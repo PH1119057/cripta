@@ -276,7 +276,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
         # Стоп округляется к входу: фактический риск не должен стать глубже 1%.
         stop,target=calculate_initial_boundaries(entry=price,side=side,tick=tick)
-        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36],"takeProfit":str(target),"stopLoss":str(stop),"tpTriggerBy":"MarkPrice","slTriggerBy":"MarkPrice","tpslMode":"Full","tpOrderType":"Market","slOrderType":"Market"}
+        # Границы ставятся только после подтверждённого исполнения Bybit, когда
+        # известна фактическая средняя цена позиции.
+        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36]}
         if offset > 0:
             order.update({"price": str(price), "timeInForce": "GTC"})
         result=api_post("/v5/order/create", order, key, secret)

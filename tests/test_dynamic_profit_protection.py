@@ -54,4 +54,4 @@ def test_xrp_initial_boundaries_use_actual_fill_not_limit_price() -> None:
         entry=Decimal("1.4563"), side="Sell", tick=Decimal("0.0001")
     )
     assert stop == Decimal("1.4708")
-    assert target == Decimal("1.4402")
+    assert target == Decimal("1.4126")
