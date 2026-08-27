@@ -178,6 +178,10 @@ def live_trading_state() -> dict[str, object]:
             available_balance FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
         rows = connection.execute("""SELECT symbol,position_idx,side,size,entry_price,leverage,
             refreshed_at_epoch_ms,payload_json FROM runtime.hot_positions ORDER BY symbol""").fetchall()
+        trailing_rows = connection.execute("""SELECT DISTINCT ON (symbol) symbol,
+            payload_json,exchange_updated_ms FROM runtime.hot_orders
+            WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
+            ORDER BY symbol,exchange_updated_ms DESC""").fetchall()
         connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE")
         connection.commit()
         settings = connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection FROM runtime.trade_settings WHERE singleton=1").fetchone()
@@ -188,15 +192,20 @@ def live_trading_state() -> dict[str, object]:
                 SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
                 FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
             ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
+    trailing_by_symbol = {str(row[0]): (json.loads(row[1]), row[2]) for row in trailing_rows}
     positions = []
     for row in rows:
         raw = json.loads(row[7])
+        trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
         positions.append({
             "symbol": row[0], "position_idx": row[1], "side": row[2], "size": row[3],
             "entry_price": row[4], "leverage": row[5], "refreshed_at_epoch_ms": row[6],
             "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
             "mark_price": raw.get("markPrice"), "stop_loss": raw.get("stopLoss"),
             "trailing_stop": raw.get("trailingStop"),
+            "trailing_trigger_price": trailing_order.get("triggerPrice"),
+            "trailing_trigger_by": trailing_order.get("triggerBy"),
+            "trailing_updated_at_epoch_ms": trailing_updated,
             "unrealised_pnl": raw.get("unrealisedPnl"), "position_value": raw.get("positionValue"),
         })
     open_lots: dict[tuple[str, str], dict[str, float]] = {}
