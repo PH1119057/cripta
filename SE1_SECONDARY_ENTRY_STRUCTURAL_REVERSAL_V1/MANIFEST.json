@@ -1,0 +1,40 @@
+{
+  "patch": "SE1_SECONDARY_ENTRY_STRUCTURAL_REVERSAL_V1",
+  "research_branch": "SECONDARY ENTRY / PROBE -> CONFIRM -> SCALE",
+  "baseline": "bybit-workbench 0.8.5 plus accepted additive research patches; current C:\\cripta is authoritative",
+  "prerequisites": [
+    "Run installer from C:\\cripta",
+    ".venv exists",
+    "Frozen ALL9 P40 sources and local public-trade archives exist",
+    "Workbench pyproject version remains 0.8.5"
+  ],
+  "resulting_version": "bybit-workbench 0.8.5 + SE1 Secondary Entry Structural Reversal V1 research files (package version unchanged)",
+  "changed_files": [
+    "src/bybit_workbench/research/secondary_entry_se1.py",
+    "tests/test_secondary_entry_se1.py",
+    "scripts/research_secondary_entry_se1_all9_windows.ps1",
+    "docs/SECONDARY_ENTRY_SE1_PROTOCOL_RU.md"
+  ],
+  "changes": [
+    "Adds research-only causal Secondary Entry anatomy",
+    "Keeps Main structural stop at -1.00%",
+    "Uses structural Secondary stop 0.10 percentage points beyond causal reversal/launch extreme",
+    "Tests fixed adverse-depth and rebound-confirmation grids without selecting a winner",
+    "Collects Secondary MFE/MAE, targets, structural-stop risk, false confirmations, and diagnostic positive-floor variants",
+    "Adds heartbeat, exact-contract resume, source fingerprints, and machine-readable outputs"
+  ],
+  "does_not_change": [
+    "Frozen Entry logic/fingerprint",
+    "P50/P51 Entry research",
+    "Exit",
+    "Risk",
+    "Execution",
+    "Live runtime",
+    "Bybit API credentials or orders",
+    "Existing reports or user data"
+  ],
+  "downloads": "DISABLED / fail-closed",
+  "backup_policy": "Add-only patch. Existing targets cause installer hard-stop, so no existing project file is overwritten and no backup is required.",
+  "acceptance_gate": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check_windows.ps1",
+  "payload_sha256_manifest_sha256": "9d934d4c9acc889c6e485b730f1aed30eac109a9e6f21f1ccc59002d319c2275"
+}

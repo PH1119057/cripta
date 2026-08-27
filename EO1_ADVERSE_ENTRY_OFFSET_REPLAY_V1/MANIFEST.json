@@ -1,0 +1,56 @@
+{
+  "patch": "EO1_ADVERSE_ENTRY_OFFSET_REPLAY_V1",
+  "baseline": "Current C:\\cripta is source of truth; Workbench 0.8.5; frozen ALL9 P40 exact-touch event truth; local public-trade archives; accepted current project gates.",
+  "prerequisites": [
+    "Run from C:\\cripta",
+    ".venv present",
+    "scripts\\check_windows.ps1 present",
+    "bybit_workbench.spec present",
+    "P40 reports for all ALL9 symbols present",
+    "local public-trade archives present"
+  ],
+  "changed_files": [
+    "docs/ENTRY_OFFSET_ADVERSE_EO1_PROTOCOL_RU.md",
+    "scripts/research_entry_offset_adverse_eo1_all9_windows.ps1",
+    "src/bybit_workbench/research/entry_offset_adverse_eo1.py",
+    "tests/test_entry_offset_adverse_eo1.py"
+  ],
+  "resulting_version": "Adds EO1 adverse delayed-entry research only; production version unchanged.",
+  "changes": "Adds one research module, one targeted test file, one Windows runner, one research protocol.",
+  "does_not_change": [
+    "Frozen Entry/P50/P51",
+    "SE1/SE2",
+    "Exit",
+    "Risk",
+    "Execution",
+    "MAYAK",
+    "live runtime",
+    "UI",
+    "existing reports or user data"
+  ],
+  "backups": "Not applicable: additive-only patch refuses overwrite of any target file.",
+  "downloads": "DISABLED / fail-closed during research.",
+  "files": [
+    {
+      "path": "docs/ENTRY_OFFSET_ADVERSE_EO1_PROTOCOL_RU.md",
+      "sha256": "6ddfcb6e16b48cd9de4df02ef948d42d4cc4b3813f17e5c717c096964cb90e22",
+      "bytes": 4086
+    },
+    {
+      "path": "scripts/research_entry_offset_adverse_eo1_all9_windows.ps1",
+      "sha256": "cda9a7160059e55be40eeef32f0466992394b91bf5319bc3d5ee03101161da23",
+      "bytes": 2342
+    },
+    {
+      "path": "src/bybit_workbench/research/entry_offset_adverse_eo1.py",
+      "sha256": "fa6b2845be479110d04a477b6fe92d9c7339ad1203a5da90e7e566fdf83e9c11",
+      "bytes": 39174
+    },
+    {
+      "path": "tests/test_entry_offset_adverse_eo1.py",
+      "sha256": "318ff3875d92c7057dc058795ea715cf3cf29bb13bd05057b702b1f0e010f85e",
+      "bytes": 4537
+    }
+  ],
+  "installer_sha256": "384ece0530e5bb5dfd6f9649a358ec4e51db246772441ffcb50a286825bce45c"
+}

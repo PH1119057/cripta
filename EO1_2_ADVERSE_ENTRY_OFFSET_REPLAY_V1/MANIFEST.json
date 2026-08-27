@@ -1,0 +1,59 @@
+{
+  "patch": "EO1_2_ADVERSE_ENTRY_OFFSET_REPLAY_V1",
+  "baseline": "Exact current C:\\cripta snapshot supplied 2026-08-22; Workbench 0.8.5; accepted EO1.1 installed; EO1.1 research failed at BTC with MemoryError while materializing 144h PathSeries; partial output isolated.",
+  "prerequisites": [
+    "Run from C:\\cripta",
+    ".venv present with project dev/test dependencies",
+    "Exact EO1.1 target-file hashes match this patch baseline",
+    "exit_break_even_v13.py and flow_reversal_v1.py hashes match inspected baseline",
+    "scripts\\check_windows.ps1 matches inspected baseline",
+    "P40 report fixtures for ALL9 are present",
+    "Local public-trade archives remain local; downloads are disabled"
+  ],
+  "changed_files": [
+    "docs/ENTRY_OFFSET_ADVERSE_EO1_PROTOCOL_RU.md",
+    "scripts/research_entry_offset_adverse_eo1_all9_windows.ps1",
+    "src/bybit_workbench/research/entry_offset_adverse_eo1.py",
+    "tests/test_entry_offset_adverse_eo1.py"
+  ],
+  "resulting_version": "Workbench production version remains 0.8.5. EO1 research contract remains V1. Replay engine revision becomes EO1.2 memory-bounded streaming.",
+  "changes": "Replaces EO1 runtime use of build_path_series/materialized 144h Python lists+tuples with chronological day-by-day scanning of packed TradeDay cache and bounded state for 0.00/0.10/0.20 scenarios. Adds materialized-vs-streaming equivalence regression tests, explicit engine revision/resumed row provenance, and PowerShell -ResumeDir support.",
+  "does_not_change": [
+    "Frozen ALL9 Entry event truth or Entry fingerprint",
+    "EO1 offsets 0.00/0.10/0.20",
+    "Pending 72h window or original +1.10 pre-fill cancellation rule",
+    "Shifted-fill stop -1.00, activation +0.10, floor +0.10, target +1.10",
+    "72h post-fill observation horizon",
+    "Illustrative 0.10% round-trip cost reserve",
+    "P50/P51/P53, SE1/SE2, Exit, Risk, Execution, MAYAK",
+    "Live runtime or UI",
+    "Existing reports or user data"
+  ],
+  "resume_contract": "EO1 V1 run_contract remains intentionally unchanged. EO1.2 may resume EO1.1 partial output only when run_contract.json matches exactly and partial JSONL contains complete 3-row signal blocks; otherwise it fails closed.",
+  "backups": "Installer creates a timestamped backup_before_apply_* tree beside the extracted patch after the final-state overlay is green. Apply or authoritative-gate failure restores EO1.1 target files from that backup.",
+  "downloads": "DISABLED / fail-closed during research.",
+  "installer_behavior": "Exact baseline hash guard -> payload SHA256 guard -> temporary final-state overlay -> PowerShell 5.1 parser -> py_compile -> Ruff -> mypy -> targeted pytest -> full pytest -> headless smoke -> offscreen GUI smoke -> backup -> apply -> post-copy hashes -> authoritative scripts\\check_windows.ps1. Any red pre-apply gate leaves project source untouched; apply/final-gate failure restores EO1.1 files.",
+  "files": [
+    {
+      "path": "docs/ENTRY_OFFSET_ADVERSE_EO1_PROTOCOL_RU.md",
+      "sha256": "d73d5948a2fffb6f4541be14d27d2434fd4e12ff1ade6ae5d120b652af64b85f",
+      "bytes": 5188
+    },
+    {
+      "path": "scripts/research_entry_offset_adverse_eo1_all9_windows.ps1",
+      "sha256": "979bd783e78a8b673668f3691d1ba105e73ad7cf452a810406011d3e1ad2a1c7",
+      "bytes": 3775
+    },
+    {
+      "path": "src/bybit_workbench/research/entry_offset_adverse_eo1.py",
+      "sha256": "930a098b8f941c8707fedf5bde0515113625ffef3d447115d537eb7aa4ea6272",
+      "bytes": 53997
+    },
+    {
+      "path": "tests/test_entry_offset_adverse_eo1.py",
+      "sha256": "7bf40533ec41e89056ff36c676ab73c6bba03c1b4608340775847698f2fb1e39",
+      "bytes": 10359
+    }
+  ],
+  "installer_sha256": "c949a4a648dded34fda52f2c1aaee10eb6fd166e94600550534588d9c2f233ee"
+}

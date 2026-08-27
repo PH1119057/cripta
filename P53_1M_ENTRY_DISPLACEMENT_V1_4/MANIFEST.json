@@ -1,0 +1,90 @@
+{
+  "patch": "P53_1M_ENTRY_DISPLACEMENT_V1_4",
+  "created_at_utc": "2026-08-21T19:31:29.528248+00:00",
+  "baseline": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "accepted_research_overlay": "P53_1M_ENTRY_DISPLACEMENT_V1_3",
+    "source_snapshot": "CRIPTA_SOURCE_CURRENT.zip",
+    "source_snapshot_sha256": "26be1d0df8d06931b099efeaafaf845dba7b8cb1417576020cf55f4e43f7a1f4",
+    "required_file_sha256": {
+      "pyproject.toml": "36332afc54d76c3f0689f4547c8f89e02dc0142fe257f86ca1c43c8cb8ff869b",
+      "scripts/check_windows.ps1": "32c708a27040976c2e9085af7c435075e1e43796f04f089978f751390453626c",
+      "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "0b284adaafa07610d9d4214f020c11359b8cffacbfec7a52c76c9cfc42d67add",
+      "tests/test_entry_one_minute_displacement_p53.py": "61ca54d58d44e4348025fd3c0e27eff0e27cb282240e077f0f4a9e496268d8e3",
+      "scripts/research_entry_1m_displacement_p53_windows.ps1": "0d1b8467608ec75d888affaae1e509b3e2e6510b4d7f9c4a953b323055eec2b5",
+      "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "ed11256008f42680fc9a4c7be8ccdac20cb7fd12405a08dee3411f356429e30d",
+      "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_3.txt": "50a6c7902874351fec6c4ed202a0f91efa56983c452faf58ddfab64cd4fff58f"
+    },
+    "additional_required_unhashed": [
+      "uv.lock",
+      "bybit_workbench.spec"
+    ]
+  },
+  "prerequisites": [
+    "Run installer from C:\\cripta.",
+    "Accepted P53 V1.3 is installed and its hashed files are unchanged.",
+    "C:\\cripta\\.venv\\Scripts\\python.exe exists with project dev dependencies.",
+    "C:\\cripta\\bybit_workbench.spec exists for overlay release-contract tests.",
+    "For research execution only: frozen ALL9 P31/P40 datasets and public-trade archives remain present.",
+    "Network downloads are disabled by design."
+  ],
+  "changed_files": [
+    {
+      "path": "src/bybit_workbench/research/entry_one_minute_displacement_p53.py",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "tests/test_entry_one_minute_displacement_p53.py",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "scripts/research_entry_1m_displacement_p53_windows.ps1",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_4.txt",
+      "operation": "ADD"
+    }
+  ],
+  "payload_sha256": {
+    "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "fc5d8b80eb2d12f8d613f2866cf7775ec24e9b0a37226ebf299713176a6c8ca4",
+    "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_4.txt": "78c4340eb88632395dffb66e39894dcf66ec4fde1cbf3fa350ec0d4ee3d1d59c",
+    "scripts/research_entry_1m_displacement_p53_windows.ps1": "806317013d64984de9e01ee39d3b8815a81739daa0af1c51976709c375aa212f",
+    "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "07e3bb8d77c7b78b960a9d56904d0c323b9ab9ce80f3f5e7c225cbd02274e5d6",
+    "tests/test_entry_one_minute_displacement_p53.py": "fbdd74886510617c8e2cba8edb2a35926c535421a1e0a222f7304b36ec13227c"
+  },
+  "installer_sha256": "9d44e9425159d082f7f35116b88c29d29a6c5b6e44bc41b76e9db3af6860b034",
+  "resulting_version": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "research_overlay": "P53_1M_ENTRY_DISPLACEMENT_V1_4",
+    "research_output_version": "P53_1M_ENTRY_DISPLACEMENT_V1_4",
+    "note": "Product version and live patch marker intentionally unchanged; research-only overlay."
+  },
+  "changes": [
+    "Fixes V1.3 dataset-boundary opening-price mismatch exposed by XRPUSDT first frozen 5m candle.",
+    "Seeds only the first minute of the whole evaluation period from the first frozen 5m open; no future H/L/C/V is used.",
+    "Keeps subsequent 1m opens strictly previous-close causal.",
+    "Keeps exact 1m-to-frozen-5m OHLCV equivalence with no tolerance.",
+    "Reuses V1.3 daily caches only when the cached first open matches the expected causal seed; incompatible days are rebuilt.",
+    "Adds regression tests for seed-sensitive cache invalidation and run-level first-5m-open seeding."
+  ],
+  "does_not_change": [
+    "1063 frozen Entry V1 cohort or Entry fingerprint",
+    "Frozen 15m+5m baseline geometry",
+    "1m displacement formula/sign convention",
+    "3h deeper-price availability contract",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "UI",
+    "P46/NEW5 holdout",
+    "reports or user market data during installation"
+  ]
+}

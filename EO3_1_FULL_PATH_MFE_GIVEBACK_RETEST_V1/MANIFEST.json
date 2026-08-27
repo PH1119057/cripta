@@ -1,0 +1,56 @@
+{
+  "patch": "EO3_1_FULL_PATH_MFE_GIVEBACK_RETEST_V1",
+  "baseline": "Workbench 0.8.5 + accepted EO1.2 + accepted EO2.3; exact EO1 ALL9 event table.",
+  "prerequisites": [
+    "Run from C:\\cripta",
+    ".venv dev/test dependencies",
+    "Exact EO1.2/EO2.3 hashes",
+    "Local public-trade archives; Downloads DISABLED"
+  ],
+  "changed_files": [
+    "docs/ENTRY_FULL_PATH_ANATOMY_EO3_PROTOCOL_RU.md",
+    "scripts/research_entry_full_path_anatomy_eo3_all9_windows.ps1",
+    "src/bybit_workbench/research/entry_full_path_anatomy_eo3.py",
+    "tests/test_entry_full_path_anatomy_eo3.py"
+  ],
+  "resulting_version": "Production remains 0.8.5. Adds research-only EO3 V1 full-path anatomy; EO3.1 packaging revision removes unused import only.",
+  "changes": "All 846 ADVERSE_0P20 fills; no profit-target exit; hard stop -1.00/data-end boundary; MFE/MAE, milestones, causal 1m-close giveback, adverse recovery, post-stop research continuation, and overlap with later signals. Resumable per-day 1m cache; raw ticks resolve fill/stop boundary minutes. EO3.1 changes no research calculation; removes unused Python import caught by Ruff in EO3 V1 installer precheck.",
+  "does_not_change": [
+    "Frozen Entry fingerprint",
+    "EO1/EO2",
+    "P50/P51/P53",
+    "SE1/SE2",
+    "Exit",
+    "Risk",
+    "Execution",
+    "MAYAK",
+    "live runtime",
+    "UI",
+    "existing reports or user data"
+  ],
+  "downloads": "DISABLED / fail-closed",
+  "installer_behavior": "Exact baseline/source hashes -> payload SHA256 -> final-state overlay -> PowerShell 5.1 parser -> py_compile -> Ruff -> mypy -> targeted/full pytest -> headless/GUI smoke -> new-file-only apply -> authoritative check_windows.ps1.",
+  "files": [
+    {
+      "path": "docs/ENTRY_FULL_PATH_ANATOMY_EO3_PROTOCOL_RU.md",
+      "sha256": "8210d8e54f0afae82f1105c1c4d8459a7814dea5af787b634bfdfa2732110380",
+      "bytes": 3859
+    },
+    {
+      "path": "scripts/research_entry_full_path_anatomy_eo3_all9_windows.ps1",
+      "sha256": "c65036d172593047853fa11ba99ec9c2a5915c9efdd3b595e7287922956ee173",
+      "bytes": 3410
+    },
+    {
+      "path": "src/bybit_workbench/research/entry_full_path_anatomy_eo3.py",
+      "sha256": "039aa149d7ce5cabea566d3db3d69982d2d864c6c36eafc5b551804f9e46db10",
+      "bytes": 46214
+    },
+    {
+      "path": "tests/test_entry_full_path_anatomy_eo3.py",
+      "sha256": "608285acfe8c15366fed243fe704c1fc27c81a67a277792b2c023bb277a2ee09",
+      "bytes": 7558
+    }
+  ],
+  "installer_sha256": "bd6238b3fdaef2bc65936f88b94b55782f5c536009080f57f852c6830163361b"
+}

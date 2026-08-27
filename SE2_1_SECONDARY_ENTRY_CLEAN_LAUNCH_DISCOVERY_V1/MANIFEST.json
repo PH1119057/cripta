@@ -1,0 +1,83 @@
+{
+  "archive_sha256": "provided externally in .zip.sha256 because embedding archive hash inside archive is self-referential",
+  "authoritative_post_install_gate": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check_windows.ps1",
+  "backup_policy": "No existing file is modified, so no backup copy is necessary. On any precheck failure no project/report/user-data file is touched.",
+  "baseline": {
+    "project": "bybit-strategy-workbench",
+    "project_version": "0.8.5",
+    "required_file_hashes": {
+      "reports/secondary_entry_se1/ALL9_SE1_WORKING/secondary_entry_events.csv": "1dca79fdaa452c346d5ff5249d3fb028a8ce33e5788fa6e1e53c89215cf41424",
+      "scripts/research_secondary_entry_se1_all9_windows.ps1": "03de129d6084246c403aa5a90e3047165616788f54ba4b75cb8a6309150e13ef",
+      "src/bybit_workbench/research/secondary_entry_se1.py": "d136ea02e5a72fe26d48da865b526985611d07ca0383c8b5c1384c1e8087ba92",
+      "tests/test_secondary_entry_se1.py": "181dd95eb9feb34a68e9de454952749ffa1a6f8a757b32471130dd32a23075af"
+    },
+    "required_se1_run_contract_sha256": "2d198b2220adae9cd3f2a997b481e90d4bf85722d8afac009ceecff63a4e82cc",
+    "required_state": "current C:\\cripta + accepted SE1.3 installed + completed exact ALL9 SE1 machine truth"
+  },
+  "change_mode": "additive only; installer refuses overwrite of any target",
+  "changed_files": [
+    "docs/SECONDARY_ENTRY_SE2_CLEAN_LAUNCH_PROTOCOL_RU.md",
+    "scripts/research_secondary_entry_se2_all9_windows.ps1",
+    "src/bybit_workbench/research/secondary_entry_se2.py",
+    "tests/test_secondary_entry_se2.py"
+  ],
+  "changes": [
+    "Adds causal ALL9 clean-launch discovery engine over exact SE1 machine truth",
+    "Adds frozen 1800-candidate discovery grid with simple one/two-filter families only",
+    "Adds deterministic robustness gates, bootstrap EV gate, cost sensitivity and full diagnostics",
+    "Adds Windows research runner and protocol documentation",
+    "Adds targeted regression tests",
+    "SE2.1 preparation fix only: resolves mypy type errors by removing a redundant cast and separating Event-vs-Metrics local variable names; research formulas, candidate grid, robustness protocol and outputs are unchanged"
+  ],
+  "created_utc": "2026-08-21T11:05:00+00:00",
+  "does_not_change": [
+    "Frozen Main Entry and its -1.00% structural stop",
+    "P50/P51 Entry research",
+    "Exit",
+    "Risk",
+    "Execution",
+    "MAYAK",
+    "live runtime or UI",
+    "reports during installation",
+    "NEW5 or any confirmation sample"
+  ],
+  "installer_gates": [
+    "baseline/hash precheck",
+    "payload SHA256 verification",
+    "final-state temp overlay",
+    "PowerShell 5.1 syntax parse",
+    "py_compile",
+    "Ruff src tests",
+    "mypy src/bybit_workbench",
+    "targeted pytest",
+    "full pytest",
+    "headless smoke",
+    "GUI smoke offscreen/replay/disarmed"
+  ],
+  "patch": "SE2_1_SECONDARY_ENTRY_CLEAN_LAUNCH_DISCOVERY_V1",
+  "payload_sha256": {
+    "docs/SECONDARY_ENTRY_SE2_CLEAN_LAUNCH_PROTOCOL_RU.md": "7d774ef81643feafe0373b54828927670830e3edaf6c110cb38bb9f78f552ffa",
+    "scripts/research_secondary_entry_se2_all9_windows.ps1": "ca106d54fd28fd48bccbb7eebf9f683c23e9d1fd8ed9220478ca13bc286f1916",
+    "src/bybit_workbench/research/secondary_entry_se2.py": "892ebcab72df5c1fdf88b93b0614030061ded64e43508cf94a3d22f1b60fb4dc",
+    "tests/test_secondary_entry_se2.py": "93ec82912441b5ed07dc1b35e47373b2c1ee0ba4e50665ac15fc42e61fa22c37"
+  },
+  "prerequisites": [
+    "Run installer from C:\\cripta",
+    ".venv exists and contains project dev dependencies",
+    "PowerShell 5.1 target",
+    "Exact frozen SE1 ALL9 result remains present",
+    "NEW5 is not required and is not accessed"
+  ],
+  "research_contract": {
+    "confirmation": "NOT INCLUDED; separate frozen-manifest run required",
+    "discovery_universe": "ALL9 only",
+    "downloads": "DISABLED / fail-closed",
+    "new5_accessed": false,
+    "primary_outcome": "Secondary +1.10% before SE1 structural stop",
+    "structural_stop": "reversal point minus 0.10 percentage points"
+  },
+  "resulting_version": {
+    "project_version": "0.8.5 unchanged",
+    "research_version": "SE2 Secondary Entry Clean Launch Discovery V1"
+  }
+}

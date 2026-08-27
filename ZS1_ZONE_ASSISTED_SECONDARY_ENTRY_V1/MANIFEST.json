@@ -1,0 +1,56 @@
+{
+  "package": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1",
+  "baseline": "bybit-workbench 0.8.5 + frozen P52/SE1/SE2 report truth",
+  "application_version_after_install": "0.8.5 (unchanged)",
+  "research_version": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1",
+  "prerequisites": [
+    "C:\\cripta",
+    "Python venv at C:\\cripta\\.venv",
+    "accepted P52/SE1/SE2 report outputs with exact embedded hashes"
+  ],
+  "changed_files": [
+    "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1.txt",
+    "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+    "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+    "tests/test_secondary_entry_zone_scale_zs1.py"
+  ],
+  "changes": [
+    "adds research analyzer",
+    "adds targeted tests",
+    "adds Windows research runner",
+    "adds patch note"
+  ],
+  "does_not_change": [
+    "Entry V1",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "P46/holdout",
+    "NEW5",
+    "reports during installation",
+    "network/download behavior"
+  ],
+  "payload_files": [
+    {
+      "path": "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1.txt",
+      "sha256": "56e699aa730ddce74f66f7fc345675cf65cec6388adee19d6852b6e4f34532f1",
+      "size": 1899
+    },
+    {
+      "path": "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+      "sha256": "4d42e25916121a66858362da75775420df2a9eda8e0a32be32034197d5c3156d",
+      "size": 996
+    },
+    {
+      "path": "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+      "sha256": "ac07e962c041b89e6f96d1cd6695e223f541e2ec833d19178f070f29c38ed68c",
+      "size": 26155
+    },
+    {
+      "path": "tests/test_secondary_entry_zone_scale_zs1.py",
+      "sha256": "bb0f0e0ea17de13fce8c43e0445076c908857ca365925c025eb8fa34bff0db61",
+      "size": 2924
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "patch": "GUI_CONNECTION_ACTIVITY_RACE_FIX_V1",
+  "baseline": "bybit-workbench 0.8.5 with accepted EO1.2 + EO2.3 state; EO3.1 not installed",
+  "purpose": "Fix transient DISCONNECTED refresh overwriting visible read-only connecting/reconnecting state before runtime reaches SYNCING.",
+  "changed_files": [
+    "src/bybit_workbench/ui/main_window.py",
+    "tests/test_gui_smoke.py"
+  ],
+  "changes": [
+    "Preserve connecting/reconnecting UI state across transient DISCONNECTED refresh snapshots while asynchronous runtime startup is in progress.",
+    "Add deterministic regression coverage that refreshes the model before SYNCING and requires the connection UI to remain busy."
+  ],
+  "does_not_change": [
+    "Entry logic or fingerprint",
+    "Exit/Risk rules",
+    "Execution order semantics",
+    "Exchange state machine transitions",
+    "Live arming or mutation permissions",
+    "Research EO1/EO2/EO3 logic",
+    "reports or user data"
+  ],
+  "resulting_version": "0.8.5 + GUI connection activity race fix V1"
+}

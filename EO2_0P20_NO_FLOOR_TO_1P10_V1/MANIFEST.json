@@ -1,0 +1,59 @@
+{
+  "patch": "EO2_0P20_NO_FLOOR_TO_1P10_V1",
+  "baseline": "Workbench 0.8.5 + accepted EO1.2 memory-bounded engine; exact completed EO1 ALL9 report from 2026-08-22.",
+  "prerequisites": [
+    "Run from C:\\cripta",
+    ".venv with dev/test dependencies",
+    "Exact EO1.2 dependency hashes",
+    "Exact EO1 completed event table SHA256 91044aba6f3148e6599a5ce9a7a1414126d19a9cbed28983e19f753203b1d44f",
+    "Local public-trade archives present; downloads disabled"
+  ],
+  "changed_files": [
+    "docs/ENTRY_OFFSET_NO_FLOOR_EO2_PROTOCOL_RU.md",
+    "scripts/research_entry_offset_no_floor_eo2_all9_windows.ps1",
+    "src/bybit_workbench/research/entry_offset_no_floor_eo2.py",
+    "tests/test_entry_offset_no_floor_eo2.py"
+  ],
+  "resulting_version": "Production remains 0.8.5. Adds research-only EO2 V1.",
+  "changes": "Adds exact replay of the 846 EO1 ADVERSE_0P20 fills with +0.10 activation/floor disabled, initial stop -1.00 retained, target +1.10 retained, and causal first-hit raw-trade scanning until target/stop or frozen-data end. Reports economics and time-to-target/stop.",
+  "does_not_change": [
+    "Frozen Entry fingerprint",
+    "EO1 fill decisions",
+    "P50/P51/P53",
+    "SE1/SE2",
+    "Exit",
+    "Risk",
+    "Execution",
+    "MAYAK",
+    "live runtime",
+    "UI",
+    "existing reports or user data"
+  ],
+  "economic_contract": "Illustrative EO1-compatible $100 margin x10, 0.10% round-trip reserve: target +$10, stop -$11. Signal replay only, not portfolio backtest.",
+  "downloads": "DISABLED / fail-closed.",
+  "installer_behavior": "Exact baseline and EO1 source hash guards -> payload SHA256 -> final-state overlay -> PowerShell 5.1 parser -> py_compile -> Ruff -> mypy -> targeted/full pytest -> headless/GUI smoke -> new-file-only apply -> authoritative check_windows.ps1. Failure before apply touches nothing; apply/final-gate failure deletes only the new EO2 files.",
+  "backups": "New-file-only patch: installer creates NEW_FILES_ONLY.txt rollback manifest; no existing project files are overwritten.",
+  "files": [
+    {
+      "path": "docs/ENTRY_OFFSET_NO_FLOOR_EO2_PROTOCOL_RU.md",
+      "sha256": "03612e42309982f4dde7ab621485f3e63aef8e5a6667ae3d22d45ee0ffb12e90",
+      "bytes": 3822
+    },
+    {
+      "path": "scripts/research_entry_offset_no_floor_eo2_all9_windows.ps1",
+      "sha256": "f28e7c2c5f5b006f81861fe365e6963d0a4038f7907afa76a5f27229fbc54f82",
+      "bytes": 2912
+    },
+    {
+      "path": "src/bybit_workbench/research/entry_offset_no_floor_eo2.py",
+      "sha256": "30d685b08b56d68243bec6878525fc766de5cadcdaee61ef3940d6b35d1572b1",
+      "bytes": 28301
+    },
+    {
+      "path": "tests/test_entry_offset_no_floor_eo2.py",
+      "sha256": "8a99c2ce5e03efea91de908ac7e9664d69cbdf34ac3e920b343133c18cca0b5c",
+      "bytes": 6853
+    }
+  ],
+  "installer_sha256": "8cc4ae1eaabbe325b886d57a595019175b22a7aa789bfdec74a4dd79a496afa8"
+}

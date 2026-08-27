@@ -1,0 +1,40 @@
+{
+  "patch": "SE1_1_SECONDARY_ENTRY_STRUCTURAL_REVERSAL_V1",
+  "research_branch": "SECONDARY ENTRY / PROBE -> CONFIRM -> SCALE",
+  "baseline": "bybit-workbench 0.8.5 plus accepted additive research patches; current C:\\cripta is authoritative",
+  "prerequisites": [
+    "Run installer from C:\\cripta",
+    ".venv exists",
+    "Frozen ALL9 P40 sources and local public-trade archives exist",
+    "Workbench pyproject version remains 0.8.5",
+    "Failed SE1 V1 installer did not apply files because it stopped at overlay Ruff precheck"
+  ],
+  "resulting_version": "bybit-workbench 0.8.5 + SE1 Secondary Entry Structural Reversal V1 research files; SE1.1 packaging/preparation fix only (package version unchanged)",
+  "changed_files": [
+    "src/bybit_workbench/research/secondary_entry_se1.py",
+    "tests/test_secondary_entry_se1.py",
+    "scripts/research_secondary_entry_se1_all9_windows.ps1",
+    "docs/SECONDARY_ENTRY_SE1_PROTOCOL_RU.md"
+  ],
+  "changes": [
+    "Fixes Ruff I001 import ordering in secondary_entry_se1.py before installation",
+    "Rebuilds the complete additive SE1 patch rather than asking for a manual project edit",
+    "Research formulas, grids, structural stop semantics, outputs, and tests are otherwise unchanged from SE1 V1"
+  ],
+  "does_not_change": [
+    "SE1 research semantics versus V1",
+    "Frozen Entry logic/fingerprint",
+    "P50/P51 Entry research",
+    "Exit",
+    "Risk",
+    "Execution",
+    "Live runtime",
+    "Bybit API credentials or orders",
+    "Existing reports or user data"
+  ],
+  "downloads": "DISABLED / fail-closed",
+  "backup_policy": "Add-only patch. Existing targets cause installer hard-stop, so no existing project file is overwritten and no backup is required.",
+  "acceptance_gate": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check_windows.ps1",
+  "payload_sha256_manifest_sha256": "022241b2b2b34fdcf8cf5510838f59b48313f3aad7de78df0f6ce00ca47c08a8",
+  "preparation_error_fixed": "Ruff I001 import block ordering; original SE1 V1 failed closed before real-project copy"
+}

@@ -1,0 +1,45 @@
+{
+  "patch": "SE1_2_SECONDARY_ENTRY_STRUCTURAL_REVERSAL_V1",
+  "research_branch": "SECONDARY ENTRY / PROBE -> CONFIRM -> SCALE",
+  "baseline": "bybit-workbench 0.8.5 plus accepted additive research patches; current C:\\cripta is authoritative",
+  "prerequisites": [
+    "Run installer from C:\\cripta",
+    ".venv exists",
+    "Frozen ALL9 P40 sources and local public-trade archives exist",
+    "Workbench pyproject version remains 0.8.5",
+    "Failed SE1 V1 and SE1.1 installers did not apply files because both stopped during overlay precheck"
+  ],
+  "resulting_version": "bybit-workbench 0.8.5 + SE1 Secondary Entry Structural Reversal V1 research files; SE1.2 packaging/preparation fixes only (package version unchanged)",
+  "changed_files": [
+    "src/bybit_workbench/research/secondary_entry_se1.py",
+    "tests/test_secondary_entry_se1.py",
+    "scripts/research_secondary_entry_se1_all9_windows.ps1",
+    "docs/SECONDARY_ENTRY_SE1_PROTOCOL_RU.md"
+  ],
+  "changes": [
+    "Retains the SE1.1 Ruff I001 import-order correction",
+    "Fixes mypy str-format errors caused by decimal points inside dynamic summary dictionary keys such as reached_plus_0.50_pct",
+    "Adds a regression test that renders the Markdown summary using decimal target keys",
+    "Rebuilds the complete additive SE1 patch rather than asking for a manual project edit",
+    "Research formulas, grids, structural-stop semantics, and machine-truth outputs are otherwise unchanged from SE1 V1"
+  ],
+  "does_not_change": [
+    "SE1 research semantics versus V1",
+    "Frozen Entry logic/fingerprint",
+    "P50/P51 Entry research",
+    "Exit",
+    "Risk",
+    "Execution",
+    "Live runtime",
+    "Bybit API credentials or orders",
+    "Existing reports or user data"
+  ],
+  "downloads": "DISABLED / fail-closed",
+  "backup_policy": "Add-only patch. Existing targets cause installer hard-stop, so no existing project file is overwritten and no backup is required.",
+  "acceptance_gate": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check_windows.ps1",
+  "payload_sha256_manifest_sha256": "8cd334638d6d4b8df533ca5f6599f59b6c2773f7c7addca96cb037ff4df0dc83",
+  "preparation_errors_fixed": [
+    "SE1 V1: Ruff I001 import block ordering",
+    "SE1.1: mypy str-format parsing of dotted decimal dictionary keys in Markdown summary rendering"
+  ]
+}

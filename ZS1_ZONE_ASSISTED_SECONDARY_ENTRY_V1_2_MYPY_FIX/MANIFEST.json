@@ -1,0 +1,57 @@
+{
+  "package": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_2_MYPY_FIX",
+  "baseline": "bybit-workbench 0.8.5 + frozen P52/SE1/SE2 report truth; prior ZS1 V1/V1.1 failed closed",
+  "application_version_after_install": "0.8.5 (unchanged)",
+  "research_version": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1 (logic unchanged)",
+  "prerequisites": [
+    "C:\\cripta",
+    "Python venv at C:\\cripta\\.venv",
+    "Ruff and mypy in C:\\cripta\\.venv\\Scripts",
+    "accepted P52/SE1/SE2 report outputs with exact embedded hashes"
+  ],
+  "changed_files": [
+    "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_2_MYPY_FIX.txt",
+    "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+    "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+    "tests/test_secondary_entry_zone_scale_zs1.py"
+  ],
+  "changes": [
+    "fixes V1.1 mypy Optional[float] narrowing errors in timing summary",
+    "adds timing-summary regression tests",
+    "keeps research analyzer, economic assumptions and frozen sources unchanged"
+  ],
+  "does_not_change": [
+    "ZS1 analytical selection/economics",
+    "Entry V1",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "P46/holdout",
+    "NEW5",
+    "reports during installation",
+    "network/download behavior"
+  ],
+  "payload_files": [
+    {
+      "path": "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_2_MYPY_FIX.txt",
+      "sha256": "dbe41983ec43dae1a5184aabaab21300c516e23c8418b10a66da7971b7b1a921",
+      "size": 1055
+    },
+    {
+      "path": "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+      "sha256": "4d42e25916121a66858362da75775420df2a9eda8e0a32be32034197d5c3156d",
+      "size": 996
+    },
+    {
+      "path": "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+      "sha256": "72999e9f9134e638cdf1caae367061128a217d2cb680378e351e671b308f6a09",
+      "size": 26598
+    },
+    {
+      "path": "tests/test_secondary_entry_zone_scale_zs1.py",
+      "sha256": "b1cc1e1c0545d7c6241a93f6ca65fa7cca62b49c92d897c68d0da5f43c6bcd15",
+      "size": 3746
+    }
+  ]
+}

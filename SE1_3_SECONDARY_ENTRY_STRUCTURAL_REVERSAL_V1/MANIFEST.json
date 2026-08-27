@@ -1,0 +1,49 @@
+{
+  "patch": "SE1_3_SECONDARY_ENTRY_STRUCTURAL_REVERSAL_V1",
+  "research_branch": "SECONDARY ENTRY / PROBE -> CONFIRM -> SCALE",
+  "baseline": "bybit-workbench 0.8.5 plus accepted additive research patches; current C:\\cripta is authoritative",
+  "prerequisites": [
+    "Run installer from C:\\cripta",
+    ".venv exists",
+    "Frozen ALL9 P40 sources and local public-trade archives exist",
+    "Workbench pyproject version remains 0.8.5",
+    "Failed SE1 V1, SE1.1, and SE1.2 installers did not apply files because each stopped during overlay precheck",
+    "Current project contains the ALL9 P40 absorption_features.csv machine-truth fixtures required by existing MAYAK research-truth tests"
+  ],
+  "resulting_version": "bybit-workbench 0.8.5 + SE1 Secondary Entry Structural Reversal V1 research files; SE1.3 installer-overlay fixture fix only (package version unchanged)",
+  "changed_files": [
+    "src/bybit_workbench/research/secondary_entry_se1.py",
+    "tests/test_secondary_entry_se1.py",
+    "scripts/research_secondary_entry_se1_all9_windows.ps1",
+    "docs/SECONDARY_ENTRY_SE1_PROTOCOL_RU.md"
+  ],
+  "changes": [
+    "Retains all SE1.2 research-code and regression fixes byte-for-byte",
+    "Fixes the installer final-state overlay: full pytest now receives a private temporary snapshot of small reports machine-truth fixtures required by existing research-truth tests",
+    "Excludes heavy raw dataset/public-trade/orderbook-cache directories and archive formats from the report snapshot",
+    "Explicitly verifies all nine ALL9 p40/absorption_features.csv fixtures exist both in current C:\\cripta and in the temporary overlay before tests",
+    "Never junctions the real reports directory into the overlay, so overlay tests cannot mutate real reports through relative project paths",
+    "Research formulas, grids, structural-stop semantics, payload code, and machine-truth outputs remain unchanged from SE1.2"
+  ],
+  "does_not_change": [
+    "SE1 research semantics versus V1/SE1.2",
+    "Frozen Entry logic/fingerprint",
+    "P50/P51 Entry research",
+    "MAYAK code, verdict, or frozen research artifacts",
+    "Exit",
+    "Risk",
+    "Execution",
+    "Live runtime",
+    "Bybit API credentials or orders",
+    "Existing reports or user data"
+  ],
+  "downloads": "DISABLED / fail-closed",
+  "backup_policy": "Add-only patch. Existing targets cause installer hard-stop, so no existing project file is overwritten and no backup is required.",
+  "acceptance_gate": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check_windows.ps1",
+  "payload_sha256_manifest_sha256": "8cd334638d6d4b8df533ca5f6599f59b6c2773f7c7addca96cb037ff4df0dc83",
+  "preparation_errors_fixed": [
+    "SE1 V1: Ruff I001 import block ordering",
+    "SE1.1: mypy str-format parsing of dotted decimal dictionary keys in Markdown summary rendering",
+    "SE1.2: full-pytest overlay omitted existing report-backed MAYAK test fixtures, causing FileNotFoundError despite the real project containing them"
+  ]
+}

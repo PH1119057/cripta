@@ -20,6 +20,8 @@ var/
 # Large local research and runtime artifacts
 reports/
 APP_2DAY_LOGS/
+APP_RUNTIME_SNAPSHOT/
+.work/
 datasets/
 data/
 cache/
@@ -35,6 +37,7 @@ logs/
 *.csv
 *.jsonl
 *.log
+*.docx
 
 # Credentials and machine-specific authentication
 .env.*

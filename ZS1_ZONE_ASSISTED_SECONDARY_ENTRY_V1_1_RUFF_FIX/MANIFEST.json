@@ -1,0 +1,59 @@
+{
+  "package": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_1_RUFF_FIX",
+  "baseline": "bybit-workbench 0.8.5 + frozen P52/SE1/SE2 report truth; prior ZS1 V1 failed closed",
+  "application_version_after_install": "0.8.5 (unchanged)",
+  "research_version": "ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1 (logic unchanged)",
+  "prerequisites": [
+    "C:\\cripta",
+    "Python venv at C:\\cripta\\.venv",
+    "Ruff and mypy in C:\\cripta\\.venv\\Scripts",
+    "accepted P52/SE1/SE2 report outputs with exact embedded hashes"
+  ],
+  "changed_files": [
+    "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_1_RUFF_FIX.txt",
+    "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+    "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+    "tests/test_secondary_entry_zone_scale_zs1.py"
+  ],
+  "changes": [
+    "fixes ZS1 Ruff preparation errors only",
+    "adds research analyzer",
+    "adds targeted tests",
+    "adds Windows research runner",
+    "adds patch note"
+  ],
+  "does_not_change": [
+    "ZS1 analytical logic/economics",
+    "Entry V1",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "P46/holdout",
+    "NEW5",
+    "reports during installation",
+    "network/download behavior"
+  ],
+  "payload_files": [
+    {
+      "path": "patches/PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_1_RUFF_FIX.txt",
+      "sha256": "0e5c91279ae7242e1d6a00a9d395e9d54721f04a783d92ce7e28f5bed3b2b3a7",
+      "size": 1008
+    },
+    {
+      "path": "scripts/research_secondary_entry_zone_scale_zs1_windows.ps1",
+      "sha256": "4d42e25916121a66858362da75775420df2a9eda8e0a32be32034197d5c3156d",
+      "size": 996
+    },
+    {
+      "path": "src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py",
+      "sha256": "2092c9806ab45ab14a93b215500c9be64fad1b180a354c62fca8cdd4b8f98fa5",
+      "size": 26512
+    },
+    {
+      "path": "tests/test_secondary_entry_zone_scale_zs1.py",
+      "sha256": "4a4533ebc23f2cb2433546548cf36cd585c10856e163d0c1b16951482989c4d9",
+      "size": 3041
+    }
+  ]
+}

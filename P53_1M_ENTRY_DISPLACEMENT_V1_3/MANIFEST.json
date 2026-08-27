@@ -1,0 +1,91 @@
+{
+  "patch": "P53_1M_ENTRY_DISPLACEMENT_V1_3",
+  "created_at_utc": "2026-08-21T15:33:10.552227+00:00",
+  "baseline": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "accepted_research_overlay": "P53_1M_ENTRY_DISPLACEMENT_V1_2",
+    "source_snapshot": "CRIPTA_SOURCE_CURRENT.zip",
+    "source_snapshot_sha256": "26be1d0df8d06931b099efeaafaf845dba7b8cb1417576020cf55f4e43f7a1f4",
+    "required_file_sha256": {
+      "pyproject.toml": "36332afc54d76c3f0689f4547c8f89e02dc0142fe257f86ca1c43c8cb8ff869b",
+      "scripts/check_windows.ps1": "32c708a27040976c2e9085af7c435075e1e43796f04f089978f751390453626c",
+      "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "c85f1dab92773a8e1bb3d04caff681744c1f781df77ea516f2127b8f860f882b",
+      "tests/test_entry_one_minute_displacement_p53.py": "f9a2bf687a3d7015af2a52a0c536ecc4d6d899e2a6f8614fdeab233e4011da6d",
+      "scripts/research_entry_1m_displacement_p53_windows.ps1": "fdfd1349b1aeb62f51cdea9052490462015aad3bdaa32bf3a7b206f22f2d4612",
+      "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "148e49c4939cc5e1c9cb1b750c3e05c006d6930c2b050e3a271725ac87eb4635",
+      "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_2.txt": "a8f597308d6bbb0bae663bbbb378f03a08d88241e9585445d7136b38c7dd2a4c"
+    },
+    "additional_required_unhashed": [
+      "uv.lock",
+      "bybit_workbench.spec"
+    ]
+  },
+  "prerequisites": [
+    "Run installer from C:\\cripta.",
+    "Accepted P53 V1.2 is installed and its hashed files are unchanged.",
+    "C:\\cripta\\.venv\\Scripts\\python.exe exists with project dev dependencies.",
+    "C:\\cripta\\bybit_workbench.spec exists for overlay release-contract tests.",
+    "For research execution only: frozen ALL9 P31/P40 datasets and public-trade archives remain present.",
+    "Network downloads are disabled by design."
+  ],
+  "changed_files": [
+    {
+      "path": "src/bybit_workbench/research/entry_one_minute_displacement_p53.py",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "tests/test_entry_one_minute_displacement_p53.py",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "scripts/research_entry_1m_displacement_p53_windows.ps1",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md",
+      "operation": "MODIFY"
+    },
+    {
+      "path": "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_3.txt",
+      "operation": "ADD"
+    }
+  ],
+  "payload_sha256": {
+    "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "ed11256008f42680fc9a4c7be8ccdac20cb7fd12405a08dee3411f356429e30d",
+    "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_3.txt": "50a6c7902874351fec6c4ed202a0f91efa56983c452faf58ddfab64cd4fff58f",
+    "scripts/research_entry_1m_displacement_p53_windows.ps1": "0d1b8467608ec75d888affaae1e509b3e2e6510b4d7f9c4a953b323055eec2b5",
+    "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "0b284adaafa07610d9d4214f020c11359b8cffacbfec7a52c76c9cfc42d67add",
+    "tests/test_entry_one_minute_displacement_p53.py": "61ca54d58d44e4348025fd3c0e27eff0e27cb282240e077f0f4a9e496268d8e3"
+  },
+  "installer_sha256": "acd5465f8ad9f938680861aeef4cc9a725570b0fae2d4bc51e9c60723536d14c",
+  "resulting_version": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "research_overlay": "P53_1M_ENTRY_DISPLACEMENT_V1_3",
+    "research_output_version": "P53_1M_ENTRY_DISPLACEMENT_V1_3",
+    "note": "Product version and live patch marker intentionally unchanged; research-only overlay."
+  },
+  "changes": [
+    "Fixes V1.2 runtime failure caused by using first trade of each non-empty minute as the 1m open.",
+    "Materializes trade-derived 1m candles with previous causal close as the next minute open when available.",
+    "Includes previous-close opening point in each trade-bearing minute high/low while retaining real last-trade close and exact summed volume.",
+    "Keeps zero-trade minutes as flat previous-close bars with volume 0.",
+    "Bumps P53 1m cache to V3 and records explicit continuous-open candle semantics.",
+    "Keeps the exact 1m-to-frozen-5m OHLCV equivalence gate; no tolerance or optimizer is introduced.",
+    "Adds regression tests for non-empty carry-forward opens, extrema and exact 5m reproduction."
+  ],
+  "does_not_change": [
+    "1063 frozen Entry V1 cohort or Entry fingerprint",
+    "Frozen 15m+5m baseline geometry",
+    "1m displacement formula/sign convention",
+    "3h deeper-price availability contract",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "UI",
+    "P46/NEW5 holdout",
+    "reports or user market data during installation"
+  ]
+}

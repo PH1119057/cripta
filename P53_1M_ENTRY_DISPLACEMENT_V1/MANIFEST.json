@@ -1,0 +1,78 @@
+{
+  "patch": "P53_1M_ENTRY_DISPLACEMENT_V1",
+  "created_at_utc": "2026-08-21T12:47:29.516973+00:00",
+  "baseline": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "source_snapshot": "CRIPTA_SOURCE_CURRENT.zip",
+    "source_snapshot_sha256": "26be1d0df8d06931b099efeaafaf845dba7b8cb1417576020cf55f4e43f7a1f4",
+    "required_file_sha256": {
+      "pyproject.toml": "36332afc54d76c3f0689f4547c8f89e02dc0142fe257f86ca1c43c8cb8ff869b",
+      "src/bybit_workbench/__init__.py": "858ede3f6450784b533b864f77ee870d2f714c54fe836f3ec9cbf6b80c735287",
+      "src/bybit_workbench/research/mtf_entry_v3.py": "6a7fefea97c9a3b375ec09b016d93122bd15887a7aa4672114b67375f6d0f6fc",
+      "src/bybit_workbench/research/exit_break_even_v13.py": "b9e7db22a2256a46ea5b7cb8909816d59a384cad25bf25305754abcfdf5861a2",
+      "src/bybit_workbench/research/first_retest_stop_anatomy_p49.py": "7f170a4abbce94d3371518a1284fed4375b5c453830b16dc70bac83a2a7d88c8",
+      "src/bybit_workbench/research/flow_reversal_v1.py": "ad8409a7fb8802191e8b05b127e7de83ca76831bcc01ac93b39044eca82b1874",
+      "scripts/check_windows.ps1": "32c708a27040976c2e9085af7c435075e1e43796f04f089978f751390453626c"
+    }
+  },
+  "prerequisites": [
+    "Run installer from C:\\cripta.",
+    "C:\\cripta\\.venv\\Scripts\\python.exe exists and contains project dev dependencies.",
+    "Baseline file hashes match the uploaded current source snapshot.",
+    "For research execution only: existing frozen P31/P40 ALL9 reports/datasets and local public-trade archives are present.",
+    "Network downloads are disabled by design."
+  ],
+  "changed_files": [
+    {
+      "path": "src/bybit_workbench/research/entry_one_minute_displacement_p53.py",
+      "operation": "ADD"
+    },
+    {
+      "path": "tests/test_entry_one_minute_displacement_p53.py",
+      "operation": "ADD"
+    },
+    {
+      "path": "scripts/research_entry_1m_displacement_p53_windows.ps1",
+      "operation": "ADD"
+    },
+    {
+      "path": "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md",
+      "operation": "ADD"
+    },
+    {
+      "path": "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1.txt",
+      "operation": "ADD"
+    }
+  ],
+  "payload_sha256": {
+    "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "63bb43fdce360cc4b0b78a47246779e1f9b894b8ab64d0c57a6c493038ee92e9",
+    "tests/test_entry_one_minute_displacement_p53.py": "6a902a752fe0046ce9d11de6897160c6026a0791aef731e5ff57e0a36292a9eb",
+    "scripts/research_entry_1m_displacement_p53_windows.ps1": "85519bc4c29a7a3dcb3bdfa5d5a18b7f953db6f45e51e072c317ce1a2a627176",
+    "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "e4a5ff49c2e113217de84d0025b649f2ba8cb6ebca011bddb923a2655e96a315",
+    "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1.txt": "5d1c15feddfd6fe4729b097f65a46c542c0f75f6ccab29ed3ee2e9f82cfa1230"
+  },
+  "resulting_version": {
+    "product_version": "0.8.5",
+    "product_patch": "P48.2",
+    "research_overlay": "P53_1M_ENTRY_DISPLACEMENT_V1",
+    "note": "Product version and live patch marker intentionally unchanged; research-only overlay."
+  },
+  "changes": [
+    "Adds fixed-1063 research overlay measuring causal 1m displacement relative to frozen 15m+5m Entry V1.",
+    "Builds 1m OHLC only from local frozen public-trade archives and validates 1m->5m OHLC equivalence.",
+    "Recreates every frozen baseline Entry price before computing any 1m displacement.",
+    "Reports side-normalized deeper/same/outward shifts, strict 15m+5m+1m confluence, and 3h availability of deeper prices.",
+    "Adds resumable per-day 1m cache under the research output directory with provenance hashes."
+  ],
+  "does_not_change": [
+    "Entry V1 fingerprint or production Entry logic",
+    "Exit",
+    "Risk",
+    "Execution",
+    "live runtime",
+    "UI",
+    "P46/NEW5 holdout",
+    "reports or user market data during installation"
+  ]
+}

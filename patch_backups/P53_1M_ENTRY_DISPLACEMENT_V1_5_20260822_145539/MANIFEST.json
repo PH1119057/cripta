@@ -1,0 +1,43 @@
+{
+  "patch": "P53_1M_ENTRY_DISPLACEMENT_V1_5",
+  "baseline": {
+    "product_version": "bybit-workbench 0.8.5 / P48.2",
+    "required_overlay": "accepted P53_1M_ENTRY_DISPLACEMENT_V1_4",
+    "required_file_sha256": {
+      "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "07e3bb8d77c7b78b960a9d56904d0c323b9ab9ce80f3f5e7c225cbd02274e5d6",
+      "tests/test_entry_one_minute_displacement_p53.py": "fbdd74886510617c8e2cba8edb2a35926c535421a1e0a222f7304b36ec13227c",
+      "scripts/research_entry_1m_displacement_p53_windows.ps1": "806317013d64984de9e01ee39d3b8815a81739daa0af1c51976709c375aa212f",
+      "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "fc5d8b80eb2d12f8d613f2866cf7775ec24e9b0a37226ebf299713176a6c8ca4",
+      "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_4.txt": "78c4340eb88632395dffb66e39894dcf66ec4fde1cbf3fa350ec0d4ee3d1d59c"
+    }
+  },
+  "prerequisites": [
+    "Run from C:\\cripta",
+    ".venv\\Scripts\\python.exe exists",
+    "Current project contains src/tests/scripts/docs/patches/pyproject.toml/uv.lock/bybit_workbench.spec",
+    "Frozen local market datasets and reports remain local and are not modified by installation"
+  ],
+  "changes": [
+    "Select causal initial 1m seed from frozen 5m candle whose opened_at exactly equals the first fingerprinted public-trade archive day at 00:00 UTC",
+    "Do not use five[0].open when frozen 5m contains earlier warm-up candles",
+    "Keep exact 1m->5m OHLCV equivalence gate with no tolerance",
+    "Add regression coverage for earlier 5m warm-up and missing boundary candle"
+  ],
+  "does_not_change": [
+    "Frozen 1063 Entry V1 cohort/fingerprint",
+    "Entry, Exit, Risk, Execution, live runtime, UI",
+    "NEW5/P46/holdout",
+    "Reports or user data during installation",
+    "Network policy: Downloads DISABLED"
+  ],
+  "resulting_version": "bybit-workbench 0.8.5 / P48.2 + P53 research overlay V1.5",
+  "cache_version": "P53_1M_OHLC_CACHE_V3",
+  "payload_sha256": {
+    "docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md": "c007ba325acd70c7a587fd05b38090da2bd1af05c581fac740f187af609baa71",
+    "patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1_5.txt": "4694f140dbcd58b6d280a3daa3e9bb34e3c0a107eaea1bf97376df655684cc9b",
+    "scripts/research_entry_1m_displacement_p53_windows.ps1": "520a4d487a7ba890d9969f21a07eb1fb78293593be52c5f2ca079bc89cc9a7e3",
+    "src/bybit_workbench/research/entry_one_minute_displacement_p53.py": "9881ba4c6e5932f0e39064c28fef08753df6669c570b9321ff119d1ab9cfc778",
+    "tests/test_entry_one_minute_displacement_p53.py": "f8d0e1e1014e5260841beee4cb007d524d5018abaddeefb39d782793c95a6cbd"
+  },
+  "installer_sha256": "42d8af56f99b0dc29d6d5e45439e2208f10bad8c8b2c86af4863cd72c6929ecf"
+}
