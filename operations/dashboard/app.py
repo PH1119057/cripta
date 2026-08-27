@@ -189,12 +189,22 @@ def live_trading_state() -> dict[str, object]:
         settings = connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1").fetchone()
         gate = connection.execute("SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'").fetchone()
         commands = connection.execute("SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20").fetchall()
+        supervisor_rows = []
+        if connection.execute("SELECT to_regclass('supervisor.snapshots')").fetchone()[0]:
+            supervisor_rows = connection.execute("""SELECT DISTINCT ON (symbol)
+                symbol,observed_at_epoch_ms,state,shadow_action,snapshot_json
+                FROM supervisor.snapshots ORDER BY symbol,observed_at_epoch_ms DESC""").fetchall()
         execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
             exec_time_ms,order_id,payload_json FROM (
                 SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
                 FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
             ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
     trailing_by_symbol = {str(row[0]): (json.loads(row[1]), row[2]) for row in trailing_rows}
+    supervisor_by_symbol = {
+        str(row[0]): {"observed_at_epoch_ms": row[1], "state": row[2],
+                      "shadow_action": row[3], "snapshot": row[4]}
+        for row in supervisor_rows
+    }
     positions = []
     for row in rows:
         raw = json.loads(row[7])
@@ -209,6 +219,7 @@ def live_trading_state() -> dict[str, object]:
             "trailing_trigger_by": trailing_order.get("triggerBy"),
             "trailing_updated_at_epoch_ms": trailing_updated,
             "unrealised_pnl": raw.get("unrealisedPnl"), "position_value": raw.get("positionValue"),
+            "supervisor": supervisor_by_symbol.get(str(row[0])),
         })
     open_lots: dict[tuple[str, str], dict[str, float]] = {}
     closed_groups: dict[tuple[str, str], dict[str, object]] = {}

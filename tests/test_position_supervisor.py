@@ -4,11 +4,16 @@ from decimal import Decimal
 import pytest
 
 from bybit_workbench.position_supervisor import (
+    ExchangePosition,
     FeatureEvidence,
+    OrderedEventAdapter,
     PositionEvent,
     PositionIdentity,
     PositionSupervisor,
+    SupervisorEventEnvelope,
+    SupervisorRegistry,
     SupervisorState,
+    process_events,
 )
 from bybit_workbench.position_supervisor.models import Quality
 
@@ -111,10 +116,18 @@ def test_replay_and_live_sequences_are_equivalent() -> None:
         PositionEvent(T0 + timedelta(minutes=i), Decimal(str(price)), complete())
         for i, price in [(1, 99.8), (2, 100.4), (3, 101.0)]
     ]
+    envelopes = [SupervisorEventEnvelope(i, event) for i, event in enumerate(events, 41)]
     live, replay = PositionSupervisor(identity()), PositionSupervisor(identity())
-    assert [live.update(x).audit_dict() for x in events] == [
-        replay.update(x).audit_dict() for x in events
-    ]
+    live_result = process_events(live, OrderedEventAdapter(envelopes))
+    replay_result = process_events(replay, OrderedEventAdapter(list(envelopes)))
+    assert [x.audit_dict() for x in live_result] == [x.audit_dict() for x in replay_result]
+
+
+def test_adapter_rejects_missing_or_duplicate_event_sequence() -> None:
+    event = PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), complete())
+    broken = [SupervisorEventEnvelope(5, event), SupervisorEventEnvelope(7, event)]
+    with pytest.raises(ValueError, match="sequence violation"):
+        list(OrderedEventAdapter(broken))
 
 
 def test_out_of_order_events_fail_closed() -> None:
@@ -127,3 +140,50 @@ def test_out_of_order_events_fail_closed() -> None:
 def test_shadow_engine_has_no_mutation_methods() -> None:
     forbidden = {"place_order", "close", "set_stop", "set_take_profit", "set_leverage"}
     assert forbidden.isdisjoint(dir(PositionSupervisor))
+
+
+def exchange(position_id: str = "p1", qty: str = "1") -> ExchangePosition:
+    return ExchangePosition(
+        position_id,
+        "XRPUSDT",
+        "Buy",
+        Decimal("100"),
+        Decimal(qty),
+        T0,
+        Decimal("10"),
+        Decimal("100.1"),
+    )
+
+
+def test_registry_exchange_truth_creates_recovers_and_removes() -> None:
+    registry = SupervisorRegistry()
+    created, removed = registry.reconcile([exchange()])
+    assert created == {"p1"} and not removed
+    assert registry.ids() == {"p1"}
+    created, removed = registry.reconcile([exchange()])
+    assert not created and not removed
+    created, removed = registry.reconcile([])
+    assert not created and removed == {"p1"}
+
+
+def test_registry_replaces_context_when_exchange_average_changes() -> None:
+    registry = SupervisorRegistry()
+    registry.reconcile([exchange(qty="1")])
+    first = registry.get("p1")
+    registry.reconcile([exchange(qty="2")])
+    assert registry.get("p1") is not first
+
+
+def test_restart_restores_mfe_mae_and_state() -> None:
+    engine = PositionSupervisor(identity())
+    engine.restore_path(
+        mfe_pct=Decimal("2.4"),
+        mae_pct=Decimal("-0.8"),
+        state=SupervisorState.WARNING,
+        state_since=T0 + timedelta(minutes=2),
+        last_at=T0 + timedelta(minutes=3),
+    )
+    snapshot = engine.update(PositionEvent(T0 + timedelta(minutes=4), Decimal("101"), complete()))
+    assert snapshot.mfe_pct == Decimal("2.4")
+    assert snapshot.mae_pct == Decimal("-0.8")
+    assert snapshot.previous_state == SupervisorState.WARNING

@@ -93,6 +93,7 @@ class PositionSnapshot:
             "giveback_pct": str(self.giveback_pct),
             "old_state": None if self.previous_state is None else self.previous_state.value,
             "new_state": self.state.value,
+            "state_since": self.state_since.astimezone(UTC).isoformat(),
             "reason": self.reason,
             "shadow_action": self.shadow_action,
             "confidence": str(self.confidence),

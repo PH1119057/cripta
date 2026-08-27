@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from .models import (
@@ -61,6 +62,26 @@ class PositionSupervisor:
             confidence=confidence,
             features=dict(event.features),
         )
+
+    def restore_path(
+        self,
+        *,
+        mfe_pct: Decimal,
+        mae_pct: Decimal,
+        state: SupervisorState,
+        state_since: datetime,
+        last_at: datetime,
+    ) -> None:
+        """Restore causal values persisted earlier for this exact position."""
+        if last_at < self.identity.fill_time or state_since < self.identity.fill_time:
+            raise ValueError("restored timestamps predate the position")
+        if mfe_pct < 0 or mae_pct > 0:
+            raise ValueError("invalid restored path extrema")
+        self._mfe = mfe_pct
+        self._mae = mae_pct
+        self._state = state
+        self._state_since = state_since
+        self._last_at = last_at
 
     def _classify(
         self, features: dict[str, FeatureEvidence] | object
