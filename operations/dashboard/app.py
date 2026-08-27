@@ -196,6 +196,7 @@ def live_trading_state() -> dict[str, object]:
             "entry_price": row[4], "leverage": row[5], "refreshed_at_epoch_ms": row[6],
             "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
             "mark_price": raw.get("markPrice"), "stop_loss": raw.get("stopLoss"),
+            "trailing_stop": raw.get("trailingStop"),
             "unrealised_pnl": raw.get("unrealisedPnl"), "position_value": raw.get("positionValue"),
         })
     open_lots: dict[tuple[str, str], dict[str, float]] = {}
@@ -640,27 +641,16 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         gate=connection.execute("SELECT enabled FROM control.execution_gates WHERE mode='mainnet'").fetchone()
                         if not gate or not gate[0]: self.send_body(409,json.dumps({"error":"Торговый шлюз закрыт"},ensure_ascii=False).encode(),"application/json; charset=utf-8"); return
                         kind,symbol=str(request.get("type","")),str(request.get("symbol","")).upper()
-                        if kind not in {"break_even","current_stop","close"} or not symbol.endswith("USDT"): raise ValueError("недопустимая команда")
-                        if kind == "break_even":
-                            position = connection.execute("""SELECT side,refreshed_at_epoch_ms,payload_json
-                                FROM runtime.hot_positions WHERE symbol=%s ORDER BY position_idx LIMIT 1""", (symbol,)).fetchone()
-                            if not position:
-                                raise ValueError("открытая позиция не найдена")
-                            if int(time.time() * 1000) - int(position[1]) > 5_000:
-                                raise ValueError("данные позиции старше пяти секунд — команда запрещена")
-                            raw = json.loads(position[2])
-                            mark = float(raw.get("markPrice") or 0)
-                            entry = float(raw.get("avgPrice") or 0)
-                            activation = (
-                                entry * 1.0013
-                                if position[0] == "Buy"
-                                else entry * 0.9987
-                            )
-                            favorable = mark >= activation if position[0] == "Buy" else mark <= activation
-                            if not favorable:
-                                raise ValueError("цена ещё не прошла 0,13% в пользу сделки от фактической цены входа")
+                        if kind not in {"break_even","current_stop","trailing_stop","close"} or not symbol.endswith("USDT"): raise ValueError("недопустимая команда")
                         command_id=f"web-{kind[:4]}-{symbol[:12]}-{int(time.time()*1000)}"
-                        connection.execute("INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,'{}','queued',%s)",(command_id,kind,symbol,int(time.time()*1000)))
+                        command_payload: dict[str, object] = {}
+                        if kind == "trailing_stop":
+                            enabled = bool(request.get("enabled"))
+                            distance_pct = float(request.get("distance_pct", 0.2))
+                            if distance_pct < 0.05 or distance_pct > 5:
+                                raise ValueError("отступ плавающего стопа должен быть от 0,05% до 5%")
+                            command_payload = {"enabled": enabled, "distance_pct": distance_pct}
+                        connection.execute("INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,%s,'queued',%s)",(command_id,kind,symbol,json.dumps(command_payload),int(time.time()*1000)))
                     connection.commit()
                 _cache=None
                 self.send_body(202,json.dumps({"status":"accepted"}).encode(),"application/json; charset=utf-8")

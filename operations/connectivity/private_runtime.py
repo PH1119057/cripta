@@ -15,6 +15,7 @@ import psycopg
 import websocket
 
 from safety_observer import api_get
+from protection_math import calculate_protection_plan
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -23,7 +24,7 @@ running = True
 status_lock = threading.Lock()
 status: dict[str, object] = {"private": {"state": "starting"}, "trade": {"state": "starting"}}
 REST_URL = os.environ.get("BYBIT_REST", "https://api.bybit.kz")
-PROFIT_PROTECTION_PCT = Decimal("0.0013")
+_tick_cache: dict[str, Decimal] = {}
 
 
 def db() -> psycopg.Connection:
@@ -124,6 +125,45 @@ def quantize(value: Decimal, step: Decimal, upward: bool = False) -> Decimal:
     return (value / step).to_integral_value(rounding=ROUND_CEILING if upward else ROUND_FLOOR) * step
 
 
+def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) -> Decimal:
+    qty = Decimal("0")
+    fee = Decimal("0")
+    rows = connection.execute(
+        "SELECT side,exec_qty,exec_fee,payload_json FROM runtime.executions WHERE symbol=%s ORDER BY exec_time_ms,exec_id",
+        (symbol,),
+    ).fetchall()
+    for execution_side, raw_qty, raw_fee, raw_payload in rows:
+        execution_qty = Decimal(str(raw_qty))
+        execution_fee = Decimal(str(raw_fee))
+        closed = Decimal(str(json.loads(raw_payload).get("closedSize") or 0))
+        if str(execution_side) == side and closed <= 0:
+            qty += execution_qty
+            fee += execution_fee
+        elif str(execution_side) != side and closed > 0 and qty > 0:
+            allocated = min(execution_qty, qty)
+            allocated_fee = fee * allocated / qty
+            qty -= allocated
+            fee = max(Decimal("0"), fee - allocated_fee)
+    return fee
+
+
+def protection_plan(
+    connection: psycopg.Connection,
+    symbol: str,
+    position: dict[str, object],
+    tick: Decimal,
+) -> dict[str, Decimal]:
+    side = str(position["side"])
+    entry = Decimal(str(position.get("avgPrice") or 0))
+    qty = Decimal(str(position.get("size") or 0))
+    if entry <= 0 or qty <= 0:
+        raise RuntimeError("position has no valid entry or size")
+    entry_fee = remaining_entry_fee(connection, symbol, side)
+    return calculate_protection_plan(
+        entry=entry, qty=qty, entry_fee=entry_fee, side=side, tick=tick
+    )
+
+
 def account_available_usdt(account: dict[str, object]) -> Decimal:
     direct = str(account.get("totalAvailableBalance") or "")
     if direct:
@@ -142,6 +182,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
     instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
     tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
+    if tick > 0:
+        _tick_cache[symbol] = tick
     qty_step = Decimal(str((instrument.get("lotSizeFilter") or {}).get("qtyStep") or "0"))
     if tick <= 0 or qty_step <= 0:
         raise RuntimeError("Bybit did not return price/quantity steps")
@@ -153,16 +195,30 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if not position: raise RuntimeError("open position not found")
         side, mark = str(position["side"]), Decimal(str(position.get("markPrice") or 0))
         if kind == "break_even":
-            base = Decimal(str(position.get("avgPrice") or 0))
-            stop = base * (
-                Decimal("1") + PROFIT_PROTECTION_PCT
-                if side == "Buy"
-                else Decimal("1") - PROFIT_PROTECTION_PCT
-            )
-        else: stop = mark * (Decimal("0.998") if side=="Buy" else Decimal("1.002"))
-        stop = quantize(stop, tick, upward=side!="Buy")
+            plan = protection_plan(connection, symbol, position, tick)
+            stop, activation = plan["stop"], plan["activation"]
+            if (side == "Buy" and mark < activation) or (side == "Sell" and mark > activation):
+                raise RuntimeError(f"price has not reached calculated protection activation {activation}")
+        else:
+            stop = quantize(mark * (Decimal("0.998") if side=="Buy" else Decimal("1.002")), tick, upward=side!="Buy")
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
         result = api_post("/v5/position/trading-stop", {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"MarkPrice","slOrderType":"Market"}, key, secret)
+        if kind == "break_even":
+            result["protectionPlan"] = {name: str(value) for name, value in plan.items()}
+    elif kind == "trailing_stop":
+        if not position: raise RuntimeError("open position not found")
+        enabled = bool(payload.get("enabled"))
+        params: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","slTriggerBy":"MarkPrice"}
+        if enabled:
+            distance_pct = Decimal(str(payload.get("distance_pct") or "0.2"))
+            if distance_pct < Decimal("0.05") or distance_pct > Decimal("5"):
+                raise RuntimeError("trailing stop distance must be from 0.05% to 5%")
+            mark = Decimal(str(position.get("markPrice") or 0))
+            distance = quantize(mark * distance_pct / Decimal("100"), tick, upward=True)
+            params["trailingStop"] = str(max(distance, tick))
+        else:
+            params["trailingStop"] = "0"
+        result = api_post("/v5/position/trading-stop", params, key, secret)
     elif kind == "entry":
         if position: raise RuntimeError("position already exists")
         existing_orders, _ = api_get(
@@ -316,16 +372,21 @@ def command_loop(key: str, secret: str) -> None:
             raw=json.loads(position_row[2]); entry=Decimal(str(position_row[1])); mark=Decimal(str(raw.get("markPrice") or 0))
             if entry<=0 or mark<=0: continue
             move=(mark/entry-Decimal("1"))*Decimal("100")*(Decimal("1") if position_row[0]=="Buy" else Decimal("-1"))
-            activation = entry * (
-                Decimal("1") + PROFIT_PROTECTION_PCT
-                if position_row[0] == "Buy"
-                else Decimal("1") - PROFIT_PROTECTION_PCT
-            )
+            tick = _tick_cache.get(str(symbol))
+            if not tick:
+                instruments, _ = api_get("/v5/market/instruments-info", {"category":"linear","symbol":symbol})
+                instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
+                tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
+                if tick <= 0: continue
+                _tick_cache[str(symbol)] = tick
+            position = dict(raw); position.update({"side":position_row[0],"avgPrice":str(entry)})
+            plan = protection_plan(connection, str(symbol), position, tick)
+            activation = plan["activation"]
             if (position_row[0] == "Buy" and mark < activation) or (position_row[0] == "Sell" and mark > activation):
                 continue
             be_id="auto-be-"+hashlib.sha256(str(entry_id).encode()).hexdigest()[:25]
             connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                VALUES(%s,'break_even',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(be_id,symbol,json.dumps({"entry_command_id":entry_id,"activation_move_pct":str(move)}),int(time.time()*1000)))
+                VALUES(%s,'break_even',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(be_id,symbol,json.dumps({"entry_command_id":entry_id,"activation_move_pct":str(move),"calculated_stop":str(plan["stop"]),"minimum_fill":str(plan["minimum_fill"]),"entry_fee":str(plan["entry_fee"]),"slippage_reserve":str(plan["slippage"])}),int(time.time()*1000)))
         connection.commit()
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
             WHERE state='queued' ORDER BY requested_at_epoch_ms LIMIT 1""").fetchone()

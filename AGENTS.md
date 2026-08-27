@@ -131,11 +131,21 @@
   its execution and fee context. Do not replace it in live logic with a fixed
   percentage approximation. Store its source timestamp and recalculate when the
   exchange changes it.
-- The live operator's explicit `Защитить прибыль +0,13%` control is a separate
-  execution rule: both its activation and its stop price are measured from the
-  actual filled entry price, not from Bybit's break-even field. It is enabled by
-  default but must remain switchable by the operator. Render the acknowledged
-  stop both as an exchange price and as a direction-aware percentage from entry.
+- Защита чистой прибыли не имеет фиксированного порога `+0,13%` или `+0,20%`.
+  Для каждой фактически открытой позиции сервер обязан отдельно рассчитать цену
+  защиты из реально уплаченной комиссии входа, ожидаемой комиссии рыночного
+  выхода, шага цены инструмента, запаса на проскальзывание и не менее `0,01 USDT`
+  ожидаемой чистой прибыли. Стоп разрешено ставить только после достижения цены,
+  на которой рассчитанная защита исполнима. В интерфейсе показываются фактически
+  подтверждённые биржей цена стопа и процент от входа. Рыночный разрыв всё равно
+  может исполнить стоп хуже расчёта; такой случай должен быть отмечен как
+  проскальзывание, а не назван успешной защитой прибыли.
+- Плавающий стоп настраивается отдельно возле каждой открытой позиции. По
+  умолчанию он выключен, базовый отступ — `0,20%` от текущей цены. Включение
+  означает немедленное сопровождение текущей позиции и не переносится на другие
+  позиции или будущие входы. При попытке включить его, пока сделка не находится в
+  плюсе, интерфейс обязан явно предупредить оператора о риске закрытия рыночным
+  шумом.
 - Keep raw measurements and three independent conclusions; do not collapse them
   into an unexplained weighted score:
   1. `position_now`: current directional return; distance to exchange break-even,
