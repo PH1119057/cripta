@@ -1169,7 +1169,12 @@ class EntrySymbolEngine:
                 )
         if self._hourly_swing_blocked:
             self._set_candidate(
-                None, observed_at=observed_at, reason="previous 60m swing limit"
+                None,
+                observed_at=observed_at,
+                reason=(
+                    f"previous 60m swing {self._hourly_swing_pct:.3f}% >= "
+                    f"{config.hourly_swing_pause_percent}%"
+                ),
             )
             return
         five_zone = compute_latest_zone(

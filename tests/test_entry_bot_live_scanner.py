@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -16,6 +17,7 @@ from bybit_workbench.entry_bot.engine import (
     TradeFlowBucket,
     compute_latest_zone,
     evaluate_core_gate,
+    floor_time,
     flow_features,
     oi_features_at,
 )
@@ -184,6 +186,15 @@ def test_oi_tail_gate_is_fail_closed_and_uses_frozen_thresholds() -> None:
         source_period="20260518_20260816",
         source_summary_sha256="a" * 64,
     )
+    calibrated_but_temporarily_missing_oi = evaluate_core_gate(
+        flow=flow,
+        oi=None,
+        calibration=calibration,
+        accepted_after_failure_embargo=True,
+        require_oi_calibration=False,
+    )
+    assert calibrated_but_temporarily_missing_oi.allowed
+    assert calibrated_but_temporarily_missing_oi.oi_tail_danger is None
     accepted = evaluate_core_gate(
         flow=flow,
         oi=oi,
@@ -192,6 +203,45 @@ def test_oi_tail_gate_is_fail_closed_and_uses_frozen_thresholds() -> None:
     )
     assert accepted.allowed
     assert accepted.oi_tail_danger is False
+
+
+def test_floor_time_for_sixty_minutes_stays_in_current_hour() -> None:
+    timestamp = datetime(2026, 8, 27, 12, 59, 59, tzinfo=UTC)
+    assert floor_time(timestamp, 60) == datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+
+
+def test_hourly_swing_pause_clears_after_shock_leaves_rolling_window() -> None:
+    config = EntryBotConfig(hourly_swing_pause_percent=Decimal("10"))
+    engine = EntrySymbolEngine("UNIUSDT", config, None)
+    five = list(_candles("UNIUSDT", "5", 260, 5))
+    five[-12] = replace(five[-12], low=Decimal("70"))
+    observed = five[-1].closed_at
+    engine.load_history(
+        {
+            "5": tuple(five),
+            "15": _candles("UNIUSDT", "15", 260, 15),
+            "60": _candles("UNIUSDT", "60", 260, 60),
+        },
+        (),
+        observed_at=observed,
+    )
+    assert engine._hourly_swing_blocked  # noqa: SLF001
+
+    last = five[-1]
+    for index in range(12):
+        opened = last.closed_at + timedelta(minutes=index * 5)
+        engine.on_closed_candle(
+            replace(
+                last,
+                opened_at=opened,
+                closed_at=opened + timedelta(minutes=5),
+                open=Decimal("110"),
+                high=Decimal("110.2"),
+                low=Decimal("109.8"),
+                close=Decimal("110"),
+            )
+        )
+    assert not engine._hourly_swing_blocked  # noqa: SLF001
 
 
 def test_calibration_builder_extracts_small_runtime_file(tmp_path: Path) -> None:

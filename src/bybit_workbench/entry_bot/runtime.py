@@ -269,6 +269,17 @@ class EntryBotRuntime:
             parts.append("REST failed: " + ", ".join(failed))
         if skipped:
             parts.append(f"NO CALIBRATION skipped: {skipped}")
+        if not self.config.require_oi_calibration:
+            observation_only = [
+                symbol
+                for symbol in self.config.working_symbols
+                if self._engines[symbol].calibration is None
+            ]
+            if observation_only:
+                parts.append(
+                    "OI только наблюдается, индивидуальной калибровки нет: "
+                    + ", ".join(observation_only)
+                )
         parts.append("collecting live 4+1 minute tape windows")
         self._set_state(ScannerState.CONNECTING, " · ".join(parts))
         return True
