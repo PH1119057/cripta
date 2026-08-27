@@ -77,6 +77,8 @@ def initialize(connection: psycopg.Connection) -> None:
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_offset_pct TEXT NOT NULL DEFAULT '0.00'",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_limit_ttl_seconds INTEGER NOT NULL DEFAULT 30",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
@@ -357,7 +359,7 @@ def command_loop(key: str, secret: str) -> None:
     next_limit_cleanup = 0.0
     while running:
         gate=connection.execute("SELECT enabled,updated_at_epoch_ms FROM control.execution_gates WHERE mode='mainnet'").fetchone()
-        settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection FROM runtime.trade_settings WHERE singleton=1").fetchone()
+        settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1").fetchone()
         if gate and gate[0] and settings:
             enabled=set(json.loads(settings[2])); now_ms=int(time.time()*1000)
             if time.monotonic() >= next_limit_cleanup:
@@ -447,6 +449,55 @@ def command_loop(key: str, secret: str) -> None:
             connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                 VALUES(%s,'break_even',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(be_id,symbol,json.dumps({"entry_command_id":entry_id,"activation_move_pct":str(move),"calculated_stop":str(plan["stop"]),"minimum_fill":str(plan["minimum_fill"]),"entry_fee":str(plan["entry_fee"]),"slippage_reserve":str(plan["slippage"])}),int(time.time()*1000)))
         connection.commit()
+        if settings and settings[7]:
+            trailing_pct = Decimal(str(settings[8] or "0.30"))
+            for entry_id, symbol in completed_entries:
+                position_row = connection.execute(
+                    "SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
+                    (symbol,),
+                ).fetchone()
+                if not position_row:
+                    continue
+                raw = json.loads(position_row[2])
+                if Decimal(str(raw.get("trailingStop") or 0)) > 0:
+                    continue
+                entry = Decimal(str(position_row[1]))
+                mark = Decimal(str(raw.get("markPrice") or 0))
+                protected_stop = Decimal(str(raw.get("stopLoss") or 0))
+                if entry <= 0 or mark <= 0 or protected_stop <= 0:
+                    continue
+                side = str(position_row[0])
+                profit_is_protected = (
+                    (side == "Buy" and protected_stop >= entry)
+                    or (side == "Sell" and protected_stop <= entry)
+                )
+                distance = mark * trailing_pct / Decimal("100")
+                if not profit_is_protected or not trailing_start_preserves_protection(
+                    side=side, mark=mark, distance=distance, protected_stop=protected_stop
+                ):
+                    continue
+                open_time = int(raw.get("openTime") or 0)
+                disabled = connection.execute(
+                    """SELECT 1 FROM runtime.trade_commands
+                       WHERE symbol=%s AND command_type='trailing_stop'
+                         AND command_id LIKE 'web-%%'
+                         AND requested_at_epoch_ms >= %s
+                         AND payload_json::jsonb->>'enabled'='false'
+                       ORDER BY requested_at_epoch_ms DESC LIMIT 1""",
+                    (symbol, open_time),
+                ).fetchone()
+                if disabled:
+                    continue
+                key = f"{entry_id}:{side}:{entry}:{trailing_pct}"
+                command_id = "auto-trail-" + hashlib.sha256(key.encode()).hexdigest()[:21]
+                connection.execute(
+                    """INSERT INTO runtime.trade_commands(
+                           command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
+                       VALUES(%s,'trailing_stop',%s,%s,'queued',%s)
+                       ON CONFLICT(command_id) DO NOTHING""",
+                    (command_id, symbol, json.dumps({"enabled": True, "distance_pct": str(trailing_pct), "source": "after_profit_protection"}), int(time.time()*1000)),
+                )
+            connection.commit()
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
             WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
         if not row: time.sleep(0.25); continue

@@ -183,8 +183,10 @@ def live_trading_state() -> dict[str, object]:
             WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
             ORDER BY symbol,exchange_updated_ms DESC""").fetchall()
         connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE")
+        connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE")
+        connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'")
         connection.commit()
-        settings = connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection FROM runtime.trade_settings WHERE singleton=1").fetchone()
+        settings = connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1").fetchone()
         gate = connection.execute("SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'").fetchone()
         commands = connection.execute("SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20").fetchall()
         execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
@@ -259,7 +261,7 @@ def live_trading_state() -> dict[str, object]:
             "wallet_balance": wallet[2], "available_balance": wallet[3],
         },
         "positions": positions,
-        "settings": {"stake_usdt": settings[0], "leverage": settings[1], "enabled_symbols": [symbol for symbol in json.loads(settings[2]) if symbol not in BYBIT_KZ_UNSUPPORTED], "entry_offset_pct": settings[3], "entry_limit_ttl_seconds": settings[4], "auto_profit_protection": bool(settings[5])} if settings else {"stake_usdt":"10","leverage":10,"enabled_symbols":[],"entry_offset_pct":"0.00","entry_limit_ttl_seconds":30,"auto_profit_protection":True},
+        "settings": {"stake_usdt": settings[0], "leverage": settings[1], "enabled_symbols": [symbol for symbol in json.loads(settings[2]) if symbol not in BYBIT_KZ_UNSUPPORTED], "entry_offset_pct": settings[3], "entry_limit_ttl_seconds": settings[4], "auto_profit_protection": bool(settings[5]), "auto_trailing_stop": bool(settings[6]), "trailing_distance_pct": settings[7]} if settings else {"stake_usdt":"10","leverage":10,"enabled_symbols":[],"entry_offset_pct":"0.00","entry_limit_ttl_seconds":30,"auto_profit_protection":True,"auto_trailing_stop":True,"trailing_distance_pct":"0.30"},
         "gate": {"enabled": bool(gate[0]), "reason": gate[1]} if gate else {"enabled":False,"reason":"шлюз не настроен"},
         "commands": [{"command_id":r[0],"type":r[1],"symbol":r[2],"state":r[3],"requested_at_epoch_ms":r[4],"error":r[5]} for r in commands],
         "recent_closed": recent_closed,
@@ -638,10 +640,13 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         entry_offset = float(request.get("entry_offset_pct", 0))
                         entry_ttl = int(request.get("entry_limit_ttl_seconds", 30))
                         auto_profit_protection = bool(request.get("auto_profit_protection", True))
+                        auto_trailing_stop = bool(request.get("auto_trailing_stop", True))
+                        trailing_distance_pct = float(request.get("trailing_distance_pct", 0.3))
                         symbols = sorted({str(x).upper() for x in request.get("enabled_symbols", [])} - BYBIT_KZ_UNSUPPORTED)
                         if stake <= 0 or leverage not in {1,2,3,5,10}: raise ValueError("недопустимая ставка или плечо")
                         if entry_offset not in {0.0, 0.1, 0.2} or entry_ttl not in {10, 20, 30, 60, 90, 120, 240, 300}: raise ValueError("недопустимая глубина входа или срок лимитной заявки")
-                        connection.execute("UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,updated_at_epoch_ms=%s WHERE singleton=1",(str(stake),leverage,json.dumps(symbols),str(entry_offset),entry_ttl,auto_profit_protection,int(time.time()*1000)))
+                        if trailing_distance_pct not in {0.1, 0.2, 0.3, 0.5, 1.0}: raise ValueError("недопустимый отступ плавающего стопа")
+                        connection.execute("UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,auto_trailing_stop=%s,trailing_distance_pct=%s,updated_at_epoch_ms=%s WHERE singleton=1",(str(stake),leverage,json.dumps(symbols),str(entry_offset),entry_ttl,auto_profit_protection,auto_trailing_stop,str(trailing_distance_pct),int(time.time()*1000)))
                     elif path == "/api/live/gate":
                         enabled=bool(request.get("enabled")); confirmation=str(request.get("confirmation", ""))
                         if enabled and confirmation != "ВКЛЮЧИТЬ РЕАЛЬНУЮ ТОРГОВЛЮ": raise ValueError("неверная подтверждающая фраза")
