@@ -662,7 +662,10 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         connection.execute("INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,%s,'queued',%s)",(command_id,kind,symbol,json.dumps(command_payload),int(time.time()*1000)))
                     connection.commit()
                 _cache=None
-                self.send_body(202,json.dumps({"status":"accepted"}).encode(),"application/json; charset=utf-8")
+                response: dict[str, object] = {"status": "accepted"}
+                if path == "/api/live/command":
+                    response["command_id"] = command_id
+                self.send_body(202,json.dumps(response).encode(),"application/json; charset=utf-8")
             except (ValueError,json.JSONDecodeError,psycopg.Error) as exc:
                 self.send_body(400,json.dumps({"error":str(exc)},ensure_ascii=False).encode(),"application/json; charset=utf-8")
             return

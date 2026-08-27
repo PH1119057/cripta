@@ -392,14 +392,23 @@ def command_loop(key: str, secret: str) -> None:
             position = dict(raw); position.update({"side":position_row[0],"avgPrice":str(entry)})
             plan = protection_plan(connection, str(symbol), position, tick)
             activation = plan["activation"]
+            existing_stop = Decimal(str(raw.get("stopLoss") or 0))
+            already_protected = existing_stop > 0 and (
+                (position_row[0] == "Buy" and existing_stop >= plan["stop"])
+                or (position_row[0] == "Sell" and existing_stop <= plan["stop"])
+            )
+            if already_protected:
+                continue
             if (position_row[0] == "Buy" and mark < activation) or (position_row[0] == "Sell" and mark > activation):
                 continue
-            be_id="auto-be-"+hashlib.sha256(str(entry_id).encode()).hexdigest()[:25]
+            retry_bucket = int(time.time() // 5)
+            protection_key = f"{symbol}:{position_row[0]}:{entry}:{retry_bucket}"
+            be_id="auto-be-"+hashlib.sha256(protection_key.encode()).hexdigest()[:25]
             connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                 VALUES(%s,'break_even',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(be_id,symbol,json.dumps({"entry_command_id":entry_id,"activation_move_pct":str(move),"calculated_stop":str(plan["stop"]),"minimum_fill":str(plan["minimum_fill"]),"entry_fee":str(plan["entry_fee"]),"slippage_reserve":str(plan["slippage"])}),int(time.time()*1000)))
         connection.commit()
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
-            WHERE state='queued' ORDER BY requested_at_epoch_ms LIMIT 1""").fetchone()
+            WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
         if not row: time.sleep(0.25); continue
         command_id=str(row[0]); connection.execute("UPDATE runtime.trade_commands SET state='running',started_at_epoch_ms=%s WHERE command_id=%s AND state='queued'",(int(time.time()*1000),command_id)); connection.commit()
         try: execute_command(connection,key,secret,row)
@@ -441,14 +450,20 @@ def reconcile(connection: psycopg.Connection, key: str, secret: str, reason: str
 
 
 def upsert_position(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
+    existing = connection.execute(
+        "SELECT payload_json FROM runtime.hot_positions WHERE symbol=%s AND position_idx=%s",
+        (item.get("symbol", ""), int(item.get("positionIdx") or 0)),
+    ).fetchone()
+    merged = json.loads(existing[0]) if existing else {}
+    merged.update(item)
     connection.execute("""INSERT INTO runtime.hot_positions(symbol,position_idx,side,size,entry_price,leverage,
         exchange_updated_ms,refreshed_at_epoch_ms,payload_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT(symbol,position_idx) DO UPDATE SET side=excluded.side,size=excluded.size,
         entry_price=excluded.entry_price,leverage=excluded.leverage,exchange_updated_ms=excluded.exchange_updated_ms,
         refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,payload_json=excluded.payload_json""",
-        (item.get("symbol", ""), int(item.get("positionIdx") or 0), item.get("side", ""), item.get("size", "0"),
-         item.get("entryPrice") or item.get("avgPrice") or "", item.get("leverage", ""), int(item.get("updatedTime") or 0), now,
-         json.dumps(item, ensure_ascii=False)))
+        (merged.get("symbol", ""), int(merged.get("positionIdx") or 0), merged.get("side", ""), merged.get("size", "0"),
+         merged.get("entryPrice") or merged.get("avgPrice") or "", merged.get("leverage", ""), int(merged.get("updatedTime") or 0), now,
+         json.dumps(merged, ensure_ascii=False)))
 
 
 def upsert_order(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
