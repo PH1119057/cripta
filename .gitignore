@@ -38,6 +38,7 @@ logs/
 *.jsonl
 *.log
 *.docx
+*.bak-*
 
 # Credentials and machine-specific authentication
 .env.*

@@ -1,0 +1,16 @@
+{
+  "job_id": "C2-R000-INTAKE_TEST",
+  "title": "Проверка приёма исследовательского пакета",
+  "line": "current",
+  "entrypoint": "run.py",
+  "dataset": {
+    "period": "20260518_20260816",
+    "symbols": ["LTCUSDT"]
+  },
+  "parameters": {
+    "mode": "validation-only"
+  },
+  "dependencies": [],
+  "timeout_seconds": 300,
+  "notes": "Технический пакет без торговой логики."
+}

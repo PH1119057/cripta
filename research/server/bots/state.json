@@ -1,0 +1,55 @@
+{
+  "execution_gate": "live-trading-locked",
+  "updated_at_epoch": 0,
+  "bots": [
+    {
+      "id": "BOT-01",
+      "name": "Стратегия 1",
+      "strategy": "не назначена",
+      "mode": "shadow",
+      "desired_state": "stopped",
+      "actual_state": "not-configured",
+      "executable": "",
+      "mainnet_approved": false,
+      "symbols": [],
+      "stats": {"signals": 0, "orders": 0, "fills": 0, "wins": 0, "losses": 0, "net_pnl": 0, "fees": 0, "slippage_bps": null, "latency_p50_ms": null}
+    },
+    {
+      "id": "BOT-02",
+      "name": "Стратегия 2",
+      "strategy": "не назначена",
+      "mode": "shadow",
+      "desired_state": "stopped",
+      "actual_state": "not-configured",
+      "executable": "",
+      "mainnet_approved": false,
+      "symbols": [],
+      "stats": {"signals": 0, "orders": 0, "fills": 0, "wins": 0, "losses": 0, "net_pnl": 0, "fees": 0, "slippage_bps": null, "latency_p50_ms": null}
+    },
+    {
+      "id": "BOT-03",
+      "name": "Стратегия 3",
+      "strategy": "не назначена",
+      "mode": "shadow",
+      "desired_state": "stopped",
+      "actual_state": "not-configured",
+      "executable": "",
+      "mainnet_approved": false,
+      "symbols": [],
+      "stats": {"signals": 0, "orders": 0, "fills": 0, "wins": 0, "losses": 0, "net_pnl": 0, "fees": 0, "slippage_bps": null, "latency_p50_ms": null}
+    },
+    {
+      "id": "BOT-04",
+      "name": "Стратегия 4",
+      "strategy": "не назначена",
+      "mode": "shadow",
+      "desired_state": "stopped",
+      "actual_state": "not-configured",
+      "executable": "",
+      "mainnet_approved": false,
+      "symbols": [],
+      "stats": {"signals": 0, "orders": 0, "fills": 0, "wins": 0, "losses": 0, "net_pnl": 0, "fees": 0, "slippage_bps": null, "latency_p50_ms": null}
+    }
+  ],
+  "events": []
+}

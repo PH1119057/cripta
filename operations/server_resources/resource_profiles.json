@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "normal": {"vcpus": 4, "ram_policy": "restore_baseline", "purpose_ru": "исходная конфигурация перед задачей"},
+  "research_8": {"vcpus": 8, "ram_policy": "provider_minimum_with_headroom", "purpose_ru": "ускоренный исследовательский прогон"},
+  "research_12": {"vcpus": 12, "ram_policy": "provider_minimum_with_headroom", "purpose_ru": "большой прогон с тяжёлыми рынками"},
+  "research_20": {"vcpus": 20, "ram_policy": "provider_minimum_with_headroom", "purpose_ru": "до 20 независимых торговых монет"}
+}

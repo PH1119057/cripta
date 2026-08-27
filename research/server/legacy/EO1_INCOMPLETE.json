@@ -1,0 +1,13 @@
+{
+  "artifact": "entry_offset_adverse_eo1",
+  "classification": "historical-incomplete",
+  "captured_on": "2026-08-23",
+  "automatic_use": false,
+  "completion": "interrupted",
+  "evidence": {
+    "running_process_found": false,
+    "partial_output": "ALL9_EO1_20260822_154907/entry_offset_adverse_events.partial.jsonl",
+    "final_output_found": false
+  },
+  "note_ru": "Сохранено для памяти и повторной проверки. Не считать завершённым исследованием или подтверждённым выводом."
+}

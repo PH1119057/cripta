@@ -1,0 +1,44 @@
+{
+  "contract_date": "2026-08-20",
+  "source_of_truth": "C:\\cripta",
+  "project_name": "bybit-strategy-workbench",
+  "project_version": "0.8.5",
+  "repository": {
+    "git_detected": false,
+    "software_version_source": "pyproject.toml"
+  },
+  "mayak_present_before_work": false,
+  "authoritative_windows_gate": "scripts/check_windows.ps1",
+  "baseline_gate": {
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "pytest": "ENVIRONMENT_BLOCKED",
+    "pytest_passed": 607,
+    "pytest_skipped": 1,
+    "pytest_setup_errors": 32,
+    "pytest_error_cause": "sandbox denied C:/Users/alex/AppData/Local/Temp/pytest-of-alex",
+    "assertion_failures_observed": 0
+  },
+  "discovery": {
+    "name": "ALL9",
+    "period": "2026-05-18T00:00:00Z/2026-08-16T00:00:00Z",
+    "symbols": [
+      "UNIUSDT", "LINKUSDT", "BTCUSDT", "ETHUSDT", "XRPUSDT",
+      "1000PEPEUSDT", "SOLUSDT", "DOGEUSDT", "ADAUSDT"
+    ],
+    "expected_entry_events": 1063,
+    "authoritative_entry_source": "reports/cross_asset_validation/<symbol>_20260518_20260816/p40/absorption_features.csv",
+    "authoritative_future_truth": [
+      "reports/early_protection_plus05_minus05_v1/ALL9_20260819_115647/event_results.csv",
+      "reports/early_failure_puncture_v1/ALL9_20260818_193424/early_failure_events.csv",
+      "reports/portfolio_replay_v1/ALL9_20260819_205330"
+    ]
+  },
+  "confirmation": {
+    "name": "NEW5",
+    "symbols": ["AAVEUSDT", "AVAXUSDT", "BNBUSDT", "LTCUSDT", "SUIUSDT"],
+    "outcome_artifacts_opened_before_discovery_freeze": false
+  },
+  "historical_downloads": "DISABLED",
+  "trading_layers_changed": false
+}
