@@ -7,6 +7,7 @@ import os
 import signal
 import threading
 import time
+import urllib.error
 import urllib.request
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from pathlib import Path
@@ -120,8 +121,14 @@ def api_post(path: str, params: dict[str, object], key: str, secret: str, *, acc
         "Content-Type": "application/json", "X-BAPI-API-KEY": key, "X-BAPI-TIMESTAMP": timestamp,
         "X-BAPI-RECV-WINDOW": recv_window, "X-BAPI-SIGN": signature, "User-Agent": "cripta-live-executor/1",
     })
-    with urllib.request.urlopen(request, timeout=10) as response:
-        payload = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")[:1000]
+        raise RuntimeError(
+            f"Bybit HTTP {exc.code} for {path}: {response_body or exc.reason}"
+        ) from exc
     if payload.get("retCode") != 0 and payload.get("retCode") not in accepted_codes:
         raise RuntimeError(str(payload.get("retMsg") or "Bybit rejected command"))
     return payload
@@ -488,8 +495,14 @@ def command_loop(key: str, secret: str) -> None:
                 ).fetchone()
                 if disabled:
                     continue
-                key = f"{entry_id}:{side}:{entry}:{trailing_pct}"
-                command_id = "auto-trail-" + hashlib.sha256(key.encode()).hexdigest()[:21]
+                retry_bucket = int(time.time() // 5)
+                idempotency_key = (
+                    f"{entry_id}:{side}:{entry}:{trailing_pct}:{retry_bucket}"
+                )
+                command_id = (
+                    "auto-trail-"
+                    + hashlib.sha256(idempotency_key.encode()).hexdigest()[:21]
+                )
                 connection.execute(
                     """INSERT INTO runtime.trade_commands(
                            command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
