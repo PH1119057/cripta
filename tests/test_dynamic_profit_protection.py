@@ -10,6 +10,7 @@ from protection_math import (  # noqa: E402
     EXIT_TAKER_FEE_RATE,
     MIN_PROTECTED_PROFIT_USDT,
     calculate_protection_plan,
+    trailing_start_preserves_protection,
 )
 
 
@@ -34,3 +35,14 @@ def test_short_protection_is_mirrored() -> None:
         side="Sell", tick=Decimal("0.001"),
     )
     assert plan["activation"] < plan["stop"] < Decimal("10")
+
+
+def test_trailing_stop_cannot_start_below_protected_profit_for_long() -> None:
+    assert not trailing_start_preserves_protection(
+        side="Buy", mark=Decimal("0.09024"), distance=Decimal("0.00019"),
+        protected_stop=Decimal("0.09023"),
+    )
+    assert trailing_start_preserves_protection(
+        side="Buy", mark=Decimal("0.09043"), distance=Decimal("0.00020"),
+        protected_stop=Decimal("0.09023"),
+    )

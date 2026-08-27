@@ -15,7 +15,7 @@ import psycopg
 import websocket
 
 from safety_observer import api_get
-from protection_math import calculate_protection_plan
+from protection_math import calculate_protection_plan, trailing_start_preserves_protection
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -215,6 +215,16 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise RuntimeError("trailing stop distance must be from 0.05% to 5%")
             mark = Decimal(str(position.get("markPrice") or 0))
             distance = quantize(mark * distance_pct / Decimal("100"), tick, upward=True)
+            plan = protection_plan(connection, symbol, position, tick)
+            if not trailing_start_preserves_protection(
+                side=str(position["side"]),
+                mark=mark,
+                distance=distance,
+                protected_stop=plan["stop"],
+            ):
+                raise RuntimeError(
+                    "trailing stop is blocked: its initial stop would not preserve calculated net profit"
+                )
             params["trailingStop"] = str(max(distance, tick))
         else:
             params["trailingStop"] = "0"

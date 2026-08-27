@@ -30,3 +30,16 @@ def calculate_protection_plan(
     stop = quantize(raw_stop, tick, upward=side == "Buy")
     activation = stop + tick if side == "Buy" else stop - tick
     return {"stop": stop, "activation": activation, "entry_fee": entry_fee, "minimum_fill": minimum_fill, "slippage": slippage}
+
+
+def trailing_start_preserves_protection(
+    *, side: str, mark: Decimal, distance: Decimal, protected_stop: Decimal
+) -> bool:
+    """Return whether an immediately active trailing stop starts beyond the protected stop."""
+    if mark <= 0 or distance <= 0:
+        return False
+    if side == "Buy":
+        return mark - distance >= protected_stop
+    if side == "Sell":
+        return mark + distance <= protected_stop
+    raise ValueError("side must be Buy or Sell")
