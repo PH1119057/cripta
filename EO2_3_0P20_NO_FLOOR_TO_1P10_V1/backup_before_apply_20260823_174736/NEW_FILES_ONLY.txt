@@ -1,0 +1,4 @@
+EO2.3 is a new-file-only research patch revision; research contract remains EO2 V1.
+No existing project files are overwritten.
+On apply/final-gate failure the four EO2 files are deleted.
+EO1 source report and reports\ user data are read-only.

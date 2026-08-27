@@ -1,0 +1,9 @@
+P41 — ENTRY V1 FREEZE + LINKUSDT CROSS-ASSET VALIDATION
+
+- freezes Entry Concept V1 before viewing LINK outcomes;
+- records final P40 orderbook conclusions in docs/ENTRY_RESEARCH_LEDGER_RU.md;
+- adds exact fixed public-trade day support to P30;
+- adds strict fixed-window completeness probing: missing archive days abort instead of silently shifting the period;
+- adds one-command LINK validation pipeline over the same research stages;
+- adds automatic LINK vs frozen UNI summary;
+- changes no live execution, SL, TP, leverage, position sizing, or Exit Engine behavior.

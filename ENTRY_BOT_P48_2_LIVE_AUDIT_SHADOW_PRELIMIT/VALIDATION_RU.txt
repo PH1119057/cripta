@@ -1,0 +1,18 @@
+CHECKED IN CHATGPT ENVIRONMENT
+- Reconstructed baseline: uploaded cripta(5).zip + installed P48 V1.2/V1.6/V1.7 payload state.
+- Python compileall on final post-patch tree: PASS.
+- Final post-patch targeted pytest (Entry Bot + config + GUI smoke + event/trading journal): 35 passed, 7 skipped (PySide6 unavailable here).
+- SQLite v8 -> v9 migration smoke: PASS; entry_bot_candidate_events created.
+- Full pytest attempted: NOT COMPLETE because hypothesis is unavailable in this environment.
+- Long-line check (>100): PASS for changed Python/tests.
+- Basic AST unused-import check: PASS after cleanup.
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime.
+- Ruff (not installed in ChatGPT environment).
+- mypy (not installed in ChatGPT environment).
+- Real PySide6 GUI rendering/color appearance.
+- Live Bybit public streams.
+- Full scripts\check_windows.ps1.
+
+Installer therefore performs fail-closed full-overlay PowerShell syntax + Ruff + mypy + targeted pytest before copying files into C:\cripta. User's scripts\check_windows.ps1 remains the authoritative post-install gate.

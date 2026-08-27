@@ -1,0 +1,50 @@
+P47L PORTFOLIO REPLAY 50/30/20
+
+Baseline
+- Current C:\cripta after successful P47K.2 installation/gate.
+- Requires existing P47G early-failure report and P47K +0.50/-0.50 report at run time.
+- Frozen Entry V1 and frozen P46 are inputs only and are not modified.
+
+Adds
+- src\bybit_workbench\research\portfolio_replay_v25.py
+- tests\test_portfolio_replay_v25.py
+- scripts\research_portfolio_replay_all9_windows.ps1
+- docs\P47L_PORTFOLIO_REPLAY_PROTOCOL_RU.md
+
+Research contract
+- Chronological replay of already-computed P47K outcomes.
+- Starting/reference bank: 100 USD.
+- Leverage: 10x.
+- Slot budgets: 50% / 30% / 20%.
+- Sizing scales down if realized equity drops below 100 USD; never upsizes above 100 USD.
+- One active position per symbol.
+- Maximum three simultaneous positions.
+- +1.10% successful exit, maker fee.
+- -1.00% and -0.50% stops, taker fee.
+- Entry fee: maker.
+- Default maker/taker rates: 0.00020 / 0.00055; CLI parameters are explicit.
+- Compare NO_CAP with diagnostic CAP2_15M (max two new entries per rolling 15 minutes).
+- No raw market-data download and no new 72h replay.
+- Earliest P47K censored Entry is the new-entry cutoff.
+
+Does NOT change
+- Entry logic or Entry fingerprint.
+- P46 or holdout definitions.
+- Production Exit/Risk/Execution/UI.
+- Bybit live behavior.
+- Historical P47K/P47G reports.
+
+Installer
+- Must run from C:\cripta.
+- Verifies payload SHA256.
+- Creates a temporary post-patch overlay using real project paths.
+- Runs PowerShell syntax, py_compile, Ruff, mypy, targeted pytest, full pytest,
+  headless smoke and GUI smoke before copying project files.
+- On precheck failure no project/reports/user-data files are changed.
+- Existing target files are rejected as a baseline mismatch.
+
+Authoritative post-install gate
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+
+Research command
+powershell -ExecutionPolicy Bypass -File .\scripts\research_portfolio_replay_all9_windows.ps1

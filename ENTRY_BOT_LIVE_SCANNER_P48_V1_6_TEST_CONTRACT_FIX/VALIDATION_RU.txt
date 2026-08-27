@@ -1,0 +1,26 @@
+P48 V1.6 VALIDATION
+
+CHECKED HERE on reconstructed post-patch overlay (user project snapshot + successfully installed P48 V1.2 + V1.6 payload):
+- Python compileall src/tests: PASS.
+- targeted pytest: tests/test_entry_bot_live_scanner.py + tests/test_config.py + tests/test_gui_smoke.py => 17 passed, 7 skipped.
+- GUI tests are skipped here because PySide6 is not installed in the ChatGPT container.
+- reviewed failing Windows GUI test contract: production correctly disables Start when snapshot.running=True; prior test incorrectly declared the fake runtime RUNNING before the operator clicked Start. V1.6 makes the fixture stateful and initially STOPPED.
+
+NOT CHECKED HERE:
+- Ruff: unavailable in container and internet is disabled.
+- mypy: unavailable in container and internet is disabled.
+- Windows PowerShell 5.1 syntax/runtime.
+- real PySide6 GUI execution.
+- full scripts\check_windows.ps1.
+- live Bybit REST/WS.
+
+Installer checks before touching C:\cripta:
+- manifest SHA256;
+- PowerShell parser syntax;
+- Python py_compile;
+- full post-patch src/tests overlay Ruff;
+- full post-patch source-overlay mypy;
+- targeted pytest including real PySide6 GUI smoke on user's environment.
+
+After installation the authoritative gate remains:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

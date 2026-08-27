@@ -1,0 +1,17 @@
+P53_1M_ENTRY_DISPLACEMENT_V1_4
+Research-only patch. Downloads: DISABLED.
+Baseline: bybit-workbench 0.8.5 / P48.2 + accepted P53 V1.3.
+
+Root cause fixed:
+- V1.3 had no previous raw-trade close at the very first minute of the 91-day evaluation period.
+- It therefore used the first trade as the first 1m open.
+- XRPUSDT proved that frozen Bybit 5m can carry a different causal opening point at that dataset boundary while H/L/C/V still match exactly.
+
+V1.4:
+- seeds only the first minute of the whole evaluation period from the open of the first frozen 5m candle;
+- uses no future H/L/C/V for that seed;
+- after the boundary, every minute still opens from previous causal close;
+- retains exact 1m -> frozen 5m OHLCV equality with no tolerance;
+- reuses compatible V1.3 daily caches and rebuilds a cached day when its first open disagrees with the expected causal seed;
+- keeps the 1063 frozen Entry cohort and all Entry/Exit/Risk/Execution/live/UI contracts unchanged;
+- does not touch P46/NEW5.

@@ -1,0 +1,31 @@
+P51 MFE-ACTIVATED RISK / GIVEBACK ANATOMY V1.1 MYPY FIX
+
+Baseline:
+- bybit-workbench 0.8.5
+- P50 V1.2 installed and accepted
+- P51 V1 was NOT installed: fail-closed mypy precheck rejected it before project modification
+
+Prerequisites at research run time:
+- C:\cripta\.venv
+- reports\multi_retest_entry_recross_p50\ALL9_P50_WORKING
+- latest reports\untouched_minus1_plus110_v1\ALL9_* exact baseline (or explicit -ExactBaselineDir)
+- existing frozen nine-asset local raw-trade datasets
+
+Changes:
+- clean consolidated P51 payload
+- fixes five mypy diagnostics from the rejected V1 package
+- exact-baseline outcome defaultdict is explicitly typed
+- aggregate output row uses a separate dict[str, Any] variable instead of reusing FirstRuleSignalRow
+- P51 research semantics are unchanged
+
+Does not change:
+- Entry V1
+- frozen P46/fingerprint
+- live Execution
+- Exit/Risk production logic
+- calibration
+- existing reports, market data or user data during installation
+- reserved OOS assets BNB/AVAX/SUI/AAVE/LTC
+
+Downloads: DISABLED / fail-closed.
+Package version remains bybit-workbench 0.8.5.

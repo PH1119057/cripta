@@ -1,0 +1,10 @@
+P48.3 AUTOMATIC WINDOWS TIME PREFLIGHT
+
+- LIVE startup ensures Windows Time (W32Time) is running via sc.exe start w32time.
+- Then calls w32tm /resync before any automatic Bybit connection.
+- If startup time sync fails, automatic Bybit connection is suppressed fail-closed.
+- Mainnet acceptance CLI now performs the same Windows clock preflight first.
+- Closed-loop Bybit clock watchdog: resync at |offset| >= 500 ms; hard block > 750 ms.
+- Clock offset sampling uses the midpoint of local time before/after /v5/market/time.
+- Top-bar Clock indicator thresholds now match the tighter safety limits.
+- No Entry/Exit strategy changes. No leverage/risk formula changes.

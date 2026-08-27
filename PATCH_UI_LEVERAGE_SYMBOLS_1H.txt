@@ -1,0 +1,41 @@
+BYBIT STRATEGY WORKBENCH — UI LEVERAGE / SYMBOLS / DEFAULT 1H PATCH
+
+Changes:
+1. Symbol dropdown always contains:
+   BTCUSDT, ETHUSDT, XRPUSDT, 1000PEPEUSDT, SOLUSDT, DOGEUSDT, ADAUSDT, UNIUSDT, LINKUSDT.
+   Existing symbol history is preserved and merged with this list.
+
+2. Default market/chart timeframe is 60 minutes (1H).
+   User can still switch to 1/3/5/15/30/60/240/D.
+
+3. Leverage is now a dropdown:
+   1x / 2x / 3x / 5x / 7x / 10x.
+
+4. LIVE mode has an explicit "Применить к Bybit" action.
+   It calls Bybit V5 set-leverage for the currently selected linear symbol,
+   with equal buy/sell leverage for one-way mode.
+
+5. Leverage configuration is fail-closed:
+   - requires fresh read-only state;
+   - requires no open position;
+   - requires no open orders;
+   - requires no active Mainnet execution workflow.
+
+6. Micro-Live is no longer hard-coded to 1x.
+   The fresh Bybit position leverage must match the leverage selected for the trade.
+
+7. Margin availability check is leverage-aware:
+   required_margin = exposure / requested_leverage.
+   Monetary risk sizing still comes from risk budget + stop distance; leverage does not
+   automatically multiply position risk.
+
+Validation performed in sandbox:
+- py_compile / compileall: PASS
+- targeted unit tests: 64 passed (plus 41 subtests)
+- GUI tests could not execute here because PySide6 is not installed in sandbox;
+  run scripts/check_windows.ps1 in the project venv after installation.
+
+Install:
+- Extract this ZIP into C:\cripta with replacement of existing files.
+- Then run:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

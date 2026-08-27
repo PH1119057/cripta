@@ -1,0 +1,6 @@
+Локальная проверка сборки:
+- Python py_compile: PASS
+- targeted pytest test_market_regime_full_panel_v2.py: 8 passed
+- добавлены тесты primary cross-asset path и legacy_materialization fallback
+
+Окончательный Ruff/mypy/full pytest gate выполняется на проектной .venv командой scripts\check_windows.ps1.

@@ -1,0 +1,54 @@
+P49.2 - memory-bounded first-retest research runner
+
+Baseline:
+- bybit-workbench 0.8.5
+- P49 FIRST RETEST STOP ANATOMY V1 installed
+- P49.1 negative CSV launcher fix installed
+- current P49.1 source/test/launcher hashes are checked before installation
+
+Root cause of the observed failure:
+P49 V1 retained every full 72h tick-level PathSeries in path_by_key until the final
+policy aggregation. At the same time it kept a separate decompressed day LRU cache
+for every one of the 9 symbols. build_path_series also materialized Python float
+lists/tuples for each 72h path. On high-volume public-trade datasets this caused
+unbounded process memory growth and eventually MemoryError while appending another
+timestamp, even though the raw day loader itself already uses packed doubles.
+
+Changes:
+- P49-specific compact 72h PathSeries uses array('d') packed doubles.
+- Only one signal path is retained at a time; completed full paths are never stored.
+- Post-retest stop-policy counts are accumulated while that signal path is in memory.
+- Signals are processed symbol-by-symbol so only one symbol's day cache is live.
+- Default 72h LRU cache is reduced from 6 to 4 UTC days (enough for any [start,start+72h)
+  interval) without changing research results.
+- max/min after confirmation are scanned without slicing/copying the remaining path.
+- Policy-grid first-hit outcomes are computed in one pass per confirmed retest instead
+  of repeatedly scanning the same path for every stop/target pair.
+- Checkpoint is written every 25 completed signals and at every symbol boundary.
+- Default output is deterministic:
+    reports\first_retest_stop_anatomy_p49\ALL9_P49_WORKING
+  Re-running the same command resumes only when the exact config + Entry source
+  summaries/features + dataset manifests fingerprint matches. Incompatible checkpoint
+  inputs fail closed rather than being mixed.
+
+Research semantics unchanged:
+- First retest exists only after a positive activation milestone.
+- Pre-activation adverse movement is Entry noise, not a retest.
+- Activation levels remain +0.10/+0.20/+0.25/+0.50%.
+- Retest-start drawdown remains 0.05 pp.
+- Causal rebound confirmation remains 0.05 pp.
+- Initial structural stop remains -1.00%.
+- Candidate tightened stops remain -0.75/-0.50/-0.25/+0.10%.
+- Continuation targets remain +0.50/+1/+2/+3%.
+- Horizon remains 72h.
+
+Does not change:
+- Entry V1 production logic or frozen Entry signals
+- frozen P46 or its fingerprint
+- Exit/Risk production logic
+- live Execution or arming state
+- market data, calibration, existing reports, or user data during installation
+- package version (remains 0.8.5)
+
+Resulting research revision: P49.2 MEMORY BOUNDED + RESUME.
+Downloads: DISABLED.

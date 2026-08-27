@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cripta · сервер исследований</title>
+  <style>
+    :root{color-scheme:dark;--bg:#091017;--card:#111c26;--line:#263746;--text:#e7eef5;--muted:#8ea1b2;--ok:#58d68d;--warn:#f5b041;--accent:#55b5ff}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#071018,#0c1720);color:var(--text);font:14px/1.45 system-ui,Segoe UI,sans-serif}
+    main{max-width:1280px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:18px}h1{font-size:28px;margin:0}h2{font-size:16px;margin:0 0 14px}.muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.card{grid-column:span 4;background:rgba(17,28,38,.96);border:1px solid var(--line);border-radius:12px;padding:18px}.wide{grid-column:span 8}.full{grid-column:1/-1}
+    nav{display:flex;gap:8px;margin:0 0 18px;padding:5px;background:#0d1720;border:1px solid var(--line);border-radius:12px;width:max-content}.tab{border:0;border-radius:8px;padding:10px 16px;background:transparent;color:var(--muted);font:inherit;font-weight:650;cursor:pointer}.tab:hover{color:var(--text);background:#162431}.tab.active{color:#071018;background:var(--accent)}.panel{display:none}.panel.active{display:grid}
+    .metric{font-size:26px;font-weight:700}.bar{height:8px;background:#263746;border-radius:8px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;background:var(--accent)}.light{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:7px}.light.green{background:#35d07f;box-shadow:0 0 9px #35d07f88}.light.yellow{background:#f5c542;box-shadow:0 0 9px #f5c54288}.light.red{background:#ef5b5b;box-shadow:0 0 9px #ef5b5b88}a{color:var(--accent)}
+    details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}summary{cursor:pointer;color:var(--accent);font-weight:600}.catalog{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.item{padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:#0b151e;font-family:ui-monospace,Consolas,monospace;font-size:12px}.checklist{list-style:none;margin:0;padding:0}.checklist li{padding:9px 4px;border-bottom:1px solid var(--line)}.done::before,.work::before,.todo::before{display:inline-block;width:24px;font-weight:800}.done::before{content:'✓';color:var(--ok)}.work::before{content:'◐';color:var(--warn)}.todo::before{content:'○';color:var(--muted)}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}.pill{display:inline-block;padding:2px 8px;border-radius:20px;background:#203244}.ok{color:var(--ok)}.warn{color:var(--warn)}code{color:#b8ddfa}
+    @media(max-width:850px){.card,.wide{grid-column:1/-1}header{align-items:start;flex-direction:column}}
+  </style>
+</head>
+<body><main>
+  <header><div><div class="muted">SERVER RESEARCH CONTROL PLANE</div><h1>Cripta · инфраструктура</h1></div><div id="stamp" class="muted">загрузка…</div></header>
+  <nav aria-label="Разделы"><button class="tab active" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="bots">Торговые боты</button><button class="tab" data-panel="history">История</button><button class="tab" data-panel="checklist">Чек-лист</button></nav>
+  <section id="infra" class="grid panel active">
+    <article class="card full"><h2>Общее состояние</h2><div id="health" class="metric">—</div><div id="healthIssues" class="muted">—</div></article>
+    <article class="card"><h2>Данные</h2><div id="dataSize" class="metric">—</div><div class="muted" id="period">—</div><div class="bar"><i id="diskBar"></i></div></article>
+    <article class="card"><h2>Загрузка</h2><div id="download" class="metric">—</div><div class="muted" id="downloadCurrent">—</div></article>
+    <article class="card"><h2>Задания</h2><div id="jobs" class="metric">—</div><div class="muted">очередь / выполняются / завершены / ошибки</div></article>
+    <article class="card full"><h2>Связь с Bybit · только чтение</h2><table><thead><tr><th>Состояние</th><th>Канал</th><th>Сообщения</th><th>Engine → сервер p50</th><th>p95</th><th>JSON p50</th><th>Переподключения</th></tr></thead><tbody id="connectivity"></tbody></table></article>
+    <article class="card full"><h2>Приватный API Bybit</h2><table><thead><tr><th>Авторизация</th><th>Endpoint</th><th>Режим ключа</th><th>Разрешения</th><th>Исполнение</th></tr></thead><tbody id="privateApi"></tbody></table></article>
+    <article class="card full"><h2>Приватные каналы Bybit</h2><table><thead><tr><th>Канал</th><th>Состояние</th><th>Переподключения</th><th>Горячие позиции</th><th>Горячие заявки</th><th>Команд отправлено</th></tr></thead><tbody id="privateChannels"></tbody></table></article>
+    <article class="card full"><h2>Exchange truth · долговечный аудит</h2><table><thead><tr><th>Состояние</th><th>Возраст потока</th><th>Сдвиг часов</th><th>REST latency</th><th>Equity</th><th>Позиции</th><th>Открытые заявки</th><th>Последняя проверка</th></tr></thead><tbody id="safety"></tbody></table><div class="muted" style="margin-top:10px">Снимки сохраняются каждые 30 секунд в PostgreSQL вместе с startup/shutdown и ошибками обновления. Контур использует только GET-запросы Bybit.</div></article>
+    <article class="card full"><h2>Резервное копирование</h2><table><thead><tr><th>Состояние</th><th>Последний снимок UTC</th><th>Состав</th><th>Тяжёлые datasets</th><th>Следующий запуск</th></tr></thead><tbody id="backup"></tbody></table></article>
+    <article class="card full"><h2>Операционный список монет</h2><div id="selectionRules" class="muted" style="margin-bottom:12px"></div><table><thead><tr><th>Сегодня</th><th>Монета</th><th>Роль</th><th>Оборот 24ч</th><th>Спред</th><th>Open interest</th><th>Funding</th><th>Trades</th><th>Orderbook</th><th>Данные</th></tr></thead><tbody id="symbols"></tbody></table></article>
+    <article class="card"><h2>Службы</h2><div id="services"></div><h2 style="margin-top:20px">Технологии</h2><div id="tech" class="muted"></div></article>
+  </section>
+  <section id="current" class="grid panel">
+    <article class="card full"><h2>Актуальная кодовая база</h2><table><thead><tr><th>Релиз</th><th>Статус</th><th>Объём</th><th>Модули src</th><th>Скрипты</th><th>Тесты</th></tr></thead><tbody id="currentCode"></tbody></table><div class="muted" style="margin-top:10px">Сохранена как воспроизводимая основа, но не активирована как стратегия и не запускает торговлю.</div></article>
+    <article class="card full"><h2>Исследования Cripta 2</h2><table><thead><tr><th>ID</th><th>Статус</th><th>Название</th><th>Линия</th><th>Монеты</th><th>Время</th><th>Результат</th></tr></thead><tbody id="jobRows"></tbody></table></article>
+    <article class="card full"><h2>Исполняемые компоненты</h2><div id="scripts" class="muted">—</div><div class="muted" style="margin-top:10px">Новые исследования поступают пакетами через K:\incoming\jobs, исполняются на сервере и публикуют результат в K:\reports\jobs.</div></article>
+  </section>
+  <section id="bots" class="grid panel">
+    <article class="card full"><h2>Контур исполнения</h2><div id="botGate" class="metric">—</div><div class="muted">Стратегии запускаются раздельно. Shadow не отправляет заявки; Mainnet требует отдельного допуска.</div></article>
+    <article class="card full"><h2>Режимы допуска</h2><table><thead><tr><th>Режим</th><th>Доступ</th><th>Причина</th></tr></thead><tbody id="gateRows"></tbody></table></article>
+    <article class="card full"><h2>Боты и качество сделок</h2><table><thead><tr><th>Бот</th><th>Стратегия</th><th>Режим</th><th>Состояние</th><th>Монеты</th><th>Сигналы / сделки</th><th>Win rate</th><th>Чистый PnL</th><th>Комиссии</th><th>Задержка p50</th><th>Управление</th></tr></thead><tbody id="botRows"></tbody></table></article>
+    <article class="card full"><h2>Что будет сохраняться по каждой сделке</h2><div class="muted">Сигнал и версия стратегии · решение фильтров · цена сигнала/заявки/исполнения · комиссия · проскальзывание · MFE/MAE · причина выхода · чистый PnL · задержки signal → send → accepted → filled.</div></article>
+    <article class="card full"><h2>Монитор всех сигналов</h2><div id="opportunitySummary" class="metric">—</div><div class="muted" style="margin-bottom:12px">Учитываются entered, shadow, blocked и skipped. Остановленный исполнитель не должен останавливать будущий scanner сигналов.</div><table><thead><tr><th>Время</th><th>Сигнал</th><th>Стратегия</th><th>Монета</th><th>Направление</th><th>Решение</th><th>Причина</th><th>Статус</th><th>MFE</th><th>MAE</th><th>Тиков</th></tr></thead><tbody id="opportunityRows"></tbody></table></article>
+    <article class="card full"><h2>Последние команды</h2><table><thead><tr><th>Время</th><th>Бот</th><th>Команда</th><th>Результат</th></tr></thead><tbody id="botEvents"></tbody></table></article>
+  </section>
+  <section id="history" class="grid panel">
+    <article class="card full"><h2>Историческая библиотека</h2><table><thead><tr><th>Snapshot</th><th>Объём</th><th>Файлы</th><th>Наборы отчётов</th><th>Research-модули</th></tr></thead><tbody id="legacyRows"></tbody></table><div id="legacyCatalog"></div><div class="muted" style="margin-top:10px">История доступна для поиска и повторной проверки, но не включается в новую линию автоматически.</div></article>
+  </section>
+  <section id="checklist" class="grid panel">
+    <article class="card full"><h2>Готово · сервер и данные</h2><ul class="checklist">
+      <li class="done">Подключён отдельный SSD 150 ГБ, ext4, автоматическое монтирование в /data/cripta</li>
+      <li class="done">Создана структура datasets / jobs / cache / staging / legacy</li>
+      <li class="done">Скачан замороженный сегмент: 14 монет, 2534 файла, пропусков 0, ошибок 0</li>
+      <li class="done">BTC и ETH отмечены индикаторами; остальные 12 — торговыми монетами</li>
+      <li class="done">Настроен диск обмена K: — incoming, reports и logs</li>
+      <li class="done">Развёрнут HTTPS-веб-интерфейс с авторизацией</li>
+      <li class="done">Работают Nginx, PostgreSQL и системные службы Cripta</li>
+    </ul></article>
+    <article class="card full"><h2>Готово · исследования и код</h2><ul class="checklist">
+      <li class="done">Старая линия сохранена в изолированной исторической библиотеке</li>
+      <li class="done">Актуальный исходный код сохранён неизменяемым серверным релизом</li>
+      <li class="done">Работают приём, проверка и очередь ZIP-пакетов исследований</li>
+      <li class="done">Работает изолированный исполнитель с timeout и данными только для чтения</li>
+      <li class="done">Сохраняются result.json, stdout.log и stderr.log; отчёты открываются через веб</li>
+      <li class="done">Тестовый пакет прошёл queued → running → completed</li>
+    </ul></article>
+    <article class="card full"><h2>Готово · связь с Bybit</h2><ul class="checklist">
+      <li class="done">Постоянный публичный WebSocket stream.bybit.kz для 20 торговых монет и двух индикаторов</li>
+      <li class="done">Измеряется задержка matching engine → сервер и скорость JSON-декодирования</li>
+      <li class="done">Mainnet API credential перенесён в зашифрованное системное хранилище</li>
+      <li class="done">Авторизация api.bybit.kz подтверждена; доступны Order, Position и DerivativesTrade</li>
+      <li class="done">Реальное исполнение заявок пока программно заблокировано</li>
+      <li class="done">Долговечный read-only журнал: биржевые часы, баланс, позиции, заявки, свежесть потока и REST latency</li>
+      <li class="done">Мониторинг свежести каналов, exchange truth, backup и резерва диска с историей переходов в PostgreSQL</li>
+      <li class="done">Независимый монитор entered / shadow / blocked / skipped сигналов с MFE, MAE и first-hit уровнями</li>
+    </ul></article>
+    <article class="card full"><h2>В работе · ближайший этап</h2><ul class="checklist">
+      <li class="done">Постоянный приватный WebSocket: orders / executions / positions / wallet</li>
+      <li class="work">WebSocket Trade аутентифицирован; отправка команд остаётся заблокированной до испытаний</li>
+      <li class="work">Безопасное закрытие позиции через reduceOnly</li>
+      <li class="done">Горячее состояние заявок и позиций в PostgreSQL с обновлением через private WS</li>
+      <li class="work">Телеметрия signal → send → accepted → filled</li>
+    </ul></article>
+    <article class="card full"><h2>Осталось · до готовой рабочей платформы</h2><ul class="checklist">
+      <li class="done">Reconciliation REST → PostgreSQL при запуске и каждом переподключении private WS</li>
+      <li class="done">Идемпотентный журнал команд: повторный idempotency key не создаёт вторую операцию</li>
+      <li class="todo">Разрешение неизвестного результата live-команды через exchange truth</li>
+      <li class="todo">Интерфейс открытия, отмены и закрытия заявки с подтверждением</li>
+      <li class="done">Shadow / Testnet / Mainnet разделены независимыми серверными gates; разрешён только Shadow</li>
+      <li class="work">Журнал команд и timings в PostgreSQL готов; ответы и fills появятся после испытаний Testnet</li>
+      <li class="work">SHA256 и финальный manifest запустятся автоматически после завершения новых 1810 файлов</li>
+      <li class="done">Ежедневная локальная копия проекта, PostgreSQL, конфигурации и отчётов с SHA256</li>
+      <li class="done">Инструкция полного восстановления сервера и обязательная reconciliation-проверка</li>
+      <li class="done">PostgreSQL backup восстановлен в отдельную тестовую БД и проверен по ключевым таблицам</li>
+      <li class="todo">Внешняя/off-site копия вне двух дисков этого сервера</li>
+      <li class="todo">Доверенный TLS-сертификат после привязки домена</li>
+      <li class="todo">После восстановления и проверки удалить временный NOPASSWD sudo</li>
+    </ul></article>
+  </section>
+</main><script>
+const size=n=>{if(!n)return'0 Б';const u=['Б','КБ','МБ','ГБ','ТБ'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i>2?1:2)+' '+u[i]};
+document.querySelectorAll('.tab').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));button.classList.add('active');document.getElementById(button.dataset.panel).classList.add('active');history.replaceState(null,'','#'+button.dataset.panel)}));
+const initial=location.hash.slice(1);if(['infra','current','bots','history','checklist'].includes(initial))document.querySelector(`.tab[data-panel="${initial}"]`).click();
+async function botAction(bot_id,action){if(!confirm(`${action==='start'?'Запустить':'Остановить'} ${bot_id}?`))return;const r=await fetch('/api/bots/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bot_id,action})});const out=await r.json();if(!r.ok)alert(out.error||'Команда не выполнена');await refresh()}
+async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});const d=await r.json();
+  stamp.textContent='обновлено '+new Date(d.generated_at_epoch*1000).toLocaleString('ru-RU'); dataSize.textContent=size(d.disk.used)+' / '+size(d.disk.total); period.textContent=(d.evaluation_start||'—')+' → '+(d.evaluation_end||'—'); diskBar.style.width=(100*d.disk.used/d.disk.total).toFixed(1)+'%';
+  const hs=d.health||{};health.textContent=hs.state==='green'?'GREEN · всё штатно':hs.state==='yellow'?'YELLOW · требуется внимание':hs.state==='red'?'RED · есть критическая проблема':'UNKNOWN';health.className='metric '+(hs.state==='green'?'ok':hs.state==='yellow'?'warn':'');healthIssues.textContent=(hs.issues||[]).map(x=>x.message).join(' · ')||'Активных замечаний нет';
+  download.textContent=(d.download.status||'не запущена')+' · '+(d.download.files_ready||0); downloadCurrent.textContent=d.download.current||'—'; jobs.textContent=[d.jobs.queued,d.jobs.running,d.jobs.completed,d.jobs.failed].join(' / ');
+  const money=n=>n==null?'—':n>=1e9?'$'+(n/1e9).toFixed(2)+' млрд':n>=1e6?'$'+(n/1e6).toFixed(1)+' млн':'$'+Math.round(n).toLocaleString('ru-RU');
+  const roles={indicator:'индикатор',trading:'торговая',excluded_meme:'мем · исключена'};
+  symbols.innerHTML=d.symbols.map(x=>{const m=x.market||{};return `<tr title="${x.traffic_reason}"><td><span class="light ${x.traffic_light}"></span>${x.traffic_light==='green'?'можно':x.traffic_light==='yellow'?'осторожно':'нельзя'}</td><td><b>${x.symbol}</b></td><td><span class="pill">${roles[x.role]||x.role}</span></td><td>${money(m.turnover24h)}</td><td>${m.spread_bps==null?'—':m.spread_bps.toFixed(2)+' б.п.'}</td><td>${money(m.open_interest_value)}</td><td>${m.funding_rate_pct==null?'—':m.funding_rate_pct.toFixed(4)+'%'}</td><td>${x.public_trade_files}</td><td>${x.orderbook_files}</td><td>${size(x.bytes)}</td></tr>`}).join('');
+  selectionRules.innerHTML=`<b><span class="light green"></span>Зелёный:</b> ${d.market_selection.green}<br><b><span class="light yellow"></span>Жёлтый:</b> ${d.market_selection.yellow}<br><b><span class="light red"></span>Красный:</b> ${d.market_selection.red}<br>Статус обновляется каждые ${d.market_selection.updated_every_seconds} секунд. Наведите курсор на строку, чтобы увидеть причину.`;
+  services.innerHTML=Object.entries(d.services).map(([k,v])=>`<div><span class="${v==='active'?'ok':'warn'}">●</span> ${k.replace('.service','')} <span class="muted">${v}</span></div>`).join('');
+  tech.innerHTML=Object.entries(d.technologies).map(([k,v])=>`<div><code>${k}</code>: ${v}</div>`).join(''); scripts.textContent=d.scripts.length?d.scripts.join(' · '):'Исполняемые модули ещё не перенесены';
+  currentCode.innerHTML=`<tr><td><b>${d.current_code.release||'—'}</b></td><td><span class="pill">${d.current_code.status}</span></td><td>${size(d.current_code.bytes)}</td><td>${d.current_code.source_modules}</td><td>${d.current_code.research_scripts}</td><td>${d.current_code.tests}</td></tr>`;
+  const c=d.connectivity, em=c.matching_engine_to_server_ms||{}, ju=c.json_decode_us||{}; connectivity.innerHTML=`<tr><td><span class="pill">${c.state}</span></td><td>${c.symbols||0} монет</td><td>${c.messages||0}</td><td>${em.p50==null?'—':em.p50+' мс'}</td><td>${em.p95==null?'—':em.p95+' мс'}</td><td>${ju.p50==null?'—':ju.p50.toFixed(1)+' мкс'}</td><td>${c.reconnects||0}</td></tr>`;
+  const p=d.private_api, perms=p.permissions||{}; privateApi.innerHTML=`<tr><td><span class="pill">${p.state}</span></td><td>${p.server_endpoint||'—'}</td><td>${p.read_only===0?'торговый':p.read_only===1?'только чтение':'—'}</td><td>${Object.entries(perms).filter(([,v])=>v.length).map(([k,v])=>k+': '+v.join(', ')).join(' · ')||'—'}</td><td><span class="pill">заблокировано</span></td></tr>`;
+  const pr=d.private_runtime||{},pw=pr.private||{},tw=pr.trade||{};privateChannels.innerHTML=`<tr><td>Private WS</td><td><span class="pill">${pw.state||'—'}</span></td><td>${pw.reconnects||0}</td><td>${pw.hot_positions||0}</td><td>${pw.hot_orders||0}</td><td>—</td></tr><tr><td>Trade WS</td><td><span class="pill">${tw.state||'—'}</span></td><td>${tw.reconnects||0}</td><td>—</td><td>—</td><td>${tw.commands_sent||0}</td></tr>`;
+  const sa=d.safety||{};safety.innerHTML=`<tr><td><span class="pill">${sa.state||'—'}</span></td><td>${sa.public_stream_age_ms==null?'—':sa.public_stream_age_ms+' мс'}</td><td>${sa.clock_offset_ms==null?'—':sa.clock_offset_ms+' мс'}</td><td>${sa.rest_latency_ms==null?'—':sa.rest_latency_ms+' мс'}</td><td>${sa.total_equity==null?'—':'$'+Number(sa.total_equity).toFixed(2)}</td><td>${sa.open_positions==null?'—':sa.open_positions}</td><td>${sa.open_orders==null?'—':sa.open_orders}</td><td>${sa.checked_at_epoch?new Date(sa.checked_at_epoch*1000).toLocaleString('ru-RU'):'—'}</td></tr>`;
+  const bk=d.backup||{};backup.innerHTML=`<tr><td><span class="pill">${bk.state||'—'}</span></td><td>${bk.created_at_utc||'—'}</td><td>проект · PostgreSQL · конфигурация · reports</td><td>${bk.includes_heavy_datasets===false?'не копируются; восстанавливаются отдельно':'—'}</td><td>ежедневно, 03:20 UTC</td></tr>`;
+  const bd=d.bots||{bots:[],events:[]};botGate.textContent=bd.execution_gate==='live-trading-locked'?'Реальные заявки заблокированы':bd.execution_gate;
+  gateRows.innerHTML=Object.entries(bd.gates||{}).map(([mode,g])=>`<tr><td><b>${mode}</b></td><td><span class="pill">${g.enabled?'разрешён':'заблокирован'}</span></td><td>${g.reason}</td></tr>`).join('');
+  botRows.innerHTML=bd.bots.length?bd.bots.map(b=>{const s=b.stats||{},closed=(s.wins||0)+(s.losses||0),wr=closed?100*(s.wins||0)/closed:null;return `<tr><td><b>${b.id}</b><br><span class="muted">${b.name}</span></td><td>${b.strategy}</td><td><span class="pill">${b.mode}</span></td><td>${b.actual_state}</td><td>${(b.symbols||[]).join(', ')||'—'}</td><td>${s.signals||0} / ${s.fills||0}</td><td>${wr==null?'—':wr.toFixed(1)+'%'}</td><td>${Number(s.net_pnl||0).toFixed(2)}</td><td>${Number(s.fees||0).toFixed(2)}</td><td>${s.latency_p50_ms==null?'—':s.latency_p50_ms+' мс'}</td><td><button class="tab" onclick="botAction('${b.id}','start')" ${b.executable?'':'disabled'}>Старт</button><button class="tab" onclick="botAction('${b.id}','stop')">Стоп</button></td></tr>`}).join(''):'<tr><td colspan="11" class="muted">Слоты ботов не созданы</td></tr>';
+  botEvents.innerHTML=(bd.events||[]).length?bd.events.slice(0,20).map(e=>`<tr><td>${new Date(e.at_epoch*1000).toLocaleString('ru-RU')}</td><td>${e.bot_id}</td><td>${e.action}</td><td>${e.result}</td></tr>`).join(''):'<tr><td colspan="4" class="muted">Команд ещё не было</td></tr>';
+  const op=d.opportunities||{counts:{},items:[]};opportunitySummary.textContent=`наблюдаются ${op.counts.tracking||0} · завершены ${op.counts.completed||0}`;opportunityRows.innerHTML=op.items.length?op.items.map(x=>`<tr><td>${new Date(x.signal_at_epoch_ms).toLocaleString('ru-RU')}</td><td><b>${x.signal_id}</b><br><span class="muted">${x.bot_id}</span></td><td>${x.strategy_version}</td><td>${x.symbol}<br><span class="light ${x.traffic_light}"></span></td><td>${x.direction}</td><td>${x.decision}</td><td>${x.reason}</td><td>${x.state}</td><td>${Number(x.mfe_pct||0).toFixed(3)}%</td><td>${Number(x.mae_pct||0).toFixed(3)}%</td><td>${x.samples}</td></tr>`).join(''):'<tr><td colspan="11" class="muted">Сигналов пока нет — монитор готов к приёму от постоянных scanner-процессов.</td></tr>';
+  jobRows.innerHTML=d.jobs.items.length?d.jobs.items.map(x=>`<tr><td><b>${x.job_id}</b></td><td><span class="pill">${x.state}</span></td><td>${x.title}</td><td>${x.line}</td><td>${x.symbols.join(', ')}</td><td>${x.duration_seconds==null?'—':x.duration_seconds+' с'}</td><td>${x.error||(x.report_path?`<a href="/reports/${x.report_path}/">Открыть отчёт</a>`:'—')}</td></tr>`).join(''):'<tr><td colspan="7" class="muted">Заданий пока нет</td></tr>';
+  legacyRows.innerHTML=d.legacy.length?d.legacy.map(x=>`<tr><td><b>${x.name}</b></td><td>${size(x.bytes)}</td><td>${x.files}</td><td>${x.report_roots}</td><td>${x.research_modules}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">История ещё не перенесена</td></tr>';
+  legacyCatalog.innerHTML=d.legacy.map(x=>`<details><summary>Показать содержимое ${x.name}</summary><h3>Наборы отчётов (${x.reports.length})</h3><div class="catalog">${x.reports.map(n=>`<span class="item">${n}</span>`).join('')}</div><h3>Исследовательские модули (${x.modules.length})</h3><div class="catalog">${x.modules.map(n=>`<span class="item">${n}</span>`).join('')}</div></details>`).join('');
+} refresh().catch(e=>stamp.textContent='ошибка: '+e);setInterval(()=>refresh().catch(()=>{}),10000);
+</script></body></html>

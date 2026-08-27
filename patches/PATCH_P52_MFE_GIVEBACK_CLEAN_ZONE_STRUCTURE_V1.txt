@@ -1,0 +1,8 @@
+P52 research-only overlay.
+Adds:
+- src/bybit_workbench/research/mfe_giveback_clean_zone_p52.py
+- scripts/research_mfe_giveback_clean_zone_p52_windows.ps1
+- tests/test_mfe_giveback_clean_zone_p52.py
+- docs/P52_MFE_GIVEBACK_CLEAN_ZONE_STRUCTURE_PROTOCOL_RU.md
+
+Does NOT modify Entry, P45.1, P50, P51, Exit, Risk, Execution, UI, market data, or reports.

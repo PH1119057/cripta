@@ -1,0 +1,22 @@
+P50 MULTI-RETEST / ENTRY RECROSS LIFECYCLE V1.2
+
+Baseline: bybit-workbench 0.8.5 + accepted P49.3.1 source.
+Research only. Downloads: DISABLED.
+
+Purpose:
+- decompose repeated full retest cycles after +0.10 activation;
+- separately decompose repeated Entry-zone visit/recovery episodes;
+- quantify stop tightening after causal peak reclaim / Entry recovery number;
+- measure SAVED LOSERS versus LOST FUTURE RUNNERS;
+- measure adverse room still required by future +0.5/+1/+2/+3 runners.
+
+Preparation fixes:
+- preserves V1.1 Ruff SIM102 equivalent-condition fix;
+- V1.2 uses distinct typed loop variables for RetestCycleEvent and EntryVisitEvent so mypy does not carry an incompatible type across adjacent loops.
+- Research semantics are unchanged from V1.
+
+Also included:
+- P49.3 heterogeneous CSV finalization fix so an already-completed 995/995 checkpoint can finish reports without recomputing raw paths.
+
+Does not change Entry V1, frozen P46, live Execution, Exit, Risk, calibration, reports or market data during installation.
+Reserved five OOS assets BNB/AVAX/SUI/AAVE/LTC are not read by P50.

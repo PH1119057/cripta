@@ -1,0 +1,24 @@
+ENTRY BOT P48 V1.5 - VALIDATION
+
+CHECKED HERE:
+- Payload SHA256 manifest regenerated.
+- Python py_compile on modified Python files: PASS.
+- Post-patch local overlay targeted pytest: 8 passed, 7 skipped (PySide6 unavailable here).
+- The two Ruff I001 import-order findings reported by the user were corrected exactly.
+
+NOT CHECKED HERE:
+- Ruff executable is not available in this sandbox.
+- mypy executable is not available in this sandbox.
+- Full pytest cannot be collected here because hypothesis is not installed.
+- Windows PowerShell 5.1 runtime is not available here.
+- Real PySide6 GUI is not available here.
+
+INSTALLER GATE BEFORE COPYING INTO C:\cripta:
+- PowerShell syntax
+- py_compile
+- FULL post-patch src/tests overlay Ruff
+- FULL post-patch source-overlay mypy
+- targeted overlay pytest
+
+FINAL AUTHORITATIVE USER GATE:
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

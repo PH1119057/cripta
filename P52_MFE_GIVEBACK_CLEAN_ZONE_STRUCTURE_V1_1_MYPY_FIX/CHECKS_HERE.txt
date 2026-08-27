@@ -1,0 +1,8 @@
+After applying:
+1) powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+2) powershell -ExecutionPolicy Bypass -File .\scripts\research_mfe_giveback_clean_zone_p52_windows.ps1
+
+Expected report:
+C:\cripta\reports\mfe_giveback_clean_zone_p52\ALL9_P52_WORKING\summary.md
+
+Do not interpret N<20 rows as production evidence. NEW5 must remain untouched.

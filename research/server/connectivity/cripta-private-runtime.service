@@ -1,0 +1,28 @@
+[Unit]
+Description=Cripta private Bybit state and locked trade websocket
+After=network-online.target postgresql.service cripta-safety-observer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/srv/cripta/connectivity
+ExecStart=/usr/bin/python3 /srv/cripta/connectivity/private_runtime.py
+LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/cripta/private_runtime
+
+[Install]
+WantedBy=multi-user.target

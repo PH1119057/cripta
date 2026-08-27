@@ -1,0 +1,8 @@
+P30 manifest/resume hotfix
+
+- Serialize datetime.date values in JSON manifests as ISO-8601 strings.
+- Keep existing Decimal/datetime/tuple JSON handling intact.
+- Allow --dataset-dir to resume an incomplete P30 dataset when dataset_manifest.json is absent.
+- Existing public trade .csv.gz files in that dataset directory are reused by the existing downloader.
+- Add regression coverage for date/datetime/Decimal manifest serialization.
+- No live-trading or strategy semantics changed.

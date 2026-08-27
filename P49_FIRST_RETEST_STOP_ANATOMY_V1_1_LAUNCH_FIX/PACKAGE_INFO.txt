@@ -1,0 +1,40 @@
+P49 FIRST RETEST STOP ANATOMY V1.1 - LAUNCH FIX
+
+Baseline:
+  C:\cripta
+  bybit-workbench 0.8.5
+  P49 FIRST RETEST STOP ANATOMY V1 installed
+
+Prerequisites:
+  Windows PowerShell 5.1 compatible target
+  C:\cripta\.venv\Scripts\python.exe
+  Existing P49 V1 files must match BASELINE.csv
+
+Changed files:
+  scripts\research_first_retest_stop_anatomy_p49_windows.ps1
+  tests\test_first_retest_stop_anatomy_p49.py
+  patches\PATCH_P49_1_NEGATIVE_CSV_ARG_FIX.txt
+
+Resulting research revision:
+  P49.1 launcher fix
+  Python package version remains 0.8.5
+
+Changes:
+  Attaches the leading-negative CSV value to --stop-candidates-pct with '=' so
+  argparse receives it as one option value.
+  Adds a regression test for this launcher contract.
+
+Does not change:
+  Entry V1, frozen P46, P49 research semantics, Exit, Risk, live Execution,
+  reports, market data, caches, calibration, or user data.
+
+Installer behavior:
+  Verify baseline and payload hashes -> syntax -> post-patch code overlay ->
+  compileall -> Ruff -> mypy -> targeted pytest -> backup -> copy.
+  Any precheck failure leaves C:\cripta project files, reports and user data untouched.
+
+After install run authoritative gate:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+
+Then rerun P49:
+  powershell -ExecutionPolicy Bypass -File .\scripts\research_first_retest_stop_anatomy_p49_windows.ps1

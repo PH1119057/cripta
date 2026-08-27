@@ -1,0 +1,18 @@
+CHECKED HERE
+- Rebuilt post-patch overlay from cripta(5).zip + accepted P49 V1/P49.1/P49.2/P49.3.1 payloads.
+- Applied the exact P50 payload to real project paths in that overlay.
+- python -m compileall -q src tests : PASS
+- Targeted pytest on post-patch overlay: 49 passed
+- P49.3 finalization regression exercised against the user's real completed 995/995 checkpoint: checkpoint loaded 995 basin rows + 995 3h rows + 48 tradeoff counters, heterogeneous CSV write PASS.
+- Executable PowerShell payload/installer files are ASCII.
+- MANIFEST payload SHA256 generated and verified before packaging.
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime
+- Ruff (not installed in this environment)
+- mypy (not installed in this environment)
+- authoritative scripts/check_windows.ps1 on the user's current C:\cripta
+- full pytest: collection is blocked here because hypothesis is not installed
+- full 995-signal P50 raw-market run
+
+The installer runs PowerShell syntax, compileall, full-overlay Ruff, full-overlay mypy and targeted pytest on the user's actual C:\cripta before copying project files.

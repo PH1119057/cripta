@@ -1,0 +1,14 @@
+VALIDATION — ENTRY BOT LIVE SCANNER P48 V1
+==========================================
+
+В сборочной Linux-среде выполнено:
+- Python py_compile изменённых/new Python-файлов: PASS.
+- targeted pytest: 15 passed, 7 skipped.
+  7 skip относятся к отсутствию PySide6 в sandbox; GUI проверяется на Windows полным gate.
+- migration smoke на копии workbench.db: schema 7/8 -> 8, обе новые таблицы присутствуют: PASS.
+- production zone calculation проверяется тестом против frozen research P30 helper.
+- durable Entry->Exit handoff record/publish/claim-once/close покрыт тестом.
+
+Ruff и mypy в sandbox не установлены. Поэтому установщик fail-closed запускает
+Ruff payload precheck и mypy на временном source-overlay ДО копирования project files.
+После установки authoritative gate: scripts\check_windows.ps1.

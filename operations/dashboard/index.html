@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cripta · сервер исследований</title>
+  <style>
+    :root{color-scheme:dark;--bg:#091017;--card:#111c26;--line:#263746;--text:#e7eef5;--muted:#8ea1b2;--ok:#58d68d;--warn:#f5b041;--accent:#55b5ff}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#071018,#0c1720);color:var(--text);font:14px/1.45 system-ui,Segoe UI,sans-serif}
+    main{max-width:1280px;margin:auto;padding:28px}header{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:18px}h1{font-size:28px;margin:0}h2{font-size:16px;margin:0 0 14px}.muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.card{grid-column:span 4;background:rgba(17,28,38,.96);border:1px solid var(--line);border-radius:12px;padding:18px}.wide{grid-column:span 8}.full{grid-column:1/-1}
+    nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px;padding:5px;background:#0d1720;border:1px solid var(--line);border-radius:12px;width:max-content;position:sticky;top:0;z-index:100;box-shadow:0 8px 20px #071018cc}.tab{border:0;border-radius:8px;padding:10px 16px;background:transparent;color:var(--muted);font:inherit;font-weight:650;cursor:pointer}.tab:hover{color:var(--text);background:#162431}.tab.active{color:#071018;background:var(--accent)}.panel{display:none}.panel.active{display:grid}
+    .metric{font-size:26px;font-weight:700}.bar{height:8px;background:#263746;border-radius:8px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;background:var(--accent)}.light{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:7px}.light.green{background:#35d07f;box-shadow:0 0 9px #35d07f88}.light.yellow{background:#f5c542;box-shadow:0 0 9px #f5c54288}.light.red{background:#ef5b5b;box-shadow:0 0 9px #ef5b5b88}.light.gray{background:#8393a0}a{color:var(--accent)}.table-scroll{overflow-x:auto}.entry-table{min-width:1500px}.entry-table th{text-align:center;white-space:nowrap}.entry-table td{text-align:right;white-space:nowrap}.entry-table td:first-child,.entry-table td:nth-child(2){text-align:left;position:sticky;background:#111c26;z-index:1}.entry-table td:first-child{left:0}.entry-table td:nth-child(2){left:105px}.entry-row-green{background:#153b2b}.entry-row-yellow{background:#493b16}.entry-row-red{background:#481f25}.entry-row-gray{background:#28323a;color:#aab6bf}.entry-row-green td:first-child,.entry-row-green td:nth-child(2){background:#153b2b}.entry-row-yellow td:first-child,.entry-row-yellow td:nth-child(2){background:#493b16}.entry-row-red td:first-child,.entry-row-red td:nth-child(2){background:#481f25}.entry-row-gray td:first-child,.entry-row-gray td:nth-child(2){background:#28323a}.rate-good{color:#79e6a9;font-weight:750}.rate-bad{color:#ff8a8a;font-weight:750}.entry-row-gray .rate-good,.entry-row-gray .rate-bad{color:inherit}.trx-focus{outline:2px solid var(--accent);outline-offset:-2px}
+    .live-strip{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px}.live-box{padding:14px;border:1px solid var(--line);border-radius:10px;background:#0b151e}.live-value{font-size:20px;font-weight:750;margin-top:5px}.decision{border-left:4px solid var(--warn)}.observer-lock{padding:10px 14px;border:1px solid #765c1d;background:#332a12;border-radius:9px;color:#ffe29a}.fresh{color:var(--ok)}.stale{color:var(--warn)}.missing{color:#ff8a8a}@media(max-width:850px){.live-strip{grid-template-columns:1fr 1fr}}
+    .trade-controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end}.trade-controls label{display:grid;gap:5px;color:var(--muted)}.trade-controls input,.trade-controls select{min-width:110px;padding:9px;border:1px solid var(--line);border-radius:7px;background:#0b151e;color:var(--text)}.action{padding:7px 10px;border:1px solid #496175;border-radius:7px;background:#172836;color:var(--text);cursor:pointer}.action:disabled{opacity:.45;cursor:not-allowed}.action.danger{border-color:#8c4141;color:#ffabab}.auto-check{width:18px;height:18px}
+    details{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}summary{cursor:pointer;color:var(--accent);font-weight:600}.catalog{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}.item{padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:#0b151e;font-family:ui-monospace,Consolas,monospace;font-size:12px}.checklist{list-style:none;margin:0;padding:0}.checklist li{padding:9px 4px;border-bottom:1px solid var(--line)}.done::before,.work::before,.todo::before{display:inline-block;width:24px;font-weight:800}.done::before{content:'✓';color:var(--ok)}.work::before{content:'◐';color:var(--warn)}.todo::before{content:'○';color:var(--muted)}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}.pill{display:inline-block;padding:2px 8px;border-radius:20px;background:#203244}.ok{color:var(--ok)}.warn{color:var(--warn)}code{color:#b8ddfa}.formula{padding:12px;margin:10px 0;border-left:3px solid var(--accent);background:#0b151e;font:13px/1.6 ui-monospace,Consolas,monospace}.strategy-tabs{display:flex;gap:8px}.strategy-view{display:none}.strategy-view.active{display:block}.strategy-card{margin-top:14px;padding:16px;border:1px solid var(--line);border-radius:10px;background:#0c1720}.strategy-card h3{margin:0 0 8px}.status-base{color:var(--ok)}.status-research{color:var(--warn)}
+    @media(max-width:850px){.card,.wide{grid-column:1/-1}header{align-items:start;flex-direction:column}}
+  </style>
+</head>
+<body><main>
+  <header><div><div class="muted">SERVER RESEARCH CONTROL PLANE</div><h1>Cripta · инфраструктура</h1></div><div id="stamp" class="muted">загрузка…</div></header>
+  <nav aria-label="Разделы"><button class="tab active" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="entry">Entry</button><button class="tab" data-panel="liveDesk">Live-наблюдение</button><button class="tab" data-panel="strategies">Стратегии</button><button class="tab" data-panel="testLibrary">Библиотека тестов</button><button class="tab" data-panel="bots">Торговые боты</button><button class="tab" data-panel="serverControl">Ресурсы сервера</button><button class="tab" data-panel="history">История</button><button class="tab" data-panel="rules">Правила проекта</button><button class="tab" data-panel="checklist">Чек-лист</button><a class="tab" href="/logout">Выйти</a></nav>
+  <section id="infra" class="grid panel active">
+    <article class="card full"><h2>Общее состояние</h2><div id="health" class="metric">—</div><div id="healthIssues" class="muted">—</div></article>
+    <article class="card"><h2>Данные</h2><div id="dataSize" class="metric">—</div><div class="muted" id="period">—</div><div class="bar"><i id="diskBar"></i></div></article>
+    <article class="card"><h2>Загрузка</h2><div id="download" class="metric">—</div><div class="muted" id="downloadCurrent">—</div></article>
+    <article class="card"><h2>Задания</h2><div id="jobs" class="metric">—</div><div class="muted">очередь / выполняются / завершены / ошибки</div></article>
+    <article class="card full"><h2>Связь с Bybit · только чтение</h2><table><thead><tr><th>Состояние</th><th>Канал</th><th>Сообщения</th><th>Engine → сервер p50</th><th>p95</th><th>JSON p50</th><th>Переподключения</th></tr></thead><tbody id="connectivity"></tbody></table></article>
+    <article class="card full"><h2>Приватный API Bybit</h2><table><thead><tr><th>Авторизация</th><th>Endpoint</th><th>Режим ключа</th><th>Разрешения</th><th>Исполнение</th></tr></thead><tbody id="privateApi"></tbody></table></article>
+    <article class="card full"><h2>Приватные каналы Bybit</h2><table><thead><tr><th>Канал</th><th>Состояние</th><th>Переподключения</th><th>Горячие позиции</th><th>Горячие заявки</th><th>Команд отправлено</th></tr></thead><tbody id="privateChannels"></tbody></table></article>
+    <article class="card full"><h2>Exchange truth · долговечный аудит</h2><table><thead><tr><th>Состояние</th><th>Возраст потока</th><th>Сдвиг часов</th><th>REST latency</th><th>Equity</th><th>Позиции</th><th>Открытые заявки</th><th>Последняя проверка</th></tr></thead><tbody id="safety"></tbody></table><div class="muted" style="margin-top:10px">Снимки сохраняются каждые 30 секунд в PostgreSQL вместе с startup/shutdown и ошибками обновления. Контур использует только GET-запросы Bybit.</div></article>
+    <article class="card full"><h2>Резервное копирование</h2><table><thead><tr><th>Состояние</th><th>Последний снимок UTC</th><th>Состав</th><th>Тяжёлые datasets</th><th>Следующий запуск</th></tr></thead><tbody id="backup"></tbody></table></article>
+    <article class="card full"><h2>Операционный список монет</h2><div id="selectionRules" class="muted" style="margin-bottom:12px"></div><table><thead><tr><th>Сегодня</th><th>Монета</th><th>Роль</th><th>Оборот 24ч</th><th>Спред</th><th>Open interest</th><th>Funding</th><th>Trades</th><th>Orderbook</th><th>Данные</th></tr></thead><tbody id="symbols"></tbody></table></article>
+    <article class="card"><h2>Службы</h2><div id="services"></div><h2 style="margin-top:20px">Технологии</h2><div id="tech" class="muted"></div></article>
+  </section>
+  <section id="current" class="grid panel">
+    <article class="card full"><h2>Актуальная кодовая база</h2><table><thead><tr><th>Релиз</th><th>Статус</th><th>Объём</th><th>Модули src</th><th>Скрипты</th><th>Тесты</th></tr></thead><tbody id="currentCode"></tbody></table><div class="muted" style="margin-top:10px">Сохранена как воспроизводимая основа, но не активирована как стратегия и не запускает торговлю.</div></article>
+    <article class="card full"><h2>Исследования Cripta 2</h2><table><thead><tr><th>ID</th><th>Статус</th><th>Название</th><th>Линия</th><th>Монеты</th><th>Время</th><th>Результат</th></tr></thead><tbody id="jobRows"></tbody></table></article>
+    <article class="card full"><h2>Исполняемые компоненты</h2><div id="scripts" class="muted">—</div><div class="muted" style="margin-top:10px">Новые исследования поступают пакетами через K:\incoming\jobs, исполняются на сервере и публикуют результат в K:\reports\jobs.</div></article>
+  </section>
+  <section id="entry" class="grid panel">
+    <article class="card full"><h2>Отображение приближающихся монет</h2><div class="trade-controls"><label>Считать ближайшими, если до входа не больше<select id="entryNearThreshold"><option value="0.25">0,25%</option><option value="0.5">0,50%</option><option value="1" selected>1,00%</option><option value="1.5">1,50%</option><option value="2">2,00%</option><option value="999">любое расстояние</option></select></label></div><p class="muted">Все монеты остаются в таблице. Ближайшие к точке входа располагаются сверху. Настройка влияет только на экран и не меняет торговый алгоритм.</p></article>
+    <article class="card full"><h2>Настройки формирования входа</h2><div class="live-strip"><div class="live-box"><span class="muted">Старший масштаб</span><div class="live-value">15 минут · 130 свечей</div></div><div class="live-box"><span class="muted">Младший масштаб</span><div class="live-value">5 минут · 130 свечей</div></div><div class="live-box"><span class="muted">Ширина зоны</span><div class="live-value">0,5 среднего диапазона</div></div><div class="live-box"><span class="muted">Допустимый разрыв зон</span><div class="live-value">0,25%</div></div></div><ul class="checklist" style="margin-top:14px"><li class="done"><b>Вход одинаков для всех монет:</b> совпадение зон 15 и 5 минут и фактическое касание рассчитанной цены.</li><li class="done"><b>Резкое движение:</b> если размах цены за последние 12 закрытых пятиминутных свечей достиг 10%, новые входы временно запрещаются. Монета вернётся в работу, когда этот размах выйдет из последнего часового окна.</li><li class="done"><b>Перестройка после ценового удара:</b> старая часть истории отбрасывается после свечи, диапазон которой не меньше трёх средних диапазонов предыдущих 20 свечей; для новой зоны требуется не менее часа новых данных.</li><li class="done"><b>Открытый интерес:</b> дополнительное предупреждение, а не запрет входа, если индивидуальных исторических порогов нет.</li><li class="done"><b>Повторный кандидат:</b> отдельной 30-минутной паузы больше нет.</li></ul><p class="muted">Это параметры поиска точки входа. Ставка, плечо, стоп, цель и сопровождение позиции сюда не относятся.</p></article>
+    <article class="card full"><h2>Entry V1 · актуальный подтверждённый срез</h2><div class="live-strip"><div class="live-box"><span class="muted">Исходные кандидаты</span><div class="live-value">8 660</div></div><div class="live-box"><span class="muted">Фактические касания цены</span><div class="live-value">8 652</div></div><div class="live-box"><span class="muted">Цель +1,10% раньше −1%</span><div class="live-value">3 892</div></div><div class="live-box"><span class="muted">Стоп −1% раньше цели</span><div class="live-value">4 405</div></div></div><p class="muted">Горизонт наблюдения 24 часа; ещё 355 касаний не завершились ни целью, ни стопом. Это исследовательская статистика, а не команда для конкретной live-сделки.</p></article>
+    <article class="card full">
+      <h2>Чистый Entry · совпали зоны 15m и 5m</h2>
+      <p class="muted">Только базовый вход E0 в момент совпадения зон. После входа учитывается первое касание: цель +1,10% или стоп −1,00%. Без E10/E20, раннего floor, 60m/72h-фильтров, OI, flow и других гипотез.</p>
+      <div id="entryLegend" class="muted" style="margin:12px 0">загрузка…</div>
+      <div class="table-scroll"><table class="entry-table" style="min-width:900px"><thead><tr><th>Монета</th><th>Условие входа</th><th>Совпадений зон</th><th>Входов</th><th>+1,10%</th><th>−1,00%</th><th>Не завершились</th><th>Точность</th><th>Статус</th></tr></thead><tbody id="entryRows"></tbody></table></div>
+    </article>
+  </section>
+  <section id="liveDesk" class="grid panel">
+    <article class="card full"><h2>Площадка live-сделок</h2><div class="observer-lock" id="tradeGateNotice"><b>Торговый шлюз закрыт.</b> Данные Bybit читаются, реальные команды пока не отправляются.</div><div class="trade-controls" style="margin-top:12px"><button id="saveTradeSettings" class="action" type="button">Сохранить торговые настройки</button><button id="tradeGateButton" class="action danger" type="button">Открыть торговый шлюз</button><span id="tradeCommandStatus" class="muted">Команд ещё не было</span></div></article>
+    <article class="card full"><h2>Общие параметры новых сделок</h2><div class="live-strip" style="margin-bottom:14px"><div class="live-box"><span class="muted">Средства на счёте</span><div id="tradeEquity" class="live-value">—</div></div><div class="live-box"><span class="muted">Доступно для новых сделок</span><div id="tradeAvailable" class="live-value">—</div></div><div class="live-box"><span class="muted">Открытых позиций</span><div id="livePositions" class="live-value">—</div></div><div class="live-box"><span class="muted">Свежесть данных</span><div id="liveFreshness" class="live-value">—</div></div></div><div class="trade-controls"><label>Ставка, USDT<input id="tradeStake" type="number" min="1" step="1" value="100"></label><label>Плечо<select id="tradeLeverage"><option>1</option><option>2</option><option>3</option><option>5</option><option selected>10</option></select></label><label>Глубина входа<select id="entryOffset"><option value="0">0,00% · сразу по рынку</option><option value="0.1">−0,10% · лимитная заявка</option><option value="0.2">−0,20% · лимитная заявка</option></select></label><label>Срок лимитной заявки<select id="entryLimitTtl"><option value="10">10 секунд</option><option value="20">20 секунд</option><option value="30" selected>30 секунд</option><option value="60">60 секунд</option><option value="90">90 секунд</option><option value="120">120 секунд</option><option value="240">240 секунд</option><option value="300">5 минут</option></select></label><label title="После движения цены на 0,13% от фактического входа портал сам установит защитный стоп на +0,13% от входа"><input id="autoProfitProtection" type="checkbox" checked> Автоматически защищать прибыль +0,13%</label><button id="enableSound" class="action" type="button">Включить звук</button><span id="balanceWarning" class="warn"></span></div><p class="muted">Для покупки глубина вычитается из цены сигнала, для продажи — прибавляется. Неисполненная лимитная заявка автоматически снимается после выбранного срока. Защита +0,13% всегда считается от фактической цены исполнения входа.</p></article>
+    <article class="card full"><h2>Открытые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Позиции и результат обновляются отдельно от остальной страницы примерно раз в секунду. Текущий результат Bybit показан до комиссий; рядом отдельно показана доходность относительно фактически занятой маржи.</div><table><thead><tr><th>Монета</th><th>Сторона</th><th>Размер</th><th>Вход</th><th>Безубыточность Bybit</th><th>Текущая цена</th><th>Текущий стоп</th><th>Результат</th><th>Действия</th></tr></thead><tbody id="positionRows"></tbody></table></article>
+    <article class="card full"><h2>Теневой сканер Entry V1</h2><div id="entryShadowSummary" class="metric">—</div><div id="entryShadowDetail" class="muted" style="margin:6px 0 8px">—</div><div class="muted" style="margin-bottom:12px">Галочка разрешит автоматический вход только после отдельного открытия торгового шлюза. Денежный поток — перевес рыночных покупок или продаж перед зоной. Открытый интерес — изменение объёма незакрытых фьючерсных позиций.</div><table><thead><tr><th title="Автоматический вход"><input id="autoAll" class="auto-check" type="checkbox" onchange="setAllAuto(this.checked)" title="Включить или выключить все монеты"></th><th>Монета</th><th>Состояние</th><th>Ожидаемая сторона</th><th>Цена входа</th><th>Расстояние</th><th>Денежный поток</th><th>Открытый интерес</th><th>Обновлено</th></tr></thead><tbody id="entryShadowRows"></tbody></table></article>
+    <article class="card full"><h2>Независимое наблюдение за сигналами</h2><div id="liveHistorySummary" class="metric">—</div><div class="muted" style="margin:6px 0 12px"><b>Это не журнал реальных сделок.</b> Сканер продолжает наблюдать каждый сигнал 24 часа независимо от того, открылась ли реальная позиция и когда она закрылась. На экране одинаковые повторные сигналы одной монеты объединены; исходные записи сохраняются.</div><div style="max-height:720px;overflow:auto"><table><thead><tr><th>Последний сигнал</th><th>Монета</th><th>Направление</th><th>Цена сигнала</th><th>Повторов</th><th>Результат сигнала</th><th>Макс. плюс</th><th>Макс. минус</th><th>Наблюдений цены</th></tr></thead><tbody id="liveRows"></tbody></table></div></article>
+    <article class="card full"><h2>Закрытые реальные сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Чистый итог учитывает фактический результат движения цены, комиссию входа и комиссию выхода.</div><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина биржи</th><th>До комиссий</th><th>Комиссия входа</th><th>Комиссия выхода</th><th>Чистый итог</th></tr></thead><tbody id="realClosedRows"></tbody></table></article>
+  </section>
+  <section id="strategies" class="grid panel">
+    <article class="card full"><h2>Сопровождение сделки и риск</h2><p>Здесь находится только то, что происходит <b>после открытия позиции</b>: ставка и плечо, исходный стоп −1,00%, цель +1,10%, перенос защиты к безубыточности, ручное закрытие и будущие правила сопровождения сильного движения.</p><p class="muted">Расчёт зон, масштабы 15/5 минут, глубина 130 свечей, перестройка после резкого движения и временный запрет нового входа относятся ко вкладке Entry.</p></article>
+    <article class="card full">
+      <h2>Рабочие тезисы · почему мы проверяем именно это</h2>
+      <ul class="checklist">
+        <li class="work"><b>Сигнал входа имеет срок жизни.</b> Само появление Entry не обязывает покупать позднее при любых условиях.</li>
+        <li class="work"><b>Нет подтверждения удержания — нет входа.</b> Если минутная структура и стакан не подтверждают, что локальную зону удерживают, ожидающая заявка отменяется.</li>
+        <li class="work"><b>Неподтверждённое продолжение вниз/вверх считаем возможным пробоем.</b> Для Long падение сквозь поддержку, для Short рост сквозь сопротивление. Мы не обязаны рисковать деньгами ради проверки, был ли это только прокол.</li>
+        <li class="work"><b>Отказанный сигнал не удаляется.</b> Он остаётся в мониторинге: отдельно измеряем ложные проколы, настоящие пробои и последующее достижение цели без нашего входа.</li>
+        <li class="work"><b>Порог отмены ещё не зафиксирован.</b> Формулировку «до минус одного» перед кодированием необходимо однозначно закрепить как −0,10% или −1,00%; до этого она не является числовым правилом.</li>
+        <li class="done"><b>Новые монеты не участвуют в подборе.</b> Сначала формула строится на старых данных, затем новые монеты используются как независимая проверка.</li>
+      </ul>
+      <p class="muted">Статус «рабочий тезис» означает объяснение направления исследования, а не подтверждённое торговое преимущество.</p>
+    </article>
+    <article class="card full">
+      <h2>Реестр торговых гипотез</h2>
+      <div class="muted">Здесь отделены зафиксированная база, исследуемые кандидаты и будущие варианты. Целевой процент успеха не является параметром стратегии: решение принимается только по результатам причинного replay и OOS-проверки.</div>
+      <div class="strategy-tabs" style="margin-top:16px">
+        <button class="tab strategy-tab active" data-strategy="entryStrategies">Стратегии входа</button>
+        <button class="tab strategy-tab" data-strategy="exitStrategies">Стратегии выхода</button>
+      </div>
+      <div id="entryStrategies" class="strategy-view active">
+        <div class="strategy-card"><h3>Текущий реальный вход · касание края зон 15 и 5 минут <span class="pill status-base">работает сейчас</span></h3><p>Расчётная цена сигнала находится на краю совпавших зон. После фактического касания и подтверждения разворота денежного потока отправляется рыночная заявка. Дополнительного ожидания −0,20% сейчас нет.</p><div class="formula">Расчётная цена = край совпавших зон, 0,00%<br>Фактическая цена = цена исполнения рыночной заявки Bybit</div></div>
+        <div class="strategy-card">
+          <h3>E0 · классический вход по краю зоны, 0,00% <span class="pill">исходный контроль</span></h3>
+          <p>Первоначальная схема: вход сразу при первом касании границы согласованных зон 15m и 5m. Она сохраняется как обязательная точка отсчёта, несмотря на повышенный шум.</p>
+          <div class="formula">Long fill = Entry<br>Short fill = Entry</div>
+          <p class="muted">Новые варианты обязаны сравниваться с E0 на одних сигналах и одном периоде. Исторический результат не переносится автоматически на торговлю.</p>
+        </div>
+        <div class="strategy-card">
+          <h3>E1 · совпадение зон 15 и 5 минут, исполнение −0,20% <span class="pill status-research">историческое исследование</span></h3>
+          <p>Сигнал формируется совпадением направленных зон поддержки/сопротивления на 15m и 5m. Заявка исполняется только после дополнительного движения цены на 0,20% внутрь зоны относительно исходного Entry.</p>
+          <div class="formula">Long fill = Entry × (1 − 0,002)<br>Short fill = Entry × (1 + 0,002)</div>
+          <p><b>Зафиксированный результат EO2:</b> 846 fills; 477 первых достижений +1,10%; 367 первых −1,00%; 2 censored. Resolved win rate 56,52%, PF 1,182. Ранний floor +0,10% отключён.</p>
+          <p class="muted">Назначение: контрольная Entry-когорта для исследований Exit. В ходе текущего исследования параметры входа не оптимизируются.</p>
+        </div>
+        <div class="strategy-card">
+          <h3>E2 · E1 + минутная микроструктура перед исполнением <span class="pill">будущий кандидат</span></h3>
+          <p>Проверит, можно ли отсеять немедленные провалы с помощью 1m-зон, taker flow, поглощения и состояния стакана. Не активирована и не применяется к текущему Exit-исследованию.</p>
+        </div>
+        <div class="strategy-card">
+          <h3>E3 · повторный вход после освобождения символа <span class="pill">будущий кандидат</span></h3>
+          <p>Отдельная проверка пропущенных повторных ретестов. Не смешивается с оценкой первого входа и будет исследоваться после Exit.</p>
+        </div>
+      </div>
+      <div id="exitStrategies" class="strategy-view">
+        <div class="strategy-card">
+          <h3>X0 · фиксированный контроль +1,10% / −1,00% <span class="pill status-base">контроль</span></h3>
+          <div class="formula">Exit = first_hit(+1,10%, −1,00%)<br>Net reserve = gross PnL − 0,10% round trip</div>
+          <p>Нужен как неизменяемая точка сравнения. Он не распознаёт истощение и способен превратить уже полученный плюс в полный стоп.</p>
+        </div>
+        <div class="strategy-card">
+          <h3>X1 · локальная структура последнего часа <span class="pill status-research">исследуется</span></h3>
+          <p>После входа зона пересчитывается по 12 закрытым 5m и 60 закрытым 1m свечам. Для Long изучается сопротивление сверху и потеря локальной поддержки; для Short — зеркально.</p>
+          <div class="formula">Context(t) = closed_5m[t−60m:t] + closed_1m[t−60m:t]<br>Все признаки в момент t используют только данные с timestamp ≤ t</div>
+        </div>
+        <div class="strategy-card">
+          <h3>X2 · структура + MFE/giveback + поток и стакан <span class="pill status-research">основной кандидат</span></h3>
+          <p>Выход рассматривается только после причинно наблюдаемого ослабления: отсутствие нового экстремума, падение скорости, разворот taker imbalance, поглощение, восстановление противоположной ликвидности и слом локальной структуры.</p>
+          <div class="formula">MFE(t) = max directional_move(fill…t)<br>Giveback(t) = MFE(t) − directional_move(t)<br>ExitScore(t) = StructureFailure + FlowReversal + Absorption + BookResistance + Giveback</div>
+          <p><b>Проверка:</b> все 846 траекторий; уровни MFE +0,10/+0,20/+0,30/+0,50/+0,75/+1,00; сохранённые стопы; преждевременно закрытые +1,10/+2/+3/+5/+10 runners; чистый PnL; PF; время занятости; доступные повторные входы.</p>
+        </div>
+        <div class="strategy-card">
+          <h3>X3 · частичная фиксация + runner <span class="pill">следующий кандидат</span></h3>
+          <p>Будет рассматриваться только после X1/X2: часть позиции закрывается при подтверждённом истощении, остаток сохраняет возможность сильного движения. Сейчас не активирован.</p>
+        </div>
+      </div>
+    </article>
+  </section>
+  <section id="testLibrary" class="grid panel">
+    <article class="card full">
+      <h2>Библиотека воспроизводимых тестов</h2>
+      <p class="muted">Каждая карточка отделяет формулу, исходные данные, состояние проверки и полученный результат. «Код готов» не означает, что торговая гипотеза подтверждена.</p>
+      <div class="strategy-card">
+        <h3>EO2 · вход −0,20%, без раннего переноса защиты <span class="pill status-base">завершён</span></h3>
+        <p><b>Выборка:</b> старые 9 монет, 846 состоявшихся входов, 18.05–16.08.2026.</p>
+        <p><b>Результат:</b> 477 × +1,10%; 367 × −1,00%; 2 не завершились. Среди завершённых 56,52%, PF 1,182.</p>
+        <p><b>Назначение:</b> неизменяемая контрольная группа для новых тестов выхода.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>E0 · классический вход по краю зоны 0,00% <span class="pill">контроль добавлен</span></h3>
+        <p><b>Назначение:</b> исходная точка сравнения для фиксированного −0,20% и минутного углубления. Полный новый replay будет использовать одинаковые сигналы, период, стоп и выход для всех трёх вариантов.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>MINUTE_ENTRY_BOOK_V1 · минутная зона + стакан <span class="pill status-base">завершён · не принят как Entry</span></h3>
+        <p><b>Выборка:</b> 1063 исходных сигнала, старые 9 монет, замороженный трёхмесячный период. Проверены 9 контрольных блоков и 1063 уникальные строки.</p>
+        <p><b>E0:</b> 1063 входа; 594 цели, 460 стопов, 9 до конца данных; 56,36% среди завершённых.</p>
+        <p><b>E20:</b> 846 входов; 476 целей, 367 стопов, 3 незавершённых; 56,47% среди завершённых.</p>
+        <p><b>Минутка + стакан:</b> подтверждён 41 сигнал, состоялось 38 входов; 22 цели и 16 стопов; 57,89%. Остальные 1022 сигнала отменены.</p>
+        <p><b>Парное сравнение 38 входов:</b> E0 дал 20 целей/18 стопов; новый вариант — 22/16. Два прежних стопа стали целями, прежние цели не ухудшились.</p>
+        <p><b>Вывод:</b> направление интересно, но текущий стаканный шлюз чрезмерно строг — он отменяет 96,1% сигналов, включая 571 будущую цель E0. Интервал неопределённости для 22/38 слишком широк; результат не доказывает преимущество и не активируется как стратегия.</p>
+        <p class="muted">Файлы: reports/jobs/MINUTE_ENTRY_BOOK_V1 · CSV SHA256 3132b39f…8037c · JSON SHA256 29148e97…6f0e.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>ORDERBOOK_ONLY_V1 · стакан без минутного фильтра <span class="pill status-research">завершён · кандидат на дальнейшую проверку</span></h3>
+        <p><b>Правило:</b> причинное подтверждение стакана только в момент исходного сигнала. Для E0 вход выполняется по границе; для E20 после подтверждения ожидается цена −0,20%. Минутная зона не используется.</p>
+        <p><b>ALL9:</b> стакан подтвердил 110/1063 сигналов. E0 — 61 цель, 44 стопа, 5 до конца данных: 58,10%. E20 — 83 входа, 52 цели, 28 стопов, 3 незавершённых: 65,00%.</p>
+        <p><b>Только 7 торговых монет, без BTC/ETH:</b> подтверждено 83/814 сигнала. E0 — 49 целей, 33 стопа, 1 незавершённая: 59,76%. E20 — 64 входа, 39 целей, 24 стопа, 1 незавершённая: 61,90%.</p>
+        <p><b>Сравнение торговых монет без фильтра:</b> E0 56,58%; E20 56,14%. Наблюдаемый прирост стаканного отбора: +3,18 и +5,76 процентного пункта соответственно.</p>
+        <p><b>Ограничение:</b> выборка мала — для E20 только 63 завершённые сделки, 95% Wilson 49,56–72,88%. Это полезный кандидат, но не доказанная стратегия. Отбор пропускает около 10,2% торговых сигналов.</p>
+        <p class="muted">Файлы: reports/jobs/ORDERBOOK_ONLY_V1 · CSV SHA256 63832049…94444 · JSON SHA256 9d3c4bdc…b8913.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>EO4 · причинное сопровождение по структуре зон <span class="pill status-base">завершён · гипотеза отклонена</span></h3>
+        <p><b>Выборка:</b> все 846 входов EO2 на −0,20%, старые 9 монет. Новые монеты не открывались. Сравнены baseline, ранний структурный выход, сохранение сильного движения и гибридная машина состояний.</p>
+        <p><b>Исполнение:</b> событие учитывается только после <code>outcome_at</code>; причинный выход — по первой закрытой минуте после подтверждения; заднего заполнения стопа нет. Baseline совпал с EO2: 844 разрешившиеся сделки без расхождений и 2 позиции на конце данных.</p>
+        <p><b>Хронология, одна позиция на монету:</b> baseline — 627 сделок, +$436,83, EV +$0,70, PF 1,143, просадка $227,00. Структурный выход — 681 сделка, −$12,15, PF 0,995. Сохранение сильного движения — 679 сделок, −$67,64, PF 0,973. Гибрид — 710 сделок, −$54,96, PF 0,975.</p>
+        <p><b>Вывод:</b> статистическая связь событий зон существует, но прямое превращение этих событий в Exit/Runner-правила экономику ухудшило. Ни один вариант не допускается в торговую систему. Следующий тест должен выяснять не «работает ли событие вообще», а при каком состоянии уже накопленного движения оно экономически полезно.</p>
+        <p><b>Ресурсы:</b> 10 vCPU / 19 ГиБ; расчёт ALL9 — 1,14 с, около 5,7 ядра в среднем, менее 50 МБ на основной процесс. Ускорение обеспечил заранее построенный минутный EO3-кеш.</p>
+        <p class="muted">Файлы: /srv/cripta/reports/exit_state_machine_eo4/ALL9_FULL_V2 · полный журнал сделок, хронология блокировок, сводка политик, разрезы symbol/direction/month и машинный контракт.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>ВХОД-М1 · ждать более глубокую минутную поддержку/сопротивление <span class="pill status-research">ядро готово</span></h3>
+        <p><b>Скрипт:</b> <code>minute_entry_wait_v1.py</code>.</p>
+        <p><b>Правило:</b> базовая цена −0,20% является верхней границей. Если согласованные зоны 1m и 5m лежат глубже, заявка переносится к ближайшему краю их пересечения. Если зоны не согласованы — вход запрещён.</p>
+        <p><b>Проверено:</b> причинная логика Long/Short и запрет входа при несовпадающих зонах. <b>Добавленная гипотеза:</b> ожидающий Entry отменяется, если до установленной границы минутка и стакан не подтвердили удержание. <b>Ожидает:</b> полный replay старых 9 монет.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>ОТКАЗ-ВХОД · неподтверждённый пробой <span class="pill status-research">новый тест</span></h3>
+        <p>Сигнал наблюдается после отказа от покупки. Сравниваем: сколько раз отказ спас от движения к −1,00%; сколько было только проколом с последующим восстановлением; сколько целей +1,10% прошло без позиции.</p>
+        <p><b>Зачем:</b> отдельно оценить цену безопасности — сохранённые стопы против потерянных хороших сделок, включая группу из 127 сигналов, не исполнившихся на фиксированном −0,20%.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>ВЫХОД-М1 · истощение у локальной зоны <span class="pill status-research">ядро готово</span></h3>
+        <p><b>Скрипт:</b> <code>minute_exit_exhaustion_v1.py</code>.</p>
+        <p><b>Правило:</b> одной перекупленности или видимой стенки недостаточно. Нужны достигнутая локальная преграда, неудача продолжения и подтверждение сломом минутной структуры либо одновременно потоком сделок и стаканом.</p>
+        <p><b>Проверено:</b> одиночная стенка не закрывает позицию; подтверждённый слом закрывает. <b>Ожидает:</b> полный replay всех 846 траекторий.</p>
+      </div>
+      <div class="strategy-card">
+        <h3>Новые монеты · контрольная проверка <span class="pill">не вскрыта</span></h3>
+        <p>Новые скачанные монеты не участвуют в выборе формулы. Они будут использованы только после фиксации кандидата, чтобы проверить переносимость без подгонки.</p>
+      </div>
+    </article>
+  </section>
+  <section id="bots" class="grid panel">
+    <article class="card full"><h2>Контур исполнения</h2><div id="botGate" class="metric">—</div><div class="muted">Стратегии запускаются раздельно. Shadow не отправляет заявки; Mainnet требует отдельного допуска.</div></article>
+    <article class="card full"><h2>Режимы допуска</h2><table><thead><tr><th>Режим</th><th>Доступ</th><th>Причина</th></tr></thead><tbody id="gateRows"></tbody></table></article>
+    <article class="card full"><h2>Боты и качество сделок</h2><table><thead><tr><th>Бот</th><th>Стратегия</th><th>Режим</th><th>Состояние</th><th>Монеты</th><th>Сигналы / сделки</th><th>Win rate</th><th>Чистый PnL</th><th>Комиссии</th><th>Задержка p50</th><th>Управление</th></tr></thead><tbody id="botRows"></tbody></table></article>
+    <article class="card full"><h2>Что будет сохраняться по каждой сделке</h2><div class="muted">Сигнал и версия стратегии · решение фильтров · цена сигнала/заявки/исполнения · комиссия · проскальзывание · MFE/MAE · причина выхода · чистый PnL · задержки signal → send → accepted → filled.</div></article>
+    <article class="card full"><h2>Монитор всех сигналов</h2><div id="opportunitySummary" class="metric">—</div><div class="muted" style="margin-bottom:12px">Учитываются entered, shadow, blocked и skipped. Остановленный исполнитель не должен останавливать будущий scanner сигналов.</div><table><thead><tr><th>Время</th><th>Сигнал</th><th>Стратегия</th><th>Монета</th><th>Направление</th><th>Решение</th><th>Причина</th><th>Статус</th><th>MFE</th><th>MAE</th><th>Тиков</th></tr></thead><tbody id="opportunityRows"></tbody></table></article>
+    <article class="card full"><h2>Последние команды</h2><table><thead><tr><th>Время</th><th>Бот</th><th>Команда</th><th>Результат</th></tr></thead><tbody id="botEvents"></tbody></table></article>
+  </section>
+  <section id="history" class="grid panel">
+    <article class="card full"><h2>Историческая библиотека</h2><table><thead><tr><th>Snapshot</th><th>Объём</th><th>Файлы</th><th>Наборы отчётов</th><th>Research-модули</th></tr></thead><tbody id="legacyRows"></tbody></table><div id="legacyCatalog"></div><div class="muted" style="margin-top:10px">История доступна для поиска и повторной проверки, но не включается в новую линию автоматически.</div></article>
+  </section>
+  <section id="serverControl" class="grid panel">
+    <article class="card full">
+      <h2>Управление ресурсами Servercore <span class="pill status-research">подготовлено · API не подключён</span></h2>
+      <p>Контур предназначен для временного увеличения и последующего уменьшения vCPU/RAM при больших исследованиях. Реальные изменения сейчас заблокированы: API-ключи не установлены, автоматического списания средств или перезагрузки сервера быть не может.</p>
+    </article>
+    <article class="card full">
+      <h2>Профили мощности</h2>
+      <table><thead><tr><th>Профиль</th><th>vCPU</th><th>RAM</th><th>Назначение</th><th>Допуск</th></tr></thead><tbody>
+        <tr><td><b>normal</b></td><td>сохранённое значение</td><td>сохранённое значение</td><td>вернуть состояние перед задачей</td><td><span class="pill">только план</span></td></tr>
+        <tr><td><b>research_8</b></td><td>8</td><td>минимум провайдера + запас</td><td>ускоренный прогон</td><td><span class="pill">только план</span></td></tr>
+        <tr><td><b>research_12</b></td><td>12</td><td>минимум провайдера + запас</td><td>тяжёлые рынки</td><td><span class="pill">только план</span></td></tr>
+        <tr><td><b>research_20</b></td><td>20</td><td>минимум провайдера + запас</td><td>до 20 независимых монет</td><td><span class="pill">только план</span></td></tr>
+      </tbody></table>
+      <p class="muted">После подключения API допустимые пары CPU/RAM будут загружаться из Servercore. Главный параметр исследования — ядра; RAM выбирается минимальной разрешённой, покрывающей измеренный пик с запасом.</p>
+    </article>
+    <article class="card full">
+      <h2>Параметры следующего запуска</h2>
+      <p><label>Ядра: <b id="cpuPreview">8</b></label><br><input id="cpuSlider" type="range" min="4" max="20" step="1" value="8" disabled style="width:100%"></p>
+      <p><label>Память: <b id="ramPreview">будет выбран минимум допустимой пары</b></label><br><input id="ramSlider" type="range" min="4" max="64" step="1" value="16" disabled style="width:100%"></p>
+      <p><label><input type="checkbox" checked disabled> Автоматически вернуть исходную конфигурацию после подтверждённого завершения</label></p>
+      <p class="muted">Элементы станут активны после read-only подключения API и загрузки реальных ограничений Servercore. Интерфейс не сможет выбрать недопустимую пару.</p>
+    </article>
+    <article class="card full">
+      <h2>Возврат в исходную конфигурацию <span class="pill status-base">обязателен для временной мощности</span></h2>
+      <p>Перед увеличением создаётся «ресурсная аренда»: сохраняются фактические vCPU/RAM, ID задания, служба расчёта и маркер полного результата. После завершения служба автоматически возвращает сохранённую конфигурацию — даже если владелец не у компьютера.</p>
+      <ul class="checklist">
+        <li class="done">Низкая нагрузка сама по себе не считается завершением.</li>
+        <li class="done">Нужны остановленная служба расчёта и проверенный маркер полного результата.</li>
+        <li class="done">При ошибке расчёта ресурсы не уменьшаются вслепую: сохраняется диагностика и применяется отдельная политика аварийного возврата.</li>
+        <li class="done">Возвращается состояние перед конкретным запуском, а не условные 4/16.</li>
+      </ul>
+      <button class="tab" disabled>Вернуть исходную конфигурацию</button>
+      <span class="muted"> заблокировано до подключения API</span>
+    </article>
+    <article class="card full">
+      <h2>Обязательная процедура большого прогона</h2>
+      <ol>
+        <li><b>Дешёвая проверка:</b> выполнить сквозной прогон примерно на 10% одной репрезентативной монеты на обычной мощности.</li>
+        <li><b>Проверить конечный продукт:</b> CSV/JSON, число строк, обязательные поля, контрольный блок, открытие отчёта и SHA256. Проверки только кода недостаточно.</li>
+        <li>Оценить число блоков, объём данных, память на процесс, пропускную способность диска и целевое время.</li>
+        <li>Только после успешной малой проверки построить план мощности и стоимости; получить явное подтверждение владельца.</li>
+        <li>Зафиксировать очередь: каждый готовый блок записан отдельно и имеет контрольную сумму.</li>
+        <li>Временно изменить конфигурацию, дождаться ACTIVE/SSH и проверить диски, PostgreSQL, Nginx и службы Cripta.</li>
+        <li>Запустить число процессов по доступным ядрам; контролировать CPU, RAM, I/O, ошибки и прогресс.</li>
+        <li>После основной массы сделать контрольную точку, уменьшить мощность и продолжить остаток без пересчёта готового.</li>
+        <li>Проверить полноту результата, собрать итог и вернуть обычный профиль.</li>
+      </ol>
+      <p class="muted"><b>Запрет:</b> повышенные ресурсы нельзя выдавать непроверенному скрипту. Неуспешный smoke-test закрывает большой прогон до исправления и повторной полной проверки малого результата.</p>
+    </article>
+    <article class="card full">
+      <h2>На что расходуются повышенные ресурсы</h2>
+      <p>Каждая ресурсная аренда связывается с конкретным заданием и хранит: ID исследования, версию кода, SHA256 успешного малого теста, входные данные, число блоков, исходную и повышенную конфигурации, плановое время/стоимость, фактическое время, причину увеличения и итог возврата.</p>
+      <p class="muted">Без успешного малого теста и его контрольной суммы ресурсная аренда не переходит из «план» в «разрешена».</p>
+    </article>
+    <article class="card full">
+      <h2>Защитные блокировки</h2><ul class="checklist">
+        <li class="done">Секрет хранится только в <code>/etc/cripta/servercore.env</code>, не в HTML, Git или отчётах.</li>
+        <li class="done">По умолчанию разрешены только readiness и построение плана.</li>
+        <li class="done">Apply требует свежий идентификатор плана и отдельное подтверждение.</li>
+        <li class="done">До read-only discovery endpoint, flavor и прав реальный resize программно заблокирован.</li>
+        <li class="done">Каждая попытка изменения записывается в отдельный аудит без секретов.</li>
+        <li class="work">Ожидается: application credential Servercore с минимальными правами.</li>
+        <li class="work">Ожидается: проверка доступных конфигураций и фактического сценария resize/confirm.</li>
+      </ul>
+      <p class="muted">Серверные файлы: <code>/srv/cripta/operations/server_resources</code>. Локальная копия: <code>C:\cripta\operations\server_resources</code>.</p>
+    </article>
+  </section>
+  <section id="rules" class="grid panel">
+    <article class="card full">
+      <h2>Правила работы проекта Cripta</h2>
+      <p>Это постоянная память проекта. Перед новым исследованием, изменением инфраструктуры или запуском торговли исполнитель обязан прочитать эту страницу. Правило считается действующим только после явного согласования; незавершённые идеи отмечаются отдельно и не используются как торговые постулаты.</p>
+    </article>
+    <article class="card full">
+      <h2>Ресурсы для больших расчётов <span class="pill status-base">утверждено 23.08.2026</span></h2>
+      <ul class="checklist">
+        <li class="done"><b>Массовые независимые расчёты ускоряются прежде всего ядрами.</b> Если монеты или группы сигналов можно считать раздельно, код заранее распараллеливается.</li>
+        <li class="done"><b>Перед глобальным прогоном оцениваются CPU, память, диск и ожидаемое время.</b> Исполнитель сообщает рекомендуемую временную конфигурацию и отдельно говорит, когда ресурсы можно уменьшить.</li>
+        <li class="done"><b>Практический режим:</b> лучше временно увеличить число ядер и уложить расчёт в оплаченный час, чем держать слабую конфигурацию три–четыре часа.</li>
+        <li class="done"><b>Память не увеличивается сама по себе.</b> Её должно хватать всем параллельным процессам с безопасным запасом; добавление памяти без ядер последовательный расчёт не ускоряет.</li>
+        <li class="done"><b>RAM выбирается по факту, а не по красивой пропорции.</b> Для выбранного числа ядер берётся минимальная допустимая Servercore пара, которая покрывает измеренный пик памяти с запасом; завышенные фиксированные профили не используются.</li>
+        <li class="done"><b>Диск является вторым ограничителем.</b> Одновременное чтение тяжёлых архивов контролируется; количество процессов уменьшается, если появляется I/O-перегрузка или опасный рост памяти.</li>
+        <li class="done"><b>Проверка после запуска обязательна:</b> загрузка всех ядер, память, ошибки, скорость прогресса и свободное место. Если дополнительные ядра простаивают, глобальный прогон останавливается и исправляется.</li>
+        <li class="done"><b>Сначала малый сквозной прогон.</b> До увеличения мощности проверяется около 10% одной репрезентативной монеты: расчёт, контрольный блок, финальные CSV/JSON, обязательные поля, число строк, открытие отчёта и SHA256.</li>
+        <li class="done"><b>Ресурсы привязаны к проверенному заданию.</b> В плане фиксируются ID исследования, версия кода, контрольная сумма малого теста, причина увеличения, плановое и фактическое время/стоимость. Без успешного малого теста повышенные ресурсы запрещены.</li>
+        <li class="done"><b>Большой расчёт обязан быть эластичным и возобновляемым.</b> Монета или небольшой временной блок является самостоятельным идемпотентным заданием; после завершения результат сразу записывается вместе с версией кода, входными параметрами и контрольной суммой.</li>
+        <li class="done"><b>Изменение мощности не обнуляет прогресс.</b> После остановки или перезапуска диспетчер проверяет сохранённые блоки, не пересчитывает готовые и продолжает только незавершённые либо повреждённые.</li>
+        <li class="done"><b>Число рабочих процессов следует доступным ядрам.</b> Например, для 20 торговых монет можно временно дать 20 ядер, быстро завершить основную массу, затем уменьшить конфигурацию; оставшиеся тяжёлые блоки продолжают работу с меньшим числом процессов.</li>
+        <li class="done"><b>Уменьшение ресурсов выполняется в контрольной точке.</b> Сначала завершаются активные небольшие блоки и фиксируется состояние очереди, затем служба безопасно перезапускается с новым лимитом процессов. Незавершённый блок не считается готовым.</li>
+        <li class="done"><b>Временная мощность автоматически возвращается.</b> Перед прогоном сохраняется исходная конфигурация; после остановки расчётной службы и проверки полного результата сервер возвращается к ней без ожидания владельца.</li>
+      </ul>
+      <div class="formula">Обычный режим: постоянная экономичная конфигурация<br>Большой прогон: временно увеличить ядра → считать независимые блоки → сохранять каждый блок сразу<br>Снижение мощности: контрольная точка → безопасный перезапуск → продолжить оставшуюся очередь<br>Завершение: проверить полноту и контрольные суммы → собрать общий итог → вернуть обычную конфигурацию</div>
+    </article>
+    <article class="card full">
+      <h2>Контур будущих правил · чек-лист наполнения</h2>
+      <ul class="checklist">
+        <li class="work"><b>Данные:</b> замороженные периоды, роли монет, контроль целостности, новые монеты как независимая проверка.</li>
+        <li class="work"><b>Исследования:</b> причинность без заглядывания вперёд, единая контрольная выборка, версии кода, воспроизводимость и критерии принятия результата.</li>
+        <li class="todo"><b>Entry:</b> формула сигнала, срок его жизни, подтверждение минуткой и стаканом, отмена и повторный вход. Пока не утверждено.</li>
+        <li class="todo"><b>Exit:</b> цель, защита, локальное истощение, минутная структура, поток и стакан. Пока не утверждено.</li>
+        <li class="todo"><b>Торговля:</b> режимы Shadow/Testnet/Mainnet, размер позиции, комиссии, проскальзывание, лимиты потерь и аварийная остановка.</li>
+        <li class="work"><b>Исполнение и безопасность:</b> ключи, права, идемпотентность команд, сверка с биржей, неизвестный результат заявки и восстановление после разрыва.</li>
+        <li class="work"><b>Мониторинг:</b> все сигналы, включая пропущенные; позиции, задержки, качество исполнения, состояние служб и уведомления.</li>
+        <li class="work"><b>Эксплуатация и восстановление:</b> ресурсы, резервные копии, контроль диска, развёртывание нового сервера и проверка восстановления.</li>
+        <li class="todo"><b>Изменение правил:</b> кто утверждает, как фиксируется причина, версия, дата и каким тестом подтверждено изменение.</li>
+      </ul>
+      <p class="muted">Этот список — структура будущей книги правил. Наличие раздела не означает, что его торговое содержание уже определено.</p>
+    </article>
+  </section>
+  <section id="checklist" class="grid panel">
+    <article class="card full"><h2>Архив проекта для анализа</h2><div class="trade-controls"><button id="packageProjectButton" class="action">Запаковать проект</button><span id="packageProjectStatus" class="muted">Архив ещё не создавался в этой сессии.</span></div><p class="muted">В ZIP попадут исходные файлы без паролей и кэшей, торговая база, состояния и отчёты за последние 72 часа. Результат сохраняется на диске cripta-robot в папке K:\Reports.</p></article>
+    <article class="card full"><h2>Первый тест реальными деньгами · исправления</h2><ul class="checklist"><li class="done">Запрет команды «В безубыток», пока текущая цена не прошла рассчитанную Bybit точку безубыточности; повторная серверная проверка перед очередью.</li><li class="done">Открытые позиции, баланс и результат обновляются отдельным контуром раз в секунду без перезагрузки всей страницы.</li><li class="done">К результату в USDT добавлено движение цены от фактической цены входа в процентах.</li><li class="done">Звуковая настройка сохраняется в браузере; три сигнала подаются по факту появления реальной позиции, а не виртуального кандидата.</li><li class="done">Добавлен журнал закрытых реальных исполнений Bybit; независимое 24-часовое наблюдение за сигналами отделено и переименовано.</li><li class="done">В заголовке списка монет добавлена общая галочка включения и выключения всех монет.</li><li class="work">DOGEUSDT и 1000PEPEUSDT отклоняются самим торговым API Bybit Kazakhstan как неподдерживаемые инструменты; требуется отдельное решение, оставлять ли их только в наблюдении.</li></ul></article>
+    <article class="card full"><h2>Готово · сервер и данные</h2><ul class="checklist">
+      <li class="done">Подключён отдельный SSD 150 ГБ, ext4, автоматическое монтирование в /data/cripta</li>
+      <li class="done">Создана структура datasets / jobs / cache / staging / legacy</li>
+      <li class="done">Скачан замороженный сегмент: 14 монет, 2534 файла, пропусков 0, ошибок 0</li>
+      <li class="done">BTC и ETH отмечены индикаторами; остальные 12 — торговыми монетами</li>
+      <li class="done">Настроен диск обмена K: — incoming, reports и logs</li>
+      <li class="done">Развёрнут HTTPS-веб-интерфейс с авторизацией</li>
+      <li class="done">Работают Nginx, PostgreSQL и системные службы Cripta</li>
+    </ul></article>
+    <article class="card full"><h2>Готово · исследования и код</h2><ul class="checklist">
+      <li class="done">Старая линия сохранена в изолированной исторической библиотеке</li>
+      <li class="done">Актуальный исходный код сохранён неизменяемым серверным релизом</li>
+      <li class="done">Работают приём, проверка и очередь ZIP-пакетов исследований</li>
+      <li class="done">Работает изолированный исполнитель с timeout и данными только для чтения</li>
+      <li class="done">Сохраняются result.json, stdout.log и stderr.log; отчёты открываются через веб</li>
+      <li class="done">Тестовый пакет прошёл queued → running → completed</li>
+    </ul></article>
+    <article class="card full"><h2>Готово · связь с Bybit</h2><ul class="checklist">
+      <li class="done">Постоянный публичный WebSocket stream.bybit.kz для 20 торговых монет и двух индикаторов</li>
+      <li class="done">Измеряется задержка matching engine → сервер и скорость JSON-декодирования</li>
+      <li class="done">Mainnet API credential перенесён в зашифрованное системное хранилище</li>
+      <li class="done">Авторизация api.bybit.kz подтверждена; доступны Order, Position и DerivativesTrade</li>
+      <li class="done">Реальное исполнение заявок пока программно заблокировано</li>
+      <li class="done">Долговечный read-only журнал: биржевые часы, баланс, позиции, заявки, свежесть потока и REST latency</li>
+      <li class="done">Мониторинг свежести каналов, exchange truth, backup и резерва диска с историей переходов в PostgreSQL</li>
+      <li class="done">Независимый монитор entered / shadow / blocked / skipped сигналов с MFE, MAE и first-hit уровнями</li>
+    </ul></article>
+    <article class="card full"><h2>В работе · ближайший этап</h2><ul class="checklist">
+      <li class="done">Постоянный приватный WebSocket: orders / executions / positions / wallet</li>
+      <li class="work">WebSocket Trade аутентифицирован; отправка команд остаётся заблокированной до испытаний</li>
+      <li class="work">Безопасное закрытие позиции через reduceOnly</li>
+      <li class="done">Горячее состояние заявок и позиций в PostgreSQL с обновлением через private WS</li>
+      <li class="work">Телеметрия signal → send → accepted → filled</li>
+    </ul></article>
+    <article class="card full"><h2>Осталось · до готовой рабочей платформы</h2><ul class="checklist">
+      <li class="done">Reconciliation REST → PostgreSQL при запуске и каждом переподключении private WS</li>
+      <li class="done">Идемпотентный журнал команд: повторный idempotency key не создаёт вторую операцию</li>
+      <li class="todo">Разрешение неизвестного результата live-команды через exchange truth</li>
+      <li class="todo">Интерфейс открытия, отмены и закрытия заявки с подтверждением</li>
+      <li class="done">Shadow / Testnet / Mainnet разделены независимыми серверными gates; разрешён только Shadow</li>
+      <li class="work">Журнал команд и timings в PostgreSQL готов; ответы и fills появятся после испытаний Testnet</li>
+      <li class="work">SHA256 и финальный manifest запустятся автоматически после завершения новых 1810 файлов</li>
+      <li class="done">Ежедневная локальная копия проекта, PostgreSQL, конфигурации и отчётов с SHA256</li>
+      <li class="done">Инструкция полного восстановления сервера и обязательная reconciliation-проверка</li>
+      <li class="done">PostgreSQL backup восстановлен в отдельную тестовую БД и проверен по ключевым таблицам</li>
+      <li class="todo">Внешняя/off-site копия вне двух дисков этого сервера</li>
+      <li class="todo">Доверенный TLS-сертификат после привязки домена</li>
+      <li class="todo">После восстановления и проверки удалить временный NOPASSWD sudo</li>
+    </ul></article>
+  </section>
+</main><script>
+const size=n=>{if(!n)return'0 Б';const u=['Б','КБ','МБ','ГБ','ТБ'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i>2?1:2)+' '+u[i]};
+const panelPaths={infra:'/',current:'/current',entry:'/entry',liveDesk:'/live',strategies:'/strategies',testLibrary:'/test-library',bots:'/bots',serverControl:'/server-control',history:'/history',rules:'/rules',checklist:'/checklist'};
+const pathPanels=Object.fromEntries(Object.entries(panelPaths).map(([panel,path])=>[path,panel]));
+function showPanel(panel,updateUrl=true){const button=document.querySelector(`nav[aria-label="Разделы"] > .tab[data-panel="${panel}"]`);if(!button)return;document.querySelectorAll('nav[aria-label="Разделы"] > .tab, main > .panel').forEach(x=>x.classList.remove('active'));button.classList.add('active');document.getElementById(panel).classList.add('active');sessionStorage.setItem('cripta-active-panel',panel);if(updateUrl)history.pushState({panel},'',panelPaths[panel]);}
+document.querySelectorAll('nav[aria-label="Разделы"] > .tab').forEach(button=>button.addEventListener('click',()=>showPanel(button.dataset.panel)));
+const legacyHash=location.hash.slice(1);const savedPanel=sessionStorage.getItem('cripta-active-panel');const allowedPanels=Object.keys(panelPaths);const initial=pathPanels[location.pathname]||(allowedPanels.includes(savedPanel)?savedPanel:(allowedPanels.includes(legacyHash)?legacyHash:'infra'));showPanel(initial,false);sessionStorage.setItem('cripta-active-panel',initial);if(legacyHash&&panelPaths[initial])history.replaceState({panel:initial},'',panelPaths[initial]);
+addEventListener('popstate',()=>showPanel(pathPanels[location.pathname]||'infra',false));
+document.querySelectorAll('.strategy-tab').forEach(button=>button.addEventListener('click',event=>{event.stopPropagation();document.querySelectorAll('.strategy-tab,.strategy-view').forEach(x=>x.classList.remove('active'));button.classList.add('active');document.getElementById(button.dataset.strategy).classList.add('active')}));
+async function botAction(bot_id,action){if(!confirm(`${action==='start'?'Запустить':'Остановить'} ${bot_id}?`))return;const r=await fetch('/api/bots/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bot_id,action})});const out=await r.json();if(!r.ok)alert(out.error||'Команда не выполнена');await refresh()}
+async function packageProject(){if(!confirm('Собрать исходники и торговые материалы за последние три дня в новый ZIP-архив?'))return;packageProjectButton.disabled=true;packageProjectStatus.textContent='Собираю архив…';try{const r=await fetch('/api/project/package',{method:'POST'}),out=await r.json();if(!r.ok)throw new Error(out.error||'Не удалось создать архив');packageProjectStatus.textContent=`Готово: ${out.file} · ${size(out.size)} · файлов: ${out.files}. Папка K:\\Reports`;}catch(e){packageProjectStatus.textContent=`Ошибка: ${e.message}`;}finally{packageProjectButton.disabled=false}}
+packageProjectButton.addEventListener('click',packageProject);
+let soundEnabled=localStorage.getItem('cripta-sound')==='1',audioContext=null,lastSignals=new Set(),lastStages=new Map(),lastOpenPositions=null,lastClosedExecutions=null,liveGateOpen=false,enabledSymbols=new Set(),lastScannerAssets=[];
+entryNearThreshold.value=localStorage.getItem('cripta-entry-near-threshold')||'1';entryNearThreshold.addEventListener('change',()=>localStorage.setItem('cripta-entry-near-threshold',entryNearThreshold.value));
+enableSound.textContent=soundEnabled?'Звук включён':'Включить звук';
+function tone(frequency,duration,delay=0){if(!soundEnabled)return;setTimeout(()=>{try{audioContext=audioContext||new AudioContext();const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.frequency.value=frequency;gain.gain.setValueAtTime(.12,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);osc.connect(gain).connect(audioContext.destination);osc.start();osc.stop(audioContext.currentTime+duration)}catch(_e){}},delay)}
+function entrySound(){tone(880,.18);tone(880,.18,260);tone(1100,.25,520)}
+function stageSound(stage){if(stage==='+1.1'){tone(1040,.18);tone(1320,.3,220)}else if(stage==='-1.0'){tone(330,.28);tone(260,.4,340)}else if(stage==='-1.1'){tone(250,.25);tone(190,.5,300)}}
+enableSound.addEventListener('click',()=>{soundEnabled=!soundEnabled;localStorage.setItem('cripta-sound',soundEnabled?'1':'0');enableSound.textContent=soundEnabled?'Звук включён':'Включить звук';if(soundEnabled)tone(740,.15)});
+function tradeLocked(){alert('Торговый шлюз пока закрыт: команда не отправлена на Bybit.')}
+async function livePost(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),out=await r.json();if(!r.ok)throw new Error(out.error||'Команда отклонена');return out}
+async function saveSettings(){await livePost('/api/live/settings',{stake_usdt:Number(tradeStake.value),leverage:Number(tradeLeverage.value),entry_offset_pct:Number(entryOffset.value),entry_limit_ttl_seconds:Number(entryLimitTtl.value),auto_profit_protection:autoProfitProtection.checked,enabled_symbols:[...enabledSymbols]})}
+async function setAuto(symbol,checked){checked?enabledSymbols.add(symbol):enabledSymbols.delete(symbol);try{await saveSettings()}catch(e){alert(e.message)}}
+async function setAllAuto(checked){enabledSymbols=new Set(checked?lastScannerAssets.map(x=>x.symbol):[]);try{await saveSettings();document.querySelectorAll('.auto-check:not(#autoAll)').forEach(x=>x.checked=checked)}catch(e){alert(e.message)}}
+async function tradeCommand(type,symbol){if(type==='break_even'){const row=window.currentPositions?.find(x=>x.symbol===symbol);if(!row||!breakEvenAvailable(row)){alert('Защита пока недоступна: цена должна пройти 0,13% в пользу сделки от фактической цены входа.');return}}if(!confirm(`Отправить реальную команду для ${symbol}?`))return;try{await livePost('/api/live/command',{type,symbol});alert('Команда принята. После подтверждения Bybit текущий стоп появится в таблице ценой и процентом от входа.')}catch(e){alert(e.message)}}
+saveTradeSettings.addEventListener('click',()=>saveSettings().then(()=>alert('Параметры сохранены')).catch(e=>alert(e.message)));
+tradeGateButton.addEventListener('click',async()=>{if(liveGateOpen){await livePost('/api/live/gate',{enabled:false});location.reload();return}const phrase=prompt('Введите: ВКЛЮЧИТЬ РЕАЛЬНУЮ ТОРГОВЛЮ');if(phrase!==null){try{await livePost('/api/live/gate',{enabled:true,confirmation:phrase});location.reload()}catch(e){alert(e.message)}}});
+function processAudio(_d){}
+function breakEvenAvailable(p){const mark=Number(p.mark_price||0),entry=Number(p.entry_price||0);return mark>0&&entry>0&&(p.side==='Buy'?mark>=entry*1.0013:mark<=entry*0.9987)}
+function renderLiveState(d){
+  const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;
+  liveGateOpen=!!lt.gate?.enabled;enabledSymbols=new Set(lt.settings?.enabled_symbols||[]);if(document.activeElement!==tradeStake)tradeStake.value=lt.settings?.stake_usdt||10;if(document.activeElement!==tradeLeverage)tradeLeverage.value=lt.settings?.leverage||10;if(document.activeElement!==entryOffset)entryOffset.value=String(Number(lt.settings?.entry_offset_pct||0));if(document.activeElement!==entryLimitTtl)entryLimitTtl.value=String(lt.settings?.entry_limit_ttl_seconds||30);if(document.activeElement!==autoProfitProtection)autoProfitProtection.checked=lt.settings?.auto_profit_protection!==false;
+  tradeGateButton.textContent=liveGateOpen?'Закрыть торговый шлюз':'Открыть торговый шлюз';tradeGateNotice.innerHTML=liveGateOpen?'<b>Реальная торговля разрешена.</b> Автоматические галочки и кнопки отправляют команды на Bybit.':'<b>Торговый шлюз закрыт.</b> Данные читаются, команды не отправляются.';tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;
+  const stake=Number(tradeStake.value||0);balanceWarning.textContent=wallet&&Number(wallet.available_balance)<stake?'Недостаточно доступных средств для следующей ставки':'';
+  const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side));if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;
+  positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,notional=entry*size,actualMargin=leverage>0?notional/leverage:null,pnl=Number(p.unrealised_pnl||0),marginReturn=actualMargin>0?pnl/actualMargin*100:null,beOk=breakEvenAvailable(p),age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}</td><td>${num(p.unrealised_pnl)}<br><b class="${move!=null&&move>=0?'ok':'warn'}">${move==null?'—':(move>=0?'+':'')+move.toFixed(3)+'% цены'}</b><br><small class="muted">${marginReturn==null?'—':(marginReturn>=0?'+':'')+marginReturn.toFixed(2)+'% фактической маржи'}<br>до комиссий</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')" ${beOk?'':`disabled title="Нужно пройти +0,13% от фактического входа"`}>Защитить прибыль +0,13%</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="9" class="muted">Открытых позиций на Bybit нет.</td></tr>';
+  const reasonText={StopLoss:'стоп',TakeProfit:'цель',UNKNOWN:'закрыто вручную'};const closed=lt.recent_closed||[],closedKeys=new Set(closed.map(x=>x.symbol+':'+x.closed_at_epoch_ms));if(lastClosedExecutions!==null){for(const x of closed)if(!lastClosedExecutions.has(x.symbol+':'+x.closed_at_epoch_ms))stageSound(x.reason==='TakeProfit'?'+1.1':'-1.0')}lastClosedExecutions=closedKeys;realClosedRows.innerHTML=closed.length?closed.map(x=>{const net=Number(x.net_pnl);return `<tr><td>${new Date(x.closed_at_epoch_ms).toLocaleString('ru-RU')}</td><td><b>${x.symbol}</b></td><td>${Number(x.qty).toFixed(4)}</td><td>${Number(x.price).toFixed(4)}</td><td>${reasonText[x.reason]||x.reason}</td><td>${Number(x.gross_pnl).toFixed(4)} USDT</td><td>${Number(x.entry_fee).toFixed(4)} USDT</td><td>${Number(x.exit_fee).toFixed(4)} USDT</td><td><b class="${net>=0?'ok':'warn'}">${net>=0?'+':''}${net.toFixed(4)} USDT</b></td></tr>`}).join(''):'<tr><td colspan="9" class="muted">Закрытых реальных исполнений пока нет.</td></tr>';
+  const commandNames={break_even:'защита прибыли +0,13%',current_stop:'стоп −0,20% от текущей цены',close:'закрытие сделки',entry:'открытие сделки'},commandStates={queued:'принято в очередь',running:'отправляется на Bybit',completed:'выполнено и подтверждено Bybit',failed:'отклонено'};const latestCommand=(lt.commands||[])[0];tradeCommandStatus.textContent=latestCommand?`Последняя команда: ${latestCommand.symbol} · ${commandNames[latestCommand.type]||latestCommand.type} · ${commandStates[latestCommand.state]||latestCommand.state}${latestCommand.error?' · '+latestCommand.error:''}`:'Команд ещё не было';const age=wallet?Math.max(0,Math.round(Date.now()/1000-wallet.refreshed_at_epoch_ms/1000)):null;liveFreshness.innerHTML=age==null?'<span class="missing">нет снимка</span>':`<span class="${age<=5?'fresh':age<=15?'stale':'missing'}">${age} сек.</span>`;
+  const op=d.opportunities||{counts:{},items:[]},shadowItems=op.items.filter(x=>x.bot_id==='entry-v1-shadow'),resultText=x=>{const h=x.hits||{},tp=h['+1.1'],sl=h['-1.0'];if(tp&&(!sl||tp<sl))return'цель +1,10% достигнута раньше стопа';if(sl&&(!tp||sl<tp))return'стоп −1,00% достигнут раньше цели';if(x.state==='completed')return'24 часа завершены без цели и стопа';return'независимое наблюдение продолжается'},signalGroups=new Map();for(const x of shadowItems){const key=x.symbol+':'+x.direction,group=signalGroups.get(key);if(!group)signalGroups.set(key,{latest:x,count:1});else{group.count++;if(x.signal_at_epoch_ms>group.latest.signal_at_epoch_ms)group.latest=x}}const displaySignals=[...signalGroups.values()].sort((a,b)=>b.latest.signal_at_epoch_ms-a.latest.signal_at_epoch_ms);liveHistorySummary.textContent=`исходных сигналов: ${shadowItems.length} · групп монета/направление: ${displaySignals.length} · наблюдаются независимо: ${shadowItems.filter(x=>x.state==='tracking').length} · завершены: ${shadowItems.filter(x=>x.state==='completed').length}`;liveRows.innerHTML=displaySignals.length?displaySignals.map(g=>{const x=g.latest;return `<tr><td>${new Date(x.signal_at_epoch_ms).toLocaleString('ru-RU')}</td><td><b>${x.symbol}</b></td><td>${x.direction==='long'?'покупка':x.direction==='short'?'продажа':x.direction}</td><td>${x.signal_price==null?'—':Number(x.signal_price).toFixed(4)}</td><td>${g.count}</td><td>${resultText(x)}</td><td>${Number(x.mfe_pct||0).toFixed(3)}%</td><td>${Number(x.mae_pct||0).toFixed(3)}%</td><td>${x.samples||0}</td></tr>`}).join(''):'<tr><td colspan="9" class="muted">Подтверждённых сигналов пока не было.</td></tr>';
+}
+function renderEntryShadow(es){
+  es=es||{state:'не запущен',running:false,assets:[]};
+  const states={RUNNING:'работает',WARMUP:'собирает первые 5 минут',WAITING:'зона пока далеко',WATCH:'зона рядом',APPROACH:'подходит к точке входа',SIGNAL:'виртуальный вход',COOLDOWN:'временная пауза',NO_CALIBRATION:'нет индивидуальной настройки',ERROR:'ошибка'};
+  const sides={Long:'покупка',Short:'продажа'};
+  const flows={pressure_then_reversal:'давление сменилось разворотом в сторону сделки',pressure_continues:'давление против сделки продолжается',already_favorable:'поток уже направлен в сторону сделки',favorable_then_fades:'поддерживающий поток ослабевает',neutral_or_mixed:'нет явного перевеса покупателей или продавцов'};
+  const interests={OK:'аномального изменения нет',TAIL:'предупреждение: необычное изменение',"—":'данных или индивидуальных порогов пока нет'};
+  const detailText=value=>{value=String(value||'');let m=value.match(/failure embargo until (.+)/);if(m)return`пауза на один час после неудавшегося входа — до ${new Date(m[1]).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`;m=value.match(/previous 60m swing ([^%]+)% exceeds limit/);if(m)return`новые входы временно запрещены: размах цены за последний час ${Number(m[1]).toFixed(2)}%`;if(value.includes('OI calibration missing'))return'нет индивидуальных порогов открытого интереса; это только предупреждение';if(value.includes('waiting for 5m+15m'))return'совпадения зон 15 и 5 минут сейчас нет';if(value.includes('approaching'))return'цена подходит к рассчитанной точке входа';if(value.includes('within watch distance'))return'рассчитанная точка входа находится рядом';if(value.includes('armed confluence exists'))return'точка рассчитана, но цена пока далеко';return value||'—'};
+  const flowText=value=>{const match=String(value||'').match(/^TAPE (\d+)\/(\d+)$/);return match?`собрано ${match[1]} из ${match[2]} завершённых минут`:flows[value]||(value||'—')};
+  const allRows=[...(es.assets||[])].sort((a,b)=>{const ad=a.distance_pct==null?Infinity:Math.abs(Number(a.distance_pct));const bd=b.distance_pct==null?Infinity:Math.abs(Number(b.distance_pct));return ad-bd||a.symbol.localeCompare(b.symbol)});lastScannerAssets=allRows;const threshold=Number(entryNearThreshold.value||1),rows=allRows,near=allRows.filter(x=>x.status==='ERROR'||threshold===999||(x.distance_pct!=null&&Math.abs(Number(x.distance_pct))<=threshold)).length,far=allRows.length-near;
+  entryShadowSummary.innerHTML=`<span class="light ${es.running?'green':'red'}"></span>${es.running?'сканер работает':'сканер не работает'} · ${states[es.state]||es.state||'—'}`;
+  entryShadowDetail.textContent=threshold===999?`Показаны все монеты: ${allRows.length}. Ближайшие расположены сверху.`:`Монеты ближе ${threshold.toFixed(2)}% расположены сверху: ${near}. Дальше выбранного порога: ${far}. Всего показано: ${allRows.length}.`;
+  if(window.autoAll){autoAll.checked=rows.length>0&&rows.every(x=>enabledSymbols.has(x.symbol));autoAll.indeterminate=enabledSymbols.size>0&&!autoAll.checked}
+  entryShadowRows.innerHTML=rows.length?rows.map(x=>`<tr><td><input class="auto-check" type="checkbox" ${enabledSymbols.has(x.symbol)?'checked':''} onchange="setAuto('${x.symbol}',this.checked)" title="Разрешить автоматический вход по новому подтверждённому сигналу"></td><td><a href="https://www.bybit.kz/trade/usdt/${x.symbol}" target="_blank" rel="noopener"><b>${x.symbol}</b></a></td><td><span class="pill">${states[x.status]||x.status||'—'}</span><br><small class="muted">${detailText(x.detail)}</small></td><td>${sides[x.side]||x.side||'—'}</td><td>${x.entry_price==null?'—':Number(x.entry_price).toFixed(4)}</td><td>${x.distance_pct==null?'—':Number(x.distance_pct).toFixed(3)+'%'}</td><td>${flowText(x.flow_state)}</td><td>${interests[x.oi_state]||x.oi_state||'—'}</td><td>${x.updated_at?new Date(x.updated_at).toLocaleString('ru-RU'):'—'}</td></tr>`).join(''):'<tr><td colspan="9" class="muted">Сканер ещё не передал состояние монет.</td></tr>'
+}
+async function refreshEntryShadow(){const r=await fetch('/api/live/state',{cache:'no-store'});const d=await r.json();renderLiveState(d);renderEntryShadow(d.entry_shadow);processAudio(d)}
+async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});const d=await r.json();
+  stamp.textContent='обновлено '+new Date(d.generated_at_epoch*1000).toLocaleString('ru-RU'); dataSize.textContent=size(d.disk.used)+' / '+size(d.disk.total); period.textContent=(d.evaluation_start||'—')+' → '+(d.evaluation_end||'—'); diskBar.style.width=(100*d.disk.used/d.disk.total).toFixed(1)+'%';
+  const hs=d.health||{};health.textContent=hs.state==='green'?'GREEN · всё штатно':hs.state==='yellow'?'YELLOW · требуется внимание':hs.state==='red'?'RED · есть критическая проблема':'UNKNOWN';health.className='metric '+(hs.state==='green'?'ok':hs.state==='yellow'?'warn':'');healthIssues.textContent=(hs.issues||[]).map(x=>x.message).join(' · ')||'Активных замечаний нет';
+  download.textContent=(d.download.status||'не запущена')+' · '+(d.download.files_ready||0); downloadCurrent.textContent=d.download.current||'—'; jobs.textContent=[d.jobs.queued,d.jobs.running,d.jobs.completed,d.jobs.failed].join(' / ');
+  const money=n=>n==null?'—':n>=1e9?'$'+(n/1e9).toFixed(2)+' млрд':n>=1e6?'$'+(n/1e6).toFixed(1)+' млн':'$'+Math.round(n).toLocaleString('ru-RU');
+  const roles={indicator:'индикатор',trading:'торговая',excluded_meme:'мем · исключена'};
+  const ec=d.entry_comparison||{rows:[]};const pct=v=>v==null?'—':Number(v).toFixed(1)+'%';const pure=(ec.rows||[]).filter(x=>x.contract.startsWith('no-floor')&&x.e0&&x.e0.target_rate_pct!=null);
+  entryLegend.innerHTML=`Показаны ${pure.length} монет с завершённым чистым расчётом. <span class="light green"></span>точность ≥ 50% &nbsp; <span class="light red"></span>точность < 50%. DOGE и PEPE исключены.`;
+  entryRows.innerHTML=pure.length?pure.map(x=>{const e=x.e0;const color=Number(e.target_rate_pct)>=50?'green':'red';const open=(e.filled??0)-(e.resolved??0);return `<tr class="entry-row-${color} ${x.symbol==='TRXUSDT'?'trx-focus':''}"><td><b>${x.symbol}</b>${x.symbol==='TRXUSDT'?'<br><span class="pill">TRX отдельно</span>':''}</td><td>15m ∩ 5m · E0</td><td>${e.signals}</td><td>${e.filled}</td><td>${e.targets}</td><td>${e.stops}</td><td>${open}</td><td class="${color==='green'?'rate-good':'rate-bad'}">${pct(e.target_rate_pct)}</td><td><span class="light ${color}"></span>${color==='green'?'≥ 50%':'< 50%'}</td></tr>`}).join(''):'<tr><td colspan="9" class="muted">Чистые Entry-результаты ещё не собраны.</td></tr>';
+  symbols.innerHTML=d.symbols.map(x=>{const m=x.market||{};return `<tr title="${x.traffic_reason}"><td><span class="light ${x.traffic_light}"></span>${x.traffic_light==='green'?'можно':x.traffic_light==='yellow'?'осторожно':'нельзя'}</td><td><b>${x.symbol}</b></td><td><span class="pill">${roles[x.role]||x.role}</span></td><td>${money(m.turnover24h)}</td><td>${m.spread_bps==null?'—':m.spread_bps.toFixed(2)+' б.п.'}</td><td>${money(m.open_interest_value)}</td><td>${m.funding_rate_pct==null?'—':m.funding_rate_pct.toFixed(4)+'%'}</td><td>${x.public_trade_files}</td><td>${x.orderbook_files}</td><td>${size(x.bytes)}</td></tr>`}).join('');
+  selectionRules.innerHTML=`<b><span class="light green"></span>Зелёный:</b> ${d.market_selection.green}<br><b><span class="light yellow"></span>Жёлтый:</b> ${d.market_selection.yellow}<br><b><span class="light red"></span>Красный:</b> ${d.market_selection.red}<br>Статус обновляется каждые ${d.market_selection.updated_every_seconds} секунд. Наведите курсор на строку, чтобы увидеть причину.`;
+  services.innerHTML=Object.entries(d.services).map(([k,v])=>`<div><span class="${v==='active'?'ok':'warn'}">●</span> ${k.replace('.service','')} <span class="muted">${v}</span></div>`).join('');
+  tech.innerHTML=Object.entries(d.technologies).map(([k,v])=>`<div><code>${k}</code>: ${v}</div>`).join(''); scripts.textContent=d.scripts.length?d.scripts.join(' · '):'Исполняемые модули ещё не перенесены';
+  currentCode.innerHTML=`<tr><td><b>${d.current_code.release||'—'}</b></td><td><span class="pill">${d.current_code.status}</span></td><td>${size(d.current_code.bytes)}</td><td>${d.current_code.source_modules}</td><td>${d.current_code.research_scripts}</td><td>${d.current_code.tests}</td></tr>`;
+  const c=d.connectivity, em=c.matching_engine_to_server_ms||{}, ju=c.json_decode_us||{}; connectivity.innerHTML=`<tr><td><span class="pill">${c.state}</span></td><td>${c.symbols||0} монет</td><td>${c.messages||0}</td><td>${em.p50==null?'—':em.p50+' мс'}</td><td>${em.p95==null?'—':em.p95+' мс'}</td><td>${ju.p50==null?'—':ju.p50.toFixed(1)+' мкс'}</td><td>${c.reconnects||0}</td></tr>`;
+  const p=d.private_api, perms=p.permissions||{}; privateApi.innerHTML=`<tr><td><span class="pill">${p.state}</span></td><td>${p.server_endpoint||'—'}</td><td>${p.read_only===0?'торговый':p.read_only===1?'только чтение':'—'}</td><td>${Object.entries(perms).filter(([,v])=>v.length).map(([k,v])=>k+': '+v.join(', ')).join(' · ')||'—'}</td><td><span class="pill">заблокировано</span></td></tr>`;
+  const pr=d.private_runtime||{},pw=pr.private||{},tw=pr.trade||{};privateChannels.innerHTML=`<tr><td>Private WS</td><td><span class="pill">${pw.state||'—'}</span></td><td>${pw.reconnects||0}</td><td>${pw.hot_positions||0}</td><td>${pw.hot_orders||0}</td><td>—</td></tr><tr><td>Trade WS</td><td><span class="pill">${tw.state||'—'}</span></td><td>${tw.reconnects||0}</td><td>—</td><td>—</td><td>${tw.commands_sent||0}</td></tr>`;
+  const sa=d.safety||{};safety.innerHTML=`<tr><td><span class="pill">${sa.state||'—'}</span></td><td>${sa.public_stream_age_ms==null?'—':sa.public_stream_age_ms+' мс'}</td><td>${sa.clock_offset_ms==null?'—':sa.clock_offset_ms+' мс'}</td><td>${sa.rest_latency_ms==null?'—':sa.rest_latency_ms+' мс'}</td><td>${sa.total_equity==null?'—':'$'+Number(sa.total_equity).toFixed(2)}</td><td>${sa.open_positions==null?'—':sa.open_positions}</td><td>${sa.open_orders==null?'—':sa.open_orders}</td><td>${sa.checked_at_epoch?new Date(sa.checked_at_epoch*1000).toLocaleString('ru-RU'):'—'}</td></tr>`;
+  const bk=d.backup||{};backup.innerHTML=`<tr><td><span class="pill">${bk.state||'—'}</span></td><td>${bk.created_at_utc||'—'}</td><td>проект · PostgreSQL · конфигурация · reports</td><td>${bk.includes_heavy_datasets===false?'не копируются; восстанавливаются отдельно':'—'}</td><td>ежедневно, 03:20 UTC</td></tr>`;
+  const bd=d.bots||{bots:[],events:[]};botGate.textContent=bd.execution_gate==='live-trading-locked'?'Реальные заявки заблокированы':bd.execution_gate;
+  gateRows.innerHTML=Object.entries(bd.gates||{}).map(([mode,g])=>`<tr><td><b>${mode}</b></td><td><span class="pill">${g.enabled?'разрешён':'заблокирован'}</span></td><td>${g.reason}</td></tr>`).join('');
+  botRows.innerHTML=bd.bots.length?bd.bots.map(b=>{const s=b.stats||{},closed=(s.wins||0)+(s.losses||0),wr=closed?100*(s.wins||0)/closed:null;return `<tr><td><b>${b.id}</b><br><span class="muted">${b.name}</span></td><td>${b.strategy}</td><td><span class="pill">${b.mode}</span></td><td>${b.actual_state}</td><td>${(b.symbols||[]).join(', ')||'—'}</td><td>${s.signals||0} / ${s.fills||0}</td><td>${wr==null?'—':wr.toFixed(1)+'%'}</td><td>${Number(s.net_pnl||0).toFixed(2)}</td><td>${Number(s.fees||0).toFixed(2)}</td><td>${s.latency_p50_ms==null?'—':s.latency_p50_ms+' мс'}</td><td><button class="tab" onclick="botAction('${b.id}','start')" ${b.executable?'':'disabled'}>Старт</button><button class="tab" onclick="botAction('${b.id}','stop')">Стоп</button></td></tr>`}).join(''):'<tr><td colspan="11" class="muted">Слоты ботов не созданы</td></tr>';
+  botEvents.innerHTML=(bd.events||[]).length?bd.events.slice(0,20).map(e=>`<tr><td>${new Date(e.at_epoch*1000).toLocaleString('ru-RU')}</td><td>${e.bot_id}</td><td>${e.action}</td><td>${e.result}</td></tr>`).join(''):'<tr><td colspan="4" class="muted">Команд ещё не было</td></tr>';
+  const op=d.opportunities||{counts:{},items:[]};opportunitySummary.textContent=`наблюдаются ${op.counts.tracking||0} · завершены ${op.counts.completed||0}`;opportunityRows.innerHTML=op.items.length?op.items.map(x=>`<tr><td>${new Date(x.signal_at_epoch_ms).toLocaleString('ru-RU')}</td><td><b>${x.signal_id}</b><br><span class="muted">${x.bot_id}</span></td><td>${x.strategy_version}</td><td>${x.symbol}<br><span class="light ${x.traffic_light}"></span></td><td>${x.direction}</td><td>${x.decision}</td><td>${x.reason}</td><td>${x.state}</td><td>${Number(x.mfe_pct||0).toFixed(3)}%</td><td>${Number(x.mae_pct||0).toFixed(3)}%</td><td>${x.samples}</td></tr>`).join(''):'<tr><td colspan="11" class="muted">Сигналов пока нет — монитор готов к приёму от постоянных scanner-процессов.</td></tr>';
+  const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';liveGateOpen=!!lt.gate?.enabled;enabledSymbols=new Set(lt.settings?.enabled_symbols||[]);if(document.activeElement!==tradeStake)tradeStake.value=lt.settings?.stake_usdt||10;if(document.activeElement!==tradeLeverage)tradeLeverage.value=lt.settings?.leverage||10;tradeGateButton.textContent=liveGateOpen?'Закрыть торговый шлюз':'Открыть торговый шлюз';tradeGateNotice.innerHTML=liveGateOpen?'<b>Реальная торговля разрешена.</b> Автоматические галочки и кнопки отправляют команды на Bybit.':'<b>Торговый шлюз закрыт.</b> Данные читаются, команды не отправляются.';tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const stake=Number(tradeStake.value||0);balanceWarning.textContent=wallet&&Number(wallet.available_balance)<stake?'Недостаточно доступных средств для следующей ставки':'';positionRows.innerHTML=positions.length?positions.map(p=>`<tr><td><b>${p.symbol}</b></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}</td><td>${Number(p.entry_price).toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${p.mark_price?Number(p.mark_price).toFixed(4):'—'}</td><td>${p.stop_loss?Number(p.stop_loss).toFixed(4):'не установлен'}</td><td>${num(p.unrealised_pnl)}</td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">В безубыток</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`).join(''):'<tr><td colspan="9" class="muted">Открытых позиций на Bybit нет.</td></tr>';
+  const latestCommand=(lt.commands||[])[0];tradeCommandStatus.textContent=latestCommand?`Последняя команда: ${latestCommand.symbol} · ${latestCommand.type} · ${latestCommand.state}${latestCommand.error?' · '+latestCommand.error:''}`:'Команд ещё не было';
+  const age=wallet?Math.max(0,Math.round(Date.now()/1000-wallet.refreshed_at_epoch_ms/1000)):null;
+  liveFreshness.innerHTML=age==null?'<span class="missing">нет снимка</span>':`<span class="${age<=45?'fresh':age<=120?'stale':'missing'}">${age} сек.</span>`;
+  renderLiveState(d);renderEntryShadow(d.entry_shadow);processAudio(d);
+  jobRows.innerHTML=d.jobs.items.length?d.jobs.items.map(x=>`<tr><td><b>${x.job_id}</b></td><td><span class="pill">${x.state}</span></td><td>${x.title}</td><td>${x.line}</td><td>${x.symbols.join(', ')}</td><td>${x.duration_seconds==null?'—':x.duration_seconds+' с'}</td><td>${x.error||(x.report_path?`<a href="/reports/${x.report_path}/">Открыть отчёт</a>`:'—')}</td></tr>`).join(''):'<tr><td colspan="7" class="muted">Заданий пока нет</td></tr>';
+  legacyRows.innerHTML=d.legacy.length?d.legacy.map(x=>`<tr><td><b>${x.name}</b></td><td>${size(x.bytes)}</td><td>${x.files}</td><td>${x.report_roots}</td><td>${x.research_modules}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">История ещё не перенесена</td></tr>';
+  legacyCatalog.innerHTML=d.legacy.map(x=>`<details><summary>Показать содержимое ${x.name}</summary><h3>Наборы отчётов (${x.reports.length})</h3><div class="catalog">${x.reports.map(n=>`<span class="item">${n}</span>`).join('')}</div><h3>Исследовательские модули (${x.modules.length})</h3><div class="catalog">${x.modules.map(n=>`<span class="item">${n}</span>`).join('')}</div></details>`).join('');
+} refresh().catch(e=>stamp.textContent='ошибка: '+e);setInterval(()=>refreshEntryShadow().catch(()=>{}),1000);setInterval(()=>refresh().catch(()=>{}),60000);
+</script></body></html>

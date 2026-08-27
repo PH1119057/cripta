@@ -1,0 +1,9 @@
+Validation performed in build environment:
+- Python py_compile: PASS for all changed Python modules.
+- Targeted Entry/Orderbook tests: 40 passed.
+- Additional randomized semantic comparison of old vs vectorized P33 path logic:
+  200/200 Long/Short cases matched exactly.
+- Full project suite could not be collected in the build container because the
+  container does not have hypothesis installed. The user's Windows check_windows.ps1
+  remains the authoritative full-suite gate.
+- Payload contains no reports directory and no live execution/risk modules.

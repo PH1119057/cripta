@@ -1,0 +1,21 @@
+P43 — MULTI-ASSET 90D PREFETCH
+
+Purpose:
+- freeze the next validation basket at 9 total assets;
+- prefetch the seven new symbols on the exact UNI/LINK 90-day window;
+- retain one shared historical orderbook cache for later P39/P40 reuse;
+- do not tune Entry V1.
+
+Default new symbols:
+BTCUSDT, ETHUSDT, XRPUSDT, PEPEUSDT, SOLUSDT, DOGEUSDT, ADAUSDT
+
+Frozen evaluation:
+2026-05-18T00:00:00Z .. 2026-08-16T00:00:00Z
+latest raw trade day: 2026-08-15
+
+Files:
+- scripts/prefetch_multi_asset_90d_windows.ps1
+- scripts/research_cross_asset_validation_windows.ps1
+- docs/ENTRY_V1_MULTI_ASSET_VALIDATION_PROTOCOL_RU.md
+
+No Python source or live trading code is changed.

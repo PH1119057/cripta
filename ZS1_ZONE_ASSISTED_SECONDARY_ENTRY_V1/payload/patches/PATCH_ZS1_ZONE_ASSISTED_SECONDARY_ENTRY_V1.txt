@@ -1,0 +1,45 @@
+ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1
+
+BASELINE
+- bybit-workbench 0.8.5 source tree.
+- Frozen P52 ALL9_P52_WORKING exact report hashes embedded in analyzer.
+- Frozen SE1 ALL9_SE1_WORKING exact report hashes embedded in analyzer.
+- Frozen SE2 ALL9_SE2_DISCOVERY_20260821_161847 exact report hashes embedded in analyzer.
+
+PURPOSE
+Test whether already-resolved clean-zone structure can turn the broad SE1 A0.50/R0.30 Secondary cohort into a more frequent positive-EV middle class between broad SE1 and SE2 GOLD.
+
+PRIMARY LOCKED COMPARISON
+- SE1_BASE_A0.50_R0.30.
+- ZONE_B: protective_hold_reclaim fully resolved before the existing SE1 scale entry.
+- ZONE_A: obstacle_clean_break_with fully resolved before the existing SE1 scale entry.
+- ZONE_FAVORABLE_NOT_GOLD: Zone-B or Zone-A, excluding SE2 GOLD signals.
+- ZONE_ADVERSE: obstacle rejection or protective clean break fully resolved before scale.
+- SE2 GOLD: A0.50_R0.30_Z_ZLE3.
+
+ECONOMICS
+- $100 Secondary margin, 10x leverage, $1000 notional.
+- 0.10% notional round-trip cost reserve = $1.
+- +1.10% target = +$10 net benchmark.
+- structural-stop loser = -(stop distance % * 10) - $1.
+- unresolved horizon rows excluded from EV.
+
+IMPORTANT BOUNDARY
+ZS1 does NOT invent a new fill at P52 zone_outcome_at. P52 aggregate rows do not contain the exact execution-truth price for such a new Secondary. Direct zone-trigger Secondary replay is a separate follow-up hypothesis requiring local trade/1m path data.
+
+CHANGES
+- Adds one research module.
+- Adds one targeted unit test file.
+- Adds one Windows research runner.
+- Adds this patch note.
+
+DOES NOT CHANGE
+- Entry V1 logic or fingerprint.
+- P46/frozen holdout or NEW5.
+- Exit, Risk, Execution or live runtime.
+- reports during installation.
+- network/download behavior.
+
+RESULTING VERSION
+- Application package version remains 0.8.5.
+- Research capability added: ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1.

@@ -1,0 +1,26 @@
+ENTRY V1 FULL PANEL PATCH — VALIDATION
+======================================
+
+Проверено в sandbox перед упаковкой:
+
+1. Python compileall: PASS.
+2. Targeted tests:
+   tests/test_full_panel_entry_validation.py
+   tests/test_cross_asset_validation_v11.py
+   -> 8 passed.
+3. Regression suite без tests/test_safety_properties.py:
+   -> 432 passed, 6 skipped, 44 subtests passed.
+   Skips: PySide6 отсутствует в sandbox; soak требует RUN_SOAK_TESTS=1.
+4. tests/test_safety_properties.py в sandbox не запускался из-за отсутствия
+   dependency hypothesis. В пользовательской Windows .venv hypothesis уже присутствовал
+   в предыдущих successful check_windows runs.
+5. Live trading/execution source не изменялся.
+6. reports/ не входит в patch payload.
+7. PowerShell runtime отсутствует в sandbox, поэтому installer перед копированием
+   обязательно запускает встроенный PowerShell Parser::ParseFile для всех payload .ps1.
+   Если синтаксис невалиден, patch не применяется.
+
+Критическая исправленная несогласованность:
+- old P43 default: PEPEUSDT
+- frozen panel research symbol: 1000PEPEUSDT
+- display label only: PEPE

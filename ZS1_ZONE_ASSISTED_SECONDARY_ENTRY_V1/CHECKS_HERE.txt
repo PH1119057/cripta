@@ -1,0 +1,15 @@
+CHECKED HERE
+- python -m py_compile payload/src/bybit_workbench/research/secondary_entry_zone_scale_zs1.py payload/tests/test_secondary_entry_zone_scale_zs1.py : PASS
+- python -m pytest -q payload/tests/test_secondary_entry_zone_scale_zs1.py : 6 passed in 0.09s
+- Analyzer smoke against exact copied P52/SE1/SE2 reports from APP_2DAY_LOGS.zip : PASS
+- Reproduced SE1 A0.50/R0.30 N=792, EV=-0.9389280293885514 : PASS
+- Reproduced SE2 GOLD N=69, EV=2.331309038925068 : PASS
+- ZS1 output contract and summary assertions : PASS
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime
+- Ruff (not installed in this Linux tool environment)
+- mypy (not installed in this Linux tool environment)
+- full project pytest
+- C:\cripta authoritative scripts/check_windows.ps1
+- live Bybit API or GUI

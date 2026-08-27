@@ -1,0 +1,30 @@
+P51 MFE-ACTIVATED RISK / GIVEBACK V1
+
+Baseline:
+- bybit-workbench 0.8.5
+- P50 V1.2 installed and accepted
+- completed P50 995-signal report
+- completed exact untouched -1.00 vs +1.10 baseline
+
+Adds:
+- research-only P51 MFE/giveback module
+- Windows launcher
+- protocol document
+- regression tests
+
+Fixed discovery matrix:
+- MFE +0.25/+0.50/+0.75/+1.00
+- tightened stops -0.75/-0.60/-0.50
+- targets +1.10/+2/+3
+- first causal +0.10 Entry recovery after MFE as the primary action
+
+Does not change:
+- Entry V1
+- frozen P46
+- live Execution
+- Exit/Risk production
+- calibration
+- existing reports or market data during installation
+- reserved BNB/AVAX/SUI/AAVE/LTC OOS
+
+Downloads: DISABLED / fail-closed.

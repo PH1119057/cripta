@@ -1,0 +1,35 @@
+P51 MFE-ACTIVATED RISK / GIVEBACK ANATOMY V1
+
+Baseline:
+- bybit-workbench 0.8.5
+- P50 V1.2 installed and accepted
+- completed P50 report: 995-signal +0.10-before--1 cohort
+- exact untouched -1.00 vs +1.10 baseline already calculated locally
+
+Prerequisites at research run time:
+- C:\cripta\.venv
+- reports\multi_retest_entry_recross_p50\ALL9_P50_WORKING
+- latest reports\untouched_minus1_plus110_v1\ALL9_* exact baseline (or explicit -ExactBaselineDir)
+- existing frozen nine-asset local raw-trade datasets
+
+Changes:
+- adds P51 research module, launcher, protocol, patch note, regression tests
+- fixed MFE milestones +0.25/+0.50/+0.75/+1.00
+- fixed candidate tightened stops -0.75/-0.60/-0.50
+- fixed future targets +1.10/+2/+3
+- primary causal action = first Entry-zone recovery to +0.10 after MFE milestone was already reached
+- exact +1.10/-1 raw-path equivalence gate
+- saved-loss vs killed-runner, runner-room, giveback and symbol/direction stability outputs
+- independent heartbeat and resumable checkpoint
+
+Does not change:
+- Entry V1
+- frozen P46/fingerprint
+- live Execution
+- Exit/Risk production logic
+- calibration
+- existing reports, market data or user data during installation
+- reserved OOS assets BNB/AVAX/SUI/AAVE/LTC
+
+Downloads: DISABLED / fail-closed.
+Package version remains bybit-workbench 0.8.5.

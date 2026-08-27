@@ -1,0 +1,21 @@
+PATCH P27 — CLOCK SELF-HEAL + OBSERVABILITY + DAILY RISK
+
+Base: v0.8.5 · P26
+Target: v0.8.5 · P27
+
+Changes:
+1. LIVE desktop startup runs `w32tm /resync` directly (no shell interpolation) and logs the result.
+2. Mainnet clock skew is now a first-class error. Read-only connection recovery and write-runtime error handling trigger another `w32tm /resync` automatically. A failed/expired mutation is NEVER blind-retried after clock correction.
+3. Clock watchdog checks Bybit server time every 60 seconds. At >=3000 ms drift it requests a resync; above 5000 ms after recovery it fails closed for new entries.
+4. Header now shows `Clock ±N ms` health next to Public WS / Private WS / REST.
+5. Bybit server-time parsing uses nanosecond/millisecond precision when available, avoiding whole-second quantization in drift monitoring.
+6. LONG/SHORT recommendation badge is removed from the chart and placed in the quote header immediately left of the current price.
+7. Added `Закрытые сделки` tab backed by `/v5/position/closed-pnl` (latest 50 for the selected symbol), refreshed on startup/reconnect and periodic reconciliation.
+8. Daily loss gate is now equity-relative. Default is 3% of current Equity; optional absolute USDT cap remains available (0 = off). If both are enabled, the stricter cap wins.
+9. Fixed pending-entry accounting: protective Stop/TP orders no longer consume `pending_entry_limit`; only actual non-reduce-only ENTRY orders count.
+10. P25 atomic Entry + server-side Stop Loss + Take Profit is unchanged.
+
+Safety notes:
+- Time synchronization is self-healing, but trade mutations are never repeated automatically merely because the clock was corrected.
+- If clock drift remains above the hard limit after resync, the workbench remains fail-closed.
+- Existing open positions and their server-side protection are not modified by this patch.

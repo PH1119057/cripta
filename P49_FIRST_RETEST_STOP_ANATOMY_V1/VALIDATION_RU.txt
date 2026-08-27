@@ -1,0 +1,16 @@
+CHECKED during package preparation:
+- Python py_compile: PASS
+- targeted unit tests for P49: 6 passed
+- synthetic causal cases: pre-activation noise, retest depth, -1 stop during retest,
+  rebound confirmation, post-retest tightened stop, future runner: PASS
+- payload SHA256 manifest generated
+
+NOT CHECKED HERE:
+- Ruff (tool unavailable in this environment)
+- mypy (tool unavailable in this environment)
+- Windows PowerShell 5.1 parser/runtime
+- full C:\cripta check_windows.ps1
+- real local 1063-signal raw-trade P49 run (market data is only on user's C:\cripta)
+
+Installer performs PowerShell syntax, py_compile, Ruff full-overlay, mypy full-overlay,
+and targeted pytest BEFORE copying any payload file into the real project.

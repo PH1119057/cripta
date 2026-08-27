@@ -1,0 +1,39 @@
+P47K +0.50 -> -0.50 QUICK SURVIVAL AUDIT
+
+BASELINE
+- Current C:\cripta with frozen Entry V1, P47H, P47I.1 and P47J.1 installed.
+- Current C:\cripta is authoritative over old chat/archives.
+
+PURPOSE
+- Test the user's new early-protection hypothesis on the already-seen ALL9 sample.
+- Keep the original -1.00% hard stop until first +0.50% favorable touch.
+- After +0.50%, move protective floor to -0.50% from Entry.
+- Count first -0.50% floor versus +1.10% continuation.
+- Separately isolate the legacy 851 theoretical-BE exits to see how many were only noise.
+
+ADDS
+- src\bybit_workbench\research\early_protection_plus05_minus05_v24.py
+- tests\test_early_protection_plus05_minus05_v24.py
+- scripts\research_early_protection_plus05_minus05_all9_windows.ps1
+
+DOES NOT CHANGE
+- Entry V1 or frozen P46/fingerprint
+- production Exit/Risk
+- Execution/live code
+- Bybit state
+- existing reports or market data
+- P47H/P47I/P47J results
+
+RESEARCH STATUS
+- DISCOVERY / seen ALL9 data. This is not a new OOS confirmation.
+- New five assets must remain unseen for later confirmation.
+- Downloads DISABLED/fail-closed.
+- Path-survival counts only; no fees/PnL/downstream runner retuning.
+
+INSTALL
+Run INSTALL_P47K.ps1 from C:\cripta.
+Installer creates a temporary post-patch overlay, applies the payload to real target paths,
+runs prechecks, and copies files into C:\cripta only if all prechecks pass.
+
+AUTHORITATIVE POST-INSTALL GATE
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

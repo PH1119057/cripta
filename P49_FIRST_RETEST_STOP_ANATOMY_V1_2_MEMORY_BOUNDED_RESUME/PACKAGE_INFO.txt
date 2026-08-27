@@ -1,0 +1,38 @@
+P49 FIRST RETEST STOP ANATOMY V1.2 - MEMORY BOUNDED + RESUME
+
+Baseline:
+- C:\cripta
+- bybit-workbench 0.8.5
+- P49 V1 + P49.1 launcher fix installed exactly as hashed in BASELINE.csv
+
+Prerequisites:
+- Windows PowerShell 5.1 target
+- existing C:\cripta\.venv
+- local frozen Entry V1 P40 datasets/raw public trades for the existing 9-asset panel
+- no downloads; no holdout inspection
+
+Changed files:
+- src\bybit_workbench\research\first_retest_stop_anatomy_p49.py
+- scripts\research_first_retest_stop_anatomy_p49_windows.ps1
+- tests\test_first_retest_stop_anatomy_p49.py
+- patches\PATCH_P49_2_MEMORY_BOUNDED.txt
+
+Resulting research revision:
+P49.2 MEMORY BOUNDED + RESUME. Package version remains 0.8.5.
+
+Changes:
+- compact packed-double signal paths
+- one live symbol cache; no retained 72h paths
+- online policy aggregation
+- bounded 4-day default LRU for 72h horizon
+- resumable fail-closed checkpoint every 25 signals and symbol boundary
+- deterministic default working report directory
+
+Does not change:
+- Entry V1 logic/signals
+- P46 frozen holdout/fingerprint
+- Exit/Risk production logic
+- live Execution/arming
+- calibration, market data or reports during installation
+
+Research downloads: DISABLED.

@@ -1,0 +1,33 @@
+CHECKED HERE
+============
+1. Reconstructed post-P50 source overlay from the uploaded project archive plus accepted P49/P50 payloads.
+2. Python compileall for the new P51 module/test: PASS.
+3. Targeted pytest on final overlay:
+   tests/test_mfe_activated_risk_p51.py
+   tests/test_multi_retest_entry_recross_p50.py
+   tests/test_full_first_retest_basin_p493.py
+   tests/test_first_retest_stop_anatomy_p49.py
+   tests/test_retest_anatomy_v14.py
+   tests/test_early_failure_puncture_v20.py
+   tests/test_exit_break_even_v13.py
+   Result: 56 passed.
+4. P50 report + exact untouched baseline reconciliation loader against uploaded real reports:
+   P50 cohort = 995
+   +1.10 first = 594
+   -1.00 first after +0.10 activation = 394
+   data end = 7
+   illustrative ALL9 baseline net = 880.0 USD under the existing illustrative contract.
+5. Python AST parse and line-length review of new Python/test source: PASS.
+
+NOT CHECKED HERE
+================
+- Windows PowerShell 5.1 parser/runtime.
+- Ruff (not installed in this environment).
+- mypy (not installed in this environment).
+- full scripts\check_windows.ps1.
+- full 995-signal P51 raw-market run (local C:\cripta datasets are not uploaded here).
+- live Bybit/API/GUI behavior (P51 is research-only and makes no live changes).
+
+The fail-closed installer runs PowerShell syntax, compileall, full-overlay Ruff,
+full-overlay mypy and targeted pytest before copying any project file.
+The authoritative Windows gate must still be run after PATCH APPLIED.

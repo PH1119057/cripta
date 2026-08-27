@@ -1,0 +1,6 @@
+Validation before packaging:
+- Python syntax / py_compile: PASS
+- Targeted P44 tests: 9 passed
+- Regression covers the real legacy layout where P30 report run and P30 dataset run are different directories.
+- No research semantics changed; only frozen 5m path resolution.
+- Full project Ruff/mypy/pytest remains the local check_windows.ps1 gate.

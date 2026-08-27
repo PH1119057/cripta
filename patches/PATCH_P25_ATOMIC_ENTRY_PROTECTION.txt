@@ -1,0 +1,34 @@
+P25 — ATOMIC ENTRY PROTECTION
+
+Base: v0.8.5 · P24
+
+Goal
+----
+Remove the avoidable unprotected interval between a successful entry fill and the
+follow-up /v5/position/trading-stop mutation.
+
+Changes
+-------
+1. Mainnet /v5/order/create now includes the sealed hard stop-loss and, when present,
+   take-profit in the same request as the entry.
+2. Entry TP/SL policy is fixed to:
+   - tpslMode=Full
+   - slTriggerBy=MarkPrice
+   - slOrderType=Market
+   - tpTriggerBy=MarkPrice and tpOrderType=Market when TP is present.
+3. The Mainnet safety gateway now requires those fields and verifies the exact stop/TP
+   values against the short-lived sealed Micro-Live ticket before the write delegate
+   can be reached.
+4. Market entries still omit price, timeInForce and custom slippageTolerance fields.
+5. /v5/position/trading-stop remains as a post-fill verification/repair fallback, not
+   the primary way to create the hard stop.
+
+Safety rationale
+----------------
+If /v5/order/create is accepted, Bybit receives the entry and its hard protection in
+the same API mutation. A later read-only reconnect or follow-up mutation failure can
+no longer be the reason the initial position was created without the planned stop.
+
+Display marker
+--------------
+v0.8.5 · P25

@@ -1,0 +1,24 @@
+P53 1M ENTRY DISPLACEMENT V1.2
+
+Baseline: bybit-workbench 0.8.5 / P48.2 + accepted P53 V1.1 research overlay.
+Prerequisite: P53 V1.1 installer completed with authoritative Windows gate GREEN.
+
+CHANGES
+- Fixes V1.1 runtime rejection of legitimate zero-trade minutes in frozen public-trade archives.
+- Builds a full causal 1m grid by carrying the last known close through an internal no-trade minute with volume=0.
+- Leading no-trade minute without a causal seed remains fail-closed.
+- Bumps 1m cache version; incompatible V1.1 cache is not reused.
+- Strengthens 1m -> frozen 5m equivalence from OHLC to OHLCV.
+- Records zero-trade minute counts in cache metadata/provenance.
+- Adds regression tests for internal zero-trade minutes, leading seed requirement, and OHLCV equivalence.
+
+DOES NOT CHANGE
+- 1063 frozen Entry V1 cohort or Entry fingerprint.
+- Frozen 15m+5m baseline geometry.
+- 1m displacement formula or sign convention.
+- NEW5 / P46 holdout.
+- Exit, Risk, Execution, live runtime, UI.
+- Market datasets or reports during installation.
+- Downloads remain DISABLED.
+
+Resulting product version: 0.8.5 / P48.2; P53 research overlay becomes V1.2.

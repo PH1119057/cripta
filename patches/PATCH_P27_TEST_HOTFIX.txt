@@ -1,0 +1,10 @@
+P27 TEST HOTFIX — GUI SMOKE VERSION ASSERTION
+
+Base/target application build: v0.8.5 · P27
+
+Fix:
+- tests/test_gui_smoke.py still expected the old P25 footer after P27 was installed.
+- Updated the smoke assertion to v0.8.5 · P27.
+
+No runtime/application behavior is changed by this hotfix.
+Expected Windows suite after applying over P27: 351 passed, 1 skipped (352 collected), assuming the environment matches the reported run.

@@ -1,0 +1,18 @@
+[Unit]
+Description=Cripta final historical dataset SHA256 manifest
+After=data-cripta.mount cripta-download-expansion.service
+Requires=data-cripta.mount
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/dataset/build_manifest.py
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/cripta/datasets/raw/20260518_20260816

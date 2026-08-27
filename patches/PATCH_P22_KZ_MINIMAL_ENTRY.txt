@@ -1,0 +1,11 @@
+P22 — KZ minimal entry compatibility
+
+- Initial /v5/order/create payload now uses only core documented fields.
+- stopLoss/takeProfit are no longer attached to the entry request.
+- The sealed Micro-Live risk plan still contains the exact stop/TP.
+- After the first confirmed fill, protection is applied through
+  /v5/position/trading-stop; failure activates the existing emergency-close path.
+- Market entry still omits price/timeInForce/custom slippage tolerance.
+- Access diagnostics now show safe API-key metadata (type, creation time, IP-binding
+  count, ContractTrade/Derivatives permissions) without printing the key.
+- No retry is added for rejected/ambiguous order POSTs.

@@ -1,0 +1,48 @@
+P21 — KZ STARTUP AUTOCONNECT + ISOLATED PRE-CHECK DIAGNOSTICS
+Date: 2026-08-15
+
+Purpose
+-------
+1. LIVE desktop startup defaults to the Kazakhstan Mainnet stack.
+2. Read-only connection starts automatically after the Qt window is created.
+3. A temporary manual .com choice is not persisted across a normal restart.
+4. Trading remains fail-closed: startup does NOT arm MICRO_LIVE and does NOT send an order.
+5. /v5/order/pre-check is skipped for ISOLATED_MARGIN because Bybit documents that
+   Pre Check Order supports Cross Margin and Portfolio Margin, not Isolated Margin.
+
+Startup behavior
+----------------
+Normal START_WORKBENCH.cmd / START_MICRO_LIVE.cmd launch:
+  REST       https://api.bybit.kz
+  Public WS  wss://stream.bybit.kz/v5/public/linear
+  Private WS wss://stream.bybit.kz/v5/private
+  Read-only  starts automatically
+  Execution  remains SHADOW / DISARMED until the existing arming flow is completed
+
+An explicit BYBIT_WORKBENCH_REST_URL remains an operator override for diagnostics/scripts.
+The shipped .cmd launchers clear that variable, so normal desktop startup selects .kz.
+
+Files changed
+-------------
+src/bybit_workbench/__main__.py
+src/bybit_workbench/ui/main_window.py
+src/bybit_workbench/exchange/bybit/access_diagnostics.py
+tests/test_access_diagnostics.py
+tests/test_endpoint_preferences.py
+tests/test_gui_smoke.py
+
+Local verification in the patch-build environment
+-------------------------------------------------
+python -m compileall -q src tests                         PASS
+pytest test_config + test_read_only_runtime + changed tests: 26 passed, 3 subtests passed
+
+PySide6, Ruff, mypy and Hypothesis are not installed in the patch-build container,
+so run the project's normal Windows gate after applying the patch:
+  cd C:\cripta
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+
+Observed exchange result before this patch
+------------------------------------------
+The operator's real /v5/order/create attempt on api.bybit.kz returned retCode=10024.
+That is a real create-order rejection, separate from the unsupported isolated-margin
+pre-check diagnostic. P21 does not bypass or weaken that exchange rejection.

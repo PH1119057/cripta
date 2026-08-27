@@ -1,0 +1,8 @@
+Local build validation performed:
+- Python py_compile: PASS
+- PowerShell source is ASCII-only
+- targeted pytest for P44 module: PASS in build environment
+- no network code exists in P44 module
+- no live trading files are included in the patch
+
+Final authoritative gate remains C:\cripta\scripts\check_windows.ps1 on the user's project environment.

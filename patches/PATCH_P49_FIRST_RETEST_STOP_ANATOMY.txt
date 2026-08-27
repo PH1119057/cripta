@@ -1,0 +1,32 @@
+PATCH P49 FIRST RETEST / STOP TIGHTENING ANATOMY V1
+
+Baseline:
+- bybit-workbench 0.8.5
+- frozen Entry V1 P40 reports for original 9 assets, period 20260518_20260816
+- local raw public-trade archives referenced by each P40 summary
+
+Adds only research files:
+- src/bybit_workbench/research/first_retest_stop_anatomy_p49.py
+- tests/test_first_retest_stop_anatomy_p49.py
+- scripts/research_first_retest_stop_anatomy_p49_windows.ps1
+- docs/P49_FIRST_RETEST_STOP_ANATOMY_PROTOCOL_RU.md
+- patches/PATCH_P49_FIRST_RETEST_STOP_ANATOMY.txt
+
+Research definition:
+- first retest exists only after a positive activation milestone;
+- adverse movement before activation is Entry noise, not retest;
+- Peak #1 is the running favorable peak after activation;
+- pullback/retest starts after a 0.05 percentage-point drawdown from Peak #1;
+- retest low is the deepest direction-normalized move after pullback start;
+- retest is causal/confirmed only after a 0.05 percentage-point rebound from that observed low;
+- if -1.00% is touched before rebound confirmation, status is initial_stop_during_retest.
+
+Does NOT change:
+- Entry V1 logic or fingerprint
+- frozen P46 or holdout data
+- live scanner/execution
+- Exit/Risk production behavior
+- reports, user data or market data during install
+
+Downloads: DISABLED.
+New BNB/AVAX/SUI/AAVE/LTC assets are intentionally excluded from P49 V1 discovery and reserved for later OOS confirmation.

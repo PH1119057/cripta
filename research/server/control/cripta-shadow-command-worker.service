@@ -1,0 +1,19 @@
+[Unit]
+Description=Cripta idempotent shadow-only command worker
+After=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/control/shadow_command_worker.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

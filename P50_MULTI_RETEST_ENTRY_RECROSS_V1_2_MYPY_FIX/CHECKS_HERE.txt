@@ -1,0 +1,28 @@
+P50 V1.2 MYPY FIX - CHECK REPORT
+
+ROOT CAUSE
+- P50 V1 failed closed on Ruff SIM102 before modifying C:\cripta.
+- P50 V1.1 fixed Ruff and then the user's real full-overlay mypy check reported two errors at the second typed loop: the reused variable name `event` had already been inferred as RetestCycleEvent, so assigning EntryVisitEvent was incompatible and the EntryVisitEvent status comparison appeared impossible.
+- This is a patch-preparation typing error, not a research-contract error.
+- V1.2 uses distinct names `cycle_event` and `visit_event`. No condition, action number, target, stop, cohort, horizon, or output semantics are changed.
+- Both earlier installers stopped before project-file copy, so P49.3.1 remains the accepted baseline.
+
+CHECKED HERE
+- Built V1.2 from the same accepted P49.3.1 baseline payload as V1.1.
+- Applied only the mypy preparation fix to P50 research source, preserving the prior Ruff fix.
+- python -m compileall -q src tests on the final V1.2 post-patch overlay: PASS.
+- Targeted pytest on the final V1.2 post-patch overlay: PASS (49 passed).
+- P49.3 heterogeneous CSV writer regression against the completed 995/995 checkpoint: PASS.
+- Executable PowerShell installer/launcher are ASCII.
+- MANIFEST.csv regenerated from the exact V1.2 payload and verified before packaging.
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime for the V1.2 installer.
+- Ruff: not installed in this execution environment. The user's V1.1 real full-overlay Ruff check passed.
+- mypy: not installed in this execution environment. V1.2 directly fixes the two errors reported by the user's V1.1 real full-overlay mypy run.
+- authoritative powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1 on the user's current C:\cripta.
+- full pytest: hypothesis is not installed in this execution environment.
+- full 995-signal P50 raw-market run.
+
+USER-SIDE FAIL-CLOSED CONTRACT
+The V1.2 installer builds a temporary post-patch overlay and runs PowerShell syntax, compileall, full Ruff, full mypy and targeted pytest before copying any project file. Any failure leaves project files, reports, market data, calibration and user data untouched.

@@ -1,0 +1,18 @@
+CHECKED HERE
+- python -m py_compile changed ZS1 source/test : PASS
+- python -m pytest -q changed ZS1 test : 8 passed
+- line-length audit of changed Python files (<=100 chars) : PASS
+- installer executable text ASCII-only : PASS
+- analyzer smoke against exact copied P52/SE1/SE2 reports : PASS
+- reproduced SE1 A0.50/R0.30 N=792, EV=-0.9389280293885514 : PASS
+- reproduced SE2 GOLD N=69, EV=2.331309038925068 : PASS
+- reproduced ZONE_FAVORABLE_NOT_GOLD N=159, EV=-1.364541985672639 : PASS
+- smoke verdict NO_EVIDENCE_FOR_MIDDLE_CLASS_ZONE_FILTER : PASS
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime
+- Ruff executable (not installed in this Linux environment)
+- mypy executable (not installed in this Linux environment)
+- full project pytest
+- C:\cripta authoritative scripts\check_windows.ps1
+- live Bybit API or GUI

@@ -1,0 +1,10 @@
+P31 — TOUCH-ALIGNED FLOW REVERSAL RESEARCH
+
+- Entry research only; live execution and exit logic are unchanged.
+- Reuses the frozen P30 90-day dataset and retained Bybit public trade archives.
+- Resolves the actual first touch inside each five-minute candidate bar from raw trades.
+- Recomputes +0.5/-0.5 and +0.5/-1.0 ordering from the raw tape after the real touch.
+- Aligns the flow-reversal window to the real touch, not to the five-minute bar open.
+- Separates four-minute adverse pressure from the final completed one-minute reversal.
+- Produces control groups, Long/Short splits, three 30-day slices and a threshold matrix.
+- No pressure/reversal threshold becomes a trading gate in P31.

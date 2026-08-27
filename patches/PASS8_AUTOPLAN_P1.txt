@@ -1,0 +1,13 @@
+PASS 8 incremental patch P1 (base: Workbench 0.8.5)
+
+Changes:
+- automatic Trend+ATR recommendation after read-only sync / market change;
+- auto-fills direction, limit entry, hard stop and take profit;
+- local RiskEngine preview is calculated immediately; explicit Check is still required before Arm;
+- changing symbol/timeframe restarts only the read-only market subscription safely;
+- symbol history moves to %LOCALAPPDATA%\BybitStrategyWorkbench\symbol_history.json and migrates old var\symbol_history.json;
+- candlestick renderer uses local time coordinates to avoid epoch precision artifacts;
+- no dependencies or live-trading switches changed.
+
+Apply: extract this ZIP to C:\ with overwrite. Do NOT delete C:\cripta first.
+Then run only: powershell -ExecutionPolicy Bypass -File C:\cripta\scripts\check_windows.ps1

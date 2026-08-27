@@ -1,0 +1,12 @@
+P53 research-only overlay.
+Adds:
+- src/bybit_workbench/research/entry_one_minute_displacement_p53.py
+- scripts/research_entry_1m_displacement_p53_windows.ps1
+- tests/test_entry_one_minute_displacement_p53.py
+- docs/P53_1M_ENTRY_DISPLACEMENT_PROTOCOL_RU.md
+- patches/PATCH_P53_1M_ENTRY_DISPLACEMENT_V1.txt
+
+Baseline cohort: 1063 frozen ALL9 Entry V1 exact-touch signals.
+Primary question: where a causal 1m zone displaces the already-frozen Entry price.
+Downloads: DISABLED. NEW5/P46: NOT TOUCHED.
+Does NOT modify Entry, Exit, Risk, Execution, live runtime, UI, market data, or reports.

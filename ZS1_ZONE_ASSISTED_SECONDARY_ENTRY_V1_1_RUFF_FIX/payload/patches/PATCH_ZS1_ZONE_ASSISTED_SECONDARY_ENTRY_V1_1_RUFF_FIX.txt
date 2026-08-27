@@ -1,0 +1,31 @@
+ZS1 ZONE-ASSISTED SECONDARY ENTRY V1.1 RUFF FIX
+
+Baseline:
+- bybit-workbench 0.8.5
+- frozen P52 / SE1 / SE2 report truth with exact hashes
+- ZS1 V1 installer attempt failed closed before project modification
+
+Reason:
+- ZS1 V1 contained Ruff preparation errors in its new Python source/test.
+- Its installer also ran Ruff across scripts, exposing unrelated pre-existing script findings.
+- This is a patch-preparation correction, not a research-logic change.
+
+Changes:
+- fixes Ruff UP035/E501 findings in ZS1 Python source/test only
+- keeps ZS1 analytical logic and frozen input hashes unchanged
+- final-state overlay Ruff scope is src + tests
+- mypy still checks full overlay src
+- targeted ZS1 pytest remains mandatory before apply
+
+Does not change:
+- Entry V1
+- Exit / Risk / Execution
+- live runtime
+- P46 / holdout
+- NEW5
+- reports during install
+- downloads/network behavior
+- ZS1 economics or selection logic
+
+Required after install:
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

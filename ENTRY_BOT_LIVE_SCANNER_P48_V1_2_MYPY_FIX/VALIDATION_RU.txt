@@ -1,0 +1,18 @@
+VALIDATION — ENTRY BOT LIVE SCANNER P48 V1.2 MYPY FIX
+==========================================
+
+В сборочной Linux-среде выполнено:
+- Python py_compile изменённых/new Python-файлов: PASS.
+- targeted pytest: 15 passed, 7 skipped.
+  7 skip относятся к отсутствию PySide6 в sandbox; GUI проверяется на Windows полным gate.
+- migration smoke на копии workbench.db: schema 7/8 -> 8, обе новые таблицы присутствуют: PASS.
+- production zone calculation проверяется тестом против frozen research P30 helper.
+- durable Entry->Exit handoff record/publish/claim-once/close покрыт тестом.
+
+Ruff и mypy в sandbox не установлены. Поэтому установщик fail-closed запускает
+Ruff payload precheck и mypy на временном source-overlay ДО копирования project files.
+После установки authoritative gate: scripts\check_windows.ps1.
+
+V1.2 включает Ruff I001 fixes из V1.1 и исправляет mypy no-redef в entry_bot/engine.py без изменения торговой логики.
+Расчётная логика scanner/calibration/handoff/UI не менялась.
+На overlay копии пользовательского проекта после исправления: targeted pytest 15 passed.

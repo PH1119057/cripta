@@ -1,0 +1,35 @@
+P23 — ISOLATED UNIFIED BALANCE + VISIBLE BUILD VERSION
+Date: 2026-08-15
+
+Purpose
+-------
+1. Fix a balance-mapping edge case seen after moving to a Kazakhstan account/key.
+2. Show the exact installed source patch in the lower-right status bar.
+3. Make zero Unified trading balance explicit in the connection panel.
+
+Balance fix
+-----------
+Bybit documents the account-wide wallet totals as not applicable to isolated margin.
+The existing mapper already handled empty-string totals by deriving USD totals from the
+per-coin rows, but it trusted string "0" totals as authoritative. Some account payloads
+can therefore expose a real non-zero USDT coin row while the non-applicable account-wide
+fields are zero placeholders.
+
+P23 behavior:
+- if account-wide totals are non-zero, keep using them;
+- if account-wide totals are all zero but per-coin rows contain real value, derive the
+  account snapshot from the coin rows;
+- if both totals and coin rows are genuinely zero, keep reporting zero (no fake funds);
+- the same mapper is used for REST and private wallet WebSocket events, so a zero-valued
+  wallet event can no longer erase a real non-zero Unified balance.
+
+UI
+--
+- Status bar lower-right now shows: v0.8.5 · P23
+- Connection details now show UNIFIED equity / available / wallet values.
+- When READY but equity and available are both zero, the connection panel warns that the
+  trading balance is zero and suggests checking whether funds are still in Funding.
+
+Safety
+------
+No order routing, risk limits, arming, endpoint policy, or credentials behavior changed.

@@ -1,0 +1,17 @@
+CHECKED IN CHATGPT SANDBOX ON POST-PATCH OVERLAY:
+- Overlay baseline: cripta(5).zip + P48 V1 payload + P48 V1.6 payload + V1.7 delta.
+- Python compileall / py_compile: PASS.
+- targeted pytest: 9 passed, 7 skipped.
+- skipped tests are PySide6 GUI tests because PySide6 is unavailable in sandbox.
+- regression added: elapsed wall-clock time alone cannot complete flow warm-up; five actual completed live minute buckets are required.
+
+NOT CHECKED HERE:
+- Windows PowerShell 5.1 runtime syntax.
+- Ruff (not installed in sandbox).
+- mypy (not installed in sandbox).
+- real PySide6 GUI.
+- live Bybit WebSocket behaviour.
+- full scripts\check_windows.ps1.
+
+Installer runs fail-closed full-overlay Ruff + mypy + targeted pytest before copying project files.
+User authoritative gate remains scripts\check_windows.ps1.

@@ -1,0 +1,37 @@
+P48.2.1 PACKAGE REVISION - VALIDATION
+
+Baseline reconstructed here:
+- /mnt/data/current_work (P48 V1.7 causal TAPE 5/5 state)
+- P48.2.1 payload applied to real src/tests/scripts/docs paths in a post-patch overlay.
+
+Preparation errors fixed from the user's failed P48.2 precheck:
+- Ruff I001 in src\bybit_workbench\entry_bot\audit.py:
+  separated stdlib and first-party import blocks.
+- Ruff UP012 in src\bybit_workbench\entry_bot\engine.py:
+  changed literal .encode("utf-8") to .encode().
+- No Entry/Exit/Risk/execution behavior changed.
+
+CHECKED HERE
+- Manifest/payload generation: 12 payload files.
+- Python compileall on final post-patch src/tests tree: PASS.
+- Targeted post-patch pytest:
+  tests/test_entry_bot_live_scanner.py
+  tests/test_config.py
+  tests/test_gui_smoke.py
+  tests/test_event_journal.py
+  tests/test_trading_journal.py
+  RESULT: 35 passed, 7 skipped (PySide6 unavailable here).
+- SQLite migration smoke: schema_migrations reaches 9 and
+  entry_bot_candidate_events exists: PASS.
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime.
+- Ruff (not installed in this environment).
+- mypy (not installed in this environment).
+- Real PySide6 GUI rendering/color appearance.
+- Live Bybit public streams.
+- Full scripts\check_windows.ps1.
+
+The installer performs fail-closed PowerShell syntax + Ruff + mypy + targeted
+pytest on a full src/tests overlay before copying project files. The user's
+scripts\check_windows.ps1 remains the authoritative post-install gate.

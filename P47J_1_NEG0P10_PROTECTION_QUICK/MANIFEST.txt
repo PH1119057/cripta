@@ -1,0 +1,33 @@
+P47J.1 NEG0P10 PROTECTION QUICK - MYPY CONTRACT FIX
+
+BASELINE
+- Current C:\cripta with frozen Entry V1, P47H, and P47I/P47I.1 installed.
+- P47J original must NOT be installed; its failed fail-closed precheck leaves targets absent.
+
+PURPOSE
+- Same P47J quick survival audit: after first +0.10% favorable touch, test -0.10% floor vs +1.10% continuation.
+- Fixes one mypy annotation error in the P47J source and adds a regression test for the data-end-after-activation branch. Research logic/thresholds are unchanged.
+
+ADDS
+- src\bybit_workbench\research\early_protection_minus01_v23.py
+- tests\test_early_protection_minus01_v23.py
+- scripts\research_early_protection_minus01_all9_windows.ps1
+
+DOES NOT CHANGE
+- Entry V1, P46/fingerprint, Exit/Risk production runtime, Execution/live code
+- existing reports or market data
+- Bybit state
+
+RESEARCH CONTRACT
+- Initial stop -1.00% before activation.
+- Activation first +0.10% favorable touch.
+- After activation floor -0.10% from Entry.
+- Continuation checkpoint +1.10%.
+- Downloads DISABLED/fail-closed.
+- Counts/survival only; no PnL retuning.
+
+INSTALL
+Run INSTALL_P47J_1.ps1 from C:\cripta. Installer builds a temporary post-patch overlay, runs prechecks, then copies files only if all prechecks pass.
+
+AUTHORITATIVE POST-INSTALL GATE
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

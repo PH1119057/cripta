@@ -1,0 +1,16 @@
+[Unit]
+Description=Cripta project, PostgreSQL and configuration backup
+After=postgresql.service data-cripta.mount
+Requires=data-cripta.mount
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/srv/cripta/backup/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/data/cripta/backups
+

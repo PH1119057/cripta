@@ -1,0 +1,20 @@
+P48.1 CONNECTION + LEVERAGE FIX
+
+Purpose
+- Do not let a temporary HTTP 400 from GET /v5/user/query-api kill the whole read-only session if authenticated wallet/position/order reads are healthy.
+- Keep Mainnet execution arming fail-closed while API-key metadata is unavailable.
+- Allow the explicit operator leverage action even while the read-only runtime is disconnected/reconnecting.
+- Perform fresh server-side position and open-order prechecks immediately before set-leverage.
+- Treat Bybit retCode 110043 (leverage already selected) as idempotent success.
+
+Safety
+- No Entry/Exit strategy changes.
+- No automatic leverage mutation.
+- Leverage changes remain explicit button actions.
+- Fresh Bybit checks block leverage changes when a position or open order exists for the symbol.
+- Missing API-key metadata blocks Mainnet execution arming.
+
+Verification in build environment
+- py_compile / compileall: PASS
+- targeted tests: 19 passed
+- full test collection unavailable in sandbox because hypothesis is not installed; run scripts/check_windows.ps1 on C:\cripta.

@@ -1,0 +1,23 @@
+P50 MULTI-RETEST / ENTRY RECROSS LIFECYCLE V1
+
+Baseline:
+- bybit-workbench 0.8.5
+- P49 V1 + P49.1 + P49.2
+- P49.3.1 Full First Retest Basin installed
+
+Changes:
+- fixes P49.3 heterogeneous CSV finalization so the completed 995/995 checkpoint can finish reports without recomputing raw paths;
+- adds P50 multi-retest / Entry recross research;
+- adds independent 25s heartbeat, memory-bounded per-signal processing, checkpoint/resume;
+- adds saved-losers vs lost-future-runners and required adverse-room tables for causal action #1..#6.
+
+Does not change:
+- Entry V1 logic or fingerprint;
+- frozen P46;
+- live Execution;
+- Exit/Risk production behavior;
+- calibration;
+- market data;
+- reserved BNB/AVAX/SUI/AAVE/LTC OOS assets.
+
+Downloads: DISABLED.

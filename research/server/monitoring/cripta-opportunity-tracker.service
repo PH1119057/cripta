@@ -1,0 +1,20 @@
+[Unit]
+Description=Cripta counterfactual opportunity tracker
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/opportunity_tracker.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

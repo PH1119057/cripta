@@ -1,0 +1,4 @@
+NEW patches\PATCH_ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1_2_MYPY_FIX.txt
+NEW scripts\research_secondary_entry_zone_scale_zs1_windows.ps1
+NEW src\bybit_workbench\research\secondary_entry_zone_scale_zs1.py
+NEW tests\test_secondary_entry_zone_scale_zs1.py

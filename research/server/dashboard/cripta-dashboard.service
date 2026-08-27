@@ -1,0 +1,24 @@
+[Unit]
+Description=Cripta research infrastructure dashboard
+After=network-online.target data-cripta.mount
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/dashboard
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_DATA_ROOT=/data/cripta
+Environment=CRIPTA_APP_ROOT=/srv/cripta
+ExecStart=/usr/bin/python3 /srv/cripta/dashboard/app.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/data/cripta /srv/cripta
+
+[Install]
+WantedBy=multi-user.target

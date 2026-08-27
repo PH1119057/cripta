@@ -1,0 +1,11 @@
+P46.1 RUFF IMPORT HOTFIX
+
+Scope: style-only import correction in exit_break_even_v13.py.
+No research logic, thresholds, path completeness, policy simulation, Entry V1, or live trading logic changes.
+
+Changes requested by Ruff:
+- Callable imported from collections.abc instead of typing.
+- datetime.time alias split to a separate datetime import line to satisfy import formatting.
+
+After extraction into C:\cripta run:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

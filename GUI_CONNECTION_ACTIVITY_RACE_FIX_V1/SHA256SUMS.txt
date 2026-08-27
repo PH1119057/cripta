@@ -1,0 +1,2 @@
+d083d85c2acdbb49017261f712dced2d05b6ad1e0b9ca580d4c7084e31903a49  src/bybit_workbench/ui/main_window.py
+4c8c239c047cdd580bb4eb0a7da838423109aec6896b617d730cd0773be02ec8  tests/test_gui_smoke.py

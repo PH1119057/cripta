@@ -1,0 +1,27 @@
+P50 V1.1 RUFF FIX - CHECK REPORT
+
+ROOT CAUSE
+- Original P50 V1 was a patch-preparation error: the user's real fail-closed installer reached full-overlay Ruff and Ruff reported exactly one SIM102 at multi_retest_entry_recross_p50.py around line 500.
+- The installer stopped before any project-file copy, so the accepted P49.3.1 baseline remains authoritative.
+- V1.1 changes only that condition to the Ruff-required single compound elif. Research semantics are unchanged.
+
+CHECKED HERE
+- Reconstructed the accepted pre-P50 baseline overlay by restoring P49.3.1 and removing P50-added files.
+- Verified every BASELINE.csv SHA256 against that reconstructed baseline: PASS (4/4).
+- Applied the exact V1.1 payload to its real project paths in a fresh temporary overlay.
+- python -m compileall -q src tests : PASS.
+- Targeted pytest on the final post-patch overlay: 49 passed.
+- P49.3 heterogeneous CSV regression re-run against the user's completed checkpoint: processed=995, three_hour_rows=995, six depth summary rows built, heterogeneous CSV write PASS.
+- Executable PowerShell installer/launcher are ASCII.
+- MANIFEST.csv regenerated from the exact V1.1 payload and SHA256 verified before packaging.
+
+NOT CHECKED HERE
+- Windows PowerShell 5.1 parser/runtime for the new V1.1 installer.
+- Ruff: not installed in this execution environment. The user's V1 Ruff run reported only the now-fixed SIM102 finding.
+- mypy: not installed in this execution environment.
+- authoritative powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1 on the user's current C:\cripta.
+- full pytest: hypothesis is not installed in this execution environment.
+- full 995-signal P50 raw-market run.
+
+USER-SIDE FAIL-CLOSED CONTRACT
+The V1.1 installer again builds a temp post-patch overlay and runs PowerShell syntax, compileall, full Ruff, full mypy and targeted pytest before copying any project file. On any failure it leaves project files/reports/market data/calibration/user data untouched.

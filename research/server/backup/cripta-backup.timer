@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Cripta operational backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=cripta-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,13 @@
+PASS 8 PATCH P6 — REST STABILITY + POSITION SIZE
+
+Base: current Workbench 0.8.5 with AutoPlan / Trading UI / Classic Layout patches.
+
+Changes:
+- GET-only pybit HTTP sessions: timeout=20s, force_retry=True, max_retries=2, retry_delay=1s.
+- Write-capable HTTP sessions remain without force_retry to avoid ambiguous POST duplication.
+- A transient periodic REST timeout preserves the last still-fresh REST snapshot and retries after 5s.
+- Runtime reconnect classifier recognizes requests ReadTimeout/ConnectTimeout/SSLError as transient.
+- Added exact requested position notional to manual trade intents and Risk Engine.
+- Added linked Position Size fields: USDT and % of Available balance.
+- Empty position size means automatic risk-based sizing; AutoPlan fills the calculated size.
+- Manual position size is still bounded by margin, max notional, exchange rules, and risk budget.

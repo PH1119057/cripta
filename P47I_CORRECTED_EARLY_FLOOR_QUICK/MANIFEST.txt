@@ -1,0 +1,41 @@
+P47I CORRECTED EARLY FLOOR QUICK DIFFERENTIAL
+
+Baseline project: current C:\cripta snapshot, bybit-strategy-workbench 0.8.5
+Resulting application version: unchanged (0.8.5)
+Patch type: research-only differential audit
+Prerequisites:
+- P47H ALL9 completed report under reports\trailing_ladder_v1\ALL9_*
+- Frozen ALL9 P40 sources and existing public-trade archives in C:\cripta
+- Existing C:\cripta\.venv
+
+CHANGES
+- Adds src\bybit_workbench\research\early_protection_differential_v22.py
+- Adds tests\test_early_protection_differential_v22.py
+- Adds scripts\research_early_protection_differential_all9_windows.ps1
+- Adds no production/live behavior.
+
+RESEARCH CONTRACT
+- Historical P47H baseline: +0.10% activation -> 0.00% theoretical floor.
+- Corrected audit: +0.10% activation -> +0.10% theoretical floor.
+- Rescans only 142 P47H +1.10 candidates plus 4 data-end cases.
+- Reuses frozen P47H downstream Full Runner GB1.50 result after +1.10.
+- Downloads: DISABLED / fail-closed.
+- Fees/slippage are NOT netted in this quick differential; +0.10 is a theoretical price floor.
+- Flags same-timestamp stop events as execution-sensitive.
+
+GUARDRAILS
+- Frozen ALL9 signals must equal 1063 with expected per-symbol counts.
+- P47H baseline must reproduce:
+  Simple: 66 initial_stop / 851 early_be / 142 core_take / 4 data_end,
+          gross 76.065635%.
+  Full Runner: 66 initial_stop / 851 early_be / 141 runner_stop /
+               1 horizon / 4 data_end, gross 95.114436%.
+- If guardrails fail, research stops rather than comparing incompatible samples.
+
+DOES NOT CHANGE
+- Entry V1 logic or fingerprint.
+- Frozen P46 or its fingerprint.
+- Exit/Risk production runtime.
+- Execution/live trading behavior.
+- Existing P47F/P47H source/results.
+- reports\ or market datasets during patch installation.

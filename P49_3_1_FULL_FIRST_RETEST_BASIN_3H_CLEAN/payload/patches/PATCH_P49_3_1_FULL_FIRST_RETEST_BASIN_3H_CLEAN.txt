@@ -1,0 +1,32 @@
+PATCH P49.3.1 FULL FIRST RETEST BASIN + 3H CLEAN BUILD
+
+Baseline:
+- bybit-workbench 0.8.5
+- P49 V1 + P49.1 + P49.2 installed
+- Failed P49.3 V1 precheck was fail-closed and is NOT part of the baseline.
+
+Purpose:
+- Rebuild P49.3 cleanly after package-preparation mypy failures.
+- Research semantics are unchanged from P49.3 V1.
+
+Preparation-error fixes:
+1. Import _archive_map directly from its defining module flow_reversal_v1 instead of
+   relying on an implicit private re-export through first_retest_stop_anatomy_p49.
+2. Give first_stops / first_targets explicit dict[float, int | None] annotations so
+   mypy does not infer dict[float, None].
+
+Research behavior unchanged:
+- exact +0.10-first cohort from completed P49.2 (expected 995);
+- full first-retetst basin ends at Peak #1 reclaim, original -1.00 stop, or censoring;
+- 3h min/max and depth/recovery tables;
+- saved-losers vs lost-runners for frozen stop candidates;
+- checkpoint/resume;
+- Downloads: DISABLED.
+
+Does NOT change:
+- Entry V1 / fingerprint;
+- frozen P46;
+- live scanner / Execution / Exit / Risk;
+- calibration;
+- existing reports / market data during installation;
+- reserved OOS assets BNB/AVAX/SUI/AAVE/LTC.

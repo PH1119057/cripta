@@ -1,0 +1,22 @@
+[Unit]
+Description=Cripta 2 research job intake and validation
+After=data-cripta.mount
+Requires=data-cripta.mount
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+SupplementaryGroups=cripta-share
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/jobs/intake.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/cripta/jobs /srv/cripta-share/incoming/jobs
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+P34 — OPEN INTEREST ENTRY CONTEXT
+Base: v0.8.5 · P33
+Target: v0.8.5 · P34
+
+Scope: research only. No live execution, Stop Loss, Take Profit, position sizing, or exit changes.
+
+Changes:
+- records the strategy convention that 1% means adverse price distance from Entry, not 1% of equity;
+- keeps the older live equity-percentage Risk Engine unchanged for later deliberate redesign;
+- analyses frozen 5m Open Interest over 5/15/30/60-minute windows;
+- adds OI expansion/deleveraging states and 5m-vs-60m acceleration;
+- combines direction-adjusted price movement with OI expansion/contraction;
+- reports OI quartiles, taker-flow/OI interactions, and three 30-day stability slices;
+- carries the causal 60-minute post-invalidation candidate pause only as a research baseline;
+- adds Windows research launcher and regression tests.
+
+Run:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\research_open_interest_90d_windows.ps1

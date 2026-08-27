@@ -1,0 +1,22 @@
+[Unit]
+Description=Cripta infrastructure health monitor
+After=postgresql.service data-cripta.mount cripta-private-runtime.service
+Requires=data-cripta.mount
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/health_monitor.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/lib/cripta/connectivity /var/lib/cripta/safety /var/lib/cripta/private_runtime /var/lib/cripta/backup /data/cripta
+ReadWritePaths=/var/lib/cripta/health
+
+[Install]
+WantedBy=multi-user.target

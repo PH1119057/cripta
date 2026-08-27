@@ -1,0 +1,28 @@
+[Unit]
+Description=Cripta durable read-only exchange safety observer
+After=network-online.target cripta-bybit-latency.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/connectivity/safety_observer.py
+LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/var/lib/cripta/connectivity
+ReadWritePaths=/var/lib/cripta/safety
+
+[Install]
+WantedBy=multi-user.target

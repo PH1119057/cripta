@@ -1,0 +1,31 @@
+P50 MULTI-RETEST / ENTRY RECROSS LIFECYCLE V1.1 RUFF FIX
+
+Baseline:
+- bybit-workbench 0.8.5
+- P49.3.1 installed and accepted
+- original P50 V1 installer did NOT modify C:\cripta because its fail-closed Ruff overlay precheck stopped before copy
+
+Prerequisites:
+- C:\cripta\.venv
+- completed P49.2 report under reports\first_retest_stop_anatomy_p49\ALL9_P49_WORKING
+- existing frozen 9-asset local raw-trade datasets
+
+Changes:
+- fixes patch-preparation Ruff SIM102 in multi_retest_entry_recross_p50.py by combining an equivalent nested initial-stop condition
+- P49.3 CSV writer finalization fix for heterogeneous summary rows
+- P50 repeated peak-retest and Entry-zone recross research
+- independent heartbeat and resume checkpoint
+- saved-losers vs lost-future-runners by causal recovery/reclaim number
+- future runner required adverse room by causal action number
+
+Does not change:
+- P50 research semantics versus V1
+- Entry V1
+- frozen P46
+- live Execution
+- Exit/Risk production logic
+- calibration
+- reports or market data during installation
+- five reserved OOS assets BNB/AVAX/SUI/AAVE/LTC
+
+Downloads: DISABLED.

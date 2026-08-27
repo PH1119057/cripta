@@ -1,0 +1,21 @@
+CHECKED HERE
+============
+1. Baseline hashes matched the reconstructed accepted P50 V1.2 overlay.
+2. Exact P51 V1.1 payload applied to a copy of that overlay.
+3. Python compileall on final post-patch overlay: PASS.
+4. Targeted pytest on final post-patch overlay: PASS (56 passed).
+5. Python AST parse of changed research module/test: PASS.
+6. The five user-reported mypy diagnostics were addressed by explicit typing / variable separation; research constants and algorithms were not changed.
+
+NOT CHECKED HERE
+================
+- Windows PowerShell 5.1 parser/runtime.
+- Ruff (not installed in this environment).
+- mypy executable itself (not installed in this environment).
+- full scripts\check_windows.ps1.
+- full 995-signal P51 raw-market run.
+- live Bybit/API/GUI behavior.
+
+The installer remains fail-closed and runs PowerShell syntax, compileall,
+full-overlay Ruff, full-overlay mypy and targeted pytest before copying any
+project file. The authoritative Windows gate must be run after PATCH APPLIED.

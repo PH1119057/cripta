@@ -1,0 +1,21 @@
+P53 1M ENTRY DISPLACEMENT V1.3
+
+Baseline: bybit-workbench 0.8.5 / P48.2 + accepted P53 V1.2.
+Research only. Downloads: DISABLED.
+
+Changes:
+- fixes causal 1m candle materialization to continuous-open semantics;
+- a trade-bearing minute opens at previous causal close when available;
+- high/low include the previous-close opening point and real trade extrema;
+- zero-trade minutes remain flat previous-close bars with volume 0;
+- bumps 1m cache to V3 and records explicit candle semantics;
+- keeps exact trade-derived 1m -> frozen 5m OHLCV equivalence gate;
+- adds regression coverage for non-empty carry-forward opens and exact 5m reproduction.
+
+Does not change:
+- frozen 1063 Entry V1 cohort/fingerprint;
+- frozen 15m+5m Entry geometry;
+- 1m displacement formula, side-normalized sign or 3h availability contract;
+- P46/NEW5;
+- Exit/Risk/Execution/live/UI;
+- reports or market data during installation.

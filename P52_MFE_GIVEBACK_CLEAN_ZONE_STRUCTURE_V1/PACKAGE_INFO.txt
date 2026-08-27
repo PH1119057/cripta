@@ -1,0 +1,4 @@
+P52_MFE_GIVEBACK_CLEAN_ZONE_STRUCTURE_V1
+Baseline: bybit-workbench 0.8.5 + accepted P45.1 V2 + P50 V1.2 + P51 V1.1 source.
+Research only. Downloads disabled by contract. NEW5 OOS untouched.
+Purpose: causal correlation of support/resistance hold/reclaim/break with runners and full losers, plus fixed stop trade-off after MFE + giveback.

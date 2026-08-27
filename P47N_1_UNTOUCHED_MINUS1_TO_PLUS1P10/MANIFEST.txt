@@ -1,0 +1,50 @@
+P47N.1 UNTOUCHED -1.00 VS +1.10 EXACT FIRST-TOUCH
+
+BASELINE
+- Workbench 0.8.5 current C:\cripta is authoritative at install time.
+- Initial P47N installer attempt ABORTED fail-closed during full pytest.
+- Root cause: its temporary code-only overlay omitted bybit_workbench.spec,
+  so tests\test_release_contract.py failed with FileNotFoundError.
+- Because precheck failed before apply, the initial attempt did NOT copy P47N payload
+  files into the real project.
+- Requires existing frozen P40 ALL9 reports and local public-trade archives at research run time.
+- Downloads remain DISABLED / fail-closed.
+
+PATCH-PREPARATION ERROR FIXED
+- This was a P47N packaging/overlay error, not a production-code or test-contract failure.
+- P47N.1 copies bybit_workbench.spec into the temporary overlay and explicitly checks it exists.
+- It also carries the small root release launcher contracts START_WORKBENCH.cmd and
+  START_MICRO_LIVE.cmd into the overlay when present.
+- No test expectation was weakened or changed.
+
+CHANGES APPLIED TO C:\cripta AFTER GREEN PRECHECK
+Adds only:
+- src\bybit_workbench\research\untouched_minus1_plus110_v26.py
+- tests\test_untouched_minus1_plus110_v26.py
+- scripts\research_untouched_minus1_plus110_all9_windows.ps1
+- docs\P47N_UNTOUCHED_MINUS1_PLUS110_PROTOCOL_RU.md
+
+DOES NOT CHANGE
+- P47N research logic versus the rejected P47N package (payload is byte-for-byte identical)
+- frozen Entry logic/fingerprint
+- P46/P49/P50 research
+- Exit logic
+- Risk logic
+- Execution/live code
+- UI
+- reports or user market data during install
+
+BACKUP
+- Not applicable to project files: this patch only adds new files and refuses installation
+  if any target already exists. No existing project file is overwritten.
+
+RESULTING VERSION
+- Workbench package version remains 0.8.5.
+- Adds research contract P47N v26 only.
+
+RESEARCH SEMANTICS
+- Exact causal first-touch from frozen Entry touch_at.
+- +1.10% favorable versus -1.00% adverse.
+- Structural -1.00% remains untouched until resolution.
+- 72h horizon.
+- No activation/retest/trailing/runner rules.

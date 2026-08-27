@@ -1,0 +1,11 @@
+Сборочная проверка:
+- Python py_compile: выполняется перед упаковкой.
+- PowerShell parser: выполняется установщиком до копирования.
+- Ruff payload precheck: выполняется установщиком через C:\cripta\.venv.
+- Полный проектный gate после установки: scripts\check_windows.ps1.
+
+Методологический guardrail:
+- holdout начинается ПОСЛЕ freeze;
+- thresholds копируются из P44/P45.1 discovery artifacts;
+- outcome evaluation до 2026-09-18 00:00 UTC запрещена кодом;
+- никакой recalibration на holdout.

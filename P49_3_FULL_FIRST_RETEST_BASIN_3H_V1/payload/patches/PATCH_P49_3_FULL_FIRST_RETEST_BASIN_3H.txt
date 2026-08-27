@@ -1,0 +1,27 @@
+PATCH P49.3 FULL FIRST RETEST BASIN + 3H RISK ANATOMY
+
+BASELINE
+- bybit-workbench 0.8.5
+- P49 V1 + P49.1 + P49.2 installed
+- completed P49.2 report at reports\first_retest_stop_anatomy_p49\ALL9_P49_WORKING
+- old 9-asset frozen Entry sample: 1063 signals
+- exact +0.10-before--1 cohort expected: 995
+
+CHANGES
+- Adds a separate P49.3 research module; P49.2 is preserved unchanged.
+- Defines full first retest as basin from first 0.05pp pullback off Peak #1 until causal Peak #1 reclaim, original -1 stop, or right censoring.
+- Adds exact 3h min/max anatomy for all 995 +0.10-first signals.
+- Adds depth/recovery table at -0.25/-0.35/-0.50/-0.60/-0.75/-1.00.
+- Adds saved-losers versus lost-runners accounting for fixed candidate stops.
+- Adds resumable checkpoint every 25 signals and symbol boundaries.
+
+DOES NOT CHANGE
+- Entry V1 logic or fingerprint
+- frozen P46 or its holdout
+- live scanner, Execution, Exit or Risk production code
+- calibration
+- reports or market data during installation
+- reserved new OOS assets BNB/AVAX/SUI/AAVE/LTC
+
+DOWNLOADS
+DISABLED. Missing/censored data is surfaced; no alternate dataset is fetched.

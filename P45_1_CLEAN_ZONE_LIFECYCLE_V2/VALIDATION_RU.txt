@@ -1,0 +1,16 @@
+P45.1 validation performed in build environment:
+- Python py_compile: PASS
+- Targeted lifecycle tests: 10 passed
+- Synthetic 9-asset end-to-end: PASS; report ZIP produced
+- Network path: none
+- Live trading / Exit / Risk files: not modified
+
+The installer additionally runs the user's own Ruff configuration against the Python payload
+BEFORE copying anything into C:\cripta. The normal project gate remains:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+
+V2 fixes applied before packaging:
+- SIM108: explicit if/else replaced by ternary assignment exactly as Ruff requested.
+- I001: import block separation adjusted exactly as Ruff requested.
+- Python py_compile after fixes: PASS
+- Targeted lifecycle tests after fixes: 10 passed

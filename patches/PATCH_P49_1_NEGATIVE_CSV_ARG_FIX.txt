@@ -1,0 +1,30 @@
+P49.1 - negative CSV launcher argument fix
+
+Baseline:
+- bybit-workbench 0.8.5
+- P49 FIRST RETEST STOP ANATOMY V1 already installed
+- authoritative Windows gate for P49 V1 was green before this fix
+
+Root cause:
+The PowerShell launcher passed the negative comma-separated stop list as a separate
+argparse token:
+  --stop-candidates-pct  -0.75,-0.50,-0.25,0.10
+argparse interpreted the leading '-' token as another option and rejected the launch
+with "argument --stop-candidates-pct: expected one argument".
+
+Change:
+Pass the same value using argparse's attached option form:
+  --stop-candidates-pct=-0.75,-0.50,-0.25,0.10
+A regression test guards the Windows launcher contract.
+
+Does not change:
+- Entry V1 logic or signals
+- P46 frozen holdout or fingerprint
+- first-retest definition or P49 research calculations
+- activation/retest/rebound thresholds
+- Exit/Risk/live Execution
+- reports, market data, caches, calibration, or user data
+- package version (remains 0.8.5)
+
+Resulting research revision: P49.1 launcher fix.
+Downloads: DISABLED.

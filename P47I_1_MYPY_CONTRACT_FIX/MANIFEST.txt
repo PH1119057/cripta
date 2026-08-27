@@ -1,0 +1,41 @@
+P47I.1 MYPY CONTRACT FIX
+
+Baseline project: current C:\cripta snapshot, bybit-strategy-workbench 0.8.5
+Baseline expectation: previous P47I installer failed during overlay mypy and therefore did not install project files.
+Resulting application version: unchanged (0.8.5)
+Patch type: research-only replacement package for failed P47I preparation
+Prerequisites:
+- Current C:\cripta matching the snapshot supplied before P47I
+- P47H ALL9 completed report under reports\trailing_ladder_v1\ALL9_*
+- Frozen ALL9 P40 sources and existing public-trade archives
+- Existing C:\cripta\.venv with project dev dependencies
+
+ROOT CAUSE FIXED
+- mypy inferred activation_at as datetime from earlier branches, then rejected datetime|None at data_end.
+  Fix: use a separately annotated activation_at_final: datetime | None.
+- the name key had already been inferred as tuple[str, datetime] earlier in run(), then was reused as a CSV field-name string.
+  Fix: rename the CSV loop variable to field_name.
+- Research behavior, thresholds, guardrails, baseline constants, and output semantics are unchanged.
+
+CHANGES
+- Adds src\bybit_workbench\research\early_protection_differential_v22.py
+- Adds tests\test_early_protection_differential_v22.py
+- Adds scripts\research_early_protection_differential_all9_windows.ps1
+- Adds no production/live behavior.
+
+RESEARCH CONTRACT
+- Historical P47H baseline: +0.10% activation -> 0.00% theoretical floor.
+- Corrected audit: +0.10% activation -> +0.10% theoretical floor.
+- Rescans only P47H +1.10 candidates plus data-end cases.
+- Reuses frozen P47H downstream Full Runner GB1.50 result after +1.10.
+- Downloads: DISABLED / fail-closed.
+- Fees/slippage are NOT netted in this quick differential; +0.10 is a theoretical price floor.
+- Same-timestamp stop events are reported as execution-sensitive.
+
+DOES NOT CHANGE
+- Entry V1 logic/fingerprint.
+- Frozen P46/fingerprint.
+- Production Exit/Risk.
+- Execution/live trading.
+- Existing P47F/P47H source/results.
+- reports\ or market datasets during installation.

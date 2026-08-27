@@ -1,0 +1,7 @@
+Package: ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1
+Baseline: bybit-workbench 0.8.5 + frozen P52/SE1/SE2 report truth
+Application version after install: unchanged (0.8.5)
+Research version added: ZS1_ZONE_ASSISTED_SECONDARY_ENTRY_V1
+Downloads: DISABLED
+NEW5: NOT ACCESSED
+Production/live changes: NONE

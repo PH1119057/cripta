@@ -1,0 +1,42 @@
+P47M - DYNAMIC HALF-FREE-DEPOSIT SNOWBALL REPLAY
+
+BASELINE / PREREQUISITES
+- Current C:\cripta after accepted P47L.1 portfolio replay patch.
+- Requires portfolio_replay_v25.py, P47K and P47G research modules/scripts.
+- Uses existing compact P47K/P47G reports at runtime; Downloads: DISABLED.
+
+CHANGES
+- Adds src\bybit_workbench\research\snowball_allocation_v26.py
+- Adds tests\test_snowball_allocation_v26.py
+- Adds scripts\research_snowball_half_free_all9_windows.ps1
+- Adds docs\P47M_SNOWBALL_ALLOCATION_PROTOCOL_RU.md
+
+RESEARCH CONTRACT
+- Starting bank 100 USD, leverage 10x.
+- Every complete signal is eligible; no fixed slot cap.
+- Same-symbol overlaps are intentionally allowed as virtual research trades.
+- New allocation = 50% of currently free deposit.
+- Free deposit = wallet balance minus margin reserved by open virtual positions.
+- Entry fee reserve is included inside the allocation budget.
+- Realized PnL/fees change future allocation sizes (continuous snowball).
+- Benchmark Exit only: +1.10 maker; -1.00/-0.50 taker.
+- Two outputs: pure NO_MIN and 6 USD practical allocation-floor sensitivity.
+- The 6 USD floor is NOT asserted as the exchange minimum for each symbol.
+
+DOES NOT CHANGE
+- Frozen Entry V1.
+- Frozen P46/fingerprint.
+- Production Entry/Exit/Risk/Execution logic.
+- Live trading state, arming, Bybit settings, UI.
+- Existing reports or market data.
+
+INSTALLER
+- Must run from C:\cripta.
+- Verifies payload SHA256.
+- Creates temp post-patch overlay excluding reports/data/user runtime data.
+- Runs PowerShell syntax, py_compile, Ruff, mypy, targeted/full pytest,
+  headless smoke and offscreen GUI smoke before copying real files.
+- Fail-closed: real project files/reports/user data are untouched on precheck failure.
+
+RESULTING RESEARCH VERSION
+- P47M / snowball_allocation_v26

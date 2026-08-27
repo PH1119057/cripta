@@ -1,0 +1,25 @@
+P53_1M_ENTRY_DISPLACEMENT_V1_5
+
+Baseline:
+- bybit-workbench 0.8.5 / P48.2
+- accepted P53 V1.4 research overlay
+
+Root cause fixed:
+- V1.4 seeded the first 1m archive from five[0].open.
+- frozen trade_5m.csv can contain warm-up candles earlier than the first public-trade archive.
+- this selected a stale warm-up open (UNI 3.232) instead of the matching archive-boundary 5m open (UNI 3.483).
+
+V1.5:
+- derives the first public-trade archive day from the frozen dataset manifest;
+- requires an exact frozen 5m candle at that day 00:00 UTC;
+- uses only that candle open as the causal boundary seed;
+- keeps exact 1m->5m OHLCV equivalence with no tolerance;
+- keeps cache V3 and rebuilds only days whose cached first open conflicts with the corrected seed.
+
+Does not change:
+- frozen 1063 Entry cohort or Entry fingerprint;
+- Entry/Exit/Risk/Execution/live/UI;
+- NEW5/P46/holdout;
+- market data or reports during installation.
+
+Downloads: DISABLED.

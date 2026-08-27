@@ -1,0 +1,70 @@
+P46 — EXIT PATH ENGINE AUDIT + CACHE
+
+Research only. Entry V1, live execution, risk engine and the historical P45 module are unchanged.
+
+Why P46 exists
+--------------
+P45 used PathSeries.available_until (last actual trade tick) to decide whether an Nh horizon
+was complete. Because each PathSeries was built to 72h, 6/12/24/48h were effectively treated
+as complete whenever any later data existed, while 72h required the last trade tick to land
+within two seconds of the exact 72h boundary.
+
+That produced the artificial collapse:
+- UNI 72h complete: 35 / 113
+- LINK 72h complete: 38 / 114
+
+The correct research question is whether complete contiguous daily raw archives cover the
+requested interval. A quiet few seconds with no trade is not right-censoring.
+
+P46 changes
+-----------
+1. Adds a new module; P45 is left intact for reproducibility:
+   src/bybit_workbench/research/exit_break_even_v13.py
+
+2. Horizon completeness is based on contiguous daily archive coverage, not last-tick proximity.
+
+3. Missing archive days terminate a path at the first gap. Later days are never stitched across
+   an unknown interval.
+
+4. Baseline diagnostics now include:
+   - available_until (last actual tick),
+   - coverage_until (nominal complete archive coverage),
+   - missing_archive_days,
+   - last_tick_gap_72h_seconds.
+
+5. Adds a bounded LRU day cache (default 6 decompressed days). The same .csv.gz tape is no longer
+   decompressed independently for every overlapping Entry path.
+
+6. Adds progress heartbeat (default every 25 seconds): stage, processed/total, elapsed, ETA,
+   current symbol and cache hit/miss counts.
+
+7. Adds focused regression tests for:
+   - complete archive with no tick in the final 10 seconds,
+   - a missing middle archive day,
+   - cache reuse across overlapping 72h paths.
+
+New launcher
+------------
+powershell -ExecutionPolicy Bypass -File .\scripts\research_exit_path_audit_uni_link_windows.ps1
+
+Default output
+--------------
+C:\cripta\reports\exit_path_audit_v1\UNI_LINK_<timestamp>
+
+Expected validation
+-------------------
+The frozen dataset ends at 2026-08-16T00:00:00Z. If its raw daily manifests are contiguous as
+P30 construction requires, nominal 72h coverage should be close to:
+- UNI: 109 / 113 complete (signals at/after 2026-08-13T00:00Z are censored),
+- LINK: 108 / 114 complete.
+
+These are expectations inferred from the frozen report timestamps; the P46 rerun on the local
+C:\cripta\reports raw archives remains the source of truth.
+
+Test status in the patch build
+------------------------------
+- P45 original tests: 6 passed.
+- P46 tests: 9 passed.
+- Combined focused suite: 15 passed.
+- Full project suite was not runnable in the sandbox because the sandbox does not have the
+  hypothesis package installed. This is an environment limitation, not a discovered test failure.

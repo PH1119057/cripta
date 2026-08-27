@@ -1,0 +1,23 @@
+P51 MFE-ACTIVATED RISK / GIVEBACK V1.1 MYPY FIX
+
+Baseline:
+- bybit-workbench 0.8.5
+- accepted P50 V1.2 source
+- P51 V1 installer was rejected fail-closed before project modification
+
+Changes:
+- fixes patch-preparation mypy errors only in mfe_activated_risk_p51.py
+- annotates exact-baseline outcome counter
+- separates FirstRuleSignalRow loop variable from aggregate dict row typing
+
+Research semantics unchanged:
+- MFE milestones +0.25/+0.50/+0.75/+1.00
+- candidate stops -0.75/-0.60/-0.50
+- targets +1.10/+2/+3
+- first causal +0.10 Entry recovery after MFE remains the primary action
+- exact untouched +1.10/-1.00 equivalence gate unchanged
+- no optimizer, no OOS access
+
+Does not change Entry V1, frozen P46, live Execution, Exit/Risk, calibration,
+reports, market data, or user data.
+Downloads: DISABLED / fail-closed.

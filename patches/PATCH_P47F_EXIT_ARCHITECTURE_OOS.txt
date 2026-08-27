@@ -1,0 +1,15 @@
+P47F — Frozen Exit Architecture OOS Comparison
+
+Adds a research-only full-panel holdout replay comparing three architectures fixed before
+this run:
+
+A SIMPLE: +0.10% -> BE; +1.10% -> model 100% take at +1.00%.
+B FULL RUNNER: +0.10% -> BE; +1.10% -> full-position +1.00% floor; MFE GB 1.50%.
+C SPLIT: +0.10% -> BE; +1.10% -> 50/50; core +1.00%; runner BE; MFE GB 4.00%.
+
+The seven holdout assets are BTC, ETH, XRP, 1000PEPE, SOL, DOGE, ADA. Expected frozen
+Entry V1 core count is 836. The run fails closed on source-count mismatch. If a P47E report
+is present, policy C must reproduce the previous pooled P47E gross result exactly within
+1e-6.
+
+No live trading code, Entry logic, leverage logic, or 1H trend logic is changed.

@@ -1,0 +1,15 @@
+P53 research-only overlay V1.1.
+
+Preparation correction from rejected V1:
+- fixes both calls to flow_reversal_v1._archive_map to match its existing one-argument contract: _archive_map(dataset_dir);
+- adds a regression test that locks the one-argument helper call contract.
+
+Research contract unchanged:
+- exact frozen cohort: 1063 ALL9 Entry V1 exact-touch signals;
+- baseline Entry geometry remains frozen 15m+5m;
+- causal 1m is research overlay only;
+- negative side-normalized shift = deeper/adverse (LONG lower, SHORT higher);
+- strict local data only; Downloads: DISABLED;
+- P46/NEW5: NOT TOUCHED.
+
+Does NOT modify Entry, Exit, Risk, Execution, live runtime, UI, market data, or reports during installation.

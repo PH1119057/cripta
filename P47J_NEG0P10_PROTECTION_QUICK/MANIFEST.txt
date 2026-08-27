@@ -1,0 +1,37 @@
+P47J NEG0P10 PROTECTION QUICK
+
+BASELINE
+- Current C:\cripta with frozen Entry V1 / P47H report available.
+- Compatible with P47I/P47I.1 installed; P47I is not modified.
+
+PURPOSE
+- Quick path-survival audit only.
+- Among signals that first reach +0.10 before -1.00, test a protective floor at -0.10.
+- Count first event after activation: -0.10 floor vs +1.10 continuation vs data end.
+
+CHANGED FILES
+- ADDS src\bybit_workbench\research\early_protection_minus01_v23.py
+- ADDS tests\test_early_protection_minus01_v23.py
+- ADDS scripts\research_early_protection_minus01_all9_windows.ps1
+
+DOES NOT CHANGE
+- Entry V1 or P46/fingerprint
+- Exit/Risk production runtime
+- Execution/live code
+- existing research results
+- reports\ or market data during installation
+- any Bybit state
+
+RESEARCH CONTRACT
+- Initial stop remains -1.00% before activation.
+- Activation is first +0.10% favorable touch.
+- After activation only, floor is -0.10% from Entry.
+- Continuation checkpoint is +1.10%.
+- Downloads DISABLED/fail-closed.
+- This audit reports survival/counts, not PnL or downstream runner performance.
+
+INSTALL
+Run installer from C:\cripta. It builds a temporary post-patch overlay and runs prechecks before copying files into the real project. On precheck failure the project is not modified.
+
+AUTHORITATIVE POST-INSTALL GATE
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

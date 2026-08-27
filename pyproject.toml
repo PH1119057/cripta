@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bybit-strategy-workbench"
+version = "0.8.5"
+description = "Fail-closed local strategy execution workbench for Bybit"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "pyside6>=6.8,<7",
+  "pyqtgraph>=0.13.7,<1",
+  "qasync>=0.27,<1",
+  "sqlalchemy>=2.0,<3",
+  "pybit>=5.9,<6",
+  "keyring>=25,<26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "hypothesis>=6.120,<7",
+  "mypy>=1.13,<2",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "ruff>=0.8,<1",
+]
+build = ["pyinstaller>=6.11,<7"]
+history = ["pyarrow>=19,<22"]
+
+[project.scripts]
+bybit-workbench = "bybit_workbench.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bybit_workbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["bybit_workbench"]
+
+[tool.uv]
+required-version = ">=0.11.33,<0.12"

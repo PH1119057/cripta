@@ -1,0 +1,30 @@
+ZS1 ZONE-ASSISTED SECONDARY ENTRY V1.2 MYPY FIX
+
+Baseline:
+- bybit-workbench 0.8.5
+- frozen P52 / SE1 / SE2 report truth with exact hashes
+- ZS1 V1 and V1.1 installer attempts failed closed before project modification
+
+Reason:
+- ZS1 V1.1 passed PowerShell syntax, py_compile and Ruff final-overlay checks.
+- Full-overlay mypy then found two Optional[float] division errors in _timing_summary.
+- This is a patch-preparation/type-safety correction, not a research-logic change.
+
+Changes:
+- computes p25/p75 percentile values into explicit float | None locals
+- divides percentile values only after explicit `is not None` narrowing
+- adds regression tests for populated and empty timing summaries
+- keeps ZS1 analytical logic, economics and frozen input hashes unchanged
+
+Does not change:
+- Entry V1
+- Exit / Risk / Execution
+- live runtime
+- P46 / holdout
+- NEW5
+- reports during install
+- downloads/network behavior
+- ZS1 selection logic or economic assumptions
+
+Required after install:
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

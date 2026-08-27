@@ -1,0 +1,10 @@
+P17 — Mainnet endpoint selector
+
+- Connection tab: editable REST endpoint selector with .kz and .com presets.
+- Endpoint applies only while read-only is disconnected.
+- REST and matching Public/Private WebSocket hosts switch together.
+- Selected endpoint is saved outside the project tree in Windows LocalAppData
+  when available, so overlay patches do not erase it.
+- START_WORKBENCH.cmd and START_MICRO_LIVE.cmd no longer hard-code api.bybit.kz.
+- If no preference exists, desktop startup keeps api.bybit.kz as the initial default.
+- Changing endpoint disarms any old Mainnet session; a fresh internal preflight is required.

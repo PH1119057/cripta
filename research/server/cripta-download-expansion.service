@@ -1,0 +1,28 @@
+[Unit]
+Description=Cripta frozen dataset expansion (10 trading symbols)
+After=network-online.target data-cripta.mount
+Wants=network-online.target
+Requires=data-cripta.mount
+OnSuccess=cripta-dataset-manifest.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/research/download_frozen_segment.py --root /data/cripta/datasets/raw --state-name download_state_expansion_20260823.json --reserve-gb 8 --symbols NEARUSDT XLMUSDT APTUSDT BCHUSDT ARBUSDT HBARUSDT INJUSDT OPUSDT DOTUSDT TRXUSDT
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/data/cripta/datasets/raw/20260518_20260816
+
+[Install]
+WantedBy=multi-user.target

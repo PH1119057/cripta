@@ -1,0 +1,12 @@
+P29 — MTF ENTRY RESEARCH V2
+
+- Keeps Live trading logic unchanged.
+- Adds frozen 5m/15m/60m research datasets with SHA-256 fingerprints.
+- Replays P28 adaptive on the same bytes for an exact A/B baseline.
+- Adds 1h direction-only context + 15m/5m entry-zone confluence.
+- Adaptive shock reset starts new zone history at the shock.
+- Default post-shock entry embargo: 60 minutes.
+- Adds 360-minute MFE/MAE horizon.
+- Reports signals/day explicitly.
+- Taker-flow is deliberately deferred to the next research layer so the baseline change is measurable on its own.
+- Windows runner exposes CooldownBars so 60m/30m/15m frequency sensitivity can be rerun on the same frozen dataset.

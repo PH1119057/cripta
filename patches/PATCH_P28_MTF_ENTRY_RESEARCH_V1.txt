@@ -1,0 +1,15 @@
+P28 — MTF ENTRY RESEARCH V1
+
+Research-only first iteration for the user's entry logic. Live execution behaviour is intentionally unchanged.
+
+Adds:
+- causal 1H + 5m support/resistance zone confluence research;
+- no delayed ChartPrime diamond confirmation: a resting zone-boundary entry is considered filled when the next 5m bar touches it;
+- fixed 130-bar baseline and optional adaptive regime-reset variant for post-shock markets;
+- no exit-strategy optimisation in this pass: reports forward MFE/MAE and target-hit statistics only;
+- 30-day public Bybit kline downloader using api.bybit.kz by default;
+- signal CSV + summary JSON + raw 5m/60m candles and fingerprints;
+- conservative same-bar ambiguity classification;
+- Windows helper: scripts/research_mtf_entry_windows.ps1.
+
+This patch does not add order-flow, OI, order-book, RSI or MACD. Those are intentionally deferred so each layer can be measured separately.

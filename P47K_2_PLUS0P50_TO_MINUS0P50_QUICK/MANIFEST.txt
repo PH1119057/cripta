@@ -1,0 +1,46 @@
+P47K.2 +0.50 -> -0.50 QUICK SURVIVAL AUDIT - CLEAN PRECHECK FIX
+
+BASELINE
+- Current C:\cripta with frozen Entry V1, P47H, P47I.1 and P47J.1 installed.
+- P47K and P47K.1 must NOT have installed; both failed in fail-closed precheck.
+- Current C:\cripta is authoritative over old chat/archives.
+
+PURPOSE
+- Same P47K discovery hypothesis; research logic is unchanged.
+- Keep hard SL -1.00% until first +0.50% favorable touch.
+- After +0.50%, move protective floor to -0.50% from Entry.
+- Count first -0.50% floor versus +1.10% continuation.
+- Separately isolate the legacy 851 theoretical-BE cohort.
+
+PATCH-PREPARATION FIXES
+- Fix Ruff B007 from P47K: remove unused loop key.
+- Fix mypy variable-type collision from P47K.1: use a distinct typed output_row mapping
+  for dataclass serialization instead of reusing the BaselineRow variable name `row`.
+- No thresholds, event ordering, output semantics, Entry, production Exit/Risk, or Execution changed.
+
+ADDS
+- src\bybit_workbench\research\early_protection_plus05_minus05_v24.py
+- tests\test_early_protection_plus05_minus05_v24.py
+- scripts\research_early_protection_plus05_minus05_all9_windows.ps1
+
+DOES NOT CHANGE
+- Entry V1 or frozen P46/fingerprint
+- production Exit/Risk
+- Execution/live code
+- Bybit state
+- existing reports or market data
+- P47H/P47I/P47J results
+
+RESEARCH STATUS
+- DISCOVERY on seen ALL9 data; not OOS confirmation.
+- New five assets remain unseen for later confirmation.
+- Downloads DISABLED / fail-closed.
+
+INSTALL
+Run P47K_2_PLUS0P50_TO_MINUS0P50_QUICK\INSTALL_P47K_2.ps1 from C:\cripta.
+Installer creates a temporary post-patch overlay and runs PowerShell syntax, py_compile,
+Ruff, mypy, targeted/full pytest and project smokes before copying real files.
+On precheck failure it does not change project files, reports, or user data.
+
+AUTHORITATIVE POST-INSTALL GATE
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

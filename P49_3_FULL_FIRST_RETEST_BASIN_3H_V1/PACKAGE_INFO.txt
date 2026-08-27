@@ -1,0 +1,22 @@
+P49.3 FULL FIRST RETEST BASIN + 3H RISK ANATOMY V1
+
+Baseline: bybit-workbench 0.8.5 + P49 V1 + P49.1 + P49.2 installed.
+Prerequisite for research run: completed P49.2 ALL9_P49_WORKING report with exact +0.10-first cohort=995.
+Changed/added files: 5 (new research module, launcher, tests, protocol, patch note).
+Resulting research revision: P49.3 FULL FIRST RETEST BASIN + 3H V1.
+Package version remains 0.8.5.
+Downloads: DISABLED.
+
+Changes:
+- full first retest basin ends only at Peak #1 reclaim, original -1 stop, or right censoring;
+- 3h min/max and adverse threshold recovery for exact 995 +0.10-first signals;
+- saved-losers vs lost-runners tables for candidate stop levels;
+- checkpoint/resume every 25 signals and symbol boundaries.
+
+Does not change:
+- Entry V1/fingerprint;
+- frozen P46;
+- live scanner / Execution / Exit / Risk;
+- calibration;
+- existing reports or market data during installation;
+- five reserved OOS assets BNB/AVAX/SUI/AAVE/LTC.

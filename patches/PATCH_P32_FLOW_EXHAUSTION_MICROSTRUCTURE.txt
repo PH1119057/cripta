@@ -1,0 +1,11 @@
+P32 — FLOW EXHAUSTION MICROSTRUCTURE
+
+Research-only patch. No live order or exit logic changes.
+
+Adds:
+- exact-second microstructure around P31 touch;
+- adverse-flow decay and persistence measures;
+- absorption proxy (adverse net notional per bp of adverse price progress);
+- post-touch 15s/30s/60s taker-flow diagnostics;
+- transition states: preflip holds/fails, late flip after touch, continued pressure;
+- quartile reports to discover monotonic useful features without promoting thresholds.

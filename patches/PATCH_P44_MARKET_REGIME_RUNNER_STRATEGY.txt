@@ -1,0 +1,11 @@
+P44 — MARKET REGIME + RUNNER STRATEGY EXTENSION
+
+Research/documentation only. No live execution, risk-engine or Entry V1 logic is changed.
+
+Adds:
+- docs/MARKET_REGIME_RUNNER_STRATEGY_EXTENSION_RU.md
+- scripts/research_market_regime_uni_link.py
+- scripts/research_market_regime_uni_link_windows.ps1
+
+The UNI/LINK probe uses only exchange-native BTC/ETH/ALT 5m klines from Bybit and frozen P40 core rows.
+It does NOT pretend to include exact BTC.D/TOTAL3/USDT.D; those are reserved for a later validated data source.

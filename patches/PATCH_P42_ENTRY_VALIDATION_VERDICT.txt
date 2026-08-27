@@ -1,0 +1,1 @@
+P42 docs-only: freezes the post-LINK Entry V1 verdict. No trading/runtime code changes.

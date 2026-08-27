@@ -1,0 +1,13 @@
+Сборочная проверка P45:
+- Python py_compile: PASS
+- Targeted pytest: 12 passed
+- Synthetic 9-asset end-to-end: PASS, report ZIP created
+
+На пользовательской машине обязательный окончательный gate:
+  powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1
+
+Инсталлятор дополнительно выполняет:
+- SHA256 payload check;
+- Python syntax check;
+- PowerShell payload syntax check;
+- Ruff precheck payload через C:\cripta\.venv и pyproject.toml, если Ruff доступен.

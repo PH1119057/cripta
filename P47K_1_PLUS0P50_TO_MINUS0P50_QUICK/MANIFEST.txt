@@ -1,0 +1,43 @@
+P47K.1 +0.50 -> -0.50 QUICK SURVIVAL AUDIT - RUFF B007 FIX
+
+BASELINE
+- Current C:\cripta with frozen Entry V1, P47H, P47I.1 and P47J.1 installed.
+- P47K original installer must NOT have installed (its precheck failed before real files).
+- Current C:\cripta is authoritative over old chat/archives.
+
+PURPOSE
+- Same P47K discovery hypothesis; no research logic change.
+- Keep hard SL -1.00% until first +0.50% favorable touch.
+- After +0.50%, move protective floor to -0.50% from Entry.
+- Count first -0.50% floor versus +1.10% continuation.
+- Separately isolate legacy 851 theoretical-BE exits.
+
+PATCH FIX
+- Fix patch-preparation Ruff B007 in early_protection_plus05_minus05_v24.py.
+- Replace unused `for key, row in baseline.items()` with `for row in baseline.values()`.
+- No thresholds, event ordering, output contract, Entry, Exit production, Risk or Execution logic changed.
+
+ADDS
+- src\bybit_workbench\research\early_protection_plus05_minus05_v24.py
+- tests\test_early_protection_plus05_minus05_v24.py
+- scripts\research_early_protection_plus05_minus05_all9_windows.ps1
+
+DOES NOT CHANGE
+- Entry V1 or frozen P46/fingerprint
+- production Exit/Risk
+- Execution/live code
+- Bybit state
+- existing reports or market data
+- P47H/P47I/P47J results
+
+RESEARCH STATUS
+- DISCOVERY / seen ALL9 data; not OOS confirmation.
+- New five assets remain unseen for later confirmation.
+- Downloads DISABLED/fail-closed.
+
+INSTALL
+Run P47K_1_PLUS0P50_TO_MINUS0P50_QUICK\INSTALL_P47K_1.ps1 from C:\cripta.
+Installer creates a temporary post-patch overlay, runs prechecks, and only then copies payload.
+
+AUTHORITATIVE POST-INSTALL GATE
+powershell -ExecutionPolicy Bypass -File .\scripts\check_windows.ps1

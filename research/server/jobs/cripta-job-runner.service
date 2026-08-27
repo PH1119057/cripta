@@ -1,0 +1,28 @@
+[Unit]
+Description=Cripta 2 isolated research job runner
+After=data-cripta.mount cripta-job-intake.service
+Requires=data-cripta.mount
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+SupplementaryGroups=cripta-share
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/jobs/runner.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/data/cripta/datasets
+ReadWritePaths=/data/cripta/jobs /srv/cripta-share/reports/jobs
+
+[Install]
+WantedBy=multi-user.target

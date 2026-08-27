@@ -1,0 +1,33 @@
+P24 — API KEY NOTE / CREDENTIAL PROFILE SEPARATION
+Date: 2026-08-15
+
+Problem
+-------
+The Mainnet ticket gate compared Bybit /v5/user/query-api `note` with the local
+Windows Credential Manager profile name (default: BotW-Mainnet). Bybit documents
+`note` as a user-defined remark. A Kazakhstan key named `Bybit_KZ` therefore passed
+all authenticated GET/read-only checks but was blocked locally before /v5/order/create
+with: "API key note does not match the selected credential profile".
+
+Fix
+---
+- Exchange key `note` is now display metadata only and is no longer required to equal
+  the local credential profile name.
+- GET-only acceptance reports the exchange remark and local profile as independent
+  labels; this item is informational and non-blocking.
+- The adapter now captures Bybit's documented unique API-key `id` from query-api and
+  binds it into the in-memory arming identity, strengthening the existing post-arming
+  "key identity changed" protection without logging the API key value or secret.
+- No order limits, permissions, endpoint restrictions, risk sizing, or confirmation
+  behavior were relaxed.
+
+Expected effect
+---------------
+A key whose Bybit remark is `Bybit_KZ` can be stored locally in profile `BotW-Mainnet`
+and proceed through the ticket gate if all real safety checks pass. The next failure,
+if any, will come from a genuine safety condition or from Bybit's order endpoint rather
+than this local label mismatch.
+
+Build marker
+------------
+v0.8.5 · P24

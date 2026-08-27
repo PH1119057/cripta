@@ -1,0 +1,23 @@
+P48.4 CLOCK WATCHDOG + AUTOMATIC RECOVERY
+
+Purpose
+- Keep the read-only scanner alive during Windows/Bybit clock drift.
+- Correct clock drift before it reaches the authenticated REST rejection zone.
+- Never require a manual reconnect solely because of clock skew.
+
+Changes
+1. Clock watchdog interval: 60s -> 15s.
+2. At |offset| >= 500 ms, perform up to 3 W32Time resync/re-measure cycles.
+3. If the correction leaves |offset| between 500 and 750 ms, keep the session alive,
+   remain fail-closed for unsafe conditions, and check again after 15 seconds.
+4. If |offset| remains > 750 ms, close the current read-only session safely, resync,
+   and automatically reconnect while the operator still wants the runtime connected.
+5. Clock-skew recovery does not consume the finite transport reconnect budget; it is
+   persistent because the screener must resume automatically after time recovery.
+6. UI Clock tooltip documents the 15-second watchdog and automatic reconnect behavior.
+
+Unchanged
+- Entry/Exit strategy logic.
+- Leverage/position sizing logic.
+- Authentication/permission failures remain fail-closed and do not retry forever.
+- Ordinary transport reconnect budget remains unchanged.

@@ -1,0 +1,12 @@
+P30 — 90-day frozen entry research dataset
+
+- 1h context is no longer a hard direction filter in V3 research.
+- 15m+5m zones define the local candidate location.
+- post-shock zones exclude the shock candle and all older candles.
+- exact 30-minute candidate cooldown.
+- 90-day evaluation split into three 30-day stability slices.
+- downloads and retains daily Bybit public trade archives.
+- builds 1-minute taker Buy/Sell flow buckets and enriches signals without filtering them.
+- downloads 5-minute Open Interest for future research layers, but does not use it in P30 scoring.
+- P29 is replayed on the same kline bytes for reference.
+- live trading/exits are unchanged.
