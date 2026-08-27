@@ -15,7 +15,11 @@ import psycopg
 import websocket
 
 from safety_observer import api_get
-from protection_math import calculate_protection_plan, trailing_start_preserves_protection
+from protection_math import (
+    calculate_initial_boundaries,
+    calculate_protection_plan,
+    trailing_start_preserves_protection,
+)
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -191,7 +195,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     if kind == "close":
         if not position: raise RuntimeError("open position not found")
         result = api_post("/v5/order/create", {"category":"linear","symbol":symbol,"side":"Sell" if position["side"]=="Buy" else "Buy","orderType":"Market","qty":str(position["size"]),"positionIdx":int(position.get("positionIdx") or 0),"orderLinkId":command_id[:36],"reduceOnly":True,"closeOnTrigger":False}, key, secret)
-    elif kind in {"break_even", "current_stop"}:
+    elif kind in {"break_even", "current_stop", "initial_protection"}:
         if not position: raise RuntimeError("open position not found")
         side, mark = str(position["side"]), Decimal(str(position.get("markPrice") or 0))
         if kind == "break_even":
@@ -199,12 +203,24 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             stop, activation = plan["stop"], plan["activation"]
             if (side == "Buy" and mark < activation) or (side == "Sell" and mark > activation):
                 raise RuntimeError(f"price has not reached calculated protection activation {activation}")
-        else:
+        elif kind == "current_stop":
             stop = quantize(mark * (Decimal("0.998") if side=="Buy" else Decimal("1.002")), tick, upward=side!="Buy")
+        else:
+            actual_entry = Decimal(str(position.get("avgPrice") or 0))
+            if actual_entry <= 0:
+                raise RuntimeError("Bybit did not return actual average entry price")
+            stop, target = calculate_initial_boundaries(
+                entry=actual_entry, side=side, tick=tick
+            )
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
-        result = api_post("/v5/position/trading-stop", {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"MarkPrice","slOrderType":"Market"}, key, secret)
+        stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"MarkPrice","slOrderType":"Market"}
+        if kind == "initial_protection":
+            stop_request.update({"takeProfit": str(target), "tpTriggerBy": "MarkPrice", "tpOrderType": "Market"})
+        result = api_post("/v5/position/trading-stop", stop_request, key, secret)
         if kind == "break_even":
             result["protectionPlan"] = {name: str(value) for name, value in plan.items()}
+        elif kind == "initial_protection":
+            result["actualProtection"] = {"entryPrice": str(actual_entry), "stopLoss": str(stop), "takeProfit": str(target)}
     elif kind == "trailing_stop":
         if not position: raise RuntimeError("open position not found")
         enabled = bool(payload.get("enabled"))
@@ -259,8 +275,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
         api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
         # Стоп округляется к входу: фактический риск не должен стать глубже 1%.
-        stop=quantize(price*(Decimal("0.99") if side=="Buy" else Decimal("1.01")),tick,upward=side=="Buy")
-        target=quantize(price*(Decimal("1.011") if side=="Buy" else Decimal("0.989")),tick,upward=side=="Buy")
+        stop,target=calculate_initial_boundaries(entry=price,side=side,tick=tick)
         order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36],"takeProfit":str(target),"stopLoss":str(stop),"tpTriggerBy":"MarkPrice","slTriggerBy":"MarkPrice","tpslMode":"Full","tpOrderType":"Market","slOrderType":"Market"}
         if offset > 0:
             order.update({"price": str(price), "timeInForce": "GTC"})
@@ -287,15 +302,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
-            actual_stop = quantize(
-                actual_entry * (Decimal("0.99") if side == "Buy" else Decimal("1.01")),
-                tick,
-                upward=side == "Buy",
-            )
-            actual_target = quantize(
-                actual_entry * (Decimal("1.011") if side == "Buy" else Decimal("0.989")),
-                tick,
-                upward=side == "Buy",
+            actual_stop, actual_target = calculate_initial_boundaries(
+                entry=actual_entry, side=side, tick=tick
             )
             protection = api_post(
                 "/v5/position/trading-stop",
@@ -374,6 +382,36 @@ def command_loop(key: str, secret: str) -> None:
             connection.commit()
         completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
             WHERE command_type='entry' AND state='completed'""").fetchall()
+        filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms)
+            FROM runtime.trade_commands c JOIN runtime.executions e ON e.order_link_id=c.command_id
+            WHERE c.command_type='entry' AND c.state='completed'
+              AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
+            GROUP BY c.command_id,c.symbol""").fetchall()
+        for entry_id,symbol,fill_time_ms in filled_entries:
+            position_row=connection.execute(
+                "SELECT side,size,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
+                (symbol,),
+            ).fetchone()
+            if not position_row:
+                continue
+            raw=json.loads(position_row[3])
+            open_time_ms=int(raw.get("openTime") or 0)
+            if open_time_ms and abs(open_time_ms-int(fill_time_ms or 0)) > 10_000:
+                continue
+            actual_entry=Decimal(str(position_row[2]))
+            current_stop=Decimal(str(raw.get("stopLoss") or 0))
+            profit_already_protected=current_stop > 0 and (
+                (position_row[0] == "Buy" and current_stop >= actual_entry)
+                or (position_row[0] == "Sell" and current_stop <= actual_entry)
+            )
+            if profit_already_protected or Decimal(str(raw.get("trailingStop") or 0)) > 0:
+                continue
+            protection_key=f"{entry_id}:{position_row[1]}:{position_row[2]}"
+            init_id="auto-init-"+hashlib.sha256(protection_key.encode()).hexdigest()[:23]
+            connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
+                VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
+                (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1]}),int(time.time()*1000)))
+        connection.commit()
         if not settings or not settings[6]:
             completed_entries = []
         for entry_id,symbol in completed_entries:

@@ -43,3 +43,21 @@ def trailing_start_preserves_protection(
     if side == "Sell":
         return mark + distance <= protected_stop
     raise ValueError("side must be Buy or Sell")
+
+
+def calculate_initial_boundaries(
+    *, entry: Decimal, side: str, tick: Decimal
+) -> tuple[Decimal, Decimal]:
+    if entry <= 0 or tick <= 0:
+        raise ValueError("entry and tick must be positive")
+    if side == "Buy":
+        return (
+            quantize(entry * Decimal("0.99"), tick, upward=True),
+            quantize(entry * Decimal("1.011"), tick, upward=True),
+        )
+    if side == "Sell":
+        return (
+            quantize(entry * Decimal("1.01"), tick, upward=False),
+            quantize(entry * Decimal("0.989"), tick, upward=False),
+        )
+    raise ValueError("side must be Buy or Sell")

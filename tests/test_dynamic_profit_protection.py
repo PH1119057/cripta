@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "operations" / "connectivity"
 from protection_math import (  # noqa: E402
     EXIT_TAKER_FEE_RATE,
     MIN_PROTECTED_PROFIT_USDT,
+    calculate_initial_boundaries,
     calculate_protection_plan,
     trailing_start_preserves_protection,
 )
@@ -46,3 +47,11 @@ def test_trailing_stop_cannot_start_below_protected_profit_for_long() -> None:
         side="Buy", mark=Decimal("0.09043"), distance=Decimal("0.00020"),
         protected_stop=Decimal("0.09023"),
     )
+
+
+def test_xrp_initial_boundaries_use_actual_fill_not_limit_price() -> None:
+    stop, target = calculate_initial_boundaries(
+        entry=Decimal("1.4563"), side="Sell", tick=Decimal("0.0001")
+    )
+    assert stop == Decimal("1.4708")
+    assert target == Decimal("1.4402")
