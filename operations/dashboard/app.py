@@ -259,22 +259,27 @@ def live_trading_state() -> dict[str, object]:
         qty, fee = float(row[3]), float(row[4])
         closed_qty = float(raw.get("closedSize") or 0)
         if closed_qty <= 0:
-            lot = open_lots.setdefault((symbol, side), {"qty": 0.0, "fee": 0.0})
+            lot = open_lots.setdefault((symbol, side), {"qty": 0.0, "fee": 0.0, "notional": 0.0})
             lot["qty"] += qty
             lot["fee"] += fee
+            lot["notional"] += qty * float(row[2])
             continue
         opening_side = "Buy" if side == "Sell" else "Sell"
-        lot = open_lots.setdefault((symbol, opening_side), {"qty": 0.0, "fee": 0.0})
+        lot = open_lots.setdefault((symbol, opening_side), {"qty": 0.0, "fee": 0.0, "notional": 0.0})
         allocated_entry_fee = 0.0
+        allocated_entry_notional = 0.0
         if lot["qty"] > 0:
             allocated_qty = min(qty, lot["qty"])
             allocated_entry_fee = lot["fee"] * allocated_qty / lot["qty"]
+            allocated_entry_notional = lot["notional"] * allocated_qty / lot["qty"]
             lot["qty"] -= allocated_qty
             lot["fee"] = max(0.0, lot["fee"] - allocated_entry_fee)
+            lot["notional"] = max(0.0, lot["notional"] - allocated_entry_notional)
         key = (symbol, str(row[6]))
         item = closed_groups.setdefault(key, {
             "symbol": symbol, "side": side, "price": 0.0, "qty": 0.0,
             "gross_pnl": 0.0, "entry_fee": 0.0, "exit_fee": 0.0,
+            "entry_notional": 0.0,
             "closed_at_epoch_ms": row[5],
             "reason": (
                 raw.get("stopOrderType")
@@ -287,11 +292,16 @@ def live_trading_state() -> dict[str, object]:
         item["qty"] = old_qty + qty
         item["gross_pnl"] = float(item["gross_pnl"]) + float(raw.get("execPnl") or 0)
         item["entry_fee"] = float(item["entry_fee"]) + allocated_entry_fee
+        item["entry_notional"] = float(item["entry_notional"]) + allocated_entry_notional
         item["exit_fee"] = float(item["exit_fee"]) + fee
         item["closed_at_epoch_ms"] = max(int(item["closed_at_epoch_ms"]), int(row[5]))
     for item in closed_groups.values():
         item["net_pnl"] = (
             float(item["gross_pnl"]) - float(item["entry_fee"]) - float(item["exit_fee"])
+        )
+        item["gross_move_pct"] = (
+            float(item["gross_pnl"]) / float(item["entry_notional"]) * 100
+            if float(item["entry_notional"]) > 0 else None
         )
     recent_closed = sorted(
         closed_groups.values(), key=lambda item: int(item["closed_at_epoch_ms"]), reverse=True
