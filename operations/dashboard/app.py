@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import base64
+import csv
+import io
 import crypt
 import hashlib
 import hmac
@@ -53,6 +55,7 @@ ALLOWED_SERVICES = (
 )
 _cache: tuple[float, dict[str, object]] | None = None
 _ticker_cache: tuple[float, dict[str, dict[str, object]]] | None = None
+_liquidity_cache: tuple[float, dict[str, dict[str, object]]] | None = None
 _package_lock = threading.Lock()
 
 TRADING_UNIVERSE = (
@@ -69,7 +72,7 @@ BYBIT_KZ_UNSUPPORTED = frozenset(("1000PEPEUSDT", "DOGEUSDT"))
 def live_tickers() -> dict[str, dict[str, object]]:
     global _ticker_cache
     now = time.monotonic()
-    if _ticker_cache and now - _ticker_cache[0] < 30:
+    if _ticker_cache and now - _ticker_cache[0] < 2:
         return _ticker_cache[1]
     with urllib.request.urlopen("https://api.bybit.kz/v5/market/tickers?category=linear", timeout=8) as response:
         payload = json.load(response)
@@ -87,6 +90,9 @@ def live_tickers() -> dict[str, dict[str, object]]:
             "funding_rate_pct": float(item.get("fundingRate") or 0) * 100,
             "spread_bps": ((ask - bid) / middle * 10_000) if middle else None,
             "last_price": item.get("lastPrice") or "",
+            "mark_price": item.get("markPrice") or "",
+            "bid_price": item.get("bid1Price") or "",
+            "ask_price": item.get("ask1Price") or "",
         }
     _ticker_cache = (now, result)
     return result
@@ -165,14 +171,56 @@ def entry_shadow_state() -> dict[str, object]:
     if not ENTRY_SHADOW_STATE.exists():
         return {"state": "не запущен", "running": False, "assets": []}
     state = json.loads(ENTRY_SHADOW_STATE.read_text(encoding="utf-8"))
+    risks = execution_liquidity_risks()
     state["assets"] = [
         item for item in state.get("assets", [])
         if item.get("symbol") not in BYBIT_KZ_UNSUPPORTED
     ]
+    for item in state["assets"]:
+        item["liquidity_risk"] = risks.get(str(item.get("symbol")))
     return state
 
 
+def execution_liquidity_risks() -> dict[str, dict[str, object]]:
+    """Classify symbols from observed stop trigger-to-fill execution, not turnover alone."""
+    global _liquidity_cache
+    now = time.monotonic()
+    if _liquidity_cache and now - _liquidity_cache[0] < 30:
+        return _liquidity_cache[1]
+    risks: dict[str, dict[str, object]] = {}
+    try:
+        with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM runtime.private_events WHERE topic='order.linear' "
+                "ORDER BY received_at_epoch_ms DESC LIMIT 5000"
+            ).fetchall()
+        for (payload,) in rows:
+            decoded = json.loads(payload)
+            items = decoded if isinstance(decoded, list) else decoded.get("data", [])
+            for item in items:
+                if item.get("orderStatus") != "Filled":
+                    continue
+                trigger, fill = float(item.get("triggerPrice") or 0), float(item.get("avgPrice") or 0)
+                if trigger <= 0 or fill <= 0:
+                    continue
+                adverse = ((trigger - fill) / trigger if item.get("side") == "Sell"
+                           else (fill - trigger) / trigger) * 100
+                symbol = str(item.get("symbol") or "")
+                if adverse >= 0.15 and adverse > float(risks.get(symbol, {}).get("observed_slippage_pct", 0)):
+                    risks[symbol] = {
+                        "status": "низкая ликвидность",
+                        "detail": "зафиксировано повышенное проскальзывание защитного выхода",
+                        "observed_slippage_pct": round(adverse, 4),
+                    }
+    except (psycopg.Error, json.JSONDecodeError, TypeError, ValueError):
+        return {}
+    _liquidity_cache = (now, risks)
+    return risks
+
+
 def live_trading_state() -> dict[str, object]:
+    tickers = live_tickers()
+    liquidity_risks = execution_liquidity_risks()
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         wallet = connection.execute("""SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
             available_balance,payload_json FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
@@ -238,12 +286,17 @@ def live_trading_state() -> dict[str, object]:
     positions = []
     for row in rows:
         raw = json.loads(row[7])
+        ticker = tickers.get(str(row[0]), {})
+        executable_price = ticker.get("bid_price") if row[2] == "Buy" else ticker.get("ask_price")
         trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
         positions.append({
             "symbol": row[0], "position_idx": row[1], "side": row[2], "size": row[3],
             "entry_price": row[4], "leverage": row[5], "refreshed_at_epoch_ms": row[6],
             "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
             "mark_price": raw.get("markPrice"), "stop_loss": raw.get("stopLoss"),
+            "last_price": ticker.get("last_price"),
+            "executable_close_price": executable_price or ticker.get("last_price") or raw.get("markPrice"),
+            "liquidity_risk": liquidity_risks.get(str(row[0])),
             "trailing_stop": raw.get("trailingStop"),
             "trailing_trigger_price": trailing_order.get("triggerPrice"),
             "trailing_trigger_by": trailing_order.get("triggerBy"),
@@ -305,7 +358,7 @@ def live_trading_state() -> dict[str, object]:
         )
     recent_closed = sorted(
         closed_groups.values(), key=lambda item: int(item["closed_at_epoch_ms"]), reverse=True
-    )[:30]
+    )
     return {
         "wallet": None if wallet is None else {
             "refreshed_at_epoch_ms": wallet[0], "total_equity": wallet[1],
@@ -320,6 +373,36 @@ def live_trading_state() -> dict[str, object]:
         "commands": [{"command_id":r[0],"type":r[1],"symbol":r[2],"state":r[3],"requested_at_epoch_ms":r[4],"error":r[5]} for r in commands],
         "recent_closed": recent_closed,
     }
+
+
+def export_trading_table(table: str, period: str) -> dict[str, object]:
+    periods = {"day": (24 * 3600, "сутки"), "week": (7 * 24 * 3600, "неделя"), "all": (None, "весь_период")}
+    if table not in {"closed", "signals"} or period not in periods:
+        raise ValueError("недопустимая таблица или период")
+    seconds, period_label = periods[period]
+    cutoff_ms = int((time.time() - seconds) * 1000) if seconds else 0
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, delimiter=";")
+    if table == "closed":
+        writer.writerow(["Время", "Монета", "Закрыто", "Цена", "Причина биржи", "До комиссий USDT", "Комиссия входа USDT", "Комиссия выхода USDT", "Чистый итог USDT"])
+        rows = [x for x in live_trading_state()["recent_closed"] if int(x["closed_at_epoch_ms"]) >= cutoff_ms]
+        for x in rows:
+            writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x["closed_at_epoch_ms"]) / 1000)), x["symbol"], x["qty"], x["price"], x["reason"], x["gross_pnl"], x["entry_fee"], x["exit_fee"], x["net_pnl"]])
+        stem = "закрытые_реальные_сделки"
+    else:
+        writer.writerow(["Время сигнала", "Монета", "Направление", "Цена сигнала", "Состояние", "Максимальный плюс %", "Максимальный минус %", "Наблюдений цены"])
+        with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+            rows = connection.execute("SELECT signal_at_epoch_ms,symbol,direction,signal_price,state,max_favorable_pct,max_adverse_pct,samples FROM monitoring.opportunities WHERE signal_at_epoch_ms >= %s ORDER BY signal_at_epoch_ms DESC", (cutoff_ms,)).fetchall()
+        for x in rows:
+            writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x[0]) / 1000)), x[1], "покупка" if x[2] == "long" else "продажа", x[3], x[4], x[5], x[6], x[7]])
+        stem = "независимое_наблюдение_сигналов"
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    final_path = REPORT_ROOT / f"{stem}_{period_label}_{stamp}.zip"
+    with zipfile.ZipFile(final_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(f"{stem}_{period_label}.csv", "\ufeff" + output.getvalue())
+        archive.writestr("ОПИСАНИЕ.txt", f"Период: {period_label}. Строк: {len(rows)}. Сформировано: {time.strftime('%Y-%m-%d %H:%M:%S')}.\n")
+    return {"file": final_path.name, "size": final_path.stat().st_size, "rows": len(rows), "url": f"/reports/{quote(final_path.name)}"}
 
 
 def snapshot() -> dict[str, object]:
@@ -643,7 +726,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             }, ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
         elif path in {
-            "/", "/current", "/entry", "/live", "/strategies", "/test-library",
+            "/", "/infra", "/current", "/entry", "/live", "/strategies", "/test-library",
             "/bots", "/server-control", "/history", "/rules", "/checklist",
         }:
             body = (Path(__file__).parent / "index.html").read_bytes()
@@ -682,6 +765,17 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 self.send_body(201, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             except (OSError, RuntimeError, psycopg.Error, zipfile.BadZipFile) as exc:
                 self.send_body(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return
+        if path == "/api/trading/export":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 2048:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                result = export_trading_table(str(request.get("table", "")), str(request.get("period", "")))
+                self.send_body(201, json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            except (ValueError, json.JSONDecodeError, OSError, psycopg.Error, zipfile.BadZipFile) as exc:
+                self.send_body(400, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
             return
         if path in {"/api/live/settings", "/api/live/command", "/api/live/gate"}:
             try:

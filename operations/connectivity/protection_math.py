@@ -14,7 +14,8 @@ def quantize(value: Decimal, step: Decimal, *, upward: bool) -> Decimal:
 
 
 def calculate_protection_plan(
-    *, entry: Decimal, qty: Decimal, entry_fee: Decimal, side: str, tick: Decimal
+    *, entry: Decimal, qty: Decimal, entry_fee: Decimal, side: str, tick: Decimal,
+    slippage_pct: Decimal = PROTECTION_SLIPPAGE_PCT,
 ) -> dict[str, Decimal]:
     if entry <= 0 or qty <= 0 or tick <= 0:
         raise ValueError("entry, quantity and tick must be positive")
@@ -25,7 +26,7 @@ def calculate_protection_plan(
         minimum_fill = (entry - per_unit_cost) / (Decimal("1") + EXIT_TAKER_FEE_RATE)
     else:
         raise ValueError("side must be Buy or Sell")
-    slippage = max(tick, entry * PROTECTION_SLIPPAGE_PCT)
+    slippage = max(tick, entry * slippage_pct)
     raw_stop = minimum_fill + slippage if side == "Buy" else minimum_fill - slippage
     stop = quantize(raw_stop, tick, upward=side == "Buy")
     activation = stop + tick if side == "Buy" else stop - tick

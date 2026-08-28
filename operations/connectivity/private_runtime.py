@@ -30,6 +30,52 @@ status_lock = threading.Lock()
 status: dict[str, object] = {"private": {"state": "starting"}, "trade": {"state": "starting"}}
 REST_URL = os.environ.get("BYBIT_REST", "https://api.bybit.kz")
 _tick_cache: dict[str, Decimal] = {}
+_ticker_cache: dict[str, tuple[float, Decimal, Decimal, Decimal]] = {}
+_slippage_cache: dict[str, tuple[float, Decimal]] = {}
+
+
+def executable_close_price(symbol: str, side: str) -> Decimal:
+    """Return the immediately executable exit price, never the mark price."""
+    cached = _ticker_cache.get(symbol)
+    if not cached or time.monotonic() - cached[0] > 1:
+        payload, _ = api_get("/v5/market/tickers", {"category": "linear", "symbol": symbol})
+        item = ((payload.get("result") or {}).get("list") or [{}])[0]
+        cached = (
+            time.monotonic(), Decimal(str(item.get("lastPrice") or 0)),
+            Decimal(str(item.get("bid1Price") or 0)), Decimal(str(item.get("ask1Price") or 0)),
+        )
+        _ticker_cache[symbol] = cached
+    _, last, bid, ask = cached
+    price = bid if side == "Buy" else ask
+    return price if price > 0 else last
+
+
+def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> Decimal:
+    """Worst recent trigger-to-fill gap plus a small live reserve."""
+    cached = _slippage_cache.get(symbol)
+    if cached and time.monotonic() - cached[0] < 60:
+        return cached[1]
+    worst = Decimal("0")
+    rows = connection.execute(
+        "SELECT payload_json FROM runtime.private_events WHERE topic='order.linear' "
+        "ORDER BY received_at_epoch_ms DESC LIMIT 5000"
+    ).fetchall()
+    for (raw_payload,) in rows:
+        payload = json.loads(raw_payload)
+        items = payload if isinstance(payload, list) else payload.get("data", [])
+        for item in items:
+            if item.get("symbol") != symbol or item.get("orderStatus") != "Filled":
+                continue
+            trigger = Decimal(str(item.get("triggerPrice") or 0))
+            fill = Decimal(str(item.get("avgPrice") or 0))
+            if trigger <= 0 or fill <= 0:
+                continue
+            gap = ((trigger - fill) / trigger if item.get("side") == "Sell"
+                   else (fill - trigger) / trigger)
+            worst = max(worst, gap)
+    reserve = max(Decimal("0.0002"), worst + Decimal("0.0002"))
+    _slippage_cache[symbol] = (time.monotonic(), reserve)
+    return reserve
 
 
 def db() -> psycopg.Connection:
@@ -173,7 +219,8 @@ def protection_plan(
         raise RuntimeError("position has no valid entry or size")
     entry_fee = remaining_entry_fee(connection, symbol, side)
     return calculate_protection_plan(
-        entry=entry, qty=qty, entry_fee=entry_fee, side=side, tick=tick
+        entry=entry, qty=qty, entry_fee=entry_fee, side=side, tick=tick,
+        slippage_pct=observed_adverse_slippage(connection, symbol),
     )
 
 
@@ -206,7 +253,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         result = api_post("/v5/order/create", {"category":"linear","symbol":symbol,"side":"Sell" if position["side"]=="Buy" else "Buy","orderType":"Market","qty":str(position["size"]),"positionIdx":int(position.get("positionIdx") or 0),"orderLinkId":command_id[:36],"reduceOnly":True,"closeOnTrigger":False}, key, secret)
     elif kind in {"break_even", "current_stop", "initial_protection"}:
         if not position: raise RuntimeError("open position not found")
-        side, mark = str(position["side"]), Decimal(str(position.get("markPrice") or 0))
+        side = str(position["side"])
+        mark = executable_close_price(symbol, side)
         if kind == "break_even":
             plan = protection_plan(connection, symbol, position, tick)
             stop, activation = plan["stop"], plan["activation"]
@@ -222,9 +270,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 entry=actual_entry, side=side, tick=tick
             )
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
-        stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"MarkPrice","slOrderType":"Market"}
+        stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"LastPrice","slOrderType":"Market"}
         if kind == "initial_protection":
-            stop_request.update({"takeProfit": str(target), "tpTriggerBy": "MarkPrice", "tpOrderType": "Market"})
+            stop_request.update({"takeProfit": str(target), "tpTriggerBy": "LastPrice", "tpOrderType": "Market"})
         result = api_post("/v5/position/trading-stop", stop_request, key, secret)
         if kind == "break_even":
             result["protectionPlan"] = {name: str(value) for name, value in plan.items()}
@@ -233,12 +281,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     elif kind == "trailing_stop":
         if not position: raise RuntimeError("open position not found")
         enabled = bool(payload.get("enabled"))
-        params: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","slTriggerBy":"MarkPrice"}
+        params: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","slTriggerBy":"LastPrice"}
         if enabled:
             distance_pct = Decimal(str(payload.get("distance_pct") or "0.2"))
             if distance_pct < Decimal("0.05") or distance_pct > Decimal("5"):
                 raise RuntimeError("trailing stop distance must be from 0.05% to 5%")
-            mark = Decimal(str(position.get("markPrice") or 0))
+            mark = executable_close_price(symbol, str(position["side"]))
             distance = quantize(mark * distance_pct / Decimal("100"), tick, upward=True)
             plan = protection_plan(connection, symbol, position, tick)
             if not trailing_start_preserves_protection(
@@ -322,8 +370,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     "category": "linear", "symbol": symbol,
                     "positionIdx": int(filled_position.get("positionIdx") or 0),
                     "tpslMode": "Full", "stopLoss": str(actual_stop),
-                    "takeProfit": str(actual_target), "slTriggerBy": "MarkPrice",
-                    "tpTriggerBy": "MarkPrice", "slOrderType": "Market",
+                    "takeProfit": str(actual_target), "slTriggerBy": "LastPrice",
+                    "tpTriggerBy": "LastPrice", "slOrderType": "Market",
                     "tpOrderType": "Market",
                 },
                 key,
@@ -428,7 +476,7 @@ def command_loop(key: str, secret: str) -> None:
         for entry_id,symbol in completed_entries:
             position_row=connection.execute("SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",(symbol,)).fetchone()
             if not position_row: continue
-            raw=json.loads(position_row[2]); entry=Decimal(str(position_row[1])); mark=Decimal(str(raw.get("markPrice") or 0))
+            raw=json.loads(position_row[2]); entry=Decimal(str(position_row[1])); mark=executable_close_price(str(symbol), str(position_row[0]))
             if entry<=0 or mark<=0: continue
             move=(mark/entry-Decimal("1"))*Decimal("100")*(Decimal("1") if position_row[0]=="Buy" else Decimal("-1"))
             tick = _tick_cache.get(str(symbol))
@@ -469,7 +517,7 @@ def command_loop(key: str, secret: str) -> None:
                 if Decimal(str(raw.get("trailingStop") or 0)) > 0:
                     continue
                 entry = Decimal(str(position_row[1]))
-                mark = Decimal(str(raw.get("markPrice") or 0))
+                mark = executable_close_price(str(symbol), str(position_row[0]))
                 protected_stop = Decimal(str(raw.get("stopLoss") or 0))
                 if entry <= 0 or mark <= 0 or protected_stop <= 0:
                     continue
