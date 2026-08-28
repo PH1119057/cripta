@@ -1,0 +1,27 @@
+[Unit]
+Description=Cripta Mayak V2 passive market and money observer
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/research_runs/universal_entry_v1/source_stage/src
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/mayak_v2.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/cripta/mayak_v2
+
+[Install]
+WantedBy=multi-user.target
