@@ -96,7 +96,10 @@ class PositionSupervisor:
                 Decimal("0"),
             )
         invalid = [
-            name for name in MANDATORY if evidence[name].quality in {Quality.STALE, Quality.MISSING}
+            name
+            for name in MANDATORY
+            if evidence[name].quality in {Quality.STALE, Quality.MISSING}
+            or evidence[name].state in {"unknown", "uncalibrated"}
         ]
         if invalid:
             return (

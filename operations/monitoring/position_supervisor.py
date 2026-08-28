@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import signal
 import time
+import urllib.parse
+import urllib.request
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +22,80 @@ from bybit_workbench.position_supervisor import (
 
 ENTRY_STATUS = Path("/var/lib/cripta/entry_shadow/status.json")
 running = True
+_public_cache: dict[str, tuple[float, dict[str, object]]] = {}
+
+
+def public_get(path: str, params: dict[str, str], ttl: float = 5) -> dict[str, object]:
+    key = path + "?" + urllib.parse.urlencode(sorted(params.items()))
+    cached = _public_cache.get(key)
+    if cached and time.monotonic() - cached[0] <= ttl:
+        return cached[1]
+    request = urllib.request.Request(
+        "https://api.bybit.kz" + key, headers={"User-Agent": "cripta-position-card/1"}
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        payload = json.load(response)
+    if payload.get("retCode") != 0:
+        raise RuntimeError(str(payload.get("retMsg") or "Bybit public API error"))
+    _public_cache[key] = (time.monotonic(), payload)
+    return payload
+
+
+def price_feature(symbol: str, side: str, now: datetime) -> FeatureEvidence:
+    payload = public_get(
+        "/v5/market/kline", {"category": "linear", "symbol": symbol, "interval": "1", "limit": "6"}, 8
+    )
+    rows = (payload.get("result") or {}).get("list") or []
+    closes = [Decimal(str(row[4])) for row in rows]
+    if len(closes) < 6 or any(value <= 0 for value in closes):
+        return FeatureEvidence("unknown", now, Quality.MISSING)
+    direction = Decimal("1") if side == "Buy" else Decimal("-1")
+    moves = {
+        "move_1m_pct": (closes[0] / closes[1] - 1) * 100 * direction,
+        "move_3m_pct": (closes[0] / closes[3] - 1) * 100 * direction,
+        "move_5m_pct": (closes[0] / closes[5] - 1) * 100 * direction,
+    }
+    state = "continuation" if moves["move_1m_pct"] > 0 else "against"
+    return FeatureEvidence(state, now, Quality.FRESH, moves)
+
+
+def execution_and_book_features(
+    symbol: str, side: str, now: datetime
+) -> tuple[FeatureEvidence, FeatureEvidence]:
+    ticker_payload = public_get(
+        "/v5/market/tickers", {"category": "linear", "symbol": symbol}, 2
+    )
+    ticker = ((ticker_payload.get("result") or {}).get("list") or [{}])[0]
+    bid = Decimal(str(ticker.get("bid1Price") or 0))
+    ask = Decimal(str(ticker.get("ask1Price") or 0))
+    middle = (bid + ask) / 2 if bid > 0 and ask > 0 else Decimal("0")
+    spread_bps = (ask - bid) / middle * 10_000 if middle > 0 else Decimal("0")
+    execution = FeatureEvidence(
+        "executable" if middle > 0 else "unavailable",
+        now,
+        Quality.FRESH if middle > 0 else Quality.MISSING,
+        {"bid": bid, "ask": ask, "spread_bps": spread_bps},
+    )
+    book_payload = public_get(
+        "/v5/market/orderbook", {"category": "linear", "symbol": symbol, "limit": "25"}, 3
+    )
+    result = book_payload.get("result") or {}
+    bid_depth = sum(Decimal(str(p)) * Decimal(str(q)) for p, q in result.get("b", []))
+    ask_depth = sum(Decimal(str(p)) * Decimal(str(q)) for p, q in result.get("a", []))
+    favorable = bid_depth if side == "Buy" else ask_depth
+    adverse = ask_depth if side == "Buy" else bid_depth
+    ratio = favorable / adverse if adverse > 0 else Decimal("0")
+    state = "replenishment" if ratio >= Decimal("1.15") else "withdrawal" if ratio <= Decimal("0.85") else "balanced"
+    book = FeatureEvidence(
+        state, now, Quality.FRESH,
+        {"bid_depth_usdt": bid_depth, "ask_depth_usdt": ask_depth, "directional_ratio": ratio},
+    )
+    return execution, book
+
+
+def market_feature(symbol: str, now: datetime) -> FeatureEvidence:
+    feature = price_feature(symbol, "Buy", now)
+    return FeatureEvidence(feature.state, feature.observed_at, feature.quality, feature.measurements)
 
 
 def stop(*_: object) -> None:
@@ -77,23 +153,48 @@ def entry_context() -> dict[str, dict[str, object]]:
 
 
 def features(
-    symbol: str, now: datetime, context: dict[str, dict[str, object]]
+    symbol: str, side: str, now: datetime, context: dict[str, dict[str, object]]
 ) -> dict[str, FeatureEvidence]:
     item = context.get(symbol)
     result: dict[str, FeatureEvidence] = {}
-    if not item:
-        return result
+    if item:
+        try:
+            observed = datetime.fromisoformat(str(item["updated_at"]))
+            quality = Quality.PARTIAL if (now - observed).total_seconds() <= 15 else Quality.STALE
+            result["flow"] = FeatureEvidence(
+                str(item.get("flow_state") or "unknown"), observed, quality
+            )
+            result["oi_price"] = FeatureEvidence(
+                str(item.get("oi_state") or "unknown"), observed, quality
+            )
+            result["structure"] = FeatureEvidence(
+                "unknown", observed, quality,
+                {
+                    "scanner_status": str(item.get("status") or ""),
+                    "distance_pct": str(item.get("distance_pct") or ""),
+                },
+            )
+        except (ValueError, TypeError, KeyError):
+            pass
+    result.setdefault("structure", FeatureEvidence("unknown", now, Quality.MISSING))
     try:
-        observed = datetime.fromisoformat(str(item["updated_at"]))
-        quality = Quality.PARTIAL if (now - observed).total_seconds() <= 15 else Quality.STALE
-        result["flow"] = FeatureEvidence(
-            str(item.get("flow_state") or "unknown"), observed, quality
+        result["price_1m"] = price_feature(symbol, side, now)
+        execution, orderbook = execution_and_book_features(symbol, side, now)
+        result["execution_now"] = execution
+        result["orderbook"] = orderbook
+        flow_state = result.get("flow", FeatureEvidence("unknown", now, Quality.MISSING)).state
+        price_state = result["price_1m"].state
+        absorption_state = (
+            "absorption"
+            if flow_state == "pressure_continues" and price_state == "continuation"
+            else "none"
         )
-        result["oi_price"] = FeatureEvidence(
-            str(item.get("oi_state") or "unknown"), observed, quality
-        )
-    except (ValueError, TypeError, KeyError):
-        pass
+        result["absorption"] = FeatureEvidence(absorption_state, now, Quality.PARTIAL)
+        result["market_btc"] = market_feature("BTCUSDT", now)
+        result["market_eth"] = market_feature("ETHUSDT", now)
+    except (OSError, RuntimeError, ValueError, TypeError):
+        for name in ("price_1m", "execution_now", "orderbook", "absorption", "market_btc", "market_eth"):
+            result.setdefault(name, FeatureEvidence("unknown", now, Quality.MISSING))
     return result
 
 
@@ -132,7 +233,7 @@ def main() -> None:
             context = entry_context()
             for position, mark in rows:
                 snapshot = registry.get(position.position_id).update(
-                    PositionEvent(now, mark, features(position.symbol, now, context))
+                    PositionEvent(now, mark, features(position.symbol, position.side, now, context))
                 )
                 document = snapshot.audit_dict()
                 at_ms = int(now.timestamp() * 1000)
