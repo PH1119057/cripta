@@ -175,13 +175,20 @@ def entry_shadow_state() -> dict[str, object]:
 def live_trading_state() -> dict[str, object]:
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         wallet = connection.execute("""SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
-            available_balance FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
+            available_balance,payload_json FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
         rows = connection.execute("""SELECT symbol,position_idx,side,size,entry_price,leverage,
             refreshed_at_epoch_ms,payload_json FROM runtime.hot_positions ORDER BY symbol""").fetchall()
         trailing_rows = connection.execute("""SELECT DISTINCT ON (symbol) symbol,
             payload_json,exchange_updated_ms FROM runtime.hot_orders
             WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
             ORDER BY symbol,exchange_updated_ms DESC""").fetchall()
+        pending_order_rows = connection.execute("""SELECT symbol,side,qty,price,leaves_qty,
+            refreshed_at_epoch_ms,payload_json FROM runtime.hot_orders
+            WHERE order_status IN ('New','PartiallyFilled','Untriggered')
+              AND COALESCE(payload_json::jsonb->>'reduceOnly','false') <> 'true'
+              AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'
+              AND COALESCE(payload_json::jsonb->>'orderType','') = 'Limit'
+            ORDER BY exchange_updated_ms DESC""").fetchall()
         connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE")
         connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE")
         connection.execute("ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'")
@@ -205,6 +212,29 @@ def live_trading_state() -> dict[str, object]:
                       "shadow_action": row[3], "snapshot": row[4]}
         for row in supervisor_rows
     }
+    wallet_raw = json.loads(wallet[4]) if wallet else {}
+    wallet_usdt = next(
+        (coin for coin in wallet_raw.get("coin", []) if coin.get("coin") == "USDT"), {}
+    )
+    reserved_for_orders = (
+        wallet_raw.get("totalOrderIM") or wallet_usdt.get("totalOrderIM") or "0"
+    )
+    reserved_for_positions = (
+        wallet_raw.get("totalPositionIM") or wallet_usdt.get("totalPositionIM") or "0"
+    )
+    pending_orders = []
+    configured_leverage = float(settings[1]) if settings and settings[1] else 1.0
+    for row in pending_order_rows:
+        raw = json.loads(row[6])
+        leaves_qty = float(row[4] or 0)
+        price = float(row[3] or raw.get("price") or 0)
+        notional = float(raw.get("leavesValue") or leaves_qty * price)
+        pending_orders.append({
+            "symbol": row[0], "side": row[1], "qty": row[2], "price": row[3],
+            "leaves_qty": row[4], "notional_usdt": notional,
+            "estimated_margin_usdt": notional / configured_leverage if configured_leverage > 0 else None,
+            "refreshed_at_epoch_ms": row[5],
+        })
     positions = []
     for row in rows:
         raw = json.loads(row[7])
@@ -270,8 +300,11 @@ def live_trading_state() -> dict[str, object]:
         "wallet": None if wallet is None else {
             "refreshed_at_epoch_ms": wallet[0], "total_equity": wallet[1],
             "wallet_balance": wallet[2], "available_balance": wallet[3],
+            "reserved_for_orders": reserved_for_orders,
+            "reserved_for_positions": reserved_for_positions,
         },
         "positions": positions,
+        "pending_entry_orders": pending_orders,
         "settings": {"stake_usdt": settings[0], "leverage": settings[1], "enabled_symbols": [symbol for symbol in json.loads(settings[2]) if symbol not in BYBIT_KZ_UNSUPPORTED], "entry_offset_pct": settings[3], "entry_limit_ttl_seconds": settings[4], "auto_profit_protection": bool(settings[5]), "auto_trailing_stop": bool(settings[6]), "trailing_distance_pct": settings[7]} if settings else {"stake_usdt":"10","leverage":10,"enabled_symbols":[],"entry_offset_pct":"0.00","entry_limit_ttl_seconds":30,"auto_profit_protection":True,"auto_trailing_stop":True,"trailing_distance_pct":"0.30"},
         "gate": {"enabled": bool(gate[0]), "reason": gate[1]} if gate else {"enabled":False,"reason":"шлюз не настроен"},
         "commands": [{"command_id":r[0],"type":r[1],"symbol":r[2],"state":r[3],"requested_at_epoch_ms":r[4],"error":r[5]} for r in commands],
