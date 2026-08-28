@@ -32,6 +32,10 @@ REST_URL = os.environ.get("BYBIT_REST", "https://api.bybit.kz")
 _tick_cache: dict[str, Decimal] = {}
 _ticker_cache: dict[str, tuple[float, Decimal, Decimal, Decimal]] = {}
 _slippage_cache: dict[str, tuple[float, Decimal]] = {}
+EXCLUDED_TRADING_SYMBOLS = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
+SIGNAL_PICKUP_WINDOW_MS = int(os.environ.get("CRIPTA_SIGNAL_PICKUP_WINDOW_MS", "120000"))
+ENTRY_COOLDOWN_MS = int(os.environ.get("CRIPTA_ENTRY_COOLDOWN_MS", "300000"))
+MAX_PORTFOLIO_ENTRIES = int(os.environ.get("CRIPTA_MAX_PORTFOLIO_ENTRIES", "1"))
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
@@ -121,6 +125,10 @@ def initialize(connection: psycopg.Connection) -> None:
             payload_json TEXT NOT NULL, state TEXT NOT NULL, requested_at_epoch_ms BIGINT NOT NULL,
             started_at_epoch_ms BIGINT, finished_at_epoch_ms BIGINT, result_json TEXT NOT NULL DEFAULT '{}',
             error TEXT NOT NULL DEFAULT '')""",
+        """CREATE TABLE IF NOT EXISTS runtime.entry_decisions(
+            signal_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL,
+            signal_at_epoch_ms BIGINT NOT NULL, decided_at_epoch_ms BIGINT NOT NULL,
+            decision TEXT NOT NULL, reason TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}')""",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_offset_pct TEXT NOT NULL DEFAULT '0.00'",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_limit_ttl_seconds INTEGER NOT NULL DEFAULT 30",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE",
@@ -132,6 +140,33 @@ def initialize(connection: psycopg.Connection) -> None:
     for statement in statements:
         connection.execute(statement)
     connection.commit()
+
+
+def record_entry_decision(
+    connection: psycopg.Connection,
+    signal_id: object,
+    symbol: object,
+    direction: object,
+    signal_at_ms: object,
+    decision: str,
+    reason: str,
+    **details: object,
+) -> None:
+    connection.execute(
+        """INSERT INTO runtime.entry_decisions(
+               signal_id,symbol,direction,signal_at_epoch_ms,decided_at_epoch_ms,
+               decision,reason,details_json)
+           VALUES(%s,%s,%s,%s,%s,%s,%s,%s)
+           ON CONFLICT(signal_id) DO UPDATE SET
+               decided_at_epoch_ms=excluded.decided_at_epoch_ms,
+               decision=excluded.decision,reason=excluded.reason,
+               details_json=excluded.details_json""",
+        (
+            str(signal_id), str(symbol), str(direction), int(signal_at_ms),
+            int(time.time()*1000), decision, reason,
+            json.dumps(details, ensure_ascii=False),
+        ),
+    )
 
 
 def atomic_status(channel: str, value: dict[str, object]) -> None:
@@ -409,35 +444,124 @@ def cancel_expired_entry_limits(
         reconcile(connection, key, secret, "expired_entry_limit")
 
 
-def command_loop(key: str, secret: str) -> None:
+def command_worker_loop(key: str, secret: str) -> None:
     connection=db()
     next_limit_cleanup = 0.0
+    next_heartbeat = 0.0
     while running:
+        if time.monotonic() >= next_heartbeat:
+            atomic_status(
+                "command",
+                {"state": "running", "heartbeat_epoch": int(time.time())},
+            )
+            next_heartbeat = time.monotonic() + 5
         gate=connection.execute("SELECT enabled,updated_at_epoch_ms FROM control.execution_gates WHERE mode='mainnet'").fetchone()
         settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1").fetchone()
-        if gate and gate[0] and settings:
-            enabled=set(json.loads(settings[2])); now_ms=int(time.time()*1000)
+        if settings:
+            gate_enabled = bool(gate and gate[0])
+            configured=set(json.loads(settings[2]))
+            enabled=configured - EXCLUDED_TRADING_SYMBOLS
+            now_ms=int(time.time()*1000)
             if time.monotonic() >= next_limit_cleanup:
                 try:
                     cancel_expired_entry_limits(connection, key, secret, now_ms)
                 except Exception:
                     connection.rollback()
                 next_limit_cleanup = time.monotonic() + 1
-            fresh_after=max(now_ms-10_000,int(gate[1] or 0),int(settings[3] or 0))
-            signals=connection.execute("""SELECT signal_id,symbol,direction,signal_price FROM monitoring.opportunities
+            fresh_after=max(
+                now_ms-SIGNAL_PICKUP_WINDOW_MS,
+                int(gate[1] or 0),
+                int(settings[3] or 0),
+            )
+            signals=connection.execute("""SELECT signal_id,symbol,direction,signal_price,signal_at_epoch_ms FROM monitoring.opportunities
                 WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
                 ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
-            for signal_id,symbol,direction,price in signals:
-                if symbol not in enabled: continue
+            for signal_id,symbol,direction,price,signal_at_ms in signals:
+                if symbol in EXCLUDED_TRADING_SYMBOLS:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "монета находится в карантине")
+                    continue
+                if symbol not in enabled:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "монета выключена в торговых настройках")
+                    continue
+                portfolio_entries = connection.execute("""SELECT
+                    (SELECT count(*) FROM runtime.hot_positions) +
+                    (SELECT count(*) FROM runtime.hot_orders
+                     WHERE order_status IN ('New','PartiallyFilled','Untriggered')) +
+                    (SELECT count(*) FROM runtime.trade_commands
+                     WHERE command_type='entry' AND state IN ('queued','running'))""").fetchone()[0]
+                if int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "достигнут общий лимит позиций и заявок",
+                                          current=int(portfolio_entries or 0), limit=MAX_PORTFOLIO_ENTRIES)
+                    continue
+                recent_entry = connection.execute(
+                    """SELECT 1 FROM runtime.trade_commands
+                       WHERE command_type='entry' AND requested_at_epoch_ms >= %s
+                       LIMIT 1""",
+                    (now_ms-ENTRY_COOLDOWN_MS,),
+                ).fetchone()
+                if recent_entry:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "действует пауза между входами",
+                                          cooldown_seconds=ENTRY_COOLDOWN_MS//1000)
+                    continue
+                market = connection.execute("""SELECT observed_at,state,
+                           payload->'price_breadth'->>'up_share',
+                           payload->'price_breadth'->>'down_share'
+                    FROM mayak_v2.snapshots ORDER BY observed_at DESC LIMIT 1""").fetchone()
+                if not market:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "нет снимка общего состояния рынка")
+                    continue
+                market_age = connection.execute(
+                    "SELECT extract(epoch from (clock_timestamp()-%s))", (market[0],)
+                ).fetchone()[0]
+                if market_age is None or float(market_age) > 90:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "данные общего рынка устарели",
+                                          age_seconds=None if market_age is None else float(market_age))
+                    continue
+                if str(market[1]) in {"денежное расхождение", "переходный рынок"}:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "Маяк видит неустойчивое состояние рынка",
+                                          market_state=str(market[1]))
+                    continue
+                up_share = Decimal(str(market[2] or 0))
+                down_share = Decimal(str(market[3] or 0))
+                if direction == "long" and up_share < Decimal("0.55"):
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "ширина рынка не подтверждает покупку",
+                                          up_share=str(up_share))
+                    continue
+                if direction == "short" and down_share < Decimal("0.55"):
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "ширина рынка не подтверждает продажу",
+                                          down_share=str(down_share))
+                    continue
                 occupied=connection.execute("""SELECT
                     EXISTS(SELECT 1 FROM runtime.hot_positions WHERE symbol=%s) OR
                     EXISTS(SELECT 1 FROM runtime.hot_orders WHERE symbol=%s AND order_status IN ('New','PartiallyFilled','Untriggered')) OR
                     EXISTS(SELECT 1 FROM runtime.trade_commands WHERE symbol=%s AND command_type='entry' AND state IN ('queued','running'))""",(symbol,symbol,symbol)).fetchone()[0]
-                if occupied: continue
+                if occupied:
+                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                          "запрещён", "по монете уже есть позиция, заявка или команда")
+                    continue
+                if not gate_enabled:
+                    record_entry_decision(
+                        connection, signal_id, symbol, direction, signal_at_ms,
+                        "теневой допуск",
+                        "все проверки пройдены, но реальный торговый шлюз закрыт",
+                    )
+                    continue
                 cid="auto-"+hashlib.sha256(str(signal_id).encode()).hexdigest()[:28]
                 body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5]}
                 connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                     VALUES(%s,'entry',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(cid,symbol,json.dumps(body),int(time.time()*1000)))
+                record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
+                                      "разрешён", "проверки пройдены, команда поставлена в очередь",
+                                      command_id=cid)
             connection.commit()
         completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
             WHERE command_type='entry' AND state='completed'""").fetchall()
@@ -566,6 +690,24 @@ def command_loop(key: str, secret: str) -> None:
         try: execute_command(connection,key,secret,row)
         except Exception as exc:
             connection.rollback(); connection.execute("UPDATE runtime.trade_commands SET state='failed',finished_at_epoch_ms=%s,error=%s WHERE command_id=%s",(int(time.time()*1000),f"{type(exc).__name__}: {exc}",command_id)); connection.commit()
+
+
+def command_loop(key: str, secret: str) -> None:
+    """Keep the command worker alive and make an internal failure visible."""
+    while running:
+        try:
+            atomic_status("command", {"state": "running", "heartbeat_epoch": int(time.time())})
+            command_worker_loop(key, secret)
+        except Exception as exc:
+            atomic_status(
+                "command",
+                {
+                    "state": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "retry_in_seconds": 2,
+                },
+            )
+            time.sleep(2)
 
 
 def reconcile(connection: psycopg.Connection, key: str, secret: str, reason: str) -> tuple[int, int]:
