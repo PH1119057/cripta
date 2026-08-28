@@ -333,9 +333,12 @@ def live_trading_state() -> dict[str, object]:
         connection.execute(
             "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'"
         )
+        connection.execute(
+            "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'"
+        )
         connection.commit()
         settings = connection.execute(
-            "SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1"
+            "SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1"
         ).fetchone()
         gate = connection.execute(
             "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
@@ -514,6 +517,7 @@ def live_trading_state() -> dict[str, object]:
             "auto_profit_protection": bool(settings[5]),
             "auto_trailing_stop": bool(settings[6]),
             "trailing_distance_pct": settings[7],
+            "entry_policy": settings[8],
         }
         if settings
         else {
@@ -525,6 +529,7 @@ def live_trading_state() -> dict[str, object]:
             "auto_profit_protection": True,
             "auto_trailing_stop": True,
             "trailing_distance_pct": "0.30",
+            "entry_policy": "base_entry_v1",
         },
         "gate": {"enabled": bool(gate[0]), "reason": gate[1]}
         if gate
@@ -1266,6 +1271,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         auto_profit_protection = bool(request.get("auto_profit_protection", True))
                         auto_trailing_stop = bool(request.get("auto_trailing_stop", True))
                         trailing_distance_pct = float(request.get("trailing_distance_pct", 0.3))
+                        entry_policy = str(request.get("entry_policy", "base_entry_v1"))
                         symbols = sorted(
                             {str(x).upper() for x in request.get("enabled_symbols", [])}
                             - BYBIT_KZ_UNSUPPORTED
@@ -1285,8 +1291,10 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             raise ValueError("недопустимая глубина входа или срок лимитной заявки")
                         if trailing_distance_pct not in {0.1, 0.2, 0.3, 0.5, 1.0}:
                             raise ValueError("недопустимый отступ плавающего стопа")
+                        if entry_policy not in {"base_entry_v1", "market_guard_v1"}:
+                            raise ValueError("неизвестное правило автоматического входа")
                         connection.execute(
-                            "UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,auto_trailing_stop=%s,trailing_distance_pct=%s,updated_at_epoch_ms=%s WHERE singleton=1",
+                            "UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,auto_trailing_stop=%s,trailing_distance_pct=%s,entry_policy=%s,updated_at_epoch_ms=%s WHERE singleton=1",
                             (
                                 str(stake),
                                 leverage,
@@ -1296,6 +1304,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 auto_profit_protection,
                                 auto_trailing_stop,
                                 str(trailing_distance_pct),
+                                entry_policy,
                                 int(time.time() * 1000),
                             ),
                         )

@@ -134,6 +134,7 @@ def initialize(connection: psycopg.Connection) -> None:
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'",
+        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
@@ -456,9 +457,10 @@ def command_worker_loop(key: str, secret: str) -> None:
             )
             next_heartbeat = time.monotonic() + 5
         gate=connection.execute("SELECT enabled,updated_at_epoch_ms FROM control.execution_gates WHERE mode='mainnet'").fetchone()
-        settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct FROM runtime.trade_settings WHERE singleton=1").fetchone()
+        settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1").fetchone()
         if settings:
             gate_enabled = bool(gate and gate[0])
+            entry_policy = str(settings[9] or "base_entry_v1")
             configured=set(json.loads(settings[2]))
             enabled=configured - EXCLUDED_TRADING_SYMBOLS
             now_ms=int(time.time()*1000)
@@ -468,8 +470,9 @@ def command_worker_loop(key: str, secret: str) -> None:
                 except Exception:
                     connection.rollback()
                 next_limit_cleanup = time.monotonic() + 1
+            pickup_window_ms = 10_000 if entry_policy == "base_entry_v1" else SIGNAL_PICKUP_WINDOW_MS
             fresh_after=max(
-                now_ms-SIGNAL_PICKUP_WINDOW_MS,
+                now_ms-pickup_window_ms,
                 int(gate[1] or 0),
                 int(settings[3] or 0),
             )
@@ -491,7 +494,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                      WHERE order_status IN ('New','PartiallyFilled','Untriggered')) +
                     (SELECT count(*) FROM runtime.trade_commands
                      WHERE command_type='entry' AND state IN ('queued','running'))""").fetchone()[0]
-                if int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
+                if entry_policy != "base_entry_v1" and int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "достигнут общий лимит позиций и заявок",
                                           current=int(portfolio_entries or 0), limit=MAX_PORTFOLIO_ENTRIES)
@@ -502,7 +505,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                        LIMIT 1""",
                     (now_ms-ENTRY_COOLDOWN_MS,),
                 ).fetchone()
-                if recent_entry:
+                if entry_policy != "base_entry_v1" and recent_entry:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "действует пауза между входами",
                                           cooldown_seconds=ENTRY_COOLDOWN_MS//1000)
@@ -511,31 +514,31 @@ def command_worker_loop(key: str, secret: str) -> None:
                            payload->'price_breadth'->>'up_share',
                            payload->'price_breadth'->>'down_share'
                     FROM mayak_v2.snapshots ORDER BY observed_at DESC LIMIT 1""").fetchone()
-                if not market:
+                if entry_policy != "base_entry_v1" and not market:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "нет снимка общего состояния рынка")
                     continue
-                market_age = connection.execute(
+                market_age = None if not market else connection.execute(
                     "SELECT extract(epoch from (clock_timestamp()-%s))", (market[0],)
                 ).fetchone()[0]
-                if market_age is None or float(market_age) > 90:
+                if entry_policy != "base_entry_v1" and (market_age is None or float(market_age) > 90):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "данные общего рынка устарели",
                                           age_seconds=None if market_age is None else float(market_age))
                     continue
-                if str(market[1]) in {"денежное расхождение", "переходный рынок"}:
+                if entry_policy != "base_entry_v1" and str(market[1]) in {"денежное расхождение", "переходный рынок"}:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "Маяк видит неустойчивое состояние рынка",
                                           market_state=str(market[1]))
                     continue
-                up_share = Decimal(str(market[2] or 0))
-                down_share = Decimal(str(market[3] or 0))
-                if direction == "long" and up_share < Decimal("0.55"):
+                up_share = Decimal(str(0 if not market else market[2] or 0))
+                down_share = Decimal(str(0 if not market else market[3] or 0))
+                if entry_policy != "base_entry_v1" and direction == "long" and up_share < Decimal("0.55"):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "ширина рынка не подтверждает покупку",
                                           up_share=str(up_share))
                     continue
-                if direction == "short" and down_share < Decimal("0.55"):
+                if entry_policy != "base_entry_v1" and direction == "short" and down_share < Decimal("0.55"):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "ширина рынка не подтверждает продажу",
                                           down_share=str(down_share))
