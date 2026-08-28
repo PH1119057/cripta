@@ -1,0 +1,13 @@
+[Unit]
+Description=Cripta Mayak V2 passive daily report
+After=postgresql.service cripta-mayak-v2.service
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/mayak_v2_report.py 1
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/cripta-share/reports

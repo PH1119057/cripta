@@ -84,6 +84,32 @@ class Collector:
                 id bigserial PRIMARY KEY, occurred_at timestamptz NOT NULL,
                 state text NOT NULL, previous_state text, confidence double precision NOT NULL,
                 reasons jsonb NOT NULL, snapshot_id bigint REFERENCES mayak_v2.snapshots(id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.coin_minutes(
+                observed_at timestamptz NOT NULL,
+                snapshot_id bigint NOT NULL REFERENCES mayak_v2.snapshots(id),
+                symbol text NOT NULL,
+                spot_buy_usd double precision, spot_sell_usd double precision,
+                spot_net_usd double precision, spot_turnover_usd double precision,
+                derivatives_buy_usd double precision, derivatives_sell_usd double precision,
+                derivatives_net_usd double precision, derivatives_turnover_usd double precision,
+                return_5m_pct double precision, open_interest double precision,
+                open_interest_change_pct double precision, funding_rate double precision,
+                mark_price double precision, index_price double precision,
+                long_ratio double precision, short_ratio double precision,
+                spot_bid_usd double precision, spot_ask_usd double precision,
+                spot_bid_change_pct double precision, spot_ask_change_pct double precision,
+                derivatives_bid_usd double precision, derivatives_ask_usd double precision,
+                derivatives_bid_change_pct double precision,
+                derivatives_ask_change_pct double precision,
+                large_spot_buy_usd double precision, large_spot_sell_usd double precision,
+                large_derivatives_buy_usd double precision,
+                large_derivatives_sell_usd double precision,
+                source_quality jsonb NOT NULL,
+                PRIMARY KEY(observed_at,symbol))""")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS mayak_v2_coin_symbol_at "
+                "ON mayak_v2.coin_minutes(symbol,observed_at DESC)"
+            )
             db.commit()
 
     def run(self) -> None:
@@ -105,6 +131,7 @@ class Collector:
             snapshot = self.engine.snapshot(now, signals=signals, positions=positions)
             if now.second < 2:
                 snapshot_id = self._persist_snapshot(snapshot)
+                self._persist_coin_minutes(snapshot_id, snapshot)
                 state = str(snapshot["state"])
                 if state != previous_state:
                     self._persist_state_event(snapshot_id, snapshot, previous_state)
@@ -318,6 +345,62 @@ class Collector:
                 ),
             )
             db.commit()
+
+    def _persist_coin_minutes(self, snapshot_id: int, snapshot: dict[str, Any]) -> None:
+        def get(source: dict[str, Any], key: str) -> Any:
+            return source.get(key)
+
+        rows = []
+        for symbol, coin in snapshot.get("coins", {}).items():
+            spot, linear = coin.get("spot") or {}, coin.get("linear") or {}
+            ticker, books = coin.get("ticker") or {}, coin.get("books") or {}
+            spot_book, linear_book = books.get("spot") or {}, books.get("linear") or {}
+            rows.append(
+                (
+                    snapshot["observed_at"],
+                    snapshot_id,
+                    symbol,
+                    get(spot, "buy_usd"),
+                    get(spot, "sell_usd"),
+                    get(spot, "net_usd"),
+                    get(spot, "turnover_usd"),
+                    get(linear, "buy_usd"),
+                    get(linear, "sell_usd"),
+                    get(linear, "net_usd"),
+                    get(linear, "turnover_usd"),
+                    get(linear, "return_pct"),
+                    get(ticker, "open_interest"),
+                    get(ticker, "open_interest_change_pct"),
+                    get(ticker, "funding_rate"),
+                    get(ticker, "mark_price"),
+                    get(ticker, "index_price"),
+                    get(ticker, "long_ratio"),
+                    get(ticker, "short_ratio"),
+                    get(spot_book, "bid_usd"),
+                    get(spot_book, "ask_usd"),
+                    get(spot_book, "bid_change_pct"),
+                    get(spot_book, "ask_change_pct"),
+                    get(linear_book, "bid_usd"),
+                    get(linear_book, "ask_usd"),
+                    get(linear_book, "bid_change_pct"),
+                    get(linear_book, "ask_change_pct"),
+                    get(spot, "large_buy_usd"),
+                    get(spot, "large_sell_usd"),
+                    get(linear, "large_buy_usd"),
+                    get(linear, "large_sell_usd"),
+                    json.dumps(coin.get("quality") or {}, default=str),
+                )
+            )
+        if rows:
+            with psycopg.connect(DSN) as db:
+                db.cursor().executemany(
+                    """INSERT INTO mayak_v2.coin_minutes VALUES(
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(observed_at,symbol) DO NOTHING""",
+                    rows,
+                )
+                db.commit()
 
     def _link_events(self, snapshot_id: int) -> None:
         # Idempotently bind actual fills/exits and signals to the causal snapshot available now.

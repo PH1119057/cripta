@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly schedule for passive Mayak V2 report
+
+[Timer]
+OnCalendar=Fri *-*-* 20:50:00 Asia/Qyzylorda
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
