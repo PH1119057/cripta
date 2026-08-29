@@ -915,6 +915,8 @@ def package_project() -> dict[str, object]:
             ".yml",
             ".md",
             ".txt",
+            ".docx",
+            ".pdf",
         }
         report_suffixes = {".csv", ".json", ".jsonl", ".html", ".md", ".txt", ".log"}
         excluded_parts = {
