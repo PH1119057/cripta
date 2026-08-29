@@ -23,14 +23,9 @@ class SourceQuality(StrEnum):
 class MarketState(StrEnum):
     CALM = "спокойный рынок"
     DIRECTIONAL = "направленное движение"
-    COUNTER_SPIKE = "встречный вынос"
-    FALSE_REVERSAL = "ложный разворот"
     SYNCHRONOUS_DROP = "синхронный пролив"
     SYNCHRONOUS_RISE = "синхронный вынос вверх"
     TRANSITION = "переходный рынок"
-    WHIPSAW = "двусторонняя пила"
-    POSITION_BUILDUP = "накопление позиций"
-    POSITION_REDUCTION = "сокращение позиций"
     MONEY_DIVERGENCE = "денежное расхождение"
 
 
@@ -107,9 +102,7 @@ class LiveMayakEngine:
         }
         self.stamps: dict[tuple[str, str, str], SourceStamp] = defaultdict(SourceStamp)
         self.tickers: dict[str, dict[str, Any]] = {}
-        self.ticker_history: dict[str, deque[tuple[float, float]]] = defaultdict(
-            lambda: deque(maxlen=4000)
-        )
+        self.ticker_history: dict[str, deque[tuple[float, float]]] = defaultdict(deque)
         self.books: dict[tuple[str, str], dict[str, Any]] = {}
         # One compact sample per second preserves the complete 15-minute causal
         # horizon even on very active books, while keeping memory bounded by time
@@ -139,8 +132,12 @@ class LiveMayakEngine:
         }
         if "open_interest" in values and current.get("open_interest", 0) > 0:
             history = self.ticker_history[symbol]
-            history.append((timestamp, current["open_interest"]))
-            while history and history[0][0] < timestamp - 3700:
+            oi_row = (timestamp, current["open_interest"])
+            if history and int(timestamp) == int(history[-1][0]):
+                history[-1] = oi_row
+            else:
+                history.append(oi_row)
+            while history and history[0][0] < timestamp - 3900:
                 history.popleft()
             for minutes in (5, 15, 30, 60):
                 baseline = next(
@@ -332,7 +329,32 @@ class LiveMayakEngine:
         median = breadth.get("median_return_pct")
         confidence = float(snapshot["confidence"])
 
-        def feature(value: str | None, *, available: bool = True) -> dict[str, Any]:
+        coins = snapshot["coins"]
+
+        def source_confidence(market: str, source: str) -> float:
+            fresh = sum(
+                coin["quality"][f"{market}_{source}"]["quality"]
+                == SourceQuality.FRESH
+                for coin in coins.values()
+            )
+            return fresh / max(1, len(coins))
+
+        spot_confidence = source_confidence("spot", "trades")
+        derivatives_confidence = source_confidence("linear", "trades")
+        price_confidence = sum(
+            (
+                coin["quality"]["linear_trades"]["quality"] == SourceQuality.FRESH
+                or coin["quality"]["spot_trades"]["quality"] == SourceQuality.FRESH
+            )
+            for coin in coins.values()
+        ) / max(1, len(coins))
+
+        def feature(
+            value: str | None,
+            *,
+            available: bool = True,
+            feature_confidence: float | None = None,
+        ) -> dict[str, Any]:
             if not available:
                 return {
                     "status": "NO_DATA",
@@ -342,7 +364,7 @@ class LiveMayakEngine:
             return {
                 "value": value,
                 "status": "VALID",
-                "confidence": confidence,
+                "confidence": confidence if feature_confidence is None else feature_confidence,
                 "observed_at": observed_at,
             }
 
@@ -410,14 +432,30 @@ class LiveMayakEngine:
             else "INSUFFICIENT"
         )
         features = {
-            "market.direction": feature(direction(median), available=median is not None),
-            "market.breadth": feature(market_breadth, available=market_breadth is not None),
-            "market.synchronization": feature(sync_value, available=sync_value is not None),
+            "market.direction": feature(
+                direction(median),
+                available=median is not None,
+                feature_confidence=price_confidence,
+            ),
+            "market.breadth": feature(
+                market_breadth,
+                available=market_breadth is not None,
+                feature_confidence=price_confidence,
+            ),
+            "market.synchronization": feature(
+                sync_value,
+                available=sync_value is not None,
+                feature_confidence=price_confidence,
+            ),
             "money.spot_pressure": feature(
-                spot_pressure, available=spot_pressure is not None
+                spot_pressure,
+                available=spot_pressure is not None,
+                feature_confidence=spot_confidence,
             ),
             "money.derivatives_pressure": feature(
-                derivatives_pressure, available=derivatives_pressure is not None
+                derivatives_pressure,
+                available=derivatives_pressure is not None,
+                feature_confidence=derivatives_confidence,
             ),
             "liquidation.intensity": feature(None, available=False),
             "liquidation.acceleration": feature(None, available=False),

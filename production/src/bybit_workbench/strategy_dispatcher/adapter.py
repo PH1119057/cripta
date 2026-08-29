@@ -114,7 +114,12 @@ class MayakSnapshotAdapter:
                 status = _feature_status(item.get("status"))
                 value = item.get("value") if status is FeatureStatus.VALID else None
                 confidence = _clamp01(item.get("confidence"), default=1.0)
-                observed_at = _parse_utc(item.get("observed_at")) or fallback_time
+                parsed_observed_at = _parse_utc(item.get("observed_at"))
+                observed_at = (
+                    parsed_observed_at or fallback_time
+                    if status is FeatureStatus.VALID
+                    else parsed_observed_at
+                )
             else:
                 status = FeatureStatus.VALID
                 value = item

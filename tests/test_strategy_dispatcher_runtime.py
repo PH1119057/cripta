@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from bybit_workbench.strategy_dispatcher import (
     DispatcherDataQuality,
+    FeatureStatus,
     FileDispatcherContextProvider,
     MayakSnapshotAdapter,
     PassiveDispatcherService,
@@ -356,6 +357,19 @@ def test_handoff_schema_explicitly_excludes_strategy_and_position_fields() -> No
     assert "positions" not in properties
     assert "pnl" not in properties
     assert "dispatcher_features" in properties
+
+
+def test_no_data_feature_keeps_missing_observation_time() -> None:
+    payload = canonical_payload()
+    payload["dispatcher_features"]["market.direction"] = {
+        "status": "NO_DATA",
+        "confidence": 0.0,
+        "observed_at": None,
+    }
+    snapshot = MayakSnapshotAdapter().adapt(payload)
+    feature = snapshot.features["market.direction"]
+    assert feature.status is FeatureStatus.NO_DATA
+    assert feature.observed_at is None
 
 
 def test_nested_dispatcher_handoff_isolated_from_outer_mayak_fields() -> None:

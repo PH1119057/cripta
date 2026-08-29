@@ -303,60 +303,6 @@ class Collector:
         asks = sorted(state["a"].items())[:50]
         self.engine.on_book(market, symbol, timestamp, bids, asks)
 
-    def _read_context(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        signals: dict[str, Any] = {"count_30m": 0, "unique_30m": 0, "long_30m": 0, "short_30m": 0}
-        positions: dict[str, Any] = {
-            "count": 0,
-            "long": 0,
-            "short": 0,
-            "below_entry": 0,
-            "worse_0p10": 0,
-            "worse_0p25": 0,
-            "worse_0p50": 0,
-            "worse_0p75": 0,
-        }
-        try:
-            with psycopg.connect(DSN) as db:
-                rows = db.execute(
-                    """SELECT direction,count(*),count(DISTINCT symbol)
-                    FROM monitoring.opportunities
-                    WHERE signal_at_epoch_ms >= %s GROUP BY direction""",
-                    (int((time.time() - 1800) * 1000),),
-                ).fetchall()
-                for direction, count, unique in rows:
-                    signals["count_30m"] += count
-                    signals["unique_30m"] += unique
-                    signals[
-                        "long_30m"
-                        if str(direction).lower() in ("buy", "long", "покупка")
-                        else "short_30m"
-                    ] += count
-                for _symbol, side, entry, payload, size in db.execute(
-                    "SELECT symbol,side,entry_price,payload_json,size FROM runtime.hot_positions"
-                ):
-                    try:
-                        mark = json.loads(payload).get("markPrice")
-                    except (TypeError, json.JSONDecodeError):
-                        mark = None
-                    if float(size or 0) <= 0 or float(entry or 0) <= 0 or float(mark or 0) <= 0:
-                        continue
-                    direction = 1 if str(side).lower() in ("buy", "long") else -1
-                    move = (float(mark) / float(entry) - 1) * 100 * direction
-                    positions["count"] += 1
-                    positions["long" if direction == 1 else "short"] += 1
-                    positions["below_entry"] += move < 0
-                    for threshold, key in (
-                        (-0.10, "worse_0p10"),
-                        (-0.25, "worse_0p25"),
-                        (-0.50, "worse_0p50"),
-                        (-0.75, "worse_0p75"),
-                    ):
-                        positions[key] += move < threshold
-        except psycopg.Error:
-            positions["quality"] = "нет данных"
-            signals["quality"] = "нет данных"
-        return signals, positions
-
     def _persist_snapshot(self, snapshot: dict[str, Any]) -> int:
         with psycopg.connect(DSN) as db:
             row = db.execute(

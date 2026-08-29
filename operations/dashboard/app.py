@@ -917,6 +917,7 @@ def package_project() -> dict[str, object]:
             ".txt",
             ".docx",
             ".pdf",
+            ".json",
         }
         report_suffixes = {".csv", ".json", ".jsonl", ".html", ".md", ".txt", ".log"}
         excluded_parts = {
@@ -960,6 +961,17 @@ def package_project() -> dict[str, object]:
                         add_file(path, f"исходники/{relative.as_posix()}")
                 except (OSError, PermissionError):
                     continue
+            for document_name in (
+                "PROJECT_ARCHITECTURE_RU.md",
+                "MAYAK_ARCHITECTURE_PRINCIPLES_RU.md",
+                "STRATEGY_DISPATCHER_ARCHITECTURE_RU.md",
+            ):
+                document = APP_ROOT / "docs" / document_name
+                if not document.is_file():
+                    raise RuntimeError(
+                        f"обязательный архитектурный документ отсутствует: {document_name}"
+                    )
+                add_file(document, f"исходники/docs/{document_name}")
             for config in Path("/etc/systemd/system").glob("cripta-*.*"):
                 try:
                     add_file(config, f"конфигурация/systemd/{config.name}")
@@ -1053,6 +1065,7 @@ def package_project() -> dict[str, object]:
                 "mayak_v2.coin_minutes",
                 "mayak_v2.events",
                 "mayak_v2.state_events",
+                "mayak_v2.observation_journal",
                 "supervisor.snapshots",
                 "supervisor.transitions",
             )
@@ -1128,11 +1141,67 @@ def package_project() -> dict[str, object]:
                 timeout=10,
                 check=False,
             )
+            branch_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            state_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            static_head = APP_ROOT / "PROJECT_GIT_HEAD.txt"
+            static_state = APP_ROOT / "PROJECT_TREE_STATE.json"
+            commit_sha = (
+                commit_result.stdout.strip()
+                if commit_result.returncode == 0
+                else static_head.read_text(encoding="utf-8").strip()
+                if static_head.is_file()
+                else "UNKNOWN"
+            )
+            if state_result.returncode == 0:
+                branch = branch_result.stdout.strip() or "DETACHED"
+                dirty = bool(state_result.stdout.strip())
+            elif static_state.is_file():
+                saved_state = json.loads(static_state.read_text(encoding="utf-8"))
+                branch = str(saved_state.get("branch") or "UNKNOWN")
+                dirty = bool(saved_state.get("dirty", True))
+            else:
+                branch, dirty = "UNKNOWN", True
+            source_rows = sorted(
+                (
+                    str(item["путь"]),
+                    str(item["sha256"]),
+                )
+                for item in manifest["файлы"]
+                if str(item["путь"]).startswith("исходники/")
+            )
+            source_fingerprint = hashlib.sha256(
+                json.dumps(source_rows, ensure_ascii=False, separators=(",", ":")).encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+            tree_state = {
+                "commit": commit_sha,
+                "branch": branch,
+                "dirty": dirty,
+                "archive_created_at": manifest["создано"],
+                "source_fingerprint": source_fingerprint,
+            }
+            archive.writestr("PROJECT_GIT_HEAD.txt", commit_sha + "\n")
+            archive.writestr(
+                "PROJECT_TREE_STATE.json",
+                json.dumps(tree_state, ensure_ascii=False, indent=2),
+            )
             database_manifest = {
                 "database_dump_created_at": manifest["создано"],
-                "project_commit_fingerprint": (
-                    commit_result.stdout.strip() if commit_result.returncode == 0 else "checkout без .git"
-                ),
+                "project_commit_fingerprint": commit_sha,
+                "project_tree_state": tree_state,
                 "schema_version": "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1",
                 "tables": manifest["таблицы"],
             }

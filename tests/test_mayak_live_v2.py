@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -48,6 +49,14 @@ def test_engine_has_no_trading_mutation_surface() -> None:
     assert not names.intersection({"place_order", "cancel_order", "set_stop", "close_position"})
 
 
+def test_mayak_runner_has_no_trading_context_reader() -> None:
+    runner = Path(__file__).parents[1] / "operations" / "monitoring" / "mayak_v2.py"
+    source = runner.read_text(encoding="utf-8")
+    assert "_read_context" not in source
+    assert "runtime.hot_positions" not in source
+    assert "pnl" not in source.lower()
+
+
 def test_open_interest_uses_causal_horizons_not_previous_message() -> None:
     item = engine()
     now = datetime.now(UTC).timestamp()
@@ -56,6 +65,22 @@ def test_open_interest_uses_causal_horizons_not_previous_message() -> None:
     ticker = item.snapshot(datetime.now(UTC))["coins"]["BTCUSDT"]["ticker"]
     assert ticker["open_interest_change_5m_pct"] == pytest.approx(10)
     assert ticker["open_interest_change_15m_pct"] is None
+
+
+def test_open_interest_retains_all_time_horizons_under_high_message_rate() -> None:
+    item = engine()
+    start = datetime.now(UTC).timestamp()
+    for second in range(3602):
+        for update in range(5):
+            item.on_ticker(
+                "BTCUSDT",
+                start + second + update / 10,
+                open_interest=100 + second / 1000,
+            )
+    ticker = item.tickers["BTCUSDT"]
+    for minutes in (5, 15, 30, 60):
+        assert ticker[f"open_interest_change_{minutes}m_pct"] is not None
+    assert len(item.ticker_history["BTCUSDT"]) <= 3901
 
 
 def test_money_breadth_denominator_uses_actual_coverage() -> None:
@@ -81,6 +106,17 @@ def test_dispatcher_handoff_is_strategy_independent_and_marks_missing_layers() -
     assert first["dispatcher_features"]["liquidation.phase"]["status"] == "NO_DATA"
     forbidden = {"signals", "positions", "pnl", "portfolio", "decision"}
     assert not forbidden.intersection(first)
+
+
+def test_dispatcher_feature_confidence_uses_its_own_source_coverage() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    for symbol in item.symbols:
+        item.on_trade("linear", symbol, now.timestamp(), "Buy", 100, 1)
+    item.on_trade("spot", "BTCUSDT", now.timestamp(), "Buy", 100, 1)
+    features = item.snapshot(now)["dispatcher_handoff"]["dispatcher_features"]
+    assert features["money.derivatives_pressure"]["confidence"] == 1
+    assert features["money.spot_pressure"]["confidence"] == pytest.approx(1 / 3)
 
 
 def test_book_history_retains_time_horizons_independently_of_message_rate() -> None:
