@@ -1,0 +1,544 @@
+{
+  "schema": "strategy-dispatcher-vocabulary-v1",
+  "features": [
+    {
+      "feature_id": "data.quality",
+      "group": "quality",
+      "label_ru": "Качество данных",
+      "kind": "STATUS",
+      "description_ru": "Общая пригодность данных Маяка для интерпретации.",
+      "allowed_values": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "INSUFFICIENT"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.direction",
+      "group": "price",
+      "label_ru": "Направление рынка",
+      "kind": "CATEGORICAL",
+      "description_ru": "Преобладающее направление рынка.",
+      "allowed_values": [
+        "STRONG_UP",
+        "UP",
+        "NEUTRAL",
+        "DOWN",
+        "STRONG_DOWN"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.direction_strength",
+      "group": "price",
+      "label_ru": "Сила направления",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько выражено направленное движение.",
+      "allowed_values": [
+        "NONE",
+        "WEAK",
+        "MODERATE",
+        "STRONG",
+        "EXTREME"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.direction_persistence",
+      "group": "price",
+      "label_ru": "Устойчивость направления",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько долго направление сохраняется.",
+      "allowed_values": [
+        "VERY_LOW",
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "VERY_HIGH"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.move_maturity",
+      "group": "price",
+      "label_ru": "Зрелость движения",
+      "kind": "CATEGORICAL",
+      "description_ru": "Стадия текущего направленного движения.",
+      "allowed_values": [
+        "EMERGING",
+        "DEVELOPING",
+        "MATURE",
+        "LATE",
+        "EXHAUSTING"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.volatility",
+      "group": "regime",
+      "label_ru": "Волатильность",
+      "kind": "CATEGORICAL",
+      "description_ru": "Текущая волатильность относительно собственной нормы рынка.",
+      "allowed_values": [
+        "VERY_LOW",
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "EXTREME"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.volatility_trend",
+      "group": "regime",
+      "label_ru": "Изменение волатильности",
+      "kind": "CATEGORICAL",
+      "description_ru": "Ускоряется или затухает волатильность.",
+      "allowed_values": [
+        "FALLING_FAST",
+        "FALLING",
+        "STABLE",
+        "RISING",
+        "RISING_FAST"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.breadth",
+      "group": "breadth",
+      "label_ru": "Ширина рынка",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько широко направление распространено между активами.",
+      "allowed_values": [
+        "STRONGLY_BULLISH",
+        "BULLISH",
+        "BALANCED",
+        "BEARISH",
+        "STRONGLY_BEARISH"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.synchronization",
+      "group": "breadth",
+      "label_ru": "Синхронность направления",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько одновременно активы движутся в одном направлении.",
+      "allowed_values": [
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "EXTREME"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.range_state",
+      "group": "structure",
+      "label_ru": "Состояние боковика",
+      "kind": "CATEGORICAL",
+      "description_ru": "Фаза общерыночного диапазона.",
+      "allowed_values": [
+        "NONE",
+        "FORMING",
+        "ESTABLISHED",
+        "MATURE",
+        "BREAKING"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.breakout_environment",
+      "group": "structure",
+      "label_ru": "Среда для пробоя",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько среда благоприятна для продолжения выходов из диапазона.",
+      "allowed_values": [
+        "HOSTILE",
+        "WEAK",
+        "NEUTRAL",
+        "FAVORABLE",
+        "STRONG"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "money.pressure",
+      "group": "money",
+      "label_ru": "Денежное давление",
+      "kind": "CATEGORICAL",
+      "description_ru": "Преобладающая сторона реально исполненного денежного потока.",
+      "allowed_values": [
+        "STRONG_BUY",
+        "BUY",
+        "BALANCED",
+        "SELL",
+        "STRONG_SELL"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "money.pressure_acceleration",
+      "group": "money",
+      "label_ru": "Ускорение денежного давления",
+      "kind": "CATEGORICAL",
+      "description_ru": "Усиливается или ослабевает преобладающий денежный поток.",
+      "allowed_values": [
+        "REVERSING",
+        "WEAKENING",
+        "STABLE",
+        "STRENGTHENING",
+        "SURGING"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "money.spot_pressure",
+      "group": "money",
+      "label_ru": "Давление спота",
+      "kind": "CATEGORICAL",
+      "description_ru": "Сторона исполненного денежного потока на спотовом рынке.",
+      "allowed_values": [
+        "STRONG_BUY",
+        "BUY",
+        "BALANCED",
+        "SELL",
+        "STRONG_SELL"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "money.derivatives_pressure",
+      "group": "money",
+      "label_ru": "Давление срочного рынка",
+      "kind": "CATEGORICAL",
+      "description_ru": "Сторона исполненного денежного потока на срочном рынке.",
+      "allowed_values": [
+        "STRONG_BUY",
+        "BUY",
+        "BALANCED",
+        "SELL",
+        "STRONG_SELL"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "money.spot_derivatives_alignment",
+      "group": "money",
+      "label_ru": "Согласие спота и срочного рынка",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько одинаково ведут себя спот и срочный рынок.",
+      "allowed_values": [
+        "STRONGLY_ALIGNED",
+        "ALIGNED",
+        "MIXED",
+        "DIVERGING",
+        "STRONGLY_DIVERGING"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "positioning.oi_regime",
+      "group": "positioning",
+      "label_ru": "Режим открытого интереса",
+      "kind": "CATEGORICAL",
+      "description_ru": "Расширяется или сокращается объём открытых контрактов.",
+      "allowed_values": [
+        "STRONG_CONTRACTION",
+        "CONTRACTING",
+        "STABLE",
+        "EXPANDING",
+        "STRONG_EXPANSION"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "positioning.price_oi_state",
+      "group": "positioning",
+      "label_ru": "Цена и открытый интерес",
+      "kind": "CATEGORICAL",
+      "description_ru": "Каноническое сочетание направления цены и открытого интереса.",
+      "allowed_values": [
+        "PRICE_UP_OI_UP",
+        "PRICE_UP_OI_DOWN",
+        "PRICE_DOWN_OI_UP",
+        "PRICE_DOWN_OI_DOWN",
+        "MIXED"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidity.quality",
+      "group": "liquidity",
+      "label_ru": "Качество ликвидности",
+      "kind": "CATEGORICAL",
+      "description_ru": "Глубина доступной ликвидности относительно нормы.",
+      "allowed_values": [
+        "POOR",
+        "THIN",
+        "NORMAL",
+        "DEEP",
+        "VERY_DEEP"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidity.trend",
+      "group": "liquidity",
+      "label_ru": "Изменение ликвидности",
+      "kind": "CATEGORICAL",
+      "description_ru": "Исчезает или восстанавливается доступная ликвидность.",
+      "allowed_values": [
+        "WITHDRAWING_FAST",
+        "WITHDRAWING",
+        "STABLE",
+        "REPLENISHING",
+        "REPLENISHING_FAST"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidity.absorption",
+      "group": "liquidity",
+      "label_ru": "Поглощение",
+      "kind": "CATEGORICAL",
+      "description_ru": "Наличие поглощения агрессивного потока противоположной стороной.",
+      "allowed_values": [
+        "NONE",
+        "WEAK_BUY",
+        "BUY",
+        "STRONG_BUY",
+        "WEAK_SELL",
+        "SELL",
+        "STRONG_SELL"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidation.intensity",
+      "group": "liquidations",
+      "label_ru": "Интенсивность ликвидаций",
+      "kind": "CATEGORICAL",
+      "description_ru": "Масштаб принудительных ликвидаций относительно нормы.",
+      "allowed_values": [
+        "NONE",
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "EXTREME"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidation.acceleration",
+      "group": "liquidations",
+      "label_ru": "Ускорение ликвидаций",
+      "kind": "CATEGORICAL",
+      "description_ru": "Ускоряется или затухает принудительный поток ликвидаций.",
+      "allowed_values": [
+        "FALLING_FAST",
+        "FALLING",
+        "STABLE",
+        "RISING",
+        "SURGING"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidation.breadth",
+      "group": "liquidations",
+      "label_ru": "Ширина ликвидаций",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько широко ликвидации распространяются между активами.",
+      "allowed_values": [
+        "LOCAL",
+        "LIMITED",
+        "BROAD",
+        "MARKET_WIDE",
+        "SYSTEMIC"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "liquidation.phase",
+      "group": "liquidations",
+      "label_ru": "Фаза ликвидационного процесса",
+      "kind": "CATEGORICAL",
+      "description_ru": "Причинная фаза: накопление напряжения, каскад, истощение или восстановление.",
+      "allowed_values": [
+        "NONE",
+        "TENSION_BUILDING",
+        "CASCADE",
+        "EXHAUSTION",
+        "RECOVERY",
+        "UNCERTAIN"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.exhaustion",
+      "group": "regime",
+      "label_ru": "Истощение движения",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько выражены признаки потери эффективности текущего движения.",
+      "allowed_values": [
+        "NONE",
+        "WEAK",
+        "FORMING",
+        "STRONG",
+        "CONFIRMED"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.continuation_environment",
+      "group": "environment",
+      "label_ru": "Среда продолжения",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько среда поддерживает продолжение текущего движения.",
+      "allowed_values": [
+        "HOSTILE",
+        "WEAK",
+        "NEUTRAL",
+        "FAVORABLE",
+        "STRONG"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.bounce_environment",
+      "group": "environment",
+      "label_ru": "Среда отскока",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько сформирована среда для отскока после сильного движения.",
+      "allowed_values": [
+        "HOSTILE",
+        "EARLY",
+        "FORMING",
+        "FAVORABLE",
+        "STRONG"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.chaos",
+      "group": "regime",
+      "label_ru": "Хаотичность",
+      "kind": "CATEGORICAL",
+      "description_ru": "Частота противоречивых движений и нестабильность краткосрочного режима.",
+      "allowed_values": [
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "EXTREME"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.transition_speed",
+      "group": "regime",
+      "label_ru": "Скорость смены режима",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько быстро рынок переходит между режимами.",
+      "allowed_values": [
+        "STABLE",
+        "SLOW_CHANGE",
+        "TRANSITIONING",
+        "FAST_CHANGE",
+        "VIOLENT_CHANGE"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.regime_stability",
+      "group": "regime",
+      "label_ru": "Стабильность режима",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько устойчив текущий режим.",
+      "allowed_values": [
+        "VERY_LOW",
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "VERY_HIGH"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "btc.state",
+      "group": "anchors",
+      "label_ru": "Состояние BTC",
+      "kind": "CATEGORICAL",
+      "description_ru": "Направление и сила опорного актива BTC.",
+      "allowed_values": [
+        "STRONG_UP",
+        "UP",
+        "NEUTRAL",
+        "DOWN",
+        "STRONG_DOWN"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "eth.state",
+      "group": "anchors",
+      "label_ru": "Состояние ETH",
+      "kind": "CATEGORICAL",
+      "description_ru": "Направление и сила опорного актива ETH.",
+      "allowed_values": [
+        "STRONG_UP",
+        "UP",
+        "NEUTRAL",
+        "DOWN",
+        "STRONG_DOWN"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "market.timeframe_alignment",
+      "group": "regime",
+      "label_ru": "Согласие временных горизонтов",
+      "kind": "CATEGORICAL",
+      "description_ru": "Насколько 1/5/15/60-минутные картины согласованы.",
+      "allowed_values": [
+        "CONFLICTING",
+        "MIXED",
+        "PARTIAL",
+        "ALIGNED",
+        "STRONGLY_ALIGNED"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "event.context",
+      "group": "events",
+      "label_ru": "Событийный фон",
+      "kind": "CATEGORICAL",
+      "description_ru": "Положение относительно объективно известного внешнего события.",
+      "allowed_values": [
+        "NONE",
+        "UPCOMING",
+        "IMMINENT",
+        "ACTIVE",
+        "POST_EVENT"
+      ],
+      "unit": null
+    },
+    {
+      "feature_id": "event.importance",
+      "group": "events",
+      "label_ru": "Значимость события",
+      "kind": "CATEGORICAL",
+      "description_ru": "Оценка заранее определённой значимости внешнего события.",
+      "allowed_values": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "EXTREME"
+      ],
+      "unit": null
+    }
+  ]
+}

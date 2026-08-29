@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "profile_id": "reference.exhaustion_bounce",
+  "version": "0.2",
+  "display_name_ru": "Среда истощения и отскока — исследовательский пример",
+  "description_ru": "Не является live-правилом. Профиль включается только для replay/shadow после отдельного исследования.",
+  "rules": [
+    {"feature_id":"data.quality","mode":"REQUIRED","operator":"ONE_OF","expected":["HIGH"],"reason_ru":"нужны качественные данные"},
+    {"feature_id":"liquidation.phase","mode":"PREFERRED","operator":"ONE_OF","expected":["EXHAUSTION","RECOVERY"],"weight":2.0,"reason_ru":"предпочтительно истощение каскада"},
+    {"feature_id":"market.exhaustion","mode":"PREFERRED","operator":"ONE_OF","expected":["STRONG","CONFIRMED"],"reason_ru":"нужны признаки истощения"},
+    {"feature_id":"market.bounce_environment","mode":"PREFERRED","operator":"ONE_OF","expected":["FAVORABLE","STRONG"],"reason_ru":"среда отскока должна сформироваться"},
+    {"feature_id":"liquidation.acceleration","mode":"REJECTED","operator":"ONE_OF","expected":["SURGING"],"reason_ru":"ускоряющийся каскад ещё не является истощением"}
+  ]
+}

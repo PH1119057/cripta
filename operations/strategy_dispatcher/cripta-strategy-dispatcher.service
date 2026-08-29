@@ -1,0 +1,28 @@
+[Unit]
+Description=Cripta passive strategy dispatcher (read-only consumer of Mayak)
+After=cripta-mayak-v2.service
+Wants=cripta-mayak-v2.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/production/src
+ExecStart=/usr/bin/python3 -m bybit_workbench.strategy_dispatcher.cli serve --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/var/lib/cripta/mayak_v2 /srv/cripta/config/strategy_dispatcher
+ReadWritePaths=/var/lib/cripta/strategy_dispatcher
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "profile_id": "reference.breakout",
+  "version": "0.2",
+  "display_name_ru": "Среда продолжения пробоя — исследовательский пример",
+  "description_ru": "Не является live-правилом. Профиль демонстрирует требования к среде пробоя.",
+  "rules": [
+    {"feature_id":"data.quality","mode":"REQUIRED","operator":"ONE_OF","expected":["HIGH"],"reason_ru":"нужны качественные данные"},
+    {"feature_id":"market.breakout_environment","mode":"PREFERRED","operator":"ONE_OF","expected":["FAVORABLE","STRONG"],"weight":2.0,"reason_ru":"среда должна поддерживать пробой"},
+    {"feature_id":"market.direction_strength","mode":"PREFERRED","operator":"ONE_OF","expected":["STRONG","EXTREME"],"reason_ru":"предпочтительно выраженное направление"},
+    {"feature_id":"market.continuation_environment","mode":"PREFERRED","operator":"ONE_OF","expected":["FAVORABLE","STRONG"],"reason_ru":"должно подтверждаться продолжение"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "profile_id": "reference.conservative_calm",
+  "version": "0.2",
+  "display_name_ru": "Спокойная консервативная среда — исследовательский пример",
+  "description_ru": "Не является live-правилом. Показывает декларативный контракт среды.",
+  "rules": [
+    {"feature_id":"data.quality","mode":"REQUIRED","operator":"ONE_OF","expected":["HIGH"],"reason_ru":"нужны качественные данные"},
+    {"feature_id":"market.volatility","mode":"PREFERRED","operator":"ONE_OF","expected":["LOW","NORMAL"],"weight":2.0,"reason_ru":"предпочтительна умеренная волатильность"},
+    {"feature_id":"market.synchronization","mode":"PREFERRED","operator":"ONE_OF","expected":["LOW","NORMAL"],"reason_ru":"предпочтительна невысокая синхронность"},
+    {"feature_id":"market.chaos","mode":"REJECTED","operator":"ONE_OF","expected":["EXTREME"],"reason_ru":"экстремальный хаос противоречит профилю"},
+    {"feature_id":"liquidation.phase","mode":"REJECTED","operator":"ONE_OF","expected":["CASCADE"],"reason_ru":"развивающийся каскад противоречит профилю"}
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "enabled": false,
+  "profile_id": "replace.me",
+  "version": "0.1",
+  "display_name_ru": "Название профиля среды",
+  "description_ru": "Описание того, какой внешний рынок требуется стратегии. Не правила Entry.",
+  "rules": [
+    {
+      "feature_id": "data.quality",
+      "mode": "REQUIRED",
+      "operator": "ONE_OF",
+      "expected": [
+        "HIGH"
+      ],
+      "weight": 1.0,
+      "reason_ru": "для решения нужны качественные данные"
+    }
+  ]
+}
