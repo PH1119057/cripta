@@ -864,9 +864,10 @@ def snapshot() -> dict[str, object]:
 
 
 def package_project() -> dict[str, object]:
-    """Create a clean source-and-trading evidence archive for the last 72 hours."""
+    """Create a clean source-and-trading evidence archive with a full PostgreSQL dump."""
     if not _package_lock.acquire(blocking=False):
         raise RuntimeError("другой архив проекта уже формируется")
+    database_dump_path: Path | None = None
     try:
         now = time.time()
         cutoff_seconds, cutoff_ms = now - 72 * 3600, int((now - 72 * 3600) * 1000)
@@ -878,6 +879,11 @@ def package_project() -> dict[str, object]:
             "создано": time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(now)),
             "период_торговых_данных": "последние 72 часа",
             "назначение": "исходный код проекта и сведения для разбора реальной торговли",
+            "postgresql": {
+                "охват": "полная логическая копия базы cripta на момент упаковки",
+                "формат": "pg_dump custom",
+                "восстановление": "см. postgresql/ВОССТАНОВЛЕНИЕ.txt",
+            },
             "файлы": [],
             "таблицы": [],
             "исключено": [
@@ -921,8 +927,10 @@ def package_project() -> dict[str, object]:
             partial_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
         ) as archive:
 
-            def add_file(path: Path, name: str) -> None:
-                if name in seen or not path.is_file() or path.stat().st_size > 25 * 1024 * 1024:
+            def add_file(
+                path: Path, name: str, *, max_size: int = 25 * 1024 * 1024
+            ) -> None:
+                if name in seen or not path.is_file() or path.stat().st_size > max_size:
                     return
                 digest = hashlib.sha256()
                 with path.open("rb") as source:
@@ -953,6 +961,43 @@ def package_project() -> dict[str, object]:
                     add_file(config, f"конфигурация/nginx/{config.name}")
                 except (OSError, PermissionError):
                     pass
+
+            database_dump_path = REPORT_ROOT / f".cripta_postgresql_{stamp}.dump.partial"
+            pg_dump = shutil.which("pg_dump") or "/usr/bin/pg_dump"
+            dump_result = subprocess.run(
+                [
+                    pg_dump,
+                    "--dbname=dbname=cripta user=cripta host=/var/run/postgresql",
+                    "--format=custom",
+                    "--compress=6",
+                    "--no-owner",
+                    "--no-privileges",
+                    f"--file={database_dump_path}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            if dump_result.returncode != 0 or not database_dump_path.is_file():
+                detail = dump_result.stderr.strip() or "pg_dump не создал файл"
+                raise RuntimeError(f"не удалось выгрузить PostgreSQL: {detail}")
+            add_file(
+                database_dump_path,
+                "postgresql/cripta_full.dump",
+                max_size=512 * 1024 * 1024,
+            )
+            archive.writestr(
+                "postgresql/ВОССТАНОВЛЕНИЕ.txt",
+                "Полная логическая копия PostgreSQL базы cripta.\n\n"
+                "Содержит все схемы, таблицы, данные, последовательности, связи и индексы "
+                "на согласованный момент упаковки. Владельцы объектов и права доступа "
+                "намеренно не переносятся.\n\n"
+                "Пример восстановления в заранее созданную пустую базу:\n"
+                "pg_restore --no-owner --no-privileges --dbname=ИМЯ_БАЗЫ cripta_full.dump\n\n"
+                "Для просмотра состава без восстановления:\n"
+                "pg_restore --list cripta_full.dump\n",
+            )
 
             report_roots = (
                 APP_ROOT / "reports",
@@ -1064,6 +1109,8 @@ def package_project() -> dict[str, object]:
             "tables": manifest["таблицы"],
         }
     finally:
+        if database_dump_path is not None:
+            database_dump_path.unlink(missing_ok=True)
         _package_lock.release()
 
 
