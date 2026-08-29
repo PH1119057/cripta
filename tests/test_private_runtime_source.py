@@ -39,6 +39,13 @@ def test_command_worker_has_fail_closed_portfolio_and_market_gates() -> None:
         assert symbol in source
 
 
+def test_mayak_policy_is_shadow_only_for_live_entry() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert 'configured_entry_policy = str(settings[9] or "base_entry_v1")' in source
+    assert 'entry_policy = "base_entry_v1"' in source
+    assert 'details["mayak_live_influence"] = False' in source
+
+
 def test_command_loop_restarts_after_internal_failure() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -55,3 +62,10 @@ def test_trailing_stop_does_not_depend_on_automatic_break_even_toggle() -> None:
     assert "protection_entries = completed_entries if settings and settings[6] else []" in source
     assert "for entry_id, symbol in completed_entries:" in source
     assert 'required_protection = protection_plan(' in source
+
+
+def test_trailing_stop_is_idempotent_for_current_position() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert '"not modified" not in str(exc).lower()' in source
+    assert "already_enabled = connection.execute" in source
+    assert "requested_at_epoch_ms >= %s" in source

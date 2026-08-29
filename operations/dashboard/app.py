@@ -336,6 +336,13 @@ def live_trading_state() -> dict[str, object]:
         connection.execute(
             "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'"
         )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS runtime.trade_settings_history(
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            changed_at_epoch_ms BIGINT NOT NULL, old_settings JSONB NOT NULL,
+            new_settings JSONB NOT NULL, source TEXT NOT NULL, origin TEXT NOT NULL,
+            settings_version TEXT NOT NULL)"""
+        )
         connection.commit()
         settings = connection.execute(
             "SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1"
@@ -1038,12 +1045,14 @@ def package_project() -> dict[str, object]:
                 "runtime.hot_positions",
                 "runtime.wallet_latest",
                 "runtime.trade_settings",
+                "runtime.trade_settings_history",
                 "runtime.entry_decisions",
                 "mayak_v2.snapshots",
                 "mayak_v2.coin_minutes",
                 "mayak_v2.events",
                 "mayak_v2.state_events",
                 "supervisor.snapshots",
+                "supervisor.transitions",
             )
             time_names = (
                 "exec_time_ms",
@@ -1090,14 +1099,45 @@ def package_project() -> dict[str, object]:
                         json.dumps(dict(zip(columns, row)), ensure_ascii=False, default=str) + "\n"
                         for row in rows
                     )
-                    archive.writestr(f"торговая_база/{table}.jsonl", output)
+                    export_path = f"торговая_база/{table}.jsonl"
+                    archive.writestr(export_path, output)
+                    timestamps = [
+                        row[columns.index(time_column)]
+                        for row in rows
+                        if time_column and row[columns.index(time_column)] is not None
+                    ]
                     manifest["таблицы"].append(
                         {
+                            "schema": schema,
                             "таблица": table,
+                            "table": table_name,
                             "строк": len(rows),
+                            "row_count": len(rows),
+                            "min_timestamp": str(min(timestamps)) if timestamps else None,
+                            "max_timestamp": str(max(timestamps)) if timestamps else None,
+                            "exported_jsonl": export_path,
                             "ограничение": "72 часа" if time_column else "текущий снимок",
                         }
                     )
+            commit_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            database_manifest = {
+                "database_dump_created_at": manifest["создано"],
+                "project_commit_fingerprint": (
+                    commit_result.stdout.strip() if commit_result.returncode == 0 else "checkout без .git"
+                ),
+                "schema_version": "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1",
+                "tables": manifest["таблицы"],
+            }
+            archive.writestr(
+                "postgresql/DATABASE_MANIFEST.json",
+                json.dumps(database_manifest, ensure_ascii=False, indent=2),
+            )
             archive.writestr("МАНИФЕСТ.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         partial_path.replace(final_path)
         return {
@@ -1320,6 +1360,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "dbname=cripta user=cripta host=/var/run/postgresql"
                 ) as connection:
                     if path == "/api/live/settings":
+                        old_settings = connection.execute(
+                            "SELECT to_jsonb(t) FROM runtime.trade_settings t WHERE singleton=1"
+                        ).fetchone()
                         stake, leverage = (
                             float(request.get("stake_usdt", 0)),
                             int(request.get("leverage", 0)),
@@ -1351,6 +1394,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             raise ValueError("недопустимый отступ плавающего стопа")
                         if entry_policy not in {"base_entry_v1", "market_guard_v1"}:
                             raise ValueError("неизвестное правило автоматического входа")
+                        changed_at_ms = int(time.time() * 1000)
                         connection.execute(
                             "UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,auto_trailing_stop=%s,trailing_distance_pct=%s,entry_policy=%s,updated_at_epoch_ms=%s WHERE singleton=1",
                             (
@@ -1363,7 +1407,21 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 auto_trailing_stop,
                                 str(trailing_distance_pct),
                                 entry_policy,
-                                int(time.time() * 1000),
+                                changed_at_ms,
+                            ),
+                        )
+                        new_settings = connection.execute(
+                            "SELECT to_jsonb(t) FROM runtime.trade_settings t WHERE singleton=1"
+                        ).fetchone()
+                        connection.execute(
+                            """INSERT INTO runtime.trade_settings_history(
+                            changed_at_epoch_ms,old_settings,new_settings,source,origin,settings_version)
+                            VALUES(%s,%s,%s,'dashboard','user',%s)""",
+                            (
+                                changed_at_ms,
+                                json.dumps(old_settings[0] if old_settings else {}),
+                                json.dumps(new_settings[0] if new_settings else {}),
+                                str(changed_at_ms),
                             ),
                         )
                     elif path == "/api/live/gate":

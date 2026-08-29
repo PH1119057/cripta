@@ -135,6 +135,16 @@ def initialize(connection: psycopg.Connection) -> None:
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'",
         "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'",
+        """CREATE TABLE IF NOT EXISTS runtime.trade_settings_history(
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            changed_at_epoch_ms BIGINT NOT NULL, old_settings JSONB NOT NULL,
+            new_settings JSONB NOT NULL, source TEXT NOT NULL, origin TEXT NOT NULL,
+            settings_version TEXT NOT NULL)""",
+        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'",
+        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS policy_version TEXT NOT NULL DEFAULT 'entry-policy-v1'",
+        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS settings_version TEXT NOT NULL DEFAULT 'unknown'",
+        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_id BIGINT",
+        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_time TIMESTAMPTZ",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
@@ -153,19 +163,37 @@ def record_entry_decision(
     reason: str,
     **details: object,
 ) -> None:
+    current_settings = connection.execute(
+        "SELECT entry_policy,updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
+    ).fetchone()
+    configured_policy = str(current_settings[0] if current_settings else "base_entry_v1")
+    policy = str(details.pop("entry_policy", "base_entry_v1"))
+    policy_version = str(details.pop("policy_version", "entry-policy-v1"))
+    settings_version = str(
+        details.pop("settings_version", current_settings[1] if current_settings else "unknown")
+    )
+    details["configured_shadow_policy"] = configured_policy
+    details["mayak_live_influence"] = False
+    mayak_snapshot_id = details.pop("mayak_snapshot_id", None)
+    mayak_snapshot_time = details.pop("mayak_snapshot_time", None)
     connection.execute(
         """INSERT INTO runtime.entry_decisions(
                signal_id,symbol,direction,signal_at_epoch_ms,decided_at_epoch_ms,
-               decision,reason,details_json)
-           VALUES(%s,%s,%s,%s,%s,%s,%s,%s)
+               decision,reason,details_json,entry_policy,policy_version,settings_version,
+               mayak_snapshot_id,mayak_snapshot_time)
+           VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
            ON CONFLICT(signal_id) DO UPDATE SET
                decided_at_epoch_ms=excluded.decided_at_epoch_ms,
                decision=excluded.decision,reason=excluded.reason,
-               details_json=excluded.details_json""",
+               details_json=excluded.details_json,entry_policy=excluded.entry_policy,
+               policy_version=excluded.policy_version,settings_version=excluded.settings_version,
+               mayak_snapshot_id=excluded.mayak_snapshot_id,
+               mayak_snapshot_time=excluded.mayak_snapshot_time""",
         (
             str(signal_id), str(symbol), str(direction), int(signal_at_ms),
             int(time.time()*1000), decision, reason,
             json.dumps(details, ensure_ascii=False),
+            policy, policy_version, settings_version, mayak_snapshot_id, mayak_snapshot_time,
         ),
     )
 
@@ -337,7 +365,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             params["trailingStop"] = str(max(distance, tick))
         else:
             params["trailingStop"] = "0"
-        result = api_post("/v5/position/trading-stop", params, key, secret)
+        try:
+            result = api_post("/v5/position/trading-stop", params, key, secret)
+        except RuntimeError as exc:
+            if "not modified" not in str(exc).lower():
+                raise
+            result = {"retCode": 0, "retMsg": "not modified", "idempotent": True}
     elif kind == "entry":
         if position: raise RuntimeError("position already exists")
         existing_orders, _ = api_get(
@@ -460,7 +493,11 @@ def command_worker_loop(key: str, secret: str) -> None:
         settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1").fetchone()
         if settings:
             gate_enabled = bool(gate and gate[0])
-            entry_policy = str(settings[9] or "base_entry_v1")
+            configured_entry_policy = str(settings[9] or "base_entry_v1")
+            # Mayak and market_guard are observation-only until a clean causal
+            # validation proves economic value. Live execution always follows
+            # the unchanged base Entry V1 policy.
+            entry_policy = "base_entry_v1"
             configured=set(json.loads(settings[2]))
             enabled=configured - EXCLUDED_TRADING_SYMBOLS
             now_ms=int(time.time()*1000)
@@ -682,6 +719,17 @@ def command_worker_loop(key: str, secret: str) -> None:
                     (symbol, open_time),
                 ).fetchone()
                 if disabled:
+                    continue
+                already_enabled = connection.execute(
+                    """SELECT 1 FROM runtime.trade_commands
+                       WHERE symbol=%s AND command_type='trailing_stop'
+                         AND state='completed' AND requested_at_epoch_ms >= %s
+                         AND payload_json::jsonb->>'enabled'='true'
+                         AND payload_json::jsonb->>'distance_pct'=%s
+                       LIMIT 1""",
+                    (symbol, open_time, str(trailing_pct)),
+                ).fetchone()
+                if already_enabled:
                     continue
                 retry_bucket = int(time.time() // 5)
                 idempotency_key = (

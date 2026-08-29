@@ -103,8 +103,14 @@ class LiveMayakEngine:
             (market, symbol): TradeWindow() for market in ("spot", "linear") for symbol in symbols
         }
         self.stamps: dict[tuple[str, str, str], SourceStamp] = defaultdict(SourceStamp)
-        self.tickers: dict[str, dict[str, float]] = {}
-        self.books: dict[tuple[str, str], dict[str, float]] = {}
+        self.tickers: dict[str, dict[str, Any]] = {}
+        self.ticker_history: dict[str, deque[tuple[float, float]]] = defaultdict(
+            lambda: deque(maxlen=4000)
+        )
+        self.books: dict[tuple[str, str], dict[str, Any]] = {}
+        self.book_history: dict[
+            tuple[str, str], deque[tuple[float, float, float, float]]
+        ] = defaultdict(lambda: deque(maxlen=4000))
         self.previous_books: dict[tuple[str, str], dict[str, float]] = {}
         self.history: deque[tuple[float, dict[str, float]]] = deque(maxlen=60)
 
@@ -121,11 +127,26 @@ class LiveMayakEngine:
         if symbol not in self.symbols:
             return
         prior = self.tickers.get(symbol, {})
-        current = {**prior, **{key: value for key, value in values.items() if value is not None}}
-        if "open_interest" in prior and "open_interest" in current and prior["open_interest"]:
-            current["open_interest_change_pct"] = (
-                current["open_interest"] / prior["open_interest"] - 1
-            ) * 100
+        current: dict[str, Any] = {
+            **prior,
+            **{key: value for key, value in values.items() if value is not None},
+        }
+        if "open_interest" in values and current.get("open_interest", 0) > 0:
+            history = self.ticker_history[symbol]
+            history.append((timestamp, current["open_interest"]))
+            while history and history[0][0] < timestamp - 3700:
+                history.popleft()
+            for minutes in (5, 15, 30, 60):
+                baseline = next(
+                    (value for at, value in reversed(history) if at <= timestamp - minutes * 60),
+                    None,
+                )
+                current[f"open_interest_change_{minutes}m_pct"] = (
+                    (current["open_interest"] / baseline - 1) * 100
+                    if baseline and baseline > 0
+                    else None
+                )
+            current["open_interest_change_pct"] = current["open_interest_change_5m_pct"]
         self.tickers[symbol] = current
         stamp = self.stamps[("linear", symbol, "ticker")]
         stamp.observed_at, stamp.stale_seconds = timestamp, 45
@@ -144,7 +165,7 @@ class LiveMayakEngine:
         old = self.books.get(key)
         bid = sum(price * size for price, size in bids if price > 0 and size > 0)
         ask = sum(price * size for price, size in asks if price > 0 and size > 0)
-        current = {
+        current: dict[str, Any] = {
             "bid_usd": bid,
             "ask_usd": ask,
             "imbalance": (bid - ask) / (bid + ask) if bid + ask else 0.0,
@@ -154,6 +175,23 @@ class LiveMayakEngine:
             current["ask_change_pct"] = (ask / old["ask_usd"] - 1) * 100 if old["ask_usd"] else 0.0
             self.previous_books[key] = old
         self.books[key] = current
+        history = self.book_history[key]
+        history.append((timestamp, bid, ask, current["imbalance"]))
+        while history and history[0][0] < timestamp - 1000:
+            history.popleft()
+        for minutes in (1, 5, 15):
+            baseline = next(
+                (row for row in reversed(history) if row[0] <= timestamp - minutes * 60), None
+            )
+            for name, value, index in (("bid", bid, 1), ("ask", ask, 2)):
+                current[f"{name}_change_{minutes}m_pct"] = (
+                    (value / baseline[index] - 1) * 100
+                    if baseline and baseline[index] > 0
+                    else None
+                )
+            current[f"imbalance_change_{minutes}m"] = (
+                current["imbalance"] - baseline[3] if baseline else None
+            )
         stamp = self.stamps[(market, symbol, "book")]
         stamp.observed_at, stamp.stale_seconds = timestamp, 8
 
@@ -179,9 +217,10 @@ class LiveMayakEngine:
                 returns[symbol] = float(ret)
             spot_sells += spot["net_usd"] is not None and spot["net_usd"] < 0
             future_sells += linear["net_usd"] is not None and linear["net_usd"] < 0
-            oi_up += bool(ticker and ticker.get("open_interest_change_pct", 0) > 0)
+            oi_up += bool(ticker and (ticker.get("open_interest_change_5m_pct") or 0) > 0)
             bid_withdrawal += any(
-                bool(book and book.get("bid_change_pct", 0) < -5) for book in books.values()
+                bool(book and (book.get("bid_change_5m_pct") or 0) < -5)
+                for book in books.values()
             )
             quality = {}
             for market, source in (
@@ -201,21 +240,43 @@ class LiveMayakEngine:
                 "books": books,
                 "quality": quality,
             }
-        total = max(1, len(self.symbols))
+        valid_spot = sum(
+            coin["spot"]["net_usd"] is not None for coin in coins.values()
+        )
+        valid_linear = sum(
+            coin["linear"]["net_usd"] is not None for coin in coins.values()
+        )
+        valid_oi = sum(
+            bool(coin["ticker"] and coin["ticker"].get("open_interest_change_5m_pct") is not None)
+            for coin in coins.values()
+        )
+        valid_books = sum(
+            any(
+                book and book.get("bid_change_5m_pct") is not None
+                for book in coin["books"].values()
+            )
+            for coin in coins.values()
+        )
         valid = max(1, len(returns))
         up = sum(value > 0 for value in returns.values())
         down = sum(value < 0 for value in returns.values())
         money_breadth = {
-            "spot_sales_share": spot_sells / total,
-            "derivatives_sales_share": future_sells / total,
-            "open_interest_growth_share": oi_up / total,
-            "buyer_liquidity_withdrawal_share": bid_withdrawal / total,
+            "spot_sales_share": spot_sells / valid_spot if valid_spot else None,
+            "spot_coverage": {"valid": valid_spot, "total": len(self.symbols)},
+            "derivatives_sales_share": future_sells / valid_linear if valid_linear else None,
+            "derivatives_coverage": {"valid": valid_linear, "total": len(self.symbols)},
+            "open_interest_growth_share": oi_up / valid_oi if valid_oi else None,
+            "open_interest_coverage": {"valid": valid_oi, "total": len(self.symbols)},
+            "buyer_liquidity_withdrawal_share": (
+                bid_withdrawal / valid_books if valid_books else None
+            ),
+            "book_coverage": {"valid": valid_books, "total": len(self.symbols)},
         }
         agreement = max(up, down) / valid
         median = statistics.median(returns.values()) if returns else None
-        correlation = self._synchronization(returns)
+        synchronization = self._synchronization(returns)
         state, reasons = self._classify(
-            median, agreement, correlation, money_breadth, positions or {}
+            median, agreement, synchronization, money_breadth, positions or {}
         )
         fresh = sum(row["quality"] == SourceQuality.FRESH for row in source_rows)
         confidence = fresh / max(1, len(source_rows))
@@ -235,7 +296,7 @@ class LiveMayakEngine:
                 "median_return_pct": median,
             },
             "money_breadth": money_breadth,
-            "correlation": correlation,
+            "direction_synchronization": synchronization,
             "signals": signals or {},
             "positions": positions or {},
             "coins": coins,
@@ -263,7 +324,7 @@ class LiveMayakEngine:
         median: float | None,
         agreement: float,
         correlation: dict[str, float | None],
-        money: dict[str, float],
+        money: dict[str, Any],
         positions: dict[str, Any],
     ) -> tuple[MarketState, list[str]]:
         if median is None:
@@ -281,7 +342,14 @@ class LiveMayakEngine:
             ]
         if (
             abs(median) < 0.10
-            and max(money["spot_sales_share"], money["derivatives_sales_share"]) >= 0.7
+            and max(
+                [
+                    value
+                    for value in (money["spot_sales_share"], money["derivatives_sales_share"])
+                    if value is not None
+                ]
+                or [0.0]
+            ) >= 0.7
         ):
             return MarketState.MONEY_DIVERGENCE, [
                 "цена почти стоит",

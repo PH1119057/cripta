@@ -223,6 +223,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     registry = SupervisorRegistry()
+    last_periodic_save: dict[str, int] = {}
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         initialize(connection)
         while running:
@@ -237,20 +238,26 @@ def main() -> None:
                 )
                 document = snapshot.audit_dict()
                 at_ms = int(now.timestamp() * 1000)
-                connection.execute(
-                    """INSERT INTO supervisor.snapshots(
-                    observed_at_epoch_ms,position_id,symbol,state,shadow_action,snapshot_json)
-                    VALUES(%s,%s,%s,%s,%s,%s)""",
-                    (
-                        at_ms,
-                        position.position_id,
-                        position.symbol,
-                        snapshot.state.value,
-                        snapshot.shadow_action,
-                        json.dumps(document, ensure_ascii=False),
-                    ),
-                )
-                if snapshot.previous_state != snapshot.state:
+                state_changed = snapshot.previous_state != snapshot.state
+                should_persist = state_changed or at_ms - last_periodic_save.get(
+                    position.position_id, 0
+                ) >= 60_000
+                if should_persist:
+                    connection.execute(
+                        """INSERT INTO supervisor.snapshots(
+                        observed_at_epoch_ms,position_id,symbol,state,shadow_action,snapshot_json)
+                        VALUES(%s,%s,%s,%s,%s,%s)""",
+                        (
+                            at_ms,
+                            position.position_id,
+                            position.symbol,
+                            snapshot.state.value,
+                            snapshot.shadow_action,
+                            json.dumps(document, ensure_ascii=False),
+                        ),
+                    )
+                    last_periodic_save[position.position_id] = at_ms
+                if state_changed:
                     connection.execute(
                         """INSERT INTO supervisor.transitions(
                         observed_at_epoch_ms,position_id,symbol,old_state,new_state,reason,

@@ -12,7 +12,10 @@ from .models import (
     SupervisorState,
 )
 
-MANDATORY = ("structure", "price_1m", "flow", "absorption", "orderbook", "oi_price")
+# Structure and per-symbol open interest are useful optional evidence, but their
+# absence must not hold the entire read-only supervisor in permanent BLOCKED.
+MANDATORY = ("price_1m", "flow", "absorption", "orderbook")
+CAUSAL_FEATURES = ("structure", "price_1m", "flow", "absorption", "orderbook", "oi_price")
 
 
 def _directional_move(identity: PositionIdentity, price: Decimal) -> Decimal:
@@ -112,12 +115,12 @@ class PositionSupervisor:
         adverse = sum(
             states.get(name)
             in {"against", "broken", "persistent_adverse", "withdrawal", "failed_reclaim"}
-            for name in MANDATORY
+            for name in CAUSAL_FEATURES
         )
         recovery = sum(
             states.get(name)
             in {"reclaim", "recovery", "absorption", "replenishment", "favorable_recovery"}
-            for name in MANDATORY
+            for name in CAUSAL_FEATURES
         )
         favorable = sum(
             states.get(name) in {"with", "continuation", "favorable", "replenishment"}

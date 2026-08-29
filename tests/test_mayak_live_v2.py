@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from bybit_workbench.mayak.core.live import LiveMayakEngine, MarketState, SourceQuality
 
 
@@ -44,3 +46,25 @@ def test_book_withdrawal_and_recovery_are_measured() -> None:
 def test_engine_has_no_trading_mutation_surface() -> None:
     names = set(dir(LiveMayakEngine))
     assert not names.intersection({"place_order", "cancel_order", "set_stop", "close_position"})
+
+
+def test_open_interest_uses_causal_horizons_not_previous_message() -> None:
+    item = engine()
+    now = datetime.now(UTC).timestamp()
+    item.on_ticker("BTCUSDT", now - 301, open_interest=100)
+    item.on_ticker("BTCUSDT", now, open_interest=110)
+    ticker = item.snapshot(datetime.now(UTC))["coins"]["BTCUSDT"]["ticker"]
+    assert ticker["open_interest_change_5m_pct"] == pytest.approx(10)
+    assert ticker["open_interest_change_15m_pct"] is None
+
+
+def test_money_breadth_denominator_uses_actual_coverage() -> None:
+    item = engine()
+    now = datetime.now(UTC).timestamp()
+    item.on_trade("spot", "BTCUSDT", now, "Sell", 100, 1)
+    item.on_trade("linear", "BTCUSDT", now, "Buy", 100, 1)
+    snapshot = item.snapshot(datetime.now(UTC))
+    assert snapshot["money_breadth"]["spot_sales_share"] == 1
+    assert snapshot["money_breadth"]["spot_coverage"] == {"valid": 1, "total": 3}
+    assert "correlation" not in snapshot
+    assert "direction_synchronization" in snapshot

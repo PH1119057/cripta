@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/srv/cripta/research_runs/universal_entry_v1/source_stage/src
+Environment=PYTHONPATH=/srv/cripta/production/src
 ExecStart=/usr/bin/python3 /srv/cripta/monitoring/mayak_v2.py
 Restart=always
 RestartSec=5
