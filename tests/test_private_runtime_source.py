@@ -48,3 +48,10 @@ def test_command_loop_restarts_after_internal_failure() -> None:
     )
     assert any(isinstance(node, ast.Try) for node in ast.walk(command_loop))
     assert "command_worker_loop(key, secret)" in source
+
+
+def test_trailing_stop_does_not_depend_on_automatic_break_even_toggle() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "protection_entries = completed_entries if settings and settings[6] else []" in source
+    assert "for entry_id, symbol in completed_entries:" in source
+    assert 'required_protection = protection_plan(' in source

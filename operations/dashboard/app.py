@@ -993,6 +993,12 @@ def package_project() -> dict[str, object]:
                 "runtime.hot_positions",
                 "runtime.wallet_latest",
                 "runtime.trade_settings",
+                "runtime.entry_decisions",
+                "mayak_v2.snapshots",
+                "mayak_v2.coin_minutes",
+                "mayak_v2.events",
+                "mayak_v2.state_events",
+                "supervisor.snapshots",
             )
             time_names = (
                 "exec_time_ms",
@@ -1006,28 +1012,33 @@ def package_project() -> dict[str, object]:
                 "created_at_epoch_ms",
                 "started_at_epoch_ms",
                 "refreshed_at_epoch_ms",
+                "decided_at_epoch_ms",
+                "observed_at_epoch_ms",
+                "observed_at",
+                "occurred_at",
             )
             with psycopg.connect(
                 "dbname=cripta user=cripta host=/var/run/postgresql"
             ) as connection:
                 for table in tables:
                     schema, table_name = table.split(".")
-                    columns = [
-                        row[0]
-                        for row in connection.execute(
-                            "SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
-                            (schema, table_name),
-                        )
-                    ]
+                    column_rows = connection.execute(
+                        "SELECT column_name,data_type FROM information_schema.columns WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
+                        (schema, table_name),
+                    ).fetchall()
+                    columns = [row[0] for row in column_rows]
+                    column_types = {row[0]: row[1] for row in column_rows}
                     if not columns:
                         continue
                     time_column = next((name for name in time_names if name in columns), None)
                     query, parameters = f'SELECT * FROM "{schema}"."{table_name}"', ()
                     if time_column:
-                        query, parameters = (
-                            query + f' WHERE "{time_column}" >= %s ORDER BY "{time_column}"',
-                            (cutoff_ms,),
-                        )
+                        if column_types[time_column].startswith("timestamp"):
+                            query += f' WHERE "{time_column}" >= to_timestamp(%s) ORDER BY "{time_column}"'
+                            parameters = (cutoff_seconds,)
+                        else:
+                            query += f' WHERE "{time_column}" >= %s ORDER BY "{time_column}"'
+                            parameters = (cutoff_ms,)
                     cursor = connection.execute(query, parameters)
                     rows = cursor.fetchall()
                     output = "".join(

@@ -598,9 +598,8 @@ def command_worker_loop(key: str, secret: str) -> None:
                 VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
                 (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1]}),int(time.time()*1000)))
         connection.commit()
-        if not settings or not settings[6]:
-            completed_entries = []
-        for entry_id,symbol in completed_entries:
+        protection_entries = completed_entries if settings and settings[6] else []
+        for entry_id,symbol in protection_entries:
             position_row=connection.execute("SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",(symbol,)).fetchone()
             if not position_row: continue
             raw=json.loads(position_row[2]); entry=Decimal(str(position_row[1])); mark=executable_close_price(str(symbol), str(position_row[0]))
@@ -645,17 +644,31 @@ def command_worker_loop(key: str, secret: str) -> None:
                     continue
                 entry = Decimal(str(position_row[1]))
                 mark = executable_close_price(str(symbol), str(position_row[0]))
-                protected_stop = Decimal(str(raw.get("stopLoss") or 0))
-                if entry <= 0 or mark <= 0 or protected_stop <= 0:
+                if entry <= 0 or mark <= 0:
                     continue
                 side = str(position_row[0])
-                profit_is_protected = (
-                    (side == "Buy" and protected_stop >= entry)
-                    or (side == "Sell" and protected_stop <= entry)
-                )
+                tick = _tick_cache.get(str(symbol))
+                if not tick:
+                    instruments, _ = api_get(
+                        "/v5/market/instruments-info",
+                        {"category": "linear", "symbol": symbol},
+                    )
+                    instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
+                    tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
+                    if tick <= 0:
+                        continue
+                    _tick_cache[str(symbol)] = tick
+                position = dict(raw)
+                position.update({"side": side, "avgPrice": str(entry)})
+                required_protection = protection_plan(
+                    connection, str(symbol), position, tick
+                )["stop"]
                 distance = mark * trailing_pct / Decimal("100")
-                if not profit_is_protected or not trailing_start_preserves_protection(
-                    side=side, mark=mark, distance=distance, protected_stop=protected_stop
+                if not trailing_start_preserves_protection(
+                    side=side,
+                    mark=mark,
+                    distance=distance,
+                    protected_stop=required_protection,
                 ):
                     continue
                 open_time = int(raw.get("openTime") or 0)
