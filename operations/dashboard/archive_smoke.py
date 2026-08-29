@@ -11,6 +11,11 @@ from pathlib import Path
 REQUIRED = (
     "исходники/config/strategy_dispatcher/MAYAK_HANDOFF_SCHEMA_V1.json",
     "исходники/config/strategy_dispatcher/PROFILE_SCHEMA_V1.json",
+    "исходники/config/strategy_dispatcher/PROFILE_TEMPLATE_RU.json",
+    "исходники/config/strategy_dispatcher/vocabulary_v1.json",
+    "исходники/config/strategy_dispatcher/profiles/reference_breakout.json",
+    "исходники/config/strategy_dispatcher/profiles/reference_conservative_calm.json",
+    "исходники/config/strategy_dispatcher/profiles/reference_exhaustion_bounce.json",
     "исходники/docs/PROJECT_ARCHITECTURE_RU.md",
     "исходники/docs/MAYAK_ARCHITECTURE_PRINCIPLES_RU.md",
     "исходники/docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md",
