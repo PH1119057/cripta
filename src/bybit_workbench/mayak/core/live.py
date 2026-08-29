@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import statistics
 import threading
@@ -27,7 +29,6 @@ class MarketState(StrEnum):
     SYNCHRONOUS_RISE = "синхронный вынос вверх"
     TRANSITION = "переходный рынок"
     WHIPSAW = "двусторонняя пила"
-    CORRELATED_RISK = "высокая корреляция риска"
     POSITION_BUILDUP = "накопление позиций"
     POSITION_REDUCTION = "сокращение позиций"
     MONEY_DIVERGENCE = "денежное расхождение"
@@ -93,6 +94,8 @@ class SourceStamp:
 
 
 class LiveMayakEngine:
+    ARCHITECTURE_VERSION = "1.0"
+    FEATURE_VERSION = "external-market-observer-v1"
     """Pure, causal, read-only market observer. It has no execution dependency."""
 
     VERSION = "mayak-v2.1"
@@ -108,9 +111,12 @@ class LiveMayakEngine:
             lambda: deque(maxlen=4000)
         )
         self.books: dict[tuple[str, str], dict[str, Any]] = {}
+        # One compact sample per second preserves the complete 15-minute causal
+        # horizon even on very active books, while keeping memory bounded by time
+        # instead of by an exchange-dependent number of websocket updates.
         self.book_history: dict[
             tuple[str, str], deque[tuple[float, float, float, float]]
-        ] = defaultdict(lambda: deque(maxlen=4000))
+        ] = defaultdict(deque)
         self.previous_books: dict[tuple[str, str], dict[str, float]] = {}
         self.history: deque[tuple[float, dict[str, float]]] = deque(maxlen=60)
 
@@ -176,7 +182,11 @@ class LiveMayakEngine:
             self.previous_books[key] = old
         self.books[key] = current
         history = self.book_history[key]
-        history.append((timestamp, bid, ask, current["imbalance"]))
+        row = (timestamp, bid, ask, current["imbalance"])
+        if history and int(timestamp) == int(history[-1][0]):
+            history[-1] = row
+        else:
+            history.append(row)
         while history and history[0][0] < timestamp - 1000:
             history.popleft()
         for minutes in (1, 5, 15):
@@ -195,13 +205,7 @@ class LiveMayakEngine:
         stamp = self.stamps[(market, symbol, "book")]
         stamp.observed_at, stamp.stale_seconds = timestamp, 8
 
-    def snapshot(
-        self,
-        now: datetime,
-        *,
-        signals: dict[str, Any] | None = None,
-        positions: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    def snapshot(self, now: datetime) -> dict[str, Any]:
         now_ts = now.timestamp()
         coins: dict[str, Any] = {}
         returns: dict[str, float] = {}
@@ -275,14 +279,26 @@ class LiveMayakEngine:
         agreement = max(up, down) / valid
         median = statistics.median(returns.values()) if returns else None
         synchronization = self._synchronization(returns)
-        state, reasons = self._classify(
-            median, agreement, synchronization, money_breadth, positions or {}
-        )
+        state, reasons = self._classify(median, agreement, synchronization, money_breadth)
         fresh = sum(row["quality"] == SourceQuality.FRESH for row in source_rows)
         confidence = fresh / max(1, len(source_rows))
-        return {
+        snapshot = {
             "observed_at": now.isoformat(),
+            "architecture_version": self.ARCHITECTURE_VERSION,
             "engine_version": self.VERSION,
+            "feature_version": self.FEATURE_VERSION,
+            "config_fingerprint": hashlib.sha256(
+                json.dumps(
+                    {
+                        "symbols": self.symbols,
+                        "architecture": self.ARCHITECTURE_VERSION,
+                        "engine": self.VERSION,
+                        "features": self.FEATURE_VERSION,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest(),
             "state": state,
             "confidence": round(confidence, 3),
             "reasons": reasons,
@@ -297,13 +313,137 @@ class LiveMayakEngine:
             },
             "money_breadth": money_breadth,
             "direction_synchronization": synchronization,
-            "signals": signals or {},
-            "positions": positions or {},
             "coins": coins,
             "external_exchange_flows": {
                 "quality": SourceQuality.UNAVAILABLE,
                 "reason": "Bybit не публикует совокупные вводы и выводы клиентов",
             },
+        }
+        snapshot["dispatcher_handoff"] = self._dispatcher_handoff(snapshot)
+        return snapshot
+
+    @staticmethod
+    def _dispatcher_handoff(snapshot: dict[str, Any]) -> dict[str, Any]:
+        """Build the objective read-only Mayak -> Dispatcher contract."""
+        observed_at = str(snapshot["observed_at"])
+        breadth = snapshot["price_breadth"]
+        money = snapshot["money_breadth"]
+        synchronization = snapshot["direction_synchronization"]
+        median = breadth.get("median_return_pct")
+        confidence = float(snapshot["confidence"])
+
+        def feature(value: str | None, *, available: bool = True) -> dict[str, Any]:
+            if not available:
+                return {
+                    "status": "NO_DATA",
+                    "confidence": 0.0,
+                    "observed_at": None,
+                }
+            return {
+                "value": value,
+                "status": "VALID",
+                "confidence": confidence,
+                "observed_at": observed_at,
+            }
+
+        def direction(value: float | None) -> str | None:
+            if value is None:
+                return None
+            if value >= 0.35:
+                return "STRONG_UP"
+            if value >= 0.10:
+                return "UP"
+            if value <= -0.35:
+                return "STRONG_DOWN"
+            if value <= -0.10:
+                return "DOWN"
+            return "NEUTRAL"
+
+        def pressure(sales_share: float | None) -> str | None:
+            if sales_share is None:
+                return None
+            if sales_share >= 0.75:
+                return "STRONG_SELL"
+            if sales_share >= 0.55:
+                return "SELL"
+            if sales_share <= 0.25:
+                return "STRONG_BUY"
+            if sales_share <= 0.45:
+                return "BUY"
+            return "BALANCED"
+
+        up_share = breadth.get("up_share")
+        market_breadth = None
+        if up_share is not None:
+            market_breadth = (
+                "STRONGLY_BULLISH"
+                if up_share >= 0.75
+                else "BULLISH"
+                if up_share >= 0.55
+                else "STRONGLY_BEARISH"
+                if up_share <= 0.25
+                else "BEARISH"
+                if up_share <= 0.45
+                else "BALANCED"
+            )
+        agreement = synchronization.get("agreement")
+        sync_value = None
+        if agreement is not None:
+            sync_value = (
+                "EXTREME"
+                if agreement >= 0.85
+                else "HIGH"
+                if agreement >= 0.65
+                else "NORMAL"
+                if agreement >= 0.35
+                else "LOW"
+            )
+        spot_pressure = pressure(money.get("spot_sales_share"))
+        derivatives_pressure = pressure(money.get("derivatives_sales_share"))
+        data_quality = (
+            "HIGH"
+            if confidence >= 0.90
+            else "MEDIUM"
+            if confidence >= 0.65
+            else "LOW"
+            if confidence >= 0.25
+            else "INSUFFICIENT"
+        )
+        features = {
+            "market.direction": feature(direction(median), available=median is not None),
+            "market.breadth": feature(market_breadth, available=market_breadth is not None),
+            "market.synchronization": feature(sync_value, available=sync_value is not None),
+            "money.spot_pressure": feature(
+                spot_pressure, available=spot_pressure is not None
+            ),
+            "money.derivatives_pressure": feature(
+                derivatives_pressure, available=derivatives_pressure is not None
+            ),
+            "liquidation.intensity": feature(None, available=False),
+            "liquidation.acceleration": feature(None, available=False),
+            "liquidation.breadth": feature(None, available=False),
+            "liquidation.phase": feature(None, available=False),
+            "event.context": feature(None, available=False),
+            "event.importance": feature(None, available=False),
+        }
+        identity = json.dumps(
+            {
+                "observed_at": observed_at,
+                "engine_version": snapshot["engine_version"],
+                "architecture_version": snapshot["architecture_version"],
+                "dispatcher_features": features,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return {
+            "snapshot_id": hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32],
+            "observed_at": observed_at,
+            "engine_version": snapshot["engine_version"],
+            "architecture_version": snapshot["architecture_version"],
+            "data_quality": data_quality,
+            "dispatcher_features": features,
         }
 
     def _synchronization(self, returns: dict[str, float]) -> dict[str, float | None]:
@@ -325,7 +465,6 @@ class LiveMayakEngine:
         agreement: float,
         correlation: dict[str, float | None],
         money: dict[str, Any],
-        positions: dict[str, Any],
     ) -> tuple[MarketState, list[str]]:
         if median is None:
             return MarketState.TRANSITION, ["идёт прогрев ценовых потоков"]
@@ -354,10 +493,6 @@ class LiveMayakEngine:
             return MarketState.MONEY_DIVERGENCE, [
                 "цена почти стоит",
                 "агрессивные продажи преобладают раньше движения цены",
-            ]
-        if positions.get("correlated_risk") and corr >= 0.7:
-            return MarketState.CORRELATED_RISK, [
-                "открытые позиции зависят от одного общего движения"
             ]
         if agreement >= 0.7 and abs(median) >= 0.1:
             return MarketState.DIRECTIONAL, ["широкий рынок движется в одном направлении"]

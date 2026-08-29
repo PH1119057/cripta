@@ -68,3 +68,34 @@ def test_money_breadth_denominator_uses_actual_coverage() -> None:
     assert snapshot["money_breadth"]["spot_coverage"] == {"valid": 1, "total": 3}
     assert "correlation" not in snapshot
     assert "direction_synchronization" in snapshot
+
+
+def test_dispatcher_handoff_is_strategy_independent_and_marks_missing_layers() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    first = item.snapshot(now)["dispatcher_handoff"]
+    second = item.snapshot(now)["dispatcher_handoff"]
+    assert first == second
+    assert first["data_quality"] == "INSUFFICIENT"
+    assert first["dispatcher_features"]["market.direction"]["status"] == "NO_DATA"
+    assert first["dispatcher_features"]["liquidation.phase"]["status"] == "NO_DATA"
+    forbidden = {"signals", "positions", "pnl", "portfolio", "decision"}
+    assert not forbidden.intersection(first)
+
+
+def test_book_history_retains_time_horizons_independently_of_message_rate() -> None:
+    item = engine()
+    start = datetime.now(UTC).timestamp()
+    for second in range(902):
+        for update in range(5):
+            timestamp = start + second + update / 10
+            item.on_book(
+                "linear",
+                "BTCUSDT",
+                timestamp,
+                [(100, 10 + second / 1000)],
+                [(101, 10)],
+            )
+    book = item.books[("linear", "BTCUSDT")]
+    assert book["bid_change_15m_pct"] is not None
+    assert len(item.book_history[("linear", "BTCUSDT")]) <= 1001

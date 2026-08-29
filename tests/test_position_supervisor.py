@@ -69,6 +69,26 @@ def test_missing_and_stale_are_never_neutral() -> None:
     )
 
 
+def test_confidence_is_bounded_by_mandatory_coverage() -> None:
+    engine = PositionSupervisor(identity())
+    snapshot = engine.update(
+        PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), complete())
+    )
+    assert snapshot.confidence == Decimal("1")
+
+
+def test_unknown_optional_structure_is_reported_as_unknown() -> None:
+    engine = PositionSupervisor(identity())
+    evidence = complete()
+    evidence["structure"] = f("unknown", Quality.MISSING)
+    snapshot = engine.update(
+        PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), evidence)
+    )
+    assert snapshot.state == SupervisorState.HEALTHY
+    assert "структурный слой недоступен" in snapshot.reason
+    assert "структура позиции сохраняется" not in snapshot.reason
+
+
 def test_broken_requires_independent_adverse_stack() -> None:
     engine = PositionSupervisor(identity())
     weak = complete(structure="broken")

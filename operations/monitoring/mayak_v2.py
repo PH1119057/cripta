@@ -130,6 +130,30 @@ class Collector:
                 "CREATE INDEX IF NOT EXISTS mayak_v2_coin_symbol_at "
                 "ON mayak_v2.coin_minutes(symbol,observed_at DESC)"
             )
+            db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.observation_journal(
+                snapshot_id bigint PRIMARY KEY REFERENCES mayak_v2.snapshots(id),
+                observed_at timestamptz NOT NULL,
+                market_state text NOT NULL,
+                confidence double precision NOT NULL,
+                reasons jsonb NOT NULL,
+                price_breadth jsonb NOT NULL,
+                money_breadth jsonb NOT NULL,
+                direction_synchronization jsonb NOT NULL,
+                btc_context jsonb,
+                eth_context jsonb,
+                data_quality jsonb NOT NULL,
+                architecture_version text NOT NULL,
+                engine_version text NOT NULL,
+                feature_version text NOT NULL,
+                config_fingerprint text NOT NULL)""")
+            db.execute(
+                "ALTER TABLE mayak_v2.observation_journal "
+                "ADD COLUMN IF NOT EXISTS dispatcher_handoff jsonb"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS mayak_v2_observation_journal_at "
+                "ON mayak_v2.observation_journal(observed_at DESC)"
+            )
             db.commit()
         self._repair_legacy_event_links()
 
@@ -148,13 +172,13 @@ class Collector:
             if time.monotonic() >= next_ratios:
                 threading.Thread(target=self._refresh_ratios, daemon=True).start()
                 next_ratios = time.monotonic() + 300
-            signals, positions = self._read_context()
-            snapshot = self.engine.snapshot(now, signals=signals, positions=positions)
+            snapshot = self.engine.snapshot(now)
             minute = now.replace(second=0, microsecond=0)
             if now.second < 2 and minute != self.last_persisted_minute:
                 snapshot_id = self._persist_snapshot(snapshot)
                 self.last_persisted_minute = minute
                 self._persist_coin_minutes(snapshot_id, snapshot)
+                self._persist_observation_journal(snapshot_id, snapshot)
                 state = str(snapshot["state"])
                 if state != previous_state:
                     self._persist_state_event(snapshot_id, snapshot, previous_state)
@@ -432,6 +456,44 @@ class Collector:
                     rows,
                 )
                 db.commit()
+
+    def _persist_observation_journal(
+        self, snapshot_id: int, snapshot: dict[str, Any]
+    ) -> None:
+        """Persist exactly what Mayak concluded from data available at this moment."""
+        data_quality = {
+            symbol: coin.get("quality", {})
+            for symbol, coin in snapshot.get("coins", {}).items()
+        }
+        with psycopg.connect(DSN) as db:
+            db.execute(
+                """INSERT INTO mayak_v2.observation_journal(
+                    snapshot_id,observed_at,market_state,confidence,reasons,
+                    price_breadth,money_breadth,direction_synchronization,
+                    btc_context,eth_context,data_quality,architecture_version,
+                    engine_version,feature_version,config_fingerprint,dispatcher_handoff)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(snapshot_id) DO NOTHING""",
+                (
+                    snapshot_id,
+                    snapshot["observed_at"],
+                    str(snapshot["state"]),
+                    snapshot["confidence"],
+                    json.dumps(snapshot["reasons"], default=str),
+                    json.dumps(snapshot["price_breadth"], default=str),
+                    json.dumps(snapshot["money_breadth"], default=str),
+                    json.dumps(snapshot["direction_synchronization"], default=str),
+                    json.dumps(snapshot.get("btc"), default=str),
+                    json.dumps(snapshot.get("eth"), default=str),
+                    json.dumps(data_quality, default=str),
+                    snapshot["architecture_version"],
+                    snapshot["engine_version"],
+                    snapshot["feature_version"],
+                    snapshot["config_fingerprint"],
+                    json.dumps(snapshot["dispatcher_handoff"], default=str),
+                ),
+            )
+            db.commit()
 
     def _link_events(self, snapshot_id: int) -> None:
         # Bind each event only to the newest snapshot that existed at or before the event.

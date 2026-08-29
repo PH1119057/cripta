@@ -126,8 +126,10 @@ class PositionSupervisor:
             states.get(name) in {"with", "continuation", "favorable", "replenishment"}
             for name in MANDATORY
         )
+        # Confidence is the explicit coverage of mandatory current evidence.
+        # Optional layers must never increase a normalized value above one.
         confidence = Decimal(
-            sum(item.quality == Quality.FRESH for item in evidence.values())
+            sum(evidence[name].quality == Quality.FRESH for name in MANDATORY)
         ) / Decimal(len(MANDATORY))
         if (
             states.get("structure") == "broken"
@@ -168,9 +170,16 @@ class PositionSupervisor:
                 "НАБЛЮДАТЬ",
                 confidence,
             )
+        structure = evidence.get("structure")
+        structure_unknown = structure is None or structure.state in {"unknown", "uncalibrated"}
         return (
             SupervisorState.HEALTHY,
-            "структура позиции сохраняется, подтверждённого неблагоприятного стека нет",
+            (
+                "подтверждённого ухудшения по доступным признакам нет; "
+                "структурный слой недоступен"
+                if structure_unknown
+                else "структура позиции сохраняется, подтверждённого неблагоприятного стека нет"
+            ),
             "УДЕРЖИВАТЬ",
             confidence,
         )
