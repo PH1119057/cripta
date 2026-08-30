@@ -1,7 +1,7 @@
 [Unit]
 Description=Cripta passive strategy dispatcher (read-only consumer of Mayak)
-After=cripta-mayak-v2.service
-Wants=cripta-mayak-v2.service
+After=cripta-mayak-v2.service postgresql.service
+Wants=cripta-mayak-v2.service postgresql.service
 
 [Service]
 Type=simple
@@ -9,7 +9,7 @@ User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/cripta/production/src
-ExecStart=/usr/bin/python3 -m bybit_workbench.strategy_dispatcher.cli serve --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/strategy_dispatcher_passive.py --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher --poll-seconds 60
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
