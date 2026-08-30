@@ -419,6 +419,8 @@ def _logs(output: Path, cutoff: datetime, since: datetime | None) -> dict[str, A
             if since:
                 command += ["--since", since.isoformat()]
             result = subprocess.run(command, capture_output=True, text=True, check=False)
+            if result.returncode != 0 or "No journal files were opened" in result.stderr:
+                raise RuntimeError(f"journalctl недоступен для {service}: {result.stderr.strip()}")
             archive.writestr(
                 service + ".log",
                 result.stdout + ("\nSTDERR:\n" + result.stderr if result.stderr else ""),

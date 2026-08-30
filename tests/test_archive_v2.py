@@ -47,7 +47,7 @@ def test_bundle_verification_detects_changed_component(tmp_path: Path) -> None:
                 "bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
             }
-        ]
+        ],
     }
     bundle = tmp_path / "bundle.zip"
     with zipfile.ZipFile(bundle, "w") as outer:
@@ -112,6 +112,19 @@ def test_postgres_dump_failure_is_fail_closed(
     monkeypatch.setattr(archive_v2.subprocess, "run", lambda *args, **kwargs: Result())
     with pytest.raises(RuntimeError, match="database unavailable"):
         archive_v2._postgres_dump(tmp_path / "failed.dump", datetime.now(UTC))
+
+
+def test_unreadable_system_journal_is_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Result:
+        returncode = 1
+        stdout = ""
+        stderr = "No journal files were opened due to insufficient permissions."
+
+    monkeypatch.setattr(archive_v2.subprocess, "run", lambda *args, **kwargs: Result())
+    with pytest.raises(RuntimeError, match="journalctl недоступен"):
+        archive_v2._logs(tmp_path / "logs.zip", datetime.now(UTC), None)
 
 
 def test_json_state_write_is_atomic_and_leaves_no_temporary_file(tmp_path: Path) -> None:
