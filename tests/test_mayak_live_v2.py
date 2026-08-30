@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from bybit_workbench.mayak.core.live import LiveMayakEngine, MarketState, SourceQuality
+from bybit_workbench.mayak.core.live import (
+    InstrumentAvailability,
+    LiveMayakEngine,
+    MarketState,
+    SourceQuality,
+)
 
 
 def engine() -> LiveMayakEngine:
@@ -111,12 +116,46 @@ def test_dispatcher_handoff_is_strategy_independent_and_marks_missing_layers() -
 def test_dispatcher_feature_confidence_uses_its_own_source_coverage() -> None:
     item = engine()
     now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.set_instrument_support("spot", {"BTCUSDT"})
+    item.on_transport("linear", connected=True, timestamp=now.timestamp())
+    item.on_transport("spot", connected=True, timestamp=now.timestamp())
     for symbol in item.symbols:
         item.on_trade("linear", symbol, now.timestamp(), "Buy", 100, 1)
     item.on_trade("spot", "BTCUSDT", now.timestamp(), "Buy", 100, 1)
     features = item.snapshot(now)["dispatcher_handoff"]["dispatcher_features"]
     assert features["money.derivatives_pressure"]["confidence"] == 1
-    assert features["money.spot_pressure"]["confidence"] == pytest.approx(1 / 3)
+    assert features["money.spot_pressure"]["confidence"] == 1
+
+
+def test_transport_health_is_independent_from_market_trade_activity() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("spot", {"BTCUSDT"})
+    item.on_transport("spot", connected=True, timestamp=now.timestamp())
+    snapshot = item.snapshot(now)
+    coin = snapshot["coins"]["BTCUSDT"]
+    assert snapshot["transport"]["spot"]["quality"] == SourceQuality.FRESH
+    assert coin["quality"]["spot_trades"]["quality"] == SourceQuality.FRESH
+    assert coin["quality"]["spot_trades"]["activity_quality"] == SourceQuality.WARMUP
+
+
+def test_spot_availability_distinguishes_unsupported_and_temporary_outage() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("spot", {"BTCUSDT"})
+    unavailable = item.snapshot(now)["coins"]
+    assert (
+        unavailable["BTCUSDT"]["availability"]["spot"]
+        == InstrumentAvailability.TEMPORARILY_UNAVAILABLE
+    )
+    assert (
+        unavailable["ADAUSDT"]["availability"]["spot"]
+        == InstrumentAvailability.UNSUPPORTED
+    )
+    item.on_transport("spot", connected=True, timestamp=now.timestamp())
+    available = item.snapshot(now)["coins"]
+    assert available["BTCUSDT"]["availability"]["spot"] == InstrumentAvailability.SUPPORTED
 
 
 def test_book_history_retains_time_horizons_independently_of_message_rate() -> None:

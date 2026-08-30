@@ -159,6 +159,7 @@ class Collector:
 
     def run(self) -> None:
         self.prepare()
+        self._refresh_instrument_support()
         threads = [
             threading.Thread(target=self._socket_loop, args=(market,), daemon=True)
             for market in ("spot", "linear")
@@ -213,12 +214,33 @@ class Collector:
             except (OSError, ValueError, KeyError, IndexError, TypeError):
                 continue
 
+    def _refresh_instrument_support(self) -> None:
+        for market in ("spot", "linear"):
+            try:
+                query = urllib.parse.urlencode({"category": market, "limit": 1000})
+                request = urllib.request.Request(
+                    f"https://api.bybit.kz/v5/market/instruments-info?{query}",
+                    headers={"User-Agent": "Cripta-Mayak-V2-read-only"},
+                )
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    payload = json.load(response)
+                rows = payload.get("result", {}).get("list", [])
+                supported = {
+                    str(row["symbol"])
+                    for row in rows
+                    if str(row.get("status") or "Trading") == "Trading"
+                }
+                self.engine.set_instrument_support(market, supported)
+            except (OSError, ValueError, KeyError, TypeError):
+                self.engine.set_instrument_support(market, None)
+
     def _socket_loop(self, market: str) -> None:
         while not self.stop.is_set():
             sock = None
             try:
                 sock = websocket.create_connection(WS[market], timeout=10)
                 sock.settimeout(1)
+                self.engine.on_transport(market, connected=True, timestamp=time.time())
                 topics = [
                     topic
                     for symbol in self.symbols
@@ -233,6 +255,7 @@ class Collector:
                     try:
                         message = json.loads(sock.recv())
                         if isinstance(message, dict):
+                            self.engine.on_transport(market, connected=True, timestamp=time.time())
                             self._message(market, message)
                     except websocket.WebSocketTimeoutException:
                         pass
@@ -240,6 +263,9 @@ class Collector:
                         sock.send('{"op":"ping"}')
                         ping = time.monotonic() + 20
             except Exception as exc:
+                self.engine.on_transport(
+                    market, connected=False, timestamp=time.time(), error=type(exc).__name__
+                )
                 self._write_error(market, exc)
                 self.stop.wait(3)
             finally:

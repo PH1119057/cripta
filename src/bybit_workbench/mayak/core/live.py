@@ -20,6 +20,13 @@ class SourceQuality(StrEnum):
     UNAVAILABLE = "источник не подключён"
 
 
+class InstrumentAvailability(StrEnum):
+    WARMUP = "WARMUP"
+    SUPPORTED = "SUPPORTED"
+    UNSUPPORTED = "UNSUPPORTED"
+    TEMPORARILY_UNAVAILABLE = "TEMPORARILY_UNAVAILABLE"
+
+
 class MarketState(StrEnum):
     CALM = "спокойный рынок"
     DIRECTIONAL = "направленное движение"
@@ -101,6 +108,14 @@ class LiveMayakEngine:
             (market, symbol): TradeWindow() for market in ("spot", "linear") for symbol in symbols
         }
         self.stamps: dict[tuple[str, str, str], SourceStamp] = defaultdict(SourceStamp)
+        self.transport: dict[str, dict[str, Any]] = {
+            market: {"connected": False, "observed_at": None, "error": None}
+            for market in ("spot", "linear")
+        }
+        self.instrument_support: dict[str, set[str] | None] = {
+            "spot": None,
+            "linear": None,
+        }
         self.tickers: dict[str, dict[str, Any]] = {}
         self.ticker_history: dict[str, deque[tuple[float, float]]] = defaultdict(deque)
         self.books: dict[tuple[str, str], dict[str, Any]] = {}
@@ -112,6 +127,21 @@ class LiveMayakEngine:
         ] = defaultdict(deque)
         self.previous_books: dict[tuple[str, str], dict[str, float]] = {}
         self.history: deque[tuple[float, dict[str, float]]] = deque(maxlen=60)
+
+    def set_instrument_support(self, market: str, symbols: set[str] | None) -> None:
+        if market in self.instrument_support:
+            self.instrument_support[market] = set(symbols) if symbols is not None else None
+
+    def on_transport(
+        self, market: str, *, connected: bool, timestamp: float, error: str | None = None
+    ) -> None:
+        if market not in self.transport:
+            return
+        self.transport[market] = {
+            "connected": connected,
+            "observed_at": timestamp,
+            "error": error,
+        }
 
     def on_trade(
         self, market: str, symbol: str, timestamp: float, side: str, price: float, size: float
@@ -208,6 +238,10 @@ class LiveMayakEngine:
         returns: dict[str, float] = {}
         spot_sells = future_sells = oi_up = bid_withdrawal = 0
         source_rows: list[dict[str, Any]] = []
+        transport = {
+            market: self._transport_description(market, now_ts)
+            for market in ("spot", "linear")
+        }
         for symbol in self.symbols:
             spot = self.trades[("spot", symbol)].metrics(now_ts, 300)
             linear = self.trades[("linear", symbol)].metrics(now_ts, 300)
@@ -223,6 +257,10 @@ class LiveMayakEngine:
                 bool(book and (book.get("bid_change_5m_pct") or 0) < -5)
                 for book in books.values()
             )
+            availability = {
+                market: self._instrument_availability(market, symbol, transport[market])
+                for market in ("spot", "linear")
+            }
             quality = {}
             for market, source in (
                 ("spot", "trades"),
@@ -232,6 +270,14 @@ class LiveMayakEngine:
                 ("linear", "ticker"),
             ):
                 row = self.stamps[(market, symbol, source)].describe(now_ts)
+                row["activity_quality"] = row["quality"]
+                row["transport_quality"] = transport[market]["quality"]
+                if (
+                    source == "trades"
+                    and availability[market] == InstrumentAvailability.SUPPORTED
+                    and transport[market]["quality"] == SourceQuality.FRESH
+                ):
+                    row["quality"] = SourceQuality.FRESH
                 quality[f"{market}_{source}"] = row
                 source_rows.append(row)
             coins[symbol] = {
@@ -240,6 +286,7 @@ class LiveMayakEngine:
                 "ticker": ticker,
                 "books": books,
                 "quality": quality,
+                "availability": availability,
             }
         valid_spot = sum(
             coin["spot"]["net_usd"] is not None for coin in coins.values()
@@ -311,6 +358,7 @@ class LiveMayakEngine:
             "money_breadth": money_breadth,
             "direction_synchronization": synchronization,
             "coins": coins,
+            "transport": transport,
             "external_exchange_flows": {
                 "quality": SourceQuality.UNAVAILABLE,
                 "reason": "Bybit не публикует совокупные вводы и выводы клиентов",
@@ -318,6 +366,37 @@ class LiveMayakEngine:
         }
         snapshot["dispatcher_handoff"] = self._dispatcher_handoff(snapshot)
         return snapshot
+
+    def _transport_description(self, market: str, now: float) -> dict[str, Any]:
+        state = self.transport[market]
+        observed_at = state.get("observed_at")
+        age = max(0.0, now - float(observed_at)) if observed_at is not None else None
+        connected = bool(state.get("connected")) and age is not None and age <= 45
+        quality = (
+            SourceQuality.WARMUP
+            if observed_at is None
+            else SourceQuality.FRESH
+            if connected
+            else SourceQuality.STALE
+        )
+        return {
+            "connected": connected,
+            "quality": quality,
+            "age_seconds": round(age, 1) if age is not None else None,
+            "error": state.get("error"),
+        }
+
+    def _instrument_availability(
+        self, market: str, symbol: str, transport: dict[str, Any]
+    ) -> InstrumentAvailability:
+        supported = self.instrument_support[market]
+        if supported is None:
+            return InstrumentAvailability.WARMUP
+        if symbol not in supported:
+            return InstrumentAvailability.UNSUPPORTED
+        if not transport["connected"]:
+            return InstrumentAvailability.TEMPORARILY_UNAVAILABLE
+        return InstrumentAvailability.SUPPORTED
 
     @staticmethod
     def _dispatcher_handoff(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -332,12 +411,17 @@ class LiveMayakEngine:
         coins = snapshot["coins"]
 
         def source_confidence(market: str, source: str) -> float:
+            eligible = [
+                coin
+                for coin in coins.values()
+                if coin["availability"][market] == InstrumentAvailability.SUPPORTED
+            ]
             fresh = sum(
                 coin["quality"][f"{market}_{source}"]["quality"]
                 == SourceQuality.FRESH
-                for coin in coins.values()
+                for coin in eligible
             )
-            return fresh / max(1, len(coins))
+            return fresh / max(1, len(eligible))
 
         spot_confidence = source_confidence("spot", "trades")
         derivatives_confidence = source_confidence("linear", "trades")
