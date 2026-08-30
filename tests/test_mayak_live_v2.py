@@ -109,7 +109,7 @@ def test_dispatcher_handoff_is_strategy_independent_and_marks_missing_layers() -
     assert first == second
     assert first["data_quality"] == "INSUFFICIENT"
     assert first["dispatcher_features"]["market.direction"]["status"] == "NO_DATA"
-    assert first["dispatcher_features"]["liquidation.phase"]["status"] == "NO_DATA"
+    assert first["dispatcher_features"]["liquidation.phase"]["status"] == "WARMUP"
     forbidden = {"signals", "positions", "pnl", "portfolio", "decision"}
     assert not forbidden.intersection(first)
 
@@ -223,3 +223,40 @@ def test_book_history_retains_time_horizons_independently_of_message_rate() -> N
     book = item.books[("linear", "BTCUSDT")]
     assert book["bid_change_15m_pct"] is not None
     assert len(item.book_history[("linear", "BTCUSDT")]) <= 1001
+
+
+def test_liquidations_stay_in_warmup_then_confirm_real_none() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 901)
+    item.on_transport("linear", connected=True, timestamp=now.timestamp())
+    handoff = item.snapshot(now)["dispatcher_handoff"]["dispatcher_features"]
+    assert handoff["liquidation.intensity"]["status"] == "VALID"
+    assert handoff["liquidation.intensity"]["value"] == "NONE"
+    assert handoff["liquidation.intensity"]["observed_at"] == now.isoformat()
+
+
+def test_liquidation_metrics_use_only_causal_prior_minutes() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 901)
+    item.on_transport("linear", connected=True, timestamp=now.timestamp())
+    item.on_liquidation("BTCUSDT", now.timestamp() - 10, "Buy", 100, 2)
+    snapshot = item.snapshot(now)
+    metrics = snapshot["liquidations"]
+    assert metrics["long_liquidated_1m_usd"] == 200
+    assert metrics["short_liquidated_1m_usd"] == 0
+    assert metrics["intensity"] == "EXTREME"
+    assert metrics["acceleration"] == "SURGING"
+    assert metrics["phase"] == "CASCADE"
+    features = snapshot["dispatcher_handoff"]["dispatcher_features"]
+    assert features["liquidation.phase"]["value"] == "CASCADE"
+
+
+def test_mayak_runner_subscribes_and_persists_all_liquidations() -> None:
+    runner = Path(__file__).parents[1] / "operations" / "monitoring" / "mayak_v2.py"
+    source = runner.read_text(encoding="utf-8")
+    assert "allLiquidation.{symbol}" in source
+    assert "mayak_v2.liquidations" in source

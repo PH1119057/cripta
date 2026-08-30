@@ -62,6 +62,8 @@ class Collector:
         self.books: dict[tuple[str, str], dict[str, dict[float, float]]] = {}
         self.last_snapshot: dict[str, Any] | None = None
         self.last_persisted_minute: datetime | None = None
+        self.pending_liquidations: list[tuple[float, str, str, float, float]] = []
+        self.liquidation_lock = threading.Lock()
 
     def prepare(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -154,6 +156,19 @@ class Collector:
                 "CREATE INDEX IF NOT EXISTS mayak_v2_observation_journal_at "
                 "ON mayak_v2.observation_journal(observed_at DESC)"
             )
+            db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.liquidations(
+                occurred_at timestamptz NOT NULL,
+                symbol text NOT NULL,
+                position_side text NOT NULL,
+                bankruptcy_price double precision NOT NULL,
+                executed_size double precision NOT NULL,
+                notional_usd double precision NOT NULL,
+                source text NOT NULL DEFAULT 'bybit_all_liquidation_v5',
+                PRIMARY KEY(occurred_at,symbol,position_side,bankruptcy_price,executed_size))""")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS mayak_v2_liquidations_at "
+                "ON mayak_v2.liquidations(occurred_at DESC)"
+            )
             db.commit()
         self._repair_legacy_event_links()
 
@@ -178,6 +193,7 @@ class Collector:
             if now.second < 2 and minute != self.last_persisted_minute:
                 snapshot_id = self._persist_snapshot(snapshot)
                 self.last_persisted_minute = minute
+                self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
                 state = str(snapshot["state"])
@@ -248,6 +264,7 @@ class Collector:
                 ]
                 if market == "linear":
                     topics.extend(f"tickers.{symbol}" for symbol in self.symbols)
+                    topics.extend(f"allLiquidation.{symbol}" for symbol in self.symbols)
                 for start in range(0, len(topics), 30):
                     sock.send(json.dumps({"op": "subscribe", "args": topics[start : start + 30]}))
                 ping = time.monotonic() + 20
@@ -301,6 +318,19 @@ class Collector:
                     if data.get(source) not in (None, ""):
                         values[target] = float(data[source])
             self.engine.on_ticker(symbol, timestamp, **values)
+        elif topic.startswith("allLiquidation.") and isinstance(data, list):
+            for row in data:
+                with suppress(KeyError, TypeError, ValueError):
+                    occurred_at = float(row["T"]) / 1000
+                    symbol = str(row["s"])
+                    side = str(row["S"])
+                    price = float(row["p"])
+                    size = float(row["v"])
+                    self.engine.on_liquidation(symbol, occurred_at, side, price, size)
+                    with self.liquidation_lock:
+                        self.pending_liquidations.append(
+                            (occurred_at, symbol, side, price, size)
+                        )
         elif topic.startswith("orderbook.") and isinstance(data, dict):
             self._book(
                 market,
@@ -348,11 +378,30 @@ class Collector:
             ).fetchone()
             if row is None:
                 row = db.execute(
-                    "SELECT id FROM mayak_v2.snapshots WHERE regular_minute=date_trunc('minute',%s::timestamptz) AND snapshot_kind='REGULAR'",
+                    """SELECT id FROM mayak_v2.snapshots
+                    WHERE regular_minute=date_trunc('minute',%s::timestamptz)
+                    AND snapshot_kind='REGULAR'""",
                     (snapshot["observed_at"],),
                 ).fetchone()
             db.commit()
             return int(row[0])
+
+    def _persist_liquidations(self) -> None:
+        with self.liquidation_lock:
+            pending = tuple(self.pending_liquidations)
+        if not pending:
+            return
+        with psycopg.connect(DSN) as db:
+            db.executemany(
+                """INSERT INTO mayak_v2.liquidations(
+                    occurred_at,symbol,position_side,bankruptcy_price,executed_size,notional_usd)
+                    VALUES(to_timestamp(%s),%s,%s,%s,%s,%s)
+                    ON CONFLICT DO NOTHING""",
+                [(*row, row[3] * row[4]) for row in pending],
+            )
+            db.commit()
+        with self.liquidation_lock:
+            del self.pending_liquidations[: len(pending)]
 
     def _persist_state_event(
         self, snapshot_id: int, snapshot: dict[str, Any], previous: str | None

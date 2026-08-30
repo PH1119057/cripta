@@ -82,6 +82,110 @@ class TradeWindow:
 
 
 @dataclass(slots=True)
+class LiquidationWindow:
+    rows: deque[tuple[float, str, str, float]] = field(default_factory=deque)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def add(self, timestamp: float, symbol: str, side: str, usd: float) -> None:
+        with self.lock:
+            self.rows.append((timestamp, symbol, side, usd))
+            while self.rows and self.rows[0][0] < timestamp - 86400:
+                self.rows.popleft()
+
+    def metrics(
+        self, now: float, symbols: tuple[str, ...], connected_since: float | None
+    ) -> dict[str, Any]:
+        if connected_since is None or now - connected_since < 900:
+            return {
+                "status": "WARMUP",
+                "observed_at": None,
+                "intensity": None,
+                "acceleration": None,
+                "breadth": None,
+                "phase": None,
+            }
+        with self.lock:
+            rows = tuple(self.rows)
+        current = [row for row in rows if row[0] >= now - 60]
+        prior = [row for row in rows if now - 960 <= row[0] < now - 60]
+        current_usd = sum(row[3] for row in current)
+        completed_minutes = []
+        for offset in range(1, 16):
+            lower = now - (offset + 1) * 60
+            upper = now - offset * 60
+            completed_minutes.append(sum(row[3] for row in prior if lower <= row[0] < upper))
+        ordered = sorted(completed_minutes)
+        p50, p90, p99 = ordered[7], ordered[13], ordered[14]
+        if current_usd == 0:
+            intensity = "NONE"
+        elif current_usd <= p50:
+            intensity = "LOW"
+        elif current_usd <= p90:
+            intensity = "NORMAL"
+        elif current_usd <= p99:
+            intensity = "HIGH"
+        else:
+            intensity = "EXTREME"
+        previous_average = sum(completed_minutes[:5]) / 5
+        if previous_average == 0:
+            acceleration = "STABLE" if current_usd == 0 else "SURGING"
+        else:
+            ratio = current_usd / previous_average
+            acceleration = (
+                "FALLING_FAST"
+                if ratio <= 0.5
+                else "FALLING"
+                if ratio < 0.9
+                else "SURGING"
+                if ratio >= 2.0
+                else "RISING"
+                if ratio > 1.1
+                else "STABLE"
+            )
+        active = {row[1] for row in rows if row[0] >= now - 300}
+        share = len(active) / max(1, len(symbols))
+        breadth = (
+            "LOCAL"
+            if share <= 0.05
+            else "LIMITED"
+            if share <= 0.2
+            else "BROAD"
+            if share <= 0.5
+            else "MARKET_WIDE"
+            if share <= 0.8
+            else "SYSTEMIC"
+        )
+        phase = (
+            "NONE"
+            if intensity == "NONE"
+            else "CASCADE"
+            if intensity in {"HIGH", "EXTREME"} and acceleration in {"RISING", "SURGING"}
+            else "EXHAUSTION"
+            if intensity in {"HIGH", "EXTREME"}
+            and acceleration in {"FALLING", "FALLING_FAST"}
+            else "TENSION_BUILDING"
+            if acceleration in {"RISING", "SURGING"}
+            else "RECOVERY"
+            if acceleration in {"FALLING", "FALLING_FAST"}
+            else "UNCERTAIN"
+        )
+        latest = max((row[0] for row in rows), default=None)
+        return {
+            "status": "VALID",
+            "observed_at": latest,
+            "intensity": intensity,
+            "acceleration": acceleration,
+            "breadth": breadth,
+            "phase": phase,
+            "current_1m_usd": current_usd,
+            "long_liquidated_1m_usd": sum(row[3] for row in current if row[2] == "Buy"),
+            "short_liquidated_1m_usd": sum(row[3] for row in current if row[2] == "Sell"),
+            "active_symbols_5m": len(active),
+            "universe_size": len(symbols),
+        }
+
+
+@dataclass(slots=True)
 class SourceStamp:
     observed_at: float | None = None
     expected_seconds: int = 2
@@ -127,6 +231,7 @@ class LiveMayakEngine:
         ] = defaultdict(deque)
         self.previous_books: dict[tuple[str, str], dict[str, float]] = {}
         self.history: deque[tuple[float, dict[str, float]]] = deque(maxlen=60)
+        self.liquidations = LiquidationWindow()
 
     def set_instrument_support(self, market: str, symbols: set[str] | None) -> None:
         if market in self.instrument_support:
@@ -141,7 +246,21 @@ class LiveMayakEngine:
             "connected": connected,
             "observed_at": timestamp,
             "error": error,
+            "connected_since": (
+                self.transport[market].get("connected_since")
+                if connected and self.transport[market].get("connected")
+                else timestamp
+                if connected
+                else None
+            ),
         }
+
+    def on_liquidation(
+        self, symbol: str, timestamp: float, side: str, price: float, size: float
+    ) -> None:
+        if symbol not in self.symbols or side not in {"Buy", "Sell"} or price <= 0 or size <= 0:
+            return
+        self.liquidations.add(timestamp, symbol, side, price * size)
 
     def on_trade(
         self, market: str, symbol: str, timestamp: float, side: str, price: float, size: float
@@ -242,6 +361,11 @@ class LiveMayakEngine:
             market: self._transport_description(market, now_ts)
             for market in ("spot", "linear")
         }
+        liquidations = self.liquidations.metrics(
+            now_ts,
+            self.symbols,
+            self.transport["linear"].get("connected_since"),
+        )
         for symbol in self.symbols:
             spot = self.trades[("spot", symbol)].metrics(now_ts, 300)
             linear = self.trades[("linear", symbol)].metrics(now_ts, 300)
@@ -364,6 +488,7 @@ class LiveMayakEngine:
             },
             "money_breadth": money_breadth,
             "direction_synchronization": synchronization,
+            "liquidations": liquidations,
             "coins": coins,
             "transport": transport,
             "external_exchange_flows": {
@@ -412,6 +537,7 @@ class LiveMayakEngine:
         breadth = snapshot["price_breadth"]
         money = snapshot["money_breadth"]
         synchronization = snapshot["direction_synchronization"]
+        liquidations = snapshot["liquidations"]
         median = breadth.get("median_return_pct")
         confidence = float(snapshot["confidence"])
 
@@ -475,6 +601,26 @@ class LiveMayakEngine:
             if value <= -0.10:
                 return "DOWN"
             return "NEUTRAL"
+
+        def liquidation_feature(name: str) -> dict[str, Any]:
+            if liquidations["status"] != "VALID":
+                return {
+                    "status": liquidations["status"],
+                    "confidence": 0.0,
+                    "observed_at": None,
+                }
+            event_at = liquidations.get("observed_at")
+            feature_observed_at = (
+                datetime.fromtimestamp(event_at, UTC).isoformat()
+                if event_at is not None
+                else observed_at
+            )
+            return {
+                "value": liquidations[name],
+                "status": "VALID",
+                "confidence": derivatives_confidence,
+                "observed_at": feature_observed_at,
+            }
 
         def pressure(sales_share: float | None) -> str | None:
             if sales_share is None:
@@ -693,10 +839,10 @@ class LiveMayakEngine:
                 available=timeframe_alignment is not None,
                 feature_confidence=price_confidence,
             ),
-            "liquidation.intensity": feature(None, available=False),
-            "liquidation.acceleration": feature(None, available=False),
-            "liquidation.breadth": feature(None, available=False),
-            "liquidation.phase": feature(None, available=False),
+            "liquidation.intensity": liquidation_feature("intensity"),
+            "liquidation.acceleration": liquidation_feature("acceleration"),
+            "liquidation.breadth": liquidation_feature("breadth"),
+            "liquidation.phase": liquidation_feature("phase"),
             "event.context": feature(None, available=False),
             "event.importance": feature(None, available=False),
             **anchor_features,
