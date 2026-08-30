@@ -438,6 +438,18 @@ def _service_states() -> dict[str, str]:
     return states
 
 
+def _database_schemas() -> list[str]:
+    import psycopg
+
+    with psycopg.connect(DB_DSN) as connection:
+        rows = connection.execute(
+            "SELECT schema_name FROM information_schema.schemata "
+            "WHERE schema_name NOT LIKE 'pg_%' "
+            "AND schema_name <> 'information_schema' ORDER BY schema_name"
+        ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
 def _build(job_id: str) -> Path:
     state = read_job(job_id)
     profile, period = state["profile"], state["period"]
@@ -523,7 +535,7 @@ def _build(job_id: str) -> Path:
     git_head = _git("rev-parse", "HEAD")
     branch = _git("branch", "--show-current") or "main"
     dirty_output = _git("status", "--porcelain")
-    dirty = None if dirty_output is None else bool(dirty_output)
+    dirty = True if dirty_output is None else bool(dirty_output)
     index = {
         "bundle_id": job_id,
         "archive_version": ARCHIVE_VERSION,
@@ -535,8 +547,13 @@ def _build(job_id: str) -> Path:
         "git_head": git_head,
         "branch": branch,
         "dirty": dirty,
+        "tree_state_basis": (
+            "NO_GIT_METADATA_CONSERVATIVE_DIRTY" if dirty_output is None else "GIT_STATUS_PORCELAIN"
+        ),
         "canonical_code_source": str(CODE_ROOT if CODE_ROOT.is_dir() else APP_ROOT),
         "installed_source_fingerprint": code_meta["sha256"],
+        "loaded_versions": {"archive_v2": ARCHIVE_VERSION, "source_commit": git_head},
+        "database_schemas": _database_schemas(),
         "service_states": _service_states(),
         "builder": {"module": "operations.dashboard.archive_v2", "version": ARCHIVE_VERSION},
         "components": components,
