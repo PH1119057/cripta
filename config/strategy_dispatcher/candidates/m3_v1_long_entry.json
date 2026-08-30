@@ -1,0 +1,12 @@
+{
+  "candidate_id": "M3_V1_LONG_ENTRY",
+  "version": "0.1.0-research",
+  "display_name_ru": "M3 V1 — среда нового входа в покупку",
+  "purpose": "ENTRY",
+  "direction": "LONG",
+  "status": "RESEARCH_REQUIRED",
+  "enabled": false,
+  "trading_effect": "NONE",
+  "rules": [],
+  "reason_ru": "Причинные пороги ещё не подтверждены статистикой; исполняемый профиль создавать запрещено."
+}

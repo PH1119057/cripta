@@ -1,0 +1,12 @@
+{
+  "candidate_id": "M3_V1_SHORT_HOLD",
+  "version": "0.1.0-research",
+  "display_name_ru": "M3 V1 — среда удержания продажи",
+  "purpose": "HOLD",
+  "direction": "SHORT",
+  "status": "RESEARCH_REQUIRED",
+  "enabled": false,
+  "trading_effect": "NONE",
+  "rules": [],
+  "reason_ru": "До причинного исследования нельзя решать, когда общерыночное ухудшение оправдывает ранний выход."
+}
