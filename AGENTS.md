@@ -17,6 +17,112 @@
   нейтральное или безопасное состояние.
 
 
+## Обязательный статистический, аудиторский и архивный контракт
+
+- Статистика является частью production-архитектуры, а не необязательным отчётом.
+  Любое новое наблюдение, фильтр, профиль среды, торговая политика, исполнение,
+  сопровождение позиции или исследовательское сравнение должно оставлять
+  причинный и версионированный след, достаточный для последующего независимого
+  воспроизведения решения.
+- Записывать нужно не только итог сделки, но и то, что система реально знала к
+  моменту решения. Future outcome, будущая свеча, будущий snapshot или
+  future-derived признак не могут задним числом становиться частью состояния в T.
+- Для каждого потенциального торгового сигнала, включая отклонённый, ожидающий
+  или не исполненный, статистический след должен позволять восстановить минимум:
+  `signal_id`, время, symbol, side, `strategy_id/version`, fingerprint Entry,
+  causal feature snapshot, ссылку на последний доступный Mayak snapshot,
+  ссылку на применимую оценку Dispatcher с `profile_id/version`, решение,
+  причину, `policy_version` и `settings_version`. Статистическая привязка может
+  выполняться отдельным причинным коррелятором после события по правилу
+  `context_time <= decision_time`; торговый runtime не должен зависеть от
+  доступности пассивных слоёв только ради журналирования. Если слой ещё не
+  подключён, отсутствие ссылки фиксируется явно; нельзя подставлять фиктивное
+  значение.
+- Различать два типа контекста: (1) `OBSERVED_CONTEXT` — какой Mayak/Dispatcher
+  контекст объективно существовал к моменту события и был связан аналитическим
+  коррелятором; (2) `CONSUMED_CONTEXT` — какой конкретный snapshot/assessment
+  торговая стратегия действительно прочитала и использовала в live-решении.
+  Наличие `OBSERVED_CONTEXT` не является доказательством торгового влияния.
+  Для обеих связей хранить link quality/provenance и времена.
+- Для каждого реального исполнения хранить фактические exchange truth:
+  request/response time, exchange/client order IDs, actual avg fill, actual qty,
+  fees, slippage where measurable, funding where applicable, protection IDs и
+  причины отказов/ошибок. Теоретическая цена сигнала не заменяет actual fill.
+- Для каждой реальной позиции сохранять durable handoff и причинную историю:
+  owning Entry/fill, initial stop, protection changes, Supervisor transitions,
+  MFE, MAE, time underwater/time in profit, связанные Mayak snapshots и
+  Dispatcher assessments. После fill Entry не владеет сопровождением позиции.
+- Для каждого выхода сохранять actual exit, exit reason, gross/net PnL, fees,
+  funding, slippage, price move %, R, holding time, MFE/MAE и версию Exit/Risk
+  policy. Production break-even должен быть economic/fee-aware, когда биржа
+  предоставляет необходимые данные.
+- Shadow и advisory-слои обязаны журналировать «что бы они рекомендовали» даже
+  при `trading_effect=NONE`. Это позволяет после факта считать saved losses,
+  lost good trades, destroyed recoveries и дополнительные execution costs до
+  выдачи слою каких-либо live-прав.
+- Любой профиль Dispatcher является версионированным статистическим объектом.
+  Изменение профиля создаёт новую версию. Исторические assessment нельзя
+  пересчитывать молча новой версией и выдавать за старые live-решения.
+- Для стратегий, где пригодность среды до Entry и после fill различается,
+  использовать отдельные профили/контракты `ENTRY_ENVIRONMENT` и
+  `HOLD_ENVIRONMENT`; не смешивать критерии нового входа с критериями удержания
+  уже открытой позиции.
+- Кластерные потери и одновременно открытые коррелированные позиции анализировать
+  отдельно от одиночных сделок. Signal replay не считается portfolio backtest:
+  портфельная статистика обязана учитывать хронологию, одновременные позиции,
+  capital/margin, конфликты, one-position-per-symbol contract (если принят),
+  fees/slippage/funding и portfolio crowding.
+- Каждое серьёзное исследование и сравнение обязано фиксировать provenance:
+  project commit, source-tree fingerprint, DB/schema version, Mayak version,
+  Dispatcher version, strategy/profile version, Entry fingerprint, Exit/Risk
+  version, symbols, период, dataset fingerprint, development/OOS/holdout label,
+  signal/trade count и completeness. Markdown — представление; DB/JSONL/CSV —
+  машинная истина.
+- Настройки являются частью статистики. Текущий singleton config недостаточен:
+  изменения параметров должны иметь append-only history, а каждое решение должно
+  ссылаться на действовавшие `settings_version` и `policy_version`.
+- При добавлении новой таблицы/журнала production-разработчик обязан одновременно
+  обновить compact-export list, `DATABASE_MANIFEST.json`, архивный smoke-test и
+  правила восстановления. Нельзя считать статистический слой завершённым, если
+  данные есть только в PostgreSQL dump и не отражены в manifest/export contract.
+- Контрольный диагностический архив обязан быть воспроизводимым снимком
+  установленного commit и содержать без секретов минимум:
+  production source, весь актуальный active test tree, `docs/`, `config/`,
+  operations/service definitions, PostgreSQL full dump, compact JSONL ключевых
+  таблиц, `DATABASE_MANIFEST.json`, git HEAD, branch, dirty/clean,
+  source-tree fingerprint, service states и необходимые журналы.
+- Полный активный набор тестов данного commit должен попадать в контрольный архив.
+  Если на сервере заявлено `N passed`, архив должен содержать достаточный test
+  tree и зависимости проекта, чтобы этот authoritative gate можно было
+  воспроизвести или должно быть явно написано, почему часть gate не
+  воспроизводима из архива. Нельзя подменять полный server gate только
+  20–30 targeted smoke tests из ZIP.
+- После упаковки обязательна проверка именно распакованного архива:
+  manifest/count consistency, JSON/schema validation, imports/py_compile,
+  targeted smoke и максимально полный доступный test gate из содержимого ZIP.
+  `ARCHIVE_SMOKE=PASS` не означает, что server full gate воспроизведён, если
+  полный active test tree не включён.
+- Исходные коды, которыми реально пользуются systemd/runtime, должны попадать в
+  архив в фактических production paths. Не считать историческую копию,
+  research snapshot или одноимённый старый файл доказательством production
+  состояния. Архив должен позволять определить единственный активный entrypoint.
+- Не включать в архив API keys, passwords, private keys, access tokens,
+  `.env`/credential files или иные секреты. Наличие секретов не оправдывается
+  требованиями воспроизводимости.
+- Если файл установлен на диск, но соответствующий live process не был безопасно
+  перезапущен/reloaded, отчёт обязан разделять:
+  `INSTALLED ON DISK` и `LOADED/RUNNING`. Нельзя говорить, что новый runtime-код
+  действует в live только потому, что файл уже скопирован.
+- Нельзя объявлять изменение экономически полезным по числу спасённых стопов.
+  Минимальная оценка:
+  `saved losses - lost good trades - destroyed recoveries - extra fees/slippage`
+  с совместимым sample и явным provenance.
+- Результаты live торговли не могут автоматически переписывать Mayak, Dispatcher,
+  Entry, Exit или Risk. Контур изменений:
+  `STATISTICS -> RESEARCH -> NEW VERSION -> SHADOW -> LIVE EQUIVALENCE ->
+  MICRO_LIVE -> LIVE`, с отдельным решением владельца.
+
+
 ## Диспетчер стратегий — независимый интерпретатор рыночной среды
 
 - Канонический архитектурный контракт Диспетчера находится в
