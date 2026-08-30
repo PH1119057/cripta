@@ -2,9 +2,10 @@ from pathlib import Path
 
 
 def test_events_are_never_linked_to_a_future_snapshot() -> None:
-    source = Path("operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
-    assert "observed_at <= to_timestamp(e.exec_time_ms/1000.0)" in source
-    assert "observed_at <= to_timestamp(e.signal_at_epoch_ms/1000.0)" in source
+    source = Path("operations/monitoring/causal_context_correlator.py").read_text(
+        encoding="utf-8"
+    )
+    assert source.count("observed_at <= to_timestamp(e.event_ms/1000.0)") == 2
     assert "latest_snapshot_not_after_event" in source
 
 

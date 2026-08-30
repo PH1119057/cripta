@@ -60,6 +60,9 @@ def test_mayak_runner_has_no_trading_context_reader() -> None:
     source = runner.read_text(encoding="utf-8")
     assert "_read_context" not in source
     assert "runtime.hot_positions" not in source
+    assert "runtime.executions" not in source
+    assert "monitoring.opportunities" not in source
+    assert "runtime.entry_decisions" not in source
     assert "pnl" not in source.lower()
 
 

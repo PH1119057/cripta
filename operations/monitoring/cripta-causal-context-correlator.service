@@ -1,0 +1,25 @@
+[Unit]
+Description=Cripta passive causal market-context correlator
+After=cripta-mayak-v2.service cripta-strategy-dispatcher.service postgresql.service
+Wants=cripta-mayak-v2.service cripta-strategy-dispatcher.service postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/causal_context_correlator.py --poll-seconds 15 --lookback-seconds 600
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

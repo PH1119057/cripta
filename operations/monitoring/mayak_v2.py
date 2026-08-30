@@ -170,7 +170,6 @@ class Collector:
                 "ON mayak_v2.liquidations(occurred_at DESC)"
             )
             db.commit()
-        self._repair_legacy_event_links()
 
     def run(self) -> None:
         self.prepare()
@@ -200,7 +199,6 @@ class Collector:
                 if state != previous_state:
                     self._persist_state_event(snapshot_id, snapshot, previous_state)
                     previous_state = state
-                self._link_events(snapshot_id)
             self.last_snapshot = snapshot
             self._write_state(snapshot)
         for thread in threads:
@@ -513,68 +511,6 @@ class Collector:
                     snapshot["config_fingerprint"],
                     json.dumps(snapshot["dispatcher_handoff"], default=str),
                 ),
-            )
-            db.commit()
-
-    def _link_events(self, snapshot_id: int) -> None:
-        # Bind each event only to the newest snapshot that existed at or before the event.
-        with suppress(psycopg.Error), psycopg.connect(DSN) as db:
-            db.execute(
-                """INSERT INTO mayak_v2.events(
-                    occurred_at,event_type,reference_id,symbol,side,snapshot_id,payload,
-                    link_quality,link_provenance)
-                    SELECT to_timestamp(exec_time_ms/1000.0),'исполнение',
-                    exec_id,symbol,side,s.id,payload_json::jsonb,'CAUSAL_PRIOR',
-                    jsonb_build_object('linked_at',clock_timestamp(),'method','latest_snapshot_not_after_event')
-                    FROM runtime.executions e
-                    JOIN LATERAL (SELECT id FROM mayak_v2.snapshots
-                        WHERE observed_at <= to_timestamp(e.exec_time_ms/1000.0)
-                        ORDER BY observed_at DESC LIMIT 1) s ON true
-                    WHERE exec_time_ms >= %s
-                    ON CONFLICT(event_type,reference_id) DO NOTHING""",
-                (int((time.time() - 120) * 1000),),
-            )
-            db.execute(
-                """INSERT INTO mayak_v2.events(
-                    occurred_at,event_type,reference_id,symbol,side,snapshot_id,payload,
-                    link_quality,link_provenance)
-                    SELECT to_timestamp(signal_at_epoch_ms/1000.0),'сигнал',
-                    signal_id,symbol,direction,s.id,'{}'::jsonb,'CAUSAL_PRIOR',
-                    jsonb_build_object('linked_at',clock_timestamp(),'method','latest_snapshot_not_after_event')
-                    FROM monitoring.opportunities e
-                    JOIN LATERAL (SELECT id FROM mayak_v2.snapshots
-                        WHERE observed_at <= to_timestamp(e.signal_at_epoch_ms/1000.0)
-                        ORDER BY observed_at DESC LIMIT 1) s ON true
-                    WHERE signal_at_epoch_ms >= %s
-                    ON CONFLICT(event_type,reference_id) DO NOTHING""",
-                (int((time.time() - 120) * 1000),),
-            )
-            db.commit()
-
-    def _repair_legacy_event_links(self) -> None:
-        """Relink old events causally and retain explicit repair provenance."""
-        with psycopg.connect(DSN) as db:
-            db.execute(
-                """UPDATE mayak_v2.events e SET snapshot_id=s.id,
-                    link_quality='CAUSAL_RELINKED',
-                    link_provenance=jsonb_build_object(
-                        'repaired_at',clock_timestamp(),
-                        'method','latest_snapshot_not_after_event',
-                        'previous_snapshot_id',e.snapshot_id)
-                    FROM mayak_v2.snapshots s
-                    WHERE s.id=(SELECT prior.id FROM mayak_v2.snapshots prior
-                        WHERE prior.observed_at <= e.occurred_at
-                        ORDER BY prior.observed_at DESC LIMIT 1) AND (
-                    e.link_quality='LEGACY_UNVERIFIED' OR e.snapshot_id IS NULL OR
-                    EXISTS(SELECT 1 FROM mayak_v2.snapshots current_snapshot
-                           WHERE current_snapshot.id=e.snapshot_id
-                           AND current_snapshot.observed_at>e.occurred_at))"""
-            )
-            db.execute(
-                """UPDATE mayak_v2.events SET link_quality='NO_CAUSAL_SNAPSHOT',
-                    link_provenance=jsonb_build_object(
-                        'checked_at',clock_timestamp(),'method','no_snapshot_not_after_event')
-                    WHERE link_quality='LEGACY_UNVERIFIED'"""
             )
             db.commit()
 
