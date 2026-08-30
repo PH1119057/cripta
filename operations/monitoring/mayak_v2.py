@@ -279,7 +279,7 @@ class Collector:
                     if time.monotonic() >= ping:
                         sock.send('{"op":"ping"}')
                         ping = time.monotonic() + 20
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - collector must recover from any WS failure
                 self.engine.on_transport(
                     market, connected=False, timestamp=time.time(), error=type(exc).__name__
                 )
