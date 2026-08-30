@@ -7,7 +7,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
 from bybit_workbench.mayak.research.universe import (
@@ -57,8 +57,7 @@ def load_discovery_events(root: Path) -> tuple[NormalizedEntryEvent, ...]:
         summary_path = asset / "p40" / "summary.json"
         source_hash.update(feature_path.read_bytes())
         summary = cast(dict[str, Any], json.loads(summary_path.read_text(encoding="utf-8")))
-        dataset_dir = Path(str(summary["dataset_dir"]))
-        manifest_path = dataset_dir / "dataset_manifest.json"
+        manifest_path = _resolve_dataset_manifest(root, str(summary["dataset_dir"]))
         dataset_hash.update(manifest_path.read_bytes())
         with feature_path.open(newline="", encoding="utf-8-sig") as handle:
             for row in csv.DictReader(handle):
@@ -189,6 +188,27 @@ def _label(outcome: str) -> PrimaryLabel:
 
 def _optional_utc(value: str) -> datetime | None:
     return datetime.fromisoformat(value).astimezone(UTC) if value else None
+
+
+def _resolve_dataset_manifest(root: Path, dataset_dir_raw: str) -> Path:
+    direct = Path(dataset_dir_raw) / "dataset_manifest.json"
+    if direct.is_file():
+        return direct
+    windows_parts = PureWindowsPath(dataset_dir_raw).parts
+    try:
+        reports_index = tuple(part.lower() for part in windows_parts).index("reports")
+    except ValueError as error:
+        message = f"dataset report path is not portable: {dataset_dir_raw}"
+        raise FileNotFoundError(message) from error
+    relative = Path(*windows_parts[reports_index + 1 :]) / "dataset_manifest.json"
+    for candidate in (
+        root / "reports" / relative,
+        root / "test_data" / "fixtures" / relative,
+        root.parent / "reports" / relative,
+    ):
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"dataset manifest is absent for frozen report: {relative}")
 
 
 def _load_cluster_ranges(root: Path) -> tuple[tuple[datetime, datetime], ...]:

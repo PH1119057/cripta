@@ -61,6 +61,10 @@ def verify_archive(path: Path, python: Path) -> None:
                 raise RuntimeError(
                     f"активное тестовое дерево неполно: найдено {len(test_files)} файлов"
                 )
+            fixtures = checkout / "test_data" / "fixtures"
+            if not fixtures.is_dir():
+                raise RuntimeError("в архиве отсутствуют причинные данные для активных тестов")
+            shutil.copytree(fixtures, checkout / "reports", dirs_exist_ok=True)
             main_environment = dict(os.environ)
             main_environment["PYTHONPATH"] = str(checkout / "src")
             main_command = [
