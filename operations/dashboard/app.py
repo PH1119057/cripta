@@ -16,6 +16,13 @@ import time
 import urllib.request
 import zipfile
 import psycopg
+
+try:
+    from archive_v2 import read_job as read_archive_job
+    from archive_v2 import start_job as start_archive_job
+except ImportError:  # package import used by tests
+    from operations.dashboard.archive_v2 import read_job as read_archive_job
+    from operations.dashboard.archive_v2 import start_job as start_archive_job
 from http.cookies import SimpleCookie
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1338,6 +1345,17 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 ensure_ascii=False,
             ).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
+        elif path.startswith("/api/project/archive-jobs/"):
+            try:
+                job_id = path.rsplit("/", 1)[-1]
+                body = json.dumps(read_archive_job(job_id), ensure_ascii=False).encode("utf-8")
+                self.send_body(200, body, "application/json; charset=utf-8")
+            except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+                self.send_body(
+                    404,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
         elif path in {
             "/",
             "/infra",
@@ -1386,17 +1404,27 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             return
         if self.require_login():
             return
-        if path == "/api/project/package":
+        if path in {"/api/project/package", "/api/project/archive-jobs"}:
             try:
-                result = package_project()
+                if path == "/api/project/package":
+                    result = start_archive_job("ANALYSIS_FULL", "3d")
+                else:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length < 0 or length > 4096:
+                        raise ValueError("недопустимый размер запроса")
+                    request = json.loads(self.rfile.read(length) or b"{}")
+                    result = start_archive_job(
+                        str(request.get("profile", "ANALYSIS_FULL")),
+                        str(request.get("period", "3d")),
+                    )
                 self.send_body(
-                    201,
+                    202,
                     json.dumps(result, ensure_ascii=False).encode(),
                     "application/json; charset=utf-8",
                 )
-            except (OSError, RuntimeError, psycopg.Error, zipfile.BadZipFile) as exc:
+            except (ValueError, OSError, RuntimeError, json.JSONDecodeError) as exc:
                 self.send_body(
-                    500,
+                    400,
                     json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
                     "application/json; charset=utf-8",
                 )

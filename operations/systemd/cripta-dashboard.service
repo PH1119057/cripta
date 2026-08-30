@@ -19,7 +19,7 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadOnlyPaths=/data/cripta /srv/cripta
-ReadWritePaths=/srv/cripta-share/reports
+ReadWritePaths=/srv/cripta-share/reports /srv/cripta-share/.archive_jobs /var/lib/cripta/archive_jobs
 
 [Install]
 WantedBy=multi-user.target

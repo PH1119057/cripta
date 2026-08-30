@@ -1,84 +1,102 @@
-# КРИПТА — АРХИТЕКТУРА АРХИВА V2
+# КРИПТА — АРХИВ V2.1
 
 **Документ:** `ARCHIVE_V2_ARCHITECTURE_RU.md`  
-**Версия:** 1.0  
-**Дата:** 2026-08-30  
+**Версия:** 1.1  
+**Дата:** 2026-08-31  
 **Статус:** архитектурный контракт  
-**Рекомендуемое размещение:** `docs/ARCHIVE_V2_ARCHITECTURE_RU.md`
+**Приоритет:** реализовать до следующего крупного исследовательского этапа
 
 ---
 
-## 1. Почему нужен V2
+## 1. Цель
 
-Старый «один ZIP со всем» смешивает:
+Одна кнопка в портале должна создавать **один скачиваемый Snapshot Bundle**, но внутри него данные должны быть физически разделены по назначению.
 
-- production source;
-- тесты;
-- PostgreSQL backup;
-- live statistics;
-- research;
-- operational logs;
-- patch backups;
-- virtual environments;
-- старые releases.
+Текущий монолитный архив смешивает исходники, отчёты, статистику, PostgreSQL, research, журналы и случайный мусор. Это неудобно для анализа и увеличивает размер.
 
-По мере роста JSONL такой архив становится тяжёлым, медленным и неудобным для адресного анализа.
+Новый формат должен позволять:
 
-Цель V2 — одна пользовательская операция, но **несколько логических слоёв**.
+- быстро передать только код;
+- быстро передать статистику выбранного периода;
+- отдельно открыть отчёты;
+- всегда иметь полный восстанавливаемый PostgreSQL dump;
+- при необходимости добавить research;
+- не тащить venv, старые releases, patch backups и дубликаты source tree.
 
 ---
 
-## 2. Корневой Snapshot Bundle
+## 2. Канонический Snapshot Bundle
 
 Пример:
 
 ```text
-CRIPTA_SNAPSHOT_20260830_120000/
+CRIPTA_SNAPSHOT_20260831_120000.zip
 │
 ├── 00_INDEX.json
 ├── 01_CODE.zip
-├── 02_LIVE_EVIDENCE_3D.zip
-├── 03_POSTGRESQL_FULL.dump
-├── 04_RESEARCH.zip              # optional
-└── 05_LOGS_3D.zip
+├── 02_REPORTS_3D.zip
+├── 03_STATISTICS_3D.zip
+├── 04_POSTGRESQL_FULL.dump
+├── 04_POSTGRESQL_MANIFEST.json
+├── 05_RESEARCH.zip                 # optional
+└── 06_LOGS_3D.zip
 ```
 
-Все компоненты имеют один:
+Внешний ZIP нужен только для удобной передачи одним файлом.
+
+Внутренние компоненты независимы и имеют собственный SHA-256.
+
+---
+
+## 3. Общий cutoff
+
+В момент создания job один раз фиксируется:
 
 ```text
-snapshot_bundle_id
-created_at_utc
-project_commit
-source_tree_fingerprint
+bundle_cutoff_time_utc
+```
+
+Все временные аналитические exports должны быть ограничены:
+
+```text
+event_time <= bundle_cutoff_time_utc
+```
+
+Это устраняет временной skew, когда разные части архива продолжают дописываться во время упаковки.
+
+PostgreSQL dump является собственным согласованным snapshot и фиксирует отдельное:
+
+```text
+database_dump_started_at
+database_dump_finished_at
 ```
 
 ---
 
-## 3. 00_INDEX.json
-
-Главный manifest набора.
+## 4. 00_INDEX.json
 
 Минимум:
 
 ```text
 bundle_id
+bundle_version
 created_at_utc
+bundle_cutoff_time_utc
+
+profile
+period
 
 git_head
 branch
 dirty
-source_tree_fingerprint
 
-db_schema_version
-database_manifest_hash
+installed_source_fingerprint
+loaded_versions
+
+database_schema_version
 
 components[]
-time_window
 service_states
-
-mayak_version
-dispatcher_version
-strategy_versions
 
 archive_builder_version
 ```
@@ -86,100 +104,142 @@ archive_builder_version
 Для каждого компонента:
 
 ```text
-filename
-sha256
-size
+name
 purpose
-included_period
+sha256
+bytes
 status
+period_start
+period_end
+row_counts
 ```
 
 ---
 
-## 4. 01_CODE.zip
+## 5. 01_CODE.zip
 
-Отвечает только на вопрос:
+Назначение:
 
-> Какой код и конфигурация могли сформировать это состояние?
+> воспроизводимый текущий исходный код и его контракты, без runtime-данных и мусора.
 
 Включать:
 
-- production source;
-- `src/`;
-- `production/src/`;
-- полный active test tree;
-- `monitoring/`;
-- `dashboard/`;
-- `config/`;
-- `docs/`;
-- `operations/`;
-- service unit templates;
-- migrations/schema;
-- `AGENTS.md`;
-- `pyproject.toml`;
-- lock-file;
-- git provenance;
-- source manifest.
+```text
+AGENTS.md
+pyproject.toml
+lock files
+src/
+production/src/
+monitoring/
+position_supervisor/
+operations/
+dashboard/
+config/
+migrations/
+scripts/
+tests/
+test_data/fixtures/
+docs/ CANONICAL + RESEARCH docs
+systemd templates owned by repo
+```
+
+Если фактический active test tree находится вне обычной repo-path, сначала определить его source-of-truth и включить один раз.
 
 ---
 
-## 5. CODE — что исключать
+## 6. CODE — жёсткие исключения
 
-Не включать:
+Исключать по именам и шаблонам, а не только точному `venv`:
 
 ```text
+.git/
 .venv/
 venv/
+env/
 *_venv/
+*venv*/
 test_gate_venv/
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 node_modules/
+cache/
+staging/
+backup/
+backups/
+releases/
+old_releases/
+incoming/
+reports/
+research_runs/
+datasets/
+*.zip
+*.dump
+*.sqlite
+*.db
 ```
 
-Также не включать автоматически:
+Исключения должны быть покрыты тестом.
 
-- PostgreSQL dump;
-- live JSONL;
-- historical reports;
-- research datasets;
-- patch backups;
-- old immutable releases;
-- ZIP-патчи;
-- incoming;
-- secrets.
+Особенно проверить:
 
-Исключение old release допускается только при отдельном recovery profile.
+```text
+test_gate_venv
+source_checkout duplication
+```
+
+Они не должны попадать в `01_CODE.zip`.
 
 ---
 
-## 6. Полный test tree обязателен
+## 7. Никакого дублирования source tree
 
-Если server gate заявляет:
-
-```text
-819 passed
-```
-
-`01_CODE.zip` должен содержать тот active test tree и project dependencies metadata, которые позволяют этот gate воспроизвести.
-
-Если часть тестов недоступна из snapshot:
+Если `/srv/cripta` уже является текущим source tree, вложенный:
 
 ```text
-FULL_GATE_REPRODUCIBLE=false
+source_checkout/
 ```
 
-и причина фиксируется в manifest.
+не должен автоматически архивироваться как второй экземпляр проекта.
+
+Если `source_checkout` нужен только для archive smoke, его надо формировать **временно внутри job staging** из канонического git tree, а не хранить/упаковывать как постоянный дубликат.
 
 ---
 
-## 7. 02_LIVE_EVIDENCE
+## 8. 02_REPORTS_<period>.zip
 
-Это не backup проекта.
+Отдельный слой человеческих и машинных отчётов.
 
-Это компактная доказательная история выбранного периода.
+Включать только отчёты, относящиеся к выбранному периоду или актуальному состоянию:
 
-Внутри:
+```text
+reports/*.md
+reports/*.html
+reports/*.csv
+reports/*.json
+reports/*.txt
+```
+
+Примеры:
+
+- live trading summaries;
+- Analyst reports;
+- research summaries;
+- diagnostic reports;
+- completeness reports.
+
+Не включать raw JSONL статистику — она относится к `03_STATISTICS`.
+
+Не включать ZIP внутри ZIP, если отчёт можно положить исходным файлом.
+
+---
+
+## 9. 03_STATISTICS_<period>.zip
+
+Это основной компактный слой для аналитики.
+
+Структура:
 
 ```text
 exchange/
@@ -195,82 +255,60 @@ analytics/
 system_quality/
 ```
 
----
-
-## 8. Exchange evidence
-
 Примеры:
-
-```text
-exchange/public_trades.jsonl
-exchange/liquidations.jsonl
-exchange/oi.jsonl
-exchange/funding.jsonl
-exchange/market_quality.jsonl
-```
-
-Не обязательно экспортировать каждый raw tick, если PostgreSQL/raw store остаётся источником истины и есть воспроизводимый агрегат.
-
----
-
-## 9. Mayak evidence
 
 ```text
 mayak/snapshots.jsonl
 mayak/coin_minutes.jsonl
 mayak/observation_journal.jsonl
-mayak/events.jsonl
-mayak/source_health.jsonl
-```
+mayak/liquidations.jsonl
 
----
-
-## 10. Dispatcher evidence
-
-```text
+dispatcher/runs.jsonl
 dispatcher/assessments.jsonl
-dispatcher/profile_versions.jsonl
-dispatcher/status_history.jsonl
-```
-
----
-
-## 11. Trading evidence
-
-```text
-strategy/signals.jsonl
-strategy/rejected_signals.jsonl
 
 entry/decisions.jsonl
-
 execution/orders.jsonl
 execution/fills.jsonl
 
+supervisor/snapshots.jsonl
 supervisor/transitions.jsonl
-supervisor/position_snapshots.jsonl
 
-exit/exits.jsonl
-risk/risk_decisions.jsonl
-```
-
----
-
-## 12. Analytics evidence
-
-После появления Аналитика:
-
-```text
 analytics/event_links.jsonl
 analytics/counterfactuals.jsonl
 analytics/diagnoses.jsonl
-analytics/daily_summary.jsonl
 ```
 
 ---
 
-## 13. Time depth
+## 10. STATISTICS экспортируется из PostgreSQL
 
-Для `LIVE_EVIDENCE` и `LOGS`:
+Если таблица является production truth в PostgreSQL, компактный JSONL экспортировать из БД, а не копировать живой append-only файл.
+
+Причины:
+
+- можно применить точный cutoff;
+- можно получить детерминированный row_count;
+- легче проверить schema;
+- меньше temporal skew.
+
+Для каждой таблицы в manifest:
+
+```text
+schema
+table
+row_count
+min_event_time
+max_event_time
+time_column
+export_path
+sha256
+```
+
+---
+
+## 11. Периоды
+
+Для REPORTS / STATISTICS / LOGS:
 
 ```text
 3d
@@ -278,76 +316,335 @@ analytics/daily_summary.jsonl
 all
 ```
 
-Но `CODE` и PostgreSQL recovery backup не должны искусственно урезаться по времени.
+Пользователь выбирает период в портале.
+
+`all` должен иметь предупреждение о размере.
+
+PostgreSQL dump всегда полный.
+
+CODE всегда текущий.
 
 ---
 
-## 14. 03_POSTGRESQL_FULL.dump
+## 12. 04_POSTGRESQL_FULL.dump
 
-Это recovery truth.
-
-Он существует отдельно от compact analytical exports.
-
-Назначение:
-
-- восстановление;
-- глубокий audit;
-- повторная выборка после появления нового вопроса.
-
-Для обычного анализа предпочтительнее компактный `LIVE_EVIDENCE`.
-
----
-
-## 15. PostgreSQL component
-
-Рядом с dump должны существовать:
+Полная восстанавливаемая база:
 
 ```text
-DATABASE_MANIFEST.json
-RESTORE_INSTRUCTIONS.md
-schema/version
-dump SHA256
+pg_dump --format=custom
+--no-owner
+--no-privileges
 ```
 
----
-
-## 16. 04_RESEARCH.zip
-
-Создаётся только когда нужен research snapshot.
-
-Включает:
-
-- scripts;
-- run configs;
-- machine truth CSV/JSON/Parquet;
-- reports;
-- dataset manifests/fingerprints;
-- OOS/holdout labels;
-- software/provenance.
-
-Не включать multi-GB raw market data, если они уже гарантированно существуют в каноническом dataset location.
-
----
-
-## 17. 05_LOGS
-
-Только эксплуатационные журналы выбранного периода:
+Рядом:
 
 ```text
-systemd
+04_POSTGRESQL_MANIFEST.json
+```
+
+Минимум:
+
+```text
+dump_sha256
+dump_bytes
+database_name
+dump_started_at
+dump_finished_at
+schema_version
+restore_command_example
+```
+
+Dump обязателен для профиля `ANALYSIS_FULL` и `FULL_RECOVERY`.
+
+---
+
+## 13. 05_RESEARCH.zip
+
+Research не должен автоматически попадать в каждый архив.
+
+Включать только при профиле:
+
+```text
+RESEARCH
+или
+ANALYSIS_FULL_WITH_RESEARCH
+```
+
+Включать:
+
+- research scripts;
+- run configs;
+- machine truth CSV/JSON/Parquet;
+- provenance;
+- dataset fingerprints;
+- development/OOS labels;
+- final reports.
+
+Не включать multi-GB market datasets, если их canonical location остаётся на сервере.
+
+---
+
+## 14. 06_LOGS_<period>.zip
+
+Отдельно:
+
+```text
+systemd journal extracts
 mayak
 dispatcher
-entry
-private_runtime
+correlator
 supervisor
-dashboard
+entry
 execution
+private_runtime
+dashboard
 errors
 ```
 
+Для systemd предпочтительно делать:
+
+```text
+journalctl --since ... --until bundle_cutoff_time
+```
+
+чтобы лог не продолжал расти во время упаковки.
+
 ---
 
-## 18. Секреты запрещены
+## 15. Профили архива
+
+### CODE
+
+```text
+00_INDEX
+01_CODE
+```
+
+### ANALYSIS_FULL — профиль по умолчанию для передачи ChatGPT/аудита
+
+```text
+00_INDEX
+01_CODE
+02_REPORTS
+03_STATISTICS
+04_POSTGRESQL_FULL
+06_LOGS
+```
+
+### ANALYSIS_FULL_WITH_RESEARCH
+
+То же +:
+
+```text
+05_RESEARCH
+```
+
+### FULL_RECOVERY
+
+```text
+00_INDEX
+01_CODE
+04_POSTGRESQL_FULL
+critical sanitized runtime config
+service manifests
+```
+
+### RESEARCH
+
+```text
+00_INDEX
+01_CODE
+03_STATISTICS
+04_POSTGRESQL_FULL
+05_RESEARCH
+```
+
+---
+
+## 16. Портал
+
+Блок должен иметь:
+
+```text
+Профиль:
+[Анализ полный ▼]
+
+Период статистики и журналов:
+[3 дня ▼]
+
+[Создать архив]
+```
+
+Варианты периода:
+
+```text
+3 дня
+10 дней
+весь период
+```
+
+После запуска браузер не ждёт упаковку в одном HTTP request.
+
+---
+
+## 17. Асинхронный job
+
+Правильная схема:
+
+```text
+POST /api/project/archive-jobs
+→ immediately {job_id}
+
+GET /api/project/archive-jobs/{job_id}
+→ current status
+
+GET /reports/<finished bundle>
+→ download
+```
+
+Тяжёлая работа выполняется серверным worker/thread/process.
+
+---
+
+## 18. Этапы
+
+```text
+PREPARE
+CODE
+REPORTS
+STATISTICS
+POSTGRESQL
+RESEARCH
+LOGS
+INDEX
+FINALIZE
+SMOKE
+DONE
+```
+
+Статус:
+
+```text
+stage
+processed
+total
+percent
+elapsed
+eta
+heartbeat_at
+error
+output_path
+```
+
+Heartbeat примерно каждые 20–30 секунд.
+
+---
+
+## 19. Переживание F5
+
+Состояние job хранить серверно:
+
+```text
+/var/lib/cripta/archive_jobs/<job_id>.json
+```
+
+или в PostgreSQL.
+
+После F5 портал снова показывает текущий job.
+
+Не хранить истину только в JS-памяти вкладки.
+
+---
+
+## 20. Fail-closed
+
+Ошибка на обязательном компоненте:
+
+```text
+job = FAILED
+```
+
+Не публиковать bundle как готовый.
+
+Не трогать:
+
+- production source;
+- production DB;
+- reports;
+- user data.
+
+Partial staging можно сохранить для диагностики или удалить после записи exact error.
+
+---
+
+## 21. Staging
+
+Работать только в:
+
+```text
+/srv/cripta-share/.archive_jobs/<job_id>/
+```
+
+или другом отдельном temporary root.
+
+Финальный bundle перемещается атомарно в:
+
+```text
+/srv/cripta-share/reports/
+```
+
+только после `SMOKE=PASS`.
+
+---
+
+## 22. Smoke
+
+Проверить:
+
+### Outer bundle
+- ZIP integrity;
+- `00_INDEX.json`;
+- component SHA256;
+- no missing component.
+
+### CODE
+- forbidden paths absent;
+- full expected tests present;
+- py_compile/import smoke;
+- strongest practical extracted-source pytest gate.
+
+### REPORTS
+- files readable;
+- JSON/CSV parse where applicable.
+
+### STATISTICS
+- every JSONL parses;
+- row_count matches manifest;
+- no row after cutoff;
+- required tables represented.
+
+### POSTGRESQL
+- `pg_restore --list` succeeds.
+
+### LOGS
+- archive opens and period metadata present.
+
+---
+
+## 23. CODE smoke не должен требовать постоянного source_checkout
+
+Для extracted test:
+
+```text
+extract 01_CODE.zip into temp
+run tests there
+```
+
+Не создавать постоянный duplicate checkout в production root ради архиватора.
+
+---
+
+## 24. Секреты
 
 Никогда не включать:
 
@@ -356,207 +653,100 @@ errors
 API keys
 API secrets
 private SSH keys
+cookies
+session secrets
+passwords
 tokens
-password stores
-browser credentials
 ```
 
-Если config содержит секретное поле, экспортируется sanitized version.
+Sanitized config экспортировать отдельно.
 
 ---
 
-## 19. Archive Profiles в портале
+## 25. Installed vs loaded
 
-Рекомендуемые пользовательские режимы:
-
-### `CODE`
-
-Только воспроизводимый код.
-
-### `ANALYSIS`
-
-`CODE manifest + LIVE_EVIDENCE + selected LOGS`.
-
-### `FULL_RECOVERY`
-
-`CODE + PostgreSQL full dump + service/config recovery data`.
-
-### `RESEARCH`
-
-Research-specific bundle.
-
----
-
-## 20. Асинхронная упаковка
-
-Тяжёлая упаковка не должна жить внутри одного долгого browser `fetch`.
-
-Модель:
+`00_INDEX.json` должен различать:
 
 ```text
-POST create archive job
-→ job_id immediately
-→ background worker
-→ GET job status
-→ heartbeat/progress
-→ download when DONE
+git_head
+installed_files_fingerprint
+loaded_service_versions
 ```
+
+Нельзя считать установленный файл уже загруженным процессом без подтверждения.
 
 ---
 
-## 21. Этапы job
+## 26. Статистика должна расти без раздувания CODE
+
+Рост:
 
 ```text
-PREPARE
-CODE
-POSTGRES
-LIVE_EVIDENCE
-RESEARCH
-LOGS
-MANIFEST
-FINALIZE
-SMOKE
-DONE
+Mayak JSONL
+Dispatcher assessments
+Analyst links
 ```
+
+увеличивает `STATISTICS`, а не `CODE`.
+
+Это ключевая цель разделения.
 
 ---
 
-## 22. Job status
+## 27. Старый endpoint
 
-Минимум:
+Существующий:
 
 ```text
-job_id
-state
-stage
-processed
-total
-percent
-started_at
-heartbeat_at
-elapsed
-eta
-output_path
-error
+POST /api/project/package
 ```
 
----
+после перехода V2:
 
-## 23. Fail-closed
+- либо удалить;
+- либо оставить временным compatibility wrapper, который запускает `ANALYSIS_FULL / 3d` job и сразу возвращает `job_id`.
 
-Если любой обязательный этап падает:
-
-- не выдавать архив как `DONE`;
-- не удалять предыдущий хороший snapshot;
-- оставить exact error;
-- partial bundle маркировать `FAILED/INCOMPLETE`;
-- не трогать production DB/source.
+Он не должен синхронно строить архив в HTTP request.
 
 ---
 
-## 24. Smoke распакованного архива
+## 28. Критерий приёмки
 
-Проверять уже готовый артефакт:
+Archive V2 принят только если из одного законченного bundle можно:
 
-- ZIP integrity;
-- SHA256;
-- JSON/JSONL parse;
-- manifest consistency;
-- required docs/config;
-- imports/py_compile;
-- targeted tests;
-- максимально полный доступный test gate.
+1. восстановить код;
+2. воспроизвести тестовый gate;
+3. восстановить PostgreSQL;
+4. отдельно открыть отчёты;
+5. отдельно анализировать статистику;
+6. получить журналы выбранного периода;
+7. доказать отсутствие venv/cache/duplicated checkout;
+8. доказать component hashes;
+9. доказать cutoff;
+10. получить результат после F5 страницы.
 
 ---
 
-## 25. JSONL validation
+## 29. Что Archive V2 не меняет
 
-Для каждого JSONL:
+Не менять:
 
 ```text
-file
-line_count
-first_time
-last_time
-parse_errors
+Entry
+Exit
+Risk
+Execution
+Mayak logic
+Dispatcher logic
+Supervisor logic
+trading settings
+live orders
 ```
 
-Если parse error > 0:
-
-```text
-LIVE_EVIDENCE_VALID=false
-```
+Это чисто operational/audit subsystem.
 
 ---
 
-## 26. Временная совместимость
+## 30. Главный принцип
 
-Все compact exports должны иметь UTC-поля согласно:
-
-`DATA_TIMELINE_CONTRACT_RU.md`.
-
-Это позволяет загружать разные архивные компоненты независимо и соединять их позже.
-
----
-
-## 27. Source tree vs installed tree
-
-Manifest должен различать:
-
-```text
-GIT_SOURCE
-INSTALLED_ON_DISK
-LOADED_RUNNING
-```
-
-Если новый файл установлен, но процесс не перезапущен:
-
-```text
-installed_version != loaded_version
-```
-
-это фиксируется явно.
-
----
-
-## 28. Дублирование допустимо только осознанно
-
-PostgreSQL dump и JSONL могут содержать одни данные дважды, потому что служат разным целям.
-
-Это нормальное дублирование:
-
-- dump = recovery truth;
-- JSONL = portable analytical evidence.
-
-Но виртуальное окружение и старые patch backups внутри `CODE` — ненужное дублирование.
-
----
-
-## 29. Адресный экспорт
-
-Позднее портал должен уметь экспортировать не только период, но и объект:
-
-```text
-trade_id
-signal_id
-position_id
-event_id
-symbol
-session
-```
-
-Например:
-
-> M3 full stop + ±30m context.
-
----
-
-## 30. Итог
-
-Архив V2 — не один огромный ZIP.
-
-Это **версионированный набор взаимосвязанных доказательных слоёв**, которые можно хранить, анализировать и восстанавливать независимо.
-
-Главный принцип:
-
-> **Код отвечает “что было установлено”, Live Evidence — “что происходило”, PostgreSQL — “как всё восстановить”, Research — “что исследовалось”, Logs — “как работала инфраструктура”.**
+> **Один Snapshot Bundle для передачи человеку — внутри независимые слои для кода, отчётов, статистики, PostgreSQL, исследований и журналов.**
