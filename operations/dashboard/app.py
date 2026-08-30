@@ -1069,8 +1069,12 @@ def package_project() -> dict[str, object]:
                 "mayak_v2.events",
                 "mayak_v2.state_events",
                 "mayak_v2.observation_journal",
+                "mayak_v2.liquidations",
                 "supervisor.snapshots",
                 "supervisor.transitions",
+                "strategy_dispatcher.runs",
+                "strategy_dispatcher.assessments",
+                "research_context.event_links",
             )
             time_names = (
                 "exec_time_ms",

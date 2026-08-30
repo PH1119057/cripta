@@ -20,7 +20,7 @@ from bybit_workbench.position_supervisor import (
     SupervisorState,
 )
 
-ENTRY_STATUS = Path("/var/lib/cripta/entry_shadow/status.json")
+MAYAK_STATUS = Path("/var/lib/cripta/mayak_v2/status.json")
 running = True
 _public_cache: dict[str, tuple[float, dict[str, object]]] = {}
 
@@ -43,7 +43,9 @@ def public_get(path: str, params: dict[str, str], ttl: float = 5) -> dict[str, o
 
 def price_feature(symbol: str, side: str, now: datetime) -> FeatureEvidence:
     payload = public_get(
-        "/v5/market/kline", {"category": "linear", "symbol": symbol, "interval": "1", "limit": "6"}, 8
+        "/v5/market/kline",
+        {"category": "linear", "symbol": symbol, "interval": "1", "limit": "6"},
+        8,
     )
     rows = (payload.get("result") or {}).get("list") or []
     closes = [Decimal(str(row[4])) for row in rows]
@@ -62,9 +64,7 @@ def price_feature(symbol: str, side: str, now: datetime) -> FeatureEvidence:
 def execution_and_book_features(
     symbol: str, side: str, now: datetime
 ) -> tuple[FeatureEvidence, FeatureEvidence]:
-    ticker_payload = public_get(
-        "/v5/market/tickers", {"category": "linear", "symbol": symbol}, 2
-    )
+    ticker_payload = public_get("/v5/market/tickers", {"category": "linear", "symbol": symbol}, 2)
     ticker = ((ticker_payload.get("result") or {}).get("list") or [{}])[0]
     bid = Decimal(str(ticker.get("bid1Price") or 0))
     ask = Decimal(str(ticker.get("ask1Price") or 0))
@@ -85,9 +85,17 @@ def execution_and_book_features(
     favorable = bid_depth if side == "Buy" else ask_depth
     adverse = ask_depth if side == "Buy" else bid_depth
     ratio = favorable / adverse if adverse > 0 else Decimal("0")
-    state = "replenishment" if ratio >= Decimal("1.15") else "withdrawal" if ratio <= Decimal("0.85") else "balanced"
+    state = (
+        "replenishment"
+        if ratio >= Decimal("1.15")
+        else "withdrawal"
+        if ratio <= Decimal("0.85")
+        else "balanced"
+    )
     book = FeatureEvidence(
-        state, now, Quality.FRESH,
+        state,
+        now,
+        Quality.FRESH,
         {"bid_depth_usdt": bid_depth, "ask_depth_usdt": ask_depth, "directional_ratio": ratio},
     )
     return execution, book
@@ -95,7 +103,9 @@ def execution_and_book_features(
 
 def market_feature(symbol: str, now: datetime) -> FeatureEvidence:
     feature = price_feature(symbol, "Buy", now)
-    return FeatureEvidence(feature.state, feature.observed_at, feature.quality, feature.measurements)
+    return FeatureEvidence(
+        feature.state, feature.observed_at, feature.quality, feature.measurements
+    )
 
 
 def stop(*_: object) -> None:
@@ -144,35 +154,55 @@ def exchange_positions(connection: psycopg.Connection) -> list[tuple[ExchangePos
     return result
 
 
-def entry_context() -> dict[str, dict[str, object]]:
+def mayak_context() -> tuple[datetime | None, dict[str, dict[str, object]]]:
     try:
-        payload = json.loads(ENTRY_STATUS.read_text(encoding="utf-8"))
-        return {str(item["symbol"]): item for item in payload.get("assets", [])}
+        payload = json.loads(MAYAK_STATUS.read_text(encoding="utf-8"))
+        observed = datetime.fromisoformat(str(payload["observed_at"]))
+        coins = payload.get("coins") or {}
+        return observed, {str(symbol): item for symbol, item in coins.items()}
     except (OSError, ValueError, KeyError):
-        return {}
+        return None, {}
 
 
 def features(
-    symbol: str, side: str, now: datetime, context: dict[str, dict[str, object]]
+    symbol: str,
+    side: str,
+    now: datetime,
+    observed: datetime | None,
+    context: dict[str, dict[str, object]],
 ) -> dict[str, FeatureEvidence]:
     item = context.get(symbol)
     result: dict[str, FeatureEvidence] = {}
-    if item:
+    if item and observed:
         try:
-            observed = datetime.fromisoformat(str(item["updated_at"]))
-            quality = Quality.PARTIAL if (now - observed).total_seconds() <= 15 else Quality.STALE
-            result["flow"] = FeatureEvidence(
-                str(item.get("flow_state") or "unknown"), observed, quality
+            age = (now - observed).total_seconds()
+            quality = Quality.FRESH if age <= 15 else Quality.STALE
+            linear = item.get("linear") or {}
+            net = Decimal(str(linear.get("net_usd") or 0))
+            directional_net = net if side == "Buy" else -net
+            flow_state = (
+                "favorable"
+                if directional_net > 0
+                else "persistent_adverse"
+                if directional_net < 0
+                else "balanced"
             )
+            result["flow"] = FeatureEvidence(
+                flow_state, observed, quality, {"directional_net_usd": directional_net}
+            )
+            ticker = item.get("ticker") or {}
+            oi_change = ticker.get("open_interest_change_5m_pct")
             result["oi_price"] = FeatureEvidence(
-                str(item.get("oi_state") or "unknown"), observed, quality
+                "unknown" if oi_change is None else "available",
+                observed,
+                Quality.MISSING if oi_change is None else quality,
+                {"open_interest_change_5m_pct": "" if oi_change is None else str(oi_change)},
             )
             result["structure"] = FeatureEvidence(
-                "unknown", observed, quality,
-                {
-                    "scanner_status": str(item.get("status") or ""),
-                    "distance_pct": str(item.get("distance_pct") or ""),
-                },
+                "unknown",
+                observed,
+                Quality.MISSING,
+                {"source": "mayak_v2; structural layer is not available"},
             )
         except (ValueError, TypeError, KeyError):
             pass
@@ -186,14 +216,26 @@ def features(
         price_state = result["price_1m"].state
         absorption_state = (
             "absorption"
-            if flow_state == "pressure_continues" and price_state == "continuation"
+            if flow_state == "persistent_adverse" and price_state == "continuation"
             else "none"
         )
-        result["absorption"] = FeatureEvidence(absorption_state, now, Quality.PARTIAL)
+        absorption_quality = (
+            Quality.FRESH
+            if result.get("flow") and result["flow"].quality == Quality.FRESH
+            else Quality.MISSING
+        )
+        result["absorption"] = FeatureEvidence(absorption_state, now, absorption_quality)
         result["market_btc"] = market_feature("BTCUSDT", now)
         result["market_eth"] = market_feature("ETHUSDT", now)
     except (OSError, RuntimeError, ValueError, TypeError):
-        for name in ("price_1m", "execution_now", "orderbook", "absorption", "market_btc", "market_eth"):
+        for name in (
+            "price_1m",
+            "execution_now",
+            "orderbook",
+            "absorption",
+            "market_btc",
+            "market_eth",
+        ):
             result.setdefault(name, FeatureEvidence("unknown", now, Quality.MISSING))
     return result
 
@@ -231,17 +273,22 @@ def main() -> None:
             rows = exchange_positions(connection)
             created, _ = registry.reconcile(position for position, _ in rows)
             restore_created(connection, registry, created)
-            context = entry_context()
+            context_observed, context = mayak_context()
             for position, mark in rows:
                 snapshot = registry.get(position.position_id).update(
-                    PositionEvent(now, mark, features(position.symbol, position.side, now, context))
+                    PositionEvent(
+                        now,
+                        mark,
+                        features(position.symbol, position.side, now, context_observed, context),
+                    )
                 )
                 document = snapshot.audit_dict()
                 at_ms = int(now.timestamp() * 1000)
                 state_changed = snapshot.previous_state != snapshot.state
-                should_persist = state_changed or at_ms - last_periodic_save.get(
-                    position.position_id, 0
-                ) >= 60_000
+                should_persist = (
+                    state_changed
+                    or at_ms - last_periodic_save.get(position.position_id, 0) >= 60_000
+                )
                 if should_persist:
                     connection.execute(
                         """INSERT INTO supervisor.snapshots(

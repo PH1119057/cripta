@@ -71,9 +71,7 @@ def test_missing_and_stale_are_never_neutral() -> None:
 
 def test_confidence_is_bounded_by_mandatory_coverage() -> None:
     engine = PositionSupervisor(identity())
-    snapshot = engine.update(
-        PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), complete())
-    )
+    snapshot = engine.update(PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), complete()))
     assert snapshot.confidence == Decimal("1")
 
 
@@ -81,9 +79,7 @@ def test_unknown_optional_structure_is_reported_as_unknown() -> None:
     engine = PositionSupervisor(identity())
     evidence = complete()
     evidence["structure"] = f("unknown", Quality.MISSING)
-    snapshot = engine.update(
-        PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), evidence)
-    )
+    snapshot = engine.update(PositionEvent(T0 + timedelta(minutes=1), Decimal("100"), evidence))
     assert snapshot.state == SupervisorState.HEALTHY
     assert "структурный слой недоступен" in snapshot.reason
     assert "структура позиции сохраняется" not in snapshot.reason
@@ -104,7 +100,8 @@ def test_broken_requires_independent_adverse_stack() -> None:
         orderbook="withdrawal",
         oi_price="against",
     )
-    snap = engine.update(PositionEvent(T0 + timedelta(minutes=2), Decimal("99.3"), broken))
+    engine.update(PositionEvent(T0 + timedelta(minutes=2), Decimal("99.3"), broken))
+    snap = engine.update(PositionEvent(T0 + timedelta(minutes=3), Decimal("99.2"), broken))
     assert snap.state == SupervisorState.BROKEN
     assert snap.shadow_action == "КАНДИДАТ НА ВЫХОД"
 
@@ -125,8 +122,9 @@ def test_recovery_and_runner_are_causal() -> None:
     runner = complete(
         structure="with", price_1m="continuation", flow="favorable", orderbook="replenishment"
     )
+    engine.update(PositionEvent(T0 + timedelta(minutes=2), Decimal("101.2"), runner))
     assert (
-        engine.update(PositionEvent(T0 + timedelta(minutes=2), Decimal("101.2"), runner)).state
+        engine.update(PositionEvent(T0 + timedelta(minutes=3), Decimal("101.3"), runner)).state
         == SupervisorState.RUNNER
     )
 
@@ -207,3 +205,17 @@ def test_restart_restores_mfe_mae_and_state() -> None:
     assert snapshot.mfe_pct == Decimal("2.4")
     assert snapshot.mae_pct == Decimal("-0.8")
     assert snapshot.previous_state == SupervisorState.WARNING
+
+
+def test_state_change_requires_repeated_confirmation_but_blocking_is_immediate() -> None:
+    engine = PositionSupervisor(identity())
+    healthy = engine.update(PositionEvent(T0 + timedelta(seconds=1), Decimal("100"), complete()))
+    assert healthy.state == SupervisorState.HEALTHY
+    adverse = complete(price_1m="against", flow="persistent_adverse")
+    pending = engine.update(PositionEvent(T0 + timedelta(seconds=2), Decimal("99.9"), adverse))
+    assert pending.state == SupervisorState.HEALTHY
+    confirmed = engine.update(PositionEvent(T0 + timedelta(seconds=3), Decimal("99.8"), adverse))
+    assert confirmed.state == SupervisorState.WARNING
+    adverse["flow"] = f("unknown", Quality.MISSING)
+    blocked = engine.update(PositionEvent(T0 + timedelta(seconds=4), Decimal("99.8"), adverse))
+    assert blocked.state == SupervisorState.BLOCKED

@@ -33,6 +33,8 @@ class PositionSupervisor:
         self._state: SupervisorState | None = None
         self._state_since = identity.fill_time
         self._last_at = identity.fill_time
+        self._candidate_state: SupervisorState | None = None
+        self._candidate_count = 0
 
     def update(self, event: PositionEvent) -> PositionSnapshot:
         if event.observed_at < self._last_at:
@@ -43,8 +45,31 @@ class PositionSupervisor:
         move = _directional_move(self.identity, event.mark_price)
         self._mfe = max(self._mfe, move)
         self._mae = min(self._mae, move)
-        state, reason, action, confidence = self._classify(event.features)
+        candidate, reason, action, confidence = self._classify(event.features)
         previous = self._state
+        immediate = candidate in {
+            SupervisorState.WARMUP,
+            SupervisorState.BLOCKED,
+            SupervisorState.ERROR,
+        }
+        if candidate == self._state or immediate or self._state is None:
+            state = candidate
+            self._candidate_state = None
+            self._candidate_count = 0
+        else:
+            if candidate == self._candidate_state:
+                self._candidate_count += 1
+            else:
+                self._candidate_state = candidate
+                self._candidate_count = 1
+            if self._candidate_count >= 2:
+                state = candidate
+                self._candidate_state = None
+                self._candidate_count = 0
+            else:
+                state = self._state
+                reason = f"ожидается повторное подтверждение состояния {candidate.value}"
+                action = "НАБЛЮДАТЬ"
         if state != previous:
             self._state_since = event.observed_at
         self._state = state
@@ -85,6 +110,8 @@ class PositionSupervisor:
         self._state = state
         self._state_since = state_since
         self._last_at = last_at
+        self._candidate_state = None
+        self._candidate_count = 0
 
     def _classify(
         self, features: dict[str, FeatureEvidence] | object
@@ -175,8 +202,7 @@ class PositionSupervisor:
         return (
             SupervisorState.HEALTHY,
             (
-                "подтверждённого ухудшения по доступным признакам нет; "
-                "структурный слой недоступен"
+                "подтверждённого ухудшения по доступным признакам нет; структурный слой недоступен"
                 if structure_unknown
                 else "структура позиции сохраняется, подтверждённого неблагоприятного стека нет"
             ),
