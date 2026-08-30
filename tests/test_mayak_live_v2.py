@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -126,6 +127,54 @@ def test_dispatcher_feature_confidence_uses_its_own_source_coverage() -> None:
     features = item.snapshot(now)["dispatcher_handoff"]["dispatcher_features"]
     assert features["money.derivatives_pressure"]["confidence"] == 1
     assert features["money.spot_pressure"]["confidence"] == 1
+
+
+def test_dispatcher_handoff_exposes_available_market_layers_and_matches_schema() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    for market in ("spot", "linear"):
+        item.set_instrument_support(market, set(item.symbols))
+        item.on_transport(market, connected=True, timestamp=now.timestamp())
+        for symbol in item.symbols:
+            item.on_trade(market, symbol, now.timestamp() - 3600, "Buy", 100, 1)
+            item.on_trade(market, symbol, now.timestamp(), "Buy", 101, 2)
+            item.on_book(market, symbol, now.timestamp() - 901, [(100, 10)], [(101, 10)])
+            item.on_book(market, symbol, now.timestamp(), [(100, 5)], [(101, 10)])
+    for symbol in item.symbols:
+        item.on_ticker(symbol, now.timestamp() - 301, open_interest=100)
+        item.on_ticker(symbol, now.timestamp(), open_interest=101)
+
+    handoff = item.snapshot(now)["dispatcher_handoff"]
+    features = handoff["dispatcher_features"]
+    for feature_id in (
+        "money.pressure",
+        "money.spot_derivatives_alignment",
+        "positioning.oi_regime",
+        "positioning.price_oi_state",
+        "liquidity.trend",
+        "market.timeframe_alignment",
+        "btc.state",
+        "eth.state",
+    ):
+        assert features[feature_id]["status"] == "VALID"
+        assert features[feature_id]["observed_at"] == now.isoformat()
+
+    schema_path = (
+        Path(__file__).parents[1]
+        / "config"
+        / "strategy_dispatcher"
+        / "MAYAK_HANDOFF_SCHEMA_V1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert set(handoff) == set(schema["properties"])
+    assert set(schema["required"]).issubset(handoff)
+    feature_schemas = schema["properties"]["dispatcher_features"]["properties"]
+    assert set(features).issubset(feature_schemas)
+    for feature_id, payload in features.items():
+        feature_schema = feature_schemas[feature_id]
+        assert payload["status"] in feature_schema["properties"]["status"]["enum"]
+        if payload["status"] == "VALID":
+            assert payload["value"] in feature_schema["properties"]["value"]["enum"]
 
 
 def test_transport_health_is_independent_from_market_trade_activity() -> None:

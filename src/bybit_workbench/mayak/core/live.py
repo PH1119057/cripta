@@ -245,6 +245,12 @@ class LiveMayakEngine:
         for symbol in self.symbols:
             spot = self.trades[("spot", symbol)].metrics(now_ts, 300)
             linear = self.trades[("linear", symbol)].metrics(now_ts, 300)
+            returns_by_horizon = {
+                f"{minutes}m": self.trades[("linear", symbol)].metrics(
+                    now_ts, minutes * 60
+                )["return_pct"]
+                for minutes in (1, 5, 15, 60)
+            }
             ticker = self.tickers.get(symbol)
             books = {market: self.books.get((market, symbol)) for market in ("spot", "linear")}
             ret = linear["return_pct"] if linear["return_pct"] is not None else spot["return_pct"]
@@ -283,6 +289,7 @@ class LiveMayakEngine:
             coins[symbol] = {
                 "spot": spot,
                 "linear": linear,
+                "returns_by_horizon": returns_by_horizon,
                 "ticker": ticker,
                 "books": books,
                 "quality": quality,
@@ -421,10 +428,14 @@ class LiveMayakEngine:
                 == SourceQuality.FRESH
                 for coin in eligible
             )
-            return fresh / max(1, len(eligible))
+            return float(fresh) / max(1, len(eligible))
 
         spot_confidence = source_confidence("spot", "trades")
         derivatives_confidence = source_confidence("linear", "trades")
+        ticker_confidence = source_confidence("linear", "ticker")
+        book_confidence = max(
+            source_confidence("linear", "book"), source_confidence("spot", "book")
+        )
         price_confidence = sum(
             (
                 coin["quality"]["linear_trades"]["quality"] == SourceQuality.FRESH
@@ -506,6 +517,117 @@ class LiveMayakEngine:
             )
         spot_pressure = pressure(money.get("spot_sales_share"))
         derivatives_pressure = pressure(money.get("derivatives_sales_share"))
+        pressure_values = [
+            value
+            for value in (money.get("spot_sales_share"), money.get("derivatives_sales_share"))
+            if value is not None
+        ]
+        combined_pressure = pressure(statistics.mean(pressure_values)) if pressure_values else None
+
+        def pressure_side(value: str | None) -> int:
+            if value in {"STRONG_BUY", "BUY"}:
+                return 1
+            if value in {"STRONG_SELL", "SELL"}:
+                return -1
+            return 0
+
+        spot_side = pressure_side(spot_pressure)
+        derivatives_side = pressure_side(derivatives_pressure)
+        pressure_alignment = None
+        if spot_pressure is not None and derivatives_pressure is not None:
+            pressure_alignment = (
+                "STRONGLY_ALIGNED"
+                if spot_side == derivatives_side and abs(spot_side) == 1
+                else "ALIGNED"
+                if spot_side == derivatives_side
+                else "STRONGLY_DIVERGING"
+                if spot_side == -derivatives_side and spot_side != 0
+                else "DIVERGING"
+                if spot_side != derivatives_side
+                else "MIXED"
+            )
+        oi_values = [
+            float(coin["ticker"]["open_interest_change_5m_pct"])
+            for coin in coins.values()
+            if coin["ticker"]
+            and coin["ticker"].get("open_interest_change_5m_pct") is not None
+        ]
+        median_oi = statistics.median(oi_values) if oi_values else None
+        oi_regime = None
+        if median_oi is not None:
+            oi_regime = (
+                "STRONG_EXPANSION"
+                if median_oi >= 1.0
+                else "EXPANDING"
+                if median_oi >= 0.2
+                else "STRONG_CONTRACTION"
+                if median_oi <= -1.0
+                else "CONTRACTING"
+                if median_oi <= -0.2
+                else "STABLE"
+            )
+        price_oi_state = None
+        if median is not None and median_oi is not None:
+            price_oi_state = (
+                "PRICE_UP_OI_UP"
+                if median > 0.05 and median_oi > 0.05
+                else "PRICE_UP_OI_DOWN"
+                if median > 0.05 and median_oi < -0.05
+                else "PRICE_DOWN_OI_UP"
+                if median < -0.05 and median_oi > 0.05
+                else "PRICE_DOWN_OI_DOWN"
+                if median < -0.05 and median_oi < -0.05
+                else "MIXED"
+            )
+        withdrawal = money.get("buyer_liquidity_withdrawal_share")
+        liquidity_trend = None
+        if withdrawal is not None:
+            liquidity_trend = (
+                "WITHDRAWING_FAST"
+                if withdrawal >= 0.7
+                else "WITHDRAWING"
+                if withdrawal >= 0.4
+                else "STABLE"
+            )
+        anchor_features = {}
+        for feature_id, symbol in (("btc.state", "BTCUSDT"), ("eth.state", "ETHUSDT")):
+            coin = coins.get(symbol)
+            anchor_return = coin["linear"]["return_pct"] if coin else None
+            anchor_confidence = (
+                1.0
+                if coin
+                and coin["quality"]["linear_trades"]["quality"] == SourceQuality.FRESH
+                else 0.0
+            )
+            anchor_features[feature_id] = feature(
+                direction(anchor_return),
+                available=anchor_return is not None,
+                feature_confidence=anchor_confidence,
+            )
+        horizon_signs = []
+        for horizon in ("1m", "5m", "15m", "60m"):
+            values = [
+                float(coin["returns_by_horizon"][horizon])
+                for coin in coins.values()
+                if coin["returns_by_horizon"][horizon] is not None
+            ]
+            if values:
+                horizon_median = statistics.median(values)
+                horizon_signs.append(
+                    1 if horizon_median > 0.05 else -1 if horizon_median < -0.05 else 0
+                )
+        timeframe_alignment = None
+        if len(horizon_signs) == 4:
+            strongest = max(horizon_signs.count(-1), horizon_signs.count(0), horizon_signs.count(1))
+            timeframe_alignment = (
+                "STRONGLY_ALIGNED"
+                if strongest == 4
+                else "ALIGNED"
+                if strongest == 3
+                else "PARTIAL"
+                if strongest == 2
+                else "CONFLICTING"
+            )
         data_quality = (
             "HIGH"
             if confidence >= 0.90
@@ -541,12 +663,43 @@ class LiveMayakEngine:
                 available=derivatives_pressure is not None,
                 feature_confidence=derivatives_confidence,
             ),
+            "money.pressure": feature(
+                combined_pressure,
+                available=combined_pressure is not None,
+                feature_confidence=min(spot_confidence, derivatives_confidence),
+            ),
+            "money.spot_derivatives_alignment": feature(
+                pressure_alignment,
+                available=pressure_alignment is not None,
+                feature_confidence=min(spot_confidence, derivatives_confidence),
+            ),
+            "positioning.oi_regime": feature(
+                oi_regime,
+                available=oi_regime is not None,
+                feature_confidence=ticker_confidence,
+            ),
+            "positioning.price_oi_state": feature(
+                price_oi_state,
+                available=price_oi_state is not None,
+                feature_confidence=min(price_confidence, ticker_confidence),
+            ),
+            "liquidity.trend": feature(
+                liquidity_trend,
+                available=liquidity_trend is not None,
+                feature_confidence=book_confidence,
+            ),
+            "market.timeframe_alignment": feature(
+                timeframe_alignment,
+                available=timeframe_alignment is not None,
+                feature_confidence=price_confidence,
+            ),
             "liquidation.intensity": feature(None, available=False),
             "liquidation.acceleration": feature(None, available=False),
             "liquidation.breadth": feature(None, available=False),
             "liquidation.phase": feature(None, available=False),
             "event.context": feature(None, available=False),
             "event.importance": feature(None, available=False),
+            **anchor_features,
         }
         identity = json.dumps(
             {
