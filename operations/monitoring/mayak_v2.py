@@ -63,6 +63,7 @@ class Collector:
         self.books: dict[tuple[str, str], dict[str, dict[float, float]]] = {}
         self.last_snapshot: dict[str, Any] | None = None
         self.last_persisted_minute: datetime | None = None
+        self.last_persisted_handoff: dict[str, Any] | None = None
         self.pending_liquidations: list[tuple[float, str, str, float, float]] = []
         self.liquidation_lock = threading.Lock()
 
@@ -202,17 +203,23 @@ class Collector:
                 next_ratios = time.monotonic() + 300
             snapshot = self.engine.snapshot(now)
             minute = now.replace(second=0, microsecond=0)
-            if now.second < 2 and minute != self.last_persisted_minute:
+            if (
+                self.last_persisted_minute is None
+                or now.second < 2 and minute != self.last_persisted_minute
+            ):
                 snapshot_id = self._persist_snapshot(snapshot)
                 self.last_persisted_minute = minute
                 self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
                 self._persist_shared_market_context(snapshot_id, snapshot)
+                self.last_persisted_handoff = snapshot["dispatcher_handoff"]
                 state = str(snapshot["state"])
                 if state != previous_state:
                     self._persist_state_event(snapshot_id, snapshot, previous_state)
                     previous_state = state
+            if self.last_persisted_handoff is not None:
+                snapshot["dispatcher_handoff"] = self.last_persisted_handoff
             self.last_snapshot = snapshot
             self._write_state(snapshot)
         for thread in threads:

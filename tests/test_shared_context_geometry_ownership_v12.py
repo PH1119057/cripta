@@ -19,6 +19,7 @@ SUPERVISOR = (ROOT / "operations/monitoring/position_supervisor.py").read_text(
     encoding="utf-8"
 )
 ARCHIVE = (ROOT / "operations/dashboard/archive_v2.py").read_text(encoding="utf-8")
+MAYAK_RUNTIME = (ROOT / "operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
 
 
 def _engine() -> LiveMayakEngine:
@@ -56,6 +57,10 @@ def test_shared_context_matches_canonical_schema() -> None:
 
 def test_shared_context_table_is_immutable() -> None:
     assert "shared_market_contexts_immutable" in MIGRATION
+
+
+def test_dispatcher_reads_only_the_last_persisted_market_context() -> None:
+    assert 'snapshot["dispatcher_handoff"] = self.last_persisted_handoff' in MAYAK_RUNTIME
 
 
 def test_geometry_table_is_immutable() -> None:
