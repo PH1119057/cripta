@@ -1,5 +1,17 @@
 # Project execution infrastructure
 
+## Server operations and patch installation
+
+- The mandatory operational contract for diagnostics, gates, temporary overlays,
+  patch installation, rollback, soak jobs, and field-proof jobs is
+  `docs/CODEX_AUTOMATION_AND_PATCH_INSTALL_RU.md`.
+- A patch must pass manifest, SHA-256, baseline, dirty-tree, temporary-overlay,
+  and project-gate checks before any real checkout file is changed. Keep full
+  logs and machine JSON on the server; return only the compact summary by default.
+- Operational tooling is not permission to change Entry, Exit, Risk, Execution,
+  Mayak feature logic, Dispatcher profiles, Supervisor strategy, or live trading.
+  Any such patch remains trading-sensitive and requires the task's explicit scope.
+
 ## Авторитетность документации
 
 - Перед использованием документа как задания определить его статус по

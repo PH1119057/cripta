@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+name="$(basename "$0")"
+case "$name" in
+  cripta-state) command=state ;;
+  cripta-gate) command=gate ;;
+  cripta-diff-report) command=diff-report ;;
+  cripta-docs-audit) command=docs-audit ;;
+  cripta-patch)
+    if [[ "${1:-}" == "rollback" || "${1:-}" == "status" ]]; then
+      command="$1"; shift
+    else
+      command=patch
+    fi
+    ;;
+  cripta-soak) command=soak ;;
+  cripta-field-proof) command=field-proof ;;
+  *) echo "unknown tool: $name" >&2; exit 2 ;;
+esac
+exec /srv/cripta/test_gate_venv/bin/python -m operations.devtools.cli "$command" "$@"
