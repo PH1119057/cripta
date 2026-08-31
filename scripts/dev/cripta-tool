@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 name="$(basename "$0")"
+if [[ "$(id -un)" != "cripta" && "$(id -u)" != "0" ]]; then
+  exec sudo -n -u cripta "/usr/local/bin/$name" "$@"
+fi
 cd /srv/cripta/source_checkout
 case "$name" in
   cripta-state) command=state ;;
