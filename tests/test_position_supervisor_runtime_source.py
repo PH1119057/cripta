@@ -11,9 +11,9 @@ def test_post_fill_supervisor_is_independent_from_entry_runtime() -> None:
 def test_supervisor_runtime_uses_joint_hold_and_supervisor_exit_only() -> None:
     source = Path("operations/monitoring/position_supervisor.py").read_text(encoding="utf-8")
     assert "dispatcher_hold_context" in source
-    assert "SupervisorState.WARNING" in source
-    assert "SupervisorState.BROKEN" in source
-    assert "INCOMPATIBLE" in source
-    assert "POOR_MATCH" in source
+    assert "early_loss_eligible" in source
+    assert "protective_clean_break_against" in source
+    assert '"internal_exit_reason": "EARLY_LOSS_PREVENTION"' in source
+    assert "SupervisorState.WARNING" not in source
     assert "reduce_only" in source
     assert "place_order" not in source
