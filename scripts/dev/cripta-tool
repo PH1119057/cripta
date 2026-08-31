@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 name="$(basename "$0")"
+cd /srv/cripta/source_checkout
 case "$name" in
   cripta-state) command=state ;;
   cripta-gate) command=gate ;;
