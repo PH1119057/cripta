@@ -1,5 +1,10 @@
 # Project execution infrastructure
 
+- Read `docs/CURRENT_PROJECT_MAP_RU.md` as the concise current map of the
+  repository, production services, PostgreSQL schemas, and component ownership.
+  When a change makes that map stale, update its version and commit, and explicitly
+  tell the owner to replace the copy used as a ChatGPT project source.
+
 ## Server operations and patch installation
 
 - The mandatory operational contract for diagnostics, gates, temporary overlays,
