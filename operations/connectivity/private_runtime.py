@@ -165,9 +165,15 @@ def initialize(connection: psycopg.Connection) -> None:
             dispatcher_status TEXT NOT NULL, decision TEXT NOT NULL,
             reason_ru TEXT NOT NULL, context_type TEXT NOT NULL
                 CHECK(context_type='CONSUMED_CONTEXT'),
-            trading_effect TEXT NOT NULL CHECK(trading_effect='FULL_LIVE_V1'),
+            trading_effect TEXT NOT NULL
+                CHECK(trading_effect IN ('FULL_LIVE_V1','NONE','CONTEXT_ONLY')),
             payload JSONB NOT NULL)""",
         "ALTER TABLE runtime.m3_consumed_context ADD COLUMN IF NOT EXISTS market_context_id TEXT",
+        """ALTER TABLE runtime.m3_consumed_context
+            DROP CONSTRAINT IF EXISTS m3_consumed_context_trading_effect_check""",
+        """ALTER TABLE runtime.m3_consumed_context
+            ADD CONSTRAINT m3_consumed_context_trading_effect_check
+            CHECK(trading_effect IN ('FULL_LIVE_V1','NONE','CONTEXT_ONLY'))""",
         """CREATE TABLE IF NOT EXISTS runtime.entry_geometry_bindings(
             entry_command_id TEXT PRIMARY KEY,
             geometry_handoff_id TEXT UNIQUE NOT NULL,
@@ -224,7 +230,8 @@ def record_entry_decision(
         details.pop("settings_version", current_settings[1] if current_settings else "unknown")
     )
     details["configured_shadow_policy"] = configured_policy
-    details["mayak_live_influence"] = policy == "m3_full_live_v1"
+    details["mayak_live_influence"] = False
+    details["dispatcher_trading_effect"] = "NONE"
     mayak_snapshot_id = details.pop("mayak_snapshot_id", None)
     mayak_snapshot_time = details.pop("mayak_snapshot_time", None)
     decided_at = int(time.time()*1000)
@@ -275,7 +282,7 @@ def consume_m3_entry_context(
     symbol: str,
     direction: str,
     signal_at_ms: int,
-) -> tuple[bool, dict[str, object]]:
+) -> dict[str, object]:
     profile_id = "M3_V1_LONG_ENTRY" if direction == "long" else "M3_V1_SHORT_ENTRY"
     signal_at = datetime.fromtimestamp(signal_at_ms / 1000, UTC)
     row = connection.execute(
@@ -287,26 +294,18 @@ def consume_m3_entry_context(
            ORDER BY observed_at DESC,stored_at DESC LIMIT 1""",
         (profile_id, signal_at),
     ).fetchone()
-    allowed_statuses = {"EXCELLENT_MATCH", "GOOD_MATCH", "PARTIAL_MATCH"}
     if row is None:
-        allowed = False
         status = "NO_CONTEXT"
-        reason = "До сигнала нет причинно допустимой оценки Диспетчера"
+        reason = "До сигнала нет причинно допустимой оценки Диспетчера; вход не блокируется"
         assessment_id = mayak_id = observed_at = version = quality = market_context_id = None
+        age_seconds = None
+        freshness = "MISSING"
         payload: object = {}
     else:
         assessment_id, mayak_id, observed_at, version, status, quality, payload, market_context_id = row
-        age = (signal_at - observed_at).total_seconds()
-        allowed = (
-            status in allowed_statuses
-            and quality in {"HIGH", "MEDIUM"}
-            and 0 <= age <= 90
-        )
-        reason = (
-            "Причинная оценка Диспетчера разрешает M3 Entry"
-            if allowed
-            else "M3 Entry закрыт: контекст непригоден, устарел или не разрешает вход"
-        )
+        age_seconds = (signal_at - observed_at).total_seconds()
+        freshness = "FRESH" if 0 <= age_seconds <= 90 else "STALE"
+        reason = "Причинная оценка Диспетчера сохранена только как контекст"
     document = {
         "signal_id": signal_id,
         "assessment_id": assessment_id,
@@ -317,9 +316,11 @@ def consume_m3_entry_context(
         "profile_version": version,
         "dispatcher_status": status,
         "data_quality": quality,
-        "decision": "ALLOW" if allowed else "BLOCK",
+        "age_seconds": age_seconds,
+        "freshness": freshness,
+        "decision": "OBSERVED",
         "context_type": "CONSUMED_CONTEXT",
-        "trading_effect": "FULL_LIVE_V1",
+        "trading_effect": "NONE",
         "reason_ru": reason,
         "assessment": payload,
     }
@@ -329,13 +330,13 @@ def consume_m3_entry_context(
             assessment_observed_at,profile_id,profile_version,dispatcher_status,
             decision,reason_ru,context_type,trading_effect,payload,market_context_id)
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                   'CONSUMED_CONTEXT','FULL_LIVE_V1',%s,%s)
+                   'CONSUMED_CONTEXT','NONE',%s,%s)
             ON CONFLICT(signal_id) DO NOTHING""",
         (signal_id, symbol, direction, signal_at, assessment_id, mayak_id,
          observed_at, profile_id, version, status, document["decision"], reason,
          json.dumps(document, ensure_ascii=False, default=str), market_context_id),
     )
-    return allowed, document
+    return document
 
 
 def connection_event(connection: psycopg.Connection, channel: str, event: str, **details: object) -> None:
@@ -645,6 +646,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                 WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
                 ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
             for signal_id,symbol,direction,price,signal_at_ms in signals:
+                consumed_context = None
                 if symbol in EXCLUDED_TRADING_SYMBOLS:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "монета находится в карантине")
@@ -654,20 +656,11 @@ def command_worker_loop(key: str, secret: str) -> None:
                                           "запрещён", "монета выключена в торговых настройках")
                     continue
                 if entry_policy == "m3_full_live_v1":
-                    context_allowed, context = consume_m3_entry_context(
+                    consumed_context = consume_m3_entry_context(
                         connection,
                         signal_id=str(signal_id), symbol=str(symbol),
                         direction=str(direction), signal_at_ms=int(signal_at_ms),
                     )
-                    if not context_allowed:
-                        record_entry_decision(
-                            connection, signal_id, symbol, direction, signal_at_ms,
-                            "запрещён", str(context["reason_ru"]),
-                            entry_policy="m3_full_live_v1",
-                            policy_version="1.0.0-owner-live",
-                            consumed_context=context,
-                        )
-                        continue
                 portfolio_entries = connection.execute("""SELECT
                     (SELECT count(*) FROM runtime.hot_positions) +
                     (SELECT count(*) FROM runtime.hot_orders
@@ -771,7 +764,8 @@ def command_worker_loop(key: str, secret: str) -> None:
                 record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                       "разрешён", "проверки пройдены, команда поставлена в очередь",
                                       command_id=cid, entry_policy=entry_policy,
-                                      policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1")
+                                      policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
+                                      consumed_context=consumed_context)
             connection.commit()
         completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
             WHERE command_type='entry' AND state='completed'""").fetchall()

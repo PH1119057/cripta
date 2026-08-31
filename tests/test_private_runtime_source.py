@@ -46,8 +46,9 @@ def test_m3_full_live_consumes_only_causal_dispatcher_context() -> None:
     assert "observed_at<=%s" in source
     assert "1.0.0-owner-live" in source
     assert "CONSUMED_CONTEXT" in source
-    assert "FULL_LIVE_V1" in source
+    assert '"trading_effect": "NONE"' in source
     assert "NO_CONTEXT" in source
+    assert "context_allowed" not in source
 
 
 def test_command_loop_restarts_after_internal_failure() -> None:
