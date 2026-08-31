@@ -22,7 +22,12 @@ SELECT 'ENTRY_DECISION', signal_id, decided_at_epoch_ms, symbol, direction,
 FROM runtime.entry_decisions
 UNION ALL
 SELECT 'TRADE_COMMAND', command_id, requested_at_epoch_ms, symbol, NULL,
-       jsonb_build_object('command_type',command_type,'state',state)
+       jsonb_build_object('command_type',command_type,'processing_state',state,
+                          'exchange_filled',EXISTS(
+                              SELECT 1 FROM runtime.executions e
+                              WHERE e.order_link_id=coalesce(
+                                  trade_commands.result_json::jsonb->>'orderLinkId',
+                                  trade_commands.payload_json::jsonb->>'order_link_id')))
 FROM runtime.trade_commands
 UNION ALL
 SELECT 'FILL', exec_id, COALESCE(exec_time_ms,received_at_epoch_ms), symbol, side,
@@ -45,6 +50,11 @@ SELECT 'DISPATCHER_HOLD', position_id||':'||assessment_id||':'||supervisor_state
        (extract(epoch from consumed_at)*1000)::bigint,
        split_part(position_id,':',1),NULL,payload
 FROM supervisor.dispatcher_hold_context
+UNION ALL
+SELECT 'EXIT_DECISION', decision_id,
+       (extract(epoch from decided_at)*1000)::bigint,
+       symbol,NULL,decision_json
+FROM supervisor.exit_decisions
 """
 
 

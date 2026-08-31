@@ -370,6 +370,20 @@ def live_trading_state() -> dict[str, object]:
                 SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
                 FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
             ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
+        lifecycle_rows = []
+        if connection.execute("SELECT to_regclass('analyst.trade_lifecycles')").fetchone()[0]:
+            lifecycle_rows = connection.execute("""SELECT trade_id,position_id,symbol,side,
+                strategy_id,strategy_version,opened_at,closed_at,lifecycle_state,
+                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json
+                FROM analyst.trade_lifecycles ORDER BY closed_at DESC NULLS LAST LIMIT 500""").fetchall()
+        session_row = connection.execute("""SELECT changed_at_epoch_ms FROM runtime.trade_settings_history
+            WHERE new_settings->>'entry_policy'='m3_full_live_v1'
+            ORDER BY changed_at_epoch_ms DESC LIMIT 1""").fetchone()
+        session_start_ms = int(session_row[0]) if session_row else 0
+        funnel_rows = connection.execute("""SELECT decided_at_epoch_ms,decision,reason,
+            details_json,entry_policy FROM runtime.entry_decisions
+            WHERE decided_at_epoch_ms >= LEAST(%s,%s)""",
+            (session_start_ms or int(time.time()*1000), int((time.time()-86400)*1000))).fetchall()
     trailing_by_symbol = {str(row[0]): (json.loads(row[1]), row[2]) for row in trailing_rows}
     supervisor_by_symbol = {
         str(row[0]): {
@@ -507,6 +521,47 @@ def live_trading_state() -> dict[str, object]:
     recent_closed = sorted(
         closed_groups.values(), key=lambda item: int(item["closed_at_epoch_ms"]), reverse=True
     )
+    lifecycles = []
+    for row in lifecycle_rows:
+        lifecycle = row[12] if isinstance(row[12], dict) else json.loads(row[12])
+        card = {
+            "trade_id": row[0], "position_id": row[1], "symbol": row[2], "side": row[3],
+            "strategy_id": row[4], "strategy_version": row[5],
+            "opened_at": None if row[6] is None else row[6].isoformat(),
+            "closed_at": None if row[7] is None else row[7].isoformat(),
+            "state": row[8], "data_completeness": row[9],
+            "diagnosis": row[10],
+            "actual_net_pnl": None if row[11] is None else str(row[11]),
+            "lifecycle": lifecycle,
+        }
+        lifecycles.append(card)
+        if row[7] is not None:
+            closed_ms = int(row[7].timestamp() * 1000)
+            candidate = min(
+                (item for item in recent_closed if item["symbol"] == row[2]),
+                key=lambda item: abs(int(item["closed_at_epoch_ms"]) - closed_ms),
+                default=None,
+            )
+            if candidate and abs(int(candidate["closed_at_epoch_ms"]) - closed_ms) <= 120_000:
+                candidate["trade_card"] = card
+                exit_decision = lifecycle.get("exit_decision") or {}
+                decision_json = exit_decision.get("decision_json") or {}
+                candidate["strategy_reason"] = (
+                    decision_json.get("internal_reason")
+                    or exit_decision.get("internal_reason") or "UNKNOWN"
+                )
+    now_ms = int(time.time() * 1000)
+    def funnel_window(start_ms: int) -> dict[str, object]:
+        rows = [row for row in funnel_rows if int(row[0]) >= start_ms]
+        decisions = {"ALLOW": 0, "BLOCK": 0}
+        reasons: dict[str, int] = {}
+        for row in rows:
+            key = "ALLOW" if str(row[1]) in {"разрешён", "ALLOW"} else "BLOCK"
+            decisions[key] += 1
+            if key == "BLOCK":
+                reasons[str(row[2])] = reasons.get(str(row[2]), 0) + 1
+        return {"core_signals": len(rows), "decisions": decisions,
+                "top_block_reasons": sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]}
     return {
         "wallet": None
         if wallet is None
@@ -560,6 +615,25 @@ def live_trading_state() -> dict[str, object]:
             for r in commands
         ],
         "recent_closed": recent_closed,
+        "trade_lifecycles": lifecycles,
+        "entry_funnel": {
+            "last_hour": funnel_window(now_ms - 3_600_000),
+            "session": funnel_window(session_start_ms),
+            "last_24h": funnel_window(now_ms - 86_400_000),
+        },
+        "strategy_controls": {
+            "strategy": "M3 FULL LIVE V1.1", "installed_version": "1.1.0",
+            "loaded_version": "1.1.0", "entry_profile": "M3_V1_LONG/SHORT_ENTRY 1.0.0-owner-live",
+            "accepted_statuses": ["EXCELLENT_MATCH","GOOD_MATCH","PARTIAL_MATCH"],
+            "max_context_age_seconds": 90, "allowed_quality": ["HIGH","MEDIUM"],
+            "hold_profile": "M3_V1_LONG/SHORT_HOLD 1.0.0-owner-live",
+            "early_exit_enabled": False,
+            "early_exit_state": "BROKEN + INCOMPATIBLE + protective_clean_break_against",
+            "early_exit_status": "DISABLED/FALLBACK_SAFE: Entry не передаёт геометрию зон",
+            "minimum_net_profit_usdt": "0.01", "exit_fee_rate": "0.00055",
+            "slippage_reserve": "не меньше 0,02% и наблюдаемого проскальзывания",
+            "hard_stop_pct": "-1.00",
+        },
     }
 
 

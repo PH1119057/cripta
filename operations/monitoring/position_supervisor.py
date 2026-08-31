@@ -11,6 +11,8 @@ from pathlib import Path
 
 import psycopg
 
+from bybit_workbench.exit_economics import calculate_close_economics
+from bybit_workbench.live_exit_policy import EarlyLossContext, early_loss_eligible
 from bybit_workbench.position_supervisor import (
     ExchangePosition,
     FeatureEvidence,
@@ -139,6 +141,30 @@ def initialize(connection: psycopg.Connection) -> None:
         trading_effect TEXT NOT NULL CHECK(trading_effect='FULL_LIVE_V1'),
         payload JSONB NOT NULL,
         PRIMARY KEY(position_id,assessment_id,supervisor_state))""")
+    connection.execute("""CREATE TABLE IF NOT EXISTS supervisor.position_structure_handoff(
+        event_id TEXT PRIMARY KEY, position_id TEXT NOT NULL, symbol TEXT NOT NULL,
+        structural_event TEXT NOT NULL CHECK(structural_event IN (
+            'protective_clean_break_against','protective_hold_reclaim',
+            'obstacle_clean_break_with','obstacle_rejection_against')),
+        observed_at TIMESTAMPTZ NOT NULL, zone_id TEXT NOT NULL,
+        zone_role TEXT NOT NULL, lower_price NUMERIC NOT NULL,
+        upper_price NUMERIC NOT NULL, source_timeframe TEXT NOT NULL,
+        geometry_version TEXT NOT NULL, signal_at TIMESTAMPTZ NOT NULL,
+        fill_at TIMESTAMPTZ NOT NULL, provenance JSONB NOT NULL,
+        CHECK(observed_at>=signal_at), CHECK(observed_at>=fill_at),
+        CHECK(lower_price<=upper_price))""")
+    connection.execute("""CREATE TABLE IF NOT EXISTS supervisor.exit_economics_snapshots(
+        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        position_id TEXT NOT NULL, symbol TEXT NOT NULL,
+        observed_at TIMESTAMPTZ NOT NULL, purpose TEXT NOT NULL,
+        economics_json JSONB NOT NULL)""")
+    connection.execute("""CREATE TABLE IF NOT EXISTS supervisor.exit_decisions(
+        decision_id TEXT PRIMARY KEY, position_id TEXT NOT NULL, symbol TEXT NOT NULL,
+        decided_at TIMESTAMPTZ NOT NULL, internal_reason TEXT NOT NULL,
+        hold_assessment_id TEXT, mayak_snapshot_id TEXT,
+        supervisor_snapshot_id BIGINT, structural_event_id TEXT,
+        economics_snapshot_id BIGINT REFERENCES supervisor.exit_economics_snapshots(id),
+        close_command_id TEXT, decision_json JSONB NOT NULL)""")
     connection.commit()
 
 
@@ -175,13 +201,57 @@ def mayak_context() -> tuple[datetime | None, dict[str, dict[str, object]]]:
         return None, {}
 
 
+def structure_feature(
+    connection: psycopg.Connection, position_id: str, now: datetime
+) -> tuple[FeatureEvidence, str | None, datetime | None]:
+    row = connection.execute(
+        """SELECT structural_event,observed_at,event_id,zone_id,zone_role,
+                  lower_price,upper_price,source_timeframe,geometry_version
+           FROM supervisor.position_structure_handoff
+           WHERE position_id=%s AND observed_at<=%s
+           ORDER BY observed_at DESC LIMIT 1""",
+        (position_id, now),
+    ).fetchone()
+    if row is None:
+        return FeatureEvidence("unknown", now, Quality.MISSING), None, None
+    event, observed_at = str(row[0]), row[1]
+    age = (now - observed_at).total_seconds()
+    quality = Quality.FRESH if 0 <= age <= 90 else Quality.STALE
+    state = {
+        "protective_clean_break_against": "broken",
+        "protective_hold_reclaim": "reclaim",
+        "obstacle_clean_break_with": "with",
+        "obstacle_rejection_against": "warning",
+    }[event]
+    return (
+        FeatureEvidence(
+            state,
+            observed_at,
+            quality,
+            {
+                "event_id": str(row[2]),
+                "zone_id": str(row[3]),
+                "zone_role": str(row[4]),
+                "lower_price": str(row[5]),
+                "upper_price": str(row[6]),
+                "source_timeframe": str(row[7]),
+                "geometry_version": str(row[8]),
+            },
+        ),
+        event,
+        observed_at,
+    )
+
+
 def features(
+    connection: psycopg.Connection,
+    position_id: str,
     symbol: str,
     side: str,
     now: datetime,
     observed: datetime | None,
     context: dict[str, dict[str, object]],
-) -> dict[str, FeatureEvidence]:
+) -> tuple[dict[str, FeatureEvidence], str | None, datetime | None]:
     item = context.get(symbol)
     result: dict[str, FeatureEvidence] = {}
     if item and observed:
@@ -209,15 +279,12 @@ def features(
                 Quality.MISSING if oi_change is None else quality,
                 {"open_interest_change_5m_pct": "" if oi_change is None else str(oi_change)},
             )
-            result["structure"] = FeatureEvidence(
-                "unknown",
-                observed,
-                Quality.MISSING,
-                {"source": "mayak_v2; structural layer is not available"},
-            )
         except (ValueError, TypeError, KeyError):
             pass
-    result.setdefault("structure", FeatureEvidence("unknown", now, Quality.MISSING))
+    structure, structural_event, structure_observed_at = structure_feature(
+        connection, position_id, now
+    )
+    result["structure"] = structure
     try:
         result["price_1m"] = price_feature(symbol, side, now)
         execution, orderbook = execution_and_book_features(symbol, side, now)
@@ -248,7 +315,12 @@ def features(
             "market_eth",
         ):
             result.setdefault(name, FeatureEvidence("unknown", now, Quality.MISSING))
-    return result
+    if structural_event == "protective_clean_break_against" and result.get("price_1m"):
+        price = result["price_1m"]
+        result["price_1m"] = FeatureEvidence(
+            "failed_reclaim", price.observed_at, price.quality, price.measurements
+        )
+    return result, structural_event, structure_observed_at
 
 
 def restore_created(
@@ -272,6 +344,16 @@ def restore_created(
         )
 
 
+def actual_entry_fee(connection: psycopg.Connection, position: ExchangePosition) -> Decimal:
+    row = connection.execute(
+        """SELECT coalesce(sum(abs(exec_fee::numeric)),0)
+           FROM runtime.executions
+           WHERE symbol=%s AND side=%s AND exec_time_ms>=%s""",
+        (position.symbol, position.side, int(position.fill_time.timestamp() * 1000)),
+    ).fetchone()
+    return Decimal(str(row[0] if row else 0))
+
+
 def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
@@ -286,11 +368,20 @@ def main() -> None:
             restore_created(connection, registry, created)
             context_observed, context = mayak_context()
             for position, mark in rows:
+                evidence, structural_event, structure_observed_at = features(
+                    connection,
+                    position.position_id,
+                    position.symbol,
+                    position.side,
+                    now,
+                    context_observed,
+                    context,
+                )
                 snapshot = registry.get(position.position_id).update(
                     PositionEvent(
                         now,
                         mark,
-                        features(position.symbol, position.side, now, context_observed, context),
+                        evidence,
                     )
                 )
                 document = snapshot.audit_dict()
@@ -315,10 +406,7 @@ def main() -> None:
                         ),
                     )
                     last_periodic_save[position.position_id] = at_ms
-                profile_id = (
-                    "M3_V1_LONG_HOLD" if position.side == "Buy"
-                    else "M3_V1_SHORT_HOLD"
-                )
+                profile_id = "M3_V1_LONG_HOLD" if position.side == "Buy" else "M3_V1_SHORT_HOLD"
                 hold = connection.execute(
                     """SELECT assessment_id,mayak_snapshot_id,observed_at,
                               profile_version,status,data_quality,payload
@@ -331,11 +419,29 @@ def main() -> None:
                 if hold is not None:
                     hold_age = (now - hold[2]).total_seconds()
                     usable = hold[5] in {"HIGH", "MEDIUM"} and 0 <= hold_age <= 90
-                    joint_close = usable and (
-                        (hold[4] == "INCOMPATIBLE" and snapshot.state in {
-                            SupervisorState.WARNING, SupervisorState.BROKEN
-                        })
-                        or (hold[4] == "POOR_MATCH" and snapshot.state is SupervisorState.BROKEN)
+                    joint_close = usable and early_loss_eligible(
+                        EarlyLossContext(
+                            hold_status=str(hold[4]),
+                            supervisor_state=snapshot.state.value,
+                            structural_event=structural_event,
+                            hold_observed_at=hold[2],
+                            structure_observed_at=structure_observed_at,
+                            decided_at=now,
+                        )
+                    )
+                    execution_feature = evidence.get("execution_now")
+                    execution_price_key = "bid" if position.side == "Buy" else "ask"
+                    executable_raw = (
+                        execution_feature.measurements.get(execution_price_key)
+                        if execution_feature and execution_feature.measurements
+                        else None
+                    )
+                    joint_close = bool(
+                        joint_close
+                        and execution_feature
+                        and execution_feature.quality is Quality.FRESH
+                        and executable_raw is not None
+                        and Decimal(str(executable_raw)) > 0
                     )
                     action = "REDUCE_ONLY_CLOSE" if joint_close else "HOLD"
                     context_payload = {
@@ -361,24 +467,118 @@ def main() -> None:
                             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,
                                    'CONSUMED_CONTEXT','FULL_LIVE_V1',%s)
                             ON CONFLICT DO NOTHING""",
-                        (position.position_id, hold[0], hold[1], hold[2], profile_id,
-                         hold[3], hold[4], snapshot.state.value, action,
-                         json.dumps(context_payload, ensure_ascii=False)),
+                        (
+                            position.position_id,
+                            hold[0],
+                            hold[1],
+                            hold[2],
+                            profile_id,
+                            hold[3],
+                            hold[4],
+                            snapshot.state.value,
+                            action,
+                            json.dumps(context_payload, ensure_ascii=False),
+                        ),
                     )
                     if joint_close:
                         command_id = "m3-exit-" + position.position_id.replace(":", "-")[-48:]
+                        measurements = execution_feature.measurements if execution_feature else {}
+                        executable = Decimal(
+                            str(
+                                measurements.get("bid")
+                                if position.side == "Buy"
+                                else measurements.get("ask")
+                            )
+                        )
+                        economics = calculate_close_economics(
+                            side=position.side,
+                            entry_price=position.actual_avg_fill,
+                            qty=position.qty,
+                            executable_close_price=executable,
+                            entry_fee_actual=actual_entry_fee(connection, position),
+                            exit_fee_rate=Decimal("0.00055"),
+                            slippage_reserve=executable * position.qty * Decimal("0.0002"),
+                            exchange_break_even_price=position.break_even_price,
+                            data_quality="FRESH"
+                            if execution_feature and execution_feature.quality is Quality.FRESH
+                            else "MISSING",
+                            exactness="ACTUAL_ENTRY_FEE_EXPECTED_EXIT_FEE_NO_FUNDING_SOURCE",
+                        )
+                        economics_id = connection.execute(
+                            """INSERT INTO supervisor.exit_economics_snapshots(
+                                position_id,symbol,observed_at,purpose,economics_json)
+                                VALUES(%s,%s,%s,'EARLY_LOSS_PREVENTION',%s)
+                                RETURNING id""",
+                            (
+                                position.position_id,
+                                position.symbol,
+                                now,
+                                json.dumps(economics.audit_dict(), ensure_ascii=False),
+                            ),
+                        ).fetchone()[0]
+                        structural_id = None
+                        if evidence["structure"].measurements:
+                            structural_id = evidence["structure"].measurements.get("event_id")
+                        decision_id = "exit-decision-" + command_id
+                        decision_payload = {
+                            "internal_reason": "EARLY_LOSS_PREVENTION",
+                            "hold_assessment_id": hold[0],
+                            "mayak_snapshot_id": hold[1],
+                            "hold_profile_id": profile_id,
+                            "hold_profile_version": hold[3],
+                            "hold_status": hold[4],
+                            "supervisor_state": snapshot.state.value,
+                            "supervisor_reason": snapshot.reason,
+                            "structural_event": structural_event,
+                            "structural_event_id": structural_id,
+                            "economics_snapshot_id": economics_id,
+                            "expected_net_if_closed_now": str(economics.expected_net_if_closed_now),
+                        }
+                        connection.execute(
+                            """INSERT INTO supervisor.exit_decisions(
+                                decision_id,position_id,symbol,decided_at,internal_reason,
+                                hold_assessment_id,mayak_snapshot_id,structural_event_id,
+                                economics_snapshot_id,close_command_id,decision_json)
+                                VALUES(%s,%s,%s,%s,'EARLY_LOSS_PREVENTION',%s,%s,%s,%s,%s,%s)
+                                ON CONFLICT(decision_id) DO NOTHING""",
+                            (
+                                decision_id,
+                                position.position_id,
+                                position.symbol,
+                                now,
+                                hold[0],
+                                hold[1],
+                                structural_id,
+                                economics_id,
+                                command_id,
+                                json.dumps(decision_payload, ensure_ascii=False),
+                            ),
+                        )
                         connection.execute(
                             """INSERT INTO runtime.trade_commands(
                                 command_id,command_type,symbol,payload_json,state,
                                 requested_at_epoch_ms)
                                 VALUES(%s,'close',%s,%s,'queued',%s)
                                 ON CONFLICT(command_id) DO NOTHING""",
-                            (command_id, position.symbol,
-                             json.dumps({"source":"m3_full_live_v1",
-                                         "reduce_only":True,
-                                         "hold_assessment_id":hold[0],
-                                         "supervisor_state":snapshot.state.value},
-                                        ensure_ascii=False), at_ms),
+                            (
+                                command_id,
+                                position.symbol,
+                                json.dumps(
+                                    {
+                                        "source": "m3_full_live_v1_1",
+                                        "reduce_only": True,
+                                        "internal_exit_reason": "EARLY_LOSS_PREVENTION",
+                                        "exit_decision_id": decision_id,
+                                        "hold_assessment_id": hold[0],
+                                        "mayak_snapshot_id": hold[1],
+                                        "supervisor_state": snapshot.state.value,
+                                        "structural_event_id": structural_id,
+                                        "economics_snapshot_id": economics_id,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                at_ms,
+                            ),
                         )
                 if state_changed:
                     connection.execute(

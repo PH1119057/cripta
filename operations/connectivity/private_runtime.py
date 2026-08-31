@@ -146,6 +146,15 @@ def initialize(connection: psycopg.Connection) -> None:
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS settings_version TEXT NOT NULL DEFAULT 'unknown'",
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_id BIGINT",
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_time TIMESTAMPTZ",
+        """CREATE TABLE IF NOT EXISTS runtime.entry_decision_events(
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            signal_id TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL,
+            signal_at_epoch_ms BIGINT NOT NULL, observed_at_epoch_ms BIGINT NOT NULL,
+            event_type TEXT NOT NULL, decision TEXT, reason TEXT NOT NULL,
+            details_json JSONB NOT NULL, entry_policy TEXT NOT NULL,
+            policy_version TEXT NOT NULL, settings_version TEXT NOT NULL)""",
+        """CREATE INDEX IF NOT EXISTS entry_decision_events_signal_time
+            ON runtime.entry_decision_events(signal_id,observed_at_epoch_ms)""",
         """CREATE TABLE IF NOT EXISTS runtime.m3_consumed_context(
             signal_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL,
             signal_at TIMESTAMPTZ NOT NULL, assessment_id TEXT,
@@ -188,22 +197,32 @@ def record_entry_decision(
     details["mayak_live_influence"] = policy == "m3_full_live_v1"
     mayak_snapshot_id = details.pop("mayak_snapshot_id", None)
     mayak_snapshot_time = details.pop("mayak_snapshot_time", None)
+    decided_at = int(time.time()*1000)
+    event_type = "TERMINAL_STRATEGY_DECISION"
+    existing = connection.execute(
+        "SELECT 1 FROM runtime.entry_decisions WHERE signal_id=%s", (str(signal_id),)
+    ).fetchone()
+    if existing:
+        event_type = "DUPLICATE_RUNTIME_OBSERVATION"
+    connection.execute(
+        """INSERT INTO runtime.entry_decision_events(
+            signal_id,symbol,direction,signal_at_epoch_ms,observed_at_epoch_ms,
+            event_type,decision,reason,details_json,entry_policy,policy_version,settings_version)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (str(signal_id), str(symbol), str(direction), int(signal_at_ms), decided_at,
+         event_type, decision, reason, json.dumps(details, ensure_ascii=False),
+         policy, policy_version, settings_version),
+    )
     connection.execute(
         """INSERT INTO runtime.entry_decisions(
                signal_id,symbol,direction,signal_at_epoch_ms,decided_at_epoch_ms,
                decision,reason,details_json,entry_policy,policy_version,settings_version,
                mayak_snapshot_id,mayak_snapshot_time)
            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-           ON CONFLICT(signal_id) DO UPDATE SET
-               decided_at_epoch_ms=excluded.decided_at_epoch_ms,
-               decision=excluded.decision,reason=excluded.reason,
-               details_json=excluded.details_json,entry_policy=excluded.entry_policy,
-               policy_version=excluded.policy_version,settings_version=excluded.settings_version,
-               mayak_snapshot_id=excluded.mayak_snapshot_id,
-               mayak_snapshot_time=excluded.mayak_snapshot_time""",
+           ON CONFLICT(signal_id) DO NOTHING""",
         (
             str(signal_id), str(symbol), str(direction), int(signal_at_ms),
-            int(time.time()*1000), decision, reason,
+            decided_at, decision, reason,
             json.dumps(details, ensure_ascii=False),
             policy, policy_version, settings_version, mayak_snapshot_id, mayak_snapshot_time,
         ),

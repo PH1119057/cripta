@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
+from bybit_workbench.exit_economics import calculate_close_economics
 
 EXIT_TAKER_FEE_RATE = Decimal("0.00055")
 MIN_PROTECTED_PROFIT_USDT = Decimal("0.01")
@@ -14,23 +15,38 @@ def quantize(value: Decimal, step: Decimal, *, upward: bool) -> Decimal:
 
 
 def calculate_protection_plan(
-    *, entry: Decimal, qty: Decimal, entry_fee: Decimal, side: str, tick: Decimal,
+    *,
+    entry: Decimal,
+    qty: Decimal,
+    entry_fee: Decimal,
+    side: str,
+    tick: Decimal,
     slippage_pct: Decimal = PROTECTION_SLIPPAGE_PCT,
 ) -> dict[str, Decimal]:
     if entry <= 0 or qty <= 0 or tick <= 0:
         raise ValueError("entry, quantity and tick must be positive")
-    per_unit_cost = (entry_fee + MIN_PROTECTED_PROFIT_USDT) / qty
-    if side == "Buy":
-        minimum_fill = (entry + per_unit_cost) / (Decimal("1") - EXIT_TAKER_FEE_RATE)
-    elif side == "Sell":
-        minimum_fill = (entry - per_unit_cost) / (Decimal("1") + EXIT_TAKER_FEE_RATE)
-    else:
-        raise ValueError("side must be Buy or Sell")
     slippage = max(tick, entry * slippage_pct)
-    raw_stop = minimum_fill + slippage if side == "Buy" else minimum_fill - slippage
+    economics = calculate_close_economics(
+        side=side,
+        entry_price=entry,
+        qty=qty,
+        executable_close_price=entry,
+        entry_fee_actual=entry_fee,
+        exit_fee_rate=EXIT_TAKER_FEE_RATE,
+        slippage_reserve=slippage * qty,
+        minimum_net_profit=MIN_PROTECTED_PROFIT_USDT,
+    )
+    minimum_fill = economics.minimum_profitable_close_price
+    raw_stop = minimum_fill
     stop = quantize(raw_stop, tick, upward=side == "Buy")
     activation = stop + tick if side == "Buy" else stop - tick
-    return {"stop": stop, "activation": activation, "entry_fee": entry_fee, "minimum_fill": minimum_fill, "slippage": slippage}
+    return {
+        "stop": stop,
+        "activation": activation,
+        "entry_fee": entry_fee,
+        "minimum_fill": minimum_fill,
+        "slippage": slippage,
+    }
 
 
 def trailing_start_preserves_protection(
@@ -47,8 +63,7 @@ def trailing_start_preserves_protection(
 
 
 def calculate_initial_boundaries(
-    *, entry: Decimal, side: str, tick: Decimal,
-    take_profit_pct: Decimal = Decimal("3.00")
+    *, entry: Decimal, side: str, tick: Decimal, take_profit_pct: Decimal = Decimal("3.00")
 ) -> tuple[Decimal, Decimal]:
     if entry <= 0 or tick <= 0:
         raise ValueError("entry and tick must be positive")

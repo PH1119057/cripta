@@ -1,0 +1,22 @@
+[Unit]
+Description=Cripta M3 read-only trade lifecycle analyst
+After=network-online.target postgresql.service cripta-private-runtime.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/production/src
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/m3_trade_analyst.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cripta
+
+[Install]
+WantedBy=multi-user.target
