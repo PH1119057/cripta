@@ -104,10 +104,7 @@ def git_head(root: Path) -> str | None:
 def git_dirty(root: Path) -> bool | None:
     git_directory = root / ".git"
     command = ["git", "status", "--porcelain"]
-    if not git_directory.exists() and DEFAULT_GIT_DIR.exists():
-        command = ["git", f"--git-dir={DEFAULT_GIT_DIR}", f"--work-tree={root}",
-                   "status", "--porcelain", "--untracked-files=no"]
-    elif not git_directory.exists():
+    if not git_directory.exists():
         return None
     result = subprocess.run(command, cwd=root, text=True,
                             capture_output=True, check=False)
@@ -177,8 +174,11 @@ def gate_command(args: argparse.Namespace) -> int:
 def changed_paths(root: Path, baseline: str) -> list[str]:
     command = ["git", "diff", "--name-only", baseline, "--"]
     if not (root / ".git").exists() and DEFAULT_GIT_DIR.exists():
-        command = ["git", f"--git-dir={DEFAULT_GIT_DIR}", f"--work-tree={root}",
-                   "diff", "--name-only", baseline, "--"]
+        installed_head = git_head(root)
+        if not installed_head:
+            raise RuntimeError("installed git head is unavailable")
+        command = ["git", f"--git-dir={DEFAULT_GIT_DIR}", "diff", "--name-only",
+                   baseline, installed_head, "--"]
     result = subprocess.run(command, cwd=root, text=True, capture_output=True, check=False)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "git diff failed")
