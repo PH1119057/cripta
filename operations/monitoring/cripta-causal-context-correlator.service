@@ -1,7 +1,7 @@
 [Unit]
 Description=Cripta passive causal market-context correlator
-After=cripta-mayak-v2.service cripta-strategy-dispatcher.service postgresql.service
-Wants=cripta-mayak-v2.service cripta-strategy-dispatcher.service postgresql.service
+After=cripta-mayak-v2.service cripta-strategy-dispatcher.service cripta-private-runtime.service cripta-position-supervisor.service postgresql.service
+Wants=cripta-mayak-v2.service cripta-strategy-dispatcher.service cripta-private-runtime.service cripta-position-supervisor.service postgresql.service
 
 [Service]
 Type=simple
