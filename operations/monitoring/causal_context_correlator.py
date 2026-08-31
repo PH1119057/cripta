@@ -26,6 +26,7 @@ SELECT 'TRADE_COMMAND', command_id, requested_at_epoch_ms, symbol, NULL,
                           'exchange_filled',EXISTS(
                               SELECT 1 FROM runtime.executions e
                               WHERE e.order_link_id=coalesce(
+                                  trade_commands.result_json::jsonb->'result'->>'orderLinkId',
                                   trade_commands.result_json::jsonb->>'orderLinkId',
                                   trade_commands.payload_json::jsonb->>'order_link_id')))
 FROM runtime.trade_commands

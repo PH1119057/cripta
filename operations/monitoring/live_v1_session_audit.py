@@ -101,7 +101,8 @@ def build(
     anatomy: list[dict[str, Any]] = []
     for command in entry_commands:
         payload = _json(command["payload_json"])
-        result = _json(command["result_json"])
+        response = _json(command["result_json"])
+        result = _json(response.get("result")) or response
         order_link_id = str(result.get("orderLinkId") or payload.get("order_link_id") or "")
         related = [
             row

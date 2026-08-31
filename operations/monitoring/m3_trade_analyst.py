@@ -53,10 +53,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         ORDER BY requested_at_epoch_ms""").fetchall()
     updated = 0
     for entry in entries:
-        entry_payload, entry_result = (
+        entry_payload, entry_response = (
             document(entry["payload_json"]),
             document(entry["result_json"]),
         )
+        entry_result = document(entry_response.get("result")) or entry_response
         order_id = str(entry_result.get("orderId") or "")
         link_id = str(entry_result.get("orderLinkId") or entry_payload.get("order_link_id") or "")
         fills = connection.execute(
@@ -92,7 +93,8 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         close_command = None
         close_fills: list[dict[str, Any]] = []
         for candidate in closes:
-            result = document(candidate["result_json"])
+            response = document(candidate["result_json"])
+            result = document(response.get("result")) or response
             candidate_order = str(result.get("orderId") or "")
             candidate_link = str(result.get("orderLinkId") or "")
             rows = connection.execute(
