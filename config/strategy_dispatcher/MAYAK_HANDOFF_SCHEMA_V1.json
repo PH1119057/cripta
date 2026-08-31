@@ -5,6 +5,9 @@
   "type": "object",
   "required": [
     "snapshot_id",
+    "market_context_id",
+    "market_context_schema_version",
+    "provenance",
     "observed_at",
     "engine_version",
     "architecture_version",
@@ -15,6 +18,24 @@
     "snapshot_id": {
       "type": "string",
       "minLength": 1
+    },
+    "market_context_id": {
+      "type": "string",
+      "pattern": "^MC-"
+    },
+    "market_context_schema_version": {
+      "const": "shared-market-context-v1"
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "config_fingerprint", "immutable", "trading_command"],
+      "properties": {
+        "source": {"const": "mayak_v2"},
+        "config_fingerprint": {"type": "string", "minLength": 1},
+        "immutable": {"const": true},
+        "trading_command": {"const": false}
+      },
+      "additionalProperties": false
     },
     "observed_at": {
       "type": "string",

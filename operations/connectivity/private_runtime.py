@@ -37,6 +37,7 @@ EXCLUDED_TRADING_SYMBOLS = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
 SIGNAL_PICKUP_WINDOW_MS = int(os.environ.get("CRIPTA_SIGNAL_PICKUP_WINDOW_MS", "120000"))
 ENTRY_COOLDOWN_MS = int(os.environ.get("CRIPTA_ENTRY_COOLDOWN_MS", "300000"))
 MAX_PORTFOLIO_ENTRIES = int(os.environ.get("CRIPTA_MAX_PORTFOLIO_ENTRIES", "1"))
+BOT_INSTANCE_ID = os.environ.get("CRIPTA_BOT_INSTANCE_ID", "m3-mainnet-primary")
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
@@ -166,6 +167,35 @@ def initialize(connection: psycopg.Connection) -> None:
                 CHECK(context_type='CONSUMED_CONTEXT'),
             trading_effect TEXT NOT NULL CHECK(trading_effect='FULL_LIVE_V1'),
             payload JSONB NOT NULL)""",
+        "ALTER TABLE runtime.m3_consumed_context ADD COLUMN IF NOT EXISTS market_context_id TEXT",
+        """CREATE TABLE IF NOT EXISTS runtime.entry_geometry_bindings(
+            entry_command_id TEXT PRIMARY KEY,
+            geometry_handoff_id TEXT UNIQUE NOT NULL,
+            signal_id TEXT UNIQUE NOT NULL,
+            bot_instance_id TEXT NOT NULL,
+            strategy_id TEXT NOT NULL,
+            strategy_version TEXT NOT NULL,
+            bound_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+            payload JSONB NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS runtime.position_ownership(
+            position_id TEXT PRIMARY KEY,
+            trade_id TEXT UNIQUE NOT NULL,
+            bot_instance_id TEXT NOT NULL,
+            strategy_id TEXT NOT NULL,
+            strategy_version TEXT NOT NULL,
+            signal_id TEXT NOT NULL,
+            entry_command_id TEXT UNIQUE NOT NULL,
+            geometry_handoff_id TEXT,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            actual_avg_fill NUMERIC NOT NULL,
+            actual_qty NUMERIC NOT NULL,
+            fill_at TIMESTAMPTZ NOT NULL,
+            exchange_order_ids JSONB NOT NULL,
+            client_order_ids JSONB NOT NULL,
+            execution_ids JSONB NOT NULL,
+            state TEXT NOT NULL DEFAULT 'OPEN',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp())""",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
@@ -250,7 +280,7 @@ def consume_m3_entry_context(
     signal_at = datetime.fromtimestamp(signal_at_ms / 1000, UTC)
     row = connection.execute(
         """SELECT assessment_id,mayak_snapshot_id,observed_at,profile_version,
-                  status,data_quality,payload
+                  status,data_quality,payload,market_context_id
            FROM strategy_dispatcher.assessments
            WHERE profile_id=%s AND profile_version='1.0.0-owner-live'
              AND observed_at<=%s
@@ -262,10 +292,10 @@ def consume_m3_entry_context(
         allowed = False
         status = "NO_CONTEXT"
         reason = "До сигнала нет причинно допустимой оценки Диспетчера"
-        assessment_id = mayak_id = observed_at = version = quality = None
+        assessment_id = mayak_id = observed_at = version = quality = market_context_id = None
         payload: object = {}
     else:
-        assessment_id, mayak_id, observed_at, version, status, quality, payload = row
+        assessment_id, mayak_id, observed_at, version, status, quality, payload, market_context_id = row
         age = (signal_at - observed_at).total_seconds()
         allowed = (
             status in allowed_statuses
@@ -281,6 +311,7 @@ def consume_m3_entry_context(
         "signal_id": signal_id,
         "assessment_id": assessment_id,
         "mayak_snapshot_id": mayak_id,
+        "market_context_id": market_context_id,
         "assessment_observed_at": None if observed_at is None else observed_at.isoformat(),
         "profile_id": profile_id,
         "profile_version": version,
@@ -296,13 +327,13 @@ def consume_m3_entry_context(
         """INSERT INTO runtime.m3_consumed_context(
             signal_id,symbol,direction,signal_at,assessment_id,mayak_snapshot_id,
             assessment_observed_at,profile_id,profile_version,dispatcher_status,
-            decision,reason_ru,context_type,trading_effect,payload)
+            decision,reason_ru,context_type,trading_effect,payload,market_context_id)
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                   'CONSUMED_CONTEXT','FULL_LIVE_V1',%s)
+                   'CONSUMED_CONTEXT','FULL_LIVE_V1',%s,%s)
             ON CONFLICT(signal_id) DO NOTHING""",
         (signal_id, symbol, direction, signal_at, assessment_id, mayak_id,
          observed_at, profile_id, version, status, document["decision"], reason,
-         json.dumps(document, ensure_ascii=False, default=str)),
+         json.dumps(document, ensure_ascii=False, default=str), market_context_id),
     )
     return allowed, document
 
@@ -707,10 +738,36 @@ def command_worker_loop(key: str, secret: str) -> None:
                         "все проверки пройдены, но реальный торговый шлюз закрыт",
                     )
                     continue
+                geometry = connection.execute(
+                    """SELECT geometry_handoff_id,strategy_id,strategy_version,payload
+                       FROM monitoring.entry_geometry_handoffs WHERE signal_id=%s""",
+                    (signal_id,),
+                ).fetchone()
+                if entry_policy == "m3_full_live_v1" and geometry is None:
+                    record_entry_decision(
+                        connection, signal_id, symbol, direction, signal_at_ms,
+                        "запрещён",
+                        "нет причинной неизменяемой геометрии Entry",
+                        entry_policy=entry_policy,
+                        policy_version="1.0.0-owner-live",
+                    )
+                    continue
                 cid="auto-"+hashlib.sha256(str(signal_id).encode()).hexdigest()[:28]
-                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1"}
+                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1","bot_instance_id":BOT_INSTANCE_ID,"geometry_handoff_id":None if geometry is None else geometry[0]}
                 connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                     VALUES(%s,'entry',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(cid,symbol,json.dumps(body),int(time.time()*1000)))
+                if geometry is not None:
+                    connection.execute(
+                        """INSERT INTO runtime.entry_geometry_bindings(
+                            entry_command_id,geometry_handoff_id,signal_id,bot_instance_id,
+                            strategy_id,strategy_version,payload)
+                            VALUES(%s,%s,%s,%s,%s,%s,%s)
+                            ON CONFLICT(entry_command_id) DO NOTHING""",
+                        (
+                            cid, geometry[0], signal_id, BOT_INSTANCE_ID,
+                            geometry[1], geometry[2], geometry[3],
+                        ),
+                    )
                 record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                       "разрешён", "проверки пройдены, команда поставлена в очередь",
                                       command_id=cid, entry_policy=entry_policy,
@@ -735,6 +792,40 @@ def command_worker_loop(key: str, secret: str) -> None:
             if open_time_ms and abs(open_time_ms-int(fill_time_ms or 0)) > 10_000:
                 continue
             actual_entry=Decimal(str(position_row[2]))
+            execution_rows = connection.execute(
+                """SELECT exec_id,order_id,order_link_id,exec_time_ms
+                   FROM runtime.executions WHERE order_link_id=%s
+                   ORDER BY exec_time_ms,exec_id""",
+                (entry_id,),
+            ).fetchall()
+            binding = connection.execute(
+                """SELECT geometry_handoff_id,signal_id,bot_instance_id,
+                          strategy_id,strategy_version
+                   FROM runtime.entry_geometry_bindings WHERE entry_command_id=%s""",
+                (entry_id,),
+            ).fetchone()
+            if binding is not None and execution_rows:
+                identity = f"{entry_id}|{'|'.join(str(row[0]) for row in execution_rows)}"
+                position_id = "POS-" + hashlib.sha256(identity.encode()).hexdigest()[:32]
+                trade_id = "TRD-" + hashlib.sha256(("trade|" + identity).encode()).hexdigest()[:32]
+                connection.execute(
+                    """INSERT INTO runtime.position_ownership(
+                        position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
+                        signal_id,entry_command_id,geometry_handoff_id,symbol,side,
+                        actual_avg_fill,actual_qty,fill_at,exchange_order_ids,
+                        client_order_ids,execution_ids)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                               to_timestamp(%s/1000.0),%s,%s,%s)
+                        ON CONFLICT(entry_command_id) DO NOTHING""",
+                    (
+                        position_id, trade_id, binding[2], binding[3], binding[4],
+                        binding[1], entry_id, binding[0], symbol, position_row[0],
+                        actual_entry, Decimal(str(position_row[1])), int(fill_time_ms),
+                        json.dumps(sorted({str(row[1]) for row in execution_rows})),
+                        json.dumps(sorted({str(row[2]) for row in execution_rows})),
+                        json.dumps([str(row[0]) for row in execution_rows]),
+                    ),
+                )
             current_stop=Decimal(str(raw.get("stopLoss") or 0))
             profit_already_protected=current_stop > 0 and (
                 (position_row[0] == "Buy" and current_stop >= actual_entry)

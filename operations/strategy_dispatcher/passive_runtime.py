@@ -30,6 +30,10 @@ def prepare_database() -> None:
             payload jsonb NOT NULL,
             stored_at timestamptz NOT NULL DEFAULT clock_timestamp())""")
         db.execute(
+            "ALTER TABLE strategy_dispatcher.runs "
+            "ADD COLUMN IF NOT EXISTS market_context_id text"
+        )
+        db.execute(
             "CREATE INDEX IF NOT EXISTS strategy_dispatcher_runs_at "
             "ON strategy_dispatcher.runs(observed_at DESC)"
         )
@@ -62,6 +66,10 @@ def prepare_database() -> None:
             "ADD COLUMN IF NOT EXISTS coverage jsonb"
         )
         db.execute(
+            "ALTER TABLE strategy_dispatcher.assessments "
+            "ADD COLUMN IF NOT EXISTS market_context_id text"
+        )
+        db.execute(
             "CREATE INDEX IF NOT EXISTS strategy_dispatcher_assessments_at "
             "ON strategy_dispatcher.assessments(observed_at DESC)"
         )
@@ -75,8 +83,8 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
         db.execute(
             """INSERT INTO strategy_dispatcher.runs(
                 snapshot_id,observed_at,mayak_version,architecture_version,data_quality,
-                service_version,profile_count,trading_effect,payload)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            service_version,profile_count,trading_effect,payload,market_context_id)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(snapshot_id) DO NOTHING""",
             (
                 snapshot_id,
@@ -88,6 +96,7 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
                 envelope["profile_count"],
                 envelope["trading_effect"],
                 json.dumps(envelope, ensure_ascii=False),
+                (snapshot.get("provenance") or {}).get("market_context_id"),
             ),
         )
         for assessment in envelope["assessments"]:
@@ -95,8 +104,8 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
                 """INSERT INTO strategy_dispatcher.assessments(
                     assessment_id,snapshot_id,observed_at,dispatcher_version,
                     profile_id,profile_version,suitability,confidence,status,payload,
-                    mayak_snapshot_id,created_at,data_quality,coverage)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    mayak_snapshot_id,created_at,data_quality,coverage,market_context_id)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT(assessment_id) DO NOTHING""",
                 (
                     assessment["assessment_id"],
@@ -113,6 +122,7 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
                     assessment.get("created_at"),
                     assessment.get("data_quality"),
                     json.dumps(assessment.get("coverage"), ensure_ascii=False),
+                    (snapshot.get("provenance") or {}).get("market_context_id"),
                 ),
             )
         db.commit()

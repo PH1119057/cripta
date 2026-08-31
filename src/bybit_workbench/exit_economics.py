@@ -10,7 +10,7 @@ class CloseEconomics:
     gross_pnl_if_closed_now: Decimal
     entry_fee_actual: Decimal
     exit_fee_expected: Decimal
-    funding_realized: Decimal
+    funding_realized: Decimal | None
     slippage_reserve: Decimal
     expected_net_if_closed_now: Decimal
     calculated_net_break_even_price: Decimal
@@ -20,6 +20,9 @@ class CloseEconomics:
     executable_close_price: Decimal
     data_quality: str
     exactness: str
+    actual_net_without_funding: Decimal
+    actual_net_pnl: Decimal | None
+    net_completeness: str
 
     def audit_dict(self) -> dict[str, Any]:
         return {
@@ -36,7 +39,7 @@ def calculate_close_economics(
     executable_close_price: Decimal,
     entry_fee_actual: Decimal,
     exit_fee_rate: Decimal,
-    funding_realized: Decimal = Decimal("0"),
+    funding_realized: Decimal | None = None,
     slippage_reserve: Decimal = Decimal("0"),
     minimum_net_profit: Decimal = Decimal("0.01"),
     exchange_break_even_price: Decimal | None = None,
@@ -60,8 +63,10 @@ def calculate_close_economics(
         raise ValueError("side должен быть Buy или Sell")
     gross = (executable_close_price - entry_price) * qty * direction
     exit_fee = executable_close_price * qty * exit_fee_rate
-    net = gross - entry_fee_actual - exit_fee + funding_realized - slippage_reserve
-    fixed = entry_fee_actual - funding_realized + slippage_reserve
+    net_without_funding = gross - entry_fee_actual - exit_fee - slippage_reserve
+    funding_effect = funding_realized if funding_realized is not None else Decimal("0")
+    net = net_without_funding + funding_effect
+    fixed = entry_fee_actual - funding_effect + slippage_reserve
     if side == "Buy":
         net_be = (entry_price * qty + fixed) / (qty * (Decimal("1") - exit_fee_rate))
         min_profitable = (entry_price * qty + fixed + minimum_net_profit) / (
@@ -86,6 +91,9 @@ def calculate_close_economics(
         executable_close_price,
         data_quality,
         exactness,
+        net_without_funding,
+        net if funding_realized is not None else None,
+        "COMPLETE" if funding_realized is not None else "PARTIAL_NO_FUNDING",
     )
 
 

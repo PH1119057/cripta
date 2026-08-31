@@ -60,6 +60,12 @@ class MayakSnapshotAdapter:
         source_snapshot_id = payload.get("snapshot_id")
         if source_snapshot_id is not None:
             provenance["mayak_snapshot_id"] = str(source_snapshot_id)
+        market_context_id = payload.get("market_context_id")
+        if market_context_id is not None:
+            provenance["market_context_id"] = str(market_context_id)
+        context_schema = payload.get("market_context_schema_version")
+        if context_schema is not None:
+            provenance["market_context_schema_version"] = str(context_schema)
         return DispatcherMarketSnapshot(
             snapshot_id=snapshot_id,
             observed_at=observed_at,

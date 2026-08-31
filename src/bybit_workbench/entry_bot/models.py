@@ -96,6 +96,7 @@ class ArmedCandidate:
     long_gap_pct: Decimal | None
     short_gap_pct: Decimal | None
     oi_features: OiFeatures | None
+    geometry: tuple[EntryZone, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +112,8 @@ class EntrySignalEvent:
     flow: FlowFeatures
     oi: OiFeatures | None
     zone_gap_pct: Decimal
+    geometry: tuple[EntryZone, ...] = ()
+    geometry_version: str = "entry-zone-geometry-v1"
     first_touch_live_convention: bool = True
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -169,6 +170,18 @@ class Collector:
                 "CREATE INDEX IF NOT EXISTS mayak_v2_liquidations_at "
                 "ON mayak_v2.liquidations(occurred_at DESC)"
             )
+            db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.shared_market_contexts(
+                market_context_id TEXT PRIMARY KEY,
+                mayak_snapshot_id BIGINT NOT NULL REFERENCES mayak_v2.snapshots(id),
+                observed_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+                mayak_version TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                config_fingerprint TEXT NOT NULL,
+                data_quality TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                provenance JSONB NOT NULL,
+                content_hash TEXT UNIQUE NOT NULL)""")
             db.commit()
 
     def run(self) -> None:
@@ -195,6 +208,7 @@ class Collector:
                 self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
+                self._persist_shared_market_context(snapshot_id, snapshot)
                 state = str(snapshot["state"])
                 if state != previous_state:
                     self._persist_state_event(snapshot_id, snapshot, previous_state)
@@ -518,6 +532,32 @@ class Collector:
         tmp = STATE_PATH.with_suffix(".tmp")
         tmp.write_text(json.dumps(snapshot, ensure_ascii=False, default=str), encoding="utf-8")
         tmp.replace(STATE_PATH)
+
+    def _persist_shared_market_context(
+        self, snapshot_id: int, snapshot: dict[str, Any]
+    ) -> None:
+        """Persist the immutable market observation; it never carries a trade command."""
+        handoff = snapshot["dispatcher_handoff"]
+        canonical = json.dumps(
+            handoff, ensure_ascii=False, default=str, sort_keys=True, separators=(",", ":")
+        )
+        content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        with psycopg.connect(DSN) as db:
+            db.execute(
+                """INSERT INTO mayak_v2.shared_market_contexts(
+                    market_context_id,mayak_snapshot_id,observed_at,mayak_version,
+                    schema_version,config_fingerprint,data_quality,payload,provenance,
+                    content_hash)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(market_context_id) DO NOTHING""",
+                (
+                    handoff["market_context_id"], snapshot_id, handoff["observed_at"],
+                    snapshot["engine_version"], handoff["market_context_schema_version"],
+                    snapshot["config_fingerprint"], handoff["data_quality"], canonical,
+                    json.dumps(handoff["provenance"], ensure_ascii=False), content_hash,
+                ),
+            )
+            db.commit()
 
     def _write_error(self, market: str, exc: Exception) -> None:
         payload = self.last_snapshot or {"state": "прогрев", "confidence": 0, "coins": {}}

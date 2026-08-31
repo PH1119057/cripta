@@ -125,6 +125,41 @@ TABLE_EXPORTS = (
         "mayak/observation_journal.jsonl",
         ("observed_at", "created_at"),
     ),
+    TableExport(
+        "mayak_v2.shared_market_contexts",
+        "mayak/shared_market_contexts.jsonl",
+        ("observed_at", "created_at"),
+    ),
+    TableExport(
+        "monitoring.entry_geometry_handoffs",
+        "entry/geometry_handoffs.jsonl",
+        ("signal_at", "geometry_observed_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.entry_geometry_bindings",
+        "entry/geometry_bindings.jsonl",
+        ("bound_at",),
+    ),
+    TableExport(
+        "runtime.position_ownership",
+        "execution/position_ownership.jsonl",
+        ("fill_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.m3_consumed_context",
+        "strategy/m3_consumed_context.jsonl",
+        ("signal_at", "consumed_at"),
+    ),
+    TableExport(
+        "analyst.trade_lifecycles",
+        "analyst/trade_lifecycles.jsonl",
+        ("opened_at", "closed_at", "updated_at"),
+    ),
+    TableExport(
+        "analyst.lifecycle_events",
+        "analyst/lifecycle_events.jsonl",
+        ("occurred_at",),
+    ),
     TableExport("mayak_v2.liquidations", "mayak/liquidations.jsonl", ("observed_at", "created_at")),
     TableExport(
         "position_supervisor.snapshots", "supervisor/snapshots.jsonl", ("observed_at", "created_at")

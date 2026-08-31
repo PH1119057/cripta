@@ -38,8 +38,26 @@ def initialize(connection: psycopg.Connection[Any]) -> None:
         strategy_id TEXT NOT NULL, strategy_version TEXT,
         opened_at TIMESTAMPTZ, closed_at TIMESTAMPTZ, lifecycle_state TEXT NOT NULL,
         data_completeness TEXT NOT NULL, diagnosis_class TEXT NOT NULL,
-        actual_net_pnl NUMERIC, lifecycle_json JSONB NOT NULL,
+        actual_net_pnl NUMERIC, actual_net_without_funding NUMERIC,
+        bot_instance_id TEXT, entry_command_id TEXT, geometry_handoff_id TEXT,
+        lifecycle_json JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp())""")
+    connection.execute(
+        "ALTER TABLE analyst.trade_lifecycles "
+        "ADD COLUMN IF NOT EXISTS actual_net_without_funding NUMERIC"
+    )
+    connection.execute(
+        "ALTER TABLE analyst.trade_lifecycles "
+        "ADD COLUMN IF NOT EXISTS bot_instance_id TEXT"
+    )
+    connection.execute(
+        "ALTER TABLE analyst.trade_lifecycles "
+        "ADD COLUMN IF NOT EXISTS entry_command_id TEXT"
+    )
+    connection.execute(
+        "ALTER TABLE analyst.trade_lifecycles "
+        "ADD COLUMN IF NOT EXISTS geometry_handoff_id TEXT"
+    )
     connection.execute("""CREATE TABLE IF NOT EXISTS analyst.lifecycle_events(
         trade_id TEXT NOT NULL, event_type TEXT NOT NULL, event_id TEXT NOT NULL,
         occurred_at TIMESTAMPTZ NOT NULL, payload JSONB NOT NULL,
@@ -84,12 +102,22 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 "SELECT * FROM runtime.m3_consumed_context WHERE signal_id=%s",
                 (decision["signal_id"],),
             ).fetchone()
-        closes = connection.execute(
-            """SELECT * FROM runtime.trade_commands
-            WHERE command_type='close' AND symbol=%s AND requested_at_epoch_ms>=%s
-            ORDER BY requested_at_epoch_ms""",
-            (entry["symbol"], opened_ms),
-        ).fetchall()
+        ownership = connection.execute(
+            """SELECT * FROM runtime.position_ownership WHERE entry_command_id=%s""",
+            (entry["command_id"],),
+        ).fetchone()
+        position_id = None if ownership is None else str(ownership["position_id"])
+        closes = (
+            []
+            if position_id is None
+            else connection.execute(
+                """SELECT * FROM runtime.trade_commands
+                WHERE command_type='close'
+                  AND payload_json::jsonb->>'position_id'=%s
+                ORDER BY requested_at_epoch_ms""",
+                (position_id,),
+            ).fetchall()
+        )
         close_command = None
         close_fills: list[dict[str, Any]] = []
         for candidate in closes:
@@ -112,7 +140,8 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 "SELECT * FROM supervisor.exit_decisions WHERE close_command_id=%s",
                 (close_command["command_id"],),
             ).fetchone()
-        position_id = None if exit_decision is None else exit_decision["position_id"]
+        if exit_decision is not None and str(exit_decision["position_id"]) != position_id:
+            raise RuntimeError("выход связан с другой позицией")
         hold_timeline = (
             []
             if position_id is None
@@ -159,7 +188,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 diagnosis = "NO_MATERIAL_EFFECT"
             else:
                 diagnosis = "UNRESOLVED"
-        trade_id = f"m3:{entry['command_id']}"
+        trade_id = (
+            f"LEGACY:{entry['command_id']}"
+            if ownership is None
+            else str(ownership["trade_id"])
+        )
         lifecycle = {
             "trade_id": trade_id,
             "strategy": {"id": "m3_full_live_v1", "version": "1.0.0-owner-live"},
@@ -180,6 +213,16 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 "avg_price": str(avg_fill),
                 "entry_fee_actual": str(entry_fee),
             },
+            "ownership": None if ownership is None else dict(ownership),
+            "entry_geometry": None
+            if ownership is None or ownership["geometry_handoff_id"] is None
+            else dict(
+                connection.execute(
+                    """SELECT * FROM monitoring.entry_geometry_handoffs
+                    WHERE geometry_handoff_id=%s""",
+                    (ownership["geometry_handoff_id"],),
+                ).fetchone()
+            ),
             "protection": [
                 dict(row)
                 for row in connection.execute(
@@ -209,13 +252,14 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 "exit_fee_actual": str(close_fee),
                 "funding": None,
                 "actual_net_without_funding": None if net is None else str(net),
+                "actual_net_pnl": None,
+                "net_completeness": "PARTIAL_NO_FUNDING",
             },
+            "completeness_class": "PARTIAL",
             "diagnosis": diagnosis,
         }
         completeness = (
-            "COMPLETE"
-            if context and close_fills and exit_decision and hold_timeline and supervisor_timeline
-            else "PARTIAL"
+            "PARTIAL_NO_FUNDING"
         )
         closed_at = (
             None
@@ -229,11 +273,18 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         connection.execute(
             """INSERT INTO analyst.trade_lifecycles(
             trade_id,symbol,side,strategy_id,strategy_version,opened_at,closed_at,
-            lifecycle_state,data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json)
-            VALUES(%s,%s,%s,'m3_full_live_v1','1.0.0-owner-live',%s,%s,%s,%s,%s,%s,%s)
+            lifecycle_state,data_completeness,diagnosis_class,actual_net_pnl,
+            actual_net_without_funding,bot_instance_id,entry_command_id,
+            geometry_handoff_id,lifecycle_json)
+            VALUES(%s,%s,%s,'m3_full_live_v1','1.0.0-owner-live',%s,%s,%s,%s,%s,
+                   %s,%s,%s,%s,%s,%s)
             ON CONFLICT(trade_id) DO UPDATE SET closed_at=excluded.closed_at,
             lifecycle_state=excluded.lifecycle_state,data_completeness=excluded.data_completeness,
             diagnosis_class=excluded.diagnosis_class,actual_net_pnl=excluded.actual_net_pnl,
+            actual_net_without_funding=excluded.actual_net_without_funding,
+            bot_instance_id=excluded.bot_instance_id,
+            entry_command_id=excluded.entry_command_id,
+            geometry_handoff_id=excluded.geometry_handoff_id,
             lifecycle_json=excluded.lifecycle_json,updated_at=clock_timestamp()""",
             (
                 trade_id,
@@ -244,7 +295,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 "CLOSED" if close_fills else "OPEN",
                 completeness,
                 diagnosis,
+                None,
                 net,
+                None if ownership is None else ownership["bot_instance_id"],
+                entry["command_id"],
+                None if ownership is None else ownership["geometry_handoff_id"],
                 json.dumps(lifecycle, ensure_ascii=False, default=str),
             ),
         )

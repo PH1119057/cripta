@@ -23,6 +23,8 @@ from bybit_workbench.position_supervisor import (
 )
 
 MAYAK_STATUS = Path("/var/lib/cripta/mayak_v2/status.json")
+STRUCTURAL_EARLY_EXIT_ENABLED = False
+STRUCTURAL_BREAK_RULE = "NOT_PROVEN"
 running = True
 _public_cache: dict[str, tuple[float, dict[str, object]]] = {}
 
@@ -175,8 +177,18 @@ def exchange_positions(connection: psycopg.Connection) -> list[tuple[ExchangePos
     for row in rows:
         raw = json.loads(row[6])
         open_ms = int(raw.get("openTime") or raw.get("createdTime") or 0)
+        owner = connection.execute(
+            """SELECT position_id FROM runtime.position_ownership
+               WHERE symbol=%s AND side=%s AND state='OPEN'
+                 AND abs(extract(epoch from (fill_at-to_timestamp(%s/1000.0))))<=10
+               ORDER BY fill_at DESC LIMIT 1""",
+            (row[0], row[2], open_ms),
+        ).fetchone()
         identity = ExchangePosition(
-            position_id=f"{row[0]}:{row[1]}:{open_ms}:{row[2]}",
+            position_id=(
+                str(owner[0]) if owner is not None
+                else f"LEGACY:{row[0]}:{row[1]}:{open_ms}:{row[2]}"
+            ),
             symbol=str(row[0]),
             side=str(row[2]),
             actual_avg_fill=Decimal(str(row[4])),
@@ -419,7 +431,7 @@ def main() -> None:
                 if hold is not None:
                     hold_age = (now - hold[2]).total_seconds()
                     usable = hold[5] in {"HIGH", "MEDIUM"} and 0 <= hold_age <= 90
-                    joint_close = usable and early_loss_eligible(
+                    joint_close = STRUCTURAL_EARLY_EXIT_ENABLED and usable and early_loss_eligible(
                         EarlyLossContext(
                             hold_status=str(hold[4]),
                             supervisor_state=snapshot.state.value,
@@ -453,6 +465,7 @@ def main() -> None:
                         "profile_version": hold[3],
                         "dispatcher_status": hold[4],
                         "data_quality": hold[5],
+                        "structural_break_rule": STRUCTURAL_BREAK_RULE,
                         "supervisor_state": snapshot.state.value,
                         "action": action,
                         "context_type": "CONSUMED_CONTEXT",
@@ -567,6 +580,7 @@ def main() -> None:
                                     {
                                         "source": "m3_full_live_v1_1",
                                         "reduce_only": True,
+                                        "position_id": position.position_id,
                                         "internal_exit_reason": "EARLY_LOSS_PREVENTION",
                                         "exit_decision_id": decision_id,
                                         "hold_assessment_id": hold[0],

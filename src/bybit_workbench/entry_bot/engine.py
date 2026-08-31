@@ -673,6 +673,7 @@ class EntrySymbolEngine:
                 flow=flow,
                 oi=oi,
                 zone_gap_pct=gap,
+                geometry=candidate.geometry,
             )
             self._last_signal = signal
             self._emit_audit(
@@ -1268,6 +1269,7 @@ class EntrySymbolEngine:
             long_gap_pct=long_gap if long_entry is not None else None,
             short_gap_pct=short_gap if short_entry is not None else None,
             oi_features=oi,
+            geometry=(five_zone, fifteen_zone),
         )
         self._last_oi_state = self._oi_state(oi)
         self._set_candidate(

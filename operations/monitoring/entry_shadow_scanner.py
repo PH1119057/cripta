@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -76,6 +77,72 @@ def persist_signals(connection: psycopg.Connection, runtime: EntryBotRuntime, ho
                 ),
             )
             inserted += cursor.rowcount
+            zone_rows = []
+            for zone in item.geometry:
+                protective = "support" if item.direction == "Long" else "resistance"
+                for role in ("support", "resistance"):
+                    lower = getattr(zone, f"{role}_bottom")
+                    upper = getattr(zone, f"{role}_top")
+                    zone_identity = (
+                        f"{item.signal_id}|{zone.timeframe}|{role}|{lower}|{upper}"
+                    )
+                    zone_rows.append(
+                        {
+                            "zone_id": "ZONE-" + hashlib.sha256(
+                                zone_identity.encode("utf-8")
+                            ).hexdigest()[:24],
+                            "role": "PROTECTIVE" if role == protective else "OBSTACLE",
+                            "kind": role,
+                            "lower_boundary": lower,
+                            "upper_boundary": upper,
+                            "timeframe": zone.timeframe,
+                            "source_candle_closed_at": zone.observed_at,
+                            "regime_reset_at": zone.regime_reset_at,
+                        }
+                    )
+            geometry_payload = {
+                "signal_id": item.signal_id,
+                "strategy_id": item.strategy_id,
+                "strategy_version": item.strategy_version,
+                "symbol": item.symbol,
+                "side": item.direction,
+                "signal_at": item.touch_at.isoformat(),
+                "geometry_observed_at": max(
+                    (zone.observed_at for zone in item.geometry), default=item.candidate_bar_at
+                ).isoformat(),
+                "geometry_version": item.geometry_version,
+                "zones": zone_rows,
+            }
+            canonical = json.dumps(
+                geometry_payload, ensure_ascii=False, default=json_value,
+                sort_keys=True, separators=(",", ":"),
+            )
+            geometry_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+            geometry_handoff_id = f"GH-{geometry_hash[:32]}"
+            config_fingerprint = hashlib.sha256(
+                json.dumps(
+                    asdict(runtime.config), default=json_value, sort_keys=True
+                ).encode("utf-8")
+            ).hexdigest()
+            connection.execute(
+                """INSERT INTO monitoring.entry_geometry_handoffs(
+                    geometry_handoff_id,signal_id,strategy_id,strategy_version,
+                    entry_fingerprint,symbol,side,signal_at,geometry_observed_at,
+                    geometry_version,config_fingerprint,geometry_hash,payload,provenance)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(signal_id) DO NOTHING""",
+                (
+                    geometry_handoff_id, item.signal_id, item.strategy_id,
+                    item.strategy_version, config_fingerprint, item.symbol,
+                    item.direction, item.touch_at,
+                    max((zone.observed_at for zone in item.geometry), default=item.candidate_bar_at),
+                    item.geometry_version,
+                    config_fingerprint,
+                    geometry_hash,
+                    canonical,
+                    json.dumps({"source": "entry_shadow_scanner", "causal": True}),
+                ),
+            )
             consume_for_signal(
                 connection,
                 signal_id=item.signal_id,
@@ -123,6 +190,24 @@ def main() -> None:
     connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
     try:
         prepare_database(connection)
+        connection.execute("""CREATE TABLE IF NOT EXISTS monitoring.entry_geometry_handoffs(
+            geometry_handoff_id TEXT PRIMARY KEY,
+            signal_id TEXT UNIQUE NOT NULL,
+            strategy_id TEXT NOT NULL,
+            strategy_version TEXT NOT NULL,
+            entry_fingerprint TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            side TEXT NOT NULL,
+            signal_at TIMESTAMPTZ NOT NULL,
+            geometry_observed_at TIMESTAMPTZ NOT NULL,
+            geometry_version TEXT NOT NULL,
+            config_fingerprint TEXT NOT NULL,
+            geometry_hash TEXT UNIQUE NOT NULL,
+            payload JSONB NOT NULL,
+            provenance JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+            CHECK(geometry_observed_at<=signal_at))""")
+        connection.commit()
         runtime.start()
         next_state_write = 0.0
         while not stopping:

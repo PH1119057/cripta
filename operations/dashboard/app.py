@@ -374,8 +374,27 @@ def live_trading_state() -> dict[str, object]:
         if connection.execute("SELECT to_regclass('analyst.trade_lifecycles')").fetchone()[0]:
             lifecycle_rows = connection.execute("""SELECT trade_id,position_id,symbol,side,
                 strategy_id,strategy_version,opened_at,closed_at,lifecycle_state,
-                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json
+                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json,
+                actual_net_without_funding,bot_instance_id,entry_command_id,
+                geometry_handoff_id
                 FROM analyst.trade_lifecycles ORDER BY closed_at DESC NULLS LAST LIMIT 500""").fetchall()
+        ownership_rows = []
+        if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
+            ownership_rows = connection.execute(
+                """SELECT position_id,trade_id,bot_instance_id,strategy_id,
+                strategy_version,signal_id,entry_command_id,geometry_handoff_id,
+                symbol,side,actual_avg_fill,actual_qty,fill_at,state
+                FROM runtime.position_ownership ORDER BY fill_at DESC LIMIT 500"""
+            ).fetchall()
+        market_context = None
+        if connection.execute(
+            "SELECT to_regclass('mayak_v2.shared_market_contexts')"
+        ).fetchone()[0]:
+            market_context = connection.execute(
+                """SELECT market_context_id,observed_at,mayak_version,schema_version,
+                data_quality,payload FROM mayak_v2.shared_market_contexts
+                ORDER BY observed_at DESC LIMIT 1"""
+            ).fetchone()
         session_row = connection.execute("""SELECT changed_at_epoch_ms FROM runtime.trade_settings_history
             WHERE new_settings->>'entry_policy'='m3_full_live_v1'
             ORDER BY changed_at_epoch_ms DESC LIMIT 1""").fetchone()
@@ -499,8 +518,10 @@ def live_trading_state() -> dict[str, object]:
                     if raw.get("stopOrderType") not in {None, "", "UNKNOWN"}
                     else raw.get("createType") or "закрытие"
                 ),
+                "exec_ids": [],
             },
         )
+        item["exec_ids"].append(str(raw.get("execId") or ""))
         old_qty = float(item["qty"])
         item["price"] = (float(item["price"]) * old_qty + float(row[2]) * qty) / (old_qty + qty)
         item["qty"] = old_qty + qty
@@ -532,17 +553,24 @@ def live_trading_state() -> dict[str, object]:
             "state": row[8], "data_completeness": row[9],
             "diagnosis": row[10],
             "actual_net_pnl": None if row[11] is None else str(row[11]),
+            "actual_net_without_funding": None if row[13] is None else str(row[13]),
+            "bot_instance_id": row[14], "entry_command_id": row[15],
+            "geometry_handoff_id": row[16],
             "lifecycle": lifecycle,
         }
         lifecycles.append(card)
         if row[7] is not None:
-            closed_ms = int(row[7].timestamp() * 1000)
-            candidate = min(
-                (item for item in recent_closed if item["symbol"] == row[2]),
-                key=lambda item: abs(int(item["closed_at_epoch_ms"]) - closed_ms),
-                default=None,
+            lifecycle_exec_ids = set(
+                str(value) for value in (lifecycle.get("close_fill") or {}).get("exec_ids", [])
             )
-            if candidate and abs(int(candidate["closed_at_epoch_ms"]) - closed_ms) <= 120_000:
+            candidate = next(
+                (
+                    item for item in recent_closed
+                    if lifecycle_exec_ids.intersection(item.get("exec_ids", []))
+                ),
+                None,
+            )
+            if candidate:
                 candidate["trade_card"] = card
                 exit_decision = lifecycle.get("exit_decision") or {}
                 decision_json = exit_decision.get("decision_json") or {}
@@ -616,6 +644,24 @@ def live_trading_state() -> dict[str, object]:
         ],
         "recent_closed": recent_closed,
         "trade_lifecycles": lifecycles,
+        "shared_market_context": None if market_context is None else {
+            "market_context_id": market_context[0],
+            "observed_at": market_context[1].isoformat(),
+            "mayak_version": market_context[2],
+            "schema_version": market_context[3],
+            "data_quality": market_context[4],
+            "payload": market_context[5],
+        },
+        "position_ownership": [
+            {
+                "position_id": row[0], "trade_id": row[1], "bot_instance_id": row[2],
+                "strategy_id": row[3], "strategy_version": row[4], "signal_id": row[5],
+                "entry_command_id": row[6], "geometry_handoff_id": row[7],
+                "symbol": row[8], "side": row[9], "actual_avg_fill": str(row[10]),
+                "actual_qty": str(row[11]), "fill_at": row[12].isoformat(), "state": row[13],
+            }
+            for row in ownership_rows
+        ],
         "entry_funnel": {
             "last_hour": funnel_window(now_ms - 3_600_000),
             "session": funnel_window(session_start_ms),

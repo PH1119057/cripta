@@ -920,13 +920,22 @@ class LiveMayakEngine:
             sort_keys=True,
             separators=(",", ":"),
         )
+        snapshot_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
         return {
-            "snapshot_id": hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32],
+            "snapshot_id": snapshot_id,
+            "market_context_id": f"MC-{snapshot_id}",
+            "market_context_schema_version": "shared-market-context-v1",
             "observed_at": observed_at,
             "engine_version": snapshot["engine_version"],
             "architecture_version": snapshot["architecture_version"],
             "data_quality": data_quality,
             "dispatcher_features": features,
+            "provenance": {
+                "source": "mayak_v2",
+                "config_fingerprint": snapshot["config_fingerprint"],
+                "immutable": True,
+                "trading_command": False,
+            },
         }
 
     def _synchronization(self, returns: dict[str, float]) -> dict[str, float | None]:
