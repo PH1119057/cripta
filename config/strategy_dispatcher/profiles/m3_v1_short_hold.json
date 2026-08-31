@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "profile_id": "M3_V1_SHORT_HOLD",
+  "version": "1.0.0-owner-live",
+  "display_name_ru": "M3 FULL LIVE V1 — сопровождение продажи",
+  "description_ru": "Исполняемый профиль сопровождения открытой продажи.",
+  "rules": [
+    {"feature_id":"market.direction","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONG_UP"]},
+    {"feature_id":"market.breadth","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONGLY_BULLISH"]},
+    {"feature_id":"money.pressure","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONG_BUY"]},
+    {"feature_id":"liquidity.trend","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["WITHDRAWING_FAST"]},
+    {"feature_id":"market.direction","mode":"PREFERRED","operator":"ONE_OF","expected":["NEUTRAL","DOWN","STRONG_DOWN"]},
+    {"feature_id":"market.breadth","mode":"PREFERRED","operator":"ONE_OF","expected":["BALANCED","BEARISH","STRONGLY_BEARISH"]},
+    {"feature_id":"money.pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["BALANCED","SELL","STRONG_SELL"]},
+    {"feature_id":"money.spot_pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["BALANCED","SELL","STRONG_SELL"]},
+    {"feature_id":"money.derivatives_pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["BALANCED","SELL","STRONG_SELL"]},
+    {"feature_id":"btc.state","mode":"PREFERRED","operator":"ONE_OF","expected":["NEUTRAL","DOWN","STRONG_DOWN"]},
+    {"feature_id":"eth.state","mode":"PREFERRED","operator":"ONE_OF","expected":["NEUTRAL","DOWN","STRONG_DOWN"]},
+    {"feature_id":"liquidity.trend","mode":"PREFERRED","operator":"ONE_OF","expected":["STABLE","REPLENISHING","REPLENISHING_FAST"]}
+  ]
+}

@@ -44,14 +44,39 @@ class PassiveDispatcherService:
         registry = StrategyMarketProfileRegistry()
         for profile in profiles:
             registry.register(profile)
-        assessments = [
-            assessment_to_dict(self.dispatcher.evaluate(snapshot, profile))
-            for profile in registry.profiles()
-        ]
-        assessments.extend(self._research_required_assessments(snapshot_to_dict(snapshot)))
+        snapshot_dict = snapshot_to_dict(snapshot)
+        created_at = datetime.now(UTC).isoformat()
+        assessments = []
+        for profile in registry.profiles():
+            item = assessment_to_dict(self.dispatcher.evaluate(snapshot, profile))
+            item.update(
+                {
+                    "mayak_snapshot_id": snapshot.provenance.get(
+                        "mayak_snapshot_id", snapshot.snapshot_id
+                    ),
+                    "created_at": created_at,
+                    "data_quality": snapshot.data_quality.value,
+                    "coverage": {
+                        feature_id: feature.get("coverage")
+                        for feature_id, feature in snapshot_dict["features"].items()
+                    },
+                    "trading_effect": (
+                        "FULL_LIVE_V1"
+                        if profile.version == "1.0.0-owner-live"
+                        else "NONE"
+                    ),
+                }
+            )
+            assessments.append(item)
+        live_profile_ids = {profile.profile_id for profile in registry.profiles()}
+        assessments.extend(
+            self._research_required_assessments(
+                snapshot_dict, excluded_profile_ids=live_profile_ids
+            )
+        )
         envelope = {
             "service_version": self.VERSION,
-            "snapshot": snapshot_to_dict(snapshot),
+            "snapshot": snapshot_dict,
             "assessments": assessments,
             "profile_count": len(assessments),
             "trading_effect": "NONE",
@@ -63,7 +88,9 @@ class PassiveDispatcherService:
         return envelope
 
     @staticmethod
-    def _research_required_assessments(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    def _research_required_assessments(
+        snapshot: dict[str, Any], *, excluded_profile_ids: set[str] | None = None
+    ) -> list[dict[str, Any]]:
         created_at = datetime.now(UTC).isoformat()
         profiles = (
             "M3_V1_LONG_ENTRY",
@@ -71,6 +98,7 @@ class PassiveDispatcherService:
             "M3_V1_LONG_HOLD",
             "M3_V1_SHORT_HOLD",
         )
+        excluded = excluded_profile_ids or set()
         return [
             {
                 "assessment_id": hashlib.sha256(
@@ -105,6 +133,7 @@ class PassiveDispatcherService:
                 "reason_ru": "Порог профиля не исследован; сохранён сырой контекст среды",
             }
             for profile in profiles
+            if profile not in excluded
         ]
 
     def serve_forever(self, *, poll_seconds: float = 1.0) -> None:

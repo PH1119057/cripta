@@ -1,0 +1,31 @@
+{
+  "enabled": true,
+  "profile_id": "M3_V1_SHORT_ENTRY",
+  "version": "1.0.0-owner-live",
+  "display_name_ru": "M3 FULL LIVE V1 — вход в продажу",
+  "description_ru": "Исполняемый профиль владельца для причинного допуска M3 в продажу.",
+  "rules": [
+    {"feature_id":"data.quality","mode":"REQUIRED","operator":"ONE_OF","expected":["HIGH","MEDIUM"]},
+    {"feature_id":"market.direction","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONG_UP"]},
+    {"feature_id":"market.breadth","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONGLY_BULLISH"]},
+    {"feature_id":"money.pressure","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["STRONG_BUY"]},
+    {"feature_id":"liquidity.trend","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["WITHDRAWING_FAST"]},
+    {"feature_id":"market.timeframe_alignment","mode":"REQUIRED","operator":"NOT_ONE_OF","expected":["CONFLICTING"]},
+    {"feature_id":"money.spot_derivatives_alignment","mode":"REJECTED","operator":"ONE_OF","expected":["STRONGLY_DIVERGING"]},
+    {"feature_id":"market.direction","mode":"PREFERRED","operator":"ONE_OF","expected":["DOWN","STRONG_DOWN"],"weight":2},
+    {"feature_id":"market.breadth","mode":"PREFERRED","operator":"ONE_OF","expected":["BEARISH","STRONGLY_BEARISH"],"weight":2},
+    {"feature_id":"money.pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["SELL","STRONG_SELL"],"weight":2},
+    {"feature_id":"money.spot_pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["SELL","STRONG_SELL"]},
+    {"feature_id":"money.derivatives_pressure","mode":"PREFERRED","operator":"ONE_OF","expected":["SELL","STRONG_SELL"]},
+    {"feature_id":"market.timeframe_alignment","mode":"PREFERRED","operator":"ONE_OF","expected":["ALIGNED","STRONGLY_ALIGNED"]},
+    {"feature_id":"btc.state","mode":"PREFERRED","operator":"ONE_OF","expected":["NEUTRAL","DOWN","STRONG_DOWN"]},
+    {"feature_id":"eth.state","mode":"PREFERRED","operator":"ONE_OF","expected":["NEUTRAL","DOWN","STRONG_DOWN"]},
+    {"feature_id":"positioning.price_oi_state","mode":"PREFERRED","operator":"ONE_OF","expected":["PRICE_DOWN_OI_UP","PRICE_DOWN_OI_DOWN"]},
+    {"feature_id":"liquidation.phase","mode":"PREFERRED","operator":"ONE_OF","expected":["NONE","EXHAUSTION","RECOVERY","UNCERTAIN"]},
+    {"feature_id":"liquidation.acceleration","mode":"PREFERRED","operator":"ONE_OF","expected":["FALLING_FAST","FALLING","STABLE"]},
+    {"feature_id":"positioning.oi_regime","mode":"TOLERATED","operator":"ONE_OF","expected":["STABLE","EXPANDING","STRONG_EXPANSION"]},
+    {"feature_id":"market.synchronization","mode":"TOLERATED","operator":"ONE_OF","expected":["NORMAL","HIGH","EXTREME"]},
+    {"feature_id":"liquidation.intensity","mode":"TOLERATED","operator":"ONE_OF","expected":["NONE","LOW","NORMAL","HIGH"]},
+    {"feature_id":"liquidation.breadth","mode":"TOLERATED","operator":"ONE_OF","expected":["LOCAL","LIMITED","BROAD","MARKET_WIDE"]}
+  ]
+}

@@ -14,7 +14,7 @@ def test_correlator_is_observation_only_and_has_no_trading_mutations() -> None:
         assert forbidden not in source
     assert "'mode','OBSERVED_CONTEXT'" in source
     assert "consumed_context" in source
-    assert "'consumed_context','NOT_RECORDED'" in source
+    assert "CONSUMED_CONTEXT" in source
 
 
 def test_correlator_uses_only_context_not_after_event() -> None:
@@ -33,5 +33,7 @@ def test_correlator_covers_signal_decision_fill_command_and_position_transition(
         "TRADE_COMMAND",
         "FILL",
         "POSITION_TRANSITION",
+        "M3_CONSUMED_CONTEXT",
+        "DISPATCHER_HOLD",
     ):
         assert f"'{event_type}'" in source

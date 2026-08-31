@@ -205,7 +205,12 @@ def test_passive_service_persists_status_and_deduplicates_same_snapshot(tmp_path
 
 def test_reference_profiles_are_disabled_by_default() -> None:
     root = Path(__file__).parents[1] / "config" / "strategy_dispatcher" / "profiles"
-    assert load_profile_directory(root, require_enabled=True) == ()
+    enabled = load_profile_directory(root, require_enabled=True)
+    assert {item.profile_id for item in enabled} == {
+        "M3_V1_LONG_ENTRY", "M3_V1_SHORT_ENTRY",
+        "M3_V1_LONG_HOLD", "M3_V1_SHORT_HOLD",
+    }
+    assert all(item.version == "1.0.0-owner-live" for item in enabled)
     assert len(tuple(root.glob("*.json"))) >= 3
 
 

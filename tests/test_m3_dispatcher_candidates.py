@@ -21,12 +21,18 @@ def test_four_m3_candidates_are_non_executable_research_specs() -> None:
     assert all(row["rules"] == [] for row in rows)
 
 
-def test_m3_candidates_are_outside_runtime_profile_directory() -> None:
+def test_owner_approved_m3_profiles_are_exactly_the_live_version() -> None:
     runtime_profiles = ROOT / "config" / "strategy_dispatcher" / "profiles"
-    assert not any(
-        "M3_V1" in path.read_text(encoding="utf-8")
-        for path in runtime_profiles.glob("*.json")
-    )
+    rows = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in runtime_profiles.glob("m3_v1_*.json")
+    ]
+    assert {row["profile_id"] for row in rows} == {
+        "M3_V1_LONG_ENTRY", "M3_V1_SHORT_ENTRY",
+        "M3_V1_LONG_HOLD", "M3_V1_SHORT_HOLD",
+    }
+    assert all(row["enabled"] is True for row in rows)
+    assert all(row["version"] == "1.0.0-owner-live" for row in rows)
 
 
 def test_removed_unreachable_states_are_not_advertised() -> None:

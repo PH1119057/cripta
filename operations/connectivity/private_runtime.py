@@ -9,6 +9,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from pathlib import Path
 
@@ -145,6 +146,17 @@ def initialize(connection: psycopg.Connection) -> None:
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS settings_version TEXT NOT NULL DEFAULT 'unknown'",
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_id BIGINT",
         "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_time TIMESTAMPTZ",
+        """CREATE TABLE IF NOT EXISTS runtime.m3_consumed_context(
+            signal_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL,
+            signal_at TIMESTAMPTZ NOT NULL, assessment_id TEXT,
+            mayak_snapshot_id TEXT, assessment_observed_at TIMESTAMPTZ,
+            strategy_decision_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+            profile_id TEXT NOT NULL, profile_version TEXT,
+            dispatcher_status TEXT NOT NULL, decision TEXT NOT NULL,
+            reason_ru TEXT NOT NULL, context_type TEXT NOT NULL
+                CHECK(context_type='CONSUMED_CONTEXT'),
+            trading_effect TEXT NOT NULL CHECK(trading_effect='FULL_LIVE_V1'),
+            payload JSONB NOT NULL)""",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
@@ -173,7 +185,7 @@ def record_entry_decision(
         details.pop("settings_version", current_settings[1] if current_settings else "unknown")
     )
     details["configured_shadow_policy"] = configured_policy
-    details["mayak_live_influence"] = False
+    details["mayak_live_influence"] = policy == "m3_full_live_v1"
     mayak_snapshot_id = details.pop("mayak_snapshot_id", None)
     mayak_snapshot_time = details.pop("mayak_snapshot_time", None)
     connection.execute(
@@ -205,6 +217,75 @@ def atomic_status(channel: str, value: dict[str, object]) -> None:
         temporary = STATUS.with_suffix(".tmp")
         temporary.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temporary.replace(STATUS)
+
+
+def consume_m3_entry_context(
+    connection: psycopg.Connection,
+    *,
+    signal_id: str,
+    symbol: str,
+    direction: str,
+    signal_at_ms: int,
+) -> tuple[bool, dict[str, object]]:
+    profile_id = "M3_V1_LONG_ENTRY" if direction == "long" else "M3_V1_SHORT_ENTRY"
+    signal_at = datetime.fromtimestamp(signal_at_ms / 1000, UTC)
+    row = connection.execute(
+        """SELECT assessment_id,mayak_snapshot_id,observed_at,profile_version,
+                  status,data_quality,payload
+           FROM strategy_dispatcher.assessments
+           WHERE profile_id=%s AND profile_version='1.0.0-owner-live'
+             AND observed_at<=%s
+           ORDER BY observed_at DESC,stored_at DESC LIMIT 1""",
+        (profile_id, signal_at),
+    ).fetchone()
+    allowed_statuses = {"EXCELLENT_MATCH", "GOOD_MATCH", "PARTIAL_MATCH"}
+    if row is None:
+        allowed = False
+        status = "NO_CONTEXT"
+        reason = "До сигнала нет причинно допустимой оценки Диспетчера"
+        assessment_id = mayak_id = observed_at = version = quality = None
+        payload: object = {}
+    else:
+        assessment_id, mayak_id, observed_at, version, status, quality, payload = row
+        age = (signal_at - observed_at).total_seconds()
+        allowed = (
+            status in allowed_statuses
+            and quality in {"HIGH", "MEDIUM"}
+            and 0 <= age <= 90
+        )
+        reason = (
+            "Причинная оценка Диспетчера разрешает M3 Entry"
+            if allowed
+            else "M3 Entry закрыт: контекст непригоден, устарел или не разрешает вход"
+        )
+    document = {
+        "signal_id": signal_id,
+        "assessment_id": assessment_id,
+        "mayak_snapshot_id": mayak_id,
+        "assessment_observed_at": None if observed_at is None else observed_at.isoformat(),
+        "profile_id": profile_id,
+        "profile_version": version,
+        "dispatcher_status": status,
+        "data_quality": quality,
+        "decision": "ALLOW" if allowed else "BLOCK",
+        "context_type": "CONSUMED_CONTEXT",
+        "trading_effect": "FULL_LIVE_V1",
+        "reason_ru": reason,
+        "assessment": payload,
+    }
+    connection.execute(
+        """INSERT INTO runtime.m3_consumed_context(
+            signal_id,symbol,direction,signal_at,assessment_id,mayak_snapshot_id,
+            assessment_observed_at,profile_id,profile_version,dispatcher_status,
+            decision,reason_ru,context_type,trading_effect,payload)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                   'CONSUMED_CONTEXT','FULL_LIVE_V1',%s)
+            ON CONFLICT(signal_id) DO NOTHING""",
+        (signal_id, symbol, direction, signal_at, assessment_id, mayak_id,
+         observed_at, profile_id, version, status, document["decision"], reason,
+         json.dumps(document, ensure_ascii=False, default=str)),
+    )
+    return allowed, document
 
 
 def connection_event(connection: psycopg.Connection, channel: str, event: str, **details: object) -> None:
@@ -494,10 +575,7 @@ def command_worker_loop(key: str, secret: str) -> None:
         if settings:
             gate_enabled = bool(gate and gate[0])
             configured_entry_policy = str(settings[9] or "base_entry_v1")
-            # Mayak and market_guard are observation-only until a clean causal
-            # validation proves economic value. Live execution always follows
-            # the unchanged base Entry V1 policy.
-            entry_policy = "base_entry_v1"
+            entry_policy = configured_entry_policy
             configured=set(json.loads(settings[2]))
             enabled=configured - EXCLUDED_TRADING_SYMBOLS
             now_ms=int(time.time()*1000)
@@ -525,13 +603,28 @@ def command_worker_loop(key: str, secret: str) -> None:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "монета выключена в торговых настройках")
                     continue
+                if entry_policy == "m3_full_live_v1":
+                    context_allowed, context = consume_m3_entry_context(
+                        connection,
+                        signal_id=str(signal_id), symbol=str(symbol),
+                        direction=str(direction), signal_at_ms=int(signal_at_ms),
+                    )
+                    if not context_allowed:
+                        record_entry_decision(
+                            connection, signal_id, symbol, direction, signal_at_ms,
+                            "запрещён", str(context["reason_ru"]),
+                            entry_policy="m3_full_live_v1",
+                            policy_version="1.0.0-owner-live",
+                            consumed_context=context,
+                        )
+                        continue
                 portfolio_entries = connection.execute("""SELECT
                     (SELECT count(*) FROM runtime.hot_positions) +
                     (SELECT count(*) FROM runtime.hot_orders
                      WHERE order_status IN ('New','PartiallyFilled','Untriggered')) +
                     (SELECT count(*) FROM runtime.trade_commands
                      WHERE command_type='entry' AND state IN ('queued','running'))""").fetchone()[0]
-                if entry_policy != "base_entry_v1" and int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
+                if entry_policy == "market_guard_v1" and int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "достигнут общий лимит позиций и заявок",
                                           current=int(portfolio_entries or 0), limit=MAX_PORTFOLIO_ENTRIES)
@@ -542,7 +635,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                        LIMIT 1""",
                     (now_ms-ENTRY_COOLDOWN_MS,),
                 ).fetchone()
-                if entry_policy != "base_entry_v1" and recent_entry:
+                if entry_policy == "market_guard_v1" and recent_entry:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "действует пауза между входами",
                                           cooldown_seconds=ENTRY_COOLDOWN_MS//1000)
@@ -551,31 +644,31 @@ def command_worker_loop(key: str, secret: str) -> None:
                            payload->'price_breadth'->>'up_share',
                            payload->'price_breadth'->>'down_share'
                     FROM mayak_v2.snapshots ORDER BY observed_at DESC LIMIT 1""").fetchone()
-                if entry_policy != "base_entry_v1" and not market:
+                if entry_policy == "market_guard_v1" and not market:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "нет снимка общего состояния рынка")
                     continue
                 market_age = None if not market else connection.execute(
                     "SELECT extract(epoch from (clock_timestamp()-%s))", (market[0],)
                 ).fetchone()[0]
-                if entry_policy != "base_entry_v1" and (market_age is None or float(market_age) > 90):
+                if entry_policy == "market_guard_v1" and (market_age is None or float(market_age) > 90):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "данные общего рынка устарели",
                                           age_seconds=None if market_age is None else float(market_age))
                     continue
-                if entry_policy != "base_entry_v1" and str(market[1]) in {"денежное расхождение", "переходный рынок"}:
+                if entry_policy == "market_guard_v1" and str(market[1]) in {"денежное расхождение", "переходный рынок"}:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "Маяк видит неустойчивое состояние рынка",
                                           market_state=str(market[1]))
                     continue
                 up_share = Decimal(str(0 if not market else market[2] or 0))
                 down_share = Decimal(str(0 if not market else market[3] or 0))
-                if entry_policy != "base_entry_v1" and direction == "long" and up_share < Decimal("0.55"):
+                if entry_policy == "market_guard_v1" and direction == "long" and up_share < Decimal("0.55"):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "ширина рынка не подтверждает покупку",
                                           up_share=str(up_share))
                     continue
-                if entry_policy != "base_entry_v1" and direction == "short" and down_share < Decimal("0.55"):
+                if entry_policy == "market_guard_v1" and direction == "short" and down_share < Decimal("0.55"):
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "ширина рынка не подтверждает продажу",
                                           down_share=str(down_share))
@@ -596,12 +689,13 @@ def command_worker_loop(key: str, secret: str) -> None:
                     )
                     continue
                 cid="auto-"+hashlib.sha256(str(signal_id).encode()).hexdigest()[:28]
-                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5]}
+                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1"}
                 connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                     VALUES(%s,'entry',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(cid,symbol,json.dumps(body),int(time.time()*1000)))
                 record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                       "разрешён", "проверки пройдены, команда поставлена в очередь",
-                                      command_id=cid)
+                                      command_id=cid, entry_policy=entry_policy,
+                                      policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1")
             connection.commit()
         completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
             WHERE command_type='entry' AND state='completed'""").fetchall()

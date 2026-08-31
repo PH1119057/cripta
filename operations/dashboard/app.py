@@ -1498,7 +1498,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             raise ValueError("недопустимая глубина входа или срок лимитной заявки")
                         if trailing_distance_pct not in {0.1, 0.2, 0.3, 0.5, 1.0}:
                             raise ValueError("недопустимый отступ плавающего стопа")
-                        if entry_policy not in {"base_entry_v1", "market_guard_v1"}:
+                        if entry_policy not in {
+                            "base_entry_v1", "market_guard_v1", "m3_full_live_v1"
+                        }:
                             raise ValueError("неизвестное правило автоматического входа")
                         changed_at_ms = int(time.time() * 1000)
                         connection.execute(

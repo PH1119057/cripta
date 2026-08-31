@@ -8,7 +8,12 @@ def test_post_fill_supervisor_is_independent_from_entry_runtime() -> None:
     assert "mayak_v2/status.json" in source
 
 
-def test_supervisor_runtime_contains_no_trading_mutations() -> None:
+def test_supervisor_runtime_uses_joint_hold_and_supervisor_exit_only() -> None:
     source = Path("operations/monitoring/position_supervisor.py").read_text(encoding="utf-8")
-    for forbidden in ("trade_commands", "trailing_stop", "set_trading_stop", "place_order"):
-        assert forbidden not in source
+    assert "dispatcher_hold_context" in source
+    assert "SupervisorState.WARNING" in source
+    assert "SupervisorState.BROKEN" in source
+    assert "INCOMPATIBLE" in source
+    assert "POOR_MATCH" in source
+    assert "reduce_only" in source
+    assert "place_order" not in source

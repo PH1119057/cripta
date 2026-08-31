@@ -128,6 +128,17 @@ def initialize(connection: psycopg.Connection) -> None:
         symbol TEXT NOT NULL, old_state TEXT, new_state TEXT NOT NULL,
         reason TEXT NOT NULL, shadow_action TEXT NOT NULL,
         snapshot_json JSONB NOT NULL)""")
+    connection.execute("""CREATE TABLE IF NOT EXISTS supervisor.dispatcher_hold_context(
+        position_id TEXT NOT NULL, assessment_id TEXT NOT NULL,
+        mayak_snapshot_id TEXT, assessment_observed_at TIMESTAMPTZ NOT NULL,
+        consumed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+        profile_id TEXT NOT NULL, profile_version TEXT NOT NULL,
+        dispatcher_status TEXT NOT NULL, supervisor_state TEXT NOT NULL,
+        action TEXT NOT NULL, context_type TEXT NOT NULL
+            CHECK(context_type='CONSUMED_CONTEXT'),
+        trading_effect TEXT NOT NULL CHECK(trading_effect='FULL_LIVE_V1'),
+        payload JSONB NOT NULL,
+        PRIMARY KEY(position_id,assessment_id,supervisor_state))""")
     connection.commit()
 
 
@@ -304,6 +315,71 @@ def main() -> None:
                         ),
                     )
                     last_periodic_save[position.position_id] = at_ms
+                profile_id = (
+                    "M3_V1_LONG_HOLD" if position.side == "Buy"
+                    else "M3_V1_SHORT_HOLD"
+                )
+                hold = connection.execute(
+                    """SELECT assessment_id,mayak_snapshot_id,observed_at,
+                              profile_version,status,data_quality,payload
+                       FROM strategy_dispatcher.assessments
+                       WHERE profile_id=%s AND profile_version='1.0.0-owner-live'
+                         AND observed_at<=%s
+                       ORDER BY observed_at DESC,stored_at DESC LIMIT 1""",
+                    (profile_id, now),
+                ).fetchone()
+                if hold is not None:
+                    hold_age = (now - hold[2]).total_seconds()
+                    usable = hold[5] in {"HIGH", "MEDIUM"} and 0 <= hold_age <= 90
+                    joint_close = usable and (
+                        (hold[4] == "INCOMPATIBLE" and snapshot.state in {
+                            SupervisorState.WARNING, SupervisorState.BROKEN
+                        })
+                        or (hold[4] == "POOR_MATCH" and snapshot.state is SupervisorState.BROKEN)
+                    )
+                    action = "REDUCE_ONLY_CLOSE" if joint_close else "HOLD"
+                    context_payload = {
+                        "position_id": position.position_id,
+                        "assessment_id": hold[0],
+                        "mayak_snapshot_id": hold[1],
+                        "assessment_observed_at": hold[2].isoformat(),
+                        "profile_id": profile_id,
+                        "profile_version": hold[3],
+                        "dispatcher_status": hold[4],
+                        "data_quality": hold[5],
+                        "supervisor_state": snapshot.state.value,
+                        "action": action,
+                        "context_type": "CONSUMED_CONTEXT",
+                        "trading_effect": "FULL_LIVE_V1",
+                    }
+                    connection.execute(
+                        """INSERT INTO supervisor.dispatcher_hold_context(
+                            position_id,assessment_id,mayak_snapshot_id,
+                            assessment_observed_at,profile_id,profile_version,
+                            dispatcher_status,supervisor_state,action,context_type,
+                            trading_effect,payload)
+                            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                   'CONSUMED_CONTEXT','FULL_LIVE_V1',%s)
+                            ON CONFLICT DO NOTHING""",
+                        (position.position_id, hold[0], hold[1], hold[2], profile_id,
+                         hold[3], hold[4], snapshot.state.value, action,
+                         json.dumps(context_payload, ensure_ascii=False)),
+                    )
+                    if joint_close:
+                        command_id = "m3-exit-" + position.position_id.replace(":", "-")[-48:]
+                        connection.execute(
+                            """INSERT INTO runtime.trade_commands(
+                                command_id,command_type,symbol,payload_json,state,
+                                requested_at_epoch_ms)
+                                VALUES(%s,'close',%s,%s,'queued',%s)
+                                ON CONFLICT(command_id) DO NOTHING""",
+                            (command_id, position.symbol,
+                             json.dumps({"source":"m3_full_live_v1",
+                                         "reduce_only":True,
+                                         "hold_assessment_id":hold[0],
+                                         "supervisor_state":snapshot.state.value},
+                                        ensure_ascii=False), at_ms),
+                        )
                 if state_changed:
                     connection.execute(
                         """INSERT INTO supervisor.transitions(

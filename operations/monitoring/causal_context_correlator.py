@@ -35,6 +35,16 @@ SELECT 'POSITION_TRANSITION', id::text, observed_at_epoch_ms, symbol, NULL,
                           'new_state',new_state,'reason',reason,
                           'shadow_action',shadow_action)
 FROM supervisor.transitions
+UNION ALL
+SELECT 'M3_CONSUMED_CONTEXT', signal_id,
+       (extract(epoch from strategy_decision_at)*1000)::bigint,
+       symbol,direction,payload
+FROM runtime.m3_consumed_context
+UNION ALL
+SELECT 'DISPATCHER_HOLD', position_id||':'||assessment_id||':'||supervisor_state,
+       (extract(epoch from consumed_at)*1000)::bigint,
+       split_part(position_id,':',1),NULL,payload
+FROM supervisor.dispatcher_hold_context
 """
 
 
@@ -88,14 +98,22 @@ def correlate(*, cutoff_epoch_ms: int | None = None) -> int:
                'dispatcher_observed_at',d.observed_at,
                'dispatcher_profile_count',d.profile_count,
                'dispatcher_trading_effect',d.trading_effect),
-           NULL,
+           CASE
+             WHEN e.event_type IN ('M3_CONSUMED_CONTEXT','DISPATCHER_HOLD')
+             THEN e.payload
+             ELSE NULL
+           END,
            CASE WHEN m.id IS NULL THEN 'NO_CAUSAL_MAYAK_SNAPSHOT'
                 WHEN d.snapshot_id IS NULL THEN 'MAYAK_ONLY_CAUSAL_PRIOR'
                 ELSE 'MAYAK_AND_DISPATCHER_CAUSAL_PRIOR' END,
            jsonb_build_object(
                'method','latest_snapshot_not_after_event',
                'linked_at',clock_timestamp(),
-               'consumed_context','NOT_RECORDED')
+               'consumed_context',CASE
+                   WHEN e.event_type IN ('M3_CONSUMED_CONTEXT','DISPATCHER_HOLD')
+                   THEN 'CONSUMED_CONTEXT'
+                   ELSE 'NOT_RECORDED'
+               END)
     FROM eligible e
     LEFT JOIN LATERAL (
         SELECT id,observed_at FROM mayak_v2.snapshots

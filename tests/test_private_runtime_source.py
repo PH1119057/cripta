@@ -39,11 +39,15 @@ def test_command_worker_has_fail_closed_portfolio_and_market_gates() -> None:
         assert symbol in source
 
 
-def test_mayak_policy_is_shadow_only_for_live_entry() -> None:
+def test_m3_full_live_consumes_only_causal_dispatcher_context() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert 'configured_entry_policy = str(settings[9] or "base_entry_v1")' in source
-    assert 'entry_policy = "base_entry_v1"' in source
-    assert 'details["mayak_live_influence"] = False' in source
+    assert "consume_m3_entry_context" in source
+    assert "observed_at<=%s" in source
+    assert "1.0.0-owner-live" in source
+    assert "CONSUMED_CONTEXT" in source
+    assert "FULL_LIVE_V1" in source
+    assert "NO_CONTEXT" in source
 
 
 def test_command_loop_restarts_after_internal_failure() -> None:
