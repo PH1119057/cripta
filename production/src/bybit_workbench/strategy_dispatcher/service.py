@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +48,7 @@ class PassiveDispatcherService:
             assessment_to_dict(self.dispatcher.evaluate(snapshot, profile))
             for profile in registry.profiles()
         ]
+        assessments.extend(self._research_required_assessments(snapshot_to_dict(snapshot)))
         envelope = {
             "service_version": self.VERSION,
             "snapshot": snapshot_to_dict(snapshot),
@@ -58,6 +61,51 @@ class PassiveDispatcherService:
             self.store.append_batch(envelope)
             self._last_snapshot_id = snapshot.snapshot_id
         return envelope
+
+    @staticmethod
+    def _research_required_assessments(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+        created_at = datetime.now(UTC).isoformat()
+        profiles = (
+            "M3_V1_LONG_ENTRY",
+            "M3_V1_SHORT_ENTRY",
+            "M3_V1_LONG_HOLD",
+            "M3_V1_SHORT_HOLD",
+        )
+        return [
+            {
+                "assessment_id": hashlib.sha256(
+                    f"{snapshot['snapshot_id']}:{profile}:shadow-v1".encode()
+                ).hexdigest(),
+                "snapshot_id": snapshot["snapshot_id"],
+                "mayak_snapshot_id": snapshot.get("provenance", {}).get(
+                    "mayak_snapshot_id", snapshot["snapshot_id"]
+                ),
+                "observed_at": snapshot["observed_at"],
+                "created_at": created_at,
+                "dispatcher_version": "strategy-dispatcher-raw-context-1.0",
+                "profile_id": profile,
+                "profile_version": "shadow-v1",
+                "suitability": None,
+                "confidence": min(
+                    (
+                        float(item["feature_confidence"])
+                        for item in snapshot["features"].values()
+                        if item["status"] == "VALID"
+                    ),
+                    default=0.0,
+                ),
+                "status": "RESEARCH_REQUIRED",
+                "data_quality": snapshot["data_quality"],
+                "coverage": {
+                    feature_id: item.get("coverage")
+                    for feature_id, item in snapshot["features"].items()
+                },
+                "features": snapshot["features"],
+                "trading_effect": "NONE",
+                "reason_ru": "Порог профиля не исследован; сохранён сырой контекст среды",
+            }
+            for profile in profiles
+        ]
 
     def serve_forever(self, *, poll_seconds: float = 1.0) -> None:
         if poll_seconds <= 0:

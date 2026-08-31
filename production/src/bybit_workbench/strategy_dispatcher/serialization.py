@@ -20,6 +20,13 @@ def snapshot_to_dict(snapshot: DispatcherMarketSnapshot) -> dict[str, Any]:
                 "value": feature.value,
                 "status": feature.status.value,
                 "confidence": feature.confidence,
+                "feature_confidence": feature.confidence,
+                "transport_confidence": feature.transport_confidence,
+                "coverage": (
+                    {"valid": feature.coverage_valid, "total": feature.coverage_total}
+                    if feature.coverage_valid is not None
+                    else None
+                ),
                 "observed_at": feature.observed_at.isoformat() if feature.observed_at else None,
             }
             for feature_id, feature in snapshot.features.items()

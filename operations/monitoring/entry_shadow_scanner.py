@@ -5,7 +5,7 @@ import os
 import signal
 import time
 from dataclasses import asdict, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from bybit_workbench.app.config import AppSettings
 from bybit_workbench.domain.types import AppMode
 from bybit_workbench.entry_bot.config import EntryBotConfig
 from bybit_workbench.entry_bot.runtime import EntryBotRuntime
+from entry_dispatcher_shadow import consume_for_signal, prepare_database
 
 
 STATE_PATH = Path(os.environ.get("CRIPTA_ENTRY_SHADOW_STATE", "/var/lib/cripta/entry_shadow/status.json"))
@@ -75,6 +76,13 @@ def persist_signals(connection: psycopg.Connection, runtime: EntryBotRuntime, ho
                 ),
             )
             inserted += cursor.rowcount
+            consume_for_signal(
+                connection,
+                signal_id=item.signal_id,
+                symbol=item.symbol,
+                direction=item.direction,
+                signal_at=item.touch_at,
+            )
     return inserted
 
 
@@ -91,7 +99,7 @@ def main() -> None:
         "BNBUSDT", "AVAXUSDT", "SUIUSDT", "AAVEUSDT", "LTCUSDT",
         "BTCUSDT", "ETHUSDT",
         "APTUSDT", "ARBUSDT", "BCHUSDT", "DOTUSDT", "HBARUSDT",
-        "INJUSDT", "OPUSDT", "TRXUSDT", "NEARUSDT", "XLMUSDT",
+        "INJUSDT", "OPUSDT", "TRXUSDT",
     )
     config = replace(
         EntryBotConfig(),
@@ -114,6 +122,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, request_stop)
     connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
     try:
+        prepare_database(connection)
         runtime.start()
         next_state_write = 0.0
         while not stopping:

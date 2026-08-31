@@ -46,6 +46,22 @@ def prepare_database() -> None:
             payload jsonb NOT NULL,
             stored_at timestamptz NOT NULL DEFAULT clock_timestamp())""")
         db.execute(
+            "ALTER TABLE strategy_dispatcher.assessments "
+            "ADD COLUMN IF NOT EXISTS mayak_snapshot_id text"
+        )
+        db.execute(
+            "ALTER TABLE strategy_dispatcher.assessments "
+            "ADD COLUMN IF NOT EXISTS created_at timestamptz"
+        )
+        db.execute(
+            "ALTER TABLE strategy_dispatcher.assessments "
+            "ADD COLUMN IF NOT EXISTS data_quality text"
+        )
+        db.execute(
+            "ALTER TABLE strategy_dispatcher.assessments "
+            "ADD COLUMN IF NOT EXISTS coverage jsonb"
+        )
+        db.execute(
             "CREATE INDEX IF NOT EXISTS strategy_dispatcher_assessments_at "
             "ON strategy_dispatcher.assessments(observed_at DESC)"
         )
@@ -78,8 +94,9 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
             db.execute(
                 """INSERT INTO strategy_dispatcher.assessments(
                     assessment_id,snapshot_id,observed_at,dispatcher_version,
-                    profile_id,profile_version,suitability,confidence,status,payload)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    profile_id,profile_version,suitability,confidence,status,payload,
+                    mayak_snapshot_id,created_at,data_quality,coverage)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT(assessment_id) DO NOTHING""",
                 (
                     assessment["assessment_id"],
@@ -92,6 +109,10 @@ def persist_envelope(envelope: dict[str, Any]) -> None:
                     assessment["confidence"],
                     assessment["status"],
                     json.dumps(assessment, ensure_ascii=False),
+                    assessment.get("mayak_snapshot_id"),
+                    assessment.get("created_at"),
+                    assessment.get("data_quality"),
+                    json.dumps(assessment.get("coverage"), ensure_ascii=False),
                 ),
             )
         db.commit()

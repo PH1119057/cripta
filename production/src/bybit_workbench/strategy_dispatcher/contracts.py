@@ -61,10 +61,23 @@ class FeatureValue:
     status: FeatureStatus = FeatureStatus.VALID
     confidence: float = 1.0
     observed_at: datetime | None = None
+    transport_confidence: float = 1.0
+    coverage_valid: int | None = None
+    coverage_total: int | None = None
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("feature confidence must be between zero and one")
+        if not 0.0 <= self.transport_confidence <= 1.0:
+            raise ValueError("transport confidence must be between zero and one")
+        if (self.coverage_valid is None) != (self.coverage_total is None):
+            raise ValueError("coverage valid and total must be supplied together")
+        if self.coverage_valid is not None and (
+            self.coverage_valid < 0
+            or self.coverage_total is None
+            or self.coverage_total < self.coverage_valid
+        ):
+            raise ValueError("feature coverage is invalid")
         if self.observed_at is not None:
             _require_utc(self.observed_at, "observed_at")
         if self.status is FeatureStatus.VALID and self.value is None:

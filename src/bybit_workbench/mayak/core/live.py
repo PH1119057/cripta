@@ -107,15 +107,33 @@ class LiquidationWindow:
         with self.lock:
             rows = tuple(self.rows)
         current = [row for row in rows if row[0] >= now - 60]
-        prior = [row for row in rows if now - 960 <= row[0] < now - 60]
+        prior = [row for row in rows if now - 3660 <= row[0] < now - 60]
         current_usd = sum(row[3] for row in current)
         completed_minutes = []
-        for offset in range(1, 16):
+        for offset in range(1, 61):
             lower = now - (offset + 1) * 60
             upper = now - offset * 60
             completed_minutes.append(sum(row[3] for row in prior if lower <= row[0] < upper))
-        ordered = sorted(completed_minutes)
-        p50, p90, p99 = ordered[7], ordered[13], ordered[14]
+        calibrated = sorted(value for value in completed_minutes if value > 0)
+        if current_usd > 0 and len(calibrated) < 5:
+            return {
+                "status": "WARMUP",
+                "observed_at": None,
+                "intensity": None,
+                "acceleration": None,
+                "breadth": None,
+                "phase": None,
+                "current_1m_usd": current_usd,
+                "baseline_nonzero_minutes": len(calibrated),
+                "baseline_required_nonzero_minutes": 5,
+            }
+        ordered = calibrated or [0.0]
+
+        def quantile(fraction: float) -> float:
+            index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * fraction) - 1))
+            return ordered[index]
+
+        p50, p90, p99 = quantile(0.50), quantile(0.90), quantile(0.99)
         if current_usd == 0:
             intensity = "NONE"
         elif current_usd <= p50:
@@ -182,6 +200,8 @@ class LiquidationWindow:
             "short_liquidated_1m_usd": sum(row[3] for row in current if row[2] == "Sell"),
             "active_symbols_5m": len(active),
             "universe_size": len(symbols),
+            "baseline_nonzero_minutes": len(calibrated),
+            "baseline_required_nonzero_minutes": 5,
         }
 
 
@@ -543,25 +563,28 @@ class LiveMayakEngine:
 
         coins = snapshot["coins"]
 
-        def source_confidence(market: str, source: str) -> float:
-            eligible = [
-                coin
-                for coin in coins.values()
-                if coin["availability"][market] == InstrumentAvailability.SUPPORTED
-            ]
+        def source_quality(market: str, source: str) -> tuple[float, dict[str, int], float]:
             fresh = sum(
                 coin["quality"][f"{market}_{source}"]["quality"]
                 == SourceQuality.FRESH
-                for coin in eligible
+                for coin in coins.values()
+                if coin["availability"][market] == InstrumentAvailability.SUPPORTED
             )
-            return float(fresh) / max(1, len(eligible))
+            total = len(coins)
+            transport = snapshot["transport"][market]
+            transport_confidence = 1.0 if transport["quality"] == SourceQuality.FRESH else 0.0
+            coverage = {"valid": fresh, "total": total}
+            return fresh / max(1, total), coverage, transport_confidence
 
-        spot_confidence = source_confidence("spot", "trades")
-        derivatives_confidence = source_confidence("linear", "trades")
-        ticker_confidence = source_confidence("linear", "ticker")
-        book_confidence = max(
-            source_confidence("linear", "book"), source_confidence("spot", "book")
+        spot_confidence, spot_coverage, spot_transport = source_quality("spot", "trades")
+        derivatives_confidence, derivatives_coverage, derivatives_transport = source_quality(
+            "linear", "trades"
         )
+        ticker_confidence, ticker_coverage, ticker_transport = source_quality("linear", "ticker")
+        linear_book = source_quality("linear", "book")
+        spot_book = source_quality("spot", "book")
+        book_source = max((linear_book, spot_book), key=lambda item: item[0])
+        book_confidence, book_coverage, book_transport = book_source
         price_confidence = sum(
             (
                 coin["quality"]["linear_trades"]["quality"] == SourceQuality.FRESH
@@ -575,17 +598,30 @@ class LiveMayakEngine:
             *,
             available: bool = True,
             feature_confidence: float | None = None,
+            coverage: dict[str, int] | None = None,
+            transport_confidence: float | None = None,
         ) -> dict[str, Any]:
             if not available:
                 return {
                     "status": "NO_DATA",
                     "confidence": 0.0,
+                    "feature_confidence": 0.0,
+                    "coverage": coverage or {"valid": 0, "total": len(coins)},
+                    "transport_confidence": transport_confidence or 0.0,
                     "observed_at": None,
                 }
+            effective_confidence = confidence if feature_confidence is None else feature_confidence
             return {
                 "value": value,
                 "status": "VALID",
-                "confidence": confidence if feature_confidence is None else feature_confidence,
+                "confidence": effective_confidence,
+                "feature_confidence": effective_confidence,
+                "coverage": coverage or {"valid": len(coins), "total": len(coins)},
+                "transport_confidence": (
+                    effective_confidence
+                    if transport_confidence is None
+                    else transport_confidence
+                ),
                 "observed_at": observed_at,
             }
 
@@ -607,6 +643,9 @@ class LiveMayakEngine:
                 return {
                     "status": liquidations["status"],
                     "confidence": 0.0,
+                    "feature_confidence": 0.0,
+                    "coverage": derivatives_coverage,
+                    "transport_confidence": derivatives_transport,
                     "observed_at": None,
                 }
             event_at = liquidations.get("observed_at")
@@ -619,6 +658,9 @@ class LiveMayakEngine:
                 "value": liquidations[name],
                 "status": "VALID",
                 "confidence": derivatives_confidence,
+                "feature_confidence": derivatives_confidence,
+                "coverage": derivatives_coverage,
+                "transport_confidence": derivatives_transport,
                 "observed_at": feature_observed_at,
             }
 
@@ -803,36 +845,56 @@ class LiveMayakEngine:
                 spot_pressure,
                 available=spot_pressure is not None,
                 feature_confidence=spot_confidence,
+                coverage=spot_coverage,
+                transport_confidence=spot_transport,
             ),
             "money.derivatives_pressure": feature(
                 derivatives_pressure,
                 available=derivatives_pressure is not None,
                 feature_confidence=derivatives_confidence,
+                coverage=derivatives_coverage,
+                transport_confidence=derivatives_transport,
             ),
             "money.pressure": feature(
                 combined_pressure,
                 available=combined_pressure is not None,
                 feature_confidence=min(spot_confidence, derivatives_confidence),
+                coverage={
+                    "valid": min(spot_coverage["valid"], derivatives_coverage["valid"]),
+                    "total": len(coins),
+                },
+                transport_confidence=min(spot_transport, derivatives_transport),
             ),
             "money.spot_derivatives_alignment": feature(
                 pressure_alignment,
                 available=pressure_alignment is not None,
                 feature_confidence=min(spot_confidence, derivatives_confidence),
+                coverage={
+                    "valid": min(spot_coverage["valid"], derivatives_coverage["valid"]),
+                    "total": len(coins),
+                },
+                transport_confidence=min(spot_transport, derivatives_transport),
             ),
             "positioning.oi_regime": feature(
                 oi_regime,
                 available=oi_regime is not None,
                 feature_confidence=ticker_confidence,
+                coverage=ticker_coverage,
+                transport_confidence=ticker_transport,
             ),
             "positioning.price_oi_state": feature(
                 price_oi_state,
                 available=price_oi_state is not None,
                 feature_confidence=min(price_confidence, ticker_confidence),
+                coverage=ticker_coverage,
+                transport_confidence=ticker_transport,
             ),
             "liquidity.trend": feature(
                 liquidity_trend,
                 available=liquidity_trend is not None,
                 feature_confidence=book_confidence,
+                coverage=book_coverage,
+                transport_confidence=book_transport,
             ),
             "market.timeframe_alignment": feature(
                 timeframe_alignment,

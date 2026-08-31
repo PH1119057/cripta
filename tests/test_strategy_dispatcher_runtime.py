@@ -118,6 +118,20 @@ def test_canonical_adapter_copies_only_vocabulary_features() -> None:
     assert "positions" not in snapshot.features
 
 
+def test_canonical_adapter_preserves_feature_specific_quality_metadata() -> None:
+    payload = canonical_payload()
+    direction = payload["dispatcher_features"]["market.direction"]
+    direction["feature_confidence"] = 0.2
+    direction["confidence"] = 0.2
+    direction["transport_confidence"] = 1.0
+    direction["coverage"] = {"valid": 4, "total": 20}
+    feature = MayakSnapshotAdapter().adapt(payload).features["market.direction"]
+    assert feature.confidence == 0.2
+    assert feature.transport_confidence == 1.0
+    assert feature.coverage_valid == 4
+    assert feature.coverage_total == 20
+
+
 def test_strategy_and_position_context_cannot_change_canonical_snapshot() -> None:
     first = canonical_payload()
     second = canonical_payload()
@@ -172,8 +186,17 @@ def test_passive_service_persists_status_and_deduplicates_same_snapshot(tmp_path
     first = service.run_once()
     second = service.run_once()
     assert first["trading_effect"] == "NONE"
-    assert first["profile_count"] == 1
-    assert second["profile_count"] == 1
+    assert first["profile_count"] == 5
+    assert second["profile_count"] == 5
+    research = [row for row in first["assessments"] if row["status"] == "RESEARCH_REQUIRED"]
+    assert {row["profile_id"] for row in research} == {
+        "M3_V1_LONG_ENTRY",
+        "M3_V1_SHORT_ENTRY",
+        "M3_V1_LONG_HOLD",
+        "M3_V1_SHORT_HOLD",
+    }
+    assert all(row["snapshot_id"] == "m-1" for row in research)
+    assert all(row["trading_effect"] == "NONE" for row in research)
     lines = (state / "assessments.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     status = json.loads((state / "status.json").read_text(encoding="utf-8"))

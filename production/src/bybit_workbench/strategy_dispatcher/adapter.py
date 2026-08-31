@@ -114,6 +114,15 @@ class MayakSnapshotAdapter:
                 status = _feature_status(item.get("status"))
                 value = item.get("value") if status is FeatureStatus.VALID else None
                 confidence = _clamp01(item.get("confidence"), default=1.0)
+                transport_confidence = _clamp01(
+                    item.get("transport_confidence"), default=confidence
+                )
+                coverage = item.get("coverage")
+                coverage_valid = None
+                coverage_total = None
+                if isinstance(coverage, Mapping):
+                    coverage_valid = int(coverage.get("valid", 0))
+                    coverage_total = int(coverage.get("total", 0))
                 parsed_observed_at = _parse_utc(item.get("observed_at"))
                 observed_at = (
                     parsed_observed_at or fallback_time
@@ -124,6 +133,9 @@ class MayakSnapshotAdapter:
                 status = FeatureStatus.VALID
                 value = item
                 confidence = 1.0
+                transport_confidence = 1.0
+                coverage_valid = None
+                coverage_total = None
                 observed_at = fallback_time
             if status is FeatureStatus.VALID and value is None:
                 status = FeatureStatus.NO_DATA
@@ -145,6 +157,9 @@ class MayakSnapshotAdapter:
                 status=status,
                 confidence=confidence,
                 observed_at=observed_at,
+                transport_confidence=transport_confidence,
+                coverage_valid=coverage_valid,
+                coverage_total=coverage_total,
             )
         return features
 

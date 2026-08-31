@@ -129,7 +129,10 @@ def test_dispatcher_feature_confidence_uses_its_own_source_coverage() -> None:
     item.on_trade("spot", "BTCUSDT", now.timestamp(), "Buy", 100, 1)
     features = item.snapshot(now)["dispatcher_handoff"]["dispatcher_features"]
     assert features["money.derivatives_pressure"]["confidence"] == 1
-    assert features["money.spot_pressure"]["confidence"] == 1
+    assert features["money.spot_pressure"]["confidence"] == pytest.approx(1 / 3)
+    assert features["money.spot_pressure"]["feature_confidence"] == pytest.approx(1 / 3)
+    assert features["money.spot_pressure"]["coverage"] == {"valid": 1, "total": 3}
+    assert features["money.spot_pressure"]["transport_confidence"] == 1
 
 
 def test_dispatcher_handoff_exposes_available_market_layers_and_matches_schema() -> None:
@@ -240,7 +243,7 @@ def test_liquidations_stay_in_warmup_then_confirm_real_none() -> None:
     assert handoff["liquidation.intensity"]["observed_at"] == now.isoformat()
 
 
-def test_liquidation_metrics_use_only_causal_prior_minutes() -> None:
+def test_first_liquidation_without_nonzero_baseline_does_not_invent_cascade() -> None:
     item = engine()
     now = datetime.now(UTC)
     item.set_instrument_support("linear", set(item.symbols))
@@ -249,13 +252,28 @@ def test_liquidation_metrics_use_only_causal_prior_minutes() -> None:
     item.on_liquidation("BTCUSDT", now.timestamp() - 10, "Buy", 100, 2)
     snapshot = item.snapshot(now)
     metrics = snapshot["liquidations"]
-    assert metrics["long_liquidated_1m_usd"] == 200
-    assert metrics["short_liquidated_1m_usd"] == 0
-    assert metrics["intensity"] == "EXTREME"
-    assert metrics["acceleration"] == "SURGING"
-    assert metrics["phase"] == "CASCADE"
+    assert metrics["current_1m_usd"] == 200
+    assert metrics["baseline_nonzero_minutes"] == 0
+    assert metrics["status"] == "WARMUP"
     features = snapshot["dispatcher_handoff"]["dispatcher_features"]
-    assert features["liquidation.phase"]["value"] == "CASCADE"
+    assert features["liquidation.phase"]["status"] == "WARMUP"
+    assert features["liquidation.phase"]["observed_at"] is None
+
+
+def test_liquidation_calibration_uses_only_causal_nonzero_prior_minutes() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 4000)
+    item.on_transport("linear", connected=True, timestamp=now.timestamp())
+    for minute in range(2, 7):
+        item.on_liquidation("BTCUSDT", now.timestamp() - minute * 60, "Buy", 100, 2)
+    item.on_liquidation("BTCUSDT", now.timestamp() - 10, "Buy", 100, 2)
+    metrics = item.snapshot(now)["liquidations"]
+    assert metrics["status"] == "VALID"
+    assert metrics["baseline_nonzero_minutes"] == 5
+    assert metrics["intensity"] == "LOW"
+    assert metrics["phase"] != "CASCADE"
 
 
 def test_mayak_runner_subscribes_and_persists_all_liquidations() -> None:
