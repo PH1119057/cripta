@@ -141,8 +141,10 @@ def gate_steps(root: Path, python: str) -> list[list[str]]:
 
 def execute_gate(root: Path, python: str, log: Path) -> list[dict[str, Any]]:
     steps = []
+    source_environment = os.environ.copy()
+    source_environment["PYTHONPATH"] = str(root / "src")
     for command in gate_steps(root, python):
-        step = run(command, root, log)
+        step = run(command, root, log, source_environment)
         steps.append(step)
         if step["returncode"]:
             return steps
