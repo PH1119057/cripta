@@ -74,6 +74,11 @@ def test_existing_entry_geometry_and_safety_gates_remain_fail_closed() -> None:
     assert "по монете уже есть позиция, заявка или команда" in worker
 
 
+def test_geometry_jsonb_is_adapted_before_binding_insert() -> None:
+    worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
+    assert "json.dumps(geometry[3], ensure_ascii=False, default=str)" in worker
+
+
 def test_entry_and_risk_settings_are_not_changed_by_p0() -> None:
     assert 'entry * Decimal("0.99")' in PROTECTION
     assert 'entry * Decimal("1.01")' in PROTECTION

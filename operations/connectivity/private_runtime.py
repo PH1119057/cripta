@@ -758,7 +758,8 @@ def command_worker_loop(key: str, secret: str) -> None:
                             ON CONFLICT(entry_command_id) DO NOTHING""",
                         (
                             cid, geometry[0], signal_id, BOT_INSTANCE_ID,
-                            geometry[1], geometry[2], geometry[3],
+                            geometry[1], geometry[2],
+                            json.dumps(geometry[3], ensure_ascii=False, default=str),
                         ),
                     )
                 record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
