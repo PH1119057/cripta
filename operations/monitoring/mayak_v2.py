@@ -390,7 +390,7 @@ class Collector:
         if not pending:
             return
         with psycopg.connect(DSN) as db:
-            db.executemany(
+            db.cursor().executemany(
                 """INSERT INTO mayak_v2.liquidations(
                     occurred_at,symbol,position_side,bankruptcy_price,executed_size,notional_usd)
                     VALUES(to_timestamp(%s),%s,%s,%s,%s,%s)

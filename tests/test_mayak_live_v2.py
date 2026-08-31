@@ -281,3 +281,5 @@ def test_mayak_runner_subscribes_and_persists_all_liquidations() -> None:
     source = runner.read_text(encoding="utf-8")
     assert "allLiquidation.{symbol}" in source
     assert "mayak_v2.liquidations" in source
+    assert "db.executemany(" not in source
+    assert "db.cursor().executemany(" in source
