@@ -63,6 +63,6 @@ def test_file_hash_contract_passes_without_git(tmp_path: Path) -> None:
 
 def test_powershell_is_only_transport_wrapper() -> None:
     text = Path("scripts/patch/INSTALL_CRIPTA_PATCH.ps1").read_text(encoding="utf-8")
-    assert "cripta-patch patch $Action" in text
+    assert "cripta-patch $Action" in text
     assert "Get-FileHash" in text
     assert "Expand-Archive" not in text
