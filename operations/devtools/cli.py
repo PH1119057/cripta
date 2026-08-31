@@ -17,6 +17,7 @@ from typing import Any, cast
 
 DEFAULT_ROOT = Path(os.environ.get("CRIPTA_SOURCE_ROOT", "/srv/cripta/source_checkout"))
 DEFAULT_STATE = Path(os.environ.get("CRIPTA_OPS_ROOT", "/srv/cripta-share/operations"))
+DEFAULT_GIT_DIR = Path(os.environ.get("CRIPTA_GIT_DIR", "/srv/cripta-share/git-mirror.git"))
 SENSITIVE = {
     "ENTRY": ("entry",), "EXIT": ("exit",), "RISK": ("risk",),
     "EXECUTION": ("execution", "bybit_live"), "MAYAK": ("mayak",),
@@ -101,9 +102,14 @@ def git_head(root: Path) -> str | None:
 
 
 def git_dirty(root: Path) -> bool | None:
-    if not (root / ".git").exists():
+    git_directory = root / ".git"
+    command = ["git", "status", "--porcelain"]
+    if not git_directory.exists() and DEFAULT_GIT_DIR.exists():
+        command = ["git", f"--git-dir={DEFAULT_GIT_DIR}", f"--work-tree={root}",
+                   "status", "--porcelain", "--untracked-files=no"]
+    elif not git_directory.exists():
         return None
-    result = subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True,
+    result = subprocess.run(command, cwd=root, text=True,
                             capture_output=True, check=False)
     return bool(result.stdout.strip()) if result.returncode == 0 else None
 
@@ -169,8 +175,11 @@ def gate_command(args: argparse.Namespace) -> int:
 
 
 def changed_paths(root: Path, baseline: str) -> list[str]:
-    result = subprocess.run(["git", "diff", "--name-only", baseline, "--"], cwd=root,
-                            text=True, capture_output=True, check=False)
+    command = ["git", "diff", "--name-only", baseline, "--"]
+    if not (root / ".git").exists() and DEFAULT_GIT_DIR.exists():
+        command = ["git", f"--git-dir={DEFAULT_GIT_DIR}", f"--work-tree={root}",
+                   "diff", "--name-only", baseline, "--"]
+    result = subprocess.run(command, cwd=root, text=True, capture_output=True, check=False)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "git diff failed")
     return [line for line in result.stdout.splitlines() if line]
