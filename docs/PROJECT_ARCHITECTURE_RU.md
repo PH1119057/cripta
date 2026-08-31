@@ -1,7 +1,7 @@
 # АРХИТЕКТУРА ПРОЕКТА «КРИПТА»
 
 **Документ:** `PROJECT_ARCHITECTURE_RU.md`  
-**Версия:** 1.0  
+**Версия:** 1.1
 **Статус:** глобальный архитектурный контракт  
 **Назначение:** определить роли основных слоёв торгового комплекса, допустимые связи между ними и обязательный статистический след для развития системы.
 
@@ -68,6 +68,51 @@ ENTRY / RISK / EXECUTION / EXIT
 ```
 
 Каждый слой имеет собственную ответственность и не должен незаметно подменять другой.
+
+## 1.1 Жёсткая остановка при архитектурном конфликте
+
+Обязательные инварианты production:
+
+```text
+ARCHITECTURE_CONFLICT_HARD_STOP=YES
+MAYAK_TRADING_EFFECT=NONE
+DISPATCHER_TRADING_EFFECT=NONE
+MAYAK_CAN_BLOCK_ENTRY=NO
+DISPATCHER_CAN_BLOCK_ENTRY=NO
+MAYAK_CAN_CREATE_ENTRY=NO
+DISPATCHER_CAN_CREATE_ENTRY=NO
+MAYAK_CAN_FORCE_EXIT=NO
+DISPATCHER_CAN_FORCE_EXIT=NO
+GLOBAL_MARKET_FORCED_EXIT=NO
+STRATEGY_OWNS_ENTRY_DECISION=YES
+STRATEGY_OWNS_HOLD_EXIT_DECISION=YES
+OPERATIONAL_SAFETY_IS_SEPARATE=YES
+ENTRY_OWNERSHIP_ENDS_AT_FILL=YES
+ENTRY_GEOMETRY_IMMUTABLE=YES
+EXCHANGE_STATE_IS_LIVE_TRUTH=YES
+POSTGRESQL_IS_CANONICAL_DATA_TRUTH=YES
+CONCEPT_CHANGE_BEFORE_CODE=YES
+ARCHITECTURE_GATE_REQUIRED=YES
+GITHUB_CHECKPOINT_REQUIRED=YES
+UNDECLARED_DATA_FLOW_EDGE=HARD_STOP
+DOC_CODE_CONFLICT=HARD_STOP
+```
+
+Оценки Маяка и Диспетчера сохраняются как причинный контекст и статистическое
+наблюдение. Они не являются логическим разрешением на торговлю и не могут сами
+отменить сигнал утверждённой стратегии. Отсутствующий или устаревший контекст
+Диспетчера не блокирует Entry, если конкретная версионированная стратегия не
+утвердила его отдельным обязательным причинным входом.
+
+Отдельные проверки технической безопасности остаются fail-closed: неизвестное
+состояние позиции биржи, небезопасный сдвиг часов, потеря reconciliation,
+устаревшее обязательное приватное состояние, неизвестные qty/fill/protection,
+ошибка безопасной мутации API и аварийный останов владельца. Эти проверки нельзя
+выдавать за мнение Маяка или Диспетчера о рынке.
+
+Если новое задание требует нарушить инвариант, реализация останавливается до
+явного решения владельца и новой версии архитектурного документа. Порядок:
+решение владельца -> версия документа -> архитектурные тесты -> код.
 
 ---
 
