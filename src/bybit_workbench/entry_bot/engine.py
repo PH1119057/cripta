@@ -343,6 +343,30 @@ class EntrySymbolEngine:
             self._audit_events.clear()
             return rows
 
+    def export_production_state(self, now: datetime) -> dict[str, str | None]:
+        observed = now.astimezone(UTC)
+        with self._lock:
+            if self._failure_embargo_until is not None and observed >= self._failure_embargo_until:
+                self._failure_embargo_until = None
+            return {
+                "failure_embargo_until": (
+                    self._failure_embargo_until.isoformat()
+                    if self._failure_embargo_until is not None
+                    else None
+                )
+            }
+
+    def restore_production_state(
+        self, payload: dict[str, object], now: datetime
+    ) -> None:
+        raw = payload.get("failure_embargo_until")
+        restored = datetime.fromisoformat(str(raw)).astimezone(UTC) if raw else None
+        observed = now.astimezone(UTC)
+        with self._lock:
+            self._failure_embargo_until = (
+                restored if restored is not None and restored > observed else None
+            )
+
     def _emit_audit(
         self,
         *,
@@ -578,16 +602,6 @@ class EntrySymbolEngine:
             accepted = (
                 self._failure_embargo_until is None or observed >= self._failure_embargo_until
             )
-            if accepted:
-                self._outcomes.append(
-                    _TrackedOutcome(
-                        direction=direction,
-                        entry_price=entry,
-                        touch_at=observed,
-                        expires_at=observed
-                        + timedelta(minutes=self.config.candidate_outcome_horizon_minutes),
-                    )
-                )
             self._start_audit_outcome(
                 candidate_id=candidate_id,
                 direction=direction,
@@ -638,6 +652,15 @@ class EntrySymbolEngine:
                     },
                 )
                 return None
+            self._outcomes.append(
+                _TrackedOutcome(
+                    direction=direction,
+                    entry_price=entry,
+                    touch_at=observed,
+                    expires_at=observed
+                    + timedelta(minutes=self.config.candidate_outcome_horizon_minutes),
+                )
+            )
             signal = EntrySignalEvent(
                 signal_id=_signal_id(self.symbol, direction, bar_open, entry),
                 strategy_id="entry_v1_core",

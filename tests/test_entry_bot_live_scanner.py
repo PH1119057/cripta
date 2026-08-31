@@ -12,6 +12,7 @@ from bybit_workbench.entry_bot.audit import EntryBotAuditStore
 from bybit_workbench.entry_bot.calibration import build_calibration_file, load_calibrations
 from bybit_workbench.entry_bot.config import EntryBotConfig
 from bybit_workbench.entry_bot.engine import (
+    _AuditTrackedOutcome,
     EntrySymbolEngine,
     OiPoint,
     TradeFlowBucket,
@@ -576,3 +577,72 @@ def test_shadow_prelimit_and_early_failure_recovery_are_audited() -> None:
     assert "MILESTONE_MINUS_1_00" in event_types
     assert "RECOVERED_ENTRY_AFTER_MINUS_1" in event_types
     assert "RECOVERED_PLUS_0_10_AFTER_MINUS_1" in event_types
+    assert engine._failure_embargo_until == touch + timedelta(
+        minutes=1 + config.failure_embargo_minutes
+    )
+
+
+def test_core_rejected_research_outcome_cannot_mutate_production_embargo() -> None:
+    config = EntryBotConfig()
+    calibration = EntryBotCalibration(
+        symbol="UNIUSDT",
+        high_oi_change_60m_pct=Decimal("100"),
+        low_oi_acceleration_5_vs_60=Decimal("-100"),
+        source_period="20260518_20260816",
+        source_summary_sha256="c" * 64,
+    )
+    engine = EntrySymbolEngine("UNIUSDT", config, calibration)
+    touch = datetime(2026, 8, 19, 1, 30, 30, tzinfo=UTC)
+    bar_open = touch.replace(second=0, microsecond=0)
+    engine._history_ready = True
+    engine._current_bar_open = bar_open
+    engine._candidate = ArmedCandidate(
+        symbol="UNIUSDT",
+        bar_opened_at=bar_open,
+        bar_reference_price=Decimal("100.20"),
+        long_entry=Decimal("100"),
+        short_entry=None,
+        long_gap_pct=Decimal("0.10"),
+        short_gap_pct=None,
+        oi_features=None,
+    )
+    # The exact touch is retained by the independent research tracker, but the
+    # incomplete 4+1 flow window rejects it before a Core Signal exists.
+    assert engine.on_trade(
+        price=Decimal("100"), size=Decimal("1"), taker_side="Sell", traded_at=touch
+    ) is None
+    assert len(engine._audit_outcomes) == 1
+    assert engine._outcomes == []
+    engine.on_trade(
+        price=Decimal("98.90"),
+        size=Decimal("1"),
+        taker_side="Sell",
+        traded_at=touch + timedelta(minutes=1),
+    )
+    assert engine._failure_embargo_until is None
+    assert any(
+        event.event_type == "MILESTONE_MINUS_1_00"
+        for event in engine.drain_audit_events()
+    )
+
+
+def test_restart_state_contains_only_allowed_production_embargo() -> None:
+    config = EntryBotConfig()
+    original = EntrySymbolEngine("UNIUSDT", config, None)
+    now = datetime(2026, 8, 19, 2, 0, tzinfo=UTC)
+    original._failure_embargo_until = now + timedelta(minutes=30)
+    original._audit_outcomes.append(
+        _AuditTrackedOutcome(
+            candidate_id="research-only",
+            direction="Long",
+            entry_price=Decimal("100"),
+            touch_at=now,
+            expires_at=now + timedelta(hours=1),
+        )
+    )
+    state = original.export_production_state(now)
+    assert set(state) == {"failure_embargo_until"}
+    restored = EntrySymbolEngine("UNIUSDT", config, None)
+    restored.restore_production_state(state, now)
+    assert restored._failure_embargo_until == now + timedelta(minutes=30)
+    assert restored._audit_outcomes == []

@@ -73,6 +73,8 @@ class EntryBotRuntime:
             symbol: EntrySymbolEngine(symbol, self.config, calibrations.get(symbol))
             for symbol in self.config.working_symbols
         }
+        self._production_state_path = settings.database_path.parent / "entry_production_state.json"
+        self._restore_production_state()
         self._handoffs = PositionHandoffStore(settings.database_path)
         self._audit = EntryBotAuditStore(settings.database_path)
         self._stop = threading.Event()
@@ -541,6 +543,33 @@ class EntryBotRuntime:
         events = engine.drain_audit_events()
         if events:
             self._audit.record_events(events)
+            self._persist_production_state()
+
+    def _restore_production_state(self) -> None:
+        try:
+            raw = json.loads(self._production_state_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return
+        if not isinstance(raw, dict):
+            return
+        now = datetime.now(UTC)
+        for symbol, engine in self._engines.items():
+            payload = raw.get(symbol)
+            if isinstance(payload, dict):
+                engine.restore_production_state(payload, now)
+
+    def _persist_production_state(self) -> None:
+        now = datetime.now(UTC)
+        payload = {
+            symbol: engine.export_production_state(now)
+            for symbol, engine in self._engines.items()
+        }
+        self._production_state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self._production_state_path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+        )
+        temporary.replace(self._production_state_path)
 
     def _set_state(self, state: ScannerState, detail: str) -> None:
         with self._lock:
