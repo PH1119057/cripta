@@ -135,4 +135,12 @@ FROM runtime.position_ownership o
 LEFT JOIN monitoring.entry_geometry_handoffs g
   ON g.geometry_handoff_id = o.geometry_handoff_id;
 
+GRANT SELECT, INSERT ON mayak_v2.shared_market_contexts TO cripta;
+GRANT SELECT, INSERT ON monitoring.entry_geometry_handoffs TO cripta;
+GRANT SELECT, INSERT, UPDATE ON runtime.entry_geometry_bindings,
+    runtime.position_ownership TO cripta;
+GRANT SELECT ON analytics.shared_market_context_consumption,
+    analytics.position_lifecycle_identity TO cripta;
+GRANT EXECUTE ON FUNCTION runtime.reject_immutable_change() TO cripta;
+
 COMMIT;

@@ -145,6 +145,11 @@ def test_analytics_views_share_operational_semantics() -> None:
     assert "analytics.position_lifecycle_identity" in MIGRATION
 
 
+def test_runtime_role_receives_explicit_new_table_permissions() -> None:
+    assert "GRANT SELECT, INSERT ON mayak_v2.shared_market_contexts TO cripta" in MIGRATION
+    assert "runtime.position_ownership TO cripta" in MIGRATION
+
+
 def test_no_live_clean_break_rule_was_invented() -> None:
     assert "P45.1_TWO_COMPLETED_CLOSES" not in SUPERVISOR
     assert "observe_clean_break" not in SUPERVISOR
