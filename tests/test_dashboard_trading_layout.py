@@ -66,6 +66,12 @@ def test_master_symbol_checkbox_has_unambiguous_toggle() -> None:
     assert "const enable=enabledSymbols.size===0" in SOURCE
 
 
+def test_legacy_market_guard_is_not_selectable_and_advisory_wording_is_current() -> None:
+    assert "entryPolicy.querySelector('option[value=\"market_guard_v1\"]')?.remove()" in SOURCE
+    assert '"base_entry_v1", "m3_full_live_v1"' in APP_SOURCE
+    assert "Они сами не создают, не запрещают и не закрывают сделки" in SOURCE
+
+
 def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:
     assert "runtime.position_exit_attribution" in APP_SOURCE
     assert "WHERE a.link_status='EXACT'" in APP_SOURCE

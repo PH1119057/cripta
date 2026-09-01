@@ -65,9 +65,18 @@ def test_command_loop_restarts_after_internal_failure() -> None:
 
 def test_trailing_stop_does_not_depend_on_automatic_break_even_toggle() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "protection_entries = completed_entries if settings and settings[6] else []" in source
-    assert "for entry_id, symbol in completed_entries:" in source
+    assert "protection_entries = owned_entries if settings and settings[6] else []" in source
+    assert "for entry_id, symbol in owned_entries:" in source
     assert 'required_protection = protection_plan(' in source
+
+
+def test_post_fill_automation_uses_only_current_exact_position_owner() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "JOIN runtime.hot_positions p" in source
+    assert "p.position_idx=o.position_idx" in source
+    assert "p.size=o.actual_qty" in source
+    assert "p.entry_price=o.actual_avg_fill" in source
+    assert "o.state='OPEN' AND o.close_link_status='OPEN'" in source
 
 
 def test_trailing_stop_is_idempotent_for_current_position() -> None:

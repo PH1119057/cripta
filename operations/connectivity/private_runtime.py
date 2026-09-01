@@ -824,8 +824,6 @@ def command_worker_loop(key: str, secret: str) -> None:
                                       policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
                                       observed_context=observed_context)
             connection.commit()
-        completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
-            WHERE command_type='entry' AND state='completed'""").fetchall()
         filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms)
             FROM runtime.trade_commands c JOIN runtime.executions e ON e.order_link_id=c.command_id
             WHERE c.command_type='entry' AND c.state='completed'
@@ -892,7 +890,16 @@ def command_worker_loop(key: str, secret: str) -> None:
                 VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
                 (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1]}),int(time.time()*1000)))
         connection.commit()
-        protection_entries = completed_entries if settings and settings[6] else []
+        owned_entries = connection.execute(
+            """SELECT o.entry_command_id,o.symbol
+               FROM runtime.position_ownership o
+               JOIN runtime.hot_positions p
+                 ON p.symbol=o.symbol AND p.position_idx=o.position_idx
+                AND p.side=o.side AND p.size=o.actual_qty
+                AND p.entry_price=o.actual_avg_fill
+               WHERE o.state='OPEN' AND o.close_link_status='OPEN'"""
+        ).fetchall()
+        protection_entries = owned_entries if settings and settings[6] else []
         for entry_id,symbol in protection_entries:
             position_row=connection.execute("SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",(symbol,)).fetchone()
             if not position_row: continue
@@ -926,7 +933,7 @@ def command_worker_loop(key: str, secret: str) -> None:
         connection.commit()
         if settings and settings[7]:
             trailing_pct = Decimal(str(settings[8] or "0.30"))
-            for entry_id, symbol in completed_entries:
+            for entry_id, symbol in owned_entries:
                 position_row = connection.execute(
                     "SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
                     (symbol,),
