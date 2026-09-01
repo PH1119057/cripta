@@ -7,9 +7,10 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
-        "liveDesk.prepend(openTradesSection,closedTradesSection,"
+        "tradeSubnav.after(openTradesSection,closedTradesSection,"
         "coinMonitorSection,signalObservationSection)"
     ) in SOURCE
+    assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
         "openTradesSection",
         "closedTradesSection",
@@ -34,8 +35,18 @@ def test_closed_trades_have_internal_scroll_and_exports_remain() -> None:
 
 
 def test_live_refresh_does_not_destroy_text_selection() -> None:
-    assert "positionRows.contains(selected)||realClosedRows.contains(selected)" in SOURCE
+    assert "positionRows.contains(selected)||realClosedRows.contains(selected)||liveRows.contains(selected)" in SOURCE
     assert "if(!tableSelected){renderLiveState(d);installPositionCards()}" in SOURCE
+    assert "function tradingViewport()" in SOURCE
+    assert "restoreTradingViewport(viewport)" in SOURCE
+
+
+def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
+    compact_row = SOURCE.split("positionRows.innerHTML=", 1)[1].split(
+        "const safe=", 1
+    )[0]
+    assert "supervisorBlock(p.supervisor)" not in compact_row
+    assert "Положение и обоснование" in SOURCE
 
 
 def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:
