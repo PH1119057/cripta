@@ -1054,7 +1054,7 @@ def reconcile_position_ownership(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id
            FROM runtime.position_ownership
-           WHERE state IN ('OPEN','RECONCILIATION_REQUIRED')
+           WHERE state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'
            ORDER BY fill_at"""
     ).fetchall()
     latest_by_key = {
@@ -1114,7 +1114,7 @@ def reconcile_position_ownership(
         if close.status != "EXACT" or close.exit_order_id is None:
             connection.execute(
                 """UPDATE runtime.position_ownership
-                   SET state='RECONCILIATION_REQUIRED',
+                   SET state='CLOSED',
                        close_link_status='UNRESOLVED_EXACT_LINK'
                    WHERE position_id=%s""",
                 (position_id,),

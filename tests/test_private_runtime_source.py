@@ -100,3 +100,13 @@ def test_current_bybit_position_matches_only_latest_exact_owned_cycle() -> None:
     assert "latest_by_key" in source
     assert 'current.get("size")' in source
     assert 'current.get("avgPrice")' in source
+
+
+def test_exchange_flat_position_is_closed_even_when_exit_link_is_unresolved() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "WHERE state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'" in source
+    unresolved_branch = source.split(
+        'if close.status != "EXACT" or close.exit_order_id is None:', 1
+    )[1].split("protection_rows =", 1)[0]
+    assert "SET state='CLOSED'" in unresolved_branch
+    assert "close_link_status='UNRESOLVED_EXACT_LINK'" in unresolved_branch
