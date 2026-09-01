@@ -1,7 +1,7 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`  
-**Версия:** 1.0  
+**Версия:** 1.1  
 **Дата:** 2026-08-31  
 **Назначение:** не позволять старым research/runbook документам становиться случайным текущим ТЗ.
 
@@ -34,6 +34,7 @@ PROJECT_ARCHITECTURE_RU.md
 MAYAK_ARCHITECTURE_PRINCIPLES_RU.md
 STRATEGY_DISPATCHER_ARCHITECTURE_RU.md
 DATA_TIMELINE_CONTRACT_RU.md
+SIGNAL_LIFECYCLE_CONTRACT_RU.md
 ANALYST_ARCHITECTURE_RU.md
 ARCHIVE_V2_ARCHITECTURE_RU.md
 ```
