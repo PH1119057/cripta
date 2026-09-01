@@ -45,6 +45,8 @@ def test_live_refresh_does_not_destroy_text_selection() -> None:
     assert "window.scrollTo" not in restore_body
     assert "expandedClosedTrades=new Set()" in SOURCE
     assert "function toggleClosedTradeCard(key)" in SOURCE
+    assert SOURCE.count("positionRows.innerHTML=") == 1
+    assert SOURCE.count("renderLiveState(d);installPositionCards()") == 1
 
 
 def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
