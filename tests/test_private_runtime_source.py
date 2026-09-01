@@ -110,3 +110,10 @@ def test_exchange_flat_position_is_closed_even_when_exit_link_is_unresolved() ->
     )[1].split("protection_rows =", 1)[0]
     assert "SET state='CLOSED'" in unresolved_branch
     assert "close_link_status='UNRESOLVED_EXACT_LINK'" in unresolved_branch
+
+
+def test_live_dashboard_request_does_not_run_schema_ddl() -> None:
+    source = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
+    live_state = source.split("def live_trading_state()", 1)[1].split("def ", 1)[0]
+    assert "ALTER TABLE" not in live_state
+    assert "CREATE TABLE" not in live_state

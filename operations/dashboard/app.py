@@ -331,26 +331,6 @@ def live_trading_state() -> dict[str, object]:
               AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'
               AND COALESCE(payload_json::jsonb->>'orderType','') = 'Limit'
             ORDER BY exchange_updated_ms DESC""").fetchall()
-        connection.execute(
-            "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE"
-        )
-        connection.execute(
-            "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE"
-        )
-        connection.execute(
-            "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'"
-        )
-        connection.execute(
-            "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'"
-        )
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS runtime.trade_settings_history(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            changed_at_epoch_ms BIGINT NOT NULL, old_settings JSONB NOT NULL,
-            new_settings JSONB NOT NULL, source TEXT NOT NULL, origin TEXT NOT NULL,
-            settings_version TEXT NOT NULL)"""
-        )
-        connection.commit()
         settings = connection.execute(
             "SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1"
         ).fetchone()
