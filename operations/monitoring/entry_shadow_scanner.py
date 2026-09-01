@@ -55,6 +55,7 @@ def write_state(runtime: EntryBotRuntime, monitored_symbols: set[str]) -> None:
         "detail": snapshot.detail,
         "execution_mode": "Только наблюдение; отправка заявок невозможна",
         "audit_event_count": snapshot.audit_event_count,
+        "available_symbols": sorted(item.symbol for item in snapshot.assets),
         "assets": [
             asdict(item) for item in snapshot.assets if item.symbol in monitored_symbols
         ],

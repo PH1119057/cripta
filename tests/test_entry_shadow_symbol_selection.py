@@ -10,6 +10,7 @@ def test_scanner_publishes_and_persists_only_owner_enabled_symbols() -> None:
     assert "if item.symbol in monitored_symbols" in SCANNER
     assert "if item.symbol not in monitored_symbols:" in SCANNER
     assert "selected_symbols = enabled_symbols(connection)" in SCANNER
+    assert '"available_symbols": sorted(item.symbol for item in snapshot.assets)' in SCANNER
 
 
 def test_closed_entry_gate_does_not_block_management_of_open_positions() -> None:
