@@ -8,7 +8,7 @@ ROOT = Path(__file__).parents[1]
 PRIVATE_PATH = ROOT / "operations/connectivity/private_runtime.py"
 PRIVATE = PRIVATE_PATH.read_text(encoding="utf-8")
 PROTECTION = (ROOT / "operations/connectivity/protection_math.py").read_text(encoding="utf-8")
-MIGRATION = (ROOT / "operations/sql/20260901_dispatcher_context_only.sql").read_text(
+MIGRATION = (ROOT / "operations/sql/20260901_observed_entry_context.sql").read_text(
     encoding="utf-8"
 )
 
@@ -23,7 +23,7 @@ def _function(name: str) -> ast.FunctionDef:
 
 
 def test_dispatcher_context_api_does_not_return_boolean_permission() -> None:
-    function = _function("consume_m3_entry_context")
+    function = _function("observe_m3_entry_context")
     assert isinstance(function.returns, ast.Subscript)
     assert isinstance(function.returns.value, ast.Name)
     assert function.returns.value.id == "dict"
@@ -34,21 +34,21 @@ def test_incompatible_context_cannot_suppress_entry_command() -> None:
     worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
     assert "context_allowed" not in worker
     assert "if not context_allowed" not in worker
-    assert "consumed_context = consume_m3_entry_context" in worker
+    assert "observed_context = observe_m3_entry_context" in worker
     assert "runtime.trade_commands" in worker
 
 
 def test_context_only_semantics_are_explicit_and_backward_compatible() -> None:
-    consumer = ast.get_source_segment(PRIVATE, _function("consume_m3_entry_context"))
+    consumer = ast.get_source_segment(PRIVATE, _function("observe_m3_entry_context"))
     assert '"decision": "OBSERVED"' in consumer
     assert '"trading_effect": "NONE"' in consumer
-    assert "'CONSUMED_CONTEXT','NONE'" in consumer
-    assert "'FULL_LIVE_V1', 'NONE', 'CONTEXT_ONLY'" in MIGRATION
+    assert "'OBSERVED_CONTEXT','NONE'" in consumer
+    assert "'CONSUMED_CONTEXT', 'OBSERVED_CONTEXT'" in MIGRATION
     assert "UPDATE runtime.m3_consumed_context" not in MIGRATION
 
 
 def test_missing_or_stale_dispatcher_context_is_observed_not_blocked() -> None:
-    consumer = ast.get_source_segment(PRIVATE, _function("consume_m3_entry_context"))
+    consumer = ast.get_source_segment(PRIVATE, _function("observe_m3_entry_context"))
     assert 'status = "NO_CONTEXT"' in consumer
     assert 'freshness = "MISSING"' in consumer
     assert 'freshness = "FRESH" if 0 <= age_seconds <= 90 else "STALE"' in consumer
@@ -65,6 +65,21 @@ def test_dispatcher_or_mayak_cannot_create_trade_commands() -> None:
         source = path.read_text(encoding="utf-8")
         assert "INSERT INTO runtime.trade_commands" not in source
         assert "UPDATE runtime.trade_commands" not in source
+
+
+def test_legacy_market_policy_cannot_restore_advisory_entry_veto() -> None:
+    worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
+    assert "market_guard_v1" not in worker
+    assert "mayak_v2.snapshots" not in worker
+    assert "up_share" not in worker
+    assert "down_share" not in worker
+
+
+def test_observed_context_schema_preserves_historical_consumed_rows() -> None:
+    assert "OBSERVED_CONTEXT" in MIGRATION
+    assert "CONSUMED_CONTEXT" in MIGRATION
+    assert "UPDATE runtime.m3_consumed_context" not in MIGRATION
+    assert "analytics.entry_advisory_contexts" in MIGRATION
 
 
 def test_existing_entry_geometry_and_safety_gates_remain_fail_closed() -> None:

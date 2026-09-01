@@ -35,8 +35,6 @@ _ticker_cache: dict[str, tuple[float, Decimal, Decimal, Decimal]] = {}
 _slippage_cache: dict[str, tuple[float, Decimal]] = {}
 EXCLUDED_TRADING_SYMBOLS = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
 SIGNAL_PICKUP_WINDOW_MS = int(os.environ.get("CRIPTA_SIGNAL_PICKUP_WINDOW_MS", "120000"))
-ENTRY_COOLDOWN_MS = int(os.environ.get("CRIPTA_ENTRY_COOLDOWN_MS", "300000"))
-MAX_PORTFOLIO_ENTRIES = int(os.environ.get("CRIPTA_MAX_PORTFOLIO_ENTRIES", "1"))
 BOT_INSTANCE_ID = os.environ.get("CRIPTA_BOT_INSTANCE_ID", "m3-mainnet-primary")
 
 
@@ -164,11 +162,16 @@ def initialize(connection: psycopg.Connection) -> None:
             profile_id TEXT NOT NULL, profile_version TEXT,
             dispatcher_status TEXT NOT NULL, decision TEXT NOT NULL,
             reason_ru TEXT NOT NULL, context_type TEXT NOT NULL
-                CHECK(context_type='CONSUMED_CONTEXT'),
+                CHECK(context_type IN ('CONSUMED_CONTEXT','OBSERVED_CONTEXT')),
             trading_effect TEXT NOT NULL
                 CHECK(trading_effect IN ('FULL_LIVE_V1','NONE','CONTEXT_ONLY')),
             payload JSONB NOT NULL)""",
         "ALTER TABLE runtime.m3_consumed_context ADD COLUMN IF NOT EXISTS market_context_id TEXT",
+        """ALTER TABLE runtime.m3_consumed_context
+            DROP CONSTRAINT IF EXISTS m3_consumed_context_context_type_check""",
+        """ALTER TABLE runtime.m3_consumed_context
+            ADD CONSTRAINT m3_consumed_context_context_type_check
+            CHECK(context_type IN ('CONSUMED_CONTEXT','OBSERVED_CONTEXT'))""",
         """ALTER TABLE runtime.m3_consumed_context
             DROP CONSTRAINT IF EXISTS m3_consumed_context_trading_effect_check""",
         """ALTER TABLE runtime.m3_consumed_context
@@ -275,7 +278,7 @@ def atomic_status(channel: str, value: dict[str, object]) -> None:
         temporary.replace(STATUS)
 
 
-def consume_m3_entry_context(
+def observe_m3_entry_context(
     connection: psycopg.Connection,
     *,
     signal_id: str,
@@ -319,7 +322,7 @@ def consume_m3_entry_context(
         "age_seconds": age_seconds,
         "freshness": freshness,
         "decision": "OBSERVED",
-        "context_type": "CONSUMED_CONTEXT",
+        "context_type": "OBSERVED_CONTEXT",
         "trading_effect": "NONE",
         "reason_ru": reason,
         "assessment": payload,
@@ -330,7 +333,7 @@ def consume_m3_entry_context(
             assessment_observed_at,profile_id,profile_version,dispatcher_status,
             decision,reason_ru,context_type,trading_effect,payload,market_context_id)
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                   'CONSUMED_CONTEXT','NONE',%s,%s)
+                   'OBSERVED_CONTEXT','NONE',%s,%s)
             ON CONFLICT(signal_id) DO NOTHING""",
         (signal_id, symbol, direction, signal_at, assessment_id, mayak_id,
          observed_at, profile_id, version, status, document["decision"], reason,
@@ -646,7 +649,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                 WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
                 ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
             for signal_id,symbol,direction,price,signal_at_ms in signals:
-                consumed_context = None
+                observed_context = None
                 if symbol in EXCLUDED_TRADING_SYMBOLS:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "монета находится в карантине")
@@ -656,66 +659,11 @@ def command_worker_loop(key: str, secret: str) -> None:
                                           "запрещён", "монета выключена в торговых настройках")
                     continue
                 if entry_policy == "m3_full_live_v1":
-                    consumed_context = consume_m3_entry_context(
+                    observed_context = observe_m3_entry_context(
                         connection,
                         signal_id=str(signal_id), symbol=str(symbol),
                         direction=str(direction), signal_at_ms=int(signal_at_ms),
                     )
-                portfolio_entries = connection.execute("""SELECT
-                    (SELECT count(*) FROM runtime.hot_positions) +
-                    (SELECT count(*) FROM runtime.hot_orders
-                     WHERE order_status IN ('New','PartiallyFilled','Untriggered')) +
-                    (SELECT count(*) FROM runtime.trade_commands
-                     WHERE command_type='entry' AND state IN ('queued','running'))""").fetchone()[0]
-                if entry_policy == "market_guard_v1" and int(portfolio_entries or 0) >= MAX_PORTFOLIO_ENTRIES:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "достигнут общий лимит позиций и заявок",
-                                          current=int(portfolio_entries or 0), limit=MAX_PORTFOLIO_ENTRIES)
-                    continue
-                recent_entry = connection.execute(
-                    """SELECT 1 FROM runtime.trade_commands
-                       WHERE command_type='entry' AND requested_at_epoch_ms >= %s
-                       LIMIT 1""",
-                    (now_ms-ENTRY_COOLDOWN_MS,),
-                ).fetchone()
-                if entry_policy == "market_guard_v1" and recent_entry:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "действует пауза между входами",
-                                          cooldown_seconds=ENTRY_COOLDOWN_MS//1000)
-                    continue
-                market = connection.execute("""SELECT observed_at,state,
-                           payload->'price_breadth'->>'up_share',
-                           payload->'price_breadth'->>'down_share'
-                    FROM mayak_v2.snapshots ORDER BY observed_at DESC LIMIT 1""").fetchone()
-                if entry_policy == "market_guard_v1" and not market:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "нет снимка общего состояния рынка")
-                    continue
-                market_age = None if not market else connection.execute(
-                    "SELECT extract(epoch from (clock_timestamp()-%s))", (market[0],)
-                ).fetchone()[0]
-                if entry_policy == "market_guard_v1" and (market_age is None or float(market_age) > 90):
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "данные общего рынка устарели",
-                                          age_seconds=None if market_age is None else float(market_age))
-                    continue
-                if entry_policy == "market_guard_v1" and str(market[1]) in {"денежное расхождение", "переходный рынок"}:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "Маяк видит неустойчивое состояние рынка",
-                                          market_state=str(market[1]))
-                    continue
-                up_share = Decimal(str(0 if not market else market[2] or 0))
-                down_share = Decimal(str(0 if not market else market[3] or 0))
-                if entry_policy == "market_guard_v1" and direction == "long" and up_share < Decimal("0.55"):
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "ширина рынка не подтверждает покупку",
-                                          up_share=str(up_share))
-                    continue
-                if entry_policy == "market_guard_v1" and direction == "short" and down_share < Decimal("0.55"):
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "ширина рынка не подтверждает продажу",
-                                          down_share=str(down_share))
-                    continue
                 occupied=connection.execute("""SELECT
                     EXISTS(SELECT 1 FROM runtime.hot_positions WHERE symbol=%s) OR
                     EXISTS(SELECT 1 FROM runtime.hot_orders WHERE symbol=%s AND order_status IN ('New','PartiallyFilled','Untriggered')) OR
@@ -766,7 +714,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                                       "разрешён", "проверки пройдены, команда поставлена в очередь",
                                       command_id=cid, entry_policy=entry_policy,
                                       policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
-                                      consumed_context=consumed_context)
+                                      observed_context=observed_context)
             connection.commit()
         completed_entries=connection.execute("""SELECT command_id,symbol FROM runtime.trade_commands
             WHERE command_type='entry' AND state='completed'""").fetchall()
