@@ -215,13 +215,6 @@ def initialize(connection: psycopg.Connection) -> None:
             execution_ids JSONB NOT NULL,
             state TEXT NOT NULL DEFAULT 'OPEN',
             created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp())""",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS exchange_position_key TEXT",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS position_idx INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS exit_order_id TEXT",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS exit_order_ids JSONB NOT NULL DEFAULT '[]'::jsonb",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS exit_execution_ids JSONB NOT NULL DEFAULT '[]'::jsonb",
-        "ALTER TABLE runtime.position_ownership ADD COLUMN IF NOT EXISTS close_link_status TEXT NOT NULL DEFAULT 'OPEN'",
         """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
             ON CONFLICT(singleton) DO NOTHING""",
     )
