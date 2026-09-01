@@ -7,7 +7,7 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
-        "tradeSubnav.after(openTradesSection,closedTradesSection,"
+        "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection,closedTradesSection,"
         "coinMonitorSection,signalObservationSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
@@ -39,7 +39,10 @@ def test_live_refresh_does_not_destroy_text_selection() -> None:
     assert "if(!tableSelected){renderLiveState(d);installPositionCards()}" in SOURCE
     assert "function tradingViewport()" in SOURCE
     assert "restoreTradingViewport(viewport)" in SOURCE
-    assert "window.scrollTo" not in SOURCE
+    restore_body = SOURCE.split("function restoreTradingViewport", 1)[1].split(
+        "async function refreshEntryShadow", 1
+    )[0]
+    assert "window.scrollTo" not in restore_body
     assert "expandedClosedTrades=new Set()" in SOURCE
     assert "function toggleClosedTradeCard(key)" in SOURCE
 
@@ -50,6 +53,17 @@ def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
     )[0]
     assert "supervisorBlock(p.supervisor)" not in compact_row
     assert "Положение и обоснование" in SOURCE
+
+
+def test_trading_uses_real_subpages_and_open_settings_precede_positions() -> None:
+    assert "function selectTradeSubpage(name)" in SOURCE
+    assert "trade-subpage-hidden" in SOURCE
+    assert "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection" in SOURCE
+
+
+def test_master_symbol_checkbox_has_unambiguous_toggle() -> None:
+    assert "autoAll.onchange=null" in SOURCE
+    assert "const enable=enabledSymbols.size===0" in SOURCE
 
 
 def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:

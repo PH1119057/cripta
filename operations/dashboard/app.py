@@ -1706,9 +1706,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         )
                     elif path == "/api/live/gate":
                         enabled = bool(request.get("enabled"))
-                        confirmation = str(request.get("confirmation", ""))
-                        if enabled and confirmation != "ВКЛЮЧИТЬ РЕАЛЬНУЮ ТОРГОВЛЮ":
-                            raise ValueError("неверная подтверждающая фраза")
+                        if enabled and request.get("confirmed") is not True:
+                            raise ValueError("включение новых входов не подтверждено")
                         connection.execute(
                             "UPDATE control.execution_gates SET enabled=%s,reason=%s,updated_at_epoch_ms=%s WHERE mode='mainnet'",
                             (
@@ -1720,18 +1719,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             ),
                         )
                     else:
-                        gate = connection.execute(
-                            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-                        ).fetchone()
-                        if not gate or not gate[0]:
-                            self.send_body(
-                                409,
-                                json.dumps(
-                                    {"error": "Торговый шлюз закрыт"}, ensure_ascii=False
-                                ).encode(),
-                                "application/json; charset=utf-8",
-                            )
-                            return
                         kind, symbol = (
                             str(request.get("type", "")),
                             str(request.get("symbol", "")).upper(),

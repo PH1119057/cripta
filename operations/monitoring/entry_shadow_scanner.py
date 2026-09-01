@@ -34,7 +34,19 @@ def json_value(value: object) -> object:
     raise TypeError(type(value).__name__)
 
 
-def write_state(runtime: EntryBotRuntime) -> None:
+def enabled_symbols(connection: psycopg.Connection) -> set[str]:
+    row = connection.execute(
+        "SELECT enabled_symbols_json FROM runtime.trade_settings WHERE singleton=1"
+    ).fetchone()
+    if not row:
+        return set()
+    try:
+        return {str(symbol).upper() for symbol in json.loads(row[0] or "[]")}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return set()
+
+
+def write_state(runtime: EntryBotRuntime, monitored_symbols: set[str]) -> None:
     snapshot = runtime.snapshot()
     payload = {
         "updated_at_epoch": int(time.time()),
@@ -43,7 +55,9 @@ def write_state(runtime: EntryBotRuntime) -> None:
         "detail": snapshot.detail,
         "execution_mode": "Только наблюдение; отправка заявок невозможна",
         "audit_event_count": snapshot.audit_event_count,
-        "assets": [asdict(item) for item in snapshot.assets],
+        "assets": [
+            asdict(item) for item in snapshot.assets if item.symbol in monitored_symbols
+        ],
     }
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATE_PATH.with_suffix(".tmp")
@@ -51,11 +65,18 @@ def write_state(runtime: EntryBotRuntime) -> None:
     temporary.replace(STATE_PATH)
 
 
-def persist_signals(connection: psycopg.Connection, runtime: EntryBotRuntime, horizon_seconds: int) -> int:
+def persist_signals(
+    connection: psycopg.Connection,
+    runtime: EntryBotRuntime,
+    horizon_seconds: int,
+    monitored_symbols: set[str],
+) -> int:
     inserted = 0
     now_ms = int(time.time() * 1000)
     with connection.transaction():
         for item in runtime.drain_signals():
+            if item.symbol not in monitored_symbols:
+                continue
             cursor = connection.execute(
                 """INSERT INTO monitoring.opportunities(
                     signal_id,bot_id,strategy_version,symbol,direction,signal_at_epoch_ms,
@@ -211,10 +232,16 @@ def main() -> None:
         runtime.start()
         next_state_write = 0.0
         while not stopping:
-            persist_signals(connection, runtime, config.candidate_outcome_horizon_minutes * 60)
+            selected_symbols = enabled_symbols(connection)
+            persist_signals(
+                connection,
+                runtime,
+                config.candidate_outcome_horizon_minutes * 60,
+                selected_symbols,
+            )
             now = time.monotonic()
             if now >= next_state_write:
-                write_state(runtime)
+                write_state(runtime, selected_symbols)
                 next_state_write = now + 2
             time.sleep(0.25)
     finally:
