@@ -11,6 +11,17 @@ import pytest
 from operations.dashboard import archive_v2
 
 
+def test_exact_exit_tables_are_in_compact_exports() -> None:
+    tables = {item.table for item in archive_v2.TABLE_EXPORTS}
+    assert {
+        "runtime.protection_events",
+        "runtime.owner_manual_interventions",
+        "runtime.position_exit_attribution",
+        "runtime.position_lifecycle_events",
+        "runtime.exchange_order_history",
+    } <= tables
+
+
 def test_code_filter_rejects_secrets_caches_and_binary_databases() -> None:
     rejected = (
         Path(".git/config"),

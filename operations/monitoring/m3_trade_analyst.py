@@ -107,6 +107,15 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             (entry["command_id"],),
         ).fetchone()
         position_id = None if ownership is None else str(ownership["position_id"])
+        attribution = (
+            None
+            if position_id is None
+            else connection.execute(
+                """SELECT * FROM runtime.position_exit_attribution
+                   WHERE position_id=%s AND link_status='EXACT'""",
+                (position_id,),
+            ).fetchone()
+        )
         closes = (
             []
             if position_id is None
@@ -120,7 +129,15 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         )
         close_command = None
         close_fills: list[dict[str, Any]] = []
-        for candidate in closes:
+        if attribution is not None:
+            exact_exec_ids = list(attribution["exit_execution_ids"] or [])
+            if exact_exec_ids:
+                close_fills = connection.execute(
+                    """SELECT * FROM runtime.executions
+                       WHERE exec_id=ANY(%s) ORDER BY exec_time_ms,exec_id""",
+                    (exact_exec_ids,),
+                ).fetchall()
+        for candidate in closes if attribution is None else []:
             response = document(candidate["result_json"])
             result = document(response.get("result")) or response
             candidate_order = str(result.get("orderId") or "")
@@ -239,6 +256,7 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             "hold_timeline": hold_timeline,
             "supervisor_timeline": supervisor_timeline,
             "exit_decision": None if exit_decision is None else dict(exit_decision),
+            "exit_attribution": None if attribution is None else dict(attribution),
             "close_command": None if close_command is None else dict(close_command),
             "close_fill": {
                 "exec_ids": [row["exec_id"] for row in close_fills],

@@ -75,3 +75,19 @@ def test_trailing_stop_is_idempotent_for_current_position() -> None:
     assert '"not modified" not in str(exc).lower()' in source
     assert "already_enabled = connection.execute" in source
     assert "requested_at_epoch_ms >= %s" in source
+
+
+def test_position_close_reconciliation_uses_exchange_inventory_not_nearest_time() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "resolve_exchange_position_close" in source
+    assert '"/v5/order/history"' in source
+    assert "upsert_exchange_order_history" in source
+    assert "UNRESOLVED_EXACT_LINK" in source
+    assert "nearest" not in source.lower()
+
+
+def test_current_bybit_position_matches_only_latest_exact_owned_cycle() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "latest_by_key" in source
+    assert 'current.get("size")' in source
+    assert 'current.get("avgPrice")' in source

@@ -146,6 +146,31 @@ TABLE_EXPORTS = (
         ("fill_at", "created_at"),
     ),
     TableExport(
+        "runtime.protection_events",
+        "execution/protection_events.jsonl",
+        ("occurred_at",),
+    ),
+    TableExport(
+        "runtime.owner_manual_interventions",
+        "execution/owner_manual_interventions.jsonl",
+        ("occurred_at",),
+    ),
+    TableExport(
+        "runtime.position_exit_attribution",
+        "exit/position_exit_attribution.jsonl",
+        ("closed_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.position_lifecycle_events",
+        "execution/position_lifecycle_events.jsonl",
+        ("occurred_at",),
+    ),
+    TableExport(
+        "runtime.exchange_order_history",
+        "execution/exchange_order_history.jsonl",
+        (),
+    ),
+    TableExport(
         "runtime.m3_consumed_context",
         "strategy/m3_consumed_context.jsonl",
         ("signal_at", "consumed_at"),
