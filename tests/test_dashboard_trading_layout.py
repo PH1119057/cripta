@@ -39,6 +39,9 @@ def test_live_refresh_does_not_destroy_text_selection() -> None:
     assert "if(!tableSelected){renderLiveState(d);installPositionCards()}" in SOURCE
     assert "function tradingViewport()" in SOURCE
     assert "restoreTradingViewport(viewport)" in SOURCE
+    assert "window.scrollTo" not in SOURCE
+    assert "expandedClosedTrades=new Set()" in SOURCE
+    assert "function toggleClosedTradeCard(key)" in SOURCE
 
 
 def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
