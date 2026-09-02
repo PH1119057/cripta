@@ -107,6 +107,7 @@ class GuiSmokeTests(unittest.TestCase):
             machine,
             set_mainnet_leverage=apply_leverage,
         )
+        window.symbol_input.setCurrentText("UNIUSDT")
         window.leverage_input.setCurrentText("10")
         self.assertEqual(window.leverage_input.currentText(), "10")
         self.assertTrue(window.apply_leverage_button.isEnabled())
@@ -235,9 +236,7 @@ class GuiSmokeTests(unittest.TestCase):
             [window.leverage_input.itemText(i) for i in range(window.leverage_input.count())],
             ["1", "2", "3", "5", "7", "10"],
         )
-        history_path = (
-            local_app_data / "BybitStrategyWorkbench" / "symbol_history.json"
-        )
+        history_path = local_app_data / "BybitStrategyWorkbench" / "symbol_history.json"
         self.assertTrue(history_path.exists())
 
         window._disconnect_read_only()
