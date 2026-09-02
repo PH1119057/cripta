@@ -21,6 +21,7 @@ from exact_close import (
     resolve_exchange_position_close,
     trigger_to_fill_slippage_pct,
 )
+from position_cycle import stable_cycle_ids
 from protection_math import (
     calculate_initial_boundaries,
     calculate_protection_plan,
@@ -41,6 +42,10 @@ _slippage_cache: dict[str, tuple[float, Decimal]] = {}
 EXCLUDED_TRADING_SYMBOLS = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
 SIGNAL_PICKUP_WINDOW_MS = int(os.environ.get("CRIPTA_SIGNAL_PICKUP_WINDOW_MS", "120000"))
 BOT_INSTANCE_ID = os.environ.get("CRIPTA_BOT_INSTANCE_ID", "m3-mainnet-primary")
+PROCESS_STARTED_AT_MS = int(time.time() * 1000)
+RECONCILIATION_MAX_AGE_MS = int(
+    os.environ.get("CRIPTA_RECONCILIATION_MAX_AGE_MS", "15000")
+)
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
@@ -89,6 +94,181 @@ def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> De
 
 def db() -> psycopg.Connection:
     return psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
+
+
+def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
+    """Close only the new-entry gate; ownership/protection commands remain available."""
+    now_ms = int(time.time() * 1000)
+    connection.execute(
+        """UPDATE control.execution_gates
+           SET enabled=FALSE,reason=%s,updated_at_epoch_ms=%s
+           WHERE mode='mainnet'""",
+        (reason, now_ms),
+    )
+    connection.commit()
+
+
+def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    if not gate or not bool(gate[0]):
+        return False, "NEW_ENTRY_GATE_DISARMED"
+    private = status.get("private", {})
+    if not isinstance(private, dict) or private.get("state") != "connected":
+        return False, "PRIVATE_WS_NOT_CONNECTED"
+    latest = connection.execute(
+        """SELECT finished_at_epoch_ms,ok FROM runtime.reconciliation_runs
+           ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    now_ms = int(time.time() * 1000)
+    if (
+        not latest
+        or not bool(latest[1])
+        or now_ms - int(latest[0]) > RECONCILIATION_MAX_AGE_MS
+    ):
+        return False, "FRESH_RECONCILIATION_REQUIRED"
+    wallet = connection.execute(
+        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
+    ).fetchone()
+    if not wallet or now_ms - int(wallet[0]) > RECONCILIATION_MAX_AGE_MS:
+        return False, "MANDATORY_EXCHANGE_STATE_STALE"
+    if not connection.execute(
+        "SELECT 1 FROM runtime.trade_settings WHERE singleton=1"
+    ).fetchone():
+        return False, "SERVER_TRADING_SETTINGS_MISSING"
+    ambiguous = connection.execute(
+        """SELECT 1 FROM runtime.trade_commands
+           WHERE command_type='entry' AND state IN ('queued','running')
+             AND requested_at_epoch_ms < %s LIMIT 1""",
+        (PROCESS_STARTED_AT_MS,),
+    ).fetchone()
+    if ambiguous:
+        return False, "AMBIGUOUS_PRESTART_ENTRY_COMMAND"
+    pending_owned = connection.execute(
+        """SELECT 1 FROM runtime.hot_orders o
+           JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
+           WHERE c.command_type='entry'
+             AND o.order_status IN ('New','PartiallyFilled','Untriggered')
+           LIMIT 1"""
+    ).fetchone()
+    if pending_owned:
+        return False, "BOT_OWNED_PENDING_ENTRY_REMAINS"
+    for symbol, raw_payload in connection.execute(
+        "SELECT symbol,payload_json FROM runtime.hot_positions"
+    ).fetchall():
+        raw = (
+            raw_payload
+            if isinstance(raw_payload, dict)
+            else json.loads(raw_payload)
+        )
+        stop = Decimal(str(raw.get("stopLoss") or 0))
+        trailing = Decimal(str(raw.get("trailingStop") or 0))
+        if stop <= 0 and trailing <= 0:
+            return False, f"UNPROTECTED_EXCHANGE_POSITION:{symbol}"
+    return True, "REARM_READY"
+
+
+def refresh_recent_executions(
+    connection: psycopg.Connection, key: str, secret: str
+) -> None:
+    response, _ = api_get(
+        "/v5/execution/list", {"category": "linear", "limit": "100"}, key, secret
+    )
+    if response.get("retCode") != 0:
+        raise RuntimeError("exchange rejected startup execution recovery")
+    now = int(time.time() * 1000)
+    for item in ((response.get("result") or {}).get("list") or []):
+        connection.execute(
+            """INSERT INTO runtime.executions(
+                exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
+                exec_fee,exec_time_ms,received_at_epoch_ms,payload_json)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(exec_id) DO NOTHING""",
+            (
+                item.get("execId", ""),
+                item.get("orderId", ""),
+                item.get("orderLinkId", ""),
+                item.get("symbol", ""),
+                item.get("side", ""),
+                item.get("execQty", ""),
+                item.get("execPrice", ""), item.get("execFee", ""),
+                int(item.get("execTime") or 0), now,
+                json.dumps(item, ensure_ascii=False),
+            ),
+        )
+    connection.commit()
+
+
+def cancel_bot_owned_pending_entry_orders(
+    connection: psycopg.Connection, key: str, secret: str
+) -> int:
+    rows = connection.execute(
+        """SELECT o.order_id,o.symbol,o.payload_json
+           FROM runtime.hot_orders o
+           JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
+           WHERE c.command_type='entry'
+             AND o.order_status IN ('New','PartiallyFilled','Untriggered')"""
+    ).fetchall()
+    cancelled = 0
+    for order_id, symbol, raw_payload in rows:
+        raw = raw_payload if isinstance(raw_payload, dict) else json.loads(raw_payload)
+        if bool(raw.get("reduceOnly")) or bool(raw.get("closeOnTrigger")):
+            continue
+        api_post(
+            "/v5/order/cancel",
+            {"category": "linear", "symbol": symbol, "orderId": order_id},
+            key,
+            secret,
+            accepted_codes=(110001,),
+        )
+        cancelled += 1
+    if cancelled:
+        reconcile(connection, key, secret, "restart_entry_cancel")
+    return cancelled
+
+
+def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
+    rows = connection.execute(
+        """SELECT command_id,state FROM runtime.trade_commands
+           WHERE command_type='entry' AND state IN ('queued','running')
+             AND requested_at_epoch_ms < %s""",
+        (PROCESS_STARTED_AT_MS,),
+    ).fetchall()
+    now_ms = int(time.time() * 1000)
+    for command_id, _state in rows:
+        execution = connection.execute(
+            "SELECT 1 FROM runtime.executions WHERE order_link_id=%s LIMIT 1", (command_id,)
+        ).fetchone()
+        if execution:
+            connection.execute(
+                """UPDATE runtime.trade_commands
+                   SET state='completed',finished_at_epoch_ms=%s,
+                       error='recovered after restart from exact execution evidence'
+                   WHERE command_id=%s""",
+                (now_ms, command_id),
+            )
+        else:
+            connection.execute(
+                """UPDATE runtime.trade_commands
+                   SET state='failed',finished_at_epoch_ms=%s,
+                       error='RESTART_DISARMED: no exact execution evidence'
+                   WHERE command_id=%s""",
+                (now_ms, command_id),
+            )
+    connection.commit()
+
+
+def startup_live_safety(
+    connection: psycopg.Connection, key: str, secret: str
+) -> None:
+    """Synchronously fail-close new Entry before any command worker can start."""
+    disarm_new_entries(connection, "restart: owner re-arm required")
+    reconcile(connection, key, secret, "startup_preflight")
+    refresh_recent_executions(connection, key, secret)
+    cancel_bot_owned_pending_entry_orders(connection, key, secret)
+    resolve_prestart_entry_commands(connection)
+    reconcile(connection, key, secret, "startup_post_cancel")
 
 
 def initialize(connection: psycopg.Connection) -> None:
@@ -854,9 +1034,16 @@ def command_worker_loop(key: str, secret: str) -> None:
                 (entry_id,),
             ).fetchone()
             if binding is not None and execution_rows:
-                identity = f"{entry_id}|{'|'.join(str(row[0]) for row in execution_rows)}"
-                position_id = "POS-" + hashlib.sha256(identity.encode()).hexdigest()[:32]
-                trade_id = "TRD-" + hashlib.sha256(("trade|" + identity).encode()).hexdigest()[:32]
+                position_idx = int(raw.get("positionIdx") or 0)
+                first_execution_id = str(execution_rows[0][0])
+                first_fill_ms = int(execution_rows[0][3] or fill_time_ms)
+                position_id, trade_id = stable_cycle_ids(
+                    entry_command_id=str(entry_id),
+                    first_execution_id=first_execution_id,
+                    symbol=str(symbol),
+                    side=str(position_row[0]),
+                    position_idx=position_idx,
+                )
                 connection.execute(
                     """INSERT INTO runtime.position_ownership(
                         position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
@@ -865,16 +1052,23 @@ def command_worker_loop(key: str, secret: str) -> None:
                         client_order_ids,execution_ids,exchange_position_key,position_idx)
                         VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                                to_timestamp(%s/1000.0),%s,%s,%s,%s,%s)
-                        ON CONFLICT(entry_command_id) DO NOTHING""",
+                        ON CONFLICT(entry_command_id) DO UPDATE SET
+                          actual_avg_fill=excluded.actual_avg_fill,
+                          actual_qty=excluded.actual_qty,
+                          exchange_order_ids=excluded.exchange_order_ids,
+                          client_order_ids=excluded.client_order_ids,
+                          execution_ids=excluded.execution_ids,
+                          exchange_position_key=excluded.exchange_position_key,
+                          position_idx=excluded.position_idx""",
                     (
                         position_id, trade_id, binding[2], binding[3], binding[4],
                         binding[1], entry_id, binding[0], symbol, position_row[0],
-                        actual_entry, Decimal(str(position_row[1])), int(fill_time_ms),
+                        actual_entry, Decimal(str(position_row[1])), first_fill_ms,
                         json.dumps(sorted({str(row[1]) for row in execution_rows})),
                         json.dumps(sorted({str(row[2]) for row in execution_rows})),
                         json.dumps([str(row[0]) for row in execution_rows]),
-                        f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{int(raw.get('positionIdx') or 0)}",
-                        int(raw.get("positionIdx") or 0),
+                        f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
+                        position_idx,
                     ),
                 )
             current_stop=Decimal(str(raw.get("stopLoss") or 0))
@@ -895,8 +1089,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                FROM runtime.position_ownership o
                JOIN runtime.hot_positions p
                  ON p.symbol=o.symbol AND p.position_idx=o.position_idx
-                AND p.side=o.side AND p.size=o.actual_qty
-                AND p.entry_price=o.actual_avg_fill
+                AND p.side=o.side
                WHERE o.state='OPEN' AND o.close_link_status='OPEN'"""
         ).fetchall()
         protection_entries = owned_entries if settings and settings[6] else []
@@ -1014,7 +1207,25 @@ def command_worker_loop(key: str, secret: str) -> None:
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
             WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
         if not row: time.sleep(0.25); continue
-        command_id=str(row[0]); connection.execute("UPDATE runtime.trade_commands SET state='running',started_at_epoch_ms=%s WHERE command_id=%s AND state='queued'",(int(time.time()*1000),command_id)); connection.commit()
+        command_id=str(row[0])
+        if str(row[1]) == "entry":
+            ready, readiness_reason = entry_runtime_readiness(connection)
+            if not ready:
+                connection.execute(
+                    """UPDATE runtime.trade_commands
+                       SET state='failed',finished_at_epoch_ms=%s,error=%s
+                       WHERE command_id=%s AND state='queued'""",
+                    (int(time.time()*1000), f"ENTRY_BLOCKED:{readiness_reason}", command_id),
+                )
+                connection.commit()
+                continue
+        connection.execute(
+            """UPDATE runtime.trade_commands
+               SET state='running',started_at_epoch_ms=%s
+               WHERE command_id=%s AND state='queued'""",
+            (int(time.time() * 1000), command_id),
+        )
+        connection.commit()
         try: execute_command(connection,key,secret,row)
         except Exception as exc:
             connection.rollback(); connection.execute("UPDATE runtime.trade_commands SET state='failed',finished_at_epoch_ms=%s,error=%s WHERE command_id=%s",(int(time.time()*1000),f"{type(exc).__name__}: {exc}",command_id)); connection.commit()
@@ -1068,8 +1279,6 @@ def reconcile_position_ownership(
             current is not None
             and latest_by_key.get((symbol, position_idx)) == position_id
             and str(current.get("side") or "") == side
-            and Decimal(str(current.get("size") or 0)) == Decimal(str(row[5]))
-            and Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))
         )
         if current_matches:
             connection.execute(
@@ -1247,24 +1456,59 @@ def reconcile_position_ownership(
         )
 
 
-def reconcile(connection: psycopg.Connection, key: str, secret: str, reason: str) -> tuple[int, int]:
+def reconcile(
+    connection: psycopg.Connection, key: str, secret: str, reason: str
+) -> tuple[int, int]:
     started = int(time.time() * 1000)
     try:
         wallet, _ = api_get("/v5/account/wallet-balance", {"accountType": "UNIFIED"}, key, secret)
-        positions, _ = api_get("/v5/position/list", {"category": "linear", "settleCoin": "USDT", "limit": "200"}, key, secret)
-        orders, _ = api_get("/v5/order/realtime", {"category": "linear", "settleCoin": "USDT", "openOnly": "0", "limit": "50"}, key, secret)
-        order_history_response, _ = api_get(
-            "/v5/order/history",
+        positions, _ = api_get(
+            "/v5/position/list",
             {"category": "linear", "settleCoin": "USDT", "limit": "200"},
             key,
             secret,
         )
-        if any(item.get("retCode") != 0 for item in (wallet, positions, orders, order_history_response)):
+        orders, _ = api_get(
+            "/v5/order/realtime",
+            {"category": "linear", "settleCoin": "USDT", "openOnly": "0", "limit": "50"},
+            key,
+            secret,
+        )
+        if any(item.get("retCode") != 0 for item in (wallet, positions, orders)):
             raise RuntimeError("exchange rejected reconciliation request")
         now = int(time.time() * 1000)
-        position_list = [p for p in ((positions.get("result") or {}).get("list") or []) if float(p.get("size") or 0) != 0]
+        position_list = [
+            p for p in ((positions.get("result") or {}).get("list") or [])
+            if float(p.get("size") or 0) != 0
+        ]
         order_list = (orders.get("result") or {}).get("list") or []
-        order_history = (order_history_response.get("result") or {}).get("list") or []
+        fetch_history = reason != "periodic"
+        if not fetch_history:
+            current_keys = {
+                (str(item.get("symbol") or ""), int(item.get("positionIdx") or 0))
+                for item in position_list
+            }
+            owned_keys = {
+                (str(row[0]), int(row[1] or 0))
+                for row in connection.execute(
+                    """SELECT symbol,position_idx FROM runtime.position_ownership
+                       WHERE state='OPEN' AND close_link_status='OPEN'"""
+                ).fetchall()
+            }
+            # Recovery/audit exception: history is fetched only when an owned cycle disappeared.
+            missing_owned_position = bool(owned_keys - current_keys)
+            fetch_history = missing_owned_position
+        order_history: list[dict[str, object]] = []
+        if fetch_history:
+            order_history_response, _ = api_get(
+                "/v5/order/history",
+                {"category": "linear", "settleCoin": "USDT", "limit": "200"},
+                key,
+                secret,
+            )
+            if order_history_response.get("retCode") != 0:
+                raise RuntimeError("exchange rejected order-history reconciliation request")
+            order_history = (order_history_response.get("result") or {}).get("list") or []
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
         with connection.transaction():
             connection.execute("DELETE FROM runtime.hot_positions")
@@ -1277,15 +1521,21 @@ def reconcile(connection: psycopg.Connection, key: str, secret: str, reason: str
                 upsert_exchange_order_history(connection, item, now)
             upsert_wallet(connection, account, now)
             reconcile_position_ownership(connection, position_list, now, order_history)
-            connection.execute("""INSERT INTO runtime.reconciliation_runs(
-                started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
-                VALUES(%s,%s,%s,1,%s,%s,'')""", (started, int(time.time() * 1000), reason, len(position_list), len(order_list)))
+            connection.execute(
+                """INSERT INTO runtime.reconciliation_runs(
+                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
+                    VALUES(%s,%s,%s,1,%s,%s,'')""",
+                (started, int(time.time() * 1000), reason, len(position_list), len(order_list)),
+            )
         return len(position_list), len(order_list)
     except Exception as exc:
         connection.rollback()
-        connection.execute("""INSERT INTO runtime.reconciliation_runs(
-            started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
-            VALUES(%s,%s,%s,0,0,0,%s)""", (started, int(time.time() * 1000), reason, f"{type(exc).__name__}: {exc}"))
+        connection.execute(
+            """INSERT INTO runtime.reconciliation_runs(
+                started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
+                VALUES(%s,%s,%s,0,0,0,%s)""",
+            (started, int(time.time() * 1000), reason, f"{type(exc).__name__}: {exc}"),
+        )
         connection.commit()
         raise
 
@@ -1389,6 +1639,8 @@ def private_loop(key: str, secret: str) -> None:
     connection = db()
     while running:
         try:
+            if reconnects > 0:
+                disarm_new_entries(connection, "private WS reconnect: owner re-arm required")
             hot_positions, hot_orders = reconcile(connection, key, secret, "startup" if reconnects == 0 else "reconnect")
             ws = websocket.create_connection(PRIVATE_URL, timeout=10, enable_multithread=False)
             ws.settimeout(1)
@@ -1456,6 +1708,7 @@ def main() -> None:
     credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
     bootstrap = db()
     initialize(bootstrap)
+    startup_live_safety(bootstrap, credentials["api_key"], credentials["api_secret"])
     bootstrap.close()
     signal.signal(signal.SIGTERM, lambda *_: globals().__setitem__("running", False))
     signal.signal(signal.SIGINT, lambda *_: globals().__setitem__("running", False))

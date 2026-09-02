@@ -312,6 +312,77 @@ def execution_liquidity_risks() -> dict[str, dict[str, object]]:
     return risks
 
 
+def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
+    reasons: list[str] = []
+    now_ms = int(time.time() * 1000)
+    try:
+        private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        private = {}
+    private_state = private.get("private", {}) if isinstance(private, dict) else {}
+    updated_at = (
+        int(private.get("updated_at_epoch") or 0)
+        if isinstance(private, dict)
+        else 0
+    )
+    if not isinstance(private_state, dict) or private_state.get("state") != "connected":
+        reasons.append("private Bybit WS is not connected")
+    if updated_at <= 0 or now_ms - updated_at * 1000 > 15_000:
+        reasons.append("private runtime state is stale")
+    latest = connection.execute(
+        """SELECT finished_at_epoch_ms,ok FROM runtime.reconciliation_runs
+           ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    if not latest or not bool(latest[1]) or now_ms - int(latest[0]) > 15_000:
+        reasons.append("fresh exchange reconciliation is required")
+    wallet = connection.execute(
+        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
+    ).fetchone()
+    if not wallet or now_ms - int(wallet[0]) > 15_000:
+        reasons.append("mandatory exchange state is stale")
+    settings = connection.execute(
+        "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
+    ).fetchone()
+    settings_version = None if not settings else str(settings[0])
+    if settings is None:
+        reasons.append("server trading settings are missing")
+    ambiguous = connection.execute(
+        """SELECT 1 FROM runtime.trade_commands
+           WHERE command_type='entry' AND state IN ('queued','running') LIMIT 1"""
+    ).fetchone()
+    if ambiguous:
+        reasons.append("ambiguous local Entry command remains")
+    pending = connection.execute(
+        """SELECT 1 FROM runtime.hot_orders o
+           JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
+           WHERE c.command_type='entry'
+             AND o.order_status IN ('New','PartiallyFilled','Untriggered') LIMIT 1"""
+    ).fetchone()
+    if pending:
+        reasons.append("bot-owned pending Entry order remains")
+    for symbol, raw_payload in connection.execute(
+        "SELECT symbol,payload_json FROM runtime.hot_positions"
+    ).fetchall():
+        raw = raw_payload if isinstance(raw_payload, dict) else json.loads(raw_payload)
+        if (
+            float(raw.get("stopLoss") or 0) <= 0
+            and float(raw.get("trailingStop") or 0) <= 0
+        ):
+            reasons.append(
+                f"current real position has no exchange-confirmed protection: {symbol}"
+            )
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    if gate and bool(gate[0]):
+        reasons.append("new Entry gate is already open")
+    return {
+        "rearm_ready": not reasons,
+        "reasons": reasons,
+        "settings_version": settings_version,
+    }
+
+
 def live_trading_state() -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
@@ -332,11 +403,15 @@ def live_trading_state() -> dict[str, object]:
               AND COALESCE(payload_json::jsonb->>'orderType','') = 'Limit'
             ORDER BY exchange_updated_ms DESC""").fetchall()
         settings = connection.execute(
-            "SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1"
+            """SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,
+            entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,
+            trailing_distance_pct,entry_policy,updated_at_epoch_ms
+            FROM runtime.trade_settings WHERE singleton=1"""
         ).fetchone()
         gate = connection.execute(
             "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone()
+        rearm = live_rearm_readiness(connection)
         commands = connection.execute(
             "SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20"
         ).fetchall()
@@ -647,6 +722,7 @@ def live_trading_state() -> dict[str, object]:
             "auto_trailing_stop": bool(settings[6]),
             "trailing_distance_pct": settings[7],
             "entry_policy": settings[8],
+            "settings_version": str(settings[9]),
         }
         if settings
         else {
@@ -659,7 +735,10 @@ def live_trading_state() -> dict[str, object]:
             "auto_trailing_stop": True,
             "trailing_distance_pct": "0.30",
             "entry_policy": "base_entry_v1",
+            "settings_version": None,
         },
+        "rearm": rearm,
+        "rearm_ready": bool(rearm.get("rearm_ready")),
         "gate": {"enabled": bool(gate[0]), "reason": gate[1]}
         if gate
         else {"enabled": False, "reason": "шлюз не настроен"},
@@ -1688,6 +1767,24 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         enabled = bool(request.get("enabled"))
                         if enabled and request.get("confirmed") is not True:
                             raise ValueError("включение новых входов не подтверждено")
+                        if enabled:
+                            current_settings = connection.execute(
+                                """SELECT updated_at_epoch_ms
+                                   FROM runtime.trade_settings WHERE singleton=1"""
+                            ).fetchone()
+                            requested_version = str(request.get("settings_version") or "")
+                            current_version = (
+                                "" if not current_settings else str(current_settings[0])
+                            )
+                            if not requested_version or requested_version != current_version:
+                                raise ValueError(
+                                    "settings_version mismatch: reload server state before re-arm"
+                                )
+                            readiness = live_rearm_readiness(connection)
+                            if not bool(readiness.get("rearm_ready")):
+                                raise ValueError(
+                                    "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
+                                )
                         connection.execute(
                             "UPDATE control.execution_gates SET enabled=%s,reason=%s,updated_at_epoch_ms=%s WHERE mode='mainnet'",
                             (

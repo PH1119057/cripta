@@ -70,12 +70,14 @@ def test_trailing_stop_does_not_depend_on_automatic_break_even_toggle() -> None:
     assert 'required_protection = protection_plan(' in source
 
 
-def test_post_fill_automation_uses_only_current_exact_position_owner() -> None:
+def test_post_fill_automation_uses_stable_position_owner_across_partial_fills() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert "JOIN runtime.hot_positions p" in source
     assert "p.position_idx=o.position_idx" in source
-    assert "p.size=o.actual_qty" in source
-    assert "p.entry_price=o.actual_avg_fill" in source
+    assert "p.side=o.side" in source
+    assert "p.size=o.actual_qty" not in source
+    assert "p.entry_price=o.actual_avg_fill" not in source
+    assert "ON CONFLICT(entry_command_id) DO UPDATE SET" in source
     assert "o.state='OPEN' AND o.close_link_status='OPEN'" in source
 
 
@@ -95,11 +97,12 @@ def test_position_close_reconciliation_uses_exchange_inventory_not_nearest_time(
     assert "nearest" not in source.lower()
 
 
-def test_current_bybit_position_matches_only_latest_exact_owned_cycle() -> None:
+def test_current_bybit_position_matches_latest_stable_owned_cycle() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert "latest_by_key" in source
-    assert 'current.get("size")' in source
-    assert 'current.get("avgPrice")' in source
+    assert 'and str(current.get("side") or "") == side' in source
+    assert 'and Decimal(str(current.get("size") or 0)) == Decimal(str(row[5]))' not in source
+    assert 'and Decimal(str(current.get("avgPrice") or 0)) == Decimal(str(row[4]))' not in source
 
 
 def test_exchange_flat_position_is_closed_even_when_exit_link_is_unresolved() -> None:

@@ -200,6 +200,7 @@ def main() -> None:
         monitoring_only_expanded_universe=True,
     )
     runtime = EntryBotRuntime(settings, config=config, calibration_path=CALIBRATION_PATH)
+    monitored_symbols = set(monitored)
     stopping = False
 
     def request_stop(_signum: int, _frame: object) -> None:
@@ -233,22 +234,21 @@ def main() -> None:
         runtime.start()
         next_state_write = 0.0
         while not stopping:
-            selected_symbols = enabled_symbols(connection)
             persist_signals(
                 connection,
                 runtime,
                 config.candidate_outcome_horizon_minutes * 60,
-                selected_symbols,
+                monitored_symbols,
             )
             now = time.monotonic()
             if now >= next_state_write:
-                write_state(runtime, selected_symbols)
+                write_state(runtime, monitored_symbols)
                 next_state_write = now + 2
             time.sleep(0.25)
     finally:
         runtime.close()
+        write_state(runtime, monitored_symbols)
         connection.close()
-        write_state(runtime)
 
 
 if __name__ == "__main__":

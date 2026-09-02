@@ -5,11 +5,13 @@ SCANNER = Path("operations/monitoring/entry_shadow_scanner.py").read_text(encodi
 DASHBOARD = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 
-def test_scanner_publishes_and_persists_only_owner_enabled_symbols() -> None:
-    assert "def enabled_symbols(" in SCANNER
+def test_scanner_persists_full_monitoring_universe_independent_of_owner_selection() -> None:
+    assert "monitored_symbols = set(monitored)" in SCANNER
     assert "if item.symbol in monitored_symbols" in SCANNER
     assert "if item.symbol not in monitored_symbols:" in SCANNER
-    assert "selected_symbols = enabled_symbols(connection)" in SCANNER
+    assert "selected_symbols = enabled_symbols(connection)" not in SCANNER
+    assert "write_state(runtime, monitored_symbols)" in SCANNER
+    assert "write_state(runtime)" not in SCANNER
     assert '"available_symbols": sorted(item.symbol for item in snapshot.assets)' in SCANNER
 
 
