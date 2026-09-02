@@ -27,6 +27,10 @@ from protection_math import (
     calculate_protection_plan,
     trailing_start_preserves_protection,
 )
+from runtime_schema import (
+    EXPECTED_RUNTIME_SCHEMA_VERSION,
+    validate_runtime_schema_contract,
+)
 from safety_observer import api_get
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
@@ -269,138 +273,6 @@ def startup_live_safety(
     cancel_bot_owned_pending_entry_orders(connection, key, secret)
     resolve_prestart_entry_commands(connection)
     reconcile(connection, key, secret, "startup_post_cancel")
-
-
-def initialize(connection: psycopg.Connection) -> None:
-    statements = (
-        "CREATE SCHEMA IF NOT EXISTS runtime",
-        """CREATE TABLE IF NOT EXISTS runtime.connection_events(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, at_epoch_ms BIGINT NOT NULL,
-            channel TEXT NOT NULL, event TEXT NOT NULL, details_json TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.private_events(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, received_at_epoch_ms BIGINT NOT NULL,
-            topic TEXT NOT NULL, message_id TEXT NOT NULL, creation_time_ms BIGINT, payload_json TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.hot_positions(
-            symbol TEXT NOT NULL, position_idx INTEGER NOT NULL, side TEXT NOT NULL, size TEXT NOT NULL,
-            entry_price TEXT NOT NULL, leverage TEXT NOT NULL, exchange_updated_ms BIGINT,
-            refreshed_at_epoch_ms BIGINT NOT NULL, payload_json TEXT NOT NULL,
-            PRIMARY KEY(symbol,position_idx))""",
-        """CREATE TABLE IF NOT EXISTS runtime.hot_orders(
-            order_id TEXT PRIMARY KEY, order_link_id TEXT NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL,
-            order_status TEXT NOT NULL, qty TEXT NOT NULL, price TEXT NOT NULL, leaves_qty TEXT NOT NULL,
-            exchange_updated_ms BIGINT, refreshed_at_epoch_ms BIGINT NOT NULL, payload_json TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.executions(
-            exec_id TEXT PRIMARY KEY, order_id TEXT NOT NULL, order_link_id TEXT NOT NULL, symbol TEXT NOT NULL,
-            side TEXT NOT NULL, exec_qty TEXT NOT NULL, exec_price TEXT NOT NULL, exec_fee TEXT NOT NULL,
-            exec_time_ms BIGINT, received_at_epoch_ms BIGINT NOT NULL, payload_json TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.exchange_order_history(
-            order_id TEXT PRIMARY KEY, order_link_id TEXT NOT NULL DEFAULT '',
-            symbol TEXT NOT NULL, side TEXT NOT NULL, order_status TEXT NOT NULL,
-            updated_at_epoch_ms BIGINT, payload_json JSONB NOT NULL,
-            refreshed_at_epoch_ms BIGINT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.wallet_latest(
-            singleton SMALLINT PRIMARY KEY CHECK(singleton=1), refreshed_at_epoch_ms BIGINT NOT NULL,
-            total_equity TEXT NOT NULL, wallet_balance TEXT NOT NULL, available_balance TEXT NOT NULL,
-            payload_json TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.reconciliation_runs(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, started_at_epoch_ms BIGINT NOT NULL,
-            finished_at_epoch_ms BIGINT NOT NULL, reason TEXT NOT NULL, ok SMALLINT NOT NULL,
-            positions INTEGER NOT NULL, orders INTEGER NOT NULL, error TEXT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.trade_settings(
-            singleton SMALLINT PRIMARY KEY CHECK(singleton=1), stake_usdt TEXT NOT NULL DEFAULT '10',
-            leverage INTEGER NOT NULL DEFAULT 10, enabled_symbols_json TEXT NOT NULL DEFAULT '[]',
-            updated_at_epoch_ms BIGINT NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.trade_commands(
-            command_id TEXT PRIMARY KEY, command_type TEXT NOT NULL, symbol TEXT NOT NULL,
-            payload_json TEXT NOT NULL, state TEXT NOT NULL, requested_at_epoch_ms BIGINT NOT NULL,
-            started_at_epoch_ms BIGINT, finished_at_epoch_ms BIGINT, result_json TEXT NOT NULL DEFAULT '{}',
-            error TEXT NOT NULL DEFAULT '')""",
-        """CREATE TABLE IF NOT EXISTS runtime.entry_decisions(
-            signal_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL,
-            signal_at_epoch_ms BIGINT NOT NULL, decided_at_epoch_ms BIGINT NOT NULL,
-            decision TEXT NOT NULL, reason TEXT NOT NULL, details_json TEXT NOT NULL DEFAULT '{}')""",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_offset_pct TEXT NOT NULL DEFAULT '0.00'",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_limit_ttl_seconds INTEGER NOT NULL DEFAULT 30",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_profit_protection BOOLEAN NOT NULL DEFAULT TRUE",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS auto_trailing_stop BOOLEAN NOT NULL DEFAULT TRUE",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS trailing_distance_pct TEXT NOT NULL DEFAULT '0.30'",
-        "ALTER TABLE runtime.trade_settings ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'",
-        """CREATE TABLE IF NOT EXISTS runtime.trade_settings_history(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            changed_at_epoch_ms BIGINT NOT NULL, old_settings JSONB NOT NULL,
-            new_settings JSONB NOT NULL, source TEXT NOT NULL, origin TEXT NOT NULL,
-            settings_version TEXT NOT NULL)""",
-        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS entry_policy TEXT NOT NULL DEFAULT 'base_entry_v1'",
-        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS policy_version TEXT NOT NULL DEFAULT 'entry-policy-v1'",
-        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS settings_version TEXT NOT NULL DEFAULT 'unknown'",
-        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_id BIGINT",
-        "ALTER TABLE runtime.entry_decisions ADD COLUMN IF NOT EXISTS mayak_snapshot_time TIMESTAMPTZ",
-        """CREATE TABLE IF NOT EXISTS runtime.entry_decision_events(
-            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            signal_id TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL,
-            signal_at_epoch_ms BIGINT NOT NULL, observed_at_epoch_ms BIGINT NOT NULL,
-            event_type TEXT NOT NULL, decision TEXT, reason TEXT NOT NULL,
-            details_json JSONB NOT NULL, entry_policy TEXT NOT NULL,
-            policy_version TEXT NOT NULL, settings_version TEXT NOT NULL)""",
-        """CREATE INDEX IF NOT EXISTS entry_decision_events_signal_time
-            ON runtime.entry_decision_events(signal_id,observed_at_epoch_ms)""",
-        """CREATE TABLE IF NOT EXISTS runtime.m3_consumed_context(
-            signal_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, direction TEXT NOT NULL,
-            signal_at TIMESTAMPTZ NOT NULL, assessment_id TEXT,
-            mayak_snapshot_id TEXT, assessment_observed_at TIMESTAMPTZ,
-            strategy_decision_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-            profile_id TEXT NOT NULL, profile_version TEXT,
-            dispatcher_status TEXT NOT NULL, decision TEXT NOT NULL,
-            reason_ru TEXT NOT NULL, context_type TEXT NOT NULL
-                CHECK(context_type IN ('CONSUMED_CONTEXT','OBSERVED_CONTEXT')),
-            trading_effect TEXT NOT NULL
-                CHECK(trading_effect IN ('FULL_LIVE_V1','NONE','CONTEXT_ONLY')),
-            payload JSONB NOT NULL)""",
-        "ALTER TABLE runtime.m3_consumed_context ADD COLUMN IF NOT EXISTS market_context_id TEXT",
-        """ALTER TABLE runtime.m3_consumed_context
-            DROP CONSTRAINT IF EXISTS m3_consumed_context_context_type_check""",
-        """ALTER TABLE runtime.m3_consumed_context
-            ADD CONSTRAINT m3_consumed_context_context_type_check
-            CHECK(context_type IN ('CONSUMED_CONTEXT','OBSERVED_CONTEXT'))""",
-        """ALTER TABLE runtime.m3_consumed_context
-            DROP CONSTRAINT IF EXISTS m3_consumed_context_trading_effect_check""",
-        """ALTER TABLE runtime.m3_consumed_context
-            ADD CONSTRAINT m3_consumed_context_trading_effect_check
-            CHECK(trading_effect IN ('FULL_LIVE_V1','NONE','CONTEXT_ONLY'))""",
-        """CREATE TABLE IF NOT EXISTS runtime.entry_geometry_bindings(
-            entry_command_id TEXT PRIMARY KEY,
-            geometry_handoff_id TEXT UNIQUE NOT NULL,
-            signal_id TEXT UNIQUE NOT NULL,
-            bot_instance_id TEXT NOT NULL,
-            strategy_id TEXT NOT NULL,
-            strategy_version TEXT NOT NULL,
-            bound_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-            payload JSONB NOT NULL)""",
-        """CREATE TABLE IF NOT EXISTS runtime.position_ownership(
-            position_id TEXT PRIMARY KEY,
-            trade_id TEXT UNIQUE NOT NULL,
-            bot_instance_id TEXT NOT NULL,
-            strategy_id TEXT NOT NULL,
-            strategy_version TEXT NOT NULL,
-            signal_id TEXT NOT NULL,
-            entry_command_id TEXT UNIQUE NOT NULL,
-            geometry_handoff_id TEXT,
-            symbol TEXT NOT NULL,
-            side TEXT NOT NULL,
-            actual_avg_fill NUMERIC NOT NULL,
-            actual_qty NUMERIC NOT NULL,
-            fill_at TIMESTAMPTZ NOT NULL,
-            exchange_order_ids JSONB NOT NULL,
-            client_order_ids JSONB NOT NULL,
-            execution_ids JSONB NOT NULL,
-            state TEXT NOT NULL DEFAULT 'OPEN',
-            created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp())""",
-        """INSERT INTO runtime.trade_settings(singleton,updated_at_epoch_ms) VALUES(1,0)
-            ON CONFLICT(singleton) DO NOTHING""",
-    )
-    for statement in statements:
-        connection.execute(statement)
-    connection.commit()
 
 
 def record_entry_decision(
@@ -1707,7 +1579,30 @@ def main() -> None:
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
     bootstrap = db()
-    initialize(bootstrap)
+    disarm_new_entries(
+        bootstrap,
+        "restart: schema validation pending; owner re-arm required",
+    )
+    try:
+        validate_runtime_schema_contract(bootstrap)
+    except Exception as exc:
+        atomic_status(
+            "schema",
+            {
+                "state": "BLOCKED",
+                "expected_version": EXPECTED_RUNTIME_SCHEMA_VERSION,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        bootstrap.close()
+        raise
+    atomic_status(
+        "schema",
+        {
+            "state": "READY",
+            "version": EXPECTED_RUNTIME_SCHEMA_VERSION,
+        },
+    )
     startup_live_safety(bootstrap, credentials["api_key"], credentials["api_secret"])
     bootstrap.close()
     signal.signal(signal.SIGTERM, lambda *_: globals().__setitem__("running", False))

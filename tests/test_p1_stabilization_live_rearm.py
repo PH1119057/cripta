@@ -139,3 +139,47 @@ def test_entry_gate_disarm_honors_smallint_schema_contract() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     assert "SET enabled=0,reason=%s,updated_at_epoch_ms=%s" in source
     assert "SET enabled=FALSE" not in source
+
+
+
+def test_private_runtime_startup_is_ddl_free_and_schema_versioned() -> None:
+    source = (ROOT / "operations" / "connectivity" / "private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    schema = (ROOT / "operations" / "connectivity" / "runtime_schema.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def initialize(" not in source
+    assert "ALTER TABLE " not in source
+    assert "CREATE TABLE " not in source
+    assert "CREATE SCHEMA " not in source
+    assert "validate_runtime_schema_contract(bootstrap)" in source
+    assert source.index("disarm_new_entries(", source.index("bootstrap = db()")) < source.index(
+        "validate_runtime_schema_contract(bootstrap)"
+    )
+    assert "SET LOCAL lock_timeout" in schema
+    assert "LOCK_TIMEOUT_MS = 2000" in schema
+    assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema
+    assert "RUNTIME_SCHEMA_VERSION_MISMATCH" in schema
+
+
+def test_runtime_schema_ddl_is_installer_only() -> None:
+    private_source = (
+        ROOT / "operations" / "connectivity" / "private_runtime.py"
+    ).read_text(encoding="utf-8")
+    schema_source = (
+        ROOT / "operations" / "connectivity" / "runtime_schema.py"
+    ).read_text(encoding="utf-8")
+    assert "migrate_runtime_schema_contract" not in private_source
+    assert "def migrate_runtime_schema_contract(" in schema_source
+    assert "CREATE TABLE IF NOT EXISTS runtime.schema_contract" in schema_source
+
+
+
+def test_shadow_scanner_owns_postgres_transactions_explicitly() -> None:
+    source = (
+        ROOT / "operations" / "monitoring" / "entry_shadow_scanner.py"
+    ).read_text(encoding="utf-8")
+    assert "autocommit=True" in source
+    assert "with connection.transaction():" in source
+    assert "selected_symbols = enabled_symbols(connection)" not in source

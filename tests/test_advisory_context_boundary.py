@@ -8,6 +8,9 @@ ROOT = Path(__file__).parents[1]
 PRIVATE_PATH = ROOT / "operations/connectivity/private_runtime.py"
 PRIVATE = PRIVATE_PATH.read_text(encoding="utf-8")
 PROTECTION = (ROOT / "operations/connectivity/protection_math.py").read_text(encoding="utf-8")
+RUNTIME_SCHEMA = (ROOT / "operations/connectivity/runtime_schema.py").read_text(
+    encoding="utf-8"
+)
 MIGRATION = (ROOT / "operations/sql/20260901_observed_entry_context.sql").read_text(
     encoding="utf-8"
 )
@@ -98,7 +101,8 @@ def test_entry_and_risk_settings_are_not_changed_by_p0() -> None:
     assert 'entry * Decimal("0.99")' in PROTECTION
     assert 'entry * Decimal("1.01")' in PROTECTION
     assert 'take_profit_pct: Decimal = Decimal("3.00")' in PROTECTION
-    assert 'trailing_distance_pct TEXT NOT NULL DEFAULT \'0.30\'' in PRIVATE
+    assert 'trailing_pct = Decimal(str(settings[8] or "0.30"))' in PRIVATE
+    assert '("runtime", "trade_settings", "trailing_distance_pct")' in RUNTIME_SCHEMA
     assert "entry_limit_ttl_seconds" in PRIVATE
     assert "entry_offset_pct" in PRIVATE
 

@@ -210,7 +210,10 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
-    connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
+    connection = psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql",
+        autocommit=True,
+    )
     try:
         prepare_database(connection)
         connection.execute("""CREATE TABLE IF NOT EXISTS monitoring.entry_geometry_handoffs(
