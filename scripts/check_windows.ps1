@@ -12,12 +12,12 @@ Remove-Item $smokeDatabase -ErrorAction SilentlyContinue
 Remove-Item "$smokeDatabase-shm" -ErrorAction SilentlyContinue
 Remove-Item "$smokeDatabase-wal" -ErrorAction SilentlyContinue
 
-& .\.venv\Scripts\python.exe -m py_compile research\server\monitoring\opportunity_tracker.py scripts\ruff_ratchet.py
+& .\.venv\Scripts\python.exe -m py_compile research\server\monitoring\opportunity_tracker.py scripts\ruff_ratchet.py scripts\mypy_ratchet.py
 if ($LASTEXITCODE -ne 0) { throw "Recovery source compile failed." }
 & .\.venv\Scripts\python.exe scripts\ruff_ratchet.py
 if ($LASTEXITCODE -ne 0) { throw "Ruff ratchet failed." }
-& .\.venv\Scripts\python.exe -m mypy src\bybit_workbench
-if ($LASTEXITCODE -ne 0) { throw "mypy failed." }
+& .\.venv\Scripts\python.exe scripts\mypy_ratchet.py
+if ($LASTEXITCODE -ne 0) { throw "mypy ratchet failed." }
 & .\.venv\Scripts\python.exe -m pytest
 if ($LASTEXITCODE -ne 0) { throw "pytest failed." }
 & .\.venv\Scripts\python.exe -m bybit_workbench --headless --database $smokeDatabase
