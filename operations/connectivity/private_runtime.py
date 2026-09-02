@@ -101,7 +101,7 @@ def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
     now_ms = int(time.time() * 1000)
     connection.execute(
         """UPDATE control.execution_gates
-           SET enabled=FALSE,reason=%s,updated_at_epoch_ms=%s
+           SET enabled=0,reason=%s,updated_at_epoch_ms=%s
            WHERE mode='mainnet'""",
         (reason, now_ms),
     )

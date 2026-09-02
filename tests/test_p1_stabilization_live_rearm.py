@@ -133,3 +133,9 @@ def test_operations_file_exchange_contract_is_persisted() -> None:
     assert "/srv/cripta-share/operations" in doc
     assert "/srv/cripta-share/reports" in doc
     assert "НЕ source of truth" in doc
+
+
+def test_entry_gate_disarm_honors_smallint_schema_contract() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    assert "SET enabled=0,reason=%s,updated_at_epoch_ms=%s" in source
+    assert "SET enabled=FALSE" not in source
