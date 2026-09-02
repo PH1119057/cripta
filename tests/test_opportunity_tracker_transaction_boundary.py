@@ -1,8 +1,5 @@
-from __future__ import annotations
-
 import ast
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 TRACKER = ROOT / "research" / "server" / "monitoring" / "opportunity_tracker.py"
