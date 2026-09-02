@@ -77,7 +77,7 @@ def flush(connection: psycopg.Connection, active: dict[str, Opportunity]) -> Non
 
 
 def main() -> None:
-    connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
+    connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql", autocommit=True)
     active: dict[str, Opportunity] = {}
     while True:
         try:
@@ -102,17 +102,17 @@ def main() -> None:
                     if topic.startswith("publicTrade."):
                         symbol = topic.split(".", 1)[1]
                         targets = [item for item in active.values() if item.symbol == symbol]
-                        for trade in message.get("data") or []:
-                            price = float(trade.get("p") or 0)
-                            trade_ms = int(trade.get("T") or 0)
-                            if price:
-                                for item in targets:
-                                    for level, hit_ms in item.observe(trade_ms, price):
-                                        connection.execute("""INSERT INTO monitoring.opportunity_events(signal_id,at_epoch_ms,
-                                            event,value_pct,price,details_json) VALUES(%s,%s,'level_first_hit',%s,%s,'{}')""",
-                                            (item.signal_id, hit_ms, level, price))
-                                if targets:
-                                    connection.commit()
+                        if targets:
+                            with connection.transaction():
+                                for trade in message.get("data") or []:
+                                    price = float(trade.get("p") or 0)
+                                    trade_ms = int(trade.get("T") or 0)
+                                    if price:
+                                        for item in targets:
+                                            for level, hit_ms in item.observe(trade_ms, price):
+                                                connection.execute("""INSERT INTO monitoring.opportunity_events(signal_id,at_epoch_ms,
+                                                    event,value_pct,price,details_json) VALUES(%s,%s,'level_first_hit',%s,%s,'{}')""",
+                                                    (item.signal_id, hit_ms, level, price))
                 now = time.monotonic()
                 if now >= next_flush:
                     flush(connection, active)
