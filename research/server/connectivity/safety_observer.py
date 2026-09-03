@@ -24,20 +24,57 @@ def stop(_signum: int, _frame: object) -> None:
     running = False
 
 
-def api_get(path: str, params: dict[str, str], key: str = "", secret: str = "") -> tuple[dict[str, object], float]:
-    query = urllib.parse.urlencode(sorted(params.items()))
-    headers = {"User-Agent": "cripta-safety-observer/1"}
-    if key:
-        timestamp = str(int(time.time() * 1000))
-        recv_window = "5000"
-        signature = hmac.new(secret.encode(), f"{timestamp}{key}{recv_window}{query}".encode(), hashlib.sha256).hexdigest()
-        headers.update({"X-BAPI-API-KEY": key, "X-BAPI-TIMESTAMP": timestamp, "X-BAPI-RECV-WINDOW": recv_window, "X-BAPI-SIGN": signature})
-    started = time.perf_counter()
-    request = urllib.request.Request(f"{BASE_URL}{path}{'?' + query if query else ''}", headers=headers)
-    with urllib.request.urlopen(request, timeout=10) as response:
-        payload = json.load(response)
-    return payload, (time.perf_counter() - started) * 1000
+SIGNED_RECV_WINDOW = "5000"
+SIGNED_IO_TIMEOUT_SECONDS = 3.0
 
+
+def api_get(
+    path: str,
+    params: dict[str, str],
+    key: str = "",
+    secret: str = "",
+) -> tuple[dict[str, object], float]:
+    """Read-only Bybit GET. Retry once only for explicit timestamp rejection."""
+    query = urllib.parse.urlencode(sorted(params.items()))
+    started = time.perf_counter()
+    attempts = 2 if key else 1
+    last_timestamp_ms = 0
+
+    for attempt in range(attempts):
+        headers = {"User-Agent": "cripta-safety-observer/1"}
+        if key:
+            timestamp_ms = max(int(time.time() * 1000), last_timestamp_ms + 1)
+            last_timestamp_ms = timestamp_ms
+            timestamp = str(timestamp_ms)
+            signature = hmac.new(
+                secret.encode(),
+                f"{timestamp}{key}{SIGNED_RECV_WINDOW}{query}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+            headers.update(
+                {
+                    "X-BAPI-API-KEY": key,
+                    "X-BAPI-TIMESTAMP": timestamp,
+                    "X-BAPI-RECV-WINDOW": SIGNED_RECV_WINDOW,
+                    "X-BAPI-SIGN": signature,
+                }
+            )
+
+        request = urllib.request.Request(
+            f"{BASE_URL}{path}{'?' + query if query else ''}",
+            headers=headers,
+        )
+        with urllib.request.urlopen(
+            request,
+            timeout=SIGNED_IO_TIMEOUT_SECONDS,
+        ) as response:
+            payload = json.load(response)
+
+        code = int(payload.get("retCode", -1))
+        if not (key and code == 10002 and attempt == 0):
+            return payload, (time.perf_counter() - started) * 1000
+
+    raise AssertionError("unreachable signed GET retry state")
 
 def initialize(connection: psycopg.Connection) -> None:
     connection.execute("CREATE SCHEMA IF NOT EXISTS safety")
@@ -86,48 +123,137 @@ def collect(connection: psycopg.Connection, key: str, secret: str) -> None:
     now_ms = int(time.time() * 1000)
     age = public_stream_age(now_ms)
     try:
+        clock_started_ns = time.time_ns()
         server, server_latency = api_get("/v5/market/time", {})
-        wallet, wallet_latency = api_get("/v5/account/wallet-balance", {"accountType": "UNIFIED"}, key, secret)
-        positions, positions_latency = api_get("/v5/position/list", {"category": "linear", "settleCoin": "USDT", "limit": "200"}, key, secret)
-        orders, orders_latency = api_get("/v5/order/realtime", {"category": "linear", "settleCoin": "USDT", "openOnly": "0", "limit": "50"}, key, secret)
+        clock_finished_ns = time.time_ns()
+        now_ms = clock_finished_ns // 1_000_000
+        age = public_stream_age(now_ms)
+        clock_midpoint_ms = (clock_started_ns + clock_finished_ns) / 2_000_000
+
+        wallet, wallet_latency = api_get(
+            "/v5/account/wallet-balance",
+            {"accountType": "UNIFIED"},
+            key,
+            secret,
+        )
+        positions, positions_latency = api_get(
+            "/v5/position/list",
+            {"category": "linear", "settleCoin": "USDT", "limit": "200"},
+            key,
+            secret,
+        )
+        orders, orders_latency = api_get(
+            "/v5/order/realtime",
+            {
+                "category": "linear",
+                "settleCoin": "USDT",
+                "openOnly": "0",
+                "limit": "50",
+            },
+            key,
+            secret,
+        )
         payloads = (server, wallet, positions, orders)
         if any(item.get("retCode") != 0 for item in payloads):
-            raise RuntimeError("; ".join(str(item.get("retMsg")) for item in payloads if item.get("retCode") != 0))
-        server_ms = int(server.get("time") or int((server.get("result") or {}).get("timeNano", "0")) // 1_000_000)
+            raise RuntimeError(
+                "; ".join(
+                    str(item.get("retMsg"))
+                    for item in payloads
+                    if item.get("retCode") != 0
+                )
+            )
+
+        server_ms = int(
+            server.get("time")
+            or int((server.get("result") or {}).get("timeNano", "0"))
+            // 1_000_000
+        )
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
         position_list = (positions.get("result") or {}).get("list") or []
         order_list = (orders.get("result") or {}).get("list") or []
-        active_positions = [p for p in position_list if float(p.get("size") or 0) != 0]
-        modes = sorted({str(p.get("positionIdx")) for p in active_positions})
-        leverages = {str(p.get("symbol")): p.get("leverage") for p in active_positions}
-        latency = max(server_latency, wallet_latency, positions_latency, orders_latency)
-        latest = {
-            "state": "healthy", "checked_at_epoch": now_ms // 1000,
-            "clock_offset_ms": server_ms - now_ms, "rest_latency_ms": round(latency, 2),
-            "public_stream_age_ms": age, "total_equity": account.get("totalEquity"),
-            "available_balance": account.get("totalAvailableBalance"), "wallet_balance": account.get("totalWalletBalance"),
-            "account_im_rate": account.get("accountIMRate"), "account_mm_rate": account.get("accountMMRate"),
-            "open_positions": len(active_positions), "open_orders": len(order_list),
-            "position_modes": modes, "leverages": leverages,
+        active_positions = [
+            item
+            for item in position_list
+            if float(item.get("size") or 0) != 0
+        ]
+        modes = sorted({str(item.get("positionIdx")) for item in active_positions})
+        leverages = {
+            str(item.get("symbol")): item.get("leverage")
+            for item in active_positions
         }
-        connection.execute("""INSERT INTO safety.exchange_snapshots(
-            at_epoch_ms,ok,clock_offset_ms,rest_latency_ms,public_stream_age_ms,total_equity,
-            available_balance,wallet_balance,account_im_rate,account_mm_rate,open_positions,
-            open_orders,position_modes_json,leverages_json,error) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (now_ms, 1, latest["clock_offset_ms"], latency, age, latest["total_equity"], latest["available_balance"],
-             latest["wallet_balance"], latest["account_im_rate"], latest["account_mm_rate"], len(active_positions),
-             len(order_list), json.dumps(modes), json.dumps(leverages), ""))
+        latency = max(
+            server_latency,
+            wallet_latency,
+            positions_latency,
+            orders_latency,
+        )
+        latest = {
+            "state": "healthy",
+            "checked_at_epoch": now_ms // 1000,
+            "clock_offset_ms": int(server_ms - clock_midpoint_ms),
+            "rest_latency_ms": round(latency, 2),
+            "public_stream_age_ms": age,
+            "total_equity": account.get("totalEquity"),
+            "available_balance": account.get("totalAvailableBalance"),
+            "wallet_balance": account.get("totalWalletBalance"),
+            "account_im_rate": account.get("accountIMRate"),
+            "account_mm_rate": account.get("accountMMRate"),
+            "open_positions": len(active_positions),
+            "open_orders": len(order_list),
+            "position_modes": modes,
+            "leverages": leverages,
+        }
+        connection.execute(
+            """INSERT INTO safety.exchange_snapshots(
+            at_epoch_ms,ok,clock_offset_ms,rest_latency_ms,public_stream_age_ms,
+            total_equity,available_balance,wallet_balance,account_im_rate,
+            account_mm_rate,open_positions,open_orders,position_modes_json,
+            leverages_json,error)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                now_ms,
+                1,
+                latest["clock_offset_ms"],
+                latency,
+                age,
+                latest["total_equity"],
+                latest["available_balance"],
+                latest["wallet_balance"],
+                latest["account_im_rate"],
+                latest["account_mm_rate"],
+                len(active_positions),
+                len(order_list),
+                json.dumps(modes),
+                json.dumps(leverages),
+                "",
+            ),
+        )
         connection.commit()
         atomic_json(latest)
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
-        connection.execute("""INSERT INTO safety.exchange_snapshots(
-            at_epoch_ms,ok,public_stream_age_ms,position_modes_json,leverages_json,error)
-            VALUES(%s,0,%s,'[]','{}',%s)""", (now_ms, age, message))
+        connection.execute(
+            """INSERT INTO safety.exchange_snapshots(
+            at_epoch_ms,ok,public_stream_age_ms,position_modes_json,
+            leverages_json,error)
+            VALUES(%s,0,%s,'[]','{}',%s)""",
+            (now_ms, age, message),
+        )
         connection.commit()
-        atomic_json({"state": "error", "checked_at_epoch": now_ms // 1000, "public_stream_age_ms": age, "error": message})
-        event(connection, "exchange_truth_refresh_failed", "error", error=message)
-
+        atomic_json(
+            {
+                "state": "error",
+                "checked_at_epoch": now_ms // 1000,
+                "public_stream_age_ms": age,
+                "error": message,
+            }
+        )
+        event(
+            connection,
+            "exchange_truth_refresh_failed",
+            "error",
+            error=message,
+        )
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)

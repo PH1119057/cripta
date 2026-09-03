@@ -50,6 +50,25 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 RECONCILIATION_MAX_AGE_MS = int(
     os.environ.get("CRIPTA_RECONCILIATION_MAX_AGE_MS", "15000")
 )
+SIGNED_RECV_WINDOW = "5000"
+SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0
+MUTATION_CLOCK_MAX_ABS_OFFSET_MS = 500.0
+
+
+class ExchangeMutationBarrier(RuntimeError):
+    """Mutation outcome or immediate post-mutation truth is uncertain."""
+
+
+class UnsafeBybitClock(ExchangeMutationBarrier):
+    """Local/Bybit clock evidence is outside the mutation safety limit."""
+
+
+class AmbiguousBybitMutation(ExchangeMutationBarrier):
+    """Transport ended without deterministic exchange acknowledgement."""
+
+
+class BybitMutationRejected(RuntimeError):
+    """Bybit explicitly rejected the mutation."""
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
@@ -144,6 +163,14 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         "SELECT 1 FROM runtime.trade_settings WHERE singleton=1"
     ).fetchone():
         return False, "SERVER_TRADING_SETTINGS_MISSING"
+    unresolved = connection.execute(
+        """SELECT 1 FROM runtime.trade_commands
+           WHERE command_type='entry' AND state='running'
+             AND error LIKE 'EXCHANGE_MUTATION_BARRIER:%'
+           LIMIT 1"""
+    ).fetchone()
+    if unresolved:
+        return False, "AMBIGUOUS_EXCHANGE_MUTATION"
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
@@ -235,6 +262,127 @@ def cancel_bot_owned_pending_entry_orders(
     return cancelled
 
 
+def protect_recovered_bot_positions(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+) -> int:
+    """Restore initial server protection only for exact bot Entry cycles."""
+    rows = connection.execute(
+        """SELECT c.command_id,c.symbol,min(e.exec_time_ms)
+           FROM runtime.trade_commands c
+           JOIN runtime.executions e ON e.order_link_id=c.command_id
+           WHERE c.command_type='entry'
+             AND COALESCE(
+                   (e.payload_json::jsonb->>'closedSize')::numeric,
+                   0
+                 )=0
+           GROUP BY c.command_id,c.symbol"""
+    ).fetchall()
+    protected = 0
+
+    for command_id, symbol, fill_time_ms in rows:
+        position_row = connection.execute(
+            """SELECT side,entry_price,payload_json
+               FROM runtime.hot_positions
+               WHERE symbol=%s
+               ORDER BY position_idx LIMIT 1""",
+            (symbol,),
+        ).fetchone()
+        if position_row is None:
+            continue
+
+        raw = (
+            position_row[2]
+            if isinstance(position_row[2], dict)
+            else json.loads(position_row[2])
+        )
+        open_time_ms = int(raw.get("openTime") or 0)
+        if open_time_ms and abs(open_time_ms - int(fill_time_ms or 0)) > 10_000:
+            continue
+
+        stop = Decimal(str(raw.get("stopLoss") or 0))
+        trailing = Decimal(str(raw.get("trailingStop") or 0))
+        if stop > 0 or trailing > 0:
+            continue
+
+        actual_entry = Decimal(str(position_row[1] or 0))
+        if actual_entry <= 0:
+            raise RuntimeError(
+                f"recovered position has no actual avg fill symbol={symbol}"
+            )
+
+        instruments, _ = api_get(
+            "/v5/market/instruments-info",
+            {"category": "linear", "symbol": str(symbol)},
+        )
+        if int(instruments.get("retCode", -1)) != 0:
+            raise RuntimeError(
+                f"instrument lookup failed during recovery symbol={symbol}"
+            )
+        instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
+        tick = Decimal(
+            str((instrument.get("priceFilter") or {}).get("tickSize") or 0)
+        )
+        if tick <= 0:
+            raise RuntimeError(
+                f"recovered position has no tick size symbol={symbol}"
+            )
+
+        actual_stop, actual_target = calculate_initial_boundaries(
+            entry=actual_entry,
+            side=str(position_row[0]),
+            tick=tick,
+        )
+        api_post(
+            "/v5/position/trading-stop",
+            {
+                "category": "linear",
+                "symbol": str(symbol),
+                "positionIdx": int(raw.get("positionIdx") or 0),
+                "tpslMode": "Full",
+                "stopLoss": str(actual_stop),
+                "takeProfit": str(actual_target),
+                "slTriggerBy": "LastPrice",
+                "tpTriggerBy": "LastPrice",
+                "slOrderType": "Market",
+                "tpOrderType": "Market",
+            },
+            key,
+            secret,
+        )
+        reconcile(
+            connection,
+            key,
+            secret,
+            "restart_recovered_entry_protection",
+        )
+
+        verified = connection.execute(
+            """SELECT payload_json FROM runtime.hot_positions
+               WHERE symbol=%s ORDER BY position_idx LIMIT 1""",
+            (symbol,),
+        ).fetchone()
+        if verified is not None:
+            verified_raw = (
+                verified[0]
+                if isinstance(verified[0], dict)
+                else json.loads(verified[0])
+            )
+            verified_stop = Decimal(str(verified_raw.get("stopLoss") or 0))
+            verified_trailing = Decimal(
+                str(verified_raw.get("trailingStop") or 0)
+            )
+            if verified_stop <= 0 and verified_trailing <= 0:
+                raise RuntimeError(
+                    "recovered bot position remains unprotected "
+                    f"symbol={symbol} entry_command_id={command_id}"
+                )
+        protected += 1
+
+    return protected
+
+
 def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
     rows = connection.execute(
         """SELECT command_id,state FROM runtime.trade_commands
@@ -245,7 +393,9 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
     now_ms = int(time.time() * 1000)
     for command_id, _state in rows:
         execution = connection.execute(
-            "SELECT 1 FROM runtime.executions WHERE order_link_id=%s LIMIT 1", (command_id,)
+            """SELECT 1 FROM runtime.executions
+               WHERE order_link_id=%s LIMIT 1""",
+            (command_id,),
         ).fetchone()
         if execution:
             connection.execute(
@@ -266,17 +416,36 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
     connection.commit()
 
 
-def startup_live_safety(
-    connection: psycopg.Connection, key: str, secret: str
+def resolve_prestart_non_entry_running_commands(
+    connection: psycopg.Connection,
 ) -> None:
-    """Synchronously fail-close new Entry before any command worker can start."""
+    """Never replay an uncertain non-Entry mutation after process restart."""
+    connection.execute(
+        """UPDATE runtime.trade_commands
+           SET state='failed',finished_at_epoch_ms=%s,
+               error='RESTART_DISARMED: mutation not replayed; exchange truth reconciled'
+           WHERE command_type<>'entry' AND state='running'
+             AND requested_at_epoch_ms < %s""",
+        (int(time.time() * 1000), PROCESS_STARTED_AT_MS),
+    )
+    connection.commit()
+
+
+def startup_live_safety(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+) -> None:
+    """Synchronously fail-close Entry and restore exchange truth before workers."""
     disarm_new_entries(connection, "restart: owner re-arm required")
     reconcile(connection, key, secret, "startup_preflight")
     refresh_recent_executions(connection, key, secret)
     cancel_bot_owned_pending_entry_orders(connection, key, secret)
+    refresh_recent_executions(connection, key, secret)
+    protect_recovered_bot_positions(connection, key, secret)
     resolve_prestart_entry_commands(connection)
+    resolve_prestart_non_entry_running_commands(connection)
     reconcile(connection, key, secret, "startup_post_cancel")
-
 
 def record_entry_decision(
     connection: psycopg.Connection,
@@ -423,26 +592,199 @@ def auth(ws: websocket.WebSocket, key: str, secret: str) -> None:
         raise RuntimeError(f"websocket auth failed: {response.get('retMsg') or response.get('ret_msg')}")
 
 
-def api_post(path: str, params: dict[str, object], key: str, secret: str, *, accepted_codes: tuple[int, ...] = ()) -> dict[str, object]:
-    body = json.dumps(params, separators=(",", ":"), ensure_ascii=False)
-    timestamp, recv_window = str(int(time.time() * 1000)), "5000"
-    signature = hmac.new(secret.encode(), f"{timestamp}{key}{recv_window}{body}".encode(), hashlib.sha256).hexdigest()
-    request = urllib.request.Request(REST_URL + path, data=body.encode(), method="POST", headers={
-        "Content-Type": "application/json", "X-BAPI-API-KEY": key, "X-BAPI-TIMESTAMP": timestamp,
-        "X-BAPI-RECV-WINDOW": recv_window, "X-BAPI-SIGN": signature, "User-Agent": "cripta-live-executor/1",
-    })
+def _server_time_ms(payload: dict[str, object]) -> float:
+    raw = payload.get("time")
+    if raw not in (None, ""):
+        return float(raw)
+    result = payload.get("result") or {}
+    if not isinstance(result, dict):
+        raise RuntimeError("Bybit time response has no result object")
+    nano = result.get("timeNano")
+    if nano:
+        return float(nano) / 1_000_000
+    second = result.get("timeSecond")
+    if second:
+        return float(second) * 1000
+    raise RuntimeError("Bybit time response has no server timestamp")
+
+
+def mutation_clock_offset_ms() -> float:
+    """Return a fresh midpoint clock observation for this mutation attempt."""
+    started_ns = time.time_ns()
+    payload, _ = api_get("/v5/market/time", {})
+    finished_ns = time.time_ns()
+    if int(payload.get("retCode", -1)) != 0:
+        raise RuntimeError(
+            f"Bybit clock probe rejected: {payload.get('retMsg')}"
+        )
+    midpoint_ms = (started_ns + finished_ns) / 2_000_000
+    return _server_time_ms(payload) - midpoint_ms
+
+
+def assert_mutation_clock_safe() -> float:
+    offset_ms = mutation_clock_offset_ms()
+    if abs(offset_ms) > MUTATION_CLOCK_MAX_ABS_OFFSET_MS:
+        raise UnsafeBybitClock(
+            "UNSAFE_BYBIT_CLOCK_OFFSET "
+            f"offset_ms={offset_ms:.1f} "
+            f"limit_ms={MUTATION_CLOCK_MAX_ABS_OFFSET_MS:.1f}"
+        )
+    return offset_ms
+
+
+def _explicit_http_payload(
+    exc: urllib.error.HTTPError,
+) -> dict[str, object] | None:
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        raw = exc.read().decode("utf-8", errors="replace")
+        value = json.loads(raw)
+    except (OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) and "retCode" in value else None
+
+
+def _validate_post_payload(
+    path: str,
+    payload: dict[str, object],
+    accepted_codes: tuple[int, ...],
+) -> dict[str, object]:
+    code = int(payload.get("retCode", -1))
+    if code == 0 or code in accepted_codes:
+        return payload
+    raise BybitMutationRejected(
+        f"Bybit POST rejected path={path} retCode={code} "
+        f"retMsg={payload.get('retMsg')}"
+    )
+
+
+def api_post(
+    path: str,
+    params: dict[str, object],
+    key: str,
+    secret: str,
+    *,
+    accepted_codes: tuple[int, ...] = (),
+) -> dict[str, object]:
+    """One signed mutation attempt. Never retry a POST with uncertain outcome."""
+    assert_mutation_clock_safe()
+    body = json.dumps(params, separators=(",", ":"), ensure_ascii=False)
+    timestamp = str(int(time.time() * 1000))
+    signature = hmac.new(
+        secret.encode(),
+        f"{timestamp}{key}{SIGNED_RECV_WINDOW}{body}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    request = urllib.request.Request(
+        REST_URL + path,
+        data=body.encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-BAPI-API-KEY": key,
+            "X-BAPI-TIMESTAMP": timestamp,
+            "X-BAPI-RECV-WINDOW": SIGNED_RECV_WINDOW,
+            "X-BAPI-SIGN": signature,
+            "User-Agent": "cripta-live-executor/1",
+        },
+    )
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=SIGNED_MUTATION_TIMEOUT_SECONDS,
+        ) as response:
             payload = json.load(response)
     except urllib.error.HTTPError as exc:
-        response_body = exc.read().decode("utf-8", errors="replace")[:1000]
-        raise RuntimeError(
-            f"Bybit HTTP {exc.code} for {path}: {response_body or exc.reason}"
+        explicit = _explicit_http_payload(exc)
+        if explicit is not None:
+            return _validate_post_payload(path, explicit, accepted_codes)
+        raise AmbiguousBybitMutation(
+            f"HTTP response without deterministic Bybit payload path={path} "
+            f"status={exc.code}"
         ) from exc
-    if payload.get("retCode") != 0 and payload.get("retCode") not in accepted_codes:
-        raise RuntimeError(str(payload.get("retMsg") or "Bybit rejected command"))
-    return payload
+    except (TimeoutError, urllib.error.URLError, OSError, ValueError) as exc:
+        raise AmbiguousBybitMutation(
+            f"transport/response uncertainty path={path} "
+            f"error={type(exc).__name__}:{exc}"
+        ) from exc
 
+    if not isinstance(payload, dict):
+        raise AmbiguousBybitMutation(
+            f"non-object Bybit POST response path={path}"
+        )
+    return _validate_post_payload(path, payload, accepted_codes)
+
+
+def handle_exchange_mutation_barrier(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+    command_id: str | None,
+    exc: BaseException,
+) -> None:
+    """Fail closed and force startup reconciliation before any later mutation."""
+    error = f"EXCHANGE_MUTATION_BARRIER:{type(exc).__name__}:{exc}"
+    recovery_errors: list[str] = []
+
+    try:
+        connection.rollback()
+        if command_id:
+            connection.execute(
+                """UPDATE runtime.trade_commands
+                   SET error=%s
+                   WHERE command_id=%s AND state='running'""",
+                (error, command_id),
+            )
+            connection.commit()
+    except Exception as recovery_exc:
+        recovery_errors.append(
+            f"persist={type(recovery_exc).__name__}:{recovery_exc}"
+        )
+
+    try:
+        disarm_new_entries(connection, error[:500])
+    except Exception as recovery_exc:
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+        recovery_errors.append(
+            f"disarm={type(recovery_exc).__name__}:{recovery_exc}"
+        )
+
+    try:
+        refresh_recent_executions(connection, key, secret)
+    except Exception as recovery_exc:
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+        recovery_errors.append(
+            f"executions={type(recovery_exc).__name__}:{recovery_exc}"
+        )
+
+    try:
+        reconcile(connection, key, secret, "ambiguous_exchange_mutation")
+    except Exception as recovery_exc:
+        try:
+            connection.rollback()
+        except Exception:
+            pass
+        recovery_errors.append(
+            f"reconcile={type(recovery_exc).__name__}:{recovery_exc}"
+        )
+
+    try:
+        atomic_status(
+            "command",
+            {
+                "state": "blocked",
+                "error": error,
+                "recovery_errors": recovery_errors,
+                "restart_required": True,
+            },
+        )
+    finally:
+        os._exit(75)
 
 def quantize(value: Decimal, step: Decimal, upward: bool = False) -> Decimal:
     return (value / step).to_integral_value(rounding=ROUND_CEILING if upward else ROUND_FLOOR) * step
@@ -720,7 +1062,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     break
                 time.sleep(0.25)
             if not filled_position:
-                raise RuntimeError("рыночный вход принят, но фактическая цена исполнения ещё не подтверждена")
+                raise ExchangeMutationBarrier(
+                    "market entry acknowledged but actual fill is not yet confirmed"
+                )
             actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
@@ -746,7 +1090,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             }
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
-    reconcile(connection,key,secret,"after_command")
+    try:
+        reconcile(connection, key, secret, "after_command")
+    except Exception as exc:
+        raise ExchangeMutationBarrier(
+            f"post-mutation reconciliation failed: {exc}"
+        ) from exc
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
@@ -773,7 +1122,12 @@ def cancel_expired_entry_limits(
             secret,
             accepted_codes=(110001,),
         )
-        reconcile(connection, key, secret, "expired_entry_limit")
+        try:
+            reconcile(connection, key, secret, "expired_entry_limit")
+        except Exception as exc:
+            raise ExchangeMutationBarrier(
+                f"expired-entry cancel reconciliation failed: {exc}"
+            ) from exc
 
 
 def command_worker_loop(key: str, secret: str) -> None:
@@ -799,6 +1153,10 @@ def command_worker_loop(key: str, secret: str) -> None:
             if time.monotonic() >= next_limit_cleanup:
                 try:
                     cancel_expired_entry_limits(connection, key, secret, now_ms)
+                except ExchangeMutationBarrier as exc:
+                    handle_exchange_mutation_barrier(
+                        connection, key, secret, None, exc
+                    )
                 except Exception:
                     connection.rollback()
                 next_limit_cleanup = time.monotonic() + 1
@@ -1105,9 +1463,25 @@ def command_worker_loop(key: str, secret: str) -> None:
             (int(time.time() * 1000), command_id),
         )
         connection.commit()
-        try: execute_command(connection,key,secret,row)
+        try:
+            execute_command(connection, key, secret, row)
+        except ExchangeMutationBarrier as exc:
+            handle_exchange_mutation_barrier(
+                connection, key, secret, command_id, exc
+            )
         except Exception as exc:
-            connection.rollback(); connection.execute("UPDATE runtime.trade_commands SET state='failed',finished_at_epoch_ms=%s,error=%s WHERE command_id=%s",(int(time.time()*1000),f"{type(exc).__name__}: {exc}",command_id)); connection.commit()
+            connection.rollback()
+            connection.execute(
+                """UPDATE runtime.trade_commands
+                   SET state='failed',finished_at_epoch_ms=%s,error=%s
+                   WHERE command_id=%s""",
+                (
+                    int(time.time() * 1000),
+                    f"{type(exc).__name__}: {exc}",
+                    command_id,
+                ),
+            )
+            connection.commit()
 
 
 def command_loop(key: str, secret: str) -> None:
