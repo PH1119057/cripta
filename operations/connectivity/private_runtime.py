@@ -96,8 +96,11 @@ def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> De
     return reserve
 
 
-def db() -> psycopg.Connection:
-    return psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
+def db(application_name: str) -> psycopg.Connection:
+    return psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        f"application_name={application_name}"
+    )
 
 
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
@@ -774,7 +777,7 @@ def cancel_expired_entry_limits(
 
 
 def command_worker_loop(key: str, secret: str) -> None:
-    connection=db()
+    connection = db("cripta-private-command")
     next_limit_cleanup = 0.0
     next_heartbeat = 0.0
     while running:
@@ -1078,7 +1081,11 @@ def command_worker_loop(key: str, secret: str) -> None:
             connection.commit()
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
             WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
-        if not row: time.sleep(0.25); continue
+        if not row:
+            # SELECT polling starts an implicit transaction; close it before sleep.
+            connection.commit()
+            time.sleep(0.25)
+            continue
         command_id=str(row[0])
         if str(row[1]) == "entry":
             ready, readiness_reason = entry_runtime_readiness(connection)
@@ -1360,13 +1367,17 @@ def reconcile(
                 (str(item.get("symbol") or ""), int(item.get("positionIdx") or 0))
                 for item in position_list
             }
-            owned_keys = {
-                (str(row[0]), int(row[1] or 0))
-                for row in connection.execute(
-                    """SELECT symbol,position_idx FROM runtime.position_ownership
-                       WHERE state='OPEN' AND close_link_status='OPEN'"""
-                ).fetchall()
-            }
+            # Close the read transaction before the later write transaction.
+            # Otherwise psycopg transaction() becomes a SAVEPOINT under the
+            # implicit outer transaction and periodic reconciliation leaks it.
+            with connection.transaction():
+                owned_keys = {
+                    (str(row[0]), int(row[1] or 0))
+                    for row in connection.execute(
+                        """SELECT symbol,position_idx FROM runtime.position_ownership
+                           WHERE state='OPEN' AND close_link_status='OPEN'"""
+                    ).fetchall()
+                }
             # Recovery/audit exception: history is fetched only when an owned cycle disappeared.
             missing_owned_position = bool(owned_keys - current_keys)
             fetch_history = missing_owned_position
@@ -1508,7 +1519,7 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
 
 def private_loop(key: str, secret: str) -> None:
     reconnects = 0
-    connection = db()
+    connection = db("cripta-private-ws")
     while running:
         try:
             if reconnects > 0:
@@ -1549,7 +1560,7 @@ def private_loop(key: str, secret: str) -> None:
 
 def trade_loop(key: str, secret: str) -> None:
     reconnects = 0
-    connection = db()
+    connection = db("cripta-private-trade")
     while running:
         try:
             ws = websocket.create_connection(TRADE_URL, timeout=10, enable_multithread=False)
@@ -1578,7 +1589,7 @@ def main() -> None:
     global running
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
-    bootstrap = db()
+    bootstrap = db("cripta-private-bootstrap")
     disarm_new_entries(
         bootstrap,
         "restart: schema validation pending; owner re-arm required",

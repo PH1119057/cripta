@@ -77,7 +77,10 @@ def flush(connection: psycopg.Connection, active: dict[str, Opportunity]) -> Non
 
 
 def main() -> None:
-    connection = psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql")
+    connection = psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=cripta-opportunity-tracker"
+    )
     active: dict[str, Opportunity] = {}
     while True:
         try:
@@ -91,6 +94,8 @@ def main() -> None:
                 now = time.monotonic()
                 if now >= next_load:
                     load_active(connection, active)
+                    # Close the read transaction before flush() opens its write transaction.
+                    connection.commit()
                     next_load = now + 2
                 try:
                     raw = ws.recv()
