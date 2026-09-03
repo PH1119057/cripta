@@ -4,7 +4,6 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).parents[1] / "operations" / "connectivity"))
 from protection_math import (  # noqa: E402
     EXIT_TAKER_FEE_RATE,

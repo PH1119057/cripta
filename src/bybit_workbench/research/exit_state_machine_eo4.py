@@ -98,7 +98,15 @@ def load_trades(path: Path, symbols: set[str] | None) -> list[Trade]:
             symbol = row["symbol"].upper()
             if symbols and symbol not in symbols:
                 continue
-            rows.append(Trade(symbol, row["direction"], parse_dt(row["touch_at"]), parse_dt(row["fill_at"]), float(row["fill_price"])))
+            rows.append(
+                Trade(
+                    symbol,
+                    row["direction"],
+                    parse_dt(row["touch_at"]),
+                    parse_dt(row["fill_at"]),
+                    float(row["fill_price"]),
+                )
+            )
     rows.sort(key=lambda x: (x.symbol, x.fill_at, x.touch_at))
     if not rows:
         raise ValueError("Не загружено ни одной сделки EO2")
@@ -114,16 +122,21 @@ def load_events(path: Path, directions: dict[tuple[str, int], str]) -> dict[str,
             if outcome not in {"bounce", "false_break_reclaim", "clean_break"} or not outcome_at:
                 continue
             symbol = row["symbol"].upper()
-            event_at = parse_dt(row["event_at"])
-            direction = directions.get((symbol, int(event_at.timestamp())))
             # Direction is trade-specific. Preserve raw role/outcome in an encoded state.
-            result[symbol].append(ZoneEvent(parse_dt(outcome_at), f"{row['role'].lower()}|{outcome.lower()}"))
+            result[symbol].append(
+                ZoneEvent(
+                    parse_dt(outcome_at),
+                    f"{row['role'].lower()}|{outcome.lower()}",
+                )
+            )
     for events in result.values():
         events.sort(key=lambda x: x.outcome_at)
     return dict(result)
 
 
-def load_series(cache_root: Path, symbol: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def load_series(
+    cache_root: Path, symbol: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     timestamps: list[np.ndarray] = []
     highs: list[np.ndarray] = []
     lows: list[np.ndarray] = []
@@ -140,7 +153,12 @@ def load_series(cache_root: Path, symbol: str) -> tuple[np.ndarray, np.ndarray, 
     order = np.argsort(ts, kind="stable")
     ts = ts[order]
     unique = np.r_[True, np.diff(ts) > 0]
-    return ts[unique], np.concatenate(highs)[order][unique], np.concatenate(lows)[order][unique], np.concatenate(closes)[order][unique]
+    return (
+        ts[unique],
+        np.concatenate(highs)[order][unique],
+        np.concatenate(lows)[order][unique],
+        np.concatenate(closes)[order][unique],
+    )
 
 
 def _state_after_event(current: State, event: str, mfe: float) -> State:
@@ -155,13 +173,22 @@ def _state_after_event(current: State, event: str, mfe: float) -> State:
     return current
 
 
-def simulate(trade: Trade, policy: Policy, series: tuple[np.ndarray, ...], raw_events: list[ZoneEvent]) -> Result:
+def simulate(
+    trade: Trade,
+    policy: Policy,
+    series: tuple[np.ndarray, ...],
+    raw_events: list[ZoneEvent],
+) -> Result:
     ts, high, low, close = series
     start = int(np.searchsorted(ts + 60.0, trade.fill_at.timestamp(), side="left"))
     end = int(np.searchsorted(ts, FROZEN_END.timestamp(), side="left"))
     if start >= end:
         raise ValueError(f"Нет пути после fill: {trade.symbol} {trade.fill_at.isoformat()}")
-    events = [ZoneEvent(e.outcome_at, classify(trade.direction, *e.state.split("|", 1))) for e in raw_events if trade.fill_at < e.outcome_at < FROZEN_END]
+    events = [
+        ZoneEvent(e.outcome_at, classify(trade.direction, *e.state.split("|", 1)))
+        for e in raw_events
+        if trade.fill_at < e.outcome_at < FROZEN_END
+    ]
     event_i = 0
     state: State = "EARLY"
     running_mfe = -math.inf
@@ -172,8 +199,14 @@ def simulate(trade: Trade, policy: Policy, series: tuple[np.ndarray, ...], raw_e
     exit_price = float(close[exit_i])
     for i in range(start, end):
         available_at = datetime.fromtimestamp(float(ts[i] + 60.0), tz=UTC)
-        favorable = move_pct(trade.direction, trade.fill_price, float(high[i] if trade.direction.lower() == "long" else low[i]))
-        adverse = move_pct(trade.direction, trade.fill_price, float(low[i] if trade.direction.lower() == "long" else high[i]))
+        favorable_price = high[i] if trade.direction.lower() == "long" else low[i]
+        favorable = move_pct(
+            trade.direction, trade.fill_price, float(favorable_price)
+        )
+        adverse_price = low[i] if trade.direction.lower() == "long" else high[i]
+        adverse = move_pct(
+            trade.direction, trade.fill_price, float(adverse_price)
+        )
         running_mfe = max(running_mfe, favorable)
         mae = min(mae, adverse)
         if state == "EARLY" and running_mfe >= PROVEN_MFE_PCT:
@@ -183,12 +216,18 @@ def simulate(trade: Trade, policy: Policy, series: tuple[np.ndarray, ...], raw_e
         # already occurred earlier in that same minute.
         if adverse <= STOP_PCT:
             exit_reason, exit_i = "hard_stop", i
-            exit_price = trade.fill_price * (1.0 + (STOP_PCT / 100.0) * (1 if trade.direction.lower() == "long" else -1))
+            direction_sign = 1 if trade.direction.lower() == "long" else -1
+            exit_price = trade.fill_price * (
+                1.0 + (STOP_PCT / 100.0) * direction_sign
+            )
             break
         runner_before_close = state == "RUNNER" and policy in {"structural_runner", "hybrid"}
         if not runner_before_close and favorable >= TARGET_PCT:
             exit_reason, exit_i = "baseline_target", i
-            exit_price = trade.fill_price * (1.0 + (TARGET_PCT / 100.0) * (1 if trade.direction.lower() == "long" else -1))
+            direction_sign = 1 if trade.direction.lower() == "long" else -1
+            exit_price = trade.fill_price * (
+                1.0 + (TARGET_PCT / 100.0) * direction_sign
+            )
             break
         while event_i < len(events) and events[event_i].outcome_at <= available_at:
             seen += 1
@@ -199,19 +238,48 @@ def simulate(trade: Trade, policy: Policy, series: tuple[np.ndarray, ...], raw_e
             exit_reason, exit_i, exit_price = "protective_break", i, float(close[i])
             break
         runner = state == "RUNNER" and policy in {"structural_runner", "hybrid"}
-        if policy == "hybrid" and runner and running_mfe >= TARGET_PCT and close_move <= running_mfe - RUNNER_GIVEBACK_PCT:
+        if (
+            policy == "hybrid"
+            and runner
+            and running_mfe >= TARGET_PCT
+            and close_move <= running_mfe - RUNNER_GIVEBACK_PCT
+        ):
             exit_reason, exit_i, exit_price = "runner_exhaustion", i, float(close[i])
             break
-        if policy == "hybrid" and state == "WARNING" and running_mfe >= PROVEN_MFE_PCT and close_move <= max(0.0, running_mfe - WARNING_GIVEBACK_PCT):
+        if (
+            policy == "hybrid"
+            and state == "WARNING"
+            and running_mfe >= PROVEN_MFE_PCT
+            and close_move <= max(0.0, running_mfe - WARNING_GIVEBACK_PCT)
+        ):
             exit_reason, exit_i, exit_price = "warning_giveback", i, float(close[i])
             break
     gross = move_pct(trade.direction, trade.fill_price, exit_price)
     net = gross - COST_PCT
     exit_at = datetime.fromtimestamp(float(ts[exit_i] + 60.0), tz=UTC)
-    return Result(policy, trade.symbol, trade.direction, trade.touch_at.isoformat(), trade.fill_at.isoformat(), exit_at.isoformat(), exit_price, gross, net, net * 10.0, exit_reason, state, (exit_at - trade.fill_at).total_seconds() / 3600.0, running_mfe, mae, seen)
+    return Result(
+        policy,
+        trade.symbol,
+        trade.direction,
+        trade.touch_at.isoformat(),
+        trade.fill_at.isoformat(),
+        exit_at.isoformat(),
+        exit_price,
+        gross,
+        net,
+        net * 10.0,
+        exit_reason,
+        state,
+        (exit_at - trade.fill_at).total_seconds() / 3600.0,
+        running_mfe,
+        mae,
+        seen,
+    )
 
 
-def worker(args: tuple[str, list[Trade], Path, list[ZoneEvent], tuple[Policy, ...]]) -> list[Result]:
+def worker(
+    args: tuple[str, list[Trade], Path, list[ZoneEvent], tuple[Policy, ...]],
+) -> list[Result]:
     symbol, trades, cache_root, events, policies = args
     series = load_series(cache_root, symbol)
     return [simulate(trade, policy, series, events) for trade in trades for policy in policies]
@@ -255,16 +323,33 @@ def summary_rows(results: list[Result]) -> list[dict[str, Any]]:
             equity += row.pnl_usd_100_margin_10x
             peak = max(peak, equity)
             max_dd = max(max_dd, peak - equity)
-        output.append({
-            "policy": policy, "trades": len(rows), "wins": sum(x > 0 for x in pnl), "losses": sum(x <= 0 for x in pnl),
-            "net_pnl_usd": sum(pnl), "ev_usd": sum(pnl) / len(pnl), "profit_factor": gross_win / gross_loss if gross_loss else None,
-            "max_drawdown_usd": max_dd, "mean_duration_hours": sum(r.duration_hours for r in rows) / len(rows),
-            "entries_during_position": sum(r.entries_during_position for r in rows), "exit_reasons": json.dumps(Counter(r.exit_reason for r in rows), ensure_ascii=False, sort_keys=True),
-        })
+        output.append(
+            {
+                "policy": policy,
+                "trades": len(rows),
+                "wins": sum(x > 0 for x in pnl),
+                "losses": sum(x <= 0 for x in pnl),
+                "net_pnl_usd": sum(pnl),
+                "ev_usd": sum(pnl) / len(pnl),
+                "profit_factor": gross_win / gross_loss if gross_loss else None,
+                "max_drawdown_usd": max_dd,
+                "mean_duration_hours": sum(r.duration_hours for r in rows) / len(rows),
+                "entries_during_position": sum(
+                    r.entries_during_position for r in rows
+                ),
+                "exit_reasons": json.dumps(
+                    Counter(r.exit_reason for r in rows),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            }
+        )
     return sorted(output, key=lambda x: x["policy"])
 
 
-def chronological_replay(results: list[Result]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def chronological_replay(
+    results: list[Result],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Allow only one active position per symbol for each policy."""
     grouped: defaultdict[tuple[str, str], list[Result]] = defaultdict(list)
     for row in results:
@@ -277,11 +362,18 @@ def chronological_replay(results: list[Result]) -> tuple[list[dict[str, Any]], l
         for row in sorted(rows, key=lambda x: (x.fill_at, x.touch_at)):
             fill_at = parse_dt(row.fill_at)
             allowed = occupied_until is None or fill_at >= occupied_until
-            audit.append({
-                "policy": policy, "symbol": symbol, "touch_at": row.touch_at, "fill_at": row.fill_at,
-                "accepted": allowed, "blocked_by_touch_at": "" if allowed else active_touch,
-                "candidate_exit_at": row.exit_at, "candidate_exit_reason": row.exit_reason,
-            })
+            audit.append(
+                {
+                    "policy": policy,
+                    "symbol": symbol,
+                    "touch_at": row.touch_at,
+                    "fill_at": row.fill_at,
+                    "accepted": allowed,
+                    "blocked_by_touch_at": "" if allowed else active_touch,
+                    "candidate_exit_at": row.exit_at,
+                    "candidate_exit_reason": row.exit_reason,
+                }
+            )
             if allowed:
                 accepted.append(row)
                 occupied_until = parse_dt(row.exit_at)
@@ -290,10 +382,12 @@ def chronological_replay(results: list[Result]) -> tuple[list[dict[str, Any]], l
     summaries = summary_rows(accepted)
     total_by_policy = Counter(row.policy for row in results)
     accepted_by_policy = Counter(row.policy for row in accepted)
-    for row in summaries:
-        policy = str(row["policy"])
-        row["signals_total"] = total_by_policy[policy]
-        row["signals_blocked"] = total_by_policy[policy] - accepted_by_policy[policy]
+    for summary_row in summaries:
+        policy = str(summary_row["policy"])
+        summary_row["signals_total"] = total_by_policy[policy]
+        summary_row["signals_blocked"] = (
+            total_by_policy[policy] - accepted_by_policy[policy]
+        )
     return audit, summaries
 
 
@@ -301,12 +395,23 @@ def scope_summary_rows(results: list[Result]) -> list[dict[str, Any]]:
     grouped: defaultdict[tuple[str, str, str], list[Result]] = defaultdict(list)
     for row in results:
         month = row.fill_at[:7]
-        for scope, value in (("symbol", row.symbol), ("direction", row.direction), ("month", month)):
+        for scope, value in (
+            ("symbol", row.symbol),
+            ("direction", row.direction),
+            ("month", month),
+        ):
             grouped[(row.policy, scope, value)].append(row)
     output: list[dict[str, Any]] = []
     for (policy, scope, value), rows in sorted(grouped.items()):
         base = summary_rows(rows)[0]
-        output.append({"policy": policy, "scope": scope, "value": value, **{k: v for k, v in base.items() if k != "policy"}})
+        output.append(
+            {
+                "policy": policy,
+                "scope": scope,
+                "value": value,
+                **{k: v for k, v in base.items() if k != "policy"},
+            }
+        )
     return output
 
 
@@ -332,17 +437,27 @@ def run(args: argparse.Namespace) -> Path:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     partial = args.output_dir / "partial"
     partial.mkdir(exist_ok=True)
-    work = [(symbol, rows, args.cache_root, events.get(symbol, []), policies) for symbol, rows in sorted(by_symbol_trades.items())]
+    work = [
+        (symbol, rows, args.cache_root, events.get(symbol, []), policies)
+        for symbol, rows in sorted(by_symbol_trades.items())
+    ]
     results: list[Result] = []
     started = time.time()
     with ProcessPoolExecutor(max_workers=min(args.workers, len(work))) as pool:
         futures = {pool.submit(worker, item): item[0] for item in work}
         for done, future in enumerate(as_completed(futures), 1):
             symbol = futures[future]
-            rows = future.result()
-            write_csv(partial / f"{symbol}.csv", [asdict(x) for x in rows])
-            results.extend(rows)
-            print(f"[EO4] {done}/{len(work)} {symbol} готово; elapsed={time.time()-started:.1f}s", flush=True)
+            symbol_results = future.result()
+            write_csv(
+                partial / f"{symbol}.csv",
+                [asdict(x) for x in symbol_results],
+            )
+            results.extend(symbol_results)
+            print(
+                f"[EO4] {done}/{len(work)} {symbol} готово; "
+                f"elapsed={time.time() - started:.1f}s",
+                flush=True,
+            )
     results = add_overlap_counts(results, trades)
     results.sort(key=lambda x: (x.fill_at, x.symbol, x.policy))
     write_csv(args.output_dir / "eo4_trade_results.csv", [asdict(x) for x in results])
@@ -353,20 +468,56 @@ def run(args: argparse.Namespace) -> Path:
     write_csv(args.output_dir / "portfolio_policy_summary.csv", portfolio_summaries)
     write_csv(args.output_dir / "scope_summary.csv", scope_summary_rows(results))
     contract = {
-        "version": VERSION, "sample_fraction": args.sample_fraction, "symbols": sorted(by_symbol_trades), "trades": len(trades),
-        "policies": list(policies), "frozen": {"entry": "EO2 -0.20%", "target_pct": TARGET_PCT, "hard_stop_pct": STOP_PCT, "cost_pct": COST_PCT,
-        "proven_mfe_pct": PROVEN_MFE_PCT, "warning_giveback_pct": WARNING_GIVEBACK_PCT, "runner_giveback_pct": RUNNER_GIVEBACK_PCT,
-        "execution": "causal 1m close after confirmed structural outcome; adverse-first OHLC ambiguity"},
-        "inputs": {"eo2_events": str(args.eo2_events), "eo2_sha256": sha256(args.eo2_events), "zone_events": str(args.zone_events), "zone_sha256": sha256(args.zone_events)},
-        "summary": summaries, "portfolio_summary": portfolio_summaries, "elapsed_seconds": time.time() - started,
+        "version": VERSION,
+        "sample_fraction": args.sample_fraction,
+        "symbols": sorted(by_symbol_trades),
+        "trades": len(trades),
+        "policies": list(policies),
+        "frozen": {
+            "entry": "EO2 -0.20%",
+            "target_pct": TARGET_PCT,
+            "hard_stop_pct": STOP_PCT,
+            "cost_pct": COST_PCT,
+            "proven_mfe_pct": PROVEN_MFE_PCT,
+            "warning_giveback_pct": WARNING_GIVEBACK_PCT,
+            "runner_giveback_pct": RUNNER_GIVEBACK_PCT,
+            "execution": (
+                "causal 1m close after confirmed structural outcome; "
+                "adverse-first OHLC ambiguity"
+            ),
+        },
+        "inputs": {
+            "eo2_events": str(args.eo2_events),
+            "eo2_sha256": sha256(args.eo2_events),
+            "zone_events": str(args.zone_events),
+            "zone_sha256": sha256(args.zone_events),
+        },
+        "summary": summaries,
+        "portfolio_summary": portfolio_summaries,
+        "elapsed_seconds": time.time() - started,
     }
-    (args.output_dir / "summary.json").write_text(json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8")
-    (args.output_dir / "RUN_COMPLETE.json").write_text(json.dumps({"version": VERSION, "completed_at": datetime.now(UTC).isoformat(), "trades": len(trades)}, ensure_ascii=False, indent=2), encoding="utf-8")
-    return args.output_dir
+    (args.output_dir / "summary.json").write_text(
+        json.dumps(contract, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (args.output_dir / "RUN_COMPLETE.json").write_text(
+        json.dumps(
+            {
+                "version": VERSION,
+                "completed_at": datetime.now(UTC).isoformat(),
+                "trades": len(trades),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return Path(args.output_dir)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="EO4: причинное сопровождение позиции по структуре зон")
+    parser = argparse.ArgumentParser(
+        description="EO4: причинное сопровождение позиции по структуре зон"
+    )
     parser.add_argument("--eo2-events", type=Path, required=True)
     parser.add_argument("--zone-events", type=Path, required=True)
     parser.add_argument("--cache-root", type=Path, required=True)

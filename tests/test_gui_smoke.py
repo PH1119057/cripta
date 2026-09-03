@@ -107,6 +107,8 @@ class GuiSmokeTests(unittest.TestCase):
             machine,
             set_mainnet_leverage=apply_leverage,
         )
+        window.symbol_input.setCurrentText("UNIUSDT")
+        self.assertEqual(window.symbol_input.currentText(), "UNIUSDT")
         window.leverage_input.setCurrentText("10")
         self.assertEqual(window.leverage_input.currentText(), "10")
         self.assertTrue(window.apply_leverage_button.isEnabled())

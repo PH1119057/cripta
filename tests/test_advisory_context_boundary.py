@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 PRIVATE_PATH = ROOT / "operations/connectivity/private_runtime.py"
 PRIVATE = PRIVATE_PATH.read_text(encoding="utf-8")

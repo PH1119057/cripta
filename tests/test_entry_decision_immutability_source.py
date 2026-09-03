@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SOURCE = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
 
 

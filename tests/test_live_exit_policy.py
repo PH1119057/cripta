@@ -2,7 +2,6 @@ from datetime import UTC, datetime, timedelta
 
 from bybit_workbench.live_exit_policy import EarlyLossContext, early_loss_eligible
 
-
 NOW = datetime(2026, 8, 31, 12, tzinfo=UTC)
 
 

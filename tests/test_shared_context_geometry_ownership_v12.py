@@ -8,7 +8,6 @@ from pathlib import Path
 from bybit_workbench.exit_economics import calculate_close_economics
 from bybit_workbench.mayak.core.live import LiveMayakEngine
 
-
 ROOT = Path(__file__).parents[1]
 MIGRATION = (ROOT / "operations/sql/20260831_shared_context_geometry_ownership.sql").read_text(
     encoding="utf-8"

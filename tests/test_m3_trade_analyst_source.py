@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SOURCE = Path("operations/monitoring/m3_trade_analyst.py").read_text(encoding="utf-8")
 
 

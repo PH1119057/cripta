@@ -1,22 +1,34 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import json
 from pathlib import Path
 
 import pytest
-from bybit_workbench.strategy_dispatcher import (
-    DispatcherDataQuality,
-    FeatureStatus,
-    FileDispatcherContextProvider,
-    MayakSnapshotAdapter,
-    PassiveDispatcherService,
+
+import bybit_workbench
+
+PRODUCTION_PACKAGE = (
+    Path(__file__).parents[1] / "production" / "src" / "bybit_workbench"
 )
-from bybit_workbench.strategy_dispatcher.profile_io import (
-    load_profile_directory,
-    load_profile_file,
+production_path = str(PRODUCTION_PACKAGE)
+if production_path not in bybit_workbench.__path__:
+    bybit_workbench.__path__.append(production_path)
+dispatcher = importlib.import_module("bybit_workbench.strategy_dispatcher")
+profile_io = importlib.import_module(
+    "bybit_workbench.strategy_dispatcher.profile_io"
 )
-from bybit_workbench.strategy_dispatcher.replay import replay_jsonl
+replay = importlib.import_module("bybit_workbench.strategy_dispatcher.replay")
+
+DispatcherDataQuality = dispatcher.DispatcherDataQuality
+FeatureStatus = dispatcher.FeatureStatus
+FileDispatcherContextProvider = dispatcher.FileDispatcherContextProvider
+MayakSnapshotAdapter = dispatcher.MayakSnapshotAdapter
+PassiveDispatcherService = dispatcher.PassiveDispatcherService
+load_profile_directory = profile_io.load_profile_directory
+load_profile_file = profile_io.load_profile_file
+replay_jsonl = replay.replay_jsonl
 
 
 def canonical_payload() -> dict[str, object]:
@@ -262,7 +274,13 @@ def test_replay_is_offline_and_deterministic(tmp_path: Path) -> None:
 
 
 def test_dispatcher_package_has_no_network_database_or_trading_imports() -> None:
-    package = Path(__file__).parents[1] / "production" / "src" / "bybit_workbench" / "strategy_dispatcher"
+    package = (
+        Path(__file__).parents[1]
+        / "production"
+        / "src"
+        / "bybit_workbench"
+        / "strategy_dispatcher"
+    )
     forbidden = (
         "execution",
         "risk",
@@ -287,7 +305,12 @@ def test_dispatcher_package_has_no_network_database_or_trading_imports() -> None
 
 
 def test_systemd_template_is_passive_and_not_an_installed_unit() -> None:
-    unit = Path(__file__).parents[1] / "operations" / "strategy_dispatcher" / "cripta-strategy-dispatcher.service"
+    unit = (
+        Path(__file__).parents[1]
+        / "operations"
+        / "strategy_dispatcher"
+        / "cripta-strategy-dispatcher.service"
+    )
     text = unit.read_text(encoding="utf-8")
     assert "ReadOnlyPaths=/var/lib/cripta/mayak_v2" in text
     assert "ReadWritePaths=/var/lib/cripta/strategy_dispatcher" in text
@@ -373,11 +396,18 @@ def test_machine_vocabulary_matches_python_contract() -> None:
 
     path = Path(__file__).parents[1] / "config" / "strategy_dispatcher" / "vocabulary_v1.json"
     raw = json.loads(path.read_text(encoding="utf-8"))
-    assert [item["feature_id"] for item in raw["features"]] == [item.feature_id for item in V1_FEATURES]
+    assert [item["feature_id"] for item in raw["features"]] == [
+        item.feature_id for item in V1_FEATURES
+    ]
 
 
 def test_handoff_schema_explicitly_excludes_strategy_and_position_fields() -> None:
-    path = Path(__file__).parents[1] / "config" / "strategy_dispatcher" / "MAYAK_HANDOFF_SCHEMA_V1.json"
+    path = (
+        Path(__file__).parents[1]
+        / "config"
+        / "strategy_dispatcher"
+        / "MAYAK_HANDOFF_SCHEMA_V1.json"
+    )
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["additionalProperties"] is False
     properties = raw["properties"]

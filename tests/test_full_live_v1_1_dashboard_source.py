@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 APP = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 HTML = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 

@@ -154,9 +154,14 @@ def test_private_runtime_startup_is_ddl_free_and_schema_versioned() -> None:
     assert "CREATE TABLE " not in source
     assert "CREATE SCHEMA " not in source
     assert "validate_runtime_schema_contract(bootstrap)" in source
-    assert source.index("disarm_new_entries(", source.index("bootstrap = db()")) < source.index(
+    bootstrap_index = source.index(
+        'bootstrap = db("cripta-private-bootstrap")'
+    )
+    disarm_index = source.index("disarm_new_entries(", bootstrap_index)
+    validation_index = source.index(
         "validate_runtime_schema_contract(bootstrap)"
     )
+    assert disarm_index < validation_index
     assert "SET LOCAL lock_timeout" in schema
     assert "LOCK_TIMEOUT_MS = 2000" in schema
     assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema

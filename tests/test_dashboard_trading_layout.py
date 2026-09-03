@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SOURCE = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
@@ -31,11 +30,17 @@ def test_open_position_card_is_compact_and_expands_from_left_triangle() -> None:
 def test_closed_trades_have_internal_scroll_and_exports_remain() -> None:
     assert 'class="closed-scroll"' in SOURCE
     assert "installExportControl('Завершённые сделки Bybit','closed','closed')" in SOURCE
-    assert "installExportControl('Независимое наблюдение за сигналами','signals','signals')" in SOURCE
+    assert (
+        "installExportControl('Независимое наблюдение за "
+        "сигналами','signals','signals')"
+    ) in SOURCE
 
 
 def test_live_refresh_does_not_destroy_text_selection() -> None:
-    assert "positionRows.contains(selected)||realClosedRows.contains(selected)||liveRows.contains(selected)" in SOURCE
+    assert (
+        "positionRows.contains(selected)||realClosedRows.contains(selected)||"
+        "liveRows.contains(selected)"
+    ) in SOURCE
     assert "if(!tableSelected){renderLiveState(d);installPositionCards()}" in SOURCE
     assert "function tradingViewport()" in SOURCE
     assert "restoreTradingViewport(viewport)" in SOURCE

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SCANNER = Path("operations/monitoring/entry_shadow_scanner.py").read_text(encoding="utf-8")
 DASHBOARD = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 

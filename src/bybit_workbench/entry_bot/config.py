@@ -37,9 +37,15 @@ class EntryBotConfig:
             raise ValueError("working symbols must be unique")
         if set(self.working_symbols) & set(self.reference_symbols):
             raise ValueError("working and reference symbols must be disjoint")
-        if not self.monitoring_only_expanded_universe and {"BTCUSDT", "ETHUSDT"} != set(self.reference_symbols):
+        if (
+            not self.monitoring_only_expanded_universe
+            and {"BTCUSDT", "ETHUSDT"} != set(self.reference_symbols)
+        ):
             raise ValueError("BTCUSDT and ETHUSDT are frozen market reference symbols")
-        if not self.monitoring_only_expanded_universe and {"1000PEPEUSDT", "DOGEUSDT"} & set(self.working_symbols):
+        if (
+            not self.monitoring_only_expanded_universe
+            and {"1000PEPEUSDT", "DOGEUSDT"} & set(self.working_symbols)
+        ):
             raise ValueError("meme assets are excluded from the ten-symbol bot universe")
         if self.history_limit < self.atr_period:
             raise ValueError("history_limit must cover ATR history")
