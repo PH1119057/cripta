@@ -8,7 +8,7 @@
 Эти два файла имеют приоритет над старыми runbook, handoff,
 research-документами, локальными копиями и прежними предположениями.
 
-Перед patch/production-code/Entry/Execution/Exit/Risk/MAYAK,
+Перед patch/production-code/MAYAK/Dispatcher/Strategy/Entry/Exit/Execution,
 research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением архитектуры
 перечитать соответствующий верхний контракт.
 
@@ -28,7 +28,7 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
 - A patch must pass manifest, SHA-256, baseline, dirty-tree, temporary-overlay,
   and project-gate checks before any real checkout file is changed. Keep full
   logs and machine JSON on the server; return only the compact summary by default.
-- Operational tooling is not permission to change Entry, Exit, Risk, Execution,
+- Operational tooling is not permission to change Strategy, Entry, Exit, Execution,
   Mayak feature logic, Dispatcher profiles, Supervisor strategy, or live trading.
   Any such patch remains trading-sensitive and requires the task's explicit scope.
 
@@ -48,8 +48,8 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   реализация -> проверки -> GitHub -> deploy -> runtime evidence.
 
 - Специализированный глобальный контракт находится в
-  `docs/PROJECT_ARCHITECTURE_RU.md`. Перед изменением связей между Маяком,
-  Диспетчером стратегий, торговыми стратегиями, Entry, Risk, Execution, Exit,
+  `docs/PROJECT_ARCHITECTURE_RU.md`. Перед изменением связей между MAYAK,
+  Dispatcher, Strategy, Entry, Exit, Execution,
   Position Supervisor, статистикой или research исполнитель обязан прочитать его
   полностью вместе с архитектурными контрактами затрагиваемых слоёв.
 - Канонический контракт непрерывной жизни сигнала находится в
@@ -58,8 +58,10 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   post-exit-наблюдения, аналитического read-model или будущей карточки обязано
   сохранять `signal_id` как постоянный корневой идентификатор и следовать этому
   документу.
-- Разрешённое основное направление данных:
-  `внешний рынок -> Маяк -> Диспетчер -> стратегии -> Entry/Risk/Execution/Exit`.
+- Разрешённая пятиуровневая прикладная модель:
+  `MAYAK -> DISPATCHER -> STRATEGY(ENTRY/EXIT) -> EXECUTION -> EXCHANGE`.
+  Technical support contour не является дополнительным trading layer, а Risk не
+  является самостоятельным верхним слоем.
   Position Supervisor отдельно наблюдает фактическую позицию после fill, а
   статистика и research читают причинную историю всех слоёв.
 - Аналитический слой не получает торговых прав автоматически. Любое новое влияние
@@ -89,11 +91,15 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   `DISPATCHER_TRADING_EFFECT=NONE`. Они не могут создавать Entry, блокировать
   Entry, принудительно закрывать позицию или напрямую менять ордера, стопы,
   позиции и торговые команды.
-- Решение о входе принадлежит версии торговой стратегии
-  (`STRATEGY_OWNS_ENTRY_DECISION=YES`). После confirmed fill владение Entry
-  заканчивается; утверждёнными переходами сопровождения владеет Exit, денежным
-  риском — Risk, а биржевые мутации исполняет Execution. Position Supervisor
-  остаётся observation/context/advisory-only; геометрия Entry неизменяема.
+- Strategy владеет policy использования капитала, size, leverage, stop,
+  drawdown и holding. Dispatcher публикует нормализованный контекст доступной
+  торговой ёмкости счёта. Entry принимает решение о попытке, Exit следует тому же
+  `strategy_id/version`, Execution владеет механикой биржевых мутаций. Position
+  Supervisor остаётся observation/context/advisory-only; геометрия Entry
+  неизменяема.
+- Карточка попытки существует до fill и связана через `strategy_attempt_id`.
+  Различать причины `DISPATCHER_MARKET_INCOMPATIBLE`,
+  `INSUFFICIENT_AVAILABLE_FUNDS` и `OPERATIONAL_SAFETY_BLOCKED`.
 - Техническая безопасность отделена от оценки рынка
   (`OPERATIONAL_SAFETY_IS_SEPARATE=YES`). Неизвестное состояние биржи, потеря
   reconciliation, устаревшее обязательное private state, неизвестные qty/fill/
@@ -230,8 +236,11 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   его профилей, адаптера Маяка или способа использования стратегиями исполнитель
   обязан прочитать эти документы вместе с контрактом Маяка.
 - Направление данных одностороннее: `Маяк -> Диспетчер -> потребитель`. Диспетчер
-  не меняет Маяк, не читает торговый PnL как рыночный признак и не имеет прямого
-  пути к Entry/Exit/Risk/Execution или приватным ордерам.
+  не меняет Маяк и не читает торговый PnL как рыночный признак. Technical
+  account-sync может поставлять ему нормализованный `TradingAccountState`, из
+  которого Dispatcher публикует advisory `TradingCapacitySnapshot`. Dispatcher
+  не резервирует средства, не создаёт orders и не вызывает private trading
+  mutation API.
 - Профиль стратегии описывает требуемую внешнюю рыночную среду и версионируется
   отдельно от Entry. Добавление новой стратегии не должно требовать патча Маяка
   или ядра Диспетчера.

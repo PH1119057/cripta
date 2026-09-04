@@ -1,7 +1,7 @@
 # CRIPTA
 
 CRIPTA — production-платформа для причинного наблюдения рынка, оценки среды,
-торговых стратегий, исполнения на Bybit, сопровождения позиций и воспроизводимой
+торговых стратегий, исполнения на подключённой бирже, сопровождения позиций и воспроизводимой
 аналитики.
 
 Сначала прочитайте:
@@ -16,7 +16,7 @@ CRIPTA — production-платформа для причинного наблю�
 
 GitHub `PH1119057/cripta:main` — общий канонический source checkpoint;
 `/srv/cripta/source_checkout` — канонический server checkout, который обязан
-быть с ним синхронизирован. Installed runtime, PostgreSQL и Bybit проверяются
+быть с ним синхронизирован. Installed runtime, PostgreSQL и подключённая биржа проверяются
 отдельно. `C:\cripta`, старые ZIP и чаты не являются source of truth.
 
 Baseline перед документационной ревизией 2026-09-05:
@@ -28,11 +28,17 @@ Production version: V36.1.11.
 
 ## Основные слои
 
-Mayak наблюдает рынок, Dispatcher даёт профильный advisory-контекст, стратегия и
-Entry принимают причинное решение до fill, Execution выполняет биржевые мутации и
-создаёт durable handoff, Exit сопровождает позицию, Risk ограничивает денежный
-риск, Position Supervisor только наблюдает и советует. PostgreSQL хранит
-операционную и аналитическую историю, Bybit остаётся live exchange truth.
+Каноническая пятиуровневая модель:
+
+```text
+MAYAK -> DISPATCHER -> STRATEGY(ENTRY/EXIT) -> EXECUTION -> EXCHANGE
+```
+
+Strategy владеет политикой использования капитала, размера, плеча, stop,
+drawdown и holding; Risk не является отдельным верхним слоем. Technical support
+contour, включая Position Supervisor и Analyst, наблюдает и обслуживает систему,
+но не образует дополнительного trading layer. PostgreSQL хранит операционную и
+аналитическую историю, подключённая биржа остаётся live exchange truth.
 
 ## Установка patch
 
@@ -50,9 +56,10 @@ directory. Полный контракт описан в
 
 Неизвестное обязательное exchange/private state, сбой часов или reconciliation,
 неизвестные qty/fill/protection и owner emergency kill остаются fail-closed.
-Mayak и Dispatcher не торгуют. Рыночные права отдельного Global/Fleet Safety слоя
-на `BLOCK_NEW_ENTRIES` или `EMERGENCY_CLOSE` не утверждены:
-`OWNER_DECISION_REQUIRED`.
+MAYAK и Dispatcher не торгуют. Общерыночное состояние является advisory
+indicator/context Dispatcher: разные Strategy могут интерпретировать его
+по-разному. Отдельного market-driven владельца `CLOSE ALL` в верхней архитектуре
+нет. Operational safety остаётся отдельным техническим fail-closed контуром.
 
 ## Исторический Windows Workbench
 

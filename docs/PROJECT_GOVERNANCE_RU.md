@@ -1,148 +1,185 @@
 # УПРАВЛЕНИЕ ИЗМЕНЕНИЯМИ ПРОЕКТА CRIPTA
 
 **Документ:** `PROJECT_GOVERNANCE_RU.md`
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата:** 2026-09-05
 **Статус:** канонический нормативный контракт
 
-## 1. Четыре вида истины
+## 1. Виды истины
 
 - Документация определяет, что система обязана делать.
 - Исходный код определяет, как утверждённый контракт реализован.
-- Bybit вместе с PostgreSQL фиксируют, что фактически произошло.
+- Подключённая торговая площадка вместе с PostgreSQL фиксируют, что фактически произошло.
 - Статистика и исследования оценивают, насколько хорошо это сработало.
 
-Статистика не имеет права напрямую менять live-поведение. Разрешённый путь:
+Статистика не имеет права напрямую менять live-поведение.
+
+## 2. Обязательный pre-read
+
+Перед архитектурно чувствительным изменением исполнитель читает:
+
+1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
+2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
+3. `AGENTS.md`;
+4. `docs/DOCUMENT_AUTHORITY_RU.md`;
+5. `docs/CURRENT_PROJECT_MAP_RU.md`;
+6. `docs/PROJECT_ARCHITECTURE_RU.md`;
+7. специализированные контракты затрагиваемых компонентов.
+
+## 3. Каноническая верхняя архитектура
 
 ```text
-СТАТИСТИКА -> ИССЛЕДОВАНИЕ -> ДОКУМЕНТИРОВАННАЯ НОВАЯ ВЕРСИЯ
--> РЕАЛИЗАЦИЯ -> ТЕСТ -> SHADOW -> ЭКВИВАЛЕНТНОСТЬ СИГНАЛОВ
--> MICRO_LIVE -> РЕШЕНИЕ ВЛАДЕЛЬЦА -> LIVE
+MAYAK
+  ↓
+DISPATCHER
+  ↓
+STRATEGY
+ ├─ ENTRY
+ └─ EXIT
+  ↓
+EXECUTION
+  ↓
+EXCHANGE
 ```
 
-Самонастройка рабочего runtime запрещена.
+Это пять верхних уровней.
 
-## 2. Общая точка разработки
+Технический поддерживающий контур не является дополнительным торговым уровнем.
 
-GitHub `main` — общая точка синхронизации владельца, Codex, входящего ревью и
-будущих разработчиков. Перед изменением каждый исполнитель обязан:
+## 4. Права разработчика
 
-1. определить текущий GitHub HEAD;
-2. прочитать `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
-3. прочитать `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
-4. прочитать `AGENTS.md`, `docs/DOCUMENT_AUTHORITY_RU.md` и
-   `docs/CURRENT_PROJECT_MAP_RU.md`;
-5. прочитать контракты затрагиваемых слоёв;
-6. объявить архитектурное влияние;
-7. только после этого менять реализацию.
+Разработчик не имеет права самостоятельно:
 
-Решение, оставшееся только в чате, не является долговременной спецификацией.
-После утверждения владельцем оно переносится в каноническую документацию.
+- создавать новый top-level trading layer;
+- превращать `Risk` в самостоятельного архитектурного владельца;
+- давать Dispatcher торговые mutation rights;
+- давать MAYAK торговые mutation rights;
+- менять Strategy на основании статистики без новой owner-approved version;
+- смешивать Entry одной Strategy и Exit другой;
+- привязывать универсальную архитектуру к одной конкретной бирже;
+- вводить скрытый лимит количества Strategy/bots/positions как архитектурный факт;
+- проектировать allocator/strategy arbitration без отдельного задания.
 
-## 3. Обязательный порядок архитектурного изменения
+Если код уже делает что-то из перечисленного, это finding и hard stop для дальнейшего изменения в этой области.
+
+## 5. Прикладной и технический контуры
+
+Прикладной контур владеет смыслом торгового решения.
+
+Технический контур владеет доставкой данных, exchange/account sync, storage, execution mechanics, safety, observation и recovery.
+
+Технический контур не получает права изменить торговую policy.
+
+## 6. Strategy ownership
+
+Strategy version/fingerprint является owner-approved policy.
+
+Внутри конкретной торговой попытки:
+
+- Entry принимает решение об открытии;
+- Exit сопровождает и закрывает по той же strategy binding.
+
+Параметры размера, leverage, stop, допустимой просадки и holding относятся к Strategy.
+
+## 7. Деньги и Dispatcher
+
+Фактическое состояние денег принадлежит внешней торговой площадке как live truth.
+
+Technical account-sync получает/нормализует его.
+
+Dispatcher публикует snapshot торговой ёмкости:
+
+- всего;
+- занято;
+- зарезервировано;
+- свободно;
+- доступно для новой торговли;
+- freshness/source.
+
+Это показатель, а не mutation.
+
+Entry может отказать attempt по причине `INSUFFICIENT_AVAILABLE_FUNDS`.
+
+## 8. Signal lifecycle
+
+До fill существует полноценная торговая attempt.
+
+Нельзя журналировать только состоявшиеся сделки.
+
+Целевая причинная связь:
 
 ```text
-РЕШЕНИЕ ВЛАДЕЛЬЦА -> ИЗМЕНЕНИЕ КАНОНИЧЕСКОГО ДОКУМЕНТА
--> ВЕРСИЯ КОНТРАКТА -> АРХИТЕКТУРНЫЙ ТЕСТ -> РЕАЛИЗАЦИЯ
--> ПРОВЕРКИ -> GITHUB CHECKPOINT -> DEPLOY -> RUNTIME EVIDENCE
+signal_id
+-> strategy_attempt_id
+-> strategy binding
+-> Entry decision
+-> optional command/fill/position
+-> optional Exit
+-> continued observation
 ```
 
-Если действующий контракт запрещает запрос, файлы не изменяются. Исполнитель
-сообщает `ARCHITECTURE_CONFLICT=YES`, точное требование, точный запрет и
-`OWNER_DECISION_REQUIRED=YES`.
+## 9. Точные IDs
 
-## 4. Источник, установленная и загруженная версии
+Ownership нельзя восстанавливать по `symbol + время`.
 
-Нормальное production-состояние:
+Используются точные IDs signal/attempt/strategy/command/order/execution/trade/position/exit.
+
+## 10. Архитектурное изменение
+
+Порядок:
 
 ```text
-REMOTE_HEAD = SOURCE_HEAD = INSTALLED_COMMIT = LOADED_COMMIT
+OWNER DECISION
+-> CANONICAL DOCUMENT
+-> VERSION
+-> ARCHITECTURE TEST
+-> IMPLEMENTATION
+-> CHECKS
+-> GITHUB CHECKPOINT
+-> DEPLOY
+-> RUNTIME EVIDENCE
 ```
 
-Любое различие означает `DESYNC=YES`. Один файл `.installed_commit` не доказывает,
-что процесс загрузил этот код. Git-источник, установленный файл и фактически
-работающий процесс проверяются отдельно. Большой Git-синхронизатор не входит в
-этот контракт.
-
-## 5. Версии слоёв и происхождение данных
-
-Зрелая платформа независимо различает как минимум:
+## 11. Исследования и live
 
 ```text
-PLATFORM_ARCHITECTURE_VERSION
-MAYAK_VERSION
-DISPATCHER_VERSION
-STRATEGY_ID / STRATEGY_VERSION
-ENTRY_VERSION / EXIT_VERSION / RISK_VERSION / EXECUTION_VERSION
-SUPERVISOR_VERSION
-SIGNAL_LIFECYCLE_SCHEMA_VERSION
-ANALYTICS_SCHEMA_VERSION
-DATABASE_SCHEMA_VERSION
+STATISTICS
+-> RESEARCH
+-> NEW OWNER-APPROVED VERSION
+-> SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
 ```
 
-Новая lifecycle-запись обязана хранить достаточно provenance, чтобы установить
-создавшие её код, стратегию, настройки и версии контрактов. Это требование не
-разрешает строить единый тяжёлый framework версий без отдельной задачи.
+## 12. Масштаб
 
-## 6. Владение сквозным жизненным циклом
+Количество Strategy, bot instances и simultaneous positions архитектурно не ограничивается этим документом.
 
-До fill торговая стратегия владеет решением `ALLOW/BLOCK`. Маяк только наблюдает,
-Диспетчер только даёт рекомендацию; их торговое влияние равно `NONE`.
+Текущая реализация может иметь более узкие ограничения. Их нельзя выдавать за вечное правило проекта.
 
-Execution владеет командой, запросом бирже, exchange/client ID, фактическими
-исполнениями, средней ценой и количеством. После подтверждённого fill владение
-Entry заканчивается. Durable handoff обязан сохранять точные `signal_id`,
-`strategy_decision_id`, `entry_command_id`, exchange order/execution IDs,
-`trade_id`, `position_id`, actual fill/qty/time, начальную защиту, protection IDs,
-версию стратегии и неизменяемую геометрию Entry.
+## 13. Source / installed / loaded
 
-После confirmed fill Entry больше не владеет позицией. Execution владеет
-фактической биржевой мутацией, fill, exchange/client IDs, reconciliation,
-initial server-side protection и durable handoff. Exit владеет protection
-transitions, economic break-even, trailing, close и restart recovery в пределах
-утверждённого Exit contract. Risk владеет допустимым денежным риском и risk
-limits. Position Supervisor только наблюдает, формирует контекст и рекомендации
-и не владеет close, stop, trailing, Risk или Entry.
+Нормальное production-состояние должно различать:
 
-Закрытие проходит через Execution и фактические исполнения Bybit, точную связь с
-позицией, состояние `CLOSED`, экономику и read-only Аналитик. Параллельные
-противоречащие друг другу state machine запрещены.
+```text
+REMOTE_HEAD
+SOURCE_HEAD
+INSTALLED_COMMIT
+LOADED_COMMIT
+```
 
-### Нерешённый вопрос рыночной общесистемной безопасности
+## 14. Exchange neutrality
 
-`GLOBAL_SAFETY_ARCHITECTURE_STATUS=OWNER_DECISION_REQUIRED`.
+В нормативной архитектуре использовать `Exchange / Trading Account`, а не конкретный бренд, кроме документации конкретного adapter/runtime.
 
-Operational safety остаётся fail-closed при неизвестном exchange state, сбое
-часов или reconciliation, неизвестных qty/fill/protection, stale mandatory
-private state, owner emergency kill либо невозможности безопасной биржевой
-мутации. Право отдельного рыночного/fleet-слоя выполнять `BLOCK_NEW_ENTRIES` или
-`EMERGENCY_CLOSE` по рыночному контексту этим документом не предоставляется.
-Mayak и Dispatcher торговых прав не получают.
+## 15. Конфликт
 
-## 7. Точные связи и честная неопределённость
+При конфликте:
 
-Каноническая связь по `symbol + ближайшее время` запрещена. Используются точные
-ID сигнала, решения, команды, ордеров, исполнений, позиции, сделки и защит.
-Если доказать связь нельзя, сохраняется `UNRESOLVED_EXACT_LINK`; догадка не
-становится истиной PostgreSQL.
+```text
+ARCHITECTURE_CONFLICT=YES
+HARD_STOP=YES
+```
 
-## 8. Ручные действия владельца
-
-Ручное изменение стопа или trailing, ручное закрытие и отмена заявки являются
-отдельными событиями `OWNER_MANUAL_INTERVENTION`. Они содержат точные exchange
-и command IDs и не приписываются алгоритму.
-
-## 9. Неизменяемые регрессионные пути
-
-Обязательные golden paths:
-
-1. сигнал -> заявка -> TTL -> `NO_FILL/CANCELLED`;
-2. сигнал -> fill -> ownership -> server protection -> прибыльный exit -> `CLOSED`;
-3. сигнал -> fill -> initial hard stop -> `CLOSED`;
-4. валидный сигнал + Dispatcher `INCOMPATIBLE` -> наблюдение записано, Entry не подавлен;
-5. позиция -> действие владельца -> exchange execution -> точное `CLOSED`.
-
-## 10. Изменение контракта
-
-Изменение этого документа требует решения владельца, новой версии, обновления
-зависимых контрактов и архитектурных тестов до реализации.
+Код не используется как автоматический источник новой архитектуры.

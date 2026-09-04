@@ -1,13 +1,11 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 2026-09-05
 **Статус:** канонический реестр авторитетности
 
 ## 1. Порядок авторитетности
-
-При прямом конфликте применяется более высокий уровень:
 
 ```text
 LEVEL 0 — явное текущее решение владельца, оформленное в каноническом контракте
@@ -23,83 +21,72 @@ docs/PROJECT_GOVERNANCE_RU.md
 LEVEL 3 — CURRENT ARCHITECTURE
 docs/PROJECT_ARCHITECTURE_RU.md
 docs/CURRENT_PROJECT_MAP_RU.md
-специализированные архитектурные контракты слоя
+docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md
+docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md
+docs/ANALYST_ARCHITECTURE_RU.md
+и другие специализированные контракты
 
 LEVEL 4 — implementation contracts
 LEVEL 5 — research protocols
 LEVEL 6 — historical Pxx / EO / SE / runbooks
-LEVEL 7 — старые handoff / resume / task / package metadata
+LEVEL 7 — old handoff / resume / task / package metadata
 ```
 
-Специализированный документ уточняет верхний контракт только там, где не
-противоречит ему. Исторический документ не становится текущим поручением из-за
-того, что остался в репозитории.
+## 2. Каноническая верхняя модель
 
-## 2. Разделение видов истины
+Любой документ уровня 2–7 обязан быть совместим с:
 
 ```text
-GitHub PH1119057/cripta:main
-    = canonical shared source-code checkpoint
+MAYAK -> DISPATCHER -> STRATEGY(ENTRY/EXIT) -> EXECUTION -> EXCHANGE
+```
+
+`Risk` не является отдельным top-level layer.
+
+Технический поддерживающий контур не является дополнительным торговым этажом.
+
+## 3. Разделение видов истины
+
+```text
+GitHub main
+= shared source checkpoint
 
 /srv/cripta/source_checkout
-    = canonical server source checkout,
-      который обязан быть синхронизирован с GitHub main
+= synchronized server source checkout
 
-/srv/cripta/... installed runtime
-    = установленная production-версия,
-      но не замена source repository
+installed runtime
+= installed implementation
 
 PostgreSQL
-    = canonical persisted operational/analytical data truth
+= persisted operational/analytical truth
 
-Bybit
-    = live exchange truth
+connected Exchange / Trading Account
+= live external truth for account/orders/fills/positions/funds
 ```
 
-Следующее не является source of truth: `C:\cripta`, старые ZIP, старые
-ChatGPT/Codex conversations и local Codex notes.
+Универсальная архитектура не привязана к бренду торговой площадки.
 
-## 3. Действующая архитектура
+## 4. Специализированные контракты
 
-К уровню текущей архитектуры относятся, в частности:
+- MAYAK: `MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`
+- Dispatcher: `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
+- lifecycle: `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
+- Analyst: `ANALYST_ARCHITECTURE_RU.md`
 
-- `docs/MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`;
-- `docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`;
-- `docs/DATA_TIMELINE_CONTRACT_RU.md`;
-- `docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md`;
-- `docs/ANALYST_ARCHITECTURE_RU.md`;
-- `docs/ARCHIVE_V2_ARCHITECTURE_RU.md`.
+Специализированный контракт уточняет верхний, но не создаёт нового top-level ownership.
 
-Implementation- и research-контракт не разрешает автоматически менять live.
+## 5. История
 
-## 4. История и provenance
+Исторические документы сохраняют фактическую историю и не переписываются задним числом.
 
-Документы Pxx, EO, SE, старые Entry-пакеты, runbook, handoff, resume, task и ZIP
-metadata сохраняют фактическую историю. По умолчанию их статус:
+Их старое слово `Risk`, конкретная биржа или старая схема ownership не отменяют текущий канон, если документ явно historical.
 
-```text
-HISTORICAL
-NOT CURRENT TASK
-NOT CURRENT PRODUCTION CONTRACT
-```
+## 6. Конфликт
 
-Исторические выводы не переписываются задним числом. Их можно использовать как
-данные исследования, но не как разрешение на production-влияние.
-
-## 5. Конфликт
-
-При конфликте с уровнем 1:
+При конфликте:
 
 ```text
 HARD_STOP=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-Исполнитель фиксирует точное противоречие и не меняет архитектурный смысл или
-production-код самостоятельно.
-
-## 6. Изменение версии 2.0
-
-Добавлены два глобальных контракта, разделены source/runtime/data/live truth,
-понижен статус исторических и локальных материалов, устранён статус `AGENTS.md`
-как самостоятельного верхнего архитектурного источника.
+Код не используется как автоматический источник новой архитектуры.

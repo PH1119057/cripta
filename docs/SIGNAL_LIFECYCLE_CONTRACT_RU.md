@@ -1,125 +1,154 @@
 # НЕПРЕРЫВНЫЙ ЖИЗНЕННЫЙ ЦИКЛ СИГНАЛА
 
 **Документ:** `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
-**Версия:** 1.0
-**Дата:** 2026-09-01
+**Версия:** 1.1
+**Дата:** 2026-09-05
 **Статус:** канонический архитектурный контракт
 
 ## 1. Корневая сущность
 
-Корневая сущность — причинный торговый сигнал. Карточка и машинная история
-создаются в момент `SIGNAL_DETECTED`, а не после fill. Постоянный `signal_id` не
-теряется независимо от исхода и не восстанавливается по монете и близкому времени.
+Корневая сущность — причинный торговый signal.
 
-Допустимые связанные идентификаторы:
+Карточка и машинная история создаются в момент `SIGNAL_DETECTED`, а не после fill.
+
+`signal_id` не теряется независимо от исхода.
+
+## 2. Strategy attempt
+
+Архитектура допускает:
 
 ```text
-market_context_id -> mayak_snapshot_id -> dispatcher_assessment_id
-signal_id -> strategy_decision_id -> geometry_handoff_id
-signal_id -> entry_command_id -> exchange/client order IDs -> execution IDs
-signal_id -> trade_id -> position_id -> protection IDs -> exit IDs
+signal_id
+  -> strategy_attempt_id
 ```
 
-## 2. Каноническая последовательность
+Каждый attempt связан с `strategy_id`, `strategy_version`, `strategy_config_fingerprint` и `bot_instance_id`, где применимо.
+
+Сегодня одна Strategy может давать один attempt. Будущая мультистратегийность не требует менять lifecycle.
+
+## 3. Последовательность
 
 ```text
 SIGNAL_DETECTED
-  -> CONTEXT_CAPTURED
-  -> STRATEGY_DECISION
-       -> REJECTED -> CONTINUED_MARKET_OBSERVATION
-       -> ACCEPTED -> ORDER_REQUESTED
-            -> NO_FILL / EXPIRED / CANCELLED / REJECTED
-                 -> CONTINUED_MARKET_OBSERVATION
-            -> FILLED -> POSITION
-                 -> PROTECTION / SUPERVISION
-                 -> OWNER_MANUAL_INTERVENTION (необязательно)
-                 -> EXIT -> ACTUAL_ECONOMICS
-                      -> CONTINUED_MARKET_OBSERVATION
+-> SIGNAL_CARD_CREATED
+-> CONTEXT_CAPTURED
+-> STRATEGY_ATTEMPT
+-> ENTRY_DECISION
+     -> REJECTED/BLOCKED -> CONTINUED_OBSERVATION
+     -> ACCEPTED -> EXECUTION_REQUEST
+          -> NO_FILL/EXPIRED/EXCHANGE_REJECTED -> CONTINUED_OBSERVATION
+          -> FILLED -> POSITION
+               -> EXIT
+               -> ACTUAL_ECONOMICS
+               -> CONTINUED_OBSERVATION
 ```
 
-Отклонение, блокировка технической безопасностью, отсутствие fill, отмена заявки
-и закрытие позиции не удаляют сигнал и не прекращают наблюдение его рыночного пути.
+## 4. Dispatcher context
 
-## 3. Наблюдавшийся и использованный контекст
+Для attempt могут быть связаны отдельно:
 
-- `OBSERVED_CONTEXT` — последний причинно доступный контекст Маяка/Диспетчера,
-  существовавший к событию, без утверждения, что стратегия использовала его.
-- `CONSUMED_CONTEXT` — конкретный snapshot/assessment, который стратегия реально
-  прочитала как input своего решения. Требуется доказуемая ссылка из решения.
+```text
+market_assessment_id
+trading_capacity_snapshot_id
+```
 
-Оба типа хранят `observed_at`, freshness, качество, версии и provenance. Контекст
-с `trading_effect=NONE` не создаёт и не подавляет торговую команду. Физическое имя
-legacy-таблицы может временно содержать слово `consumed`, но новые строки обязаны
-иметь честный `context_type`; старые строки не переписываются.
+Различать `OBSERVED_CONTEXT` и `CONSUMED_CONTEXT`.
 
-## 4. Фактический и контрфактический пути
+## 5. Причины Entry decision
 
-`ACTUAL_PATH` — что система и биржа реально сделали. `OBSERVATION_PATH` — что рынок
-делал после решения и какой результат мог бы дать иной путь. Будущие данные никогда
-не изменяют historical state at T.
+Минимально:
 
-Если позиция реально закрыта на `+0,50%`, а затем рынок дошёл до `+2,00%`, actual
-остаётся `+0,50%`; оставшееся движение — post-exit observation, а не фактический
-убыток. Движение отклонённого сигнала — кандидат потерянной возможности, а не PnL.
+```text
+ACCEPTED
+STRATEGY_CONDITION_REJECTED
+DISPATCHER_MARKET_INCOMPATIBLE
+INSUFFICIENT_AVAILABLE_FUNDS
+OPERATIONAL_SAFETY_BLOCKED
+STALE_OR_UNKNOWN_REQUIRED_STATE
+EXCHANGE_REJECTED
+```
 
-## 5. Непрерывное наблюдение
+Не объединять их в общий `RISK_REJECTED`.
 
-Использовать существующий opportunity tracker, не создавать параллельный tracker
-без отдельного архитектурного решения. Для rejected/no-fill/closed сохранять
-доступные причинные горизонты `T+5m/15m/30m/1h/3h/6h/24h`, MFE, MAE, первые
-достижения порогов и возврат/невозврат. Post-exit путь служит Exit research и не
-перенастраивает live автоматически.
+## 6. Денежный snapshot
 
-## 6. Ручное вмешательство владельца
+Если решение зависит от доступных средств, attempt должен ссылаться на причинный account-capacity snapshot.
 
-Каждое изменение стопа/защиты, отмена ордера или закрытие владельцем записывается
-отдельным событием `OWNER_MANUAL_INTERVENTION` с exchange truth до и после.
-История обязана различать намерение алгоритма, действие владельца и фактическое
-исполнение Bybit. Ручной выход нельзя выдавать за решение алгоритма.
+Минимально восстанавливать:
 
-## 7. Обязательные разделы будущего read-model/карточки
+```text
+source_exchange/account
+observed_at
+freshness
+total/equity
+used
+reserved
+free
+available_for_new_trading
+strategy_requested_allocation
+```
 
-1. Сигнал и основание Entry: стратегия/версия, fingerprint, сторона, время/цена,
-   причинные признаки, неизменяемая 15m/5m-геометрия и provenance.
-2. Рыночный контекст: IDs Маяка/Диспетчера, тип `OBSERVED/CONSUMED`, времена,
-   freshness и качество.
-3. Решение стратегии: владелец решения, точные причины, policy/settings version.
-4. Execution: лимит, offset, TTL, запрос/ответ, IDs, fill/no-fill/expiry/rejection,
-   фактические avg fill и qty.
-5. Позиция: `trade_id`, `position_id`, исходный stop, protection IDs, переходы
-   Supervisor, MFE/MAE, время в прибыли/убытке, HOLD/Exit.
-6. Ручные события с истиной биржи до/после.
-7. Exit: причина, исполнения и владелец решения — алгоритм/владелец/техника.
-8. Экономика: gross, обе комиссии, funding, slippage,
-   `actual_net_without_funding`; `actual_net_pnl` только при полной стоимости и
-   обязательный completeness flag.
-9. Наблюдение после reject/no-fill/exit.
-10. Версионированный read-only аналитический диагноз.
+## 7. Карточка attempt
 
-Допустимые диагнозы включают: спасённый hard stop, ложное вето, заявка всё равно
-не исполнилась, потерянный прибыльный путь, выход около локального оптимума,
-кандидат слишком раннего выхода и неопределённый исход. Они не являются командами.
+Карточка должна позволять ответить:
 
-## 8. Источник истины и статистика
+- почему возник signal;
+- какая Strategy рассматривалась;
+- какой market context видел Entry;
+- сколько торговой ёмкости было доступно;
+- сколько хотела использовать Strategy;
+- почему Entry принял/отклонил;
+- был ли отправлен order;
+- был ли fill;
+- что было дальше с рынком;
+- если position была — как работал Exit.
 
-Сначала PostgreSQL/analytics read-model восстанавливает единственную историю по
-`signal_id`; UI, Аналитик, экспорт и диагностический Snapshot отображают её.
+## 8. Actual и counterfactual
+
+Rejected/no-fill/no-funds attempt не удаляется.
+
+Он продолжает наблюдаться как `OBSERVATION_PATH`.
+
+Его дальнейший путь не является фактическим PnL.
+
+## 9. Несколько Strategy
+
+Если один signal обрабатывается несколькими Strategy, attempts сохраняются независимо.
+
+## 10. Точные ID
+
+Целевая цепочка:
+
+```text
+signal_id
+-> strategy_attempt_id
+-> entry_decision_id
+-> entry_command_id
+-> exchange/client order IDs
+-> execution IDs
+-> trade_id
+-> position_id
+-> exit_decision_id
+```
+
+Связь по `symbol + время` неканонична.
+
+## 11. Аналитика
+
+Analyst должен отдельно считать strategy rejects, Dispatcher-market rejects, insufficient-funds rejects, operational blocks, no-fill, filled outcomes, saved loss, lost profitable path и capital-constrained opportunity.
+
+## 12. UI/read model
+
 UI не хранит собственную историю.
 
-Для всех сигналов должны считаться total/accepted/rejected/no-fill/filled/open/
-closed. Для rejected — no-fill anyway/saved hard stop/lost profitable path/
-unresolved. Для filled — actual net, MFE/MAE, эффективность выхода, post-exit MFE
-и влияние владельца. Польза фильтра оценивается как спасённые убытки минус
-потерянные хорошие сделки, разрушенные восстановления и дополнительные расходы.
+Карточка восстанавливается из PostgreSQL/read-model.
 
-## 9. Запрет автоматического обучения
+## 13. Запрет автоматического обучения
 
-Lifecycle — статистика и аналитика, не автоматическое изменение стратегии.
-Разрешённый путь: статистика -> исследование -> новая версия -> SHADOW ->
-LIVE EQUIVALENCE -> MICRO_LIVE -> LIVE -> отдельное решение владельца.
+Lifecycle — доказательная история, а не механизм изменения Strategy.
 
-## 10. Граница текущего этапа
+## 14. Граница реализации
 
-Этот контракт не разрешает автоматически создавать UI-карточку, новую massive
-schema, переписывать Analyst или менять Entry/Exit/Risk. Такие изменения требуют
-отдельного задания после принятия архитектуры.
+Этот документ утверждает целевую архитектуру lifecycle.
+
+Он не разрешает автоматически менять schema/code/UI без отдельной implementation-задачи.

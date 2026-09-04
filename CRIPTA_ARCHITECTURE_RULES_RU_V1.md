@@ -1,113 +1,366 @@
 # CRIPTA — архитектурные правила проекта
 
-Версия: 1.0 · 2026-09-05  
-Назначение: роли слоёв, live-safety, research-contract и зафиксированные архитектурные долги.  
+Версия: 1.1 · 2026-09-05
+Назначение: верхняя модель проекта, владельцы прикладных решений, технический поддерживающий контур, жизненный цикл торговой попытки и обязательные архитектурные границы.
+
 Процесс patch/install/Git вынесен в `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`.
 
-## 1. Главный принцип
-Каждый слой имеет одного владельца ответственности. Слой не должен незаметно выполнять работу соседнего слоя. Если границы меняются — сначала обновляется архитектурный контракт, затем код.
+# 1. Главный принцип
 
-## 2. Market Data / Connectivity / Exchange Sync
-**Владеет:** WS/REST, clock drift, reconnect/watchdog, positions/orders/fills/balance/leverage/margin mode, reconciliation, свежестью exchange state.  
-**Не владеет:** торговым решением.  
-**Правило:** свежий Bybit = live truth. Неизвестное обязательное состояние => `BLOCKED/WAITING/ERROR`, без silent defaults.
+Проект имеет:
 
-## 3. MAYAK
-**Владеет:** независимым наблюдением рынка, режима, денег/объёма, OI, tape/orderbook/context, при необходимости внешнего контекста.  
-**Не владеет:** Entry, stop, close, Risk.  
-MAYAK сообщает состояние/предупреждение, но не торгует и не становится скрытой стратегией.
+1. **прикладной торговый контур** — отвечает на вопрос, что система понимает о рынке, какую Strategy применяет и какое торговое действие требуется;
+2. **технический поддерживающий контур** — обеспечивает прикладной контур данными, связью, хранением, исполнением, восстановлением, наблюдаемостью и аудитом.
 
-## 4. Entry
-**Владеет:** причинным решением «есть ли допустимый вход сейчас», causal geometry/context, состояниями `WARMUP/WAITING/WATCH/APPROACH/SIGNAL/COOLDOWN/NO CALIBRATION/ERROR/BLOCKED`.  
-**Не владеет:** сопровождением позиции после confirmed fill, BE/trailing/close, Exit/Risk.  
-Только causal online data, без look-ahead/future-derived artifacts. После restart/reconnect обязательные causal features re-warm/restored.
+Эти контуры связаны и взаимозависимы, но не являются двумя конкурирующими торговыми системами.
 
-## 5. Initial protection: Entry -> Execution
-Текущий контракт V36.1.11: `entry_v1_core` задаёт immutable initial protection: SL 1.00%, TP 3.00%, `LastPrice`, `Full`. Execution ставит server-side protection вместе с Entry order и после fill может только re-anchor те же параметры к actual avg fill.
+Технический контур поддерживает прикладной. Он не получает права самостоятельно изобретать торговую логику только потому, что без него прикладной контур не может работать.
 
-## 6. Execution
-**Владеет:** live readiness, биржевыми mutations, actual fill, durable handoff, order/client/protection IDs, reconciliation и server-side protection.  
-**Не владеет:** повторным вычислением Entry logic.
+# 2. Пять верхнеуровневых архитектурных уровней
 
-Durable handoff минимум: symbol, side, actual avg fill, qty, fill time, initial protection, exchange/client IDs, protection IDs, ownership/trade IDs.
+Каноническая прикладная цепочка:
 
-## 7. Exit
-После confirmed fill владеет сопровождением позиции: protection transitions, BE, trailing, close, restart recovery.  
-Не ретюнит Entry и не переопределяет frozen Entry geometry.  
-V36.1.11: structural early-loss auto-close отсутствует — `DISABLED_NOT_PROVEN_NO_CLOSE_IMPLEMENTATION`.
+```text
+1. MAYAK
+      ↓
+2. DISPATCHER
+      ↓
+3. STRATEGY
+   ├── ENTRY
+   └── EXIT
+      ↓
+4. EXECUTION
+      ↓
+5. EXCHANGE
+```
 
-## 8. Risk
-Владеет допустимым денежным риском. Различать price move %, R, equity %, notional, margin, leverage.  
-`monetary risk = position size × stop distance + costs`.  
-Leverage меняет margin, но не должен сжимать structural stop, увеличивать допустимый убыток или менять Entry/Exit levels.
+Это верхняя архитектурная карта проекта.
 
-## 9. Economic break-even
-Production BE учитывает по возможности entry/closing fees, slippage, funding и валидный Bybit `breakEvenPrice`. Теоретический `0.00%` в research не равен гарантированному net-zero.
+Не каждый процесс, daemon, таблица, сервис, библиотека или аналитический компонент является отдельным верхнеуровневым слоем.
 
-## 10. Position Supervisor
-**Владеет:** карточкой позиции, causal context, наблюдением structure/flow/OI/orderbook, diagnostic/advisory state.  
-**Не владеет:** Entry, close, stop, trailing, Risk.  
-В V36.1.11 остаётся observation/context layer.
+# 3. MAYAK
 
-## 11. Restart / reconnect / clock safety
-После restart нельзя считать систему warm. Обязательны clock check, reconnect, reconciliation actual positions/orders/fills/qty/avg fill/stops/IDs и re-warm causal features. Нельзя открыть вторую позицию потому, что local memory говорит `flat`. Server-side stop, cancel-pending, reduce-only close, reconciliation и emergency kill не зависят от scanner/research logic.
+MAYAK — независимый наблюдатель внешнего рынка.
 
-## 12. Live fail-closed
-Если обязательное по утверждённому контракту состояние missing/stale/invalid — trading mutation запрещена. Observation и trading permission — разные вещи: наблюдение может продолжаться при `BLOCKED` для торговли.
+Он отвечает:
 
-## 13. SHADOW -> MICRO_LIVE -> LIVE
-Новая автоматизация проходит: research equivalence -> SHADOW -> live feature/signal equivalence -> MICRO_LIVE -> LIVE. Каждый переход — отдельное решение владельца. После restart Entry по умолчанию disarmed, если явно не утверждено обратное.
+> Что происходит на рынке?
 
-## 14. Research != Production
-Research фиксирует provenance и может работать с historical datasets. Production содержит только causal online logic и не зависит от multi-GB history/future-derived artifacts.
+MAYAK может наблюдать цену, сделки, объём, деньги, открытый интерес, funding, стакан, ликвидации, ширину и синхронность рынка, разные торговые площадки, on-chain и внешний макро/политический контекст, если он утверждён как источник.
 
-## 15. Holdout / OOS
-Discovery отделяется от confirmation. Просмотренный holdout больше не чистый для retuning. Новая настройка требует нового unseen asset/time/sample. Для Entry filter считать не только failures saved, но и lost good entries, retention, signals/day, continuation, runners, cross-asset stability.
+MAYAK не выбирает Strategy, не открывает и не закрывает позиции, не задаёт размер позиции, не блокирует Entry, не двигает stop, не меняет торговый счёт и не учится автоматически на PnL конкретной стратегии.
 
-## 16. Simple benchmark first
-Сложная Entry/Exit/Risk логика должна заметно превосходить заранее заданный простой benchmark с учётом fees/slippage, PF, drawdown, stability, concentration, trade count и operational complexity.
+Его результат — причинный, версионированный снимок внешнего рынка.
 
-## 17. Data / provenance
-Frozen/offline research не должен молча скачивать другой dataset или чинить/удалять плохие данные. Missing/corrupt/schema/timestamp/duplicates фиксируются или fail-closed. Serious result хранит version, period, symbols, fingerprints, params, dev/holdout label, signal count, completeness, software/logic version. CSV/JSON = machine truth; Markdown = presentation.
+# 4. DISPATCHER
 
-## 18. Signal replay != portfolio backtest
-Независимые 72h paths измеряют signal quality, а не portfolio PnL. Portfolio test обязан моделировать chronology, one active position/symbol если принято, finite capital/margin, simultaneous positions и deterministic conflicts.
+Dispatcher — прикладной слой общей обстановки между MAYAK и торговыми стратегиями.
 
-## 19. UI / Audit
-UI — observation/control, не скрытая стратегия. Cosmetic change не меняет trading logic. Параметры UI, влияющие на Entry/Exit/Risk, обязаны иметь runtime contract и audit. Live trail должен сохранять решение, causal inputs, order/fill/protection/Exit и итог.
+Он публикует **показатели**, а не торговые команды.
 
-## 20. Hard stop при конфликте архитектуры и кода
-Если код расходится с действующей концепцией, разработка останавливается. Либо код исправляется под концепцию, либо владелец сначала меняет концепцию. Нельзя тихо менять смысл слоя внутри технического patch.
+## 4.1 Рыночный контекст
 
----
+На основе MAYAK Dispatcher показывает, насколько текущая внешняя среда подходит разным профилям торговли.
 
-# Текущий stable checkpoint
+Один и тот же рынок может быть плохим для одной Strategy и хорошим для другой.
 
-- Production: **V36.1.11**.
-- GitHub `main` = server `source_checkout`: `22f1ed07ec34a4713f23d4d196765ded545ec610`.
-- Tracked worktree: clean.
-- 21 ожидаемый local untracked research/test artifact сохранён вне Git.
-- Ключевые V36 source/live files: MATCH.
-- `postgresql`, `private-runtime`, `entry-shadow-scanner`, `position-supervisor`, `exit-runtime`: active на последней проверке.
-- `ENTRY_GATE=DISARMED`.
-- На последней readiness-проверке: positions=0, active orders=0, active commands=0.
-- Exit runtime: `RUNNING`.
-- Early-loss automation: disabled/not proven/no close implementation.
+`GLOBAL_MARKET_STATE`, `INCOMPATIBLE`, `POOR_MATCH` и аналогичные статусы — только показатели/оценки.
 
-Этот checkpoint подтверждает техническую стабильность текущего поведения, но не означает завершённый полный аудит всей логики.
+Dispatcher не имеет торговых mutation rights.
 
-# Что сейчас не так / требует отдельного решения
+## 4.2 Состояние торгового счёта
 
-## A. Устаревший source-of-truth contract
-Старое правило «`C:\cripta` — source of truth» больше неверно. Теперь авторитетны server `source_checkout` + GitHub `main`.
+Dispatcher также публикует фактическое состояние доступной торговой ёмкости аккаунта, полученное из технического контура подключения к текущей торговой площадке.
 
-## B. Старые правила смешивали Windows и Linux production deployment
-Windows остаётся отдельной целевой средой, но production server использует собственный rail `/usr/local/sbin/cripta-apply-incoming`. Эти два installer-contract нельзя смешивать.
+Минимально должны быть различимы:
 
-## C. Observation universe и live-trading eligibility явно не разделены в архитектурном документе
-Фактически scanner наблюдает 20 enabled symbols. На последней проверке 8 не имели индивидуальной OI calibration: `APT, ARB, BCH, DOT, HBAR, INJ, OP, TRX`. Был зафиксирован CORE signal по INJ при `oi=uncalibrated`.
+- общий торговый баланс / equity, где применимо;
+- уже занятые средства;
+- зарезервированные средства;
+- свободные средства;
+- фактически доступная сумма для новой торговли;
+- freshness и provenance такого состояния.
 
-Это **не разрешение на изменение кода**. Нужно отдельное решение владельца: отсутствие calibration допустимо только для observation или также для live Entry, и где именно находится trading-eligibility boundary. До решения текущее поведение не менять.
+Архитектура не привязана к конкретной бирже.
 
-## D. Полный логический аудит после stable checkpoint ещё не выполнен
-Сейчас подтверждены техническая стабильность, source/live equivalence и Git sync. Отдельно ещё предстоит аудит соответствия всех Entry/Exit/Risk/MAYAK/restart contracts архитектуре. Его нельзя начинать внутри текущего стабилизационного цикла без отдельной команды.
+Источник фактической истины — подключённая торговая площадка и её торговый аккаунт. Технический контур получает и нормализует эту истину; Dispatcher публикует её прикладным потребителям как показатель.
+
+Dispatcher не «владеет деньгами», не резервирует их по собственной воле и не создаёт ордер.
+
+# 5. STRATEGY
+
+Strategy — утверждённый владельцем набор правил конкретного способа торговли.
+
+В Strategy живут правила:
+
+- какой рыночный контекст ей подходит;
+- как использовать Dispatcher;
+- Entry policy;
+- размер входа;
+- фиксированная сумма или доля доступного капитала;
+- плечо;
+- stop;
+- допустимая просадка;
+- правила удержания;
+- Exit policy;
+- initial protection.
+
+Никто из MAYAK, Dispatcher, Analyst, Supervisor или технического контура не изменяет утверждённую Strategy автоматически.
+
+Изменение Strategy = новая утверждённая владельцем версия/fingerprint.
+
+# 6. ENTRY
+
+Entry — специализированная часть Strategy, отвечающая за конкретную попытку входа.
+
+Monitor/Scanner может сообщить, что на инструменте появилась потенциальная торговая возможность. Это не приказ войти.
+
+После `SIGNAL_DETECTED` Entry:
+
+- рассматривает доступную торговую возможность;
+- работает только с утверждёнными Strategy;
+- использует правила выбранной/подходящей Strategy;
+- смотрит применимый Dispatcher market context;
+- смотрит опубликованное Dispatcher состояние доступных средств;
+- проверяет обязательную техническую readiness;
+- принимает итоговое решение по попытке входа.
+
+Архитектура **не фиксирует сейчас** алгоритм выбора между несколькими Strategy. Такой механизм является отдельным будущим контрактом.
+
+После выбора Strategy конкретной попытки фиксируется точными:
+
+```text
+strategy_id
+strategy_version
+strategy_config_fingerprint
+```
+
+Entry не должен после fill менять Strategy позиции.
+
+# 7. EXIT
+
+Exit — специализированная часть той же Strategy.
+
+После confirmed fill Exit сопровождает позицию по той же `strategy_id/version/fingerprint`, по которой был выполнен Entry.
+
+Разные Strategy могут иметь принципиально разные stop, допустимую глубину отката, break-even, trailing, holding и причины закрытия.
+
+Нельзя молча применить Exit policy одной Strategy к позиции другой Strategy.
+
+# 8. Risk — не верхнеуровневый слой
+
+В проекте не существует самостоятельного верхнеуровневого архитектурного слоя `Risk`.
+
+Слово `Risk` может оставаться в коде, исторических документах, research и специализированных формулах.
+
+Архитектурно соответствующие обязанности распределены:
+
+- MAYAK — наблюдает опасные/нестабильные состояния рынка как факты;
+- Dispatcher — показывает рыночный контекст и состояние доступной торговой ёмкости;
+- Strategy — задаёт размер, плечо, stop, допустимую просадку и правила удержания;
+- Entry — фиксирует решение конкретной попытки;
+- Exit — сопровождает позицию по strategy policy;
+- Execution / technical safety — не выполняет небезопасную mutation при неизвестном обязательном состоянии;
+- Exchange — является фактическим ограничителем по доступным средствам, позициям, правилам инструмента и исполнению.
+
+Нельзя заново создать отдельный top-level `Risk` layer без решения владельца и новой версии архитектурного контракта.
+
+# 9. EXECUTION
+
+Execution реализует принятое прикладное торговое решение на подключённой торговой площадке.
+
+Execution владеет readiness непосредственно перед mutation, order requests, exchange/client IDs, actual fills, qty, actual avg fill, protection mutations, reconciliation и durable handoff.
+
+Execution не выбирает Strategy, не придумывает Entry/Exit и не меняет стратегический размер, stop или holding policy по собственной инициативе.
+
+# 10. EXCHANGE
+
+Exchange — внешняя торговая площадка.
+
+Архитектура CRIPTA не привязана к одной конкретной бирже.
+
+Фактическая торговая площадка является live truth по доступным ей данным, включая торговый баланс/account equity, свободные/занятые средства, positions, orders, fills, instrument rules, leverage/margin/position mode, fees/funding/break-even, если площадка их предоставляет.
+
+# 11. Технический поддерживающий контур
+
+Технический контур не является шестым торговым уровнем.
+
+Он включает компоненты, необходимые для работы пяти верхних уровней, например:
+
+- connectivity / market data adapters;
+- private account/exchange sync;
+- clock/reconnect/watchdog;
+- нормализацию exchange/account state;
+- PostgreSQL;
+- журналы и audit trail;
+- Position Supervisor;
+- Analyst;
+- UI/read models;
+- service management;
+- restart/reconciliation;
+- архивирование;
+- operational safety;
+- monitoring/health.
+
+Технический компонент может обслуживать несколько прикладных уровней.
+
+Это не даёт ему права принимать торговое решение вместо Strategy.
+
+# 12. Monitor / Scanner и карточка попытки
+
+Monitor/Scanner относится к техническому/наблюдательному обеспечению поиска торговых возможностей.
+
+Его сообщение «возможность обнаружена и готова к проверке Entry» не равно приказу открыть позицию.
+
+При `SIGNAL_DETECTED` создаётся постоянная причинная запись/карточка.
+
+Она существует даже если Entry отказал, Strategy не подошла, Dispatcher context был несовместим, не было свободных средств, technical readiness заблокировала действие, order не был создан или не исполнился.
+
+# 13. Один сигнал и несколько стратегий
+
+Архитектура должна масштабироваться на множество Strategy и bot instances.
+
+Один `signal_id` может в будущем иметь несколько `strategy_attempt_id`.
+
+Разные Strategy могут принять противоположные решения по одному рыночному сигналу.
+
+Сегодня production может работать по одной Strategy. Это не архитектурное ограничение системы.
+
+Не устанавливать без отдельного решения владельца максимальное число Strategy, bot instances, одновременно открытых positions, механизм конкуренции Strategy за капитал или алгоритм автоматического выбора Strategy.
+
+# 14. Состояние денег и причина отказа
+
+Цепочка:
+
+```text
+EXCHANGE ACCOUNT TRUTH
+      ↓
+TECHNICAL ACCOUNT SYNC
+      ↓
+DISPATCHER TRADING-CAPACITY CONTEXT
+      ↓
+STRATEGY / ENTRY
+```
+
+Strategy определяет, сколько она хочет использовать.
+
+Entry сравнивает потребность выбранной Strategy с актуально опубликованной доступной торговой ёмкостью и принимает решение.
+
+Если средств недостаточно, это отдельная причина:
+
+```text
+INSUFFICIENT_AVAILABLE_FUNDS
+```
+
+Она не смешивается с `DISPATCHER_MARKET_INCOMPATIBLE`, `STRATEGY_CONDITION_REJECTED`, `OPERATIONAL_SAFETY_BLOCKED` или `EXCHANGE_REJECTED`.
+
+# 15. Dispatcher не является торговым gate
+
+Dispatcher показывает context.
+
+Правильная причинная цепочка:
+
+```text
+Dispatcher assessment
+      ↓
+Strategy policy
+      ↓
+Entry decision
+```
+
+Dispatcher не создаёт order block mutation.
+
+# 16. Global Market State
+
+Dispatcher может публиковать общий advisory indicator:
+
+```text
+NORMAL
+CAUTION
+HIGH_RISK
+CRITICAL
+UNKNOWN
+```
+
+Разные Strategy могут трактовать его по-разному.
+
+Универсальная рыночная команда `CLOSE ALL` из Dispatcher запрещена без отдельного нового архитектурного решения.
+
+# 17. Operational Safety
+
+Operational safety относится к техническому поддерживающему контуру.
+
+Он может fail-closed блокировать unsafe mutation при stale/unknown mandatory account state, clock/reconnect failure, reconciliation failure, unknown position/qty/fill/protection, неподтверждённом состоянии доступных средств, невозможности безопасно выполнить exchange mutation или owner emergency kill.
+
+Это не торговое мнение о рынке и не Strategy.
+
+# 18. Жизненный цикл и точные ID
+
+Корневая история начинается до реальной сделки.
+
+Целевая связь:
+
+```text
+signal_id
+  -> strategy_attempt_id
+  -> strategy_id/version/fingerprint
+  -> entry_decision_id
+  -> entry_command_id
+  -> exchange/client order IDs
+  -> execution IDs
+  -> trade_id / position_id
+  -> exit_decision_id
+```
+
+Нельзя восстанавливать ownership по `symbol + ближайшее время`.
+
+# 19. Analyst / Supervisor
+
+Position Supervisor и Analyst находятся в поддерживающем наблюдательно-аналитическом контуре.
+
+Они не выбирают Strategy, не меняют Strategy автоматически, не открывают/закрывают позиции напрямую и не становятся новыми top-level trading layers.
+
+# 20. Research != Production
+
+Разрешённый путь:
+
+```text
+STATISTICS
+-> RESEARCH
+-> OWNER-APPROVED NEW VERSION
+-> SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
+```
+
+# 21. Масштабирование
+
+Верхняя архитектура не должна быть зажата текущим числом позиций или одной Strategy.
+
+Будущая система может иметь много Strategy, много bot instances, много одновременных positions и разные торговые площадки.
+
+Точные portfolio limits, allocator, strategy arbitration и capital competition не определяются этим документом.
+
+# 22. Hard stop при конфликте
+
+Если код или более низкий документ делает `Risk` отдельным верхним владельцем, Dispatcher торговым исполнителем, technical service владельцем Strategy, MAYAK источником торговой команды, Exit независимым от Strategy binding конкретной позиции или exchange-specific правило универсальной архитектурой — это архитектурный конфликт.
+
+Порядок:
+
+```text
+HARD STOP
+-> report mismatch
+-> owner decision if needed
+-> canonical docs
+-> architecture tests
+-> code
+```
+
+# 23. Текущий production checkpoint
+
+Текущий production может не реализовывать все целевые элементы этого документа.
+
+Новая архитектура не является автоматическим разрешением немедленно менять production-код.
+
+Сначала документация становится каноном. Затем отдельной задачей проводится аудит соответствия текущей реализации.
