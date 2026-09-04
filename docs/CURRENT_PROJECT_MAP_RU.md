@@ -8,17 +8,21 @@
 ## 1. Проверенные checkpoints
 
 ```text
-CURRENT_VERIFIED_SOURCE_CHECKPOINT=22f1ed07ec34a4713f23d4d196765ded545ec610
+CURRENT_VERIFIED_SOURCE_CHECKPOINT=commit containing this document
+BASELINE_BEFORE_DOCUMENTATION_REVISION=22f1ed07ec34a4713f23d4d196765ded545ec610
+SOURCE_CHECKPOINT_RULE=GitHub main HEAD must equal /srv/cripta/source_checkout HEAD
 SOURCE_CHECKPOINT_VERIFIED_AT=2026-09-05
 LAST_VERIFIED_RUNTIME_CHECKPOINT=22f1ed07ec34a4713f23d4d196765ded545ec610
 RUNTIME_CHECKPOINT_EVIDENCE_DATE=2026-09-04
 PRODUCTION_VERSION=V36.1.11
 ```
 
-На 2026-09-05 GitHub `PH1119057/cripta:main` и
-`/srv/cripta/source_checkout` совпали; tracked server worktree был чист. Runtime
-checkpoint выше является последней зафиксированной проверкой, а не утверждением
-о непрерывно наблюдаемом состоянии «сейчас».
+До ревизии 2026-09-05 GitHub `PH1119057/cripta:main` и
+`/srv/cripta/source_checkout` совпали на указанном baseline; после публикации
+ревизии текущим source checkpoint является commit, содержащий эту карту, при
+условии фактически проверенного равенства обоих HEAD. Tracked server worktree был
+чист. Runtime checkpoint выше является последней зафиксированной проверкой, а не
+утверждением о непрерывно наблюдаемом состоянии «сейчас».
 
 ## 2. Где находится истина
 

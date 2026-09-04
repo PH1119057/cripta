@@ -19,8 +19,10 @@ GitHub `PH1119057/cripta:main` — общий канонический source ch
 быть с ним синхронизирован. Installed runtime, PostgreSQL и Bybit проверяются
 отдельно. `C:\cripta`, старые ZIP и чаты не являются source of truth.
 
-Проверенный source checkpoint на 2026-09-05:
-`22f1ed07ec34a4713f23d4d196765ded545ec610`. Production version: V36.1.11.
+Baseline перед документационной ревизией 2026-09-05:
+`22f1ed07ec34a4713f23d4d196765ded545ec610`. Текущий source checkpoint — commit,
+содержащий этот README, при проверенном равенстве GitHub main и server checkout.
+Production version: V36.1.11.
 Последний runtime checkpoint и дата его evidence указаны в текущей карте; их
 нельзя выдавать за непрерывно наблюдаемое состояние «сейчас».
 
