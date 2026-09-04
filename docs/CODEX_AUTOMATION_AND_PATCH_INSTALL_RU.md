@@ -1,8 +1,8 @@
 # КРИПТА — CODEX AUTOMATION И НЕЗАВИСИМАЯ УСТАНОВКА ПАТЧЕЙ
 
 **Документ:** `CODEX_AUTOMATION_AND_PATCH_INSTALL_RU.md`  
-**Версия:** 1.0  
-**Дата:** 2026-08-31  
+**Версия:** 1.1
+**Дата:** 2026-09-05
 **Статус:** постоянный эксплуатационный контракт  
 **Рекомендуемое размещение:** `docs/CODEX_AUTOMATION_AND_PATCH_INSTALL_RU.md`  
 **Торговый эффект:** `NONE`
@@ -59,15 +59,16 @@ reproducibility
 
 # 3. Источник истины
 
-Перед любой операцией определить текущий реальный source of truth.
-
-Для серверной ветки проекта:
+Перед любой операцией определить и раздельно проверить:
 
 ```text
-/srv/cripta
+GitHub PH1119057/cripta:main = canonical shared source checkpoint
+/srv/cripta/source_checkout = canonical server source checkout
+/srv/cripta/... installed runtime = установленная production-версия
 ```
 
-является установленным серверным деревом, которое должно быть проверено непосредственно перед patch/install/audit.
+Server checkout обязан совпадать с GitHub main. Installed runtime проверяется
+отдельно и не заменяет source repository.
 
 Никакой старый ZIP, локальная копия или старый manifest не может автоматически считаться текущим baseline.
 
@@ -554,16 +555,14 @@ report
 P20260831_MAYAK_DATA_QUALITY_V1.zip
 │
 ├── MANIFEST.json
-├── README_RU.md
 ├── install.sh
-├── payload/
-│   ├── monitoring/...
-│   ├── tests/...
-│   └── docs/...
 ├── SHA256SUMS.txt
-└── optional/
-    └── rollback_notes.md
+├── README_RU.md               (optional)
+└── payload/...                (по manifest)
 ```
+
+Wrapper directory запрещён. Sidecar checksum имеет формат:
+`<sha256><two spaces><basename.zip>`.
 
 Если нужен Windows helper:
 
@@ -857,48 +856,41 @@ Helper должен быть совместим с Windows PowerShell 5.1:
 
 ---
 
-# 35. SSH workflow
+# 35. Канонический server ZIP rail
 
 Без PowerShell:
 
 ```bash
 scp PATCH.zip robot:/srv/cripta-share/incoming/
-ssh robot-admin \
-  "sudo /srv/cripta/scripts/patch/install_patch.sh \
-   /srv/cripta-share/incoming/PATCH.zip"
+ssh robot-admin "sudo /usr/local/sbin/cripta-apply-incoming PATCH.zip"
 ```
 
 Конкретные alias/user/path должны соответствовать текущей инфраструктуре.
 
 ---
 
-# 36. Один installer — два способа запуска
+# 36. Один installer rail
 
 Критический принцип:
 
-> PowerShell и SSH не должны иметь две разные реализации patch logic.
+> PowerShell и SSH helpers не должны иметь собственную реализацию patch logic.
 
 Оба вызывают один и тот же:
 
 ```text
-server-side install_patch
+/usr/local/sbin/cripta-apply-incoming
 ```
 
 Иначе со временем процедуры разойдутся.
 
 ---
 
-# 37. Серверные команды patch subsystem
+# 37. Исторические альтернативные installers
 
-Рекомендуемый интерфейс:
-
-```text
-cripta-patch inspect PATCH.zip
-cripta-patch precheck PATCH.zip
-cripta-patch install PATCH.zip
-cripta-patch rollback <install_id>
-cripta-patch status <install_id>
-```
+Путь `/srv/cripta/scripts/patch/install_patch.sh` и интерфейсы
+`cripta-patch ...` не являются активным installer rail. Они могут упоминаться
+только как historical implementation provenance. Новые пакеты не bootstrap-ят
+собственный альтернативный runner, если постоянный canonical runner установлен.
 
 ---
 

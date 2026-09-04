@@ -1,11 +1,14 @@
 # АРХИТЕКТУРА ПРОЕКТА «КРИПТА»
 
 **Документ:** `PROJECT_ARCHITECTURE_RU.md`  
-**Версия:** 1.3
+**Версия:** 1.4
+**Дата:** 2026-09-05
 **Статус:** глобальный архитектурный контракт  
 
-Порядок принятия, версионирования, публикации и развёртывания архитектурных
-изменений задаёт `docs/PROJECT_GOVERNANCE_RU.md`.
+Верхний архитектурный контракт — `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`.
+Этот документ уточняет его и не может изменять его смысл. Порядок принятия,
+версионирования, публикации и развёртывания изменений задают
+`CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md` и `docs/PROJECT_GOVERNANCE_RU.md`.
 **Назначение:** определить роли основных слоёв торгового комплекса, допустимые связи между ними и обязательный статистический след для развития системы.
 
 ---
@@ -23,7 +26,9 @@
 их роли, времена закрытия исходных свечей, версия расчёта и fingerprint
 конфигурации. Связь `signal_id -> entry_command_id -> execution IDs ->
 position_id` сохраняется явно. После фактического исполнения Entry больше не
-владеет позицией, а Supervisor, Exit и Аналитик используют стабильный
+владеет позицией. Exit владеет утверждёнными переходами сопровождения, Risk —
+допустимым денежным риском, Execution — биржевыми мутациями, а Supervisor и
+Аналитик используют стабильный
 `position_id` и `trade_id`; восстановление владения по одной монете и близкому
 времени запрещено как неоднозначное.
 
@@ -88,7 +93,7 @@ MAYAK_CAN_FORCE_EXIT=NO
 DISPATCHER_CAN_FORCE_EXIT=NO
 GLOBAL_MARKET_FORCED_EXIT=NO
 STRATEGY_OWNS_ENTRY_DECISION=YES
-STRATEGY_OWNS_HOLD_EXIT_DECISION=YES
+EXIT_OWNS_APPROVED_POSITION_MANAGEMENT_TRANSITIONS=YES
 OPERATIONAL_SAFETY_IS_SEPARATE=YES
 ENTRY_OWNERSHIP_ENDS_AT_FILL=YES
 ENTRY_GEOMETRY_IMMUTABLE=YES
@@ -288,6 +293,10 @@ Execution отвечает за фактическое исполнение ре
 
 Execution обязан создавать долговечный handoff после fill.
 
+Execution также владеет фактическими биржевыми мутациями, reconciliation,
+initial server-side protection и точными exchange/client execution IDs. Он не
+принимает заново решение Entry или Exit.
+
 Минимально:
 
 ```text
@@ -353,6 +362,9 @@ Risk не должен увеличивать допустимую денежн�
 
 Supervisor не должен становиться Entry.
 
+Supervisor остаётся observation/context/advisory-only. Он не владеет close,
+stop, trailing, Risk или Entry и не выполняет торговые мутации.
+
 Его наблюдение должно переживать restart/reconnect и опираться на реальную позицию биржи.
 
 ---
@@ -363,9 +375,26 @@ Exit отвечает:
 
 > **Когда и как закрыть уже существующую позицию?**
 
+После confirmed fill Exit владеет утверждёнными protection transitions,
+economic break-even, trailing, close и restart recovery. Стратегия может
+поставлять утверждённую версионированную Exit policy, но runtime ownership
+торгового решения и мутации не должен становиться параллельным или неоднозначным.
+
 Exit не должен заново определять Entry.
 
 Будущие правила раннего закрытия, сопровождения, фиксации прибыли и защиты от общерыночного обвала должны исследоваться отдельно от Entry.
+
+## 10.1 Global/Fleet Safety
+
+```text
+GLOBAL_SAFETY_ARCHITECTURE_STATUS=OWNER_DECISION_REQUIRED
+```
+
+Operational safety отделена от рыночной оценки и может оставаться fail-closed по
+утверждённому техническому контракту. Имеет ли отдельный рыночный/fleet-слой
+право выполнять `BLOCK_NEW_ENTRIES` или `EMERGENCY_CLOSE` на основании рыночного
+контекста, не решено. Это не даёт Mayak или Dispatcher торговых прав и не
+активирует такую политику.
 
 ---
 

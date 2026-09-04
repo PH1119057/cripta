@@ -1,8 +1,8 @@
 # УПРАВЛЕНИЕ ИЗМЕНЕНИЯМИ ПРОЕКТА CRIPTA
 
-**Документ:** `PROJECT_GOVERNANCE_RU.md`  
-**Версия:** 1.0  
-**Дата:** 2026-09-01  
+**Документ:** `PROJECT_GOVERNANCE_RU.md`
+**Версия:** 1.1
+**Дата:** 2026-09-05
 **Статус:** канонический нормативный контракт
 
 ## 1. Четыре вида истины
@@ -28,10 +28,13 @@ GitHub `main` — общая точка синхронизации владел�
 будущих разработчиков. Перед изменением каждый исполнитель обязан:
 
 1. определить текущий GitHub HEAD;
-2. прочитать `AGENTS.md` и `docs/CURRENT_PROJECT_MAP_RU.md`;
-3. прочитать канонические контракты затрагиваемых слоёв;
-4. объявить архитектурное влияние;
-5. только после этого менять реализацию.
+2. прочитать `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
+3. прочитать `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
+4. прочитать `AGENTS.md`, `docs/DOCUMENT_AUTHORITY_RU.md` и
+   `docs/CURRENT_PROJECT_MAP_RU.md`;
+5. прочитать контракты затрагиваемых слоёв;
+6. объявить архитектурное влияние;
+7. только после этого менять реализацию.
 
 Решение, оставшееся только в чате, не является долговременной спецификацией.
 После утверждения владельцем оно переносится в каноническую документацию.
@@ -93,10 +96,28 @@ Entry заканчивается. Durable handoff обязан сохранят�
 `trade_id`, `position_id`, actual fill/qty/time, начальную защиту, protection IDs,
 версию стратегии и неизменяемую геометрию Entry.
 
-После fill позицией владеют Exit/Risk/Position Supervisor в пределах своих
-контрактов. Закрытие проходит через фактические исполнения Bybit, точную связь с
+После confirmed fill Entry больше не владеет позицией. Execution владеет
+фактической биржевой мутацией, fill, exchange/client IDs, reconciliation,
+initial server-side protection и durable handoff. Exit владеет protection
+transitions, economic break-even, trailing, close и restart recovery в пределах
+утверждённого Exit contract. Risk владеет допустимым денежным риском и risk
+limits. Position Supervisor только наблюдает, формирует контекст и рекомендации
+и не владеет close, stop, trailing, Risk или Entry.
+
+Закрытие проходит через Execution и фактические исполнения Bybit, точную связь с
 позицией, состояние `CLOSED`, экономику и read-only Аналитик. Параллельные
 противоречащие друг другу state machine запрещены.
+
+### Нерешённый вопрос рыночной общесистемной безопасности
+
+`GLOBAL_SAFETY_ARCHITECTURE_STATUS=OWNER_DECISION_REQUIRED`.
+
+Operational safety остаётся fail-closed при неизвестном exchange state, сбое
+часов или reconciliation, неизвестных qty/fill/protection, stale mandatory
+private state, owner emergency kill либо невозможности безопасной биржевой
+мутации. Право отдельного рыночного/fleet-слоя выполнять `BLOCK_NEW_ENTRIES` или
+`EMERGENCY_CLOSE` по рыночному контексту этим документом не предоставляется.
+Mayak и Dispatcher торговых прав не получают.
 
 ## 7. Точные связи и честная неопределённость
 

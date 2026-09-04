@@ -1,181 +1,105 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
-**Документ:** `DOCUMENT_AUTHORITY_RU.md`  
-**Версия:** 1.2
-**Дата:** 2026-08-31  
-**Назначение:** не позволять старым research/runbook документам становиться случайным текущим ТЗ.
-
----
+**Документ:** `DOCUMENT_AUTHORITY_RU.md`
+**Версия:** 2.0
+**Дата:** 2026-09-05
+**Статус:** канонический реестр авторитетности
 
 ## 1. Порядок авторитетности
 
-Если документы противоречат друг другу:
+При прямом конфликте применяется более высокий уровень:
 
 ```text
-1. текущий AGENTS.md
-2. PROJECT_ARCHITECTURE_RU.md
-3. специализированный текущий архитектурный контракт слоя
-4. текущий implementation contract
-5. текущий research protocol
-6. исторические runbooks / Pxx / EO / SE документы
-7. старые handoff / resume / package metadata
+LEVEL 0 — явное текущее решение владельца, оформленное в каноническом контракте
+
+LEVEL 1 — GLOBAL
+CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md
+CRIPTA_ARCHITECTURE_RULES_RU_V1.md
+
+LEVEL 2 — BOOTSTRAP / GOVERNANCE
+AGENTS.md
+docs/PROJECT_GOVERNANCE_RU.md
+
+LEVEL 3 — CURRENT ARCHITECTURE
+docs/PROJECT_ARCHITECTURE_RU.md
+docs/CURRENT_PROJECT_MAP_RU.md
+специализированные архитектурные контракты слоя
+
+LEVEL 4 — implementation contracts
+LEVEL 5 — research protocols
+LEVEL 6 — historical Pxx / EO / SE / runbooks
+LEVEL 7 — старые handoff / resume / task / package metadata
 ```
 
-Текущий `/srv/cripta` остаётся source of truth по установленному коду.
+Специализированный документ уточняет верхний контракт только там, где не
+противоречит ему. Исторический документ не становится текущим поручением из-за
+того, что остался в репозитории.
 
----
-
-## 2. CANONICAL ARCHITECTURE
-
-Считать действующими:
+## 2. Разделение видов истины
 
 ```text
-PROJECT_ARCHITECTURE_RU.md
-PROJECT_GOVERNANCE_RU.md
-MAYAK_ARCHITECTURE_PRINCIPLES_RU.md
-STRATEGY_DISPATCHER_ARCHITECTURE_RU.md
-DATA_TIMELINE_CONTRACT_RU.md
-SIGNAL_LIFECYCLE_CONTRACT_RU.md
-ANALYST_ARCHITECTURE_RU.md
-ARCHIVE_V2_ARCHITECTURE_RU.md
+GitHub PH1119057/cripta:main
+    = canonical shared source-code checkpoint
+
+/srv/cripta/source_checkout
+    = canonical server source checkout,
+      который обязан быть синхронизирован с GitHub main
+
+/srv/cripta/... installed runtime
+    = установленная production-версия,
+      но не замена source repository
+
+PostgreSQL
+    = canonical persisted operational/analytical data truth
+
+Bybit
+    = live exchange truth
 ```
 
----
+Следующее не является source of truth: `C:\cripta`, старые ZIP, старые
+ChatGPT/Codex conversations и local Codex notes.
 
-## 3. ACTIVE SUPPORTING CONTRACTS
+## 3. Действующая архитектура
+
+К уровню текущей архитектуры относятся, в частности:
+
+- `docs/MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`;
+- `docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`;
+- `docs/DATA_TIMELINE_CONTRACT_RU.md`;
+- `docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md`;
+- `docs/ANALYST_ARCHITECTURE_RU.md`;
+- `docs/ARCHIVE_V2_ARCHITECTURE_RU.md`.
+
+Implementation- и research-контракт не разрешает автоматически менять live.
+
+## 4. История и provenance
+
+Документы Pxx, EO, SE, старые Entry-пакеты, runbook, handoff, resume, task и ZIP
+metadata сохраняют фактическую историю. По умолчанию их статус:
 
 ```text
-ANALYST_V1_IMPLEMENTATION_CONTRACT_RU.md
-M3_ENVIRONMENT_RESEARCH_PROTOCOL_RU.md
-MAYAK_DATA_SOURCE_MATRIX_RU.md
-BYBIT_PUBLIC_DATA_FOR_MAYAK_DISPATCHER_RU.md
-STRATEGY_DISPATCHER_MARKET_VOCABULARY_RU.md
-STRATEGY_DISPATCHER_PROFILE_GUIDE_RU.md
+HISTORICAL
+NOT CURRENT TASK
+NOT CURRENT PRODUCTION CONTRACT
 ```
 
-Наличие implementation/research contract не означает разрешение немедленно менять live trading.
+Исторические выводы не переписываются задним числом. Их можно использовать как
+данные исследования, но не как разрешение на production-влияние.
 
----
+## 5. Конфликт
 
-## 4. HISTORICAL / RESEARCH PROVENANCE
-
-Сохранять, но **не трактовать как текущую задачу без явного указания владельца**:
+При конфликте с уровнем 1:
 
 ```text
-P44*
-P45*
-P46*
-P47*
-P49*
-P50*
-P51*
-P52*
-P53*
-EO1*
-EO2*
-EO3*
-EO4*
-SE1*
-SE2*
-ENTRY_* research protocols/verdicts
-algorithm_2_entry_research_v1..v7
-historical Mayak P1 reports
+HARD_STOP=YES
+OWNER_DECISION_REQUIRED=YES
 ```
 
-Они нужны для provenance и воспроизводимости исследований.
+Исполнитель фиксирует точное противоречие и не меняет архитектурный смысл или
+production-код самостоятельно.
 
-Не удалять их только потому, что работа ушла дальше.
+## 6. Изменение версии 2.0
 
----
-
-## 5. IMPLEMENTATION HISTORY
-
-Документы вроде:
-
-```text
-STRATEGY_DISPATCHER_IMPLEMENTATION_D0_D6_RU.md
-STRATEGY_DISPATCHER_RUNBOOK_RU.md
-POSITION_SUPERVISOR_V1_PLAN_RU.md
-```
-
-после фактической реализации являются историей реализации.
-
-Они не должны автоматически становиться новым backlog.
-
-При желании позже перенести в:
-
-```text
-docs/history/implementation/
-```
-
-но перенос не обязателен для текущей задачи.
-
----
-
-## 6. УДАЛИТЬ КАК УСТАРЕВШЕЕ
-
-Следующий файл больше не соответствует состоянию проекта:
-
-```text
-docs/CODEX_RESUME_AFTER_PAUSE_RU.md
-```
-
-Причина:
-
-- описывает незавершённый шаг 7;
-- прогон уже завершён;
-- commit давно изменился;
-- документ может заставить агента «продолжать» уже завершённую задачу.
-
-Удалить из active tree. Git history сохраняет его происхождение.
-
----
-
-## 7. УДАЛИТЬ TRANSPORT METADATA ИЗ docs
-
-Каталог:
-
-```text
-docs/architecture_pack_20260830/
-```
-
-с `README_RU.md` и `MANIFEST.json` является метаданными транспортного пакета, а не архитектурой проекта.
-
-После успешной интеграции удалить из active `docs`.
-
-Git history остаётся достаточным provenance.
-
----
-
-## 8. Не добавлять handoff-файлы в постоянную архитектуру без необходимости
-
-Файлы вида:
-
-```text
-CODEX_RESUME_*
-CODEX_HANDOFF_*
-NEXT_TASK_*
-```
-
-должны быть временными рабочими инструкциями.
-
-После выполнения:
-
-- удалить;
-- или переместить в `docs/history/tasks/`.
-
-Они не должны конкурировать с архитектурой.
-
----
-
-## 9. Новая обязательная строка для AGENTS.md
-
-Добавить смысловой контракт:
-
-> Перед использованием документа как задания определить его статус по `docs/DOCUMENT_AUTHORITY_RU.md`. Исторический research/runbook/handoff не является текущим поручением. При конфликте текущий AGENTS.md и канонические архитектурные контракты имеют приоритет.
-
----
-
-## 10. Главный принцип
-
-> **Историю исследований сохраняем. Старые поручения не сохраняем как активные инструкции.**
+Добавлены два глобальных контракта, разделены source/runtime/data/live truth,
+понижен статус исторических и локальных материалов, устранён статус `AGENTS.md`
+как самостоятельного верхнего архитектурного источника.

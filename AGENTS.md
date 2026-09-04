@@ -1,5 +1,20 @@
 # Project execution infrastructure
 
+Перед любой работой по проекту CRIPTA прочитать:
+
+1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
+2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
+
+Эти два файла имеют приоритет над старыми runbook, handoff,
+research-документами, локальными копиями и прежними предположениями.
+
+Перед patch/production-code/Entry/Execution/Exit/Risk/MAYAK,
+research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением архитектуры
+перечитать соответствующий верхний контракт.
+
+При конфликте документа/кода с верхним контрактом: `HARD STOP`.
+Не изменять смысл архитектуры самостоятельно.
+
 - Read `docs/CURRENT_PROJECT_MAP_RU.md` as the concise current map of the
   repository, production services, PostgreSQL schemas, and component ownership.
   When a change makes that map stale, update its version and commit, and explicitly
@@ -26,13 +41,13 @@
 
 ## Глобальная архитектура проекта
 
-- Канонический порядок управления изменениями находится в
+- Подчинённый верхним CRIPTA-контрактам порядок управления изменениями находится в
   `docs/PROJECT_GOVERNANCE_RU.md`. До реализации исполнитель сверяет GitHub HEAD,
   читает карту и контракты затрагиваемых слоёв, объявляет архитектурное влияние и
   следует порядку: решение владельца -> документ/версия -> архитектурный тест ->
   реализация -> проверки -> GitHub -> deploy -> runtime evidence.
 
-- Канонический глобальный контракт находится в
+- Специализированный глобальный контракт находится в
   `docs/PROJECT_ARCHITECTURE_RU.md`. Перед изменением связей между Маяком,
   Диспетчером стратегий, торговыми стратегиями, Entry, Risk, Execution, Exit,
   Position Supervisor, статистикой или research исполнитель обязан прочитать его
@@ -75,10 +90,10 @@
   Entry, принудительно закрывать позицию или напрямую менять ордера, стопы,
   позиции и торговые команды.
 - Решение о входе принадлежит версии торговой стратегии
-  (`STRATEGY_OWNS_ENTRY_DECISION=YES`), а решение об удержании/выходе после fill —
-  стратегии сопровождения и утверждённому Exit/Risk-контуру
-  (`STRATEGY_OWNS_HOLD_EXIT_DECISION=YES`). После fill владение Entry заканчивается;
-  геометрия Entry неизменяема.
+  (`STRATEGY_OWNS_ENTRY_DECISION=YES`). После confirmed fill владение Entry
+  заканчивается; утверждёнными переходами сопровождения владеет Exit, денежным
+  риском — Risk, а биржевые мутации исполняет Execution. Position Supervisor
+  остаётся observation/context/advisory-only; геометрия Entry неизменяема.
 - Техническая безопасность отделена от оценки рынка
   (`OPERATIONAL_SAFETY_IS_SEPARATE=YES`). Неизвестное состояние биржи, потеря
   reconciliation, устаревшее обязательное private state, неизвестные qty/fill/

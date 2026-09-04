@@ -216,3 +216,6 @@
 Диалог расширения риска стопом остаётся незакрытым намеренно: существующий UI вообще
 не разрешает расширять подтверждённый stop, что безопаснее. Добавлять такое разрешение
 нужно только вместе с согласованной продуктовой политикой и повторным risk approval.
+# HISTORICAL / NOT CURRENT TASK / NOT CURRENT PRODUCTION CONTRACT
+
+Legacy Windows Workbench checklist; сохранён для provenance.

@@ -1,5 +1,7 @@
 # OPERATIONS FILE EXCHANGE — проект «Крипта»
 
+**Версия:** 1.1
+**Дата:** 2026-09-05
 **Статус:** operational contract.
 
 ## 1. Назначение incoming
@@ -54,7 +56,7 @@ Bybit                        = live exchange truth
 ```text
 владелец кладёт PATCH.zip в K:\\incoming; PATCH.zip.sha256 — рекомендуемый audit companion, но runner не требует его наличия
 → файл появляется в /srv/cripta-share/incoming
-→ владелец запускает одну команду: sudo cripta-apply-incoming PATCH.zip
+→ владелец запускает одну команду: sudo /usr/local/sbin/cripta-apply-incoming PATCH.zip
 → runner сам создаёт private staging в operations
 → распаковывает ZIP
 → проверяет ZIP CRC, вычисляет и сохраняет archive SHA256; если рядом есть `.zip.sha256`, сверяет и его; затем проверяет SHA256SUMS/manifest
@@ -65,7 +67,14 @@ Bybit                        = live exchange truth
 
 Runner не является watcher-ом и не ставит патчи автоматически по факту появления ZIP: применение всегда начинается отдельным явным действием владельца. Это сохраняет owner control над live-системой.
 
-Каждый серьёзный ZIP-патч должен содержать `server/cripta-apply-incoming`. При первом успешном применении package runner копируется в `/usr/local/sbin/cripta-apply-incoming`. До этого текущий ZIP запускается напрямую одной bootstrap-командой из архива без ручной распаковки. После установки постоянного runner дальнейшие патчи запускаются только как `sudo cripta-apply-incoming PATCH.zip`.
+Постоянный canonical runner уже установлен. Новый patch не bootstrap-ит
+альтернативный runner и не приносит второй равноправный installer workflow.
+Дальнейшие пакеты запускаются только как
+`sudo /usr/local/sbin/cripta-apply-incoming PATCH.zip`.
+
+Контракт ZIP: в корне находятся `MANIFEST.json`, `install.sh` и
+`SHA256SUMS.txt`, wrapper directory отсутствует. Формат sidecar:
+`<sha256><two spaces><basename.zip>`.
 
 
 ## 7. Свободное место и целостность доставки

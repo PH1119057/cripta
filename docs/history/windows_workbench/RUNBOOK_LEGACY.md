@@ -95,3 +95,6 @@ symbol/timeframe, Workbench/strategy version, параметрами, market-dat
 Это не повод включать соединение или переносить ключи в файлы; профиль остаётся в
 Windows Credential Manager. Реальный GET-only acceptance выполняется только в проходе
 7, а первый торговый POST остаётся отдельным hard stop после всех семи проходов.
+# HISTORICAL / NOT CURRENT TASK / NOT CURRENT PRODUCTION CONTRACT
+
+Legacy Windows Workbench runbook; сохранён для provenance.
