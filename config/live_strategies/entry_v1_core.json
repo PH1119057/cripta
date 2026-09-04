@@ -1,0 +1,10 @@
+{
+  "strategy_id": "entry_v1_core",
+  "strategy_version": "1.0-live-first-touch",
+  "initial_protection": {
+    "stop_loss_pct": "1.00",
+    "take_profit_pct": "3.00",
+    "trigger_by": "LastPrice",
+    "tpsl_mode": "Full"
+  }
+}

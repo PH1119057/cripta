@@ -50,7 +50,11 @@ def test_trailing_stop_cannot_start_below_protected_profit_for_long() -> None:
 
 def test_xrp_initial_boundaries_use_actual_fill_not_limit_price() -> None:
     stop, target = calculate_initial_boundaries(
-        entry=Decimal("1.4563"), side="Sell", tick=Decimal("0.0001")
+        entry=Decimal("1.4563"),
+        side="Sell",
+        tick=Decimal("0.0001"),
+        stop_loss_pct=Decimal("1.00"),
+        take_profit_pct=Decimal("3.00"),
     )
     assert stop == Decimal("1.4708")
     assert target == Decimal("1.4126")

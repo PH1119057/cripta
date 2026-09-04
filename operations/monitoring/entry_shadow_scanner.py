@@ -17,6 +17,7 @@ from bybit_workbench.domain.types import AppMode
 from bybit_workbench.entry_bot.config import EntryBotConfig
 from bybit_workbench.entry_bot.runtime import EntryBotRuntime
 from entry_dispatcher_shadow import consume_for_signal, prepare_database
+from entry_strategy_contract import ENTRY_V1_CORE_INITIAL_PROTECTION
 
 
 STATE_PATH = Path(os.environ.get("CRIPTA_ENTRY_SHADOW_STATE", "/var/lib/cripta/entry_shadow/status.json"))
@@ -133,6 +134,9 @@ def persist_signals(
                     (zone.observed_at for zone in item.geometry), default=item.candidate_bar_at
                 ).isoformat(),
                 "geometry_version": item.geometry_version,
+                "initial_protection": ENTRY_V1_CORE_INITIAL_PROTECTION.payload_for(
+                    item.strategy_id, item.strategy_version
+                ),
                 "zones": zone_rows,
             }
             canonical = json.dumps(

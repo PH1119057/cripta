@@ -63,19 +63,27 @@ def trailing_start_preserves_protection(
 
 
 def calculate_initial_boundaries(
-    *, entry: Decimal, side: str, tick: Decimal, take_profit_pct: Decimal = Decimal("3.00")
+    *,
+    entry: Decimal,
+    side: str,
+    tick: Decimal,
+    stop_loss_pct: Decimal,
+    take_profit_pct: Decimal,
 ) -> tuple[Decimal, Decimal]:
     if entry <= 0 or tick <= 0:
         raise ValueError("entry and tick must be positive")
+    if stop_loss_pct <= 0 or take_profit_pct <= 0:
+        raise ValueError("stop-loss and take-profit percentages must be positive")
+    stop_move = stop_loss_pct / Decimal("100")
     target_move = take_profit_pct / Decimal("100")
     if side == "Buy":
         return (
-            quantize(entry * Decimal("0.99"), tick, upward=True),
+            quantize(entry * (Decimal("1") - stop_move), tick, upward=True),
             quantize(entry * (Decimal("1") + target_move), tick, upward=True),
         )
     if side == "Sell":
         return (
-            quantize(entry * Decimal("1.01"), tick, upward=False),
+            quantize(entry * (Decimal("1") + stop_move), tick, upward=False),
             quantize(entry * (Decimal("1") - target_move), tick, upward=False),
         )
     raise ValueError("side must be Buy or Sell")

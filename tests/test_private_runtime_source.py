@@ -63,29 +63,35 @@ def test_command_loop_restarts_after_internal_failure() -> None:
     assert "command_worker_loop(key, secret)" in source
 
 
-def test_trailing_stop_does_not_depend_on_automatic_break_even_toggle() -> None:
-    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "protection_entries = owned_entries if settings and settings[6] else []" in source
-    assert "for entry_id, symbol in owned_entries:" in source
-    assert 'required_protection = protection_plan(' in source
+def test_exit_trailing_does_not_depend_on_automatic_break_even_toggle() -> None:
+    private = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    exit_runtime = Path("operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
+    assert "auto-be-" not in private
+    assert "auto-trail-" not in private
+    assert "if auto_profit:" in exit_runtime
+    assert "if auto_trailing:" in exit_runtime
+    assert "required_stop = protection_plan(" in exit_runtime
 
 
-def test_post_fill_automation_uses_stable_position_owner_across_partial_fills() -> None:
-    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "JOIN runtime.hot_positions p" in source
-    assert "p.position_idx=o.position_idx" in source
-    assert "p.side=o.side" in source
-    assert "p.size=o.actual_qty" not in source
-    assert "p.entry_price=o.actual_avg_fill" not in source
-    assert "ON CONFLICT(entry_command_id) DO UPDATE SET" in source
-    assert "o.state='OPEN' AND o.close_link_status='OPEN'" in source
+def test_exit_automation_uses_stable_position_owner_across_partial_fills() -> None:
+    private = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    exit_runtime = Path("operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
+    assert "ON CONFLICT(entry_command_id) DO UPDATE SET" in private
+    assert "FROM runtime.position_ownership o" in exit_runtime
+    assert "JOIN runtime.hot_positions p" in exit_runtime
+    assert "p.position_idx=o.position_idx" in exit_runtime
+    assert "p.side=o.side" in exit_runtime
+    assert "p.size=o.actual_qty" not in exit_runtime
+    assert "p.entry_price=o.actual_avg_fill" not in exit_runtime
+    assert "o.state='OPEN' AND o.close_link_status='OPEN'" in exit_runtime
 
 
 def test_trailing_stop_is_idempotent_for_current_position() -> None:
-    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert '"not modified" not in str(exc).lower()' in source
-    assert "already_enabled = connection.execute" in source
-    assert "requested_at_epoch_ms >= %s" in source
+    private = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    exit_runtime = Path("operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
+    assert '"not modified" not in str(exc).lower()' in private
+    assert "already_enabled = connection.execute" in exit_runtime
+    assert "requested_at_epoch_ms >= %s" in exit_runtime
 
 
 def test_position_close_reconciliation_uses_exchange_inventory_not_nearest_time() -> None:

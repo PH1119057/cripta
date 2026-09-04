@@ -269,7 +269,7 @@ def protect_recovered_bot_positions(
 ) -> int:
     """Restore initial server protection only for exact bot Entry cycles."""
     rows = connection.execute(
-        """SELECT c.command_id,c.symbol,min(e.exec_time_ms)
+        """SELECT c.command_id,c.symbol,min(e.exec_time_ms),c.payload_json
            FROM runtime.trade_commands c
            JOIN runtime.executions e ON e.order_link_id=c.command_id
            WHERE c.command_type='entry'
@@ -277,11 +277,11 @@ def protect_recovered_bot_positions(
                    (e.payload_json::jsonb->>'closedSize')::numeric,
                    0
                  )=0
-           GROUP BY c.command_id,c.symbol"""
+           GROUP BY c.command_id,c.symbol,c.payload_json"""
     ).fetchall()
     protected = 0
 
-    for command_id, symbol, fill_time_ms in rows:
+    for command_id, symbol, fill_time_ms, raw_entry_payload in rows:
         position_row = connection.execute(
             """SELECT side,entry_price,payload_json
                FROM runtime.hot_positions
@@ -329,10 +329,18 @@ def protect_recovered_bot_positions(
                 f"recovered position has no tick size symbol={symbol}"
             )
 
+        entry_payload = (
+            raw_entry_payload
+            if isinstance(raw_entry_payload, dict)
+            else json.loads(str(raw_entry_payload))
+        )
+        contract = initial_protection_contract(entry_payload)
         actual_stop, actual_target = calculate_initial_boundaries(
             entry=actual_entry,
             side=str(position_row[0]),
             tick=tick,
+            stop_loss_pct=contract["stop_loss_pct"],
+            take_profit_pct=contract["take_profit_pct"],
         )
         api_post(
             "/v5/position/trading-stop",
@@ -340,11 +348,11 @@ def protect_recovered_bot_positions(
                 "category": "linear",
                 "symbol": str(symbol),
                 "positionIdx": int(raw.get("positionIdx") or 0),
-                "tpslMode": "Full",
+                "tpslMode": str(contract["tpsl_mode"]),
                 "stopLoss": str(actual_stop),
                 "takeProfit": str(actual_target),
-                "slTriggerBy": "LastPrice",
-                "tpTriggerBy": "LastPrice",
+                "slTriggerBy": str(contract["trigger_by"]),
+                "tpTriggerBy": str(contract["trigger_by"]),
                 "slOrderType": "Market",
                 "tpOrderType": "Market",
             },
@@ -840,6 +848,28 @@ def account_available_usdt(account: dict[str, object]) -> Decimal:
     return max(Decimal("0"), wallet - reserved)
 
 
+def initial_protection_contract(payload: dict[str, object]) -> dict[str, object]:
+    raw = payload.get("initial_protection")
+    if not isinstance(raw, dict):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_CONTRACT_MISSING")
+    stop_loss_pct = Decimal(str(raw.get("stop_loss_pct") or 0))
+    take_profit_pct = Decimal(str(raw.get("take_profit_pct") or 0))
+    trigger_by = str(raw.get("trigger_by") or "")
+    tpsl_mode = str(raw.get("tpsl_mode") or "")
+    if stop_loss_pct <= 0 or take_profit_pct <= 0:
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_PERCENT_INVALID")
+    if trigger_by != "LastPrice":
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_TRIGGER_UNSUPPORTED")
+    if tpsl_mode != "Full":
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_MODE_UNSUPPORTED")
+    return {
+        "stop_loss_pct": stop_loss_pct,
+        "take_profit_pct": take_profit_pct,
+        "trigger_by": trigger_by,
+        "tpsl_mode": tpsl_mode,
+    }
+
+
 def record_protection_or_owner_event(
     connection: psycopg.Connection,
     command_id: str,
@@ -955,6 +985,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if not position: raise RuntimeError("open position not found")
         side = str(position["side"])
         mark = executable_close_price(symbol, side)
+        trigger_by = "LastPrice"
         if kind == "break_even":
             plan = protection_plan(connection, symbol, position, tick)
             stop, activation = plan["stop"], plan["activation"]
@@ -966,13 +997,19 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             actual_entry = Decimal(str(position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit did not return actual average entry price")
+            contract = initial_protection_contract(payload)
+            trigger_by = str(contract["trigger_by"])
             stop, target = calculate_initial_boundaries(
-                entry=actual_entry, side=side, tick=tick
+                entry=actual_entry,
+                side=side,
+                tick=tick,
+                stop_loss_pct=contract["stop_loss_pct"],
+                take_profit_pct=contract["take_profit_pct"],
             )
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
-        stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":"LastPrice","slOrderType":"Market"}
+        stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":trigger_by,"slOrderType":"Market"}
         if kind == "initial_protection":
-            stop_request.update({"takeProfit": str(target), "tpTriggerBy": "LastPrice", "tpOrderType": "Market"})
+            stop_request.update({"takeProfit": str(target), "tpTriggerBy": trigger_by, "tpOrderType": "Market", "tpslMode": str(contract["tpsl_mode"])})
         result = api_post("/v5/position/trading-stop", stop_request, key, secret)
         if kind == "break_even":
             result["protectionPlan"] = {name: str(value) for name, value in plan.items()}
@@ -1036,11 +1073,18 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
         api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
-        # Стоп округляется к входу: фактический риск не должен стать глубже 1%.
-        stop,target=calculate_initial_boundaries(entry=price,side=side,tick=tick)
-        # Границы ставятся только после подтверждённого исполнения Bybit, когда
-        # известна фактическая средняя цена позиции.
-        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36]}
+        contract = initial_protection_contract(payload)
+        stop,target=calculate_initial_boundaries(
+            entry=price,
+            side=side,
+            tick=tick,
+            stop_loss_pct=contract["stop_loss_pct"],
+            take_profit_pct=contract["take_profit_pct"],
+        )
+        # V36: Entry submits server-side initial SL/TP atomically with the entry order.
+        # Post-fill reconciliation may only re-anchor the same strategy-owned contract
+        # to the actual average fill; it is never the first protection mutation.
+        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36],"tpslMode":str(contract["tpsl_mode"]),"stopLoss":str(stop),"takeProfit":str(target),"slTriggerBy":str(contract["trigger_by"]),"tpTriggerBy":str(contract["trigger_by"]),"slOrderType":"Market","tpOrderType":"Market"}
         if offset > 0:
             order.update({"price": str(price), "timeInForce": "GTC"})
         result=api_post("/v5/order/create", order, key, secret)
@@ -1069,16 +1113,20 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
             actual_stop, actual_target = calculate_initial_boundaries(
-                entry=actual_entry, side=side, tick=tick
+                entry=actual_entry,
+                side=side,
+                tick=tick,
+                stop_loss_pct=contract["stop_loss_pct"],
+                take_profit_pct=contract["take_profit_pct"],
             )
             protection = api_post(
                 "/v5/position/trading-stop",
                 {
                     "category": "linear", "symbol": symbol,
                     "positionIdx": int(filled_position.get("positionIdx") or 0),
-                    "tpslMode": "Full", "stopLoss": str(actual_stop),
-                    "takeProfit": str(actual_target), "slTriggerBy": "LastPrice",
-                    "tpTriggerBy": "LastPrice", "slOrderType": "Market",
+                    "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
+                    "takeProfit": str(actual_target), "slTriggerBy": str(contract["trigger_by"]),
+                    "tpTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
                     "tpOrderType": "Market",
                 },
                 key,
@@ -1205,17 +1253,39 @@ def command_worker_loop(key: str, secret: str) -> None:
                        FROM monitoring.entry_geometry_handoffs WHERE signal_id=%s""",
                     (signal_id,),
                 ).fetchone()
-                if entry_policy == "m3_full_live_v1" and geometry is None:
+                if geometry is None:
                     record_entry_decision(
                         connection, signal_id, symbol, direction, signal_at_ms,
                         "запрещён",
-                        "нет причинной неизменяемой геометрии Entry",
+                        "нет причинной неизменяемой геометрии Entry; "
+                        "нет immutable Entry handoff с strategy initial protection",
                         entry_policy=entry_policy,
-                        policy_version="1.0.0-owner-live",
+                        policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
+                    )
+                    continue
+                geometry_payload = (
+                    geometry[3] if isinstance(geometry[3], dict) else json.loads(str(geometry[3]))
+                )
+                initial_protection = geometry_payload.get("initial_protection")
+                if not isinstance(initial_protection, dict):
+                    record_entry_decision(
+                        connection, signal_id, symbol, direction, signal_at_ms,
+                        "запрещён", "нет strategy initial protection в immutable Entry handoff",
+                        entry_policy=entry_policy,
+                    )
+                    continue
+                if (
+                    str(initial_protection.get("strategy_id") or "") != str(geometry[1])
+                    or str(initial_protection.get("strategy_version") or "") != str(geometry[2])
+                ):
+                    record_entry_decision(
+                        connection, signal_id, symbol, direction, signal_at_ms,
+                        "запрещён", "strategy initial protection не соответствует Entry handoff",
+                        entry_policy=entry_policy,
                     )
                     continue
                 cid="auto-"+hashlib.sha256(str(signal_id).encode()).hexdigest()[:28]
-                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1","bot_instance_id":BOT_INSTANCE_ID,"geometry_handoff_id":None if geometry is None else geometry[0]}
+                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1","bot_instance_id":BOT_INSTANCE_ID,"geometry_handoff_id":geometry[0],"strategy_id":geometry[1],"strategy_version":geometry[2],"initial_protection":initial_protection}
                 connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                     VALUES(%s,'entry',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(cid,symbol,json.dumps(body),int(time.time()*1000)))
                 if geometry is not None:
@@ -1237,12 +1307,12 @@ def command_worker_loop(key: str, secret: str) -> None:
                                       policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
                                       observed_context=observed_context)
             connection.commit()
-        filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms)
+        filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
             FROM runtime.trade_commands c JOIN runtime.executions e ON e.order_link_id=c.command_id
             WHERE c.command_type='entry' AND c.state='completed'
               AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
-            GROUP BY c.command_id,c.symbol""").fetchall()
-        for entry_id,symbol,fill_time_ms in filled_entries:
+            GROUP BY c.command_id,c.symbol,c.payload_json""").fetchall()
+        for entry_id,symbol,fill_time_ms,raw_entry_payload in filled_entries:
             position_row=connection.execute(
                 "SELECT side,size,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
                 (symbol,),
@@ -1254,6 +1324,14 @@ def command_worker_loop(key: str, secret: str) -> None:
             if open_time_ms and abs(open_time_ms-int(fill_time_ms or 0)) > 10_000:
                 continue
             actual_entry=Decimal(str(position_row[2]))
+            entry_payload = (
+                raw_entry_payload
+                if isinstance(raw_entry_payload, dict)
+                else json.loads(str(raw_entry_payload))
+            )
+            initial_protection = entry_payload.get("initial_protection")
+            if not isinstance(initial_protection, dict):
+                raise RuntimeError("filled Entry lost immutable initial protection contract")
             execution_rows = connection.execute(
                 """SELECT exec_id,order_id,order_link_id,exec_time_ms
                    FROM runtime.executions WHERE order_link_id=%s
@@ -1315,128 +1393,9 @@ def command_worker_loop(key: str, secret: str) -> None:
             init_id="auto-init-"+hashlib.sha256(protection_key.encode()).hexdigest()[:23]
             connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
                 VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
-                (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1]}),int(time.time()*1000)))
+                (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1],"initial_protection":initial_protection}),int(time.time()*1000)))
         connection.commit()
-        owned_entries = connection.execute(
-            """SELECT o.entry_command_id,o.symbol
-               FROM runtime.position_ownership o
-               JOIN runtime.hot_positions p
-                 ON p.symbol=o.symbol AND p.position_idx=o.position_idx
-                AND p.side=o.side
-               WHERE o.state='OPEN' AND o.close_link_status='OPEN'"""
-        ).fetchall()
-        protection_entries = owned_entries if settings and settings[6] else []
-        for entry_id,symbol in protection_entries:
-            position_row=connection.execute("SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",(symbol,)).fetchone()
-            if not position_row: continue
-            raw=json.loads(position_row[2]); entry=Decimal(str(position_row[1])); mark=executable_close_price(str(symbol), str(position_row[0]))
-            if entry<=0 or mark<=0: continue
-            move=(mark/entry-Decimal("1"))*Decimal("100")*(Decimal("1") if position_row[0]=="Buy" else Decimal("-1"))
-            tick = _tick_cache.get(str(symbol))
-            if not tick:
-                instruments, _ = api_get("/v5/market/instruments-info", {"category":"linear","symbol":symbol})
-                instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
-                tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
-                if tick <= 0: continue
-                _tick_cache[str(symbol)] = tick
-            position = dict(raw); position.update({"side":position_row[0],"avgPrice":str(entry)})
-            plan = protection_plan(connection, str(symbol), position, tick)
-            activation = plan["activation"]
-            existing_stop = Decimal(str(raw.get("stopLoss") or 0))
-            already_protected = existing_stop > 0 and (
-                (position_row[0] == "Buy" and existing_stop >= plan["stop"])
-                or (position_row[0] == "Sell" and existing_stop <= plan["stop"])
-            )
-            if already_protected:
-                continue
-            if (position_row[0] == "Buy" and mark < activation) or (position_row[0] == "Sell" and mark > activation):
-                continue
-            retry_bucket = int(time.time() // 5)
-            protection_key = f"{symbol}:{position_row[0]}:{entry}:{retry_bucket}"
-            be_id="auto-be-"+hashlib.sha256(protection_key.encode()).hexdigest()[:25]
-            connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                VALUES(%s,'break_even',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(be_id,symbol,json.dumps({"entry_command_id":entry_id,"activation_move_pct":str(move),"calculated_stop":str(plan["stop"]),"minimum_fill":str(plan["minimum_fill"]),"entry_fee":str(plan["entry_fee"]),"slippage_reserve":str(plan["slippage"])}),int(time.time()*1000)))
-        connection.commit()
-        if settings and settings[7]:
-            trailing_pct = Decimal(str(settings[8] or "0.30"))
-            for entry_id, symbol in owned_entries:
-                position_row = connection.execute(
-                    "SELECT side,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
-                    (symbol,),
-                ).fetchone()
-                if not position_row:
-                    continue
-                raw = json.loads(position_row[2])
-                if Decimal(str(raw.get("trailingStop") or 0)) > 0:
-                    continue
-                entry = Decimal(str(position_row[1]))
-                mark = executable_close_price(str(symbol), str(position_row[0]))
-                if entry <= 0 or mark <= 0:
-                    continue
-                side = str(position_row[0])
-                tick = _tick_cache.get(str(symbol))
-                if not tick:
-                    instruments, _ = api_get(
-                        "/v5/market/instruments-info",
-                        {"category": "linear", "symbol": symbol},
-                    )
-                    instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
-                    tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
-                    if tick <= 0:
-                        continue
-                    _tick_cache[str(symbol)] = tick
-                position = dict(raw)
-                position.update({"side": side, "avgPrice": str(entry)})
-                required_protection = protection_plan(
-                    connection, str(symbol), position, tick
-                )["stop"]
-                distance = mark * trailing_pct / Decimal("100")
-                if not trailing_start_preserves_protection(
-                    side=side,
-                    mark=mark,
-                    distance=distance,
-                    protected_stop=required_protection,
-                ):
-                    continue
-                open_time = int(raw.get("openTime") or 0)
-                disabled = connection.execute(
-                    """SELECT 1 FROM runtime.trade_commands
-                       WHERE symbol=%s AND command_type='trailing_stop'
-                         AND command_id LIKE 'web-%%'
-                         AND requested_at_epoch_ms >= %s
-                         AND payload_json::jsonb->>'enabled'='false'
-                       ORDER BY requested_at_epoch_ms DESC LIMIT 1""",
-                    (symbol, open_time),
-                ).fetchone()
-                if disabled:
-                    continue
-                already_enabled = connection.execute(
-                    """SELECT 1 FROM runtime.trade_commands
-                       WHERE symbol=%s AND command_type='trailing_stop'
-                         AND state='completed' AND requested_at_epoch_ms >= %s
-                         AND payload_json::jsonb->>'enabled'='true'
-                         AND payload_json::jsonb->>'distance_pct'=%s
-                       LIMIT 1""",
-                    (symbol, open_time, str(trailing_pct)),
-                ).fetchone()
-                if already_enabled:
-                    continue
-                retry_bucket = int(time.time() // 5)
-                idempotency_key = (
-                    f"{entry_id}:{side}:{entry}:{trailing_pct}:{retry_bucket}"
-                )
-                command_id = (
-                    "auto-trail-"
-                    + hashlib.sha256(idempotency_key.encode()).hexdigest()[:21]
-                )
-                connection.execute(
-                    """INSERT INTO runtime.trade_commands(
-                           command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                       VALUES(%s,'trailing_stop',%s,%s,'queued',%s)
-                       ON CONFLICT(command_id) DO NOTHING""",
-                    (command_id, symbol, json.dumps({"enabled": True, "distance_pct": str(trailing_pct), "source": "after_profit_protection"}), int(time.time()*1000)),
-                )
-            connection.commit()
+        # V36: BE/trailing/close decisions belong to Exit. This worker only executes commands.
         row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
             WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
         if not row:

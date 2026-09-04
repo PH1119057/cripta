@@ -7,6 +7,7 @@ ROOT = Path(__file__).parents[1]
 PRIVATE_PATH = ROOT / "operations/connectivity/private_runtime.py"
 PRIVATE = PRIVATE_PATH.read_text(encoding="utf-8")
 PROTECTION = (ROOT / "operations/connectivity/protection_math.py").read_text(encoding="utf-8")
+EXIT_RUNTIME = (ROOT / "operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
 RUNTIME_SCHEMA = (ROOT / "operations/connectivity/runtime_schema.py").read_text(
     encoding="utf-8"
 )
@@ -96,11 +97,14 @@ def test_geometry_jsonb_is_adapted_before_binding_insert() -> None:
     assert "json.dumps(geometry[3], ensure_ascii=False, default=str)" in worker
 
 
-def test_entry_and_risk_settings_are_not_changed_by_p0() -> None:
-    assert 'entry * Decimal("0.99")' in PROTECTION
-    assert 'entry * Decimal("1.01")' in PROTECTION
-    assert 'take_profit_pct: Decimal = Decimal("3.00")' in PROTECTION
-    assert 'trailing_pct = Decimal(str(settings[8] or "0.30"))' in PRIVATE
+def test_v36_strategy_owns_initial_protection_without_retuning_other_risk() -> None:
+    assert 'entry * Decimal("0.99")' not in PROTECTION
+    assert 'entry * Decimal("1.01")' not in PROTECTION
+    assert 'take_profit_pct: Decimal = Decimal("3.00")' not in PROTECTION
+    assert "stop_loss_pct: Decimal," in PROTECTION
+    assert "take_profit_pct: Decimal," in PROTECTION
+    assert 'trailing_pct = Decimal(str(settings[8] or "0.30"))' not in PRIVATE
+    assert 'trailing_pct = Decimal(str(settings[2] or "0.30"))' in EXIT_RUNTIME
     assert '("runtime", "trade_settings", "trailing_distance_pct")' in RUNTIME_SCHEMA
     assert "entry_limit_ttl_seconds" in PRIVATE
     assert "entry_offset_pct" in PRIVATE

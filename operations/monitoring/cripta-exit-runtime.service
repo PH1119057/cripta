@@ -1,0 +1,27 @@
+[Unit]
+Description=Cripta Exit owner runtime V36.1
+After=network-online.target postgresql.service cripta-private-runtime.service cripta-position-supervisor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/production/src:/srv/cripta/connectivity
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/exit_runtime.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cripta/exit_runtime
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -17,6 +17,7 @@ ANALYST = (ROOT / "operations/monitoring/m3_trade_analyst.py").read_text(encodin
 SUPERVISOR = (ROOT / "operations/monitoring/position_supervisor.py").read_text(
     encoding="utf-8"
 )
+EXIT_RUNTIME = (ROOT / "operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
 ARCHIVE = (ROOT / "operations/dashboard/archive_v2.py").read_text(encoding="utf-8")
 MAYAK_RUNTIME = (ROOT / "operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
 
@@ -156,6 +157,10 @@ def test_runtime_role_receives_explicit_new_table_permissions() -> None:
 
 def test_no_live_clean_break_rule_was_invented() -> None:
     assert "P45.1_TWO_COMPLETED_CLOSES" not in SUPERVISOR
+    assert "P45.1_TWO_COMPLETED_CLOSES" not in EXIT_RUNTIME
     assert "observe_clean_break" not in SUPERVISOR
-    assert 'STRUCTURAL_BREAK_RULE = "NOT_PROVEN"' in SUPERVISOR
-    assert "STRUCTURAL_EARLY_EXIT_ENABLED = False" in SUPERVISOR
+    assert "observe_clean_break" not in EXIT_RUNTIME
+    assert 'STRUCTURAL_BREAK_RULE = "NOT_PROVEN"' in EXIT_RUNTIME
+    assert "STRUCTURAL_EARLY_EXIT_ENABLED = False" in EXIT_RUNTIME
+    assert "INSERT INTO runtime.trade_commands" not in SUPERVISOR
+    assert "EARLY_LOSS_PREVENTION" not in EXIT_RUNTIME
