@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import secrets
 import shutil
+import sqlite3
 import subprocess
 import threading
 import time
@@ -23,6 +24,7 @@ try:
 except ImportError:  # package import used by tests
     from operations.dashboard.archive_v2 import read_job as read_archive_job
     from operations.dashboard.archive_v2 import start_job as start_archive_job
+from datetime import UTC, datetime
 from http.cookies import SimpleCookie
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,6 +70,10 @@ _cache: tuple[float, dict[str, object]] | None = None
 _ticker_cache: tuple[float, dict[str, dict[str, object]]] | None = None
 _liquidity_cache: tuple[float, dict[str, dict[str, object]]] | None = None
 _package_lock = threading.Lock()
+_signal_export_job_lock = threading.Lock()
+SIGNAL_EXPORT_JOB_ROOT = Path(
+    os.environ.get("CRIPTA_SIGNAL_EXPORT_JOB_ROOT", "/var/lib/cripta/archive_jobs")
+)
 
 TRADING_UNIVERSE = (
     "AAVEUSDT",
@@ -794,86 +800,659 @@ def live_trading_state() -> dict[str, object]:
     }
 
 
+SIGNAL_EXPORT_PERIODS = {
+    "day": (24 * 3600, "сутки"),
+    "72h": (72 * 3600, "72_часа"),
+    "week": (7 * 24 * 3600, "неделя"),
+    "all": (None, "весь_период"),
+}
+ENTRY_AUDIT_DATABASE = Path(
+    os.environ.get("CRIPTA_ENTRY_SHADOW_DB", "/var/lib/cripta/entry_shadow/workbench.db")
+)
+ENTRY_AUDIT_EVENT_TYPES = (
+    "CANDIDATE_ARMED",
+    "CANDIDATE_CLEARED",
+    "PRELIMIT_ARM_SHADOW",
+    "PRELIMIT_TOUCH_SHADOW",
+    "PRELIMIT_CANCEL_SHADOW",
+    "TOUCH_VETO",
+    "TOUCH_BLOCKED",
+    "CORE_SIGNAL",
+    "EARLY_FAILURE",
+    "STREAM_GAP",
+    "WARMUP_ERROR",
+)
+SIGNAL_ANALYSIS_TABLES = (
+    ("monitoring.opportunities", "signal_at_epoch_ms", "epoch_ms"),
+    ("monitoring.opportunity_events", "at_epoch_ms", "epoch_ms"),
+    ("monitoring.entry_dispatcher_shadow_decisions", "signal_at", "timestamp"),
+    ("monitoring.entry_geometry_handoffs", "signal_at", "timestamp"),
+    ("runtime.entry_decisions", "signal_at_epoch_ms", "epoch_ms"),
+    ("runtime.m3_consumed_context", "signal_at", "timestamp"),
+    ("runtime.trade_settings_history", "changed_at_epoch_ms", "epoch_ms"),
+    ("research_context.event_links", "occurred_at", "timestamp"),
+    ("strategy_dispatcher.runs", "observed_at", "timestamp"),
+    ("strategy_dispatcher.assessments", "observed_at", "timestamp"),
+    ("mayak_v2.snapshots", "observed_at", "timestamp"),
+    ("mayak_v2.coin_minutes", "observed_at", "timestamp"),
+    ("mayak_v2.events", "occurred_at", "timestamp"),
+    ("mayak_v2.state_events", "occurred_at", "timestamp"),
+    ("mayak_v2.observation_journal", "observed_at", "timestamp"),
+    ("mayak_v2.liquidations", "occurred_at", "timestamp"),
+    ("mayak_v2.shared_market_contexts", "observed_at", "timestamp"),
+)
+
+
+def _csv_cell(value: object) -> object:
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, default=str, sort_keys=True)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _write_cursor_csv(archive: zipfile.ZipFile, name: str, cursor: object) -> int:
+    description = getattr(cursor, "description", None)
+    if not description:
+        raise RuntimeError(f"экспорт {name}: запрос не вернул столбцы")
+    columns = [item.name if hasattr(item, "name") else item[0] for item in description]
+    count = 0
+    with archive.open(name, "w") as raw:
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+        writer = csv.writer(text, delimiter=";")
+        writer.writerow(columns)
+        for row in cursor:
+            writer.writerow([_csv_cell(value) for value in row])
+            count += 1
+        text.flush()
+        text.detach()
+    return count
+
+
+def _first_hit_state(first_hits_json: object, target: str) -> tuple[object, object, str]:
+    try:
+        first_hits = (
+            json.loads(first_hits_json)
+            if isinstance(first_hits_json, str)
+            else dict(first_hits_json or {})
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        first_hits = {}
+    target_at = first_hits.get(target)
+    stop_at = first_hits.get("-1.0")
+    if target_at is not None and (stop_at is None or int(target_at) < int(stop_at)):
+        state = "TARGET_FIRST"
+    elif stop_at is not None and (target_at is None or int(stop_at) < int(target_at)):
+        state = "STOP_FIRST"
+    elif target_at is None and stop_at is None:
+        state = "UNRESOLVED"
+    else:
+        state = "SAME_TIMESTAMP"
+    return target_at, stop_at, state
+
+
+def _write_signal_context_csv(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_ms: int | None,
+) -> tuple[int, dict[str, int]]:
+    query = """
+        WITH signal_link AS (
+            SELECT DISTINCT ON (reference_id)
+                   reference_id,
+                   observed_mayak_snapshot_id,
+                   observed_mayak_at,
+                   observed_dispatcher_snapshot_id,
+                   observed_dispatcher_at,
+                   observed_context,
+                   consumed_context,
+                   link_quality,
+                   provenance
+            FROM research_context.event_links
+            WHERE event_type='SIGNAL'
+            ORDER BY reference_id, linked_at DESC
+        ), shadow AS (
+            SELECT DISTINCT ON (m3_setup_id)
+                   m3_setup_id,
+                   shadow_dispatcher_decision,
+                   consumed_dispatcher_assessment_id,
+                   consumed_mayak_snapshot_id,
+                   assessment_observed_at,
+                   profile_id,
+                   profile_version,
+                   data_quality,
+                   coverage,
+                   decision_reason_ru,
+                   trading_effect,
+                   payload
+            FROM monitoring.entry_dispatcher_shadow_decisions
+            ORDER BY m3_setup_id, created_at DESC
+        )
+        SELECT
+            o.signal_id,
+            o.bot_id,
+            o.strategy_version AS scanner_strategy_version,
+            o.symbol,
+            o.direction,
+            to_timestamp(o.signal_at_epoch_ms / 1000.0) AS signal_at,
+            o.signal_at_epoch_ms,
+            o.signal_price,
+            o.decision AS scanner_decision,
+            o.decision_reason AS scanner_decision_reason,
+            o.traffic_light,
+            o.horizon_seconds,
+            o.state AS observation_state,
+            o.last_price,
+            o.max_favorable_pct,
+            o.max_adverse_pct,
+            o.first_hits_json,
+            o.samples,
+            o.finalized_at_epoch_ms,
+            link.observed_mayak_snapshot_id,
+            link.observed_mayak_at,
+            link.observed_dispatcher_snapshot_id,
+            link.observed_dispatcher_at,
+            link.link_quality,
+            link.provenance AS observed_link_provenance,
+            link.observed_context,
+            link.consumed_context,
+            mayak.state AS mayak_state,
+            mayak.confidence AS mayak_confidence,
+            mayak.engine_version AS mayak_engine_version,
+            mayak.payload AS mayak_payload,
+            dispatcher.assessment_id AS dispatcher_assessment_id,
+            dispatcher.profile_id AS dispatcher_profile_id,
+            dispatcher.profile_version AS dispatcher_profile_version,
+            dispatcher.suitability AS dispatcher_suitability,
+            dispatcher.confidence AS dispatcher_confidence,
+            dispatcher.status AS dispatcher_status,
+            dispatcher.data_quality AS dispatcher_data_quality,
+            dispatcher.coverage AS dispatcher_coverage,
+            dispatcher.payload AS dispatcher_payload,
+            coin.observed_at AS coin_context_at,
+            coin.spot_net_usd,
+            coin.spot_turnover_usd,
+            coin.derivatives_net_usd,
+            coin.derivatives_turnover_usd,
+            coin.return_5m_pct,
+            coin.open_interest,
+            coin.open_interest_change_pct,
+            coin.funding_rate,
+            coin.mark_price,
+            coin.index_price,
+            coin.long_ratio,
+            coin.short_ratio,
+            coin.spot_bid_change_pct,
+            coin.spot_ask_change_pct,
+            coin.derivatives_bid_change_pct,
+            coin.derivatives_ask_change_pct,
+            coin.large_spot_buy_usd,
+            coin.large_spot_sell_usd,
+            coin.large_derivatives_buy_usd,
+            coin.large_derivatives_sell_usd,
+            coin.source_quality AS coin_source_quality,
+            entry.decision AS entry_decision,
+            entry.reason AS entry_reason,
+            entry.details_json AS entry_details,
+            entry.entry_policy,
+            entry.policy_version AS entry_policy_version,
+            entry.settings_version,
+            entry.mayak_snapshot_id AS entry_recorded_mayak_snapshot_id,
+            entry.mayak_snapshot_time AS entry_recorded_mayak_snapshot_time,
+            advisory.context_type AS advisory_context_type,
+            advisory.trading_effect AS advisory_trading_effect,
+            advisory.assessment_id AS advisory_assessment_id,
+            advisory.mayak_snapshot_id AS advisory_mayak_snapshot_id,
+            advisory.market_context_id AS advisory_market_context_id,
+            advisory.dispatcher_status AS advisory_dispatcher_status,
+            advisory.reason_ru AS advisory_reason_ru,
+            geometry.strategy_id,
+            geometry.strategy_version,
+            geometry.entry_fingerprint,
+            geometry.geometry_version,
+            geometry.config_fingerprint AS geometry_config_fingerprint,
+            geometry.geometry_hash,
+            geometry.payload AS geometry_payload,
+            shadow.shadow_dispatcher_decision,
+            shadow.consumed_dispatcher_assessment_id AS shadow_assessment_id,
+            shadow.consumed_mayak_snapshot_id AS shadow_mayak_snapshot_id,
+            shadow.assessment_observed_at AS shadow_assessment_observed_at,
+            shadow.profile_id AS shadow_profile_id,
+            shadow.profile_version AS shadow_profile_version,
+            shadow.data_quality AS shadow_data_quality,
+            shadow.coverage AS shadow_coverage,
+            shadow.decision_reason_ru AS shadow_reason_ru,
+            shadow.trading_effect AS shadow_trading_effect,
+            shadow.payload AS shadow_payload,
+            CASE
+                WHEN link.observed_mayak_at IS NULL OR link.observed_dispatcher_at IS NULL
+                    THEN 'MISSING'
+                WHEN link.observed_mayak_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                 AND link.observed_dispatcher_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                    THEN 'YES'
+                ELSE 'NO_FUTURE_CONTEXT'
+            END AS causal_context_ok,
+            CASE WHEN link.observed_mayak_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - link.observed_mayak_at
+                    )
+                ) * 1000
+            END AS mayak_age_ms,
+            CASE WHEN link.observed_dispatcher_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - link.observed_dispatcher_at
+                    )
+                ) * 1000
+            END AS dispatcher_age_ms,
+            CASE WHEN coin.observed_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - coin.observed_at
+                    )
+                ) * 1000
+            END AS coin_context_age_ms
+        FROM monitoring.opportunities o
+        LEFT JOIN signal_link link ON link.reference_id=o.signal_id
+        LEFT JOIN mayak_v2.snapshots mayak
+               ON mayak.id::text=link.observed_mayak_snapshot_id::text
+        LEFT JOIN strategy_dispatcher.assessments dispatcher
+               ON dispatcher.snapshot_id::text=link.observed_dispatcher_snapshot_id::text
+              AND dispatcher.profile_id=(
+                    CASE WHEN o.direction='long'
+                         THEN 'M3_V1_LONG_ENTRY' ELSE 'M3_V1_SHORT_ENTRY' END
+              )
+        LEFT JOIN LATERAL (
+            SELECT cm.*
+            FROM mayak_v2.coin_minutes cm
+            WHERE cm.symbol=o.symbol
+              AND cm.observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+            ORDER BY cm.observed_at DESC
+            LIMIT 1
+        ) coin ON TRUE
+        LEFT JOIN runtime.entry_decisions entry ON entry.signal_id=o.signal_id
+        LEFT JOIN runtime.m3_consumed_context advisory ON advisory.signal_id=o.signal_id
+        LEFT JOIN monitoring.entry_geometry_handoffs geometry ON geometry.signal_id=o.signal_id
+        LEFT JOIN shadow ON shadow.m3_setup_id=o.signal_id
+    """
+    parameters: tuple[object, ...] = ()
+    if cutoff_ms is not None:
+        query += " WHERE o.signal_at_epoch_ms >= %s"
+        parameters = (cutoff_ms,)
+    query += " ORDER BY o.signal_at_epoch_ms"
+    cursor = connection.execute(query, parameters)
+    base_columns = [item.name for item in cursor.description]
+    extra_columns = (
+        "first_plus_0_10_at_epoch_ms",
+        "first_minus_1_00_at_epoch_ms_for_be",
+        "plus_0_10_vs_minus_1",
+        "first_plus_1_10_at_epoch_ms",
+        "first_minus_1_00_at_epoch_ms_for_target",
+        "plus_1_10_vs_minus_1",
+    )
+    summary = {
+        "signals": 0,
+        "be_target_first": 0,
+        "be_stop_first": 0,
+        "be_unresolved": 0,
+        "plus_1_10_target_first": 0,
+        "plus_1_10_stop_first": 0,
+        "plus_1_10_unresolved": 0,
+        "causal_context_yes": 0,
+        "causal_context_missing": 0,
+        "causal_context_violation": 0,
+    }
+    first_hits_index = base_columns.index("first_hits_json")
+    causal_index = base_columns.index("causal_context_ok")
+    with archive.open("01_SIGNAL_CONTEXT.csv", "w") as raw:
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+        writer = csv.writer(text, delimiter=";")
+        writer.writerow(base_columns + list(extra_columns))
+        for row in cursor:
+            be_at, be_stop_at, be_state = _first_hit_state(row[first_hits_index], "+0.1")
+            target_at, target_stop_at, target_state = _first_hit_state(
+                row[first_hits_index], "+1.1"
+            )
+            writer.writerow(
+                [_csv_cell(value) for value in row]
+                + [be_at, be_stop_at, be_state, target_at, target_stop_at, target_state]
+            )
+            summary["signals"] += 1
+            if be_state == "TARGET_FIRST":
+                summary["be_target_first"] += 1
+            elif be_state == "STOP_FIRST":
+                summary["be_stop_first"] += 1
+            else:
+                summary["be_unresolved"] += 1
+            if target_state == "TARGET_FIRST":
+                summary["plus_1_10_target_first"] += 1
+            elif target_state == "STOP_FIRST":
+                summary["plus_1_10_stop_first"] += 1
+            else:
+                summary["plus_1_10_unresolved"] += 1
+            causal = row[causal_index]
+            if causal == "YES":
+                summary["causal_context_yes"] += 1
+            elif causal == "MISSING":
+                summary["causal_context_missing"] += 1
+            else:
+                summary["causal_context_violation"] += 1
+        text.flush()
+        text.detach()
+    return summary["signals"], summary
+
+
+def _write_postgresql_period_tables(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_seconds: float | None,
+    cutoff_ms: int | None,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for table, time_column, time_kind in SIGNAL_ANALYSIS_TABLES:
+        schema, table_name = table.split(".")
+        query = f'SELECT * FROM "{schema}"."{table_name}"'
+        parameters: tuple[object, ...] = ()
+        if cutoff_seconds is not None:
+            if time_kind == "timestamp":
+                query += f' WHERE "{time_column}" >= to_timestamp(%s)'
+                parameters = (cutoff_seconds,)
+            else:
+                query += f' WHERE "{time_column}" >= %s'
+                parameters = (cutoff_ms,)
+        query += f' ORDER BY "{time_column}"'
+        cursor = connection.execute(query, parameters)
+        path = f"postgresql/{table}.csv"
+        counts[table] = _write_cursor_csv(archive, path, cursor)
+    return counts
+
+
+def _write_entry_audit_csv(
+    archive: zipfile.ZipFile, cutoff_seconds: float | None
+) -> int:
+    if not ENTRY_AUDIT_DATABASE.is_file():
+        raise RuntimeError(f"не найдена Entry audit DB: {ENTRY_AUDIT_DATABASE}")
+    placeholders = ",".join("?" for _ in ENTRY_AUDIT_EVENT_TYPES)
+    query = f"""
+        SELECT event_id,occurred_at,symbol,event_type,status,candidate_id,direction,
+               candidate_bar_at,entry_price,last_price,distance_pct,flow_state,oi_state,
+               reason,payload_json,created_at
+        FROM entry_bot_candidate_events
+        WHERE event_type IN ({placeholders})
+    """
+    parameters: list[object] = list(ENTRY_AUDIT_EVENT_TYPES)
+    if cutoff_seconds is not None:
+        query += " AND occurred_at >= ?"
+        parameters.append(datetime.fromtimestamp(cutoff_seconds, UTC).isoformat())
+    # Keep the composite (event_type, occurred_at) index usable. Consumers can
+    # sort this CSV by occurred_at when a globally chronological view is needed.
+    query += " ORDER BY event_type, occurred_at, id"
+    connection = sqlite3.connect(
+        f"file:{ENTRY_AUDIT_DATABASE}?mode=ro", uri=True, timeout=30
+    )
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        cursor = connection.execute(query, tuple(parameters))
+        return _write_cursor_csv(archive, "02_ENTRY_AUDIT_EVENTS.csv", cursor)
+    finally:
+        connection.close()
+
+
+def export_signal_analysis_bundle(period: str) -> dict[str, object]:
+    if period not in SIGNAL_EXPORT_PERIODS:
+        raise ValueError("недопустимый период наблюдения сигналов")
+    seconds, period_label = SIGNAL_EXPORT_PERIODS[period]
+    now_seconds = time.time()
+    cutoff_seconds = now_seconds - seconds if seconds is not None else None
+    cutoff_ms = int(cutoff_seconds * 1000) if cutoff_seconds is not None else None
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    final_path = REPORT_ROOT / f"аналитика_сигналов_{period_label}_{stamp}.zip"
+    partial_path = final_path.with_suffix(".zip.partial")
+    partial_path.unlink(missing_ok=True)
+    source_head = "unknown"
+    try:
+        source_head = subprocess.run(
+            ["git", "-C", "/srv/cripta/source_checkout", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        source_head = "unknown"
+    installed_marker = APP_ROOT / "PROJECT_GIT_HEAD.txt"
+    installed_commit = (
+        installed_marker.read_text(encoding="utf-8").strip()
+        if installed_marker.is_file()
+        else "unknown"
+    )
+    manifest: dict[str, object] = {
+        "format": "CRIPTA_SIGNAL_ANALYSIS_EXPORT_V1",
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "period": period,
+        "period_label": period_label,
+        "period_start_utc": (
+            datetime.fromtimestamp(cutoff_seconds, UTC).isoformat()
+            if cutoff_seconds is not None
+            else None
+        ),
+        "period_end_utc": datetime.fromtimestamp(now_seconds, UTC).isoformat(),
+        "source_git_head": source_head,
+        "installed_commit_marker": installed_commit,
+        "postgresql_database": "cripta",
+        "entry_audit_database": str(ENTRY_AUDIT_DATABASE),
+        "entry_audit_event_types": list(ENTRY_AUDIT_EVENT_TYPES),
+        "causality_rule": "context_time <= signal_time; future context is forbidden",
+        "trading_effect": "NONE: export/Analyst observation only",
+        "files": {},
+        "summary": {},
+    }
+    try:
+        with zipfile.ZipFile(
+            partial_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+        ) as archive:
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                signal_rows, summary = _write_signal_context_csv(
+                    archive, connection, cutoff_ms
+                )
+                manifest["summary"] = summary
+                manifest["files"]["01_SIGNAL_CONTEXT.csv"] = signal_rows
+                postgres_counts = _write_postgresql_period_tables(
+                    archive, connection, cutoff_seconds, cutoff_ms
+                )
+                for table, count in postgres_counts.items():
+                    manifest["files"][f"postgresql/{table}.csv"] = count
+            audit_rows = _write_entry_audit_csv(archive, cutoff_seconds)
+            manifest["files"]["02_ENTRY_AUDIT_EVENTS.csv"] = audit_rows
+            archive.writestr(
+                "README_RU.txt",
+                "CRIPTA — причинный архив анализа сигналов V1\n\n"
+                "Главный файл: 01_SIGNAL_CONTEXT.csv. Одна строка = один Entry signal.\n"
+                "В строке рядом находятся: точные first-hit уровни, объективно существовавший\n"
+                "к моменту сигнала MAYAK, Dispatcher assessment для направления Entry,\n"
+                "последняя причинная coin-minute запись конкретной монеты, Entry decision,\n"
+                "advisory/observed context, geometry/fingerprint и shadow Dispatcher.\n\n"
+                "02_ENTRY_AUDIT_EVENTS.csv содержит ключевые события внутреннего Entry scanner:\n"
+                "candidate armed/cleared, pre-limit shadow, touch veto/blocked, Core signal,\n"
+                "early failure и ошибки потока. События отбираются только за выбранный период.\n\n"
+                "Каталог postgresql/ содержит только записи выбранного периода из таблиц\n"
+                "MAYAK, Dispatcher, Entry, causal correlator и signal observation. "
+                "Это НЕ pg_dump.\n\n"
+                "OBSERVED_CONTEXT показывает, какой контекст существовал к моменту события.\n"
+                "CONSUMED_CONTEXT означает только реально прочитанный торговым контуром контекст.\n"
+                "Наличие OBSERVED_CONTEXT не доказывает торговое влияние.\n\n"
+                "Поля plus_0_10_vs_minus_1 и plus_1_10_vs_minus_1 дают точный FIRST HIT:\n"
+                "TARGET_FIRST / STOP_FIRST / UNRESOLVED.\n"
+            )
+            archive.writestr(
+                "00_MANIFEST.json",
+                json.dumps(manifest, ensure_ascii=False, indent=2, default=str),
+            )
+        partial_path.replace(final_path)
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        raise
+    return {
+        "file": final_path.name,
+        "size": final_path.stat().st_size,
+        "rows": int(manifest["summary"].get("signals", 0)),
+        "files": len(manifest["files"]) + 2,
+        "summary": manifest["summary"],
+        "url": f"/reports/{quote(final_path.name)}",
+    }
+
+
+def _signal_export_job_path(job_id: str) -> Path:
+    token = job_id.removeprefix("signal-")
+    if (
+        not job_id.startswith("signal-")
+        or len(token) != 32
+        or any(character not in "0123456789abcdef" for character in token)
+    ):
+        raise ValueError("некорректный идентификатор задания анализа сигналов")
+    return SIGNAL_EXPORT_JOB_ROOT / f"{job_id}.json"
+
+
+def _write_signal_export_job(state: dict[str, object]) -> None:
+    SIGNAL_EXPORT_JOB_ROOT.mkdir(parents=True, exist_ok=True)
+    path = _signal_export_job_path(str(state["job_id"]))
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    os.replace(temporary, path)
+
+
+def read_signal_export_job(job_id: str) -> dict[str, object]:
+    path = _signal_export_job_path(job_id)
+    if not path.is_file():
+        raise FileNotFoundError("задание анализа сигналов не найдено")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _update_signal_export_job(job_id: str, **changes: object) -> dict[str, object]:
+    with _signal_export_job_lock:
+        state = read_signal_export_job(job_id)
+        state.update(changes)
+        state["heartbeat_at_utc"] = datetime.now(UTC).isoformat()
+        _write_signal_export_job(state)
+        return state
+
+
+def _run_signal_export_job(job_id: str, period: str) -> None:
+    started = time.monotonic()
+    _update_signal_export_job(
+        job_id,
+        status="RUNNING",
+        stage="COLLECT_CONTEXT",
+        percent=5,
+        started_at_utc=datetime.now(UTC).isoformat(),
+    )
+    try:
+        output = export_signal_analysis_bundle(period)
+    except Exception as exc:  # job boundary must persist failure for UI
+        _update_signal_export_job(
+            job_id,
+            status="FAILED",
+            stage="FAILED",
+            percent=100,
+            elapsed_seconds=round(time.monotonic() - started, 1),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        return
+    _update_signal_export_job(
+        job_id,
+        status="DONE",
+        stage="DONE",
+        percent=100,
+        elapsed_seconds=round(time.monotonic() - started, 1),
+        output=output,
+        error=None,
+    )
+
+
+def start_signal_export_job(period: str) -> dict[str, object]:
+    if period not in SIGNAL_EXPORT_PERIODS:
+        raise ValueError("недопустимый период наблюдения сигналов")
+    job_id = f"signal-{secrets.token_hex(16)}"
+    state: dict[str, object] = {
+        "job_id": job_id,
+        "kind": "SIGNAL_ANALYSIS_EXPORT_V1",
+        "period": period,
+        "status": "QUEUED",
+        "stage": "QUEUED",
+        "percent": 0,
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "heartbeat_at_utc": datetime.now(UTC).isoformat(),
+        "elapsed_seconds": 0,
+        "output": None,
+        "error": None,
+    }
+    _write_signal_export_job(state)
+    threading.Thread(
+        target=_run_signal_export_job,
+        args=(job_id, period),
+        daemon=True,
+        name=f"signal-export-{job_id[-8:]}",
+    ).start()
+    return state
+
+
 def export_trading_table(table: str, period: str) -> dict[str, object]:
+    if table == "signals":
+        return export_signal_analysis_bundle(period)
     periods = {
         "day": (24 * 3600, "сутки"),
         "week": (7 * 24 * 3600, "неделя"),
         "all": (None, "весь_период"),
     }
-    if table not in {"closed", "signals"} or period not in periods:
+    if table != "closed" or period not in periods:
         raise ValueError("недопустимая таблица или период")
     seconds, period_label = periods[period]
     cutoff_ms = int((time.time() - seconds) * 1000) if seconds else 0
     output = io.StringIO(newline="")
     writer = csv.writer(output, delimiter=";")
-    if table == "closed":
-        writer.writerow(
-            [
-                "Время",
-                "Монета",
-                "Закрыто",
-                "Цена",
-                "Причина биржи",
-                "До комиссий USDT",
-                "Комиссия входа USDT",
-                "Комиссия выхода USDT",
-                "Чистый итог USDT",
-            ]
-        )
-        rows = [
-            x
-            for x in live_trading_state()["recent_closed"]
-            if int(x["closed_at_epoch_ms"]) >= cutoff_ms
+    writer.writerow(
+        [
+            "Время",
+            "Монета",
+            "Закрыто",
+            "Цена",
+            "Причина биржи",
+            "До комиссий USDT",
+            "Комиссия входа USDT",
+            "Комиссия выхода USDT",
+            "Чистый итог USDT",
         ]
-        for x in rows:
-            writer.writerow(
-                [
-                    time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(int(x["closed_at_epoch_ms"]) / 1000)
-                    ),
-                    x["symbol"],
-                    x["qty"],
-                    x["price"],
-                    x["reason"],
-                    x["gross_pnl"],
-                    x["entry_fee"],
-                    x["exit_fee"],
-                    x["net_pnl"],
-                ]
-            )
-        stem = "закрытые_реальные_сделки"
-    else:
+    )
+    rows = [
+        x
+        for x in live_trading_state()["recent_closed"]
+        if int(x["closed_at_epoch_ms"]) >= cutoff_ms
+    ]
+    for x in rows:
         writer.writerow(
             [
-                "Время сигнала",
-                "Монета",
-                "Направление",
-                "Цена сигнала",
-                "Состояние",
-                "Максимальный плюс %",
-                "Максимальный минус %",
-                "Наблюдений цены",
+                time.strftime(
+                    "%Y-%m-%d %H:%M:%S",
+                    time.localtime(int(x["closed_at_epoch_ms"]) / 1000),
+                ),
+                x["symbol"],
+                x["qty"],
+                x["price"],
+                x["reason"],
+                x["gross_pnl"],
+                x["entry_fee"],
+                x["exit_fee"],
+                x["net_pnl"],
             ]
         )
-        with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
-            rows = connection.execute(
-                "SELECT signal_at_epoch_ms,symbol,direction,signal_price,state,max_favorable_pct,max_adverse_pct,samples FROM monitoring.opportunities WHERE signal_at_epoch_ms >= %s ORDER BY signal_at_epoch_ms DESC",
-                (cutoff_ms,),
-            ).fetchall()
-        for x in rows:
-            writer.writerow(
-                [
-                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(x[0]) / 1000)),
-                    x[1],
-                    "покупка" if x[2] == "long" else "продажа",
-                    x[3],
-                    x[4],
-                    x[5],
-                    x[6],
-                    x[7],
-                ]
-            )
-        stem = "независимое_наблюдение_сигналов"
+    stem = "закрытые_реальные_сделки"
     stamp = time.strftime("%Y%m%d_%H%M%S")
     REPORT_ROOT.mkdir(parents=True, exist_ok=True)
     final_path = REPORT_ROOT / f"{stem}_{period_label}_{stamp}.zip"
@@ -881,7 +1460,8 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
         archive.writestr(f"{stem}_{period_label}.csv", "\ufeff" + output.getvalue())
         archive.writestr(
             "ОПИСАНИЕ.txt",
-            f"Период: {period_label}. Строк: {len(rows)}. Сформировано: {time.strftime('%Y-%m-%d %H:%M:%S')}.\n",
+            f"Период: {period_label}. Строк: {len(rows)}. "
+            f"Сформировано: {time.strftime('%Y-%m-%d %H:%M:%S')}.\n",
         )
     return {
         "file": final_path.name,
@@ -1576,6 +2156,19 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 ensure_ascii=False,
             ).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
+        elif path.startswith("/api/trading/export-jobs/"):
+            try:
+                job_id = path.rsplit("/", 1)[-1]
+                body = json.dumps(
+                    read_signal_export_job(job_id), ensure_ascii=False
+                ).encode("utf-8")
+                self.send_body(200, body, "application/json; charset=utf-8")
+            except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+                self.send_body(
+                    404,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
         elif path.startswith("/api/project/archive-jobs/"):
             try:
                 job_id = path.rsplit("/", 1)[-1]
@@ -1666,11 +2259,16 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 if length <= 0 or length > 2048:
                     raise ValueError("недопустимый размер запроса")
                 request = json.loads(self.rfile.read(length))
-                result = export_trading_table(
-                    str(request.get("table", "")), str(request.get("period", ""))
-                )
+                table = str(request.get("table", ""))
+                period = str(request.get("period", ""))
+                if table == "signals":
+                    result = start_signal_export_job(period)
+                    status_code = 202
+                else:
+                    result = export_trading_table(table, period)
+                    status_code = 201
                 self.send_body(
-                    201,
+                    status_code,
                     json.dumps(result, ensure_ascii=False).encode(),
                     "application/json; charset=utf-8",
                 )
@@ -1679,6 +2277,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 json.JSONDecodeError,
                 OSError,
                 psycopg.Error,
+                sqlite3.Error,
+                RuntimeError,
                 zipfile.BadZipFile,
             ) as exc:
                 self.send_body(
