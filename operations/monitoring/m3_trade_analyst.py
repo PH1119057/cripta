@@ -159,6 +159,21 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             ).fetchone()
         if exit_decision is not None and str(exit_decision["position_id"]) != position_id:
             raise RuntimeError("выход связан с другой позицией")
+        if exit_decision is None and attribution is not None:
+            mechanism = str(attribution["exit_mechanism"] or "UNKNOWN")
+            if mechanism != "UNKNOWN":
+                exit_decision = {
+                    "position_id": position_id,
+                    "internal_reason": mechanism,
+                    "close_command_id": None,
+                    "decision_json": {
+                        "internal_reason": mechanism,
+                        "decision_source": "EXACT_EXIT_ATTRIBUTION",
+                        "exit_owner": str(attribution["exit_owner"] or "UNKNOWN"),
+                        "exit_mechanism": mechanism,
+                        "attribution_id": str(attribution["attribution_id"]),
+                    },
+                }
         hold_timeline = (
             []
             if position_id is None

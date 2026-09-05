@@ -1785,14 +1785,36 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 raise ValueError(
                                     "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
                                 )
+                        previous_gate = connection.execute(
+                            "SELECT enabled FROM control.execution_gates "
+                            "WHERE mode='mainnet' FOR UPDATE"
+                        ).fetchone()
+                        previous_enabled = bool(previous_gate[0]) if previous_gate else False
+                        gate_changed_at_ms = int(time.time() * 1000)
+                        gate_reason = (
+                            "явно включено владельцем через портал"
+                            if enabled
+                            else "выключено владельцем через портал"
+                        )
                         connection.execute(
-                            "UPDATE control.execution_gates SET enabled=%s,reason=%s,updated_at_epoch_ms=%s WHERE mode='mainnet'",
+                            "UPDATE control.execution_gates SET enabled=%s,reason=%s,"
+                            "updated_at_epoch_ms=%s WHERE mode='mainnet'",
+                            (1 if enabled else 0, gate_reason, gate_changed_at_ms),
+                        )
+                        connection.execute(
+                            """INSERT INTO control.execution_gate_events(
+                               at_epoch_ms,mode,previous_enabled,requested_enabled,
+                               resulting_enabled,reason,source,origin,request_id,
+                               settings_version)
+                               VALUES(%s,'mainnet',%s,%s,%s,%s,'dashboard','owner',%s,%s)""",
                             (
-                                1 if enabled else 0,
-                                "явно включено владельцем через портал"
-                                if enabled
-                                else "выключено владельцем через портал",
-                                int(time.time() * 1000),
+                                gate_changed_at_ms,
+                                previous_enabled,
+                                enabled,
+                                enabled,
+                                gate_reason,
+                                str(request.get("request_id") or secrets.token_hex(8)),
+                                str(request.get("settings_version") or ""),
                             ),
                         )
                     else:
@@ -1832,6 +1854,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                 response: dict[str, object] = {"status": "accepted"}
                 if path == "/api/live/command":
                     response["command_id"] = command_id
+                if path == "/api/live/gate":
+                    response["gate_enabled"] = enabled
                 self.send_body(
                     202, json.dumps(response).encode(), "application/json; charset=utf-8"
                 )

@@ -146,20 +146,29 @@ def classify_exit(
     protection_events: Iterable[Mapping[str, Any]],
     close_commands: Iterable[Mapping[str, Any]],
 ) -> tuple[str, str, str]:
+    matching_events: list[Mapping[str, Any]] = []
     for event in protection_events:
         order_ids = event.get("exchange_order_ids") or []
         if isinstance(order_ids, str):
             order_ids = json.loads(order_ids or "[]")
-        if exit_order_id not in {str(value) for value in order_ids}:
-            continue
+        if exit_order_id in {str(value) for value in order_ids}:
+            matching_events.append(event)
+
+    if matching_events:
+        event = matching_events[-1]
         kind = str(event.get("protection_kind") or "")
         initiator = str(event.get("initiator") or "UNKNOWN")
-        owner = initiator if initiator in {"ALGORITHM", "OWNER", "TECHNICAL_SAFETY"} else "UNKNOWN"
+        owner = (
+            initiator
+            if initiator in {"ALGORITHM", "OWNER", "TECHNICAL_SAFETY"}
+            else "UNKNOWN"
+        )
         mechanism = {
             "INITIAL_HARD_STOP": "INITIAL_HARD_STOP",
             "PROFIT_PROTECTION_STOP": "PROFIT_PROTECTION_STOP",
             "TRAILING_STOP": "TRAILING_STOP",
             "TAKE_PROFIT": "TAKE_PROFIT",
+            "OWNER_MODIFIED_STOP": "OWNER_MODIFIED_STOP",
         }.get(kind, "UNKNOWN")
         return owner, mechanism, "EXACT_PROTECTION_ORDER_ID"
 
