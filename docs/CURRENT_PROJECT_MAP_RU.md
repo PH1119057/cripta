@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.7
+**Версия документа:** 4.8
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -74,6 +74,8 @@ derivatives/Spot executed flow, OI, funding/mark/index premium, account ratio и
 derivatives depth-200 liquidity. Frozen component research = 251 признак;
 `CoinMarketRating` не фитился, live Entry policy не менялась. Следующий research gate —
 новый temporal/cross-asset OOS с теми же frozen definitions.
+
+OOS protocol V1 предварительно заморожен в `MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md`: тест = NEW15/14024 signals, BTC/ETH = reference-only, 12 candidate effects и confirmation gates зафиксированы до открытия NEW15 MAYAK result. На этой карте OOS result ещё не считается полученным; `CoinMarketRating` по-прежнему не фитится.
 
 ## 5. Dispatcher
 
