@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.2
+**Версия документа:** 4.3
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -67,6 +67,13 @@ Live и historical replay используют один `LiveMayakEngine`; repla
 `CoinMarketRating` остаётся объектом Dispatcher поверх объективных MAYAK-фактов;
 формула рейтинга в MAYAK не зашивается. Состояние установленного/загруженного runtime
 проверяется отдельно от source checkpoint.
+
+MAYAK V2 historical stage 2026-09-06 завершён отдельным evidence report
+`MAYAK_V2_STAGE_RESULTS_RU.md`: exact causal replay по frozen ALL9/1063 включает
+derivatives/Spot executed flow, OI, funding/mark/index premium, account ratio и
+derivatives depth-200 liquidity. Frozen component research = 251 признак;
+`CoinMarketRating` не фитился, live Entry policy не менялась. Следующий research gate —
+новый temporal/cross-asset OOS с теми же frozen definitions.
 
 ## 5. Dispatcher
 

@@ -1,7 +1,7 @@
 # МАЯК — МАТРИЦА ИСТОЧНИКОВ ДАННЫХ
 
 **Документ:** `MAYAK_DATA_SOURCE_MATRIX_RU.md`  
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата:** 2026-09-06
 **Статус:** архитектурная матрица + контрольная точка текущего слепка  
 **Связанный документ:** `BYBIT_PUBLIC_DATA_FOR_MAYAK_DISPATCHER_RU.md`
@@ -87,6 +87,22 @@ subscriptions разбиваются на ограниченные пакеты 
 Первый собирается Dispatcher из objective context после отдельного research-контракта,
 второй принадлежит Analyst/research.
 
+### 2.2 Verified live + historical research checkpoint 2026-09-06
+
+После установки `mayak-v2.2` live smoke подтвердил:
+
+```text
+CoinMarketContext = 20/20 observed symbols
+Spot public-trade activity coverage after warmup = 20/20
+Linear public-trade activity coverage = 20/20
+subscription reject = 0 in verified smoke
+trading_effect = NONE
+```
+
+Frozen historical stage завершён на ALL9/1063. Exact causal contexts построены и исследованы для derivatives trades, Spot trades, OI, funding/mark/index premium, long/short account ratio и derivatives depth-200 orderbook. Итог: 251 frozen components, без threshold selection и без `CoinMarketRating` fit. Подробный evidence report: `MAYAK_V2_STAGE_RESULTS_RU.md`.
+
+Historical exact liquidations до начала доказанного raw capture остаются `NO_DATA`.
+
 ---
 
 ## 3. Легенда
@@ -107,23 +123,23 @@ UNKNOWN   — по слепку доказать нельзя
 
 | Источник / слой | Bybit public | Адаптер | Live в слепке | Stored | Derived Mayak | Handoff | Research status |
 |---|---|---|---|---|---|---|---|
-| Spot public trades | YES | YES | PARTIAL, 5/20 coverage | YES | Spot pressure | YES | не подтверждён как gate |
-| Linear public trades | YES | YES | YES, 20/20 | YES | Derivatives pressure | YES | не подтверждён как gate |
+| Spot public trades | YES | YES | YES, 20/20 verified after warmup | YES | exact Spot flow 1/5/15/30/60m | CoinMarketContext YES; legacy handoff separate | exact frozen 1063 PASS; no gate |
+| Linear public trades | YES | YES | YES, 20/20 | YES | exact derivatives flow 1/5/15/30/60m | CoinMarketContext YES | exact frozen 1063 PASS; no gate |
 | Price breadth | derived | YES | YES | YES | Breadth | YES | observation |
 | Direction synchronization | derived | YES | YES | YES | Synchronization | YES | observation |
 | Multi-timeframe returns | derived | YES | YES | YES | Timeframe alignment | YES | observation |
 | Linear ticker | YES | YES | YES | YES | inputs available | PARTIAL | observation |
 | Open Interest current | YES | YES | YES | YES | raw/coin | PARTIAL | horizons in warmup at snapshot |
-| OI 5/15/30/60m | derived | YES | WARMUP in snapshot | YES | intended OI regime | NO_DATA | needs stable run |
-| Funding | YES | YES | YES | YES | raw context | not explicit dedicated feature | needs derivation |
-| Mark price | YES | YES | YES | YES | raw context | not dedicated | needs premium stress |
-| Index price | YES | YES | YES | YES | raw context | not dedicated | needs premium stress |
-| Last/Mark/Index premium stress | YES inputs | NO dedicated layer found | NO | UNKNOWN | NO | NO | planned |
-| Long/Short account ratio | YES | YES | YES for sampled symbols | YES/raw status | raw context | not dedicated crowding feature | needs normalization/research |
+| OI 5/15/30/60m | derived | YES | YES after causal warmup | YES | OI horizons/speed/acceleration | CoinMarketContext YES | exact frozen 1063 PASS |
+| Funding | YES | YES | YES | YES | funding + causal change | CoinMarketContext YES | exact frozen 1063 PASS |
+| Mark price | YES | YES | YES | YES | mark context | CoinMarketContext YES | exact frozen 1063 PASS |
+| Index price | YES | YES | YES | YES | index context | CoinMarketContext YES | exact frozen 1063 PASS |
+| Last/Mark/Index premium stress | YES inputs | YES | YES where source available | YES/context | mark-index and related premium facts | CoinMarketContext YES | exact mark-index frozen 1063 PASS |
+| Long/Short account ratio | YES | YES | YES for supported symbols | YES | normalized long/short/crowding facts | research/context | exact frozen 1063 PASS; crowding candidate only |
 | Normal orderbook Spot | YES | YES | PARTIAL | YES | liquidity inputs | PARTIAL/NO_DATA trend | needs stable horizons |
-| Normal orderbook Linear | YES | YES | YES | YES | liquidity inputs | PARTIAL/NO_DATA trend | needs stable horizons |
+| Normal orderbook Linear | YES | YES | YES | YES | depth + imbalance + 1/5/15m changes | CoinMarketContext YES | exact depth-200 frozen 1063 PASS |
 | Orderbook 1m change | derived | YES | YES | YES | input | not canonical dedicated | observation |
-| Orderbook 5/15m | derived | YES | WARMUP in snapshot | YES | intended liquidity trend | NO_DATA | needs stable run |
+| Orderbook 5/15m | derived | YES | YES after causal warmup | YES | liquidity changes | CoinMarketContext YES | exact depth-200 frozen 1063 PASS |
 | Liquidity resilience | derived | NO dedicated implementation found | NO | NO | NO | NO | planned |
 | Absorption | derived | no production Mayak implementation confirmed | NO | NO | NO | vocabulary future | planned |
 | All Liquidation | YES | YES in source | WARMUP | likely journal/runtime | WARMUP layer | WARMUP x4 | first priority to validate |
@@ -227,23 +243,18 @@ LIQUIDATION_*
 
 ---
 
-## 8. Приоритет проверки следующего архива
+## 8. Следующий приоритет после verified V2 stage
 
-После завершения Codex проверить по порядку:
+После завершённого live/replay/component checkpoint ближайшие доказательные пробелы:
 
-1. transport/freshness semantics;
-2. Spot coverage semantics;
-3. OI 5/15/30/60;
-4. book 1/5/15;
-5. allLiquidation реально получает события;
-6. liquidation phase выходит из WARMUP;
-7. PostgreSQL/JSONL persistence liquidation raw/derived;
-8. dedicated OI handoff;
-9. dedicated liquidity handoff;
-10. Dispatcher assessment persistence;
-11. `trading_effect=NONE`;
-12. profile count/status;
-13. source confidence по каждому feature.
+1. накопить достаточную causal live history exact liquidations и проверить intensity/acceleration/phase;
+2. подключить надёжный historical/live event context, если будет выбран внешний источник;
+3. выполнить **новый temporal/cross-asset OOS** теми же frozen component definitions без retuning;
+4. после OOS вынести подтверждённые objective components в отдельный Dispatcher `CoinMarketRating` research contract;
+5. отдельно исследовать Spot orderbook resilience/absorption/RPI, не смешивая posted liquidity с executed money;
+6. позднее расширять multi-exchange/external flows/options/futures curve.
+
+До нового OOS текущие candidate effects не являются live gate.
 
 ---
 

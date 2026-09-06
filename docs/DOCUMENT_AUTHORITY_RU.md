@@ -1,7 +1,7 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.3
+**Версия:** 2.4
 **Дата:** 2026-09-06
 **Статус:** канонический реестр авторитетности
 
@@ -74,6 +74,7 @@ connected Exchange / Trading Account
 - universal market/coin context and rating: `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
 - lifecycle: `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
 - Analyst: `ANALYST_ARCHITECTURE_RU.md`
+- MAYAK V2 completed-stage evidence (LEVEL 5 / research evidence, not architecture): `MAYAK_V2_STAGE_RESULTS_RU.md`
 
 Специализированный контракт уточняет верхний, но не создаёт нового top-level ownership.
 
