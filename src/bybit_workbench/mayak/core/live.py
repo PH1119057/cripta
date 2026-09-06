@@ -40,19 +40,28 @@ class MarketState(StrEnum):
 class TradeWindow:
     rows: deque[tuple[float, float, float]] = field(default_factory=deque)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    revision: int = 0
+    large_threshold_cache: tuple[int, float] | None = None
 
     def add(self, timestamp: float, signed_usd: float, price: float) -> None:
         with self.lock:
             self.rows.append((timestamp, signed_usd, price))
             # Two hours are required for a causal current-vs-prior 60m comparison.
             self.trim(timestamp - 7200)
+            self.revision += 1
+            self.large_threshold_cache = None
 
     def trim(self, cutoff: float) -> None:
         while self.rows and self.rows[0][0] < cutoff:
             self.rows.popleft()
 
     def metrics(
-        self, now: float, seconds: int, *, offset_seconds: int = 0
+        self,
+        now: float,
+        seconds: int,
+        *,
+        offset_seconds: int = 0,
+        include_large: bool = True,
     ) -> dict[str, float | None]:
         """Return causal metrics for one closed-backward window.
 
@@ -63,6 +72,8 @@ class TradeWindow:
         start = end - seconds
         with self.lock:
             all_rows = tuple(self.rows)
+            revision = self.revision
+            cached_threshold = self.large_threshold_cache
         causal_rows = [row for row in all_rows if row[0] <= end]
         rows = [row for row in causal_rows if row[0] > start]
         if not rows:
@@ -77,18 +88,34 @@ class TradeWindow:
             }
         positive = [v for _, v, _ in rows if v > 0]
         negative = [-v for _, v, _ in rows if v < 0]
-        sizes = sorted(abs(v) for _, v, _ in causal_rows)
-        threshold = (
-            sizes[max(0, math.ceil(len(sizes) * 0.95) - 1)] if len(sizes) >= 20 else math.inf
-        )
+        threshold = math.inf
+        if include_large and len(causal_rows) >= 20:
+            includes_all_rows = not all_rows or all_rows[-1][0] <= end
+            if (
+                includes_all_rows
+                and cached_threshold is not None
+                and cached_threshold[0] == revision
+            ):
+                threshold = cached_threshold[1]
+            else:
+                sizes = sorted(abs(v) for _, v, _ in causal_rows)
+                threshold = sizes[max(0, math.ceil(len(sizes) * 0.95) - 1)]
+                if includes_all_rows:
+                    with self.lock:
+                        if self.revision == revision:
+                            self.large_threshold_cache = (revision, threshold)
         return {
             "buy_usd": sum(positive),
             "sell_usd": sum(negative),
             "net_usd": sum(v for _, v, _ in rows),
             "turnover_usd": sum(abs(v) for _, v, _ in rows),
             "return_pct": (rows[-1][2] / rows[0][2] - 1) * 100 if rows[0][2] else None,
-            "large_buy_usd": sum(v for _, v, _ in rows if v >= threshold),
-            "large_sell_usd": sum(-v for _, v, _ in rows if v <= -threshold),
+            "large_buy_usd": (
+                sum(v for _, v, _ in rows if v >= threshold) if include_large else None
+            ),
+            "large_sell_usd": (
+                sum(-v for _, v, _ in rows if v <= -threshold) if include_large else None
+            ),
         }
 
     def flow_context(self, now: float) -> dict[str, Any]:
@@ -101,7 +128,11 @@ class TradeWindow:
         result: dict[str, Any] = {}
         for label, seconds in (("1m", 60), ("5m", 300), ("15m", 900), ("30m", 1800), ("60m", 3600)):
             current = self.metrics(now, seconds)
-            prior = self.metrics(now, seconds, offset_seconds=seconds)
+            # Prior large-trade buckets are not exposed by flow_context; skip the
+            # expensive percentile sort while preserving the exact prior net/turnover.
+            prior = self.metrics(
+                now, seconds, offset_seconds=seconds, include_large=False
+            )
             minutes = seconds / 60
             net = current["net_usd"]
             turnover = current["turnover_usd"]

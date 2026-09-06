@@ -33,17 +33,47 @@ class CausalMayakReplay:
     def set_supported(self, market: str, symbols: set[str]) -> None:
         self.engine.set_instrument_support(market, symbols)
 
-    def feed(self, event: MarketEvent) -> None:
-        if self.last_event_at is not None and event.event_at < self.last_event_at:
+    def _check_event_time(self, event_at: float) -> None:
+        if self.last_event_at is not None and event_at < self.last_event_at:
             raise ValueError(
-                f"MAYAK_REPLAY_OUT_OF_ORDER event_at={event.event_at} "
+                f"MAYAK_REPLAY_OUT_OF_ORDER event_at={event_at} "
                 f"last_event_at={self.last_event_at}"
             )
-        if self.last_snapshot_at is not None and event.event_at < self.last_snapshot_at:
+        if self.last_snapshot_at is not None and event_at < self.last_snapshot_at:
             raise ValueError(
-                f"MAYAK_REPLAY_EVENT_BEFORE_SNAPSHOT event_at={event.event_at} "
+                f"MAYAK_REPLAY_EVENT_BEFORE_SNAPSHOT event_at={event_at} "
                 f"last_snapshot_at={self.last_snapshot_at}"
             )
+
+    def feed_trade(
+        self,
+        event_at: float,
+        symbol: str,
+        market: str,
+        side: str,
+        price: float,
+        size: float,
+    ) -> None:
+        """Fast chronological route for large exact public-trade archives."""
+        self._check_event_time(event_at)
+        self.engine.on_trade(market, symbol, event_at, side, price, size)
+        self.last_event_at = event_at
+
+    def feed(self, event: MarketEvent) -> None:
+        if event.kind == "TRADE":
+            if event.market is None or event.symbol is None:
+                raise ValueError("TRADE event requires market and symbol")
+            payload = event.payload or {}
+            self.feed_trade(
+                event.event_at,
+                event.symbol,
+                event.market,
+                str(payload["side"]),
+                float(payload["price"]),
+                float(payload["size"]),
+            )
+            return
+        self._check_event_time(event.event_at)
         payload = event.payload or {}
         if event.kind == "TRANSPORT":
             if event.market is None:
@@ -53,17 +83,6 @@ class CausalMayakReplay:
                 connected=bool(payload.get("connected", True)),
                 timestamp=event.event_at,
                 error=str(payload["error"]) if payload.get("error") is not None else None,
-            )
-        elif event.kind == "TRADE":
-            if event.market is None or event.symbol is None:
-                raise ValueError("TRADE event requires market and symbol")
-            self.engine.on_trade(
-                event.market,
-                event.symbol,
-                event.event_at,
-                str(payload["side"]),
-                float(payload["price"]),
-                float(payload["size"]),
             )
         elif event.kind == "TICKER":
             if event.symbol is None:

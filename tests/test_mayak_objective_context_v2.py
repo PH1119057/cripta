@@ -50,6 +50,22 @@ def test_flow_context_has_causal_current_and_prior_windows() -> None:
     assert current["net_share"] == pytest.approx(250 / 350)
 
 
+def test_flow_context_60m_keeps_full_prior_60m_window() -> None:
+    item = prepared_engine()
+    now = fixed_now().timestamp()
+    # Previous 60m: +120 USD at T-7000. Current 60m: +300 USD at T-100.
+    # The prior row must survive until the snapshot, so retention must exceed 60m.
+    item.on_trade("linear", "ADAUSDT", now - 7000, "Buy", 120, 1)
+    item.on_trade("linear", "ADAUSDT", now - 100, "Buy", 100, 3)
+    flow = item.snapshot(fixed_now())["coin_market_contexts"]["ADAUSDT"]["payload"]["money"]
+    current = flow["derivatives"]["60m"]
+    assert current["net_usd"] == pytest.approx(300)
+    assert current["prior_turnover_usd"] == pytest.approx(120)
+    assert current["speed_usd_per_min"] == pytest.approx(5)
+    assert current["acceleration_usd_per_min2"] == pytest.approx((5 - 2) / 60)
+    assert current["turnover_ratio_to_prior"] == pytest.approx(2.5)
+
+
 def test_past_snapshot_object_is_not_mutated_by_later_event() -> None:
     item = prepared_engine()
     now = fixed_now().timestamp()
