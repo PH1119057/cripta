@@ -10,9 +10,12 @@ from bybit_workbench.mayak.research.component_analysis import (
     NumericSample,
     analyze,
     auc_higher_is_good,
+    feature_names,
     load_rows,
     merge_basis,
+    merge_liquidity,
     merge_positioning,
+    merge_spot,
     run,
 )
 
@@ -190,3 +193,86 @@ def test_basis_join_adds_only_whitelisted_features_and_rejects_outcome(tmp_path:
             )
     with pytest.raises(ValueError, match="forbidden outcome"):
         merge_basis(base, forbidden)
+
+
+def test_spot_and_liquidity_join_are_key_exact_and_normalized(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    base = load_rows(source)
+    spot = tmp_path / "spot.csv"
+    with spot.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["signal_key", "spot_5m_net_usd", "spot_5m_net_share"], delimiter=";"
+        )
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow(
+                {
+                    "signal_key": str(index),
+                    "spot_5m_net_usd": str(index),
+                    "spot_5m_net_share": "0.2",
+                }
+            )
+    liq = tmp_path / "liq.csv"
+    fields = [
+        "signal_key",
+        "liquidity_best_bid",
+        "liquidity_best_ask",
+        "liquidity_mid_price",
+        "liquidity_bid_usd",
+        "liquidity_ask_usd",
+        "liquidity_imbalance",
+        "liquidity_bid_depth_5bps_usd",
+        "liquidity_ask_depth_5bps_usd",
+        "liquidity_bid_change_5m_pct",
+        "liquidity_ask_change_5m_pct",
+    ]
+    with liq.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter=";")
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow(
+                {
+                    "signal_key": str(index),
+                    "liquidity_best_bid": "99",
+                    "liquidity_best_ask": "101",
+                    "liquidity_mid_price": "100",
+                    "liquidity_bid_usd": "1000",
+                    "liquidity_ask_usd": "1000",
+                    "liquidity_imbalance": "0",
+                    "liquidity_bid_depth_5bps_usd": "200",
+                    "liquidity_ask_depth_5bps_usd": "100",
+                    "liquidity_bid_change_5m_pct": "10",
+                    "liquidity_ask_change_5m_pct": "-5",
+                }
+            )
+    rows = merge_spot(base, spot)
+    rows = merge_liquidity(rows, liq)
+    assert rows[0]["spot_5m_net_usd"] == "0"
+    assert float(rows[0]["liquidity_depth_5bps_imbalance"]) == pytest.approx(1 / 3)
+    assert float(rows[0]["liquidity_depth_5bps_share"]) == pytest.approx(0.15)
+    assert float(rows[0]["liquidity_spread_bps"]) == pytest.approx(200.0)
+    assert rows[0]["liquidity_entry_support_change_5m_pct"] == "10"
+    names = feature_names(rows)
+    assert "spot_5m_net_usd" in names
+    assert "entry_aligned::spot_5m_net_usd" in names
+    assert "liquidity_depth_5bps_imbalance" in names
+    assert "entry_aligned::liquidity_depth_5bps_imbalance" in names
+    assert "liquidity_bid_usd" not in names
+
+
+def test_spot_and_liquidity_reject_outcome_fields(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    base = load_rows(source)
+    for name, merger in (("spot", merge_spot), ("liq", merge_liquidity)):
+        path = tmp_path / f"{name}.csv"
+        with path.open("w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=["signal_key", "future_outcome"], delimiter=";"
+            )
+            writer.writeheader()
+            for index in range(8):
+                writer.writerow({"signal_key": str(index), "future_outcome": "bad"})
+        with pytest.raises(ValueError, match="forbidden outcome"):
+            merger(base, path)

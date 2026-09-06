@@ -80,6 +80,17 @@ OI не получает искусственного direction sign: рост O
 
 Абсолютные `basis_mark_price` и `basis_index_price` не являются pooled ALL9 feature из-за несопоставимого price scale между активами. Funding и premium — signed market facts; Analyst может строить их `entry_aligned::` проекцию только в research output.
 
+
+## 4.1 Frozen extension: exact Spot and liquidity
+
+До просмотра результатов этих слоёв заранее фиксируется следующий набор.
+
+Exact Spot replay через `LiveMayakEngine` добавляет `spot_*` для 1/5/15/30/60m: buy/sell/net/turnover/net_share, speed/acceleration, large-trade share и turnover ratio. Direction-adjusted проекция разрешена только для signed net/speed/acceleration/net_share и существует только в Analyst output.
+
+Exact depth-200 orderbook replay добавляет только нормализуемые pooled признаки: общий imbalance; bid/ask change immediate/1/5/15m; imbalance change 1/5/15m; spread bps; для 5/10/25/50 bps — локальный depth imbalance и доля этого band от полного depth-200 notional. Абсолютный `bid_usd/ask_usd` и абсолютные depth USD не используются как pooled ALL9 признаки из-за несопоставимого масштаба активов.
+
+Для Strategy-specific research разрешена только внешняя проекция: signed imbalance по direction и `entry_support_change` / `entry_opposition_change` (bid/ask для LONG, ask/bid для SHORT). Она не возвращается в MAYAK.
+
 ## 5. Direction-adjusted признаки
 
 MAYAK хранит raw objective value. Analyst дополнительно имеет право построить Strategy-specific исследовательскую проекцию:
