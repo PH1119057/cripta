@@ -61,7 +61,16 @@ Unresolved/data-end исключаются только из соответст�
 - market median return, breadth/synchronization;
 - MAYAK confidence/data completeness.
 
-Spot/OI/funding/premium/orderbook/liquidations не получают фиктивных значений. Они добавляются только отдельной feature/source version после доказанного causal backfill.
+Spot/funding/premium/orderbook/liquidations не получают фиктивных значений. Они добавляются только отдельной feature/source version после доказанного causal backfill.
+
+После отдельного exact OI 5m source backfill + `CausalMayakReplay -> LiveMayakEngine.on_ticker()` разрешается присоединить объективные `positioning_*` поля по точному `signal_key`. Разрешены только:
+
+- `open_interest`;
+- OI change 5/15/30/60m;
+- OI speed 5m;
+- OI acceleration 5m.
+
+OI не получает искусственного direction sign: рост OI сам по себе не является LONG/SHORT фактом. `open_interest` в pooled ALL9 интерпретируется только как scale-dependent diagnostic; переносимость оценивается per-symbol.
 
 ## 5. Direction-adjusted признаки
 

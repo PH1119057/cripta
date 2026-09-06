@@ -11,6 +11,7 @@ from bybit_workbench.mayak.research.component_analysis import (
     analyze,
     auc_higher_is_good,
     load_rows,
+    merge_positioning,
     run,
 )
 
@@ -102,3 +103,39 @@ def test_manifest_marks_holdout_as_diagnostic_reuse(tmp_path: Path) -> None:
     assert manifest["holdout_status"] == "DIAGNOSTIC_REUSE_NOT_FRESH_OOS"
     assert manifest["threshold_selection"] is False
     assert manifest["coin_market_rating_fitted"] is False
+
+
+def test_positioning_join_is_one_to_one_and_adds_objective_features(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    base = load_rows(source)
+    positioning = tmp_path / "positioning.csv"
+    with positioning.open("w", encoding="utf-8-sig", newline="") as handle:
+        fields = ["signal_key", "positioning_open_interest_change_5m_pct"]
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter=";")
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow(
+                {
+                    "signal_key": str(index),
+                    "positioning_open_interest_change_5m_pct": str(index - 4),
+                }
+            )
+    merged = merge_positioning(base, positioning)
+    assert len(merged) == 8
+    assert merged[0]["positioning_open_interest_change_5m_pct"] == "-4"
+    summary, _ = analyze(merged)
+    assert any(row["feature"] == "positioning_open_interest_change_5m_pct" for row in summary)
+
+
+def test_positioning_join_rejects_outcome_columns(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    positioning = tmp_path / "positioning.csv"
+    with positioning.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["signal_key", "future_outcome"], delimiter=";")
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow({"signal_key": str(index), "future_outcome": "x"})
+    with pytest.raises(ValueError, match="forbidden outcome"):
+        merge_positioning(load_rows(source), positioning)

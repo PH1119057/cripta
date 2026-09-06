@@ -82,7 +82,10 @@ def _scope(row: dict[str, str]) -> str:
 
 def _candidate_feature(name: str) -> bool:
     return (
-        name in EXPLICIT_FEATURES or name.startswith("derivatives_") or name.startswith("relative_")
+        name in EXPLICIT_FEATURES
+        or name.startswith("derivatives_")
+        or name.startswith("relative_")
+        or name.startswith("positioning_")
     )
 
 
@@ -106,6 +109,41 @@ def load_rows(path: Path) -> list[dict[str, str]]:
     if len(keys) != len(set(keys)):
         raise ValueError("duplicate signal_key in correlation input")
     return rows
+
+
+def merge_positioning(
+    rows: Sequence[dict[str, str]], positioning_csv: Path | None
+) -> list[dict[str, str]]:
+    merged = [dict(row) for row in rows]
+    if positioning_csv is None:
+        return merged
+    with positioning_csv.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=";")
+        if "signal_key" not in (reader.fieldnames or []):
+            raise ValueError("positioning file missing signal_key")
+        pos: dict[str, dict[str, str]] = {}
+        for row in reader:
+            key = row["signal_key"]
+            if key in pos:
+                raise ValueError(f"duplicate positioning signal_key: {key}")
+            forbidden = {name for name in row if "outcome" in name.lower() or "pnl" in name.lower()}
+            if forbidden:
+                raise ValueError(
+                    f"positioning file contains forbidden outcome fields: {sorted(forbidden)}"
+                )
+            pos[key] = row
+    keys = {row["signal_key"] for row in merged}
+    if keys != set(pos):
+        raise ValueError(
+            f"positioning key mismatch base={len(keys)} positioning={len(pos)} "
+            f"missing={len(keys.difference(pos))} extra={len(set(pos).difference(keys))}"
+        )
+    for row in merged:
+        extra = pos[row["signal_key"]]
+        for name, value in extra.items():
+            if name.startswith("positioning_"):
+                row[name] = value
+    return merged
 
 
 def feature_names(rows: Sequence[dict[str, str]]) -> list[str]:
@@ -282,13 +320,18 @@ def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
-def run(input_csv: Path, output_dir: Path, source_commit: str) -> dict[str, Any]:
+def run(
+    input_csv: Path,
+    output_dir: Path,
+    source_commit: str,
+    positioning_csv: Path | None = None,
+) -> dict[str, Any]:
     valid_sha = len(source_commit) == 40 and all(
         ch in "0123456789abcdef" for ch in source_commit.lower()
     )
     if not valid_sha:
         raise ValueError("source_commit must be a 40-character Git SHA")
-    rows = load_rows(input_csv)
+    rows = merge_positioning(load_rows(input_csv), positioning_csv)
     summary, quartiles = analyze(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(output_dir / "COMPONENT_SUMMARY.csv", summary)
@@ -305,6 +348,8 @@ def run(input_csv: Path, output_dir: Path, source_commit: str) -> dict[str, Any]
         "created_at": datetime.now(UTC).isoformat(),
         "input_csv": str(input_csv),
         "input_sha256": _sha256(input_csv),
+        "positioning_csv": str(positioning_csv) if positioning_csv else None,
+        "positioning_sha256": _sha256(positioning_csv) if positioning_csv else None,
         "source_replay_manifest_sha256": (
             _sha256(input_csv.parent / "RUN_MANIFEST.json")
             if (input_csv.parent / "RUN_MANIFEST.json").exists()
@@ -345,12 +390,18 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-csv", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--positioning-csv", type=Path)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    manifest = run(args.input_csv, args.output_dir, args.source_commit)
+    manifest = run(
+        args.input_csv,
+        args.output_dir,
+        args.source_commit,
+        positioning_csv=args.positioning_csv,
+    )
     print(
         "MAYAK_COMPONENT_RESEARCH=PASS "
         f"signals={manifest['signals']} features={manifest['feature_count']}"
