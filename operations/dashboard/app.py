@@ -347,11 +347,18 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     if not wallet or now_ms - int(wallet[0]) > 15_000:
         reasons.append("mandatory exchange state is stale")
     settings = connection.execute(
-        "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
+        """SELECT updated_at_epoch_ms,enabled_symbols_json
+           FROM runtime.trade_settings WHERE singleton=1"""
     ).fetchone()
     settings_version = None if not settings else str(settings[0])
     if settings is None:
         reasons.append("server trading settings are missing")
+    else:
+        enabled_symbols = {
+            str(symbol).upper() for symbol in json.loads(settings[1] or "[]")
+        } - BYBIT_KZ_UNSUPPORTED
+        if not enabled_symbols:
+            reasons.append("select at least one trading symbol before re-arm")
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running') LIMIT 1"""
@@ -2370,13 +2377,25 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             raise ValueError("включение новых входов не подтверждено")
                         if enabled:
                             current_settings = connection.execute(
-                                """SELECT updated_at_epoch_ms
+                                """SELECT updated_at_epoch_ms,enabled_symbols_json
                                    FROM runtime.trade_settings WHERE singleton=1"""
                             ).fetchone()
                             requested_version = str(request.get("settings_version") or "")
                             current_version = (
                                 "" if not current_settings else str(current_settings[0])
                             )
+                            current_symbols = (
+                                set()
+                                if not current_settings
+                                else {
+                                    str(symbol).upper()
+                                    for symbol in json.loads(current_settings[1] or "[]")
+                                } - BYBIT_KZ_UNSUPPORTED
+                            )
+                            if not current_symbols:
+                                raise ValueError(
+                                    "нельзя открыть шлюз: не выбрана ни одна торговая монета"
+                                )
                             if not requested_version or requested_version != current_version:
                                 raise ValueError(
                                     "settings_version mismatch: reload server state before re-arm"
