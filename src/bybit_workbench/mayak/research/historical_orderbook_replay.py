@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib
 import json
 import os
 import zipfile
@@ -16,7 +17,25 @@ from typing import Any
 from bybit_workbench.mayak.research.historical_signal_backfill import Signal, load_baseline
 from bybit_workbench.mayak.research.objective_replay import CausalMayakReplay, MarketEvent
 
+_orjson: Any
+try:
+    _orjson = importlib.import_module("orjson")
+except ModuleNotFoundError:  # optional research acceleration; stdlib remains canonical fallback.
+    _orjson = None
+
 VERSION = "mayak-historical-orderbook-replay-v1"
+
+
+def _json_backend() -> tuple[str, str | None]:
+    if _orjson is not None:
+        return "orjson", str(_orjson.__version__)
+    return "stdlib-json", None
+
+
+def _decode_json(raw: bytes) -> Any:
+    return _orjson.loads(raw) if _orjson is not None else json.loads(raw)
+
+
 RETAIN_SECONDS = 1005.0
 PREVIOUS_DAY_THRESHOLD_SECONDS = 1000.0
 
@@ -376,7 +395,7 @@ def _archive_events(path: Path) -> Iterable[tuple[int, str, float, dict[str, Any
             raise ValueError(f"expected one member in {path}, found {len(members)}")
         with archive.open(members[0], "r") as handle:
             for line_no, raw_line in enumerate(handle, start=1):
-                payload = json.loads(raw_line)
+                payload = _decode_json(raw_line)
                 event = _normalize_event(payload)
                 if event is None:
                     raise ValueError(f"unrecognized orderbook event {path}:{line_no}")
@@ -563,6 +582,8 @@ def write_outputs(
         "created_at": datetime.now(UTC).isoformat(),
         "project_commit": source_commit,
         "replay_code_sha256": _sha256(Path(__file__).resolve()),
+        "json_parser_backend": _json_backend()[0],
+        "json_parser_version": _json_backend()[1],
         "baseline": str(baseline),
         "baseline_sha256": _sha256(baseline),
         "raw_manifest": str(raw_manifest),

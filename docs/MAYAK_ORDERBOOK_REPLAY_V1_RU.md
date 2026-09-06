@@ -36,6 +36,8 @@ YYYY-MM-DD_<SYMBOL>_ob200.data.zip
 
 Content provenance берётся из канонического `MANIFEST.sha256.json`; фактический размер каждого прочитанного файла обязан совпасть с manifest entry.
 
+Декодирование JSON может использовать ускоренный `orjson`, если он доступен в research environment. Это исключительно transport/performance backend: normalized payload и feature math не меняются, stdlib `json` остаётся обязательным fallback. `RUN_MANIFEST.json` фиксирует backend и его версию.
+
 ## 3. Reconstruction
 
 Используются те же snapshot/delta semantics, что и в проверенном P40/Pilot reconstruction:

@@ -8,6 +8,7 @@ from bybit_workbench.mayak.research.historical_orderbook_replay import (
     ReconstructionState,
     _apply_event,
     _capture_signal,
+    _decode_json,
     _normalize_event,
 )
 from bybit_workbench.mayak.research.historical_signal_backfill import Signal
@@ -118,3 +119,29 @@ def test_raw_normalization_matches_legacy_p40_semantics() -> None:
     ]
     for payload in payloads:
         assert _normalize_event(payload) == legacy_normalize_event(payload)
+
+
+def test_json_backend_preserves_normalized_event(monkeypatch) -> None:
+    from bybit_workbench.mayak.research import historical_orderbook_replay as replay_mod
+
+    raw = (
+        b'{"type":"delta","ts":1779062400234,"cts":1779062400220,'
+        b'"data":{"b":[["99","3"]],"a":[["101","0"]],"u":2}}'
+    )
+    accelerated = _normalize_event(_decode_json(raw))
+    installed = replay_mod._orjson
+    monkeypatch.setattr(replay_mod, "_orjson", None)
+    fallback = _normalize_event(replay_mod._decode_json(raw))
+    monkeypatch.setattr(replay_mod, "_orjson", installed)
+    assert accelerated == fallback
+
+
+def test_json_backend_reports_provenance() -> None:
+    from bybit_workbench.mayak.research import historical_orderbook_replay as replay_mod
+
+    backend, version = replay_mod._json_backend()
+    assert backend in {"orjson", "stdlib-json"}
+    if backend == "orjson":
+        assert version
+    else:
+        assert version is None
