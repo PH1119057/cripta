@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.8
-**Дата:** 2026-09-06
+**Версия документа:** 4.9
+**Дата:** 2026-09-07
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -75,7 +75,7 @@ derivatives depth-200 liquidity. Frozen component research = 251 признак;
 `CoinMarketRating` не фитился, live Entry policy не менялась. Следующий research gate —
 новый temporal/cross-asset OOS с теми же frozen definitions.
 
-OOS protocol V1 предварительно заморожен в `MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md`: тест = NEW15/14024 signals, BTC/ETH = reference-only, 12 candidate effects и confirmation gates зафиксированы до открытия NEW15 MAYAK result. На этой карте OOS result ещё не считается полученным; `CoinMarketRating` по-прежнему не фитится.
+OOS protocol V1 из `MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md` полностью выполнен на NEW15/14024 signals с BTC/ETH только как reference-only. Итог зафиксирован в `MAYAK_COMPONENT_OOS_RESULTS_V1_RU.md`: `CONFIRMED=1`, `MIXED=11`, `REJECTED=0`, `INSUFFICIENT_DATA=0`. Единственный подтверждённый frozen effect — более низкий entry-aligned long/short crowding для исхода `+1.10% раньше -1.00%` (directional AUC 0.53225, ожидаемый знак 12/15 активов, frozen Q1 53.33% против Q4 44.50%). `CoinMarketRating` по-прежнему не фитился; следующий обязательный рубеж — owner review, затем отдельный rating research contract.
 
 ## 5. Dispatcher
 
@@ -178,7 +178,7 @@ D8 завершён и подтверждён `DISPATCHER_V2_D8_STAGE_RESULTS_RU
 
 Exact-ID discipline остаётся fail-honest: если событие не имеет доказанной exact lineage к `signal_id/position_id/trade_id`, D8 оставляет поля `NULL` и не восстанавливает ownership по `symbol + время`.
 
-Следующий научный gate перед формулой `CoinMarketRating` — новый temporal/cross-asset OOS frozen MAYAK components без retuning, затем owner review. Seen frozen ALL9 не используется для выбора итоговой формулы рейтинга.
+Temporal/cross-asset OOS frozen MAYAK components завершён без retuning. По frozen V1 подтверждён 1 из 12 эффектов, 11 получили `MIXED`; Seen frozen ALL9 не используется для post-hoc выбора формулы. Следующий обязательный gate перед `CoinMarketRating` — owner review результата `MAYAK_COMPONENT_OOS_RESULTS_V1_RU.md`, затем отдельный research/implementation contract рейтинга.
 
 ## 13. Масштабирование
 

@@ -1,8 +1,8 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.9
-**Дата:** 2026-09-06
+**Версия:** 3.0
+**Дата:** 2026-09-07
 **Статус:** канонический реестр авторитетности
 
 ## 1. Порядок авторитетности
@@ -80,6 +80,7 @@ connected Exchange / Trading Account
 - Analyst: `ANALYST_ARCHITECTURE_RU.md`
 - MAYAK V2 completed-stage evidence (LEVEL 5 / research evidence, not architecture): `MAYAK_V2_STAGE_RESULTS_RU.md`
 - MAYAK V2 cross-asset OOS frozen confirmation: `MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md` (LEVEL 5, pre-registered research protocol)
+- MAYAK V2 cross-asset OOS result V1: `MAYAK_COMPONENT_OOS_RESULTS_V1_RU.md` (LEVEL 5, frozen research evidence; не trading policy и не rating formula)
 
 Специализированный контракт уточняет верхний, но не создаёт нового top-level ownership.
 
