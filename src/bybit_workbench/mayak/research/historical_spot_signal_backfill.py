@@ -12,8 +12,9 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -57,21 +58,30 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _months(start_epoch: float, end_epoch: float) -> list[str]:
-    current = datetime.fromtimestamp(start_epoch, UTC).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    end = datetime.fromtimestamp(end_epoch, UTC).replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    result: list[str] = []
-    while current <= end:
-        result.append(current.strftime("%Y-%m"))
-        current = current.replace(
-            year=current.year + (current.month == 12),
-            month=1 if current.month == 12 else current.month + 1,
-        )
-    return result
+def _merge_intervals(signals: Sequence[Signal]) -> list[tuple[float, float]]:
+    intervals = sorted((item.touch_epoch - PRE_ROLL_SECONDS, item.touch_epoch) for item in signals)
+    merged: list[tuple[float, float]] = []
+    for start, end in intervals:
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def _days_for_intervals(intervals: Sequence[tuple[float, float]]) -> list[date]:
+    days: set[date] = set()
+    for start, end in intervals:
+        current = datetime.fromtimestamp(start, UTC).date()
+        last = datetime.fromtimestamp(end, UTC).date()
+        while current <= last:
+            days.add(current)
+            current += timedelta(days=1)
+    return sorted(days)
+
+
+def _event_in_intervals(event_at: float, intervals: Sequence[tuple[float, float]]) -> bool:
+    return any(start <= event_at <= end for start, end in intervals)
 
 
 def _download(url: str, destination: Path, retries: int = 5) -> None:
@@ -95,40 +105,55 @@ def _download(url: str, destination: Path, retries: int = 5) -> None:
 def download_sources(
     signals: Sequence[Signal], symbols: tuple[str, ...], cache_dir: Path
 ) -> dict[str, Any]:
-    start = min(item.touch_epoch for item in signals) - PRE_ROLL_SECONDS
-    end = max(item.touch_epoch for item in signals)
-    months = _months(start, end)
-    files: list[dict[str, Any]] = []
+    by_symbol: dict[str, list[Signal]] = defaultdict(list)
+    for signal in signals:
+        by_symbol[signal.symbol].append(signal)
+    tasks: list[tuple[str, str, date, Path, str]] = []
+    required_days: dict[str, list[str]] = {}
     for symbol in symbols:
+        intervals = _merge_intervals(by_symbol[symbol])
+        days = _days_for_intervals(intervals)
+        required_days[symbol] = [item.isoformat() for item in days]
         source_symbol = _spot_source_symbol(symbol)
-        for month in months:
-            name = f"{source_symbol}-{month}.csv.gz"
+        for day in days:
+            name = f"{source_symbol}_{day.isoformat()}.csv.gz"
             path = cache_dir / symbol / name
             url = f"{ARCHIVE_BASE}/{source_symbol}/{name}"
-            if not path.exists():
-                _download(url, path)
-            # Fail closed on corrupt/non-gzip sources.
-            with gzip.open(path, "rt", encoding="utf-8") as handle:
-                header = handle.readline().strip().split(",")
-            if header[:5] != ["id", "timestamp", "price", "volume", "side"]:
-                raise ValueError(f"unexpected spot archive schema: {path} {header}")
-            files.append(
-                {
-                    "symbol": symbol,
-                    "month": month,
-                    "path": str(path),
-                    "url": url,
-                    "bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
-                }
-            )
+            tasks.append((symbol, source_symbol, day, path, url))
+
+    def prepare(task: tuple[str, str, date, Path, str]) -> dict[str, Any]:
+        symbol, source_symbol, day, path, url = task
+        if not path.exists():
+            _download(url, path)
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            header = handle.readline().strip().split(",")
+        if header[:5] != ["id", "timestamp", "price", "volume", "side"]:
+            raise ValueError(f"unexpected spot archive schema: {path} {header}")
+        return {
+            "symbol": symbol,
+            "source_symbol": source_symbol,
+            "day": day.isoformat(),
+            "path": str(path),
+            "url": url,
+            "bytes": path.stat().st_size,
+            "sha256": _sha256(path),
+        }
+
+    files: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(prepare, task) for task in tasks]
+        for future in as_completed(futures):
+            files.append(future.result())
+    files.sort(key=lambda item: (str(item["symbol"]), str(item["day"])))
+    start = min(item.touch_epoch for item in signals) - PRE_ROLL_SECONDS
+    end = max(item.touch_epoch for item in signals)
     return {
         "version": VERSION,
-        "source": "BYBIT_PUBLIC_SPOT_MONTHLY_ARCHIVE",
+        "source": "BYBIT_PUBLIC_SPOT_DAILY_ARCHIVE",
         "archive_base": ARCHIVE_BASE,
         "period_start": datetime.fromtimestamp(start, UTC).isoformat(),
         "period_end": datetime.fromtimestamp(end, UTC).isoformat(),
-        "months": months,
+        "required_days": required_days,
         "files": files,
     }
 
@@ -158,12 +183,23 @@ def _iter_file(path: Path, start: float, end: float) -> Iterator[tuple[float, st
             yield event_at, side, price, size
 
 
+def _iter_file_intervals(
+    path: Path, intervals: Sequence[tuple[float, float]]
+) -> Iterator[tuple[float, str, float, float]]:
+    if not intervals:
+        return
+    start = intervals[0][0]
+    end = intervals[-1][1]
+    for event in _iter_file(path, start, end):
+        if _event_in_intervals(event[0], intervals):
+            yield event
+
+
 def replay_symbol(
     symbol: str, signals: Sequence[Signal], source_files: Sequence[Path]
 ) -> tuple[list[dict[str, Any]], int]:
     ordered = sorted(signals, key=lambda item: item.touch_epoch)
-    start = ordered[0].touch_epoch - PRE_ROLL_SECONDS
-    end = ordered[-1].touch_epoch
+    intervals = _merge_intervals(ordered)
     replay = CausalMayakReplay((symbol,), exact_liquidations=False)
     replay.set_supported("spot", {symbol})
     index = 0
@@ -187,7 +223,7 @@ def replay_symbol(
         )
 
     for path in source_files:
-        for event_at, side, price, size in _iter_file(path, start, end):
+        for event_at, side, price, size in _iter_file_intervals(path, intervals):
             while index < len(ordered) and ordered[index].touch_epoch < event_at:
                 capture(ordered[index])
                 index += 1
@@ -282,6 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "created_at": datetime.now(UTC).isoformat(),
         "project_commit": args.source_commit,
         "replay_code_sha256": _sha256(Path(__file__).resolve()),
+        "source_granularity": "daily-required-window-v1",
         "baseline": str(args.baseline_csv),
         "baseline_sha256": _sha256(args.baseline_csv),
         "source_manifest": str(source_manifest_path),

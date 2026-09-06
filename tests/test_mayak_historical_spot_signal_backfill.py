@@ -7,7 +7,10 @@ from pathlib import Path
 
 from bybit_workbench.mayak.research.historical_signal_backfill import Signal
 from bybit_workbench.mayak.research.historical_spot_signal_backfill import (
+    _days_for_intervals,
     _iter_file,
+    _iter_file_intervals,
+    _merge_intervals,
     _spot_source_symbol,
     replay_symbol,
 )
@@ -57,3 +60,29 @@ def test_replay_does_not_use_future_trade(tmp_path: Path) -> None:
 def test_spot_symbol_mapping_is_explicit() -> None:
     assert _spot_source_symbol("1000PEPEUSDT") == "PEPEUSDT"
     assert _spot_source_symbol("UNIUSDT") == "UNIUSDT"
+
+
+def test_daily_intervals_cover_only_required_signal_windows() -> None:
+    first = _signal("2026-05-18T01:00:00+00:00")
+    second = _signal("2026-05-18T10:00:00+00:00")
+    intervals = _merge_intervals([first, second])
+    assert intervals == [
+        (first.touch_epoch - 7200, first.touch_epoch),
+        (second.touch_epoch - 7200, second.touch_epoch),
+    ]
+    days = _days_for_intervals(intervals)
+    assert [item.isoformat() for item in days] == ["2026-05-17", "2026-05-18"]
+
+
+def test_iter_spot_archive_intervals_skips_noncausal_gap(tmp_path: Path) -> None:
+    path = tmp_path / "UNIUSDT_2026-05-18.csv.gz"
+    _spot(
+        path,
+        [
+            (1_000, 2.0, 1.0, "buy"),
+            (2_000, 2.0, 1.0, "sell"),
+            (10_000, 2.0, 1.0, "buy"),
+        ],
+    )
+    rows = list(_iter_file_intervals(path, [(0.5, 2.5)]))
+    assert [item[0] for item in rows] == [1.0, 2.0]
