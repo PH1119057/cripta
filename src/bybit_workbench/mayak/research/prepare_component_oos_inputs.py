@@ -141,6 +141,22 @@ def run(
                 if activation_at:
                     raise ValueError(f"initial stop after recorded +0.10 activation: {key}")
                 outcome_counts_010["hit_minus_1p00_before_plus_0p10"] += 1
+            elif reason == "target" and not activation_at:
+                # The frozen EO1 engine exits at target before recording activation
+                # when the first observed fill tick already exceeds +1.10%. That
+                # same causal tick necessarily proves +0.10 before -1.00.
+                target_at = floor_row.get("exit_at") or ""
+                if not target_at:
+                    raise ValueError(f"same-tick target has no exit_at: {key}")
+                audit_010.append(
+                    {
+                        "symbol": symbol,
+                        "touch_at": base["touch_at"],
+                        "outcome": "target_same_tick_implies_plus_0p10",
+                        "activation_at": _at(target_at),
+                    }
+                )
+                outcome_counts_010["reached_plus_0p10_before_minus_1p00"] += 1
             elif activation_at:
                 audit_010.append(
                     {

@@ -226,6 +226,67 @@ def test_input_adapter_preserves_exact_keys_and_maps_existing_path_semantics(
     assert manifest["trading_effect"] == "NONE"
 
 
+def test_input_adapter_maps_first_tick_target_to_plus010_at_same_tick(tmp_path: Path) -> None:
+    symbol = "TESTUSDT"
+    entry_root = tmp_path / "entry_root"
+    floor_root = tmp_path / "floor"
+    nofloor_root = tmp_path / "nofloor"
+    _write_csv(
+        entry_root / "entry" / symbol / "signals.csv",
+        ["symbol", "direction", "entry_at", "entry_price"],
+        [
+            {
+                "symbol": symbol,
+                "direction": "Long",
+                "entry_at": "2026-05-18T00:00:00+00:00",
+                "entry_price": "100",
+            }
+        ],
+    )
+    fields = [
+        "symbol",
+        "direction",
+        "touch_at",
+        "original_entry_price",
+        "adverse_offset_pct",
+        "scenario",
+        "fill_status",
+        "protection_activation_at",
+        "exit_reason",
+        "exit_at",
+        "trade_window_complete",
+    ]
+    row = {
+        "symbol": symbol,
+        "direction": "Long",
+        "touch_at": "2026-05-18T00:00:00+00:00",
+        "original_entry_price": "100",
+        "adverse_offset_pct": "0.0",
+        "scenario": "BASELINE_0P00",
+        "fill_status": "filled",
+        "protection_activation_at": "",
+        "exit_reason": "target",
+        "exit_at": "2026-05-18T00:00:00.250000+00:00",
+        "trade_window_complete": "True",
+    }
+    _write_csv(floor_root / symbol / "events.csv", fields, [row])
+    _write_csv(nofloor_root / symbol / "events.csv", fields, [row])
+    out = tmp_path / "out"
+    manifest = prepare_inputs(
+        symbols=(symbol,),
+        entry_root=entry_root,
+        floor_root=floor_root,
+        nofloor_root=nofloor_root,
+        output_dir=out,
+        source_commit="a" * 40,
+    )
+    assert manifest["plus010_counts"] == {"reached_plus_0p10_before_minus_1p00": 1}
+    with (out / "NEW15_PLUS010_AUDIT.csv").open(encoding="utf-8-sig", newline="") as handle:
+        audit = list(csv.DictReader(handle))
+    assert audit[0]["outcome"] == "target_same_tick_implies_plus_0p10"
+    assert audit[0]["activation_at"] == "2026-05-18T00:00:00.250000+00:00"
+
+
 def test_oos_contract_is_observation_only_and_registered() -> None:
     body = (ROOT / "docs/MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md").read_text(encoding="utf-8")
     authority = (ROOT / "docs/DOCUMENT_AUTHORITY_RU.md").read_text(encoding="utf-8")
