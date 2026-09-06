@@ -69,3 +69,11 @@ def test_v2_tables_are_in_archive_and_signal_analysis_contracts() -> None:
     ):
         assert table in archive
         assert table in dashboard
+
+
+def test_v2_live_bootstrap_starts_from_latest_mayak_and_then_moves_forward() -> None:
+    runtime = RUNTIME.read_text(encoding="utf-8")
+    assert "max(source_mayak_snapshot_id)" in runtime
+    assert "max(mayak_snapshot_id)" in runtime
+    assert "source.mayak_snapshot_id>watermark.source_mayak_snapshot_id" in runtime
+    assert "Bootstrap from latest source only" in runtime

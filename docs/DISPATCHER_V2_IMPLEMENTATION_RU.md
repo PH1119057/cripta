@@ -134,6 +134,7 @@ Owner таблиц — migration owner; runtime `cripta` получает тол
 - не импортирует Strategy/Entry/Exit/Supervisor;
 - публикует status/health с source freshness и counts;
 - restart/idempotency не создаёт дубликаты.
+- при первом старте пустого `dispatcher_v2` runtime bootstrap берёт только последний доступный MAYAK snapshot и затем движется только вперёд по `source_mayak_snapshot_id`; массовый historical backfill не является поведением production daemon и запускается только отдельной явной research/maintenance задачей.
 
 ## 11. Версии D0–D7
 

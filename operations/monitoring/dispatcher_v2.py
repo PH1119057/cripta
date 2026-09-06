@@ -42,17 +42,32 @@ SOURCE_ACCOUNT_REF = os.environ.get("CRIPTA_ACCOUNT_REF", "runtime.wallet_latest
 def _source_global_rows(
     connection: psycopg.Connection[Any], limit: int = 8
 ) -> list[dict[str, Any]]:
+    """Bootstrap from latest source only, then advance monotonically by snapshot id."""
     with connection.cursor(row_factory=dict_row) as cursor:
         return list(
             cursor.execute(
-                """SELECT market_context_id,mayak_snapshot_id,observed_at,mayak_version,
-                          schema_version,config_fingerprint,data_quality,payload,
-                          provenance,content_hash
+                """WITH watermark AS (
+                       SELECT max(source_mayak_snapshot_id) AS source_mayak_snapshot_id
+                       FROM dispatcher_v2.global_market_contexts
+                   ), latest_source AS (
+                       SELECT max(mayak_snapshot_id) AS mayak_snapshot_id
+                       FROM mayak_v2.shared_market_contexts
+                   )
+                   SELECT source.market_context_id,source.mayak_snapshot_id,
+                          source.observed_at,source.mayak_version,source.schema_version,
+                          source.config_fingerprint,source.data_quality,source.payload,
+                          source.provenance,source.content_hash
                    FROM mayak_v2.shared_market_contexts source
-                   WHERE NOT EXISTS (
-                     SELECT 1 FROM dispatcher_v2.global_market_contexts target
-                     WHERE target.source_market_context_id=source.market_context_id)
-                   ORDER BY observed_at ASC LIMIT %s""",
+                   CROSS JOIN watermark
+                   CROSS JOIN latest_source
+                   WHERE (
+                       watermark.source_mayak_snapshot_id IS NULL
+                       AND source.mayak_snapshot_id=latest_source.mayak_snapshot_id
+                   ) OR (
+                       watermark.source_mayak_snapshot_id IS NOT NULL
+                       AND source.mayak_snapshot_id>watermark.source_mayak_snapshot_id
+                   )
+                   ORDER BY source.mayak_snapshot_id ASC LIMIT %s""",
                 (limit,),
             ).fetchall()
         )
