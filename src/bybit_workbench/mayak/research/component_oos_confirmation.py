@@ -474,8 +474,11 @@ def _load_replay_manifest(path: Path) -> dict[str, Any]:
     symbols = tuple(str(item) for item in payload.get("symbols", []))
     if symbols != REPLAY_PANEL:
         raise ValueError(f"replay panel mismatch: {symbols}")
-    if int(payload.get("signals", -1)) != EXPECTED_SIGNALS:
-        raise ValueError(f"replay signal count mismatch: {payload.get('signals')}")
+    if int(payload.get("selected_signal_count", -1)) != EXPECTED_SIGNALS:
+        raise ValueError(
+            "replay signal count mismatch: "
+            f"{payload.get('selected_signal_count')}"
+        )
     if payload.get("outcomes_used_by_replay") is not False:
         raise ValueError("replay manifest must prove outcomes_used_by_replay=false")
     return payload

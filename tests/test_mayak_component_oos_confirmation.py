@@ -12,6 +12,7 @@ from bybit_workbench.mayak.research.component_oos_confirmation import (
     TEST_SYMBOLS,
     Candidate,
     FrozenQuartiles,
+    _load_replay_manifest,
     evaluate_candidate,
 )
 from bybit_workbench.mayak.research.prepare_component_oos_inputs import run as prepare_inputs
@@ -46,6 +47,25 @@ def _synthetic_rows(*, good_high: bool) -> list[dict[str, str]]:
                 }
             )
     return rows
+
+
+def test_oos_replay_manifest_uses_historical_backfill_selected_signal_count(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "RUN_MANIFEST.json"
+    path.write_text(
+        __import__("json").dumps(
+            {
+                "symbols": list(TEST_SYMBOLS + REFERENCE_SYMBOLS),
+                "selected_signal_count": EXPECTED_SIGNALS,
+                "outcomes_used_by_replay": False,
+                "project_commit": "a" * 40,
+            }
+        ),
+        encoding="utf-8",
+    )
+    payload = _load_replay_manifest(path)
+    assert payload["selected_signal_count"] == EXPECTED_SIGNALS
 
 
 def test_oos_registry_is_frozen_to_new15_and_twelve_candidates() -> None:
