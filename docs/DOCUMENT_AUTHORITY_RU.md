@@ -1,7 +1,7 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.5
+**Версия:** 2.6
 **Дата:** 2026-09-06
 **Статус:** канонический реестр авторитетности
 
@@ -72,6 +72,7 @@ connected Exchange / Trading Account
 - MAYAK V2 objective context implementation/research: `MAYAK_OBJECTIVE_CONTEXT_V2_IMPLEMENTATION_RU.md`
 - Dispatcher: `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
 - Dispatcher V2 implementation D0–D7: `DISPATCHER_V2_IMPLEMENTATION_RU.md` (LEVEL 4, active implementation contract)
+- Dispatcher V2 D0–D7 runtime evidence: `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md` (LEVEL 5)
 - universal market/coin context and rating: `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
 - lifecycle: `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
 - Analyst: `ANALYST_ARCHITECTURE_RU.md`

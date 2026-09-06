@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.4
+**Версия документа:** 4.5
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -169,6 +169,8 @@ Supervisor/Analyst/PostgreSQL/UI находятся в поддерживающ�
 Owner decision 2026-09-06 прекратил profile-based legacy runtime. `cripta-strategy-dispatcher.service` и старый `cripta-causal-context-correlator.service` отключены; исторические `strategy_dispatcher.*` и `research_context.event_links` не переписываются. Первичные signal/Entry/fill/position/MAYAK данные продолжают накапливаться и допускают последующий causal backfill.
 
 Активная целевая реализация D0–D7 — clean `dispatcher_v2`: отдельный package/runtime/schema без Strategy profiles. Она публикует `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` с `trading_effect=NONE`. `CoinMarketRating` на этом этапе **не реализован**. Strategy/Entry/Exit consumer cutover остаётся следующим отдельным этапом.
+
+D0–D7 production runtime подтверждён evidence report `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md`: `cripta-dispatcher-v2.service` active/enabled, installed/loaded source commit `ff259fdc173841a02cc6bb633af5ed5765614df1`, bootstrap from current MAYAK PASS, 20 coin contexts per source snapshot, restart/idempotency PASS. Следующий этап — D8 passive `OBSERVED_CONTEXT` correlation; это ещё не Strategy consumption.
 
 ## 13. Масштабирование
 
