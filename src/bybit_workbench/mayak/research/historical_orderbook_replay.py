@@ -265,6 +265,51 @@ def _apply_event(
         state.undos.popleft()
 
 
+def _apply_event_light(
+    state: ReconstructionState,
+    *,
+    record_type: str,
+    event_at: float,
+    uid: str,
+    data: dict[str, Any],
+) -> None:
+    """Apply exact raw book state without retaining reverse history.
+
+    This is used only outside the 1005-second causal window before a frozen
+    touch. Update-id continuity, full book state, timestamps and counters remain
+    exact; only undo objects that cannot affect any future snapshot are skipped.
+    """
+    bids = _levels(data.get("b"))
+    asks = _levels(data.get("a"))
+    update_raw = data.get("u")
+    update_id = int(update_raw) if update_raw is not None else None
+    state.serial += 1
+    if record_type == "snapshot":
+        state.book.bids = {price: qty for price, qty in bids if qty > 0}
+        state.book.asks = {price: qty for price, qty in asks if qty > 0}
+        state.book.ready = True
+        state.previous_update_id = update_id
+        state.snapshots += 1
+    elif record_type == "delta":
+        if not state.book.ready:
+            raise ValueError(f"delta before first snapshot at {event_at}")
+        if update_id is None or state.previous_update_id is None:
+            raise ValueError(f"missing update id at {event_at}")
+        if update_id != state.previous_update_id + 1:
+            raise ValueError(
+                f"ORDERBOOK_UPDATE_ID_GAP prior={state.previous_update_id} current={update_id}"
+            )
+        _apply_levels(state.book.bids, bids)
+        _apply_levels(state.book.asks, asks)
+        state.previous_update_id = update_id
+        state.deltas += 1
+    else:
+        raise ValueError(f"unsupported orderbook record type: {record_type}")
+    state.last_event_at = event_at
+    state.last_uid = uid
+    state.undos.clear()
+
+
 def _reverse_once(
     bids: dict[str, float], asks: dict[str, float], undo: UndoEvent
 ) -> tuple[dict[str, float], dict[str, float], bool]:
@@ -420,6 +465,7 @@ def _process_archive(
     index = 0
     output: list[dict[str, Any]] = []
     first_event = True
+    tail_record_after: float | None = None
     for line_no, record_type, event_at, data, raw_bytes in _archive_events(path):
         state.bytes_read += raw_bytes
         state.records += 1
@@ -428,11 +474,27 @@ def _process_archive(
             index += 1
         if index >= len(ordered) and not need_tail:
             break
-        if first_event and record_type != "snapshot":
-            raise ValueError(f"first orderbook event is not snapshot: {path}")
-        first_event = False
+        if first_event:
+            if record_type != "snapshot":
+                raise ValueError(f"first orderbook event is not snapshot: {path}")
+            if need_tail:
+                dt = datetime.fromtimestamp(event_at, UTC)
+                next_midnight = datetime.combine(
+                    dt.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+                )
+                tail_record_after = next_midnight.timestamp() - RETAIN_SECONDS
+            first_event = False
         uid = f"{path.name}:{line_no}"
-        _apply_event(state, record_type=record_type, event_at=event_at, uid=uid, data=data)
+        next_touch = ordered[index].touch_epoch if index < len(ordered) else None
+        record_undo = bool(next_touch is not None and event_at >= next_touch - RETAIN_SECONDS)
+        if tail_record_after is not None and event_at >= tail_record_after:
+            record_undo = True
+        if record_undo:
+            _apply_event(state, record_type=record_type, event_at=event_at, uid=uid, data=data)
+        else:
+            _apply_event_light(
+                state, record_type=record_type, event_at=event_at, uid=uid, data=data
+            )
     while index < len(ordered):
         output.append(_capture_signal(state, ordered[index]))
         index += 1
@@ -584,6 +646,7 @@ def write_outputs(
         "replay_code_sha256": _sha256(Path(__file__).resolve()),
         "json_parser_backend": _json_backend()[0],
         "json_parser_version": _json_backend()[1],
+        "undo_capture_mode": "signal-window-only-v1",
         "baseline": str(baseline),
         "baseline_sha256": _sha256(baseline),
         "raw_manifest": str(raw_manifest),

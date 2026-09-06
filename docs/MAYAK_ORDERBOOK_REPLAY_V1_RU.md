@@ -75,7 +75,7 @@ CausalMayakReplay
 
 Raw depth-200 может обновляться около 10 раз/сек. Вызывать Python `on_book()` на каждом delta не требуется для воспроизведения snapshot T.
 
-Reader применяет каждый raw delta к reconstructed state, но хранит обратимые изменения только последних ~1000 секунд. В момент signal T:
+Reader применяет каждый raw delta к reconstructed state. Для участков, которые находятся дальше чем ~1005 секунд от ближайшего frozen touch, сохраняются только exact full-book state, timestamp и update-id continuity без ненужных undo-копий. За ~1005 секунд до touch включается обратимая delta-history. Для required previous-day tail такая history включается на последних ~1005 секундах суток. Это performance-only режим `signal-window-only-v1`; он не меняет snapshot/delta semantics или feature math. В момент signal T:
 
 1. определяется последний raw book event `E <= T`;
 2. сохраняется непосредственное предыдущее raw состояние перед E для exact immediate change;

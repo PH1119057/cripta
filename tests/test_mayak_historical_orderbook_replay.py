@@ -7,6 +7,7 @@ from bybit_workbench.mayak.research.historical_orderbook_replay import (
     MutableBook,
     ReconstructionState,
     _apply_event,
+    _apply_event_light,
     _capture_signal,
     _decode_json,
     _normalize_event,
@@ -77,7 +78,22 @@ def test_sparse_orderbook_replay_matches_full_live_engine_with_subsecond_updates
         "derivatives"
     ]
     sparse = _capture_signal(state, _signal(target))["liquidity"]
+
+    windowed = ReconstructionState.empty()
+    for serial, (event_at, kind, data) in enumerate(events, start=1):
+        if event_at > target:
+            break
+        apply = _apply_event if event_at >= target - 1005.0 else _apply_event_light
+        apply(
+            windowed,
+            record_type=kind,
+            event_at=event_at,
+            uid=f"synthetic:{serial}",
+            data=data,
+        )
+    windowed_liquidity = _capture_signal(windowed, _signal(target))["liquidity"]
     assert sparse == expected
+    assert windowed_liquidity == expected
 
 
 def test_update_id_gap_is_fail_closed() -> None:
@@ -101,6 +117,27 @@ def test_update_id_gap_is_fail_closed() -> None:
         assert "UPDATE_ID_GAP" in str(exc)
     else:
         raise AssertionError("gap must fail closed")
+
+    light = ReconstructionState.empty()
+    _apply_event_light(
+        light,
+        record_type="snapshot",
+        event_at=1.0,
+        uid="a",
+        data=_data(10, 10, 10, snapshot=True),
+    )
+    try:
+        _apply_event_light(
+            light,
+            record_type="delta",
+            event_at=2.0,
+            uid="b",
+            data=_data(12, 11, 11),
+        )
+    except ValueError as exc:
+        assert "UPDATE_ID_GAP" in str(exc)
+    else:
+        raise AssertionError("light path gap must fail closed")
 
 
 def test_raw_normalization_matches_legacy_p40_semantics() -> None:
