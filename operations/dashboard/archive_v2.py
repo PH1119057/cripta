@@ -66,6 +66,7 @@ SERVICE_NAMES = (
     "cripta-private-runtime.service",
     "cripta-mayak-v2.service",
     "cripta-dispatcher-v2.service",
+    "cripta-dispatcher-v2-context-correlator.service",
     "cripta-position-supervisor.service",
     "postgresql.service",
 )
@@ -222,6 +223,11 @@ TABLE_EXPORTS = (
     ),
     TableExport(
         "research_context.event_links", "analytics/event_links.jsonl", ("event_at", "created_at")
+    ),
+    TableExport(
+        "research_context.dispatcher_v2_event_links",
+        "analytics/dispatcher_v2_event_links.jsonl",
+        ("occurred_at", "linked_at"),
     ),
 )
 

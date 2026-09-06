@@ -1,0 +1,27 @@
+[Unit]
+Description=Cripta Dispatcher V2 passive observed-context correlator
+After=cripta-dispatcher-v2.service postgresql.service
+Wants=cripta-dispatcher-v2.service postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/var/lib/cripta/dispatcher_v2/correlator.env
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/dispatcher_v2_context_correlator.py --poll-seconds 10 --batch-limit 1000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/cripta/dispatcher_v2
+
+[Install]
+WantedBy=multi-user.target

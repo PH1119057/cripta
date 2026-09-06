@@ -828,6 +828,7 @@ SIGNAL_ANALYSIS_TABLES = (
     ("runtime.m3_consumed_context", "signal_at", "timestamp"),
     ("runtime.trade_settings_history", "changed_at_epoch_ms", "epoch_ms"),
     ("research_context.event_links", "occurred_at", "timestamp"),
+    ("research_context.dispatcher_v2_event_links", "occurred_at", "timestamp"),
     ("strategy_dispatcher.runs", "observed_at", "timestamp"),
     ("strategy_dispatcher.assessments", "observed_at", "timestamp"),
     ("mayak_v2.snapshots", "observed_at", "timestamp"),
@@ -1169,6 +1170,83 @@ def _write_postgresql_period_tables(
     return counts
 
 
+
+
+def _write_dispatcher_v2_signal_context_csv(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_ms: int | None,
+) -> int:
+    query = """
+        SELECT
+            o.signal_id,
+            o.symbol,
+            o.direction,
+            to_timestamp(o.signal_at_epoch_ms / 1000.0) AS signal_at,
+            o.signal_price,
+            o.decision AS scanner_decision,
+            entry.decision AS entry_decision,
+            entry.reason AS entry_reason,
+            entry.entry_policy,
+            entry.policy_version AS entry_policy_version,
+            link.global_context_id,
+            link.global_observed_at,
+            link.global_age_seconds,
+            global_ctx.data_quality AS global_data_quality,
+            global_ctx.freshness_status AS global_stored_freshness_status,
+            global_ctx.payload AS global_context_payload,
+            link.coin_context_id,
+            link.coin_observed_at,
+            link.coin_age_seconds,
+            coin_ctx.data_quality AS coin_data_quality,
+            coin_ctx.freshness_status AS coin_stored_freshness_status,
+            coin_ctx.payload AS coin_context_payload,
+            link.capacity_snapshot_id,
+            link.capacity_observed_at,
+            link.capacity_age_seconds,
+            capacity.data_quality AS capacity_data_quality,
+            capacity.freshness_status AS capacity_stored_freshness_status,
+            capacity.total_equity,
+            capacity.used_position_margin,
+            capacity.reserved_order_margin,
+            capacity.free_balance,
+            capacity.available_for_new_trading,
+            capacity.open_positions_count,
+            capacity.active_orders_count,
+            link.link_quality,
+            link.observed_context_mode,
+            link.consumed_context_mode,
+            link.provenance AS dispatcher_v2_link_provenance,
+            CASE
+                WHEN link.global_context_id IS NULL THEN 'MISSING'
+                WHEN link.global_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                 AND (link.coin_observed_at IS NULL OR
+                      link.coin_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0))
+                 AND (link.capacity_observed_at IS NULL OR
+                      link.capacity_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0))
+                    THEN 'YES'
+                ELSE 'NO_FUTURE_CONTEXT'
+            END AS dispatcher_v2_causal_ok
+        FROM monitoring.opportunities o
+        LEFT JOIN research_context.dispatcher_v2_event_links link
+          ON link.event_type='SIGNAL' AND link.reference_id=o.signal_id
+        LEFT JOIN dispatcher_v2.global_market_contexts global_ctx
+          ON global_ctx.global_context_id=link.global_context_id
+        LEFT JOIN dispatcher_v2.coin_market_contexts coin_ctx
+          ON coin_ctx.coin_context_id=link.coin_context_id
+        LEFT JOIN dispatcher_v2.trading_capacity_snapshots capacity
+          ON capacity.capacity_snapshot_id=link.capacity_snapshot_id
+        LEFT JOIN runtime.entry_decisions entry ON entry.signal_id=o.signal_id
+    """
+    parameters: tuple[object, ...] = ()
+    if cutoff_ms is not None:
+        query += " WHERE o.signal_at_epoch_ms >= %s"
+        parameters = (cutoff_ms,)
+    query += " ORDER BY o.signal_at_epoch_ms"
+    cursor = connection.execute(query, parameters)
+    return _write_cursor_csv(archive, "03_DISPATCHER_V2_OBSERVED_CONTEXT.csv", cursor)
+
+
 def _write_entry_audit_csv(
     archive: zipfile.ZipFile, cutoff_seconds: float | None
 ) -> int:
@@ -1261,8 +1339,12 @@ def export_signal_analysis_bundle(period: str) -> dict[str, object]:
                 signal_rows, summary = _write_signal_context_csv(
                     archive, connection, cutoff_ms
                 )
+                v2_rows = _write_dispatcher_v2_signal_context_csv(
+                    archive, connection, cutoff_ms
+                )
                 manifest["summary"] = summary
                 manifest["files"]["01_SIGNAL_CONTEXT.csv"] = signal_rows
+                manifest["files"]["03_DISPATCHER_V2_OBSERVED_CONTEXT.csv"] = v2_rows
                 postgres_counts = _write_postgresql_period_tables(
                     archive, connection, cutoff_seconds, cutoff_ms
                 )
