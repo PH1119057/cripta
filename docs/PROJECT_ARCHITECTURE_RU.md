@@ -1,8 +1,8 @@
 # АРХИТЕКТУРА ПРОЕКТА «КРИПТА»
 
 **Документ:** `PROJECT_ARCHITECTURE_RU.md`
-**Версия:** 2.0
-**Дата:** 2026-09-05
+**Версия:** 2.1
+**Дата:** 2026-09-06
 **Статус:** глобальный архитектурный контракт
 
 Верхний контракт: `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`.
@@ -63,19 +63,25 @@ MAYAK наблюдает внешний мир независимо от тор�
 
 > Что происходит на рынке?
 
-Результат MAYAK — общий причинный `SharedMarketContext`.
+Результат MAYAK — причинный `SharedMarketContext` и strategy-agnostic instrument/coin facts, достаточные для объективного описания как рынка в целом, так и конкретных инструментов.
 
-# 3. Dispatcher — общая прикладная обстановка
+# 3. Dispatcher — универсальная прикладная обстановка
 
-Dispatcher имеет две функции-показателя.
+Dispatcher не знает тип Entry и не интерпретирует рынок за конкретную Strategy. Он преобразует MAYAK в единый причинный read-model для прикладных потребителей.
 
-## 3.1 Пригодность рыночной среды
+Dispatcher имеет три класса показателей.
 
-Он сопоставляет MAYAK с профилями Strategy.
+## 3.1 Общерыночный контекст
 
-Один рынок может дать разные assessments разным Strategy.
+Публикует objective global market state: направление/ширину/синхронность, деньги, ликвидность, ликвидации, позиционирование, качество и свежесть.
 
-## 3.2 Состояние торгового счёта
+## 3.2 Контекст и рейтинг конкретной монеты
+
+Публикует strategy-agnostic карточку/`CoinMarketRating` конкретного инструмента. Рейтинг может учитывать фактический spot/derivatives money flow, его скорость/ускорение, OI, крупные сделки, ликвидность, ликвидации, relative strength, divergence, event risk и data quality.
+
+Рейтинг не использует PnL или успешность наших Entry и не является командой LONG/SHORT.
+
+## 3.3 Состояние торгового счёта
 
 Из technical account-sync Dispatcher получает нормализованный фактический снимок торгового аккаунта подключённой площадки и публикует:
 
@@ -147,7 +153,7 @@ Entry рассматривает:
 
 - causal signal;
 - утверждённые Strategy rules;
-- применимый Dispatcher market assessment;
+- применимый объективный Dispatcher global/coin market context;
 - Dispatcher trading-capacity snapshot;
 - technical readiness.
 
@@ -156,7 +162,6 @@ Entry фиксирует точный outcome, например:
 ```text
 ACCEPTED
 STRATEGY_CONDITION_REJECTED
-DISPATCHER_MARKET_INCOMPATIBLE
 INSUFFICIENT_AVAILABLE_FUNDS
 OPERATIONAL_SAFETY_BLOCKED
 EXCHANGE_REJECTED
@@ -195,7 +200,7 @@ position_id
 | Смысл | Архитектурный владелец |
 |---|---|
 | Рынок нестабилен / каскад / ликвидность плохая | MAYAK как наблюдаемый факт |
-| Для Strategy среда плоха | Dispatcher assessment + Strategy interpretation |
+| Для Strategy среда плоха | Strategy interpretation объективного Dispatcher context |
 | Сколько денег свободно | Exchange truth -> technical account sync -> Dispatcher indicator |
 | Сколько использовать | Strategy |
 | Размер позиции / плечо / stop | Strategy |
@@ -282,30 +287,40 @@ source_exchange/account
 
 # 14. Global market indicator
 
-Dispatcher может публиковать общий indicator состояния среды.
+Dispatcher может публиковать общий objective indicator состояния среды.
 
-Он не является командой.
+Он не является командой и не является оценкой пригодности для конкретной Strategy.
 
 Strategy решает, что этот indicator означает для её Entry и Exit.
 
-# 15. Supervisor и Analyst
+# 15. CoinMarketRating и StrategyCoinFit
+
+`CoinMarketRating` — объективная причинная характеристика текущего состояния монеты, формируемая MAYAK/Dispatcher без знания нашей торговой статистики.
+
+`StrategyCoinFit` — статистика того, насколько конкретная `strategy_id/version` исторически работает на конкретном инструменте. Она принадлежит Analyst/research и может стать входом новой owner-approved Strategy version только через обычный research/shadow/live процесс.
+
+Эти сущности запрещено смешивать. Плохой результат Strategy на монете не делает монету «плохой» внутри MAYAK.
+
+Механизм выбора между несколькими одновременно доступными Entry attempts/монетами этим документом не задаётся; если он будет внедряться, это отдельный Strategy/portfolio contract.
+
+# 16. Supervisor и Analyst
 
 Position Supervisor и Analyst относятся к поддерживающему наблюдательно-аналитическому контуру.
 
 Они не являются новыми top-level trading layers.
 
-# 16. PostgreSQL
+# 17. PostgreSQL
 
 PostgreSQL — persisted truth проекта, но не торговый слой.
 
 Он хранит историю и причинные связи, достаточные для восстановления signal, attempt, strategy binding, account/trading-capacity snapshot, Dispatcher context, Entry decision, Execution, position, Exit, economics и post-decision observation.
 
-# 17. Operational safety
+# 18. Operational safety
 
 Техническая безопасность имеет право fail-closed остановить небезопасную mutation.
 
 Она не должна маскироваться под рыночный фильтр или Strategy.
 
-# 18. Изменения
+# 19. Изменения
 
 Любая попытка вернуть top-level Risk, сделать Dispatcher исполнителем, сделать technical service владельцем Strategy, привязать архитектуру к одной бирже или смешать Entry/Exit разных strategy bindings является архитектурно чувствительной.

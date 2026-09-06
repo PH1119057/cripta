@@ -1,8 +1,8 @@
 # НЕПРЕРЫВНЫЙ ЖИЗНЕННЫЙ ЦИКЛ СИГНАЛА
 
 **Документ:** `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
-**Версия:** 1.1
-**Дата:** 2026-09-05
+**Версия:** 1.2
+**Дата:** 2026-09-06
 **Статус:** канонический архитектурный контракт
 
 ## 1. Корневая сущность
@@ -48,8 +48,10 @@ SIGNAL_DETECTED
 Для attempt могут быть связаны отдельно:
 
 ```text
-market_assessment_id
+global_market_context_id
+coin_market_context_id / coin_market_rating_id
 trading_capacity_snapshot_id
+legacy_market_assessment_id   # только для исторической/profile-based совместимости
 ```
 
 Различать `OBSERVED_CONTEXT` и `CONSUMED_CONTEXT`.
@@ -61,7 +63,6 @@ trading_capacity_snapshot_id
 ```text
 ACCEPTED
 STRATEGY_CONDITION_REJECTED
-DISPATCHER_MARKET_INCOMPATIBLE
 INSUFFICIENT_AVAILABLE_FUNDS
 OPERATIONAL_SAFETY_BLOCKED
 STALE_OR_UNKNOWN_REQUIRED_STATE
@@ -94,7 +95,7 @@ strategy_requested_allocation
 
 - почему возник signal;
 - какая Strategy рассматривалась;
-- какой market context видел Entry;
+- какой objective global/coin market context видел Entry;
 - сколько торговой ёмкости было доступно;
 - сколько хотела использовать Strategy;
 - почему Entry принял/отклонил;
@@ -135,7 +136,7 @@ signal_id
 
 ## 11. Аналитика
 
-Analyst должен отдельно считать strategy rejects, Dispatcher-market rejects, insufficient-funds rejects, operational blocks, no-fill, filled outcomes, saved loss, lost profitable path и capital-constrained opportunity.
+Analyst должен отдельно считать strategy rejects, insufficient-funds rejects, operational blocks, no-fill, filled outcomes, saved loss, lost profitable path и capital-constrained opportunity. Исторические `DISPATCHER_MARKET_INCOMPATIBLE` сохраняются как legacy-аудит и не становятся канонической новой причиной отказа.
 
 ## 12. UI/read model
 

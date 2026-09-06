@@ -87,7 +87,7 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
 ## Жёсткая остановка при архитектурном конфликте
 
 - `ARCHITECTURE_CONFLICT_HARD_STOP=YES`. Маяк и Диспетчер являются только
-  наблюдательным и рекомендательным контекстом: `MAYAK_TRADING_EFFECT=NONE`,
+  наблюдательным/структурирующим объективным контекстом: `MAYAK_TRADING_EFFECT=NONE`,
   `DISPATCHER_TRADING_EFFECT=NONE`. Они не могут создавать Entry, блокировать
   Entry, принудительно закрывать позицию или напрямую менять ордера, стопы,
   позиции и торговые команды.
@@ -98,8 +98,9 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   Supervisor остаётся observation/context/advisory-only; геометрия Entry
   неизменяема.
 - Карточка попытки существует до fill и связана через `strategy_attempt_id`.
-  Различать причины `DISPATCHER_MARKET_INCOMPATIBLE`,
-  `INSUFFICIENT_AVAILABLE_FUNDS` и `OPERATIONAL_SAFETY_BLOCKED`.
+  Различать причины `STRATEGY_CONDITION_REJECTED`,
+  `INSUFFICIENT_AVAILABLE_FUNDS` и `OPERATIONAL_SAFETY_BLOCKED`. Исторический
+  `DISPATCHER_MARKET_INCOMPATIBLE` остаётся legacy-аудитом старого profile-based механизма.
 - Техническая безопасность отделена от оценки рынка
   (`OPERATIONAL_SAFETY_IS_SEPARATE=YES`). Неизвестное состояние биржи, потеря
   reconciliation, устаревшее обязательное private state, неизвестные qty/fill/
@@ -133,7 +134,7 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   или не исполненный, статистический след должен позволять восстановить минимум:
   `signal_id`, время, symbol, side, `strategy_id/version`, fingerprint Entry,
   causal feature snapshot, ссылку на последний доступный Mayak snapshot,
-  ссылку на применимую оценку Dispatcher с `profile_id/version`, решение,
+  ссылки на objective Dispatcher global/coin context и их версии; для legacy profile-based истории — `profile_id/version`; решение,
   причину, `policy_version` и `settings_version`. Статистическая привязка может
   выполняться отдельным причинным коррелятором после события по правилу
   `context_time <= decision_time`; торговый runtime не должен зависеть от
@@ -153,7 +154,7 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
 - Для каждой реальной позиции сохранять durable handoff и причинную историю:
   owning Entry/fill, initial stop, protection changes, Supervisor transitions,
   MFE, MAE, time underwater/time in profit, связанные Mayak snapshots и
-  Dispatcher assessments. После fill Entry не владеет сопровождением позиции.
+  objective Dispatcher global/coin contexts; legacy assessments сохраняются только как historical evidence. После fill Entry не владеет сопровождением позиции.
 - Для каждого выхода сохранять actual exit, exit reason, gross/net PnL, fees,
   funding, slippage, price move %, R, holding time, MFE/MAE и версию Exit/Risk
   policy. Production break-even должен быть economic/fee-aware, когда биржа
@@ -162,13 +163,8 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   при `trading_effect=NONE`. Это позволяет после факта считать saved losses,
   lost good trades, destroyed recoveries и дополнительные execution costs до
   выдачи слою каких-либо live-прав.
-- Любой профиль Dispatcher является версионированным статистическим объектом.
-  Изменение профиля создаёт новую версию. Исторические assessment нельзя
-  пересчитывать молча новой версией и выдавать за старые live-решения.
-- Для стратегий, где пригодность среды до Entry и после fill различается,
-  использовать отдельные профили/контракты `ENTRY_ENVIRONMENT` и
-  `HOLD_ENVIRONMENT`; не смешивать критерии нового входа с критериями удержания
-  уже открытой позиции.
+- Legacy profile-based Dispatcher assessment остаётся версионированным статистическим объектом и не переписывается задним числом. Канонический Dispatcher v2 strategy-agnostic; Strategy-specific interpretation принадлежит Strategy/Analyst research.
+- Для Strategy могут существовать разные Strategy-owned `ENTRY_ENVIRONMENT` и `HOLD_ENVIRONMENT` interpretations одного objective Dispatcher context; не смешивать критерии нового входа с критериями удержания уже открытой позиции и не переносить эти criteria внутрь MAYAK/Dispatcher.
 - Кластерные потери и одновременно открытые коррелированные позиции анализировать
   отдельно от одиночных сделок. Signal replay не считается portfolio backtest:
   портфельная статистика обязана учитывать хронологию, одновременные позиции,

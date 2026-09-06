@@ -1,61 +1,94 @@
-# ДИСПЕТЧЕР СТРАТЕГИЙ — АРХИТЕКТУРНЫЙ КОНТРАКТ
+# ДИСПЕТЧЕР — АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
-**Версия:** 1.1
-**Дата:** 2026-09-05
+**Версия:** 2.0
+**Дата:** 2026-09-06
 **Статус:** канонический специализированный контракт
 
 Верхние контракты:
 
 - `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
 - `PROJECT_ARCHITECTURE_RU.md`
+- `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
 
 ## 1. Назначение
 
-Dispatcher — второй уровень прикладного торгового контура:
+Dispatcher — второй уровень прикладного контура:
 
 ```text
 MAYAK -> DISPATCHER -> STRATEGY
 ```
 
-Он публикует общую обстановку, необходимую Strategy и Entry.
+Он получает объективные причинные факты MAYAK и публикует единый прикладной read-model рынка и торговой ёмкости.
 
-Он не торгует.
+Dispatcher не торгует, не знает тип Entry и не принимает решения за Strategy.
 
-## 2. Два класса выходных показателей
+## 2. Главная граница
 
-Dispatcher публикует:
+Dispatcher не отвечает на вопрос:
 
-1. `MarketSuitabilityAssessment` — пригодность текущей рыночной среды для конкретного strategy profile;
-2. `TradingCapacitySnapshot` — фактическое состояние торговой ёмкости подключённого аккаунта.
+> «Подходит ли этот рынок конкретной Strategy/Entry?»
 
-Они не должны сливаться в один status.
+Он отвечает:
 
-Плохой рынок и отсутствие свободных денег — разные причины.
+> «Что объективно происходит на рынке и с конкретной монетой прямо сейчас, насколько свежи и качественны эти данные, и какая торговая ёмкость аккаунта доступна?»
 
-## 3. Рыночный вход
+Интерпретация принадлежит Strategy.
 
-Источник:
+## 3. Вход Dispatcher
+
+Рыночный вход:
 
 ```text
 MAYAK SharedMarketContext
-+
-StrategyMarketProfile
++ MAYAK instrument/coin facts
 ```
 
-Результат:
+Account input:
 
 ```text
-MarketSuitabilityAssessment
+normalized TradingAccountState
 ```
 
-## 4. Account-capacity вход
+`StrategyMarketProfile`, тип Entry, результат сделки, PnL, текущие позиции нашей Strategy и историческая успешность Entry не являются входом объективной рыночной оценки Dispatcher.
 
-Фактический private account state получает технический exchange/account-sync.
+## 4. Три класса выходных показателей
 
-Dispatcher архитектурно потребляет нормализованный `TradingAccountState`.
+### 4.1 GlobalMarketContext
 
-Минимальный contract:
+Общерыночная карточка: направление, breadth, synchronization, timeframe state, фактический money flow, liquidity, liquidations, positioning/OI, BTC/ETH/reference state, event context, quality/freshness/provenance.
+
+### 4.2 CoinMarketContext / CoinMarketRating
+
+Для каждого наблюдаемого инструмента Dispatcher публикует объективную динамическую карточку. Минимально допускаются:
+
+```text
+symbol
+observed_at
+market_context_id
+coin_context_id / rating_id
+rating_version
+score / band
+spot_money_flow
+derivatives_money_flow
+money_flow_speed / acceleration
+large_trade_activity
+open_interest / change / regime
+funding / positioning
+liquidity_state / resilience
+liquidation_state / phase / acceleration
+relative_strength
+market_synchronization / divergence
+event_risk
+data_quality / freshness / coverage
+provenance
+```
+
+Конкретная формула score должна быть causal, versioned и explainable. Отсутствующие данные остаются unknown/unsupported, а не превращаются в ноль или нейтральное состояние.
+
+### 4.3 TradingCapacitySnapshot
+
+Состояние торговой ёмкости аккаунта:
 
 ```text
 account_state_id
@@ -70,103 +103,89 @@ available_for_new_trading
 completeness/quality
 ```
 
-Результат Dispatcher:
+Рыночный rating и account capacity никогда не сливаются в один status.
+
+## 5. Деньги
+
+Dispatcher обязан сохранять физический смысл данных MAYAK.
+
+Фактически исполненный spot flow, фактически исполненный derivatives flow, изменение OI и выставленная ликвидность — разные процессы. Они не заменяют друг друга.
+
+Понятия «деньги входят в монету» / «деньги выходят из монеты» могут публиковаться только как объяснимая агрегация реально наблюдаемых потоков с указанием source, window, magnitude, speed, acceleration и quality.
+
+## 6. Ликвидации
+
+Ликвидации — отдельный объективный датчик принудительного потока и рыночного стресса.
+
+Dispatcher должен уметь показать как минимум направление ликвидаций, денежный объём, интенсивность, breadth, acceleration и phase, не превращая это в торговую команду.
+
+## 7. Рейтинг монеты не является рейтингом Strategy
+
+`CoinMarketRating` описывает саму монету/рынок. Он не должен использовать:
+
+- успешность наших Entry;
+- PnL нашей Strategy;
+- число текущих LONG/SHORT сигналов;
+- наличие нашей позиции;
+- результаты backtest/research конкретной Strategy.
+
+`StrategyCoinFit` — отдельный Analyst/research объект. Если Strategy когда-либо использует его, это происходит только через новую owner-approved Strategy version.
+
+## 8. Dispatcher не выбирает направление сделки
+
+Dispatcher может объективно публиковать `money_inflow`, `money_outflow`, bullish/bearish breadth, forced long/short liquidations и другие направленные рыночные факты.
+
+Это не `ENTER_LONG`, `ENTER_SHORT`, `BLOCK_ENTRY` или `CLOSE_POSITION`.
+
+Разные Strategy могут использовать один и тот же контекст противоположно.
+
+## 9. Несколько Strategy
+
+Один `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` могут быть прочитаны любым количеством Strategy/Entry consumers.
+
+Dispatcher не создаёт отдельную «истину рынка» под каждую Strategy.
+
+## 10. Причинность и версии
+
+Каждый context/rating хранит:
 
 ```text
-TradingCapacitySnapshot
+observed_at
+created_at
+source MAYAK snapshot/context IDs
+version/schema/config fingerprint
+quality/freshness/coverage
+provenance
 ```
 
-## 5. Exchange neutrality
+Для решения в T допустим только context с `observed_at <= T`.
 
-`TradingAccountState` не должен быть моделью одной конкретной биржи.
+## 11. Account capacity не является разрешением на вход
 
-Adapter каждой площадки преобразует её поля в общий contract там, где это возможно.
-
-Если показатель невозможно честно получить/нормализовать, он остаётся unknown/unsupported, а не подставляется как ноль.
-
-## 6. Dispatcher не владеет средствами
-
-Dispatcher:
-
-- не переводит деньги;
-- не резервирует капитал по собственной policy;
-- не выбирает allocation;
-- не меняет leverage;
-- не создаёт/отменяет orders;
-- не закрывает positions.
-
-Он только показывает состояние.
-
-## 7. Strategy profile
-
-Market profile описывает требуемую среду.
-
-Он не содержит limit price, size, stop, TP или allocation.
-
-Эти параметры принадлежат Strategy.
-
-## 8. TradingCapacitySnapshot не является разрешением на вход
-
-Даже если:
-
-```text
-available_for_new_trading > requested_amount
-```
-
-Dispatcher не говорит «войти».
-
-Strategy/Entry принимает решение.
-
-## 9. Причинный audit
-
-Если Entry отказал из-за market assessment:
-
-```text
-REASON=DISPATCHER_MARKET_INCOMPATIBLE
-consumed_assessment_id=<id>
-```
-
-Если Entry отказал из-за account capacity:
-
-```text
-REASON=INSUFFICIENT_AVAILABLE_FUNDS
-consumed_trading_capacity_snapshot_id=<id>
-```
-
-Обе attempts продолжают жить в lifecycle.
-
-## 10. Неограниченное количество Strategy
-
-Один Market snapshot и один account-capacity snapshot могут быть прочитаны многими Strategy/Entry consumers.
-
-Они могут принять разные решения.
-
-## 11. Global Market State
-
-Общий indicator рынка допустим как advisory context.
-
-Он не является `BLOCK_NEW_ENTRIES` или `CLOSE_ALL` mutation.
+Даже если `available_for_new_trading >= requested_amount`, Dispatcher не говорит «войти». Strategy задаёт policy, Entry принимает конкретное решение.
 
 ## 12. Безопасность
 
-Dispatcher не получает прямого пути к Execution mutations.
+Dispatcher не имеет прямого пути к Execution mutations.
 
-Technical fail-closed право находится в operational safety / Execution, если mandatory exchange/account state stale/unknown.
+Technical fail-closed принадлежит operational safety / Execution для stale/unknown mandatory exchange/account state. Рыночный rating сам по себе техническим safety gate не является.
 
-## 13. Детерминированность и версии
+## 13. Переход от profile-based реализации
 
-Market assessment детерминирован относительно MAYAK snapshot, Dispatcher version и profile version.
+Текущие таблицы/сервисы могут исторически содержать `strategy_dispatcher.assessments`, `profile_id`, `GOOD_MATCH`, `INCOMPATIBLE` и другие profile-based оценки.
 
-Trading-capacity snapshot хранит account_state_id, source/adapter version, freshness/completeness и Dispatcher version.
+С версии этого контракта они считаются transitional/legacy research evidence и могут временно продолжать работать только с `trading_effect=NONE` для накопления статистики и сравнения.
+
+Они не определяют будущую каноническую роль Dispatcher и не получают live-влияние автоматически. Их удаление/миграция/замена требует отдельной implementation-задачи.
 
 ## 14. Главная формула
 
-> MAYAK описывает рынок.
+> MAYAK наблюдает внешний рынок и формирует причинные факты.
 
-> Dispatcher показывает, насколько этот рынок подходит разным Strategy, и сколько фактической торговой ёмкости сейчас доступно.
+> Dispatcher универсально структурирует эти факты в global/coin context и публикует торговую ёмкость.
 
-> Strategy определяет правила торговли и потребность в капитале.
+> Strategy решает, что объективный контекст означает для её способа торговли.
 
-> Entry принимает конкретное решение.
+> Entry принимает решение конкретной попытки.
 
 > Execution исполняет.

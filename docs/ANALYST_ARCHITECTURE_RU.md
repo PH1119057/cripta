@@ -1,8 +1,8 @@
 # АНАЛИТИК — АРХИТЕКТУРА СЛОЯ ПОСТФАКТУМ-АНАЛИЗА
 
 **Документ:** `ANALYST_ARCHITECTURE_RU.md`
-**Версия:** 1.1
-**Дата:** 2026-09-05
+**Версия:** 1.2
+**Дата:** 2026-09-06
 **Статус:** специализированный архитектурный контракт поддерживающего контура
 
 Верхние контракты:
@@ -56,7 +56,6 @@ signal_id + strategy_attempt_id
 
 ```text
 STRATEGY_CONDITION_REJECTED
-DISPATCHER_MARKET_INCOMPATIBLE
 INSUFFICIENT_AVAILABLE_FUNDS
 OPERATIONAL_SAFETY_BLOCKED
 EXCHANGE_REJECTED
@@ -77,7 +76,9 @@ Analyst должен отличить:
 
 ## 6. Dispatcher quality
 
-Market assessment оценивается отдельно от account-capacity snapshot.
+Analyst отдельно оценивает качество objective Dispatcher global/coin context и account-capacity snapshot: причинность, freshness, coverage, calibration, полезность компонентов и сохранение физического смысла данных MAYAK.
+
+Решение о пригодности среды для конкретной Strategy принадлежит Strategy, поэтому `STRATEGY_CONDITION_REJECTED` нельзя считать «ошибкой Dispatcher» только по факту отказа.
 
 Отказ по недостатку средств не является ошибкой market logic.
 
@@ -126,7 +127,15 @@ ANALYSIS
 -> LIVE
 ```
 
-## 13. Масштаб
+## 13. StrategyCoinFit
+
+Analyst может рассчитывать `StrategyCoinFit`: насколько конкретная `strategy_id/version` исторически соответствует конкретной монете по заранее определённым outcome-метрикам.
+
+Это отдельный strategy-specific исследовательский объект. Он не является `CoinMarketRating`, не должен менять MAYAK/Dispatcher и не может автоматически становиться live-фильтром.
+
+Путь к live использованию остаётся: analysis -> research -> owner-approved Strategy version -> shadow -> live equivalence -> micro-live -> live.
+
+## 14. Масштаб
 
 Analyst должен работать при множестве Strategy/bots/positions.
 

@@ -1,8 +1,8 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.1
-**Дата:** 2026-09-05
+**Версия:** 2.2
+**Дата:** 2026-09-06
 **Статус:** канонический реестр авторитетности
 
 ## 1. Порядок авторитетности
@@ -22,6 +22,7 @@ LEVEL 3 — CURRENT ARCHITECTURE
 docs/PROJECT_ARCHITECTURE_RU.md
 docs/CURRENT_PROJECT_MAP_RU.md
 docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md
+docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md
 docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md
 docs/ANALYST_ARCHITECTURE_RU.md
 и другие специализированные контракты
@@ -69,6 +70,7 @@ connected Exchange / Trading Account
 
 - MAYAK: `MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`
 - Dispatcher: `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
+- universal market/coin context and rating: `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
 - lifecycle: `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
 - Analyst: `ANALYST_ARCHITECTURE_RU.md`
 

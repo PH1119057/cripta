@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.0
-**Дата:** 2026-09-05
+**Версия документа:** 4.1
+**Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -55,10 +55,13 @@ EXCHANGE
 
 ## 5. Dispatcher
 
-Публикует два типа показателей:
+Публикует три strategy-agnostic класса показателей:
 
-1. пригодность рыночной среды для профилей Strategy;
-2. состояние торговой ёмкости аккаунта.
+1. объективный global market context;
+2. объективный per-coin context / `CoinMarketRating`;
+3. состояние торговой ёмкости аккаунта.
+
+Dispatcher не знает тип Entry и не определяет пригодность рынка за конкретную Strategy. Интерпретация принадлежит Strategy.
 
 Account capacity минимум:
 
@@ -93,7 +96,7 @@ Monitor/Scanner даёт candidate signal, не приказ на вход.
 
 Entry рассматривает signal в рамках подходящей утверждённой Strategy.
 
-Он может использовать Dispatcher market assessment, Dispatcher account-capacity snapshot и technical readiness.
+Он может использовать objective Dispatcher global/coin context, Dispatcher account-capacity snapshot и technical readiness в соответствии с policy выбранной Strategy.
 
 Отказ из-за отсутствия денег:
 
@@ -133,7 +136,13 @@ Rejected/no-fill/no-funds attempts сохраняются.
 
 Supervisor/Analyst/PostgreSQL/UI находятся в поддерживающем наблюдательно-аналитическом контуре.
 
+`StrategyCoinFit` — отдельный Analyst/research показатель исторической совместимости конкретной Strategy с конкретной монетой. Он не смешивается с объективным `CoinMarketRating`.
+
 Они не являются новыми trading layers.
+
+## 12.1 Переходный runtime Dispatcher
+
+Текущая реализация всё ещё содержит profile-based `strategy_dispatcher.assessments` (`GOOD_MATCH`, `INCOMPATIBLE` и т.п.). После owner decision 2026-09-06 это transitional research/shadow механизм с `trading_effect=NONE`, а не целевой канон Dispatcher. Отдельная implementation-задача должна позже привести runtime к универсальному global/coin context без автоматического изменения trading policy.
 
 ## 13. Масштабирование
 
@@ -152,4 +161,5 @@ Supervisor/Analyst/PostgreSQL/UI находятся в поддерживающ�
 2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
 3. `docs/PROJECT_ARCHITECTURE_RU.md`
 4. `docs/PROJECT_GOVERNANCE_RU.md`
-5. затрагиваемые специализированные контракты
+5. `docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md` при работе с MAYAK/Dispatcher/coin rating
+6. затрагиваемые специализированные контракты
