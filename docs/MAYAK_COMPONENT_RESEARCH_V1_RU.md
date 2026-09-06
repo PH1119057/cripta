@@ -1,7 +1,7 @@
 # MAYAK V2 — протокол компонентного исследования по frozen Entry
 
 **Документ:** `MAYAK_COMPONENT_RESEARCH_V1_RU.md`
-**Версия:** 1.0
+**Версия:** 1.1
 **Дата:** 2026-09-06
 **Статус:** frozen research protocol, без live rules
 
@@ -71,6 +71,14 @@ Spot/funding/premium/orderbook/liquidations не получают фиктивн
 - OI acceleration 5m.
 
 OI не получает искусственного direction sign: рост OI сам по себе не является LONG/SHORT фактом. `open_interest` в pooled ALL9 интерпретируется только как scale-dependent diagnostic; переносимость оценивается per-symbol.
+
+После exact funding + causally available mark/index replay разрешается присоединить по `signal_key` только сопоставимые `basis_*` поля:
+
+- `basis_funding_rate`;
+- `basis_funding_rate_change_from_previous`;
+- `basis_mark_index_premium_pct`.
+
+Абсолютные `basis_mark_price` и `basis_index_price` не являются pooled ALL9 feature из-за несопоставимого price scale между активами. Funding и premium — signed market facts; Analyst может строить их `entry_aligned::` проекцию только в research output.
 
 ## 5. Direction-adjusted признаки
 

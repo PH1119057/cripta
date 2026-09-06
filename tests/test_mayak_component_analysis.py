@@ -11,6 +11,7 @@ from bybit_workbench.mayak.research.component_analysis import (
     analyze,
     auc_higher_is_good,
     load_rows,
+    merge_basis,
     merge_positioning,
     run,
 )
@@ -139,3 +140,53 @@ def test_positioning_join_rejects_outcome_columns(tmp_path: Path) -> None:
             writer.writerow({"signal_key": str(index), "future_outcome": "x"})
     with pytest.raises(ValueError, match="forbidden outcome"):
         merge_positioning(load_rows(source), positioning)
+
+
+def test_basis_join_adds_only_whitelisted_features_and_rejects_outcome(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    base = load_rows(source)
+    basis = tmp_path / "basis.csv"
+    with basis.open("w", encoding="utf-8-sig", newline="") as handle:
+        fields = [
+            "signal_key",
+            "basis_funding_rate",
+            "basis_funding_rate_change_from_previous",
+            "basis_mark_index_premium_pct",
+            "basis_mark_price",
+        ]
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter=";")
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow(
+                {
+                    "signal_key": str(index),
+                    "basis_funding_rate": str((index - 4) / 10000),
+                    "basis_funding_rate_change_from_previous": str((index - 4) / 100000),
+                    "basis_mark_index_premium_pct": str(index - 4),
+                    "basis_mark_price": str(100 + index),
+                }
+            )
+    merged = merge_basis(base, basis)
+    assert "basis_mark_price" not in merged[0]
+    summary, _ = analyze(merged)
+    names = {row["feature"] for row in summary}
+    assert "basis_funding_rate" in names
+    assert "entry_aligned::basis_funding_rate" in names
+    assert "basis_mark_index_premium_pct" in names
+
+    forbidden = tmp_path / "basis_bad.csv"
+    with forbidden.open("w", encoding="utf-8-sig", newline="") as handle:
+        fields = ["signal_key", "basis_funding_rate", "future_outcome"]
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter=";")
+        writer.writeheader()
+        for index in range(8):
+            writer.writerow(
+                {
+                    "signal_key": str(index),
+                    "basis_funding_rate": "0",
+                    "future_outcome": "GOOD",
+                }
+            )
+    with pytest.raises(ValueError, match="forbidden outcome"):
+        merge_basis(base, forbidden)
