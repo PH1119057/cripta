@@ -6,7 +6,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from bybit_workbench.mayak.research.historical_signal_backfill import Signal
-from bybit_workbench.mayak.research.historical_spot_signal_backfill import _iter_file, replay_symbol
+from bybit_workbench.mayak.research.historical_spot_signal_backfill import (
+    _iter_file,
+    _spot_source_symbol,
+    replay_symbol,
+)
 
 
 def _signal(at: str) -> Signal:
@@ -48,3 +52,8 @@ def test_replay_does_not_use_future_trade(tmp_path: Path) -> None:
     assert one["buy_usd"] == 20.0
     assert one["sell_usd"] == 10.0
     assert one["net_usd"] == 10.0
+
+
+def test_spot_symbol_mapping_is_explicit() -> None:
+    assert _spot_source_symbol("1000PEPEUSDT") == "PEPEUSDT"
+    assert _spot_source_symbol("UNIUSDT") == "UNIUSDT"

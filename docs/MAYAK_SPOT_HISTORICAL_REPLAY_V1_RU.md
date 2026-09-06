@@ -22,3 +22,7 @@
 ## 5. Research boundary
 
 Entry outcome присоединяется только внешним Analyst после immutable Spot context. Никакой cutoff, gate, LONG/SHORT command или CoinMarketRating этим проходом не утверждается.
+
+## 6. Instrument mapping
+
+Версионированный source-adapter mapping: `1000PEPEUSDT` (linear contract) -> `PEPEUSDT` (Spot base asset). Spot notional всегда считается из фактических Spot `price × volume`; множитель имени derivatives-контракта не применяется к Spot. Mapping хранится в source manifest.

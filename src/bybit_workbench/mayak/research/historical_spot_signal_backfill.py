@@ -22,6 +22,13 @@ from bybit_workbench.mayak.research.objective_replay import CausalMayakReplay
 
 VERSION = "mayak-historical-spot-signal-backfill-v1"
 ARCHIVE_BASE = "https://public.bybit.com/spot"
+SPOT_SYMBOL_MAP = {"1000PEPEUSDT": "PEPEUSDT"}
+
+
+def _spot_source_symbol(symbol: str) -> str:
+    return SPOT_SYMBOL_MAP.get(symbol, symbol)
+
+
 PRE_ROLL_SECONDS = 7200
 WINDOW_LABELS = ("1m", "5m", "15m", "30m", "60m")
 FLOW_FIELDS = (
@@ -93,10 +100,11 @@ def download_sources(
     months = _months(start, end)
     files: list[dict[str, Any]] = []
     for symbol in symbols:
+        source_symbol = _spot_source_symbol(symbol)
         for month in months:
-            name = f"{symbol}-{month}.csv.gz"
+            name = f"{source_symbol}-{month}.csv.gz"
             path = cache_dir / symbol / name
-            url = f"{ARCHIVE_BASE}/{symbol}/{name}"
+            url = f"{ARCHIVE_BASE}/{source_symbol}/{name}"
             if not path.exists():
                 _download(url, path)
             # Fail closed on corrupt/non-gzip sources.
