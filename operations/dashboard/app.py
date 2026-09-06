@@ -397,6 +397,10 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
 
 
 def live_trading_state() -> dict[str, object]:
+    return _live_trading_state(include_history=True)
+
+
+def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
@@ -433,31 +437,10 @@ def live_trading_state() -> dict[str, object]:
             supervisor_rows = connection.execute("""SELECT DISTINCT ON (symbol)
                 symbol,observed_at_epoch_ms,state,shadow_action,snapshot_json
                 FROM supervisor.snapshots ORDER BY symbol,observed_at_epoch_ms DESC""").fetchall()
-        execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
-            exec_time_ms,order_id,payload_json FROM (
-                SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
-                FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
-            ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
-        lifecycle_rows = []
-        if connection.execute("SELECT to_regclass('analyst.trade_lifecycles')").fetchone()[0]:
-            lifecycle_rows = connection.execute("""SELECT trade_id,position_id,symbol,side,
-                strategy_id,strategy_version,opened_at,closed_at,lifecycle_state,
-                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json,
-                actual_net_without_funding,bot_instance_id,entry_command_id,
-                geometry_handoff_id
-                FROM analyst.trade_lifecycles ORDER BY closed_at DESC NULLS LAST LIMIT 500""").fetchall()
-        ownership_rows = []
-        if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
-            ownership_rows = connection.execute(
-                """SELECT position_id,trade_id,bot_instance_id,strategy_id,
-                strategy_version,signal_id,entry_command_id,geometry_handoff_id,
-                symbol,side,actual_avg_fill,actual_qty,fill_at,state
-                FROM runtime.position_ownership ORDER BY fill_at DESC LIMIT 500"""
-            ).fetchall()
         exact_exit_rows = []
-        has_exact_exit_table = bool(connection.execute(
-            "SELECT to_regclass('runtime.position_exit_attribution')"
-        ).fetchone()[0])
+        has_exact_exit_table = bool(
+            connection.execute("SELECT to_regclass('runtime.position_exit_attribution')").fetchone()[0]
+        )
         if has_exact_exit_table:
             exact_exit_rows = connection.execute(
                 """SELECT a.position_id,a.trade_id,o.symbol,o.side,a.closed_at,
@@ -469,8 +452,26 @@ def live_trading_state() -> dict[str, object]:
                 FROM runtime.position_exit_attribution a
                 JOIN runtime.position_ownership o USING(position_id,trade_id)
                 WHERE a.link_status='EXACT'
-                ORDER BY a.closed_at DESC LIMIT 1000"""
+                ORDER BY a.closed_at DESC LIMIT %s""",
+                (1000 if include_history else 20,),
             ).fetchall()
+        execution_rows = []
+        if include_history and not has_exact_exit_table:
+            execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
+                exec_time_ms,order_id,payload_json FROM (
+                    SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
+                    FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
+                ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
+        lifecycle_rows = []
+        if include_history and connection.execute(
+            "SELECT to_regclass('analyst.trade_lifecycles')"
+        ).fetchone()[0]:
+            lifecycle_rows = connection.execute("""SELECT trade_id,position_id,symbol,side,
+                strategy_id,strategy_version,opened_at,closed_at,lifecycle_state,
+                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json,
+                actual_net_without_funding,bot_instance_id,entry_command_id,
+                geometry_handoff_id
+                FROM analyst.trade_lifecycles ORDER BY closed_at DESC NULLS LAST LIMIT 500""").fetchall()
         market_context = None
         if connection.execute(
             "SELECT to_regclass('mayak_v2.shared_market_contexts')"
@@ -662,7 +663,6 @@ def live_trading_state() -> dict[str, object]:
             }
             for row in exact_exit_rows
         ]
-    lifecycles = []
     for row in lifecycle_rows:
         lifecycle = row[12] if isinstance(row[12], dict) else json.loads(row[12])
         card = {
@@ -678,7 +678,6 @@ def live_trading_state() -> dict[str, object]:
             "geometry_handoff_id": row[16],
             "lifecycle": lifecycle,
         }
-        lifecycles.append(card)
         if row[7] is not None:
             lifecycle_exec_ids = set(
                 str(value) for value in (lifecycle.get("close_fill") or {}).get("exec_ids", [])
@@ -767,7 +766,7 @@ def live_trading_state() -> dict[str, object]:
             for r in commands
         ],
         "recent_closed": recent_closed,
-        "trade_lifecycles": lifecycles,
+        "trade_lifecycles": [],
         "shared_market_context": None if market_context is None else {
             "market_context_id": market_context[0],
             "observed_at": market_context[1].isoformat(),
@@ -776,16 +775,7 @@ def live_trading_state() -> dict[str, object]:
             "data_quality": market_context[4],
             "payload": market_context[5],
         },
-        "position_ownership": [
-            {
-                "position_id": row[0], "trade_id": row[1], "bot_instance_id": row[2],
-                "strategy_id": row[3], "strategy_version": row[4], "signal_id": row[5],
-                "entry_command_id": row[6], "geometry_handoff_id": row[7],
-                "symbol": row[8], "side": row[9], "actual_avg_fill": str(row[10]),
-                "actual_qty": str(row[11]), "fill_at": row[12].isoformat(), "state": row[13],
-            }
-            for row in ownership_rows
-        ],
+        "position_ownership": [],
         "entry_funnel": {
             "last_hour": funnel_window(now_ms - 3_600_000),
             "session": funnel_window(session_start_ms),
@@ -2133,7 +2123,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         self.send_header("Set-Cookie", cookie)
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
         if path == "/healthz":
             self.send_body(200, b'{"status":"ok"}\n', "application/json; charset=utf-8")
         elif path == "/login":
@@ -2153,12 +2145,18 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
         elif path == "/api/live/state":
+            view = str((query.get("view") or ["open"])[0])
+            if view not in {"open", "closed", "monitor", "signals"}:
+                view = "open"
             body = json.dumps(
                 {
-                    "live_trading": live_trading_state(),
-                    "opportunities": opportunity_state(),
-                    "entry_shadow": entry_shadow_state(),
-                    "mayak_v2": mayak_v2_state(),
+                    "live_trading": _live_trading_state(include_history=view == "closed"),
+                    "opportunities": opportunity_state()
+                    if view == "signals"
+                    else {"counts": {}, "items": []},
+                    "entry_shadow": entry_shadow_state() if view == "monitor" else None,
+                    "mayak_v2": mayak_v2_state() if view == "open" else None,
+                    "view": view,
                     "generated_at_epoch": int(time.time()),
                 },
                 ensure_ascii=False,
