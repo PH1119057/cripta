@@ -24,3 +24,15 @@ def test_legacy_dispatcher_docs_are_historical_only() -> None:
         "STRATEGY_DISPATCHER_RUNBOOK_RU.md",
     ):
         assert name in authority
+
+
+def test_dispatcher_v2_source_tree_has_no_legacy_imports() -> None:
+    package = ROOT / "production/src/bybit_workbench/dispatcher_v2"
+    if not package.exists():
+        return
+    body = "\n".join(path.read_text(encoding="utf-8") for path in package.glob("*.py"))
+    assert "bybit_workbench.strategy_dispatcher" not in body
+    assert "StrategyMarketProfile" not in body
+    assert "SuitabilityStatus" not in body
+    assert "GOOD_MATCH" not in body
+    assert "INCOMPATIBLE" not in body

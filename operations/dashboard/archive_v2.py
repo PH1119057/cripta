@@ -65,7 +65,7 @@ SERVICE_NAMES = (
     "cripta-dashboard.service",
     "cripta-private-runtime.service",
     "cripta-mayak-v2.service",
-    "cripta-strategy-dispatcher.service",
+    "cripta-dispatcher-v2.service",
     "cripta-position-supervisor.service",
     "postgresql.service",
 )
@@ -133,6 +133,21 @@ TABLE_EXPORTS = (
     TableExport(
         "mayak_v2.shared_market_contexts",
         "mayak/shared_market_contexts.jsonl",
+        ("observed_at", "created_at"),
+    ),
+    TableExport(
+        "dispatcher_v2.global_market_contexts",
+        "dispatcher_v2/global_market_contexts.jsonl",
+        ("observed_at", "created_at"),
+    ),
+    TableExport(
+        "dispatcher_v2.coin_market_contexts",
+        "dispatcher_v2/coin_market_contexts.jsonl",
+        ("observed_at", "created_at"),
+    ),
+    TableExport(
+        "dispatcher_v2.trading_capacity_snapshots",
+        "dispatcher_v2/trading_capacity_snapshots.jsonl",
         ("observed_at", "created_at"),
     ),
     TableExport(

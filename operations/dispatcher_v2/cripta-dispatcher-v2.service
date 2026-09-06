@@ -1,0 +1,27 @@
+[Unit]
+Description=Cripta Dispatcher V2 universal passive context runtime
+After=cripta-mayak-v2.service cripta-private-runtime.service postgresql.service
+Wants=cripta-mayak-v2.service cripta-private-runtime.service postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/production/src
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/dispatcher_v2.py --poll-seconds 2
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/cripta/dispatcher_v2
+
+[Install]
+WantedBy=multi-user.target

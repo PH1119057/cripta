@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.3
+**Версия документа:** 4.4
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -99,6 +99,8 @@ source_exchange/account
 
 Источник фактов — подключённая торговая площадка через technical account-sync.
 
+D0–D7 implementation: `dispatcher-v2.1`; persisted truth — `dispatcher_v2.global_market_contexts`, `dispatcher_v2.coin_market_contexts`, `dispatcher_v2.trading_capacity_snapshots`; runtime — `cripta-dispatcher-v2.service`. Формула `CoinMarketRating` отложена до следующего research-этапа.
+
 ## 6. Strategy
 
 Owner-approved versioned policy.
@@ -162,9 +164,11 @@ Supervisor/Analyst/PostgreSQL/UI находятся в поддерживающ�
 
 Они не являются новыми trading layers.
 
-## 12.1 Переходный runtime Dispatcher
+## 12.1 Dispatcher V2.1 runtime
 
-Текущая реализация всё ещё содержит profile-based `strategy_dispatcher.assessments` (`GOOD_MATCH`, `INCOMPATIBLE` и т.п.). После owner decision 2026-09-06 это transitional research/shadow механизм с `trading_effect=NONE`, а не целевой канон Dispatcher. Отдельная implementation-задача должна позже привести runtime к универсальному global/coin context без автоматического изменения trading policy.
+Owner decision 2026-09-06 прекратил profile-based legacy runtime. `cripta-strategy-dispatcher.service` и старый `cripta-causal-context-correlator.service` отключены; исторические `strategy_dispatcher.*` и `research_context.event_links` не переписываются. Первичные signal/Entry/fill/position/MAYAK данные продолжают накапливаться и допускают последующий causal backfill.
+
+Активная целевая реализация D0–D7 — clean `dispatcher_v2`: отдельный package/runtime/schema без Strategy profiles. Она публикует `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` с `trading_effect=NONE`. `CoinMarketRating` на этом этапе **не реализован**. Strategy/Entry/Exit consumer cutover остаётся следующим отдельным этапом.
 
 ## 13. Масштабирование
 

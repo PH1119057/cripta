@@ -838,6 +838,9 @@ SIGNAL_ANALYSIS_TABLES = (
     ("mayak_v2.observation_journal", "observed_at", "timestamp"),
     ("mayak_v2.liquidations", "occurred_at", "timestamp"),
     ("mayak_v2.shared_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.global_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.coin_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.trading_capacity_snapshots", "observed_at", "timestamp"),
 )
 
 
