@@ -27,3 +27,17 @@ def test_live_state_polling_is_single_flight_and_operations_are_bounded() -> Non
     assert "const deadline=Date.now()+20000" in html
     assert "Шлюз открыт, но 0 монет разрешено" in html
     assert html.count("fetch('/api/live/state'") == 0
+
+
+def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> None:
+    html = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
+    assert "function livePollDelay()" in html
+    assert "open:1000,monitor:2000,closed:5000,signals:5000" in html
+    assert "if(document.hidden)return 30000" in html
+    assert "if(activePanelName()!=='liveDesk')return 15000" in html
+    assert "scheduleLivePoll(0)" in html
+    assert "setInterval(()=>refreshEntryShadow" not in html
+    assert "if(activeTradePage()==='open')positionRows.innerHTML" in html
+    assert "if(activeTradePage()==='closed')realClosedRows.innerHTML" in html
+    assert "if(activeTradePage()==='signals')liveRows.innerHTML" in html
+    assert "if(page==='monitor')renderEntryShadow" in html
