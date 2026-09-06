@@ -460,6 +460,7 @@ def _process_archive(
     signals: Sequence[Signal],
     state: ReconstructionState,
     need_tail: bool,
+    causal_cutoff: float | None = None,
 ) -> list[dict[str, Any]]:
     ordered = sorted(signals, key=lambda item: item.touch_epoch)
     index = 0
@@ -472,6 +473,8 @@ def _process_archive(
         while index < len(ordered) and ordered[index].touch_epoch < event_at:
             output.append(_capture_signal(state, ordered[index]))
             index += 1
+        if causal_cutoff is not None and event_at > causal_cutoff:
+            break
         if index >= len(ordered) and not need_tail:
             break
         if first_event:
@@ -559,9 +562,23 @@ def replay_symbol(
             and bool(required.get(day))
         )
         day_signals = by_day.get(day, [])
+        next_day_signals = by_day.get(day + timedelta(days=1), [])
+        causal_cutoff = (
+            min(item.touch_epoch for item in next_day_signals)
+            if need_tail and next_day_signals
+            else None
+        )
         before_records = state.records
         before_bytes = state.bytes_read
-        output.extend(_process_archive(path, signals=day_signals, state=state, need_tail=need_tail))
+        output.extend(
+            _process_archive(
+                path,
+                signals=day_signals,
+                state=state,
+                need_tail=need_tail,
+                causal_cutoff=causal_cutoff,
+            )
+        )
         archives.append(
             {
                 "path": rel,

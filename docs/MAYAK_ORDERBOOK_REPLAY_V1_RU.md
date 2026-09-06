@@ -98,6 +98,8 @@ Orderbook raw начинается 2026-05-18. Для signal раньше ~00:16
 
 Отсутствующий необходимый previous-day archive не превращается в zero; соответствующее baseline поле остаётся missing/NO_DATA и фиксируется в manifest.
 
+Previous-day archive может физически содержать несколько записей уже после UTC midnight. Такой spillover не даёт права видеть будущее: pre-roll имеет жёсткий causal cutoff по ближайшему следующему frozen touch, и raw event с `event_at > touch` не применяется к reconstructed state.
+
 ## 7. Frozen identity
 
 Baseline тот же:

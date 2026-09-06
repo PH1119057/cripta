@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import zipfile
 from collections import deque
 from datetime import UTC, datetime
 
@@ -11,6 +13,7 @@ from bybit_workbench.mayak.research.historical_orderbook_replay import (
     _capture_signal,
     _decode_json,
     _normalize_event,
+    _process_archive,
 )
 from bybit_workbench.mayak.research.historical_signal_backfill import Signal
 from bybit_workbench.mayak.research.objective_replay import CausalMayakReplay, MarketEvent
@@ -182,3 +185,36 @@ def test_json_backend_reports_provenance() -> None:
         assert version
     else:
         assert version is None
+
+
+def test_previous_day_tail_stops_at_next_touch_even_if_archive_spills_past_midnight(
+    tmp_path,
+) -> None:
+    archive_path = tmp_path / "previous_day.data.zip"
+    member = "previous_day.data"
+    payloads = [
+        {
+            "type": "snapshot",
+            "cts": 86399000,
+            "data": {"u": 1, "b": [["99", "1"]], "a": [["101", "1"]]},
+        },
+        {
+            "type": "delta",
+            "cts": 86401000,
+            "data": {"u": 2, "b": [["99", "2"]], "a": []},
+        },
+    ]
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(member, b"".join((json.dumps(item) + "\n").encode() for item in payloads))
+
+    state = ReconstructionState.empty()
+    _process_archive(
+        archive_path,
+        signals=[],
+        state=state,
+        need_tail=True,
+        causal_cutoff=86400.5,
+    )
+    assert state.last_event_at == 86399.0
+    row = _capture_signal(state, _signal(86400.5))
+    assert row["source"]["current_event_at"] == 86399.0
