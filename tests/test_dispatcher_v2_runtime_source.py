@@ -77,3 +77,11 @@ def test_v2_live_bootstrap_starts_from_latest_mayak_and_then_moves_forward() -> 
     assert "max(mayak_snapshot_id)" in runtime
     assert "source.mayak_snapshot_id>watermark.source_mayak_snapshot_id" in runtime
     assert "Bootstrap from latest source only" in runtime
+
+
+def test_v2_service_loads_persistent_deploy_provenance() -> None:
+    unit_path = ROOT / "operations/dispatcher_v2/cripta-dispatcher-v2.service"
+    unit = unit_path.read_text(encoding="utf-8")
+    assert "EnvironmentFile=/var/lib/cripta/dispatcher_v2/runtime.env" in unit
+    runtime = RUNTIME.read_text(encoding="utf-8")
+    assert 'SOURCE_COMMIT = os.environ.get("DISPATCHER_V2_SOURCE_COMMIT", "UNSPECIFIED")' in runtime
