@@ -221,27 +221,13 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   MICRO_LIVE -> LIVE`, с отдельным решением владельца.
 
 
-## Диспетчер стратегий — независимый интерпретатор рыночной среды
+## Dispatcher V2 — универсальный объективный read-model
 
-- Канонический архитектурный контракт Диспетчера находится в
-  `docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`, словарь — в
-  `docs/STRATEGY_DISPATCHER_MARKET_VOCABULARY_RU.md`, этапы внедрения — в
-  `docs/STRATEGY_DISPATCHER_RUNBOOK_RU.md`, реализационный контракт D0–D6 — в
-  `docs/STRATEGY_DISPATCHER_IMPLEMENTATION_D0_D6_RU.md`, правила создания новых
-  профилей среды — в `docs/STRATEGY_DISPATCHER_PROFILE_GUIDE_RU.md`. Перед изменением ядра Диспетчера,
-  его профилей, адаптера Маяка или способа использования стратегиями исполнитель
-  обязан прочитать эти документы вместе с контрактом Маяка.
-- Направление данных одностороннее: `Маяк -> Диспетчер -> потребитель`. Диспетчер
-  не меняет Маяк и не читает торговый PnL как рыночный признак. Technical
-  account-sync может поставлять ему нормализованный `TradingAccountState`, из
-  которого Dispatcher публикует advisory `TradingCapacitySnapshot`. Dispatcher
-  не резервирует средства, не создаёт orders и не вызывает private trading
-  mutation API.
-- Профиль стратегии описывает требуемую внешнюю рыночную среду и версионируется
-  отдельно от Entry. Добавление новой стратегии не должно требовать патча Маяка
-  или ядра Диспетчера.
-- До отдельного подтверждённого этапа D6 Диспетчер работает только пассивно/SHADOW.
-  Сам Диспетчер никогда не получает права торговать даже после D6.
+- Канонический контракт: `docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`; универсальный market/coin contract: `docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`; активный implementation contract D0–D7: `docs/DISPATCHER_V2_IMPLEMENTATION_RU.md`.
+- Owner decision 2026-09-06: новый Dispatcher V2 создаётся как **clean implementation**. Production V2 запрещено импортировать/вызывать legacy `bybit_workbench.strategy_dispatcher`, profile registry/matcher, StrategyMarketProfile, suitability statuses или конфигурацию `config/strategy_dispatcher/profiles`.
+- Старые `STRATEGY_DISPATCHER_IMPLEMENTATION_D0_D6_RU.md`, `STRATEGY_DISPATCHER_MARKET_VOCABULARY_RU.md`, `STRATEGY_DISPATCHER_PROFILE_GUIDE_RU.md`, `STRATEGY_DISPATCHER_RUNBOOK_RU.md` — LEVEL 6 historical legacy, не текущие инструкции.
+- Направление данных: `MAYAK -> DISPATCHER V2 -> STRATEGY`. Technical account-sync отдельно поставляет normalized account truth для `TradingCapacitySnapshot`. Dispatcher не читает PnL/Entry success как рыночный вход, не резервирует капитал и не вызывает trading mutation.
+- D0–D7 публикует только `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot`, causal/versioned/quality-aware/provenance-rich, `trading_effect=NONE`. Формула `CoinMarketRating` и Strategy-consumer migration являются отдельными следующими этапами.
 
 
 ## Маяк — независимый слой наблюдения

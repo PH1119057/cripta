@@ -1,7 +1,7 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 2.4
+**Версия:** 2.5
 **Дата:** 2026-09-06
 **Статус:** канонический реестр авторитетности
 
@@ -71,6 +71,7 @@ connected Exchange / Trading Account
 - MAYAK: `MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`
 - MAYAK V2 objective context implementation/research: `MAYAK_OBJECTIVE_CONTEXT_V2_IMPLEMENTATION_RU.md`
 - Dispatcher: `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
+- Dispatcher V2 implementation D0–D7: `DISPATCHER_V2_IMPLEMENTATION_RU.md` (LEVEL 4, active implementation contract)
 - universal market/coin context and rating: `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
 - lifecycle: `SIGNAL_LIFECYCLE_CONTRACT_RU.md`
 - Analyst: `ANALYST_ARCHITECTURE_RU.md`
@@ -81,6 +82,13 @@ connected Exchange / Trading Account
 ## 5. История
 
 Исторические документы сохраняют фактическую историю и не переписываются задним числом.
+
+Следующие документы старого profile-based Dispatcher после owner decision 2026-09-06 имеют статус **LEVEL 6 / HISTORICAL LEGACY** и не являются заданием для V2:
+
+- `STRATEGY_DISPATCHER_IMPLEMENTATION_D0_D6_RU.md`;
+- `STRATEGY_DISPATCHER_MARKET_VOCABULARY_RU.md`;
+- `STRATEGY_DISPATCHER_PROFILE_GUIDE_RU.md`;
+- `STRATEGY_DISPATCHER_RUNBOOK_RU.md`.
 
 Их старое слово `Risk`, конкретная биржа или старая схема ownership не отменяют текущий канон, если документ явно historical.
 

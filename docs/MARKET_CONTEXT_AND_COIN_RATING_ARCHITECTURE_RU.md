@@ -1,7 +1,7 @@
 # УНИВЕРСАЛЬНЫЙ РЫНОЧНЫЙ КОНТЕКСТ И РЕЙТИНГ МОНЕТЫ
 
 **Документ:** `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
-**Версия:** 1.0
+**Версия:** 1.1
 **Дата:** 2026-09-06
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-06
@@ -253,13 +253,18 @@ OBSERVATION
 -> LIVE
 ```
 
-## 11. Переходный текущий Dispatcher
+## 11. Legacy Dispatcher после решения владельца 2026-09-06
 
-Существующий profile-based Dispatcher (`GOOD_MATCH`, `PARTIAL_MATCH`, `POOR_MATCH`, `INCOMPATIBLE`, `profile_id/version`) возник до этого owner decision.
+Profile-based Dispatcher (`GOOD_MATCH`, `PARTIAL_MATCH`, `POOR_MATCH`, `INCOMPATIBLE`, `profile_id/version`) больше не является работающим shadow-кандидатом будущего Dispatcher.
 
-Он может оставаться включённым как shadow/research evidence с `trading_effect=NONE`, чтобы не терять накопление истории.
+Решение владельца:
 
-Он не является каноническим будущим смыслом Dispatcher и не должен получать trading rights. Отдельная implementation-задача позже должна заменить/разделить его на universal global/coin context, сохранив исторический audit.
+- прекратить создание новых legacy assessments после безопасного отключения старого сервиса;
+- строить Dispatcher V2 как отдельную чистую реализацию без зависимости от старого matcher/profile-кода;
+- исторические записи не переписывать и использовать только как historical audit при необходимости;
+- новые objective global/coin/capacity contexts хранить отдельно в namespace/schema `dispatcher_v2`.
+
+`CoinMarketRating` по-прежнему не определяется этим переходом и требует отдельного research/implementation этапа после появления устойчивого V2 context runtime.
 
 ## 12. Неприкосновенные границы
 

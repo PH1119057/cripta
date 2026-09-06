@@ -1,9 +1,10 @@
 # ДИСПЕТЧЕР — АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 2026-09-06
 **Статус:** канонический специализированный контракт
+**Основание V2.1:** явное решение владельца 2026-09-06 — новый Dispatcher V2 создаётся как чистая реализация без profile-based ядра.
 
 Верхние контракты:
 
@@ -170,13 +171,37 @@ Dispatcher не имеет прямого пути к Execution mutations.
 
 Technical fail-closed принадлежит operational safety / Execution для stale/unknown mandatory exchange/account state. Рыночный rating сам по себе техническим safety gate не является.
 
-## 13. Переход от profile-based реализации
+## 13. Решение владельца: чистый Dispatcher V2 и прекращение legacy runtime
 
-Текущие таблицы/сервисы могут исторически содержать `strategy_dispatcher.assessments`, `profile_id`, `GOOD_MATCH`, `INCOMPATIBLE` и другие profile-based оценки.
+Решением владельца 2026-09-06 зафиксировано:
 
-С версии этого контракта они считаются transitional/legacy research evidence и могут временно продолжать работать только с `trading_effect=NONE` для накопления статистики и сравнения.
+```text
+DISPATCHER_V2_CLEAN_IMPLEMENTATION = YES
+LEGACY_PROFILE_RUNTIME_NEW_DATA = STOP
+LEGACY_PROFILE_RUNTIME_TRADING_EFFECT = NONE
+LEGACY_HISTORY_REWRITE = NO
+```
 
-Они не определяют будущую каноническую роль Dispatcher и не получают live-влияние автоматически. Их удаление/миграция/замена требует отдельной implementation-задачи.
+Новый Dispatcher V2 создаётся **с нуля в отдельном модуле и отдельном runtime**. Его production-код не импортирует и не вызывает старый пакет `bybit_workbench.strategy_dispatcher`, profile registry, profile matcher, `StrategyMarketProfile`, `SuitabilityStatus`, `GOOD_MATCH`, `INCOMPATIBLE` и другие strategy-specific механизмы.
+
+Старый profile-based сервис прекращает создание новых assessment после безопасного operational decommission. Его исторические PostgreSQL-записи остаются только как уже состоявшийся audit и не переписываются задним числом. Сохранение старого сервиса как работающего shadow-механизма больше не требуется.
+
+Старые implementation/runbook/profile документы относятся к истории прежней реализации и не являются инструкцией для V2.
+
+Текущий утверждённый implementation scope `D0–D7`:
+
+```text
+D0  canonical clean-V2 contract + legacy decommission boundary
+D1  immutable V2 contracts
+D2  direct PostgreSQL MAYAK handoff
+D3  GlobalMarketContext
+D4  CoinMarketContext (без формулы CoinMarketRating)
+D5  TradingCapacitySnapshot
+D6  append-only dispatcher_v2 persisted truth
+D7  passive production runtime + status/health
+```
+
+В этот scope **не входят**: формула `CoinMarketRating`, Strategy interpretation, Entry/Exit policy, migration Strategy consumers и любое торговое влияние.
 
 ## 14. Главная формула
 
