@@ -48,6 +48,7 @@ WS = {
     "spot": "wss://stream.bybit.kz/v5/public/spot",
     "linear": "wss://stream.bybit.kz/v5/public/linear",
 }
+SUBSCRIBE_BATCH_LIMIT = {"spot": 10, "linear": 30}
 
 
 class Collector:
@@ -66,6 +67,7 @@ class Collector:
         self.last_persisted_handoff: dict[str, Any] | None = None
         self.pending_liquidations: list[tuple[float, str, str, float, float]] = []
         self.liquidation_lock = threading.Lock()
+        self.subscription_acks: dict[str, dict[str, Any]] = {}
 
     def prepare(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +213,7 @@ class Collector:
                 self.last_persisted_minute = minute
                 self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
+                self._persist_coin_market_contexts(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
                 self._persist_shared_market_context(snapshot_id, snapshot)
                 self.last_persisted_handoff = snapshot["dispatcher_handoff"]
@@ -284,8 +287,16 @@ class Collector:
                 if market == "linear":
                     topics.extend(f"tickers.{symbol}" for symbol in self.symbols)
                     topics.extend(f"allLiquidation.{symbol}" for symbol in self.symbols)
-                for start in range(0, len(topics), 30):
-                    sock.send(json.dumps({"op": "subscribe", "args": topics[start : start + 30]}))
+                batch_limit = SUBSCRIBE_BATCH_LIMIT[market]
+                for start in range(0, len(topics), batch_limit):
+                    batch = topics[start : start + batch_limit]
+                    req_id = f"mayak-{market}-{start // batch_limit}-{int(time.time() * 1000)}"
+                    self.subscription_acks[req_id] = {
+                        "market": market,
+                        "args": tuple(batch),
+                        "status": "PENDING",
+                    }
+                    sock.send(json.dumps({"op": "subscribe", "req_id": req_id, "args": batch}))
                 ping = time.monotonic() + 20
                 while not self.stop.is_set():
                     try:
@@ -313,6 +324,20 @@ class Collector:
         topic = str(message.get("topic") or "")
         data = message.get("data")
         timestamp = float(message.get("ts") or time.time() * 1000) / 1000
+        if message.get("op") == "subscribe" or "success" in message and message.get("req_id"):
+            req_id = str(message.get("req_id") or "")
+            row = self.subscription_acks.setdefault(req_id, {"market": market, "args": ()})
+            success = bool(message.get("success"))
+            row["status"] = "ACK" if success else "REJECTED"
+            row["response"] = {
+                key: message.get(key) for key in ("success", "ret_msg", "conn_id") if key in message
+            }
+            if not success:
+                raise RuntimeError(
+                    f"MAYAK_SUBSCRIPTION_REJECTED market={market} req_id={req_id} "
+                    f"reason={message.get('ret_msg') or message.get('retMsg') or 'unknown'}"
+                )
+            return
         if topic.startswith("publicTrade.") and isinstance(data, list):
             for row in data:
                 with suppress(KeyError, TypeError, ValueError):
@@ -329,7 +354,9 @@ class Collector:
             values = {}
             for source, target in (
                 ("openInterest", "open_interest"),
+                ("openInterestValue", "open_interest_value"),
                 ("fundingRate", "funding_rate"),
+                ("lastPrice", "last_price"),
                 ("markPrice", "mark_price"),
                 ("indexPrice", "index_price"),
             ):
@@ -403,6 +430,8 @@ class Collector:
                     (snapshot["observed_at"],),
                 ).fetchone()
             db.commit()
+            if row is None:
+                raise RuntimeError("MAYAK_REGULAR_SNAPSHOT_ID_MISSING")
             return int(row[0])
 
     def _persist_liquidations(self) -> None:
@@ -496,6 +525,44 @@ class Collector:
                     rows,
                 )
                 db.commit()
+
+    def _persist_coin_market_contexts(
+        self, snapshot_id: int, snapshot: dict[str, Any]
+    ) -> None:
+        contexts = snapshot.get("coin_market_contexts") or {}
+        rows = []
+        for context in contexts.values():
+            payload = context["payload"]
+            provenance = context["provenance"]
+            rows.append(
+                (
+                    context["coin_context_id"],
+                    snapshot_id,
+                    context["observed_at"],
+                    context["symbol"],
+                    context["schema_version"],
+                    context["engine_version"],
+                    context["feature_version"],
+                    context["config_fingerprint"],
+                    context["data_quality"],
+                    json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True),
+                    json.dumps(provenance, ensure_ascii=False, default=str, sort_keys=True),
+                    context["content_hash"],
+                )
+            )
+        if not rows:
+            return
+        with psycopg.connect(DSN) as db:
+            db.cursor().executemany(
+                """INSERT INTO mayak_v2.coin_market_contexts(
+                    coin_context_id,mayak_snapshot_id,observed_at,symbol,schema_version,
+                    engine_version,feature_version,config_fingerprint,data_quality,
+                    payload,provenance,content_hash)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT(coin_context_id) DO NOTHING""",
+                rows,
+            )
+            db.commit()
 
     def _persist_observation_journal(
         self, snapshot_id: int, snapshot: dict[str, Any]

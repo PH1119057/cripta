@@ -44,16 +44,27 @@ class TradeWindow:
     def add(self, timestamp: float, signed_usd: float, price: float) -> None:
         with self.lock:
             self.rows.append((timestamp, signed_usd, price))
-            self.trim(timestamp - 3600)
+            # Two hours are required for a causal current-vs-prior 60m comparison.
+            self.trim(timestamp - 7200)
 
     def trim(self, cutoff: float) -> None:
         while self.rows and self.rows[0][0] < cutoff:
             self.rows.popleft()
 
-    def metrics(self, now: float, seconds: int) -> dict[str, float | None]:
+    def metrics(
+        self, now: float, seconds: int, *, offset_seconds: int = 0
+    ) -> dict[str, float | None]:
+        """Return causal metrics for one closed-backward window.
+
+        ``offset_seconds`` selects a prior window without exposing rows newer than
+        its end. This is shared by live and historical replay.
+        """
+        end = now - offset_seconds
+        start = end - seconds
         with self.lock:
             all_rows = tuple(self.rows)
-        rows = [row for row in all_rows if row[0] >= now - seconds]
+        causal_rows = [row for row in all_rows if row[0] <= end]
+        rows = [row for row in causal_rows if row[0] > start]
         if not rows:
             return {
                 "buy_usd": None,
@@ -66,7 +77,7 @@ class TradeWindow:
             }
         positive = [v for _, v, _ in rows if v > 0]
         negative = [-v for _, v, _ in rows if v < 0]
-        sizes = sorted(abs(v) for _, v, _ in all_rows)
+        sizes = sorted(abs(v) for _, v, _ in causal_rows)
         threshold = (
             sizes[max(0, math.ceil(len(sizes) * 0.95) - 1)] if len(sizes) >= 20 else math.inf
         )
@@ -79,6 +90,54 @@ class TradeWindow:
             "large_buy_usd": sum(v for _, v, _ in rows if v >= threshold),
             "large_sell_usd": sum(-v for _, v, _ in rows if v <= -threshold),
         }
+
+    def flow_context(self, now: float) -> dict[str, Any]:
+        def safe_ratio(numerator: float | None, denominator: float | None) -> float | None:
+            if numerator is None or denominator in (None, 0):
+                return None
+            assert denominator is not None
+            return numerator / denominator
+
+        result: dict[str, Any] = {}
+        for label, seconds in (("1m", 60), ("5m", 300), ("15m", 900), ("30m", 1800), ("60m", 3600)):
+            current = self.metrics(now, seconds)
+            prior = self.metrics(now, seconds, offset_seconds=seconds)
+            minutes = seconds / 60
+            net = current["net_usd"]
+            turnover = current["turnover_usd"]
+            prior_net = prior["net_usd"]
+            prior_turnover = prior["turnover_usd"]
+            net_value = float(net) if net is not None else None
+            turnover_value = float(turnover) if turnover is not None else None
+            prior_net_value = float(prior_net) if prior_net is not None else None
+            prior_turnover_value = (
+                float(prior_turnover) if prior_turnover is not None else None
+            )
+            speed = net_value / minutes if net_value is not None else None
+            prior_speed = prior_net_value / minutes if prior_net_value is not None else None
+            acceleration = (
+                (speed - prior_speed) / minutes
+                if speed is not None and prior_speed is not None
+                else None
+            )
+            large_total = (
+                float(current["large_buy_usd"] or 0) + float(current["large_sell_usd"] or 0)
+                if turnover is not None
+                else None
+            )
+            result[label] = {
+                **current,
+                "status": "VALID" if net is not None else "NO_DATA",
+                "net_share": safe_ratio(net_value, turnover_value),
+                "speed_usd_per_min": speed,
+                "acceleration_usd_per_min2": acceleration,
+                "large_trade_share": safe_ratio(large_total, turnover_value),
+                "prior_turnover_usd": prior_turnover,
+                "turnover_ratio_to_prior": safe_ratio(
+                    turnover_value, prior_turnover_value
+                ),
+            }
+        return result
 
 
 @dataclass(slots=True)
@@ -205,6 +264,113 @@ class LiquidationWindow:
         }
 
 
+    def symbol_context(
+        self, now: float, symbol: str, connected_since: float | None
+    ) -> dict[str, Any]:
+        """Return exact, causal liquidation facts for one symbol."""
+        if connected_since is None or now - connected_since < 900:
+            return {"status": "WARMUP", "observed_at": None, "phase": None}
+        with self.lock:
+            rows = tuple(row for row in self.rows if row[0] <= now and row[1] == symbol)
+
+        result: dict[str, Any] = {}
+        for label, seconds in (("1m", 60), ("5m", 300), ("15m", 900), ("30m", 1800)):
+            current = [row for row in rows if row[0] > now - seconds]
+            result[label] = {
+                "long_count": sum(row[2] == "Buy" for row in current),
+                "short_count": sum(row[2] == "Sell" for row in current),
+                "long_notional_usd": sum(row[3] for row in current if row[2] == "Buy"),
+                "short_notional_usd": sum(row[3] for row in current if row[2] == "Sell"),
+                "total_notional_usd": sum(row[3] for row in current),
+            }
+
+        completed_minutes: list[float] = []
+        for offset in range(1, 61):
+            lower = now - (offset + 1) * 60
+            upper = now - offset * 60
+            completed_minutes.append(sum(row[3] for row in rows if lower < row[0] <= upper))
+        calibrated = sorted(value for value in completed_minutes if value > 0)
+        current_usd = float(result["1m"]["total_notional_usd"])
+        previous_average = sum(completed_minutes[:5]) / 5
+        acceleration_value = (current_usd - previous_average) / 5
+        latest = max((row[0] for row in rows), default=None)
+        result.update(
+            {
+                "observed_at": latest,
+                "current_1m_usd": current_usd,
+                "prior_5m_average_usd_per_min": previous_average,
+                "speed_usd_per_min": current_usd,
+                "acceleration_usd_per_min2": acceleration_value,
+                "baseline_nonzero_minutes": len(calibrated),
+                "baseline_required_nonzero_minutes": 5,
+                "side_semantics": {"Buy": "LONG_LIQUIDATED", "Sell": "SHORT_LIQUIDATED"},
+            }
+        )
+        if current_usd > 0 and len(calibrated) < 5:
+            result.update(
+                {
+                    "status": "WARMUP",
+                    "intensity": None,
+                    "acceleration": None,
+                    "phase": None,
+                    "normalization_to_p50": None,
+                }
+            )
+            return result
+
+        ordered = calibrated or [0.0]
+        def quantile(fraction: float) -> float:
+            index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * fraction) - 1))
+            return ordered[index]
+
+        p50, p90, p99 = quantile(0.50), quantile(0.90), quantile(0.99)
+        if current_usd == 0:
+            intensity = "NONE"
+        elif current_usd <= p50:
+            intensity = "LOW"
+        elif current_usd <= p90:
+            intensity = "NORMAL"
+        elif current_usd <= p99:
+            intensity = "HIGH"
+        else:
+            intensity = "EXTREME"
+        if previous_average == 0:
+            acceleration = "STABLE" if current_usd == 0 else "SURGING"
+        else:
+            ratio = current_usd / previous_average
+            acceleration = (
+                "FALLING_FAST" if ratio <= 0.5 else
+                "FALLING" if ratio < 0.9 else
+                "SURGING" if ratio >= 2.0 else
+                "RISING" if ratio > 1.1 else "STABLE"
+            )
+        if intensity == "NONE":
+            phase = "NONE"
+        elif intensity in {"HIGH", "EXTREME"} and acceleration in {"RISING", "SURGING"}:
+            phase = "CASCADE"
+        elif intensity in {"HIGH", "EXTREME"} and acceleration in {"FALLING", "FALLING_FAST"}:
+            phase = "EXHAUSTION"
+        elif acceleration in {"RISING", "SURGING"}:
+            phase = "TENSION_BUILDING"
+        elif acceleration in {"FALLING", "FALLING_FAST"}:
+            phase = "RECOVERY"
+        else:
+            phase = "UNCERTAIN"
+        result.update(
+            {
+                "status": "VALID",
+                "intensity": intensity,
+                "acceleration": acceleration,
+                "phase": phase,
+                "normalization_to_p50": current_usd / p50 if p50 > 0 else None,
+                "baseline_p50_usd": p50,
+                "baseline_p90_usd": p90,
+                "baseline_p99_usd": p99,
+            }
+        )
+        return result
+
+
 @dataclass(slots=True)
 class SourceStamp:
     observed_at: float | None = None
@@ -220,14 +386,15 @@ class SourceStamp:
 
 
 class LiveMayakEngine:
-    ARCHITECTURE_VERSION = "1.0"
-    FEATURE_VERSION = "external-market-observer-v1"
+    ARCHITECTURE_VERSION = "1.1"
+    FEATURE_VERSION = "objective-coin-context-v2"
     """Pure, causal, read-only market observer. It has no execution dependency."""
 
-    VERSION = "mayak-v2.1"
+    VERSION = "mayak-v2.2"
 
-    def __init__(self, symbols: tuple[str, ...]) -> None:
+    def __init__(self, symbols: tuple[str, ...], *, exact_liquidations: bool = True) -> None:
         self.symbols = symbols
+        self.exact_liquidations = exact_liquidations
         self.trades = {
             (market, symbol): TradeWindow() for market in ("spot", "linear") for symbol in symbols
         }
@@ -242,6 +409,7 @@ class LiveMayakEngine:
         }
         self.tickers: dict[str, dict[str, Any]] = {}
         self.ticker_history: dict[str, deque[tuple[float, float]]] = defaultdict(deque)
+        self.funding_history: dict[str, deque[tuple[float, float]]] = defaultdict(deque)
         self.books: dict[tuple[str, str], dict[str, Any]] = {}
         # One compact sample per second preserves the complete 15-minute causal
         # horizon even on very active books, while keeping memory bounded by time
@@ -306,7 +474,7 @@ class LiveMayakEngine:
                 history[-1] = oi_row
             else:
                 history.append(oi_row)
-            while history and history[0][0] < timestamp - 3900:
+            while history and history[0][0] < timestamp - 7500:
                 history.popleft()
             for minutes in (5, 15, 30, 60):
                 baseline = next(
@@ -319,6 +487,37 @@ class LiveMayakEngine:
                     else None
                 )
             current["open_interest_change_pct"] = current["open_interest_change_5m_pct"]
+            current_change = current.get("open_interest_change_5m_pct")
+            five_minute_value = next(
+                (value for at, value in reversed(history) if at <= timestamp - 300), None
+            )
+            ten_minute_value = next(
+                (value for at, value in reversed(history) if at <= timestamp - 600), None
+            )
+            previous_change = (
+                (five_minute_value / ten_minute_value - 1) * 100
+                if five_minute_value and ten_minute_value and ten_minute_value > 0
+                else None
+            )
+            current_speed = float(current_change) / 5 if current_change is not None else None
+            previous_speed = float(previous_change) / 5 if previous_change is not None else None
+            current["open_interest_speed_5m_pct_per_min"] = current_speed
+            current["open_interest_acceleration_5m_pct_per_min2"] = (
+                (current_speed - previous_speed) / 5
+                if current_speed is not None and previous_speed is not None
+                else None
+            )
+        if "funding_rate" in values:
+            funding = float(values["funding_rate"])
+            funding_history = self.funding_history[symbol]
+            previous_funding = funding_history[-1][1] if funding_history else None
+            current["funding_rate_change_from_previous"] = (
+                funding - previous_funding if previous_funding is not None else None
+            )
+            if not funding_history or funding != funding_history[-1][1]:
+                funding_history.append((timestamp, funding))
+            while funding_history and funding_history[0][0] < timestamp - 7 * 86400:
+                funding_history.popleft()
         self.tickers[symbol] = current
         stamp = self.stamps[("linear", symbol, "ticker")]
         stamp.observed_at, stamp.stale_seconds = timestamp, 45
@@ -335,13 +534,37 @@ class LiveMayakEngine:
             return
         key = (market, symbol)
         old = self.books.get(key)
-        bid = sum(price * size for price, size in bids if price > 0 and size > 0)
-        ask = sum(price * size for price, size in asks if price > 0 and size > 0)
+        clean_bids = sorted(
+            ((price, size) for price, size in bids if price > 0 and size > 0), reverse=True
+        )
+        clean_asks = sorted((price, size) for price, size in asks if price > 0 and size > 0)
+        bid = sum(price * size for price, size in clean_bids)
+        ask = sum(price * size for price, size in clean_asks)
+        best_bid = clean_bids[0][0] if clean_bids else None
+        best_ask = clean_asks[0][0] if clean_asks else None
+        mid = (
+            (best_bid + best_ask) / 2
+            if best_bid is not None and best_ask is not None
+            else best_bid if best_bid is not None else best_ask
+        )
         current: dict[str, Any] = {
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "mid_price": mid,
             "bid_usd": bid,
             "ask_usd": ask,
             "imbalance": (bid - ask) / (bid + ask) if bid + ask else 0.0,
         }
+        if mid and mid > 0:
+            for bps in (5, 10, 25, 50):
+                bid_floor = mid * (1 - bps / 10000)
+                ask_ceiling = mid * (1 + bps / 10000)
+                current[f"bid_depth_{bps}bps_usd"] = sum(
+                    price * size for price, size in clean_bids if price >= bid_floor
+                )
+                current[f"ask_depth_{bps}bps_usd"] = sum(
+                    price * size for price, size in clean_asks if price <= ask_ceiling
+                )
         if old:
             current["bid_change_pct"] = (bid / old["bid_usd"] - 1) * 100 if old["bid_usd"] else 0.0
             current["ask_change_pct"] = (ask / old["ask_usd"] - 1) * 100 if old["ask_usd"] else 0.0
@@ -422,12 +645,6 @@ class LiveMayakEngine:
                 row = self.stamps[(market, symbol, source)].describe(now_ts)
                 row["activity_quality"] = row["quality"]
                 row["transport_quality"] = transport[market]["quality"]
-                if (
-                    source == "trades"
-                    and availability[market] == InstrumentAvailability.SUPPORTED
-                    and transport[market]["quality"] == SourceQuality.FRESH
-                ):
-                    row["quality"] = SourceQuality.FRESH
                 quality[f"{market}_{source}"] = row
                 source_rows.append(row)
             coins[symbol] = {
@@ -473,27 +690,34 @@ class LiveMayakEngine:
         }
         agreement = max(up, down) / valid
         median = statistics.median(returns.values()) if returns else None
-        synchronization = self._synchronization(returns)
+        synchronization = self._synchronization(returns, now_ts)
         state, reasons = self._classify(median, agreement, synchronization, money_breadth)
         fresh = sum(row["quality"] == SourceQuality.FRESH for row in source_rows)
         confidence = fresh / max(1, len(source_rows))
+        config_fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "symbols": self.symbols,
+                    "architecture": self.ARCHITECTURE_VERSION,
+                    "engine": self.VERSION,
+                    "features": self.FEATURE_VERSION,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        coin_market_contexts = self._coin_market_contexts(
+            now_ts=now_ts,
+            observed_at=now.isoformat(),
+            coins=coins,
+            config_fingerprint=config_fingerprint,
+        )
         snapshot = {
             "observed_at": now.isoformat(),
             "architecture_version": self.ARCHITECTURE_VERSION,
             "engine_version": self.VERSION,
             "feature_version": self.FEATURE_VERSION,
-            "config_fingerprint": hashlib.sha256(
-                json.dumps(
-                    {
-                        "symbols": self.symbols,
-                        "architecture": self.ARCHITECTURE_VERSION,
-                        "engine": self.VERSION,
-                        "features": self.FEATURE_VERSION,
-                    },
-                    ensure_ascii=False,
-                    sort_keys=True,
-                ).encode("utf-8")
-            ).hexdigest(),
+            "config_fingerprint": config_fingerprint,
             "state": state,
             "confidence": round(confidence, 3),
             "reasons": reasons,
@@ -510,6 +734,7 @@ class LiveMayakEngine:
             "direction_synchronization": synchronization,
             "liquidations": liquidations,
             "coins": coins,
+            "coin_market_contexts": coin_market_contexts,
             "transport": transport,
             "external_exchange_flows": {
                 "quality": SourceQuality.UNAVAILABLE,
@@ -518,6 +743,178 @@ class LiveMayakEngine:
         }
         snapshot["dispatcher_handoff"] = self._dispatcher_handoff(snapshot)
         return snapshot
+
+    def _coin_market_contexts(
+        self,
+        *,
+        now_ts: float,
+        observed_at: str,
+        coins: dict[str, Any],
+        config_fingerprint: str,
+    ) -> dict[str, dict[str, Any]]:
+        panel_medians: dict[str, float | None] = {}
+        for horizon in ("1m", "5m", "15m", "60m"):
+            values = [
+                float(coin["returns_by_horizon"][horizon])
+                for coin in coins.values()
+                if coin["returns_by_horizon"].get(horizon) is not None
+            ]
+            panel_medians[horizon] = statistics.median(values) if values else None
+        btc = coins.get("BTCUSDT") or {}
+        eth = coins.get("ETHUSDT") or {}
+        btc_returns = btc.get("returns_by_horizon") or {}
+        eth_returns = eth.get("returns_by_horizon") or {}
+        connected_since = self.transport["linear"].get("connected_since")
+        contexts: dict[str, dict[str, Any]] = {}
+
+        for symbol, coin in coins.items():
+            ticker = coin.get("ticker") or {}
+            returns_by_horizon = coin.get("returns_by_horizon") or {}
+            relative: dict[str, Any] = {}
+            for horizon in ("1m", "5m", "15m", "60m"):
+                value = returns_by_horizon.get(horizon)
+                panel = panel_medians[horizon]
+                btc_value = btc_returns.get(horizon)
+                eth_value = eth_returns.get(horizon)
+                relative[horizon] = {
+                    "coin_return_pct": value,
+                    "panel_median_return_pct": panel,
+                    "relative_to_panel_pct": (
+                        float(value) - panel if value is not None and panel is not None else None
+                    ),
+                    "relative_to_btc_pct": (
+                        float(value) - float(btc_value)
+                        if value is not None and btc_value is not None else None
+                    ),
+                    "relative_to_eth_pct": (
+                        float(value) - float(eth_value)
+                        if value is not None and eth_value is not None else None
+                    ),
+                }
+
+            def pct(a: Any, b: Any) -> float | None:
+                if a is None or b in (None, 0):
+                    return None
+                return (float(a) / float(b) - 1) * 100
+
+            positioning = {
+                "open_interest": ticker.get("open_interest"),
+                "open_interest_value": ticker.get("open_interest_value"),
+                "open_interest_change_5m_pct": ticker.get("open_interest_change_5m_pct"),
+                "open_interest_change_15m_pct": ticker.get("open_interest_change_15m_pct"),
+                "open_interest_change_30m_pct": ticker.get("open_interest_change_30m_pct"),
+                "open_interest_change_60m_pct": ticker.get("open_interest_change_60m_pct"),
+                "open_interest_speed_5m_pct_per_min": ticker.get(
+                    "open_interest_speed_5m_pct_per_min"
+                ),
+                "open_interest_acceleration_5m_pct_per_min2": ticker.get(
+                    "open_interest_acceleration_5m_pct_per_min2"
+                ),
+                "funding_rate": ticker.get("funding_rate"),
+                "funding_rate_change_from_previous": ticker.get(
+                    "funding_rate_change_from_previous"
+                ),
+                "last_price": ticker.get("last_price"),
+                "mark_price": ticker.get("mark_price"),
+                "index_price": ticker.get("index_price"),
+                "mark_index_premium_pct": pct(ticker.get("mark_price"), ticker.get("index_price")),
+                "last_index_premium_pct": pct(ticker.get("last_price"), ticker.get("index_price")),
+                "last_mark_premium_pct": pct(ticker.get("last_price"), ticker.get("mark_price")),
+                "long_ratio": ticker.get("long_ratio"),
+                "short_ratio": ticker.get("short_ratio"),
+            }
+
+            quality = coin.get("quality") or {}
+            availability = coin.get("availability") or {}
+            expected: list[str] = []
+            fresh = 0
+            for source_id, market in (
+                ("spot_trades", "spot"),
+                ("linear_trades", "linear"),
+                ("spot_book", "spot"),
+                ("linear_book", "linear"),
+                ("linear_ticker", "linear"),
+            ):
+                if availability.get(market) != InstrumentAvailability.UNSUPPORTED:
+                    expected.append(source_id)
+                    if (quality.get(source_id) or {}).get("quality") == SourceQuality.FRESH:
+                        fresh += 1
+            ratio = fresh / len(expected) if expected else 0.0
+            data_quality = (
+                "HIGH" if ratio >= 0.90 else
+                "MEDIUM" if ratio >= 0.65 else
+                "LOW" if ratio >= 0.25 else "INSUFFICIENT"
+            )
+            liquidation = (
+                self.liquidations.symbol_context(now_ts, symbol, connected_since)
+                if self.exact_liquidations
+                else {
+                    "status": "NO_DATA",
+                    "observed_at": None,
+                    "phase": None,
+                    "reason": "EXACT_LIQUIDATION_SOURCE_NOT_AVAILABLE",
+                }
+            )
+            payload = {
+                "price": {"returns": returns_by_horizon},
+                "money": {
+                    "spot": self.trades[("spot", symbol)].flow_context(now_ts),
+                    "derivatives": self.trades[("linear", symbol)].flow_context(now_ts),
+                },
+                "positioning": positioning,
+                "liquidity": {
+                    "spot": coin.get("books", {}).get("spot"),
+                    "derivatives": coin.get("books", {}).get("linear"),
+                },
+                "liquidations": liquidation,
+                "relative_strength": relative,
+                "event_context": {"status": "NO_DATA", "observed_at": None},
+                "data_quality": {
+                    "band": data_quality,
+                    "fresh_sources": fresh,
+                    "expected_sources": len(expected),
+                    "coverage": ratio,
+                    "sources": quality,
+                    "availability": availability,
+                },
+            }
+            provenance = {
+                "source": "mayak_v2",
+                "venue": "current_exchange_adapter",
+                "trading_command": False,
+                "exact_liquidations": self.exact_liquidations,
+                "config_fingerprint": config_fingerprint,
+            }
+            identity = json.dumps(
+                {
+                    "symbol": symbol,
+                    "observed_at": observed_at,
+                    "engine_version": self.VERSION,
+                    "feature_version": self.FEATURE_VERSION,
+                    "payload": payload,
+                    "provenance": provenance,
+                },
+                ensure_ascii=False,
+                default=str,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+            context_id = f"CMC-{digest[:32]}"
+            contexts[symbol] = {
+                "coin_context_id": context_id,
+                "symbol": symbol,
+                "observed_at": observed_at,
+                "schema_version": "coin-market-context-v1",
+                "engine_version": self.VERSION,
+                "feature_version": self.FEATURE_VERSION,
+                "config_fingerprint": config_fingerprint,
+                "data_quality": data_quality,
+                "payload": payload,
+                "provenance": provenance,
+                "content_hash": digest,
+            }
+        return contexts
 
     def _transport_description(self, market: str, now: float) -> dict[str, Any]:
         state = self.transport[market]
@@ -938,7 +1335,7 @@ class LiveMayakEngine:
             },
         }
 
-    def _synchronization(self, returns: dict[str, float]) -> dict[str, float | None]:
+    def _synchronization(self, returns: dict[str, float], now_ts: float) -> dict[str, float | None]:
         if len(returns) < 3:
             return {"agreement": None, "change": None}
         signs = [1 if value > 0 else -1 if value < 0 else 0 for value in returns.values()]
@@ -948,7 +1345,7 @@ class LiveMayakEngine:
         previous_agreement = (
             abs(sum(previous_signs)) / len(previous_signs) if previous_signs else agreement
         )
-        self.history.append((datetime.now(UTC).timestamp(), dict(returns)))
+        self.history.append((now_ts, dict(returns)))
         return {"agreement": agreement, "change": agreement - previous_agreement}
 
     @staticmethod

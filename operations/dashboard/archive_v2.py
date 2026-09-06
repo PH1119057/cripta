@@ -118,6 +118,11 @@ TABLE_EXPORTS = (
     ),
     TableExport("mayak_v2.snapshots", "mayak/snapshots.jsonl", ("observed_at", "created_at")),
     TableExport("mayak_v2.coin_minutes", "mayak/coin_minutes.jsonl", ("minute_at", "observed_at")),
+    TableExport(
+        "mayak_v2.coin_market_contexts",
+        "mayak/coin_market_contexts.jsonl",
+        ("observed_at", "created_at"),
+    ),
     TableExport("mayak_v2.events", "mayak/events.jsonl", ("event_at", "created_at")),
     TableExport("mayak_v2.state_events", "mayak/state_events.jsonl", ("observed_at", "created_at")),
     TableExport(

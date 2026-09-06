@@ -191,7 +191,7 @@ def test_transport_health_is_independent_from_market_trade_activity() -> None:
     snapshot = item.snapshot(now)
     coin = snapshot["coins"]["BTCUSDT"]
     assert snapshot["transport"]["spot"]["quality"] == SourceQuality.FRESH
-    assert coin["quality"]["spot_trades"]["quality"] == SourceQuality.FRESH
+    assert coin["quality"]["spot_trades"]["quality"] == SourceQuality.WARMUP
     assert coin["quality"]["spot_trades"]["activity_quality"] == SourceQuality.WARMUP
 
 

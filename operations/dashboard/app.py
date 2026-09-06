@@ -835,6 +835,7 @@ SIGNAL_ANALYSIS_TABLES = (
     ("strategy_dispatcher.assessments", "observed_at", "timestamp"),
     ("mayak_v2.snapshots", "observed_at", "timestamp"),
     ("mayak_v2.coin_minutes", "observed_at", "timestamp"),
+    ("mayak_v2.coin_market_contexts", "observed_at", "timestamp"),
     ("mayak_v2.events", "occurred_at", "timestamp"),
     ("mayak_v2.state_events", "occurred_at", "timestamp"),
     ("mayak_v2.observation_journal", "observed_at", "timestamp"),

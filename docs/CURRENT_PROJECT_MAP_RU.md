@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.1
+**Версия документа:** 4.2
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -52,6 +52,21 @@ EXCHANGE
 ## 4. MAYAK
 
 Наблюдает внешний рынок. Trading effect: `NONE`.
+
+Текущая source-реализация objective context: `mayak-v2.2` /
+`objective-coin-context-v2`. Она добавляет strategy-agnostic
+`CoinMarketContext` для каждого наблюдаемого инструмента и сохраняет его append-only
+в `mayak_v2.coin_market_contexts`. Внутри MAYAK не вычисляется Strategy-specific
+пригодность монеты и не принимается решение LONG/SHORT.
+
+Live и historical replay используют один `LiveMayakEngine`; replay только причинно
+подаёт нормализованные события в тот же движок. Исторический replay без точного raw
+источника ликвидаций обязан сохранять этот слой как `NO_DATA`, а не выводить ложное
+`NONE`.
+
+`CoinMarketRating` остаётся объектом Dispatcher поверх объективных MAYAK-фактов;
+формула рейтинга в MAYAK не зашивается. Состояние установленного/загруженного runtime
+проверяется отдельно от source checkpoint.
 
 ## 5. Dispatcher
 

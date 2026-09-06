@@ -1,8 +1,8 @@
 # МАЯК — МАТРИЦА ИСТОЧНИКОВ ДАННЫХ
 
 **Документ:** `MAYAK_DATA_SOURCE_MATRIX_RU.md`  
-**Версия:** 1.0  
-**Дата:** 2026-08-30  
+**Версия:** 1.1
+**Дата:** 2026-09-06
 **Статус:** архитектурная матрица + контрольная точка текущего слепка  
 **Связанный документ:** `BYBIT_PUBLIC_DATA_FOR_MAYAK_DISPATCHER_RU.md`
 
@@ -53,6 +53,39 @@ adapter_mode = canonical
 ```
 
 Это **снимок архива**, а не утверждение о текущем live после последующих изменений Codex.
+
+### 2.1 Source implementation checkpoint 2026-09-06
+
+После owner decision 2026-09-06 source-реализация MAYAK расширена до
+`mayak-v2.2` / `objective-coin-context-v2`. Этот checkpoint описывает код и контракт,
+но сам по себе не является доказательством, что конкретный runtime уже загружен.
+
+Добавлено без торгового влияния:
+
+```text
+CoinMarketContext per symbol
+spot executed flow 1/5/15/30/60m
+derivatives executed flow 1/5/15/30/60m
+flow speed / acceleration / large-trade share
+OI horizons / speed / acceleration
+last/mark/index premium relations
+near-price orderbook depth 5/10/25/50 bps
+per-coin liquidation windows and phase
+relative strength vs panel/BTC/ETH
+append-only mayak_v2.coin_market_contexts
+causal replay through the same LiveMayakEngine
+```
+
+Исправлено различение transport freshness и фактической activity: живой WebSocket
+больше не превращает отсутствие сделок в фиктивный `FRESH` trade flow. Spot
+subscriptions разбиваются на ограниченные пакеты с `req_id` и контролем ACK/reject.
+
+Точный historical liquidation layer не восстанавливается из отсутствующих данных:
+если exact raw liquidation source недоступен, replay выдаёт `NO_DATA`, а не `NONE`.
+
+`CoinMarketRating` и Strategy-specific `StrategyCoinFit` в MAYAK не вычисляются.
+Первый собирается Dispatcher из objective context после отдельного research-контракта,
+второй принадлежит Analyst/research.
 
 ---
 
