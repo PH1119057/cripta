@@ -13,8 +13,13 @@ def test_d8_contract_is_observed_only_and_clean_v2() -> None:
     assert "CoinMarketRating" in body
 
 
-def test_d8_is_registered_as_active_contract() -> None:
+def test_d8_is_registered_and_closed_with_runtime_evidence() -> None:
     authority = (ROOT / "docs/DOCUMENT_AUTHORITY_RU.md").read_text(encoding="utf-8")
     current_map = (ROOT / "docs/CURRENT_PROJECT_MAP_RU.md").read_text(encoding="utf-8")
+    results = (ROOT / "docs/DISPATCHER_V2_D8_STAGE_RESULTS_RU.md").read_text(encoding="utf-8")
     assert "DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md" in authority
-    assert "D8 owner-approved implementation scope" in current_map
+    assert "DISPATCHER_V2_D8_STAGE_RESULTS_RU.md" in authority
+    assert "D8 завершён" in current_map
+    assert "D8_RUNTIME_EVIDENCE       = PASS" in results
+    assert "D8_TRADING_EFFECT         = NONE" in results
+    assert "D8_CONSUMED_CONTEXT       = NO" in results

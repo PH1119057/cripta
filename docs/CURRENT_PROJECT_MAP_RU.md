@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.6
+**Версия документа:** 4.7
 **Дата:** 2026-09-06
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -170,9 +170,13 @@ Owner decision 2026-09-06 прекратил profile-based legacy runtime. `crip
 
 Активная целевая реализация D0–D7 — clean `dispatcher_v2`: отдельный package/runtime/schema без Strategy profiles. Она публикует `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` с `trading_effect=NONE`. `CoinMarketRating` на этом этапе **не реализован**. Strategy/Entry/Exit consumer cutover остаётся следующим отдельным этапом.
 
-D0–D7 production runtime подтверждён evidence report `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md`: `cripta-dispatcher-v2.service` active/enabled, installed/loaded source commit `ff259fdc173841a02cc6bb633af5ed5765614df1`, bootstrap from current MAYAK PASS, 20 coin contexts per source snapshot, restart/idempotency PASS. Следующий этап — D8 passive `OBSERVED_CONTEXT` correlation; это ещё не Strategy consumption.
+D0–D7 production runtime подтверждён evidence report `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md`: `cripta-dispatcher-v2.service` active/enabled, installed/loaded source commit `ff259fdc173841a02cc6bb633af5ed5765614df1`, bootstrap from current MAYAK PASS, 20 coin contexts per source snapshot, restart/idempotency PASS.
 
-D8 owner-approved implementation scope зафиксирован в `DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md`: отдельный append-only V2 event-context link и пассивный causal correlator. На D8 `CONSUMED_CONTEXT=NO`, Entry/Strategy policy не меняется.
+D8 завершён и подтверждён `DISPATCHER_V2_D8_STAGE_RESULTS_RU.md`. `cripta-dispatcher-v2-context-correlator.service` active/enabled и причинно пишет append-only `research_context.dispatcher_v2_event_links`. На контрольной production-точке: 23 links, negative context age = 0, duplicates = 0, `NOT_CONSUMED=23/23`, `trading_effect=NONE=23/23`; Global/Coin event-time age доходил примерно до 540 секунд и сохраняется как фактическое качество observed context, а не исправляется задним числом.
+
+Exact-ID discipline остаётся fail-honest: если событие не имеет доказанной exact lineage к `signal_id/position_id/trade_id`, D8 оставляет поля `NULL` и не восстанавливает ownership по `symbol + время`.
+
+Следующий научный gate перед формулой `CoinMarketRating` — новый temporal/cross-asset OOS frozen MAYAK components без retuning, затем owner review. Seen frozen ALL9 не используется для выбора итоговой формулы рейтинга.
 
 ## 13. Масштабирование
 
