@@ -119,6 +119,8 @@ def _signed_feature(name: str) -> bool:
         return True
     if name in BASIS_FEATURES:
         return True
+    if name == "positioning_long_short_imbalance":
+        return True
     if name.startswith("liquidity_"):
         return (
             name == "liquidity_imbalance"
@@ -488,6 +490,7 @@ def run(
     basis_csv: Path | None = None,
     spot_csv: Path | None = None,
     liquidity_csv: Path | None = None,
+    account_ratio_csv: Path | None = None,
 ) -> dict[str, Any]:
     valid_sha = len(source_commit) == 40 and all(
         ch in "0123456789abcdef" for ch in source_commit.lower()
@@ -498,6 +501,7 @@ def run(
     rows = merge_basis(rows, basis_csv)
     rows = merge_spot(rows, spot_csv)
     rows = merge_liquidity(rows, liquidity_csv)
+    rows = merge_positioning(rows, account_ratio_csv)
     summary, quartiles = analyze(rows)
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(output_dir / "COMPONENT_SUMMARY.csv", summary)
@@ -522,6 +526,8 @@ def run(
         "spot_sha256": _sha256(spot_csv) if spot_csv else None,
         "liquidity_csv": str(liquidity_csv) if liquidity_csv else None,
         "liquidity_sha256": _sha256(liquidity_csv) if liquidity_csv else None,
+        "account_ratio_csv": str(account_ratio_csv) if account_ratio_csv else None,
+        "account_ratio_sha256": _sha256(account_ratio_csv) if account_ratio_csv else None,
         "source_replay_manifest_sha256": (
             _sha256(input_csv.parent / "RUN_MANIFEST.json")
             if (input_csv.parent / "RUN_MANIFEST.json").exists()
@@ -566,6 +572,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--basis-csv", type=Path)
     parser.add_argument("--spot-csv", type=Path)
     parser.add_argument("--liquidity-csv", type=Path)
+    parser.add_argument("--account-ratio-csv", type=Path)
     return parser
 
 
@@ -579,6 +586,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         basis_csv=args.basis_csv,
         spot_csv=args.spot_csv,
         liquidity_csv=args.liquidity_csv,
+        account_ratio_csv=args.account_ratio_csv,
     )
     print(
         "MAYAK_COMPONENT_RESEARCH=PASS "

@@ -87,6 +87,9 @@ OI не получает искусственного direction sign: рост O
 
 Exact Spot replay через `LiveMayakEngine` добавляет `spot_*` для 1/5/15/30/60m: buy/sell/net/turnover/net_share, speed/acceleration, large-trade share и turnover ratio. Direction-adjusted проекция разрешена только для signed net/speed/acceleration/net_share и существует только в Analyst output.
 
+
+Historical 5m account-ratio добавляет `positioning_long_ratio`, `positioning_short_ratio`, `positioning_long_short_imbalance`. Это ratio количества аккаунтов, не денег. Direction-adjusted проекция разрешена только для `long_short_imbalance` и только во внешнем Analyst.
+
 Exact depth-200 orderbook replay добавляет только нормализуемые pooled признаки: общий imbalance; bid/ask change immediate/1/5/15m; imbalance change 1/5/15m; spread bps; для 5/10/25/50 bps — локальный depth imbalance и доля этого band от полного depth-200 notional. Абсолютный `bid_usd/ask_usd` и абсолютные depth USD не используются как pooled ALL9 признаки из-за несопоставимого масштаба активов.
 
 Для Strategy-specific research разрешена только внешняя проекция: signed imbalance по direction и `entry_support_change` / `entry_opposition_change` (bid/ask для LONG, ask/bid для SHORT). Она не возвращается в MAYAK.

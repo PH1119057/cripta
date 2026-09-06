@@ -276,3 +276,35 @@ def test_spot_and_liquidity_reject_outcome_fields(tmp_path: Path) -> None:
                 writer.writerow({"signal_key": str(index), "future_outcome": "bad"})
         with pytest.raises(ValueError, match="forbidden outcome"):
             merger(base, path)
+
+
+def test_account_ratio_imbalance_gets_external_direction_projection(tmp_path: Path) -> None:
+    source = tmp_path / "input.csv"
+    _write_input(source)
+    base = load_rows(source)
+    ratio = tmp_path / "ratio.csv"
+    with ratio.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(
+            f,
+            fieldnames=[
+                "signal_key",
+                "positioning_long_ratio",
+                "positioning_short_ratio",
+                "positioning_long_short_imbalance",
+            ],
+            delimiter=";",
+        )
+        w.writeheader()
+        for index in range(8):
+            w.writerow(
+                {
+                    "signal_key": str(index),
+                    "positioning_long_ratio": "0.6",
+                    "positioning_short_ratio": "0.4",
+                    "positioning_long_short_imbalance": "0.2",
+                }
+            )
+    rows = merge_positioning(base, ratio)
+    names = feature_names(rows)
+    assert "positioning_long_short_imbalance" in names
+    assert "entry_aligned::positioning_long_short_imbalance" in names
