@@ -1,0 +1,253 @@
+{
+  "activation": {
+    "activation_id": "u4-entry-v1-compat",
+    "enabled": true,
+    "operator": "owner",
+    "source": "U4_PARITY_ONLY"
+  },
+  "approved_at": "2026-09-08T15:00:00+00:00",
+  "approved_source": "owner-approved-U4-forensic-compatibility",
+  "calibration_provenance": {
+    "missing_symbols": [],
+    "period": "20260518_20260816",
+    "relative_path": "config/strategy_compat/entry_v1_core_calibration_20260518_20260816.json",
+    "schema": "entry-bot-calibration-v1",
+    "sha256": "b977bd42d76800a3eac63e42f67da7b75ecbf14e93c88761ff674cb084a32571",
+    "strategy": "ENTRY_V1_CORE"
+  },
+  "capital_policy": {
+    "require_capacity": false
+  },
+  "description": "U4 compatibility-only reconstruction of legacy V1 Entry policy; no live cutover.",
+  "directions": [
+    "LONG",
+    "SHORT"
+  ],
+  "dispatcher_context_policy": [],
+  "entry_policy": {
+    "entry_plan_version": "v1-compat-u4-1",
+    "predicate": {
+      "children": [
+        {
+          "op": "TOUCH"
+        },
+        {
+          "op": "COMPARE",
+          "params": {
+            "comparator": "EQ",
+            "path": "fact.flow_condition_met",
+            "value": true
+          }
+        },
+        {
+          "op": "COMPARE",
+          "params": {
+            "comparator": "EQ",
+            "path": "fact.oi_condition_met",
+            "value": true
+          }
+        }
+      ],
+      "op": "AND"
+    },
+    "watch_policy": {
+      "candidate_lifecycle": {
+        "clear_on_touch": true
+      },
+      "candidate_timeframe_minutes": 5,
+      "derived_event_kind": "TOUCH",
+      "direction_precedence": [
+        "LONG",
+        "SHORT"
+      ],
+      "direction_rules": {
+        "LONG": {
+          "entry_zone_field": "support_top",
+          "touch_comparator": "LTE"
+        },
+        "SHORT": {
+          "entry_zone_field": "resistance_bottom",
+          "touch_comparator": "GTE"
+        }
+      },
+      "enabled": true,
+      "events": {
+        "bar_open": "BAR_OPEN",
+        "candle_closed": "CANDLE_CLOSED",
+        "open_interest": "OPEN_INTEREST",
+        "trade": "PUBLIC_TRADE"
+      },
+      "flow": {
+        "condition": {
+          "pressure": {
+            "comparator": "LT",
+            "value": "0"
+          },
+          "reversal": {
+            "comparator": "GT",
+            "value": "0"
+          }
+        },
+        "enabled": true,
+        "operator": "DIRECTIONAL_NOTIONAL_DELTA",
+        "pressure_offsets_minutes": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "required_offsets_minutes": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "reversal_offsets_minutes": [
+          1
+        ]
+      },
+      "geometry": {
+        "atr_period": 200,
+        "confirming_timeframe": "15",
+        "confluence_max_gap_percent": "0.25",
+        "lookback_by_timeframe": {
+          "15": 130,
+          "5": 130
+        },
+        "operator": "RANGE_ATR_CONFLUENCE",
+        "primary_timeframe": "5",
+        "shock": {
+          "maturity_minutes": 60,
+          "multiple": "3.0",
+          "tr_period": 20
+        },
+        "timeframes": [
+          "5",
+          "15"
+        ],
+        "zone_half_width_atr": "0.5"
+      },
+      "history_limit": 1000,
+      "hourly_swing": {
+        "comparator": "GTE",
+        "enabled": true,
+        "operator": "ROLLING_RANGE_PERCENT",
+        "threshold_percent": "10.0",
+        "timeframe": "5",
+        "window_bars": 12
+      },
+      "oi": {
+        "acceleration_divisor": "12",
+        "calibration_rows": {},
+        "danger_combine": "OR",
+        "danger_rules": [
+          {
+            "comparator": "GTE",
+            "field": "long_change_percent",
+            "threshold_field": "high_oi_change_60m_pct"
+          },
+          {
+            "comparator": "LTE",
+            "field": "acceleration",
+            "threshold_field": "low_oi_acceleration_5_vs_60"
+          }
+        ],
+        "enabled": true,
+        "long_offset_minutes": 60,
+        "operator": "PERCENT_CHANGE_ACCELERATION",
+        "required": true,
+        "short_offset_minutes": 5
+      },
+      "required_closed_timeframes": [
+        "5",
+        "15",
+        "60"
+      ]
+    }
+  },
+  "exit_policy": {
+    "compatibility_scope": "entry-parity-only-no-exit-reconstruction",
+    "exit_plan_version": "v1-entry-compat-u4"
+  },
+  "lifecycle_policy": {
+    "post_signal_outcome_policy": {
+      "adverse_resulting_entry_state": "EMBARGO",
+      "adverse_threshold": "-1.00",
+      "enabled": true,
+      "favorable_resulting_entry_state": "CLEAR",
+      "favorable_threshold": "0.50",
+      "horizon": "360",
+      "horizon_unit": "minutes",
+      "metric": "DIRECTIONAL_PERCENT_CHANGE",
+      "observation_event_kind": "PUBLIC_TRADE",
+      "observation_value_path": "fact.price",
+      "optional_embargo": {
+        "anchor": "fact.observed_at",
+        "duration": "60",
+        "enabled": true,
+        "on_resolution": "ADVERSE",
+        "scope": "PER_SYMBOL",
+        "unit": "minutes"
+      },
+      "reference_value_path": "fact.entry_price",
+      "resolution_semantics": "FIRST_THRESHOLD"
+    }
+  },
+  "market_sensor_policy": [],
+  "mayak_context_policy": [],
+  "name": "Entry V1 forensic compatibility",
+  "protection_policy": {
+    "initial_protection": {
+      "stop_loss_pct": "1.00",
+      "take_profit_pct": "3.00",
+      "tpsl_mode": "Full",
+      "trigger_by": "LastPrice"
+    }
+  },
+  "schema_version": "strategy-compatibility-card-u4-v1",
+  "scope": {
+    "kind": "symbols",
+    "trading_symbols": [
+      "UNIUSDT",
+      "LINKUSDT",
+      "XRPUSDT",
+      "SOLUSDT",
+      "ADAUSDT",
+      "BNBUSDT",
+      "AVAXUSDT",
+      "SUIUSDT",
+      "AAVEUSDT",
+      "LTCUSDT"
+    ]
+  },
+  "strategy_id": "entry_v1_core",
+  "strategy_version": "1.0-live-first-touch",
+  "symbols": [
+    "UNIUSDT",
+    "LINKUSDT",
+    "XRPUSDT",
+    "SOLUSDT",
+    "ADAUSDT",
+    "BNBUSDT",
+    "AVAXUSDT",
+    "SUIUSDT",
+    "AAVEUSDT",
+    "LTCUSDT"
+  ],
+  "touch_policy": {
+    "accept_touch_from": 1,
+    "accepted_touch_numbers": [],
+    "candidate_cooldown": {
+      "anchor": "fact.candidate_bar_at",
+      "duration": "30",
+      "enabled": true,
+      "scope": "PER_SYMBOL",
+      "trigger_event": "TOUCH",
+      "unit": "minutes"
+    },
+    "maximum_touch_count": null,
+    "require_exit_from_zone": false,
+    "reset_on": []
+  }
+}

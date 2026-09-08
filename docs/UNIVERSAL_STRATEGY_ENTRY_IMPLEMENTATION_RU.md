@@ -1,11 +1,12 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.0
+**Версия:** 1.1
 **Дата:** 2026-09-08
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
-**Source baseline:** 68da299c720ecfc2d5b284970fe464d6b3bb6cf8
+**Source baseline U4:** 9b5b4d8705cfa585875245ddba8e003b58dcd8e4
+**Основание V1.1:** owner clarification 2026-09-08 — границы generic causal market watch, post-signal Entry lifecycle, explicit cooldown anchor, V1 calibration provenance и deterministic parity diagnostics.
 
 ## 1. Назначение
 
@@ -71,9 +72,12 @@
     flow condition                     pressure_then_reversal
     OI calibration required            true
     OI danger rule                     high 60m change OR low 5-vs-60 acceleration
+    causal readiness                   latest 5m/15m/60m histories reach required closed boundary
     exact-touch convention             first qualifying touch in current V1 lifecycle
     failure-outcome trigger            -1.00% before +0.50% on accepted Core signal
     failure-outcome horizon            360 minutes
+
+`60m` в этом forensic является readiness requirement текущего V1 candidate lifecycle, а не третьим timeframe геометрии: сама Entry geometry остаётся 5m+15m.
 
 hourly_lookback=130 существует в EntryBotConfig, но production entry_bot/engine.py его не читает; поэтому он не переносится в V1 EntryPlan как доказанный live decision parameter.
 
@@ -193,7 +197,7 @@ Generic operators:
 
 Первый stage реально поддерживает boolean composition, comparison, event matching, touch number/Nth event, sequence/window/timer state and reset events. Unsupported operator возвращает explicit UNSUPPORTED_OPERATOR; он не превращается в false/neutral silently.
 
-## 7. TouchPolicy
+## 7. TouchPolicy / cooldown anchor
 
 Typed policy:
 
@@ -204,7 +208,9 @@ Typed policy:
     minimum_time_between_touches enabled/value/unit
     maximum_touch_count enabled/value
     reset_on event kinds
-    candidate_cooldown enabled/duration/unit/scope
+    candidate_cooldown enabled/duration/unit/scope/anchor
+
+`candidate_cooldown.anchor` задаётся явно как поддерживаемый causal timestamp field/event reference. Hidden/default anchor запрещён. Generic contract не содержит enum/branch со смыслом `V1 candidate bar`. Для V1 compatibility card anchor = `candidate_bar_at`, duration = 30 minutes. Другая Strategy может явно использовать `touch_at`, `signal_at` или иной поддерживаемый causal timestamp.
 
 При candidate_cooldown enabled=false Universal Entry не создаёт hidden timer.
 
@@ -237,6 +243,45 @@ Registry загружает enabled activations, materializes card to immutable 
     persist shadow evidence
 
 Один input может вернуть 0..N independent results. Engine API не принимает selected_strategy, winner, priority или other_strategy_won.
+
+### 10.1 Boundary: causal market watch
+
+Universal Entry / Entry Watch имеет право вычислять Strategy-specific predicates из уже причинно нормализованных market facts согласно EntryPlan:
+
+    causal candles/facts
+    -> geometry specified by EntryPlan
+    -> confluence specified by EntryPlan
+    -> touch/break/retest specified by EntryPlan
+    -> StrategySignal
+
+При этом получение raw market data, exchange-feed normalization и публикация shared causal facts остаются техническим sensor/market-data contour. U4 не создаёт второй strategy-aware Scanner рядом с Entry, не переносит V1 geometry в shared sensor layer и не даёт Universal Entry ownership над exchange feed.
+
+Если для вычисления Strategy predicate требуется новый тип универсального causal derived fact/operator, он реализуется как generic primitive, parameterized EntryPlan. Ветка `if strategy_id == ...`, hidden trading number и V1-specific sensor logic запрещены.
+
+### 10.2 Boundary: post-signal Entry lifecycle
+
+Generic post-signal observation разрешён только как plan-local Entry lifecycle state, влияющий на будущие Entry той же Strategy, если EntryPlan это явно требует:
+
+    StrategySignal
+    -> causal post-signal market observation
+    -> favorable/adverse resolution
+    -> Entry lifecycle state
+    -> optional future-entry embargo
+
+Это не position supervision, stop management, take-profit или Exit. После confirmed fill сопровождение позиции принадлежит ExitPlan той же Strategy.
+
+Минимальная explicit policy model:
+
+    post_signal_outcome_policy:
+        enabled
+        favorable_threshold
+        adverse_threshold
+        horizon
+        resolution_semantics
+        resulting_entry_state
+        optional_embargo
+
+При `enabled=false` нет hidden post-signal tracking. Threshold/horizon/embargo values принадлежат StrategyCard -> EntryPlan. Исторические +0.50%, -1.00%, 360m и 60m существуют только в V1 compatibility card.
 
 ## 11. IDs and lineage
 
@@ -289,9 +334,20 @@ Policy/plan/signal/attempt/decision facts append-only. Activations mutable only 
 
 ## 16. V1 compatibility mapping
 
+V1 compatibility StrategyCard records current production values only. Trading scope фиксирован ровно на 10 `WORKING_SYMBOLS` legacy V1; наличие дополнительных строк в calibration artifact не расширяет Strategy scope. BTC/ETH reference rows и DOGE/1000PEPE calibration rows не становятся V1 trading symbols.
+
+Generic calibration consumer не знает список V1: он получает symbol из конкретного EntryPlan и требует exact calibration row для этого symbol. Frozen calibration artifact используется как parity evidence/provenance, а не как hidden Universal Entry constant:
+
+    SHA256 = b977bd42d76800a3eac63e42f67da7b75ecbf14e93c88761ff674cb084a32571
+    schema = entry-bot-calibration-v1
+    strategy = ENTRY_V1_CORE
+    period = 20260518_20260816
+    missing_symbols = []
+
 V1 compatibility StrategyCard records current production values only:
 
-    scope/symbols        current EntryBotConfig V1 universe
+    scope/symbols        exactly 10 legacy V1 WORKING_SYMBOLS
+    causal readiness     explicit required closed timeframes 5m/15m/60m
     entry geometry       5m/15m lookback, ATR, zone width, confluence
     shock/reset          20 TR, 3.0 multiple, 60m maturity
     hourly policy        10.0% prior-60m swing pause
@@ -312,9 +368,27 @@ Parity replay uses identical deterministic causal events:
     A = legacy EntrySymbolEngine with production V1 settings
     B = Universal Entry Engine + V1 compatibility EntryPlan
 
-Compare candidate geometry, armed/cleared state, exact touch, flow state, OI state, failure embargo, candidate cooldown, hourly swing block, signal/no-signal, direction, entry price and causal source refs.
+Deterministic comparison сравнивает не только итоговое число Core signals, а causal sequence по каждой сравнимой попытке/кандидату минимум:
+
+    candidate identity/time
+    direction
+    geometry values
+    exact touch time
+    candidate cooldown decision and anchor
+    shock/reset state
+    hourly swing state
+    pressure/reversal result
+    OI result
+    final StrategySignal presence/absence
+    post-signal favorable/adverse resolution
+    entry-lifecycle embargo transitions
+    causal source refs
+
+Первый mismatch обязан иметь diagnostic category, exact causal key, legacy value/state и universal value/state. `COUNT_DIFF` без первой диагностируемой семантической причины недостаточен.
 
 New generic signal_id byte identity is not required to equal legacy V1 id because canonical new identity includes exact Strategy binding. Parity maps by deterministic causal key and requires one-to-one semantic equivalence. Any unexplained semantic difference => V1_PARITY=FAIL and cutover forbidden.
+
+Если legacy V1 semantic невозможно выразить generic primitives без `if strategy_id == V1`, hidden default/number или special V1 branch, U4 останавливается с `HARD_STOP=YES` и фиксирует недостающий generic primitive; compatibility workaround запрещён.
 
 ## 18. Architecture test matrix
 
@@ -357,7 +431,7 @@ Approved card is read-only. Editing means create new version. Saving new version
     U1 immutable contracts/fingerprint/DSL/catalog
     U2 materializer + registry + engine
     U3 PostgreSQL schema/storage
-    U4 V1 compatibility card/plan + parity runner
+    U4 generic watch/lifecycle primitives + V1 compatibility card/plan + deterministic parity runner
     U5 shadow universal runtime parallel to legacy V1
     U6 dashboard Strategy control/read-model
     U7 parity evidence + full gate + Git checkpoint

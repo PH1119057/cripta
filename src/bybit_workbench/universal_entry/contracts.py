@@ -94,7 +94,8 @@ class CandidateCooldown:
     duration: Decimal | None = None
     unit: str | None = None
     scope: CooldownScope | None = None
-    start_on: str | None = None
+    trigger_event: str | None = None
+    anchor: str | None = None
 
     def __post_init__(self) -> None:
         if self.enabled:
@@ -104,16 +105,19 @@ class CandidateCooldown:
                 raise ValueError("enabled cooldown requires explicit duration unit")
             if self.scope is None:
                 raise ValueError("enabled cooldown requires scope")
-            if self.start_on not in {"TOUCH", "SIGNAL", "ATTEMPT"}:
-                raise ValueError("enabled cooldown requires explicit start_on event")
+            if self.trigger_event not in {"TOUCH", "SIGNAL", "ATTEMPT"}:
+                raise ValueError("enabled cooldown requires explicit trigger_event")
+            if not self.anchor:
+                raise ValueError("enabled cooldown requires explicit anchor")
         elif (
             self.duration is not None
             or self.unit is not None
             or self.scope is not None
-            or self.start_on is not None
+            or self.trigger_event is not None
+            or self.anchor is not None
         ):
             raise ValueError(
-                "disabled cooldown cannot carry hidden duration, unit, scope or trigger"
+                "disabled cooldown cannot carry hidden duration, unit, scope, trigger or anchor"
             )
 
     def as_seconds(self) -> Decimal:
@@ -125,6 +129,121 @@ class CandidateCooldown:
             "hours": Decimal("3600"),
         }
         return self.duration * factors[self.unit]
+
+
+@dataclass(frozen=True, slots=True)
+class EntryEmbargoPolicy:
+    enabled: bool = False
+    on_resolution: str | None = None
+    duration: Decimal | None = None
+    unit: str | None = None
+    scope: CooldownScope | None = None
+    anchor: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.enabled:
+            if self.on_resolution not in {"FAVORABLE", "ADVERSE"}:
+                raise ValueError("enabled embargo requires explicit on_resolution")
+            if self.duration is None or self.duration <= 0:
+                raise ValueError("enabled embargo requires positive duration")
+            if self.unit not in {"seconds", "minutes", "hours"}:
+                raise ValueError("enabled embargo requires explicit duration unit")
+            if self.scope is None:
+                raise ValueError("enabled embargo requires scope")
+            if not self.anchor:
+                raise ValueError("enabled embargo requires explicit anchor")
+        elif (
+            self.on_resolution is not None
+            or self.duration is not None
+            or self.unit is not None
+            or self.scope is not None
+            or self.anchor is not None
+        ):
+            raise ValueError("disabled embargo cannot carry hidden policy")
+
+    def as_seconds(self) -> Decimal:
+        if not self.enabled or self.duration is None or self.unit is None:
+            raise ValueError("disabled embargo has no duration")
+        factors = {
+            "seconds": Decimal("1"),
+            "minutes": Decimal("60"),
+            "hours": Decimal("3600"),
+        }
+        return self.duration * factors[self.unit]
+
+
+@dataclass(frozen=True, slots=True)
+class PostSignalOutcomePolicy:
+    enabled: bool = False
+    observation_event_kind: str | None = None
+    reference_value_path: str | None = None
+    observation_value_path: str | None = None
+    metric: str | None = None
+    favorable_threshold: Decimal | None = None
+    adverse_threshold: Decimal | None = None
+    horizon: Decimal | None = None
+    horizon_unit: str | None = None
+    resolution_semantics: str | None = None
+    favorable_resulting_entry_state: str | None = None
+    adverse_resulting_entry_state: str | None = None
+    optional_embargo: EntryEmbargoPolicy = EntryEmbargoPolicy()
+
+    def __post_init__(self) -> None:
+        if self.enabled:
+            required = {
+                "observation_event_kind": self.observation_event_kind,
+                "reference_value_path": self.reference_value_path,
+                "observation_value_path": self.observation_value_path,
+                "metric": self.metric,
+                "favorable_threshold": self.favorable_threshold,
+                "adverse_threshold": self.adverse_threshold,
+                "horizon": self.horizon,
+                "horizon_unit": self.horizon_unit,
+                "resolution_semantics": self.resolution_semantics,
+                "favorable_resulting_entry_state": self.favorable_resulting_entry_state,
+                "adverse_resulting_entry_state": self.adverse_resulting_entry_state,
+            }
+            missing = tuple(
+                name for name, value in required.items() if value is None or value == ""
+            )
+            if missing:
+                raise ValueError(
+                    "enabled post-signal outcome policy requires explicit " + ", ".join(missing)
+                )
+            if self.horizon is None or self.horizon <= 0:
+                raise ValueError("post-signal horizon must be positive")
+            if self.horizon_unit not in {"seconds", "minutes", "hours"}:
+                raise ValueError("post-signal horizon requires explicit duration unit")
+            if self.resolution_semantics != "FIRST_THRESHOLD":
+                raise ValueError("unsupported post-signal resolution_semantics")
+            if self.metric != "DIRECTIONAL_PERCENT_CHANGE":
+                raise ValueError("unsupported post-signal metric")
+        else:
+            values = (
+                self.observation_event_kind,
+                self.reference_value_path,
+                self.observation_value_path,
+                self.metric,
+                self.favorable_threshold,
+                self.adverse_threshold,
+                self.horizon,
+                self.horizon_unit,
+                self.resolution_semantics,
+                self.favorable_resulting_entry_state,
+                self.adverse_resulting_entry_state,
+            )
+            if any(value is not None for value in values) or self.optional_embargo.enabled:
+                raise ValueError("disabled post-signal policy cannot carry hidden values")
+
+    def horizon_seconds(self) -> Decimal:
+        if not self.enabled or self.horizon is None or self.horizon_unit is None:
+            raise ValueError("disabled post-signal policy has no horizon")
+        factors = {
+            "seconds": Decimal("1"),
+            "minutes": Decimal("60"),
+            "hours": Decimal("3600"),
+        }
+        return self.horizon * factors[self.horizon_unit]
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,11 +418,13 @@ class EntryPlan:
     symbols: tuple[str, ...]
     directions: tuple[TradeDirection, ...]
     predicate: object
+    watch_policy: FrozenPolicy
     touch_policy: TouchPolicy
     sensor_policy: tuple[SensorRequirement, ...]
     context_policy: tuple[ContextRequirement, ...]
     capital_policy: FrozenPolicy
     lifecycle_policy: FrozenPolicy
+    post_signal_outcome_policy: PostSignalOutcomePolicy
 
 
 @dataclass(frozen=True, slots=True)

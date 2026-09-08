@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.1
+**Версия документа:** 5.2
 **Дата:** 2026-09-08
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -170,11 +170,25 @@ U3
 + separately mutable StrategyActivation with append-only activation journal
 + exact StrategySignal -> StrategyAttempt -> EntryDecision -> optional ExecutionRequest storage
 + separate OBSERVED_CONTEXT / CONSUMED_CONTEXT and observed/consumed sensor links
+
+U4
+= generic parameterized causal market watch inside Entry Watch
++ explicit causal cooldown anchor without hidden defaults
++ generic post-signal Entry lifecycle / optional future-entry embargo
++ forensic V1 compatibility StrategyCard for exactly 10 trading symbols
++ exact frozen OI calibration provenance
++ deterministic causal-sequence parity runner against canonical legacy EntrySymbolEngine
 ```
 
-`strategy_entry` установлена в PostgreSQL с owner `postgres`; runtime role `cripta` имеет только минимальные SELECT/INSERT и narrow UPDATE для `strategy_activations`, без DELETE и без UPDATE immutable entities. Trading effect U1-U3: `NONE`.
+`strategy_entry` установлена в PostgreSQL с owner `postgres`; runtime role `cripta` имеет только минимальные SELECT/INSERT и narrow UPDATE для `strategy_activations`, без DELETE и без UPDATE immutable entities.
 
-На U1-U3 нет systemd consumer cutover, exchange mutation, MICRO_LIVE/LIVE, mainnet re-arm, allocator или strategy selector. Следующий implementation stage после отдельного green U3 checkpoint — V1 compatibility/parity, где V1-specific значения допустимы только как данные V1 StrategyCard/EntryPlan.
+U4 не переносит ownership raw market-data/feed normalization в Entry: technical sensor contour поставляет нормализованные causal facts, а Entry Watch только интерпретирует их по конкретному EntryPlan. Generic post-signal lifecycle относится только к будущим Entry и не является stop/TP/Exit сопровождением позиции.
+
+V1 compatibility card содержит historical V1 значения только как Strategy/EntryPlan data. Trading scope = ровно 10 legacy `WORKING_SYMBOLS`; дополнительные BTC/ETH/DOGE/1000PEPE строки frozen calibration artifact scope не расширяют. Calibration provenance SHA-256: `b977bd42d76800a3eac63e42f67da7b75ecbf14e93c88761ff674cb084a32571`.
+
+Deterministic U4 parity проверяет candidate/time, direction, geometry, touch, cooldown anchor/state, 5m/15m/60m causal readiness, shock/reset, rolling swing, pressure/reversal, OI result, StrategySignal presence/absence, favorable/adverse post-signal resolution, future-entry embargo и causal refs. Legacy current shadow scanner не используется как parity baseline.
+
+Trading effect U1-U4: `NONE`. На U1-U4 нет systemd consumer cutover, parallel shadow runtime, exchange mutation, MICRO_LIVE/LIVE, mainnet re-arm, allocator или strategy selector. Следующий отдельный stage может начинаться только после U4 Git checkpoint и отдельной задачи по дальнейшему shadow/equivalence доказательству.
 
 ## 8. Exit
 

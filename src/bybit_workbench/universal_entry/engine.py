@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -30,6 +31,14 @@ from .contracts import (
 )
 from .dsl import PlanState, PredicateNode, evaluate_predicate, is_independent_touch
 from .fingerprint import fingerprint
+from .lifecycle import EntryLifecycleSnapshot, PostSignalLifecycleBook
+from .market_watch import (
+    GenericOiPoint,
+    MarketWatchSnapshot,
+    ParameterizedCausalMarketWatch,
+    WatchTracePoint,
+)
+from .references import resolve_causal_timestamp
 from .registry import ActivePlanRegistry
 
 _QUALITY_RANK = {
@@ -48,6 +57,8 @@ class UniversalEntryEngine:
         self._states: dict[tuple[str, str], PlanState] = {}
         self._strategy_cooldowns: dict[str, datetime] = {}
         self._account_cooldowns: dict[tuple[str, str], datetime] = {}
+        self._market_watch = ParameterizedCausalMarketWatch()
+        self._post_signal_lifecycle = PostSignalLifecycleBook()
 
     def process(
         self,
@@ -63,83 +74,229 @@ class UniversalEntryEngine:
         available_contexts = dict(contexts or {})
         output: list[EntryEvaluation] = []
         for plan in self._registry.plans_for(fact.symbol):
-            if fact.direction is not None and fact.direction not in plan.directions:
-                continue
-            direction = self._resolve_direction(plan, fact)
-            if direction is None:
-                continue
+            self._post_signal_lifecycle.observe(plan, fact, account_ref=account_ref)
             state = self._state_for(plan, fact.symbol)
-            if fact.event_kind.upper() in {value.upper() for value in plan.touch_policy.reset_on}:
-                self._reset_plan_state(plan, state, account_ref)
-            if self._cooldown_active(plan, state, fact.observed_at, account_ref):
-                state.observe(fact, independent_touch=False)
-                continue
-
-            independent_touch = is_independent_touch(fact, state, plan.touch_policy)
-            sensor_links, consumed_sensors, sensors_ready = self._sensor_links(
-                plan,
-                available_sensors,
-                fact.observed_at,
+            watch_enabled = bool(plan.watch_policy.to_dict().get("enabled"))
+            candidate_allowed = not self._cooldown_active(
+                plan, state, fact.observed_at, account_ref
             )
-            context_links, consumed_contexts, contexts_ready = self._context_links(
-                plan,
-                available_contexts,
-                fact.observed_at,
-            )
-            predicate = plan.predicate
-            if not isinstance(predicate, PredicateNode):
-                raise TypeError("EntryPlan predicate is not a PredicateNode")
-            matched = False
-            if sensors_ready and contexts_ready:
-                matched = evaluate_predicate(
-                    predicate,
-                    fact=fact,
-                    state=state,
-                    touch_policy=plan.touch_policy,
-                    independent_touch=independent_touch,
-                    sensors=consumed_sensors,
-                    allowed_sensor_modes={item.sensor_id: item.mode for item in plan.sensor_policy},
-                    contexts=consumed_contexts,
-                    allowed_context_modes={
-                        item.context_id: item.mode for item in plan.context_policy
-                    },
+            if watch_enabled:
+                evaluation_facts = self._market_watch.process(
+                    plan, fact, allow_candidate=candidate_allowed
                 )
+            else:
+                if not candidate_allowed:
+                    state.observe(fact, independent_touch=False)
+                    continue
+                evaluation_facts = (fact,)
 
-            state.observe(fact, independent_touch=independent_touch)
-            cooldown = plan.touch_policy.candidate_cooldown
-            if independent_touch and cooldown.enabled and cooldown.start_on == "TOUCH":
-                self._start_cooldown(cooldown, plan, state, fact.observed_at, account_ref)
-            if not matched:
-                continue
+            for evaluation_fact in evaluation_facts:
+                if (
+                    evaluation_fact.direction is not None
+                    and evaluation_fact.direction not in plan.directions
+                ):
+                    continue
+                direction = self._resolve_direction(plan, evaluation_fact)
+                if direction is None:
+                    continue
+                if evaluation_fact.event_kind.upper() in {
+                    value.upper() for value in plan.touch_policy.reset_on
+                }:
+                    self._reset_plan_state(plan, state, account_ref)
 
-            signal = self._signal(plan, fact, direction)
-            if cooldown.enabled and cooldown.start_on == "SIGNAL":
-                self._start_cooldown(cooldown, plan, state, fact.observed_at, account_ref)
-            attempt = self._attempt(plan, signal, fact.observed_at)
-            if cooldown.enabled and cooldown.start_on == "ATTEMPT":
-                self._start_cooldown(cooldown, plan, state, fact.observed_at, account_ref)
-            decision = self._decision(
-                plan,
-                signal,
-                attempt,
-                fact.observed_at,
-                capacity=capacity,
-                technical_readiness=technical_readiness,
-            )
-            request = self._execution_request(plan, signal, attempt, decision, fact.observed_at)
-            notifications = self._notifications(signal, attempt, decision, plan, capacity=capacity)
-            output.append(
-                EntryEvaluation(
+                independent_touch = is_independent_touch(
+                    evaluation_fact, state, plan.touch_policy
+                )
+                sensor_links, consumed_sensors, sensors_ready = self._sensor_links(
+                    plan,
+                    available_sensors,
+                    evaluation_fact.observed_at,
+                )
+                context_links, consumed_contexts, contexts_ready = self._context_links(
+                    plan,
+                    available_contexts,
+                    evaluation_fact.observed_at,
+                )
+                predicate = plan.predicate
+                if not isinstance(predicate, PredicateNode):
+                    raise TypeError("EntryPlan predicate is not a PredicateNode")
+                lifecycle_allowed, embargo_until = self._post_signal_lifecycle.entry_allowed(
+                    plan,
+                    symbol=evaluation_fact.symbol,
+                    observed_at=evaluation_fact.observed_at,
+                    account_ref=account_ref,
+                )
+                fact_for_predicate = self._with_lifecycle_evidence(
+                    evaluation_fact,
+                    enabled=plan.post_signal_outcome_policy.enabled,
+                    allowed=lifecycle_allowed,
+                    embargo_until=embargo_until,
+                )
+                matched = False
+                if sensors_ready and contexts_ready and lifecycle_allowed:
+                    matched = evaluate_predicate(
+                        predicate,
+                        fact=fact_for_predicate,
+                        state=state,
+                        touch_policy=plan.touch_policy,
+                        independent_touch=independent_touch,
+                        sensors=consumed_sensors,
+                        allowed_sensor_modes={
+                            item.sensor_id: item.mode for item in plan.sensor_policy
+                        },
+                        contexts=consumed_contexts,
+                        allowed_context_modes={
+                            item.context_id: item.mode for item in plan.context_policy
+                        },
+                    )
+
+                state.observe(fact_for_predicate, independent_touch=independent_touch)
+                cooldown = plan.touch_policy.candidate_cooldown
+                if (
+                    independent_touch
+                    and cooldown.enabled
+                    and cooldown.trigger_event == "TOUCH"
+                ):
+                    self._start_cooldown(
+                        cooldown,
+                        plan,
+                        state,
+                        fact_for_predicate,
+                        account_ref,
+                    )
+                if not matched:
+                    continue
+
+                signal = self._signal(plan, fact_for_predicate, direction)
+                if cooldown.enabled and cooldown.trigger_event == "SIGNAL":
+                    self._start_cooldown(
+                        cooldown,
+                        plan,
+                        state,
+                        fact_for_predicate,
+                        account_ref,
+                        signal=signal,
+                    )
+                attempt = self._attempt(plan, signal, fact_for_predicate.observed_at)
+                if cooldown.enabled and cooldown.trigger_event == "ATTEMPT":
+                    self._start_cooldown(
+                        cooldown,
+                        plan,
+                        state,
+                        fact_for_predicate,
+                        account_ref,
+                        signal=signal,
+                        attempt=attempt,
+                    )
+                self._post_signal_lifecycle.register(
+                    plan,
+                    signal_id=signal.signal_id,
+                    direction=direction,
+                    signal_fact=fact_for_predicate,
+                    account_ref=account_ref,
+                )
+                decision = self._decision(
+                    plan,
                     signal,
                     attempt,
-                    decision,
-                    request,
-                    sensor_links,
-                    context_links,
-                    notifications,
+                    fact_for_predicate.observed_at,
+                    capacity=capacity,
+                    technical_readiness=technical_readiness,
                 )
-            )
+                request = self._execution_request(
+                    plan, signal, attempt, decision, fact_for_predicate.observed_at
+                )
+                notifications = self._notifications(
+                    signal, attempt, decision, plan, capacity=capacity
+                )
+                output.append(
+                    EntryEvaluation(
+                        signal,
+                        attempt,
+                        decision,
+                        request,
+                        sensor_links,
+                        context_links,
+                        notifications,
+                    )
+                )
         return tuple(output)
+
+    @staticmethod
+    def _with_lifecycle_evidence(
+        fact: MarketFactEnvelope,
+        *,
+        enabled: bool,
+        allowed: bool,
+        embargo_until: datetime | None,
+    ) -> MarketFactEnvelope:
+        if not enabled:
+            return fact
+        attributes = fact.attributes.to_dict()
+        attributes["entry_lifecycle_allowed"] = allowed
+        attributes["entry_embargo_until"] = embargo_until
+        return replace(fact, attributes=FrozenPolicy.from_mapping(attributes))
+
+    def load_watch_history(
+        self,
+        symbol: str,
+        candles: Mapping[str, tuple[object, ...]],
+        oi_points: tuple[GenericOiPoint, ...],
+        *,
+        observed_at: datetime,
+        account_ref: str | None = None,
+    ) -> None:
+        from bybit_workbench.domain.models import Candle
+
+        typed: dict[str, tuple[Candle, ...]] = {}
+        for timeframe, rows in candles.items():
+            if not all(isinstance(item, Candle) for item in rows):
+                raise TypeError("watch history requires normalized Candle objects")
+            typed[timeframe] = tuple(item for item in rows if isinstance(item, Candle))
+        for plan in self._registry.plans_for(symbol):
+            if not bool(plan.watch_policy.to_dict().get("enabled")):
+                continue
+            state = self._state_for(plan, symbol)
+            allow_candidate = not self._cooldown_active(
+                plan, state, observed_at, account_ref
+            )
+            self._market_watch.load_history(
+                plan,
+                symbol,
+                typed,
+                oi_points,
+                observed_at=observed_at,
+                allow_candidate=allow_candidate,
+            )
+
+    def watch_snapshot(
+        self, entry_plan_fingerprint: str, symbol: str
+    ) -> MarketWatchSnapshot:
+        return self._market_watch.snapshot(entry_plan_fingerprint, symbol)
+
+    def drain_watch_trace(
+        self, entry_plan_fingerprint: str, symbol: str
+    ) -> tuple[WatchTracePoint, ...]:
+        return self._market_watch.drain_trace(entry_plan_fingerprint, symbol)
+
+    def lifecycle_snapshot(
+        self,
+        entry_plan_fingerprint: str,
+        symbol: str,
+        *,
+        account_ref: str | None = None,
+    ) -> EntryLifecycleSnapshot:
+        plan = next(
+            (
+                item
+                for item in self._registry.active_entry_plans()
+                if item.entry_plan_fingerprint == entry_plan_fingerprint
+            ),
+            None,
+        )
+        if plan is None:
+            raise KeyError(f"unknown active EntryPlan: {entry_plan_fingerprint}")
+        return self._post_signal_lifecycle.snapshot(plan, symbol, account_ref=account_ref)
 
     def _state_for(self, plan: EntryPlan, symbol: str) -> PlanState:
         return self._states.setdefault((plan.entry_plan_fingerprint, symbol), PlanState())
@@ -190,12 +347,18 @@ class UniversalEntryEngine:
         cooldown: CandidateCooldown,
         plan: EntryPlan,
         state: PlanState,
-        observed_at: datetime,
+        fact: MarketFactEnvelope,
         account_ref: str | None,
+        *,
+        signal: StrategySignal | None = None,
+        attempt: StrategyAttempt | None = None,
     ) -> None:
         if not cooldown.enabled:
             return
-        until = observed_at + timedelta(seconds=float(cooldown.as_seconds()))
+        anchor = resolve_causal_timestamp(
+            cooldown.anchor or "", fact=fact, signal=signal, attempt=attempt
+        )
+        until = anchor + timedelta(seconds=float(cooldown.as_seconds()))
         if cooldown.scope is CooldownScope.PER_SYMBOL:
             state.cooldown_until = until
             return

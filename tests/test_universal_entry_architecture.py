@@ -17,10 +17,12 @@ from bybit_workbench.universal_entry import (
     CooldownScope,
     DataQuality,
     EntryDecisionCode,
+    EntryEmbargoPolicy,
     FrozenPolicy,
     MarketFactEnvelope,
     NumericRule,
     ObjectiveContext,
+    PostSignalOutcomePolicy,
     SensorObservation,
     SensorRequirement,
     StrategyActivation,
@@ -57,6 +59,7 @@ def make_card(
     entry: dict[str, object] = {
         "entry_plan_version": "1",
         "predicate": predicate or {"op": "TOUCH"},
+        "watch_policy": {"enabled": False},
     }
     return StrategyCard.build(
         strategy_id=name,
@@ -70,7 +73,7 @@ def make_card(
         exit_policy=policy({"exit_plan_version": "1"}),
         capital_policy=policy(capital),
         protection_policy=policy({}),
-        lifecycle_policy=policy({}),
+        lifecycle_policy=policy({"post_signal_outcome_policy": {"enabled": False}}),
         touch_policy=touch_policy or TouchPolicy(accepted_touch_numbers=(1,), accept_touch_from=1),
         market_sensor_policy=sensors,
         dispatcher_context_policy=contexts,
@@ -266,15 +269,105 @@ def test_disabled_cooldown_has_no_hidden_timer() -> None:
     assert len(evaluate(engine, fact(2, seconds=1))) == 1
 
 
+def test_enabled_cooldown_requires_explicit_trigger_and_anchor() -> None:
+    with pytest.raises(ValueError, match="trigger_event"):
+        CandidateCooldown(
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_SYMBOL,
+            anchor="fact.observed_at",
+        )
+    with pytest.raises(ValueError, match="anchor"):
+        CandidateCooldown(
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_SYMBOL,
+            trigger_event="TOUCH",
+        )
+
+
+def test_cooldown_anchor_can_use_explicit_causal_fact_timestamp() -> None:
+    touch = TouchPolicy(
+        accepted_touch_numbers=(1,),
+        accept_touch_from=1,
+        candidate_cooldown=CandidateCooldown(
+            enabled=True,
+            duration=Decimal("5"),
+            unit="minutes",
+            scope=CooldownScope.PER_SYMBOL,
+            trigger_event="TOUCH",
+            anchor="fact.candidate_bar_at",
+        ),
+    )
+    card = make_card("anchor", touch_policy=touch)
+    _, engine = setup_engine(card)
+    first = fact(1, seconds=240, attributes={"candidate_bar_at": NOW.isoformat()})
+    assert len(evaluate(engine, first)) == 1
+    # Anchored at 12:00, not at the 12:04 touch. 12:05:01 is therefore allowed.
+    second = fact(2, seconds=301, attributes={"candidate_bar_at": NOW.isoformat()})
+    assert len(evaluate(engine, second)) == 1
+
+
+def test_post_signal_policy_is_explicit_and_disabled_has_no_hidden_tracking() -> None:
+    disabled = PostSignalOutcomePolicy(enabled=False)
+    assert not disabled.enabled
+    with pytest.raises(ValueError, match="observation_event_kind"):
+        PostSignalOutcomePolicy(
+            enabled=True,
+            reference_value_path="fact.entry_price",
+            observation_value_path="fact.price",
+            metric="DIRECTIONAL_PERCENT_CHANGE",
+            favorable_threshold=Decimal("0.5"),
+            adverse_threshold=Decimal("-1"),
+            horizon=Decimal("360"),
+            horizon_unit="minutes",
+            resolution_semantics="FIRST_THRESHOLD",
+            favorable_resulting_entry_state="CLEAR",
+            adverse_resulting_entry_state="EMBARGO",
+        )
+
+
+def test_post_signal_embargo_is_entry_lifecycle_not_exit_policy() -> None:
+    embargo = EntryEmbargoPolicy(
+        enabled=True,
+        on_resolution="ADVERSE",
+        duration=Decimal("60"),
+        unit="minutes",
+        scope=CooldownScope.PER_SYMBOL,
+        anchor="fact.observed_at",
+    )
+    post = PostSignalOutcomePolicy(
+        enabled=True,
+        observation_event_kind="PUBLIC_TRADE",
+        reference_value_path="fact.entry_price",
+        observation_value_path="fact.price",
+        metric="DIRECTIONAL_PERCENT_CHANGE",
+        favorable_threshold=Decimal("0.5"),
+        adverse_threshold=Decimal("-1"),
+        horizon=Decimal("360"),
+        horizon_unit="minutes",
+        resolution_semantics="FIRST_THRESHOLD",
+        favorable_resulting_entry_state="CLEAR",
+        adverse_resulting_entry_state="EMBARGO",
+        optional_embargo=embargo,
+    )
+    assert post.optional_embargo.on_resolution == "ADVERSE"
+    assert not hasattr(post, "stop_loss")
+    assert not hasattr(post, "take_profit")
+
+
 def test_enabled_per_symbol_cooldown_blocks_only_same_symbol() -> None:
     touch = TouchPolicy(
         accepted_touch_numbers=(1, 2),
         candidate_cooldown=CandidateCooldown(
-            True,
-            Decimal("1"),
-            "minutes",
-            CooldownScope.PER_SYMBOL,
-            "SIGNAL",
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_SYMBOL,
+            trigger_event="SIGNAL",
+            anchor="signal.detected_at",
         ),
     )
     card = make_card("cooldown", symbols=("XRPUSDT", "SOLUSDT"), touch_policy=touch)
@@ -289,11 +382,12 @@ def test_per_account_cooldown_is_explicit_and_does_not_select_strategy() -> None
         accepted_touch_numbers=(1,),
         accept_touch_from=1,
         candidate_cooldown=CandidateCooldown(
-            True,
-            Decimal("1"),
-            "minutes",
-            CooldownScope.PER_ACCOUNT,
-            "SIGNAL",
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_ACCOUNT,
+            trigger_event="SIGNAL",
+            anchor="signal.detected_at",
         ),
     )
     card = make_card("account-cooldown", symbols=("XRPUSDT", "SOLUSDT"), touch_policy=touch)
@@ -307,11 +401,12 @@ def test_per_account_cooldown_without_account_ref_fails_explicitly() -> None:
     touch = TouchPolicy(
         accepted_touch_numbers=(1,),
         candidate_cooldown=CandidateCooldown(
-            True,
-            Decimal("1"),
-            "minutes",
-            CooldownScope.PER_ACCOUNT,
-            "SIGNAL",
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_ACCOUNT,
+            trigger_event="SIGNAL",
+            anchor="signal.detected_at",
         ),
     )
     card = make_card("account-required", touch_policy=touch)
@@ -325,11 +420,12 @@ def test_touch_triggered_cooldown_can_start_before_full_strategy_match() -> None
         accepted_touch_numbers=(1,),
         accept_touch_from=1,
         candidate_cooldown=CandidateCooldown(
-            True,
-            Decimal("1"),
-            "minutes",
-            CooldownScope.PER_SYMBOL,
-            "TOUCH",
+            enabled=True,
+            duration=Decimal("1"),
+            unit="minutes",
+            scope=CooldownScope.PER_SYMBOL,
+            trigger_event="TOUCH",
+            anchor="fact.observed_at",
         ),
     )
     predicate = {
@@ -714,7 +810,12 @@ def test_sensor_context_catalog_has_stable_ids_and_rejects_collision() -> None:
 
 def test_universal_entry_source_has_no_strategy_selector_or_exchange_mutation() -> None:
     package = ROOT / "src/bybit_workbench/universal_entry"
-    body = "\n".join(path.read_text(encoding="utf-8") for path in package.glob("*.py"))
+    compatibility_only = {"v1_compat.py", "parity.py"}
+    body = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in package.glob("*.py")
+        if path.name not in compatibility_only
+    )
     forbidden = (
         "OTHER_STRATEGY_WON",
         "select_strategy(",

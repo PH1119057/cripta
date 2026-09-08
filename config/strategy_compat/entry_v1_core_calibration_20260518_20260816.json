@@ -1,0 +1,107 @@
+{
+  "generated_at": "2026-08-26T10:37:59.331745+00:00",
+  "missing_symbols": [],
+  "period": "20260518_20260816",
+  "schema_version": "entry-bot-calibration-v1",
+  "strategy": "ENTRY_V1_CORE",
+  "symbols": {
+    "1000PEPEUSDT": {
+      "high_oi_change_60m_pct": "1.0750083109192328",
+      "low_oi_acceleration_5_vs_60": "-0.22107592973469217",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "6edc41337839218caa4dfcbd333c5dc9001c37ccd80d146d1b261fc6d85046e1",
+      "symbol": "1000PEPEUSDT"
+    },
+    "AAVEUSDT": {
+      "high_oi_change_60m_pct": "0.6991503843720259",
+      "low_oi_acceleration_5_vs_60": "-0.11218180245152934",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "7b34c9faa87f2e7b40e704f6e83ff5e93ad2ccc79183df494dadd7a14e75b7b0",
+      "symbol": "AAVEUSDT"
+    },
+    "ADAUSDT": {
+      "high_oi_change_60m_pct": "0.9452416316646552",
+      "low_oi_acceleration_5_vs_60": "-0.17191553585403568",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "57a3cd02bbfd15c567ab868f84bcbee0b83d6054798bbf91f4307a27fc4dc3e7",
+      "symbol": "ADAUSDT"
+    },
+    "AVAXUSDT": {
+      "high_oi_change_60m_pct": "0.7072155908746895",
+      "low_oi_acceleration_5_vs_60": "-0.12410245976860831",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "ea21c2ec072fdc9e7ecf3ac0d1bd752f1497cb609c4d268bcf6e9693533fe346",
+      "symbol": "AVAXUSDT"
+    },
+    "BNBUSDT": {
+      "high_oi_change_60m_pct": "0.43053458630546926",
+      "low_oi_acceleration_5_vs_60": "-0.06445366690127606",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "392dc5dfc371273927888fcfcfe5b94def7231e7c4e4761a4f8856eb05950750",
+      "symbol": "BNBUSDT"
+    },
+    "BTCUSDT": {
+      "high_oi_change_60m_pct": "0.7744580100975427",
+      "low_oi_acceleration_5_vs_60": "-0.1174449439140565",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "e11daadd26acd27958aedf06ebe5e6c8227ce0b9738ed5eae722d4485d03f96c",
+      "symbol": "BTCUSDT"
+    },
+    "DOGEUSDT": {
+      "high_oi_change_60m_pct": "0.9769949229219421",
+      "low_oi_acceleration_5_vs_60": "-0.1568889708001468",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "0ba02e4190be23f8cfbb5320a10251fdd2dcfb43e8811df6d37c89d43969a56d",
+      "symbol": "DOGEUSDT"
+    },
+    "ETHUSDT": {
+      "high_oi_change_60m_pct": "1.1381044877420088",
+      "low_oi_acceleration_5_vs_60": "-0.183986656832053",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "f9e640c28df6a522d22b4ccb73e40e504380b5c0c4ea5f29cbf556da0c808747",
+      "symbol": "ETHUSDT"
+    },
+    "LINKUSDT": {
+      "high_oi_change_60m_pct": "0.5343219487484159",
+      "low_oi_acceleration_5_vs_60": "-0.09705400667436966",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "de27065da3356cd32674eb206082a6f4e8d51048024d46f7398314046d8bb5b0",
+      "symbol": "LINKUSDT"
+    },
+    "LTCUSDT": {
+      "high_oi_change_60m_pct": "0.38228696406064056",
+      "low_oi_acceleration_5_vs_60": "-0.06447602288178962",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "ae361fc4dc5fabc98a56621fb72e39ee035dc72f9b30358766b63805b1682bee",
+      "symbol": "LTCUSDT"
+    },
+    "SOLUSDT": {
+      "high_oi_change_60m_pct": "0.9255920853888224",
+      "low_oi_acceleration_5_vs_60": "-0.17048842074179338",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "a235aba9b2a926ea9bd84c1f86b82bb1fa7e095e4a948149c931a5d8836b7f1b",
+      "symbol": "SOLUSDT"
+    },
+    "SUIUSDT": {
+      "high_oi_change_60m_pct": "0.8413257754238515",
+      "low_oi_acceleration_5_vs_60": "-0.15485701610287747",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "4a7b259ed76405b39c1cc5406becbde489f91fae08e072f653259e86e922fbf7",
+      "symbol": "SUIUSDT"
+    },
+    "UNIUSDT": {
+      "high_oi_change_60m_pct": "0.5870611842414553",
+      "low_oi_acceleration_5_vs_60": "-0.11100302419041719",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "c0a73c0a8c3ffa97dff06022be2f1589409f4e703b070b8bc4e083e319d9ac2a",
+      "symbol": "UNIUSDT"
+    },
+    "XRPUSDT": {
+      "high_oi_change_60m_pct": "0.922307745224755",
+      "low_oi_acceleration_5_vs_60": "-0.16701786095149698",
+      "source_period": "20260518_20260816",
+      "source_summary_sha256": "4232d23e83399e0f1823c903103a098574254a480cd790efcde7054486ce90ac",
+      "symbol": "XRPUSDT"
+    }
+  }
+}

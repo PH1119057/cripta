@@ -53,11 +53,13 @@ def _entry_plan_json(plan: EntryPlan) -> str:
             "symbols": plan.symbols,
             "directions": plan.directions,
             "predicate": plan.predicate,
+            "watch_policy": plan.watch_policy,
             "touch_policy": plan.touch_policy,
             "sensor_policy": plan.sensor_policy,
             "context_policy": plan.context_policy,
             "capital_policy": plan.capital_policy,
             "lifecycle_policy": plan.lifecycle_policy,
+            "post_signal_outcome_policy": plan.post_signal_outcome_policy,
         }
     )
 
