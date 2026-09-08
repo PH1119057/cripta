@@ -53,7 +53,6 @@ def materialize_plans(
     context_policy = card.mayak_context_policy + card.dispatcher_context_policy
     entry_payload = {
         "strategy_fingerprint": card.strategy_config_fingerprint,
-        "activation_id": activation.activation_id,
         "entry_plan_version": str(version_raw),
         "symbols": card.symbols,
         "directions": card.direction_policy,
@@ -84,7 +83,6 @@ def materialize_plans(
     exit_version = str(exit_raw.get("exit_plan_version") or card.strategy_version)
     exit_payload = {
         "strategy_fingerprint": card.strategy_config_fingerprint,
-        "activation_id": activation.activation_id,
         "exit_plan_version": exit_version,
         "exit_policy": card.exit_policy,
         "protection_policy": card.protection_policy,

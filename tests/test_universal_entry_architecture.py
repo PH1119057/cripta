@@ -222,6 +222,20 @@ def test_disable_activation_removes_only_that_plan_and_card_is_immutable() -> No
         first.name = "changed"  # type: ignore[misc]
 
 
+def test_plan_fingerprint_is_independent_of_activation_identity() -> None:
+    card = make_card("same-policy")
+    first_registry = ActivePlanRegistry()
+    first_registry.register_card(card)
+    first = first_registry.activate(activation(card, "first"))
+
+    second_registry = ActivePlanRegistry()
+    second_registry.register_card(card)
+    second = second_registry.activate(activation(card, "second"))
+
+    assert first.strategy_activation_id != second.strategy_activation_id
+    assert first.entry_plan_fingerprint == second.entry_plan_fingerprint
+
+
 def test_reenable_activation_updates_control_timestamp_not_card() -> None:
     card = make_card("reenable")
     registry = ActivePlanRegistry()
