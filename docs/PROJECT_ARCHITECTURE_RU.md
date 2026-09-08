@@ -1,8 +1,8 @@
 # АРХИТЕКТУРА ПРОЕКТА «КРИПТА»
 
 **Документ:** `PROJECT_ARCHITECTURE_RU.md`
-**Версия:** 2.1
-**Дата:** 2026-09-06
+**Версия:** 2.2
+**Дата:** 2026-09-08
 **Статус:** глобальный архитектурный контракт
 
 Верхний контракт: `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`.
@@ -124,37 +124,51 @@ AVAILABLE FUNDS
 
 Current provider является implementation detail.
 
-# 5. Strategy — владелец торговой политики
+# 5. Strategy — единственный владелец торговой политики
 
-Strategy определяет правила конкретного способа торговли.
+Strategy канонически представлена пассивной immutable `StrategyCard`, а не работающим ботом.
 
 В ней живут:
 
 - условия подходящей среды;
-- Entry policy;
-- капитал, который Strategy хочет использовать;
-- размер позиции;
-- leverage policy;
-- stop;
-- допустимая просадка;
-- holding rules;
-- Exit policy;
-- initial protection.
+- Entry policy со всеми числами, таймерами, touch/reset/lifecycle правилами;
+- правила использования MAYAK-origin/Dispatcher objective context;
+- капитал, allocation, размер позиции и leverage policy;
+- stop, допустимая просадка, holding и initial protection;
+- Exit policy.
 
-Strategy version immutable после утверждения.
+Strategy version immutable после утверждения. Изменение любого торгового смысла или параметра = новая version/fingerprint.
 
-# 6. Entry — вход внутри Strategy
+`StrategyActivation` хранится отдельно от StrategyCard и определяет только, какие утверждённые Strategy включены владельцем. Одновременно могут быть включены несколько противоречащих Strategy.
 
-Monitor/Scanner обнаруживает возможность и создаёт signal.
+Из конкретной Strategy version материализуются immutable `EntryPlan` и `ExitPlan`. Materialization является технической функцией уровня Strategy, но не мониторит рынок и не принимает торговых решений.
 
-Entry получает возможность на рассмотрение, но не обязан входить.
+# 6. Entry — универсальное исполнение EntryPlan
 
-Entry рассматривает:
+Entry не выбирает Strategy. Он независимо обслуживает все активные `EntryPlan`, которые поступили от включённых Strategy.
 
-- causal signal;
-- утверждённые Strategy rules;
-- применимый объективный Dispatcher global/coin market context;
-- Dispatcher trading-capacity snapshot;
+Логическая модель:
+
+```text
+Active EntryPlan Registry
+-> Entry Watch
+-> StrategySignal (signal_id)
+-> Entry Decision
+-> optional ExecutionRequest
+```
+
+Технический Monitor/Scanner/market-data контур поставляет causal market facts. Сам рыночный факт не является торговым signal конкретной Strategy.
+
+`StrategySignal` создаётся Entry Watch, когда причинное состояние рынка и обязательный consumed context удовлетворяют конкретному EntryPlan.
+
+Entry может поддерживать универсальные операторы (`touch`, `break`, `retest`, `count`, `sequence`, `window`, `reset`, `AND/OR/NOT`), но вся торговая параметризация принадлежит Strategy. Candidate cooldown, включая исторические 30 минут V1, является отключаемой настройкой Strategy, а не свойством Entry.
+
+Entry для конкретной attempt рассматривает:
+
+- strategy-specific `signal_id`;
+- точную Strategy binding и `entry_plan_fingerprint`;
+- только разрешённый/обязательный объективный context;
+- Dispatcher trading-capacity snapshot согласно Strategy policy;
 - technical readiness.
 
 Entry фиксирует точный outcome, например:
@@ -164,13 +178,14 @@ ACCEPTED
 STRATEGY_CONDITION_REJECTED
 INSUFFICIENT_AVAILABLE_FUNDS
 OPERATIONAL_SAFETY_BLOCKED
-EXCHANGE_REJECTED
-NO_FILL
+STALE_OR_UNKNOWN_REQUIRED_STATE
+EXPIRED
+CANCELLED
 ```
 
-Если будущий механизм допускает несколько Strategy, один signal может породить несколько strategy attempts.
+`EXCHANGE_REJECTED` / `NO_FILL` являются downstream execution outcomes.
 
-Механизм автоматического выбора Strategy этим документом не определяется.
+Entry не сравнивает Strategy A и Strategy B и не создаёт `OTHER_STRATEGY_WON`. При нехватке общего капитала без отдельного allocator фактический недостаток средств/exchange rejection фиксируется честно для конкретной attempt.
 
 # 7. Exit — выход внутри той же Strategy
 
@@ -236,18 +251,23 @@ Exchange — внешняя торговая площадка.
 
 Adapters технического контура нормализуют различия площадок без изменения верхней архитектуры.
 
-# 11. Signal / Attempt / Card
+# 11. Market facts / StrategySignal / Attempt / Card
 
-`SIGNAL_DETECTED` — начало истории.
+Рыночные факты находятся upstream. Торговая история конкретной Strategy начинается при `STRATEGY_SIGNAL_DETECTED`.
+
+Канонический `signal_id` — это strategy-specific `StrategySignal`, созданный Entry Watch из конкретного EntryPlan и причинных source market/context refs.
+
+Один рыночный момент может породить несколько независимых `signal_id` разных Strategy.
 
 Карточка создаётся до реальной сделки.
 
 Целевая модель:
 
 ```text
-signal_id
-  -> 1..N strategy_attempt_id
-       -> strategy binding
+causal market/context source refs
+  -> signal_id                 # StrategySignal
+       -> strategy + EntryPlan binding
+       -> strategy_attempt_id
        -> Entry decision
        -> optional Execution
        -> optional position
@@ -277,13 +297,15 @@ source_exchange/account
 
 # 13. Несколько стратегий и ботов
 
-Архитектура разрешает множество Strategy, bot instances и simultaneous positions.
+Архитектура разрешает множество одновременно включённых Strategy, EntryPlan, bot instances и simultaneous positions.
 
-Сегодняшняя реализация одной Strategy — только текущий этап.
+Противоречащие Strategy допустимы. Entry не выбирает между ними и не вводит скрытый priority.
+
+Текущая реализация одной Strategy — только текущий implementation stage.
 
 Не вводить architecture cap без отдельного решения.
 
-Не проектировать сейчас allocator/arbitration/priority между Strategy.
+Не проектировать сейчас allocator/arbitration/priority между Strategy. Если такой механизм понадобится, он оформляется отдельно и не маскируется под Entry или Dispatcher.
 
 # 14. Global market indicator
 
@@ -323,4 +345,6 @@ PostgreSQL — persisted truth проекта, но не торговый сло
 
 # 19. Изменения
 
-Любая попытка вернуть top-level Risk, сделать Dispatcher исполнителем, сделать technical service владельцем Strategy, привязать архитектуру к одной бирже или смешать Entry/Exit разных strategy bindings является архитектурно чувствительной.
+Любая попытка вернуть top-level Risk, сделать Dispatcher исполнителем/запускателем Strategy, сделать technical service владельцем Strategy, дать Entry право выбирать/ранжировать Strategy, вернуть strategy-specific constants внутрь universal Entry, привязать архитектуру к одной бирже или смешать Entry/Exit разных strategy bindings является архитектурно чувствительной.
+
+Специализированный контракт Strategy/Entry: `STRATEGY_ENTRY_ARCHITECTURE_RU.md`.

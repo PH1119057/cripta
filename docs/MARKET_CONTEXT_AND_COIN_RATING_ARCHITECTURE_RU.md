@@ -1,8 +1,8 @@
 # УНИВЕРСАЛЬНЫЙ РЫНОЧНЫЙ КОНТЕКСТ И РЕЙТИНГ МОНЕТЫ
 
 **Документ:** `MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md`
-**Версия:** 1.1
-**Дата:** 2026-09-06
+**Версия:** 1.2
+**Дата:** 2026-09-08
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-06
 
@@ -273,10 +273,13 @@ Profile-based Dispatcher (`GOOD_MATCH`, `PARTIAL_MATCH`, `POOR_MATCH`, `INCOMPAT
 - обучать MAYAK на PnL Strategy;
 - делать CoinMarketRating из success rate наших Entry;
 - давать Dispatcher знание логики конкретного Entry;
+- давать Dispatcher право читать StrategyActivation ради управления Strategy, включать/выключать Strategy или создавать StrategySignal;
 - превращать inflow/outflow в приказ LONG/SHORT;
 - превращать rating в universal BLOCK/CLOSE;
 - смешивать account capacity с рыночным quality score;
 - автоматически менять Strategy по статистике Analyst.
+
+StrategyCard может параметризовать использование доступного objective context по режимам `OFF / OBSERVE / CONDITION / RANKING`, но смысл этого выбора принадлежит Strategy. `RANKING` не даёт Entry права сравнивать разные Strategy и не создаёт allocator.
 
 ## 13. Итог
 

@@ -1,8 +1,8 @@
 # УПРАВЛЕНИЕ ИЗМЕНЕНИЯМИ ПРОЕКТА CRIPTA
 
 **Документ:** `PROJECT_GOVERNANCE_RU.md`
-**Версия:** 1.2
-**Дата:** 2026-09-05
+**Версия:** 1.3
+**Дата:** 2026-09-08
 **Статус:** канонический нормативный контракт
 
 ## 1. Виды истины
@@ -58,7 +58,10 @@ EXCHANGE
 - смешивать Entry одной Strategy и Exit другой;
 - привязывать универсальную архитектуру к одной конкретной бирже;
 - вводить скрытый лимит количества Strategy/bots/positions как архитектурный факт;
-- проектировать allocator/strategy arbitration без отдельного задания.
+- проектировать allocator/strategy arbitration без отдельного задания;
+- давать Entry право выбирать, сравнивать, ранжировать или отключать Strategy;
+- давать Dispatcher право включать/выключать Strategy, компилировать EntryPlan или создавать StrategySignal;
+- зашивать strategy-specific торговые числа в universal Entry как скрытую policy.
 
 Если код уже делает что-то из перечисленного, это finding и hard stop для дальнейшего изменения в этой области.
 
@@ -72,14 +75,13 @@ EXCHANGE
 
 ## 6. Strategy ownership
 
-Strategy version/fingerprint является owner-approved policy.
+Strategy version/fingerprint является owner-approved immutable policy. `StrategyCard` пассивна: она не является ботом и сама не мониторит рынок.
 
-Внутри конкретной торговой попытки:
+Все торговые параметры, timers/cooldown, touch/reset/lifecycle правила, размер, leverage, stop, допустимая просадка, holding, Entry/Exit policy и правила использования objective context относятся к Strategy.
 
-- Entry принимает решение об открытии;
-- Exit сопровождает и закрывает по той же strategy binding.
+`StrategyActivation` отделён от StrategyCard. Владелец может одновременно включить несколько противоречащих Strategy.
 
-Параметры размера, leverage, stop, допустимой просадки и holding относятся к Strategy.
+Из StrategyCard материализуются immutable EntryPlan/ExitPlan. Entry принимает решение об открытии, исполняя конкретный EntryPlan, но Entry не выбирает Strategy. Exit сопровождает и закрывает по той же strategy binding.
 
 ## 7. Деньги и Dispatcher
 
@@ -104,14 +106,17 @@ Entry может отказать attempt по причине `INSUFFICIENT_AVAI
 
 До fill существует полноценная торговая attempt.
 
+Технические market events/facts не являются StrategySignal сами по себе. Entry Watch создаёт strategy-specific `signal_id` при выполнении активного EntryPlan. Один набор рыночных фактов может породить несколько независимых signals разных Strategy.
+
 Нельзя журналировать только состоявшиеся сделки.
 
 Целевая причинная связь:
 
 ```text
-signal_id
+causal market/context source refs
+-> signal_id                       # StrategySignal
+-> strategy + EntryPlan binding
 -> strategy_attempt_id
--> strategy binding
 -> Entry decision
 -> optional command/fill/position
 -> optional Exit
@@ -122,7 +127,7 @@ signal_id
 
 Ownership нельзя восстанавливать по `symbol + время`.
 
-Используются точные IDs signal/attempt/strategy/command/order/execution/trade/position/exit.
+Используются точные IDs/refs market lineage, signal, Strategy/activation/EntryPlan, attempt, decision, command, order, execution, trade, position и exit.
 
 ## 10. Архитектурное изменение
 

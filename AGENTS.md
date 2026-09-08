@@ -52,6 +52,17 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   Dispatcher, Strategy, Entry, Exit, Execution,
   Position Supervisor, статистикой или research исполнитель обязан прочитать его
   полностью вместе с архитектурными контрактами затрагиваемых слоёв.
+- Канонический specialized contract Strategy / universal Entry находится в
+  `docs/STRATEGY_ENTRY_ARCHITECTURE_RU.md`. StrategyCard является пассивной
+  immutable owner-approved policy; включение/выключение хранится отдельно как
+  StrategyActivation. Все торговые числа, timers/cooldown, touch/reset/lifecycle,
+  capital/protection и context-consumption rules принадлежат Strategy. Из конкретной
+  Strategy version materialize-ятся immutable EntryPlan/ExitPlan. Universal Entry
+  независимо обслуживает все активные EntryPlan, не выбирает/не ранжирует Strategy,
+  а Entry Watch создаёт strategy-specific `signal_id` только при выполнении плана.
+  Dispatcher не читает StrategyActivation ради управления торговлей, не запускает
+  Strategy и не создаёт StrategySignal. Исторические 30m cooldown/flow/OI gates V1
+  не являются универсальными правилами Entry.
 - Канонический контракт непрерывной жизни сигнала находится в
   `docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md`. Любое изменение журналирования сигнала,
   решений, заявок, исполнений, позиции, ручного вмешательства, выхода,
@@ -86,7 +97,13 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
 
 ## Жёсткая остановка при архитектурном конфликте
 
-- `ARCHITECTURE_CONFLICT_HARD_STOP=YES`. Маяк и Диспетчер являются только
+- `ARCHITECTURE_CONFLICT_HARD_STOP=YES`. Entry не имеет права выбирать,
+  сравнивать, ранжировать или выключать Strategy; universal Entry не хранит
+  strategy-specific торговые constants как собственную policy. StrategyActivation
+  управляется владельцем отдельно от immutable StrategyCard. Market facts не
+  являются StrategySignal; StrategySignal создаёт Entry Watch по конкретному
+  EntryPlan. Dispatcher не запускает Strategy и не создаёт StrategySignal.
+- Маяк и Диспетчер являются только
   наблюдательным/структурирующим объективным контекстом: `MAYAK_TRADING_EFFECT=NONE`,
   `DISPATCHER_TRADING_EFFECT=NONE`. Они не могут создавать Entry, блокировать
   Entry, принудительно закрывать позицию или напрямую менять ордера, стопы,

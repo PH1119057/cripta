@@ -1,6 +1,6 @@
 # CRIPTA — архитектурные правила проекта
 
-Версия: 1.2 · 2026-09-06
+Версия: 1.3 · 2026-09-08
 Назначение: верхняя модель проекта, владельцы прикладных решений, технический поддерживающий контур, жизненный цикл торговой попытки и обязательные архитектурные границы.
 
 Процесс patch/install/Git вынесен в `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`.
@@ -106,53 +106,66 @@ MAYAK может рассчитывать причинные strategy-agnostic �
 
 # 5. STRATEGY
 
-Strategy — утверждённый владельцем набор правил конкретного способа торговли.
+Strategy — утверждённая владельцем пассивная, неизменяемая и версионированная торговая policy (`StrategyCard`). Она не является ботом, монитором или исполнителем.
 
-В Strategy живут правила:
+Strategy является единственным владельцем торгового смысла конкретного способа торговли. В ней живут:
 
-- какой рыночный контекст ей подходит;
-- как использовать Dispatcher;
-- Entry policy;
-- размер входа;
-- фиксированная сумма или доля доступного капитала;
-- плечо;
-- stop;
-- допустимая просадка;
-- правила удержания;
-- Exit policy;
-- initial protection.
+- условия подходящей среды;
+- Entry policy, включая геометрию, касания, последовательности, timers/cooldown/reset и все численные параметры;
+- правила использования объективного MAYAK/Dispatcher context;
+- размер входа, allocation и leverage policy;
+- stop, допустимая просадка, holding и initial protection;
+- Exit policy.
+
+Все торговые числа принадлежат Strategy. Универсальный Entry не должен хранить strategy-specific значения как собственные магические константы.
+
+Включение/выключение Strategy хранится отдельно как `StrategyActivation` и не изменяет immutable StrategyCard. Владельцем через управляющий контур может быть одновременно включено любое число утверждённых Strategy, в том числе противоречащих друг другу.
+
+Из StrategyCard конкретной версии материализуются immutable `EntryPlan` и `ExitPlan` с собственными fingerprint. Materializer/compiler является внутренней технической функцией уровня Strategy и не мониторит рынок.
 
 Никто из MAYAK, Dispatcher, Analyst, Supervisor или технического контура не изменяет утверждённую Strategy автоматически.
 
-Изменение Strategy = новая утверждённая владельцем версия/fingerprint.
+Изменение торговой policy = новая утверждённая владельцем версия/fingerprint.
 
 # 6. ENTRY
 
-Entry — специализированная часть Strategy, отвечающая за конкретную попытку входа.
+Entry — специализированная часть Strategy и единый универсальный параметризованный механизм исполнения активных `EntryPlan`.
 
-Monitor/Scanner может сообщить, что на инструменте появилась потенциальная торговая возможность. Это не приказ войти.
+Entry **не выбирает Strategy**, не сравнивает их, не ранжирует и не выключает. Если включено несколько Strategy, их EntryPlan наблюдаются независимо. Противоречащие LONG/SHORT планы допустимы и не разрешаются Entry скрытым arbitration.
 
-После `SIGNAL_DETECTED` Entry:
-
-- рассматривает доступную торговую возможность;
-- работает только с утверждёнными Strategy;
-- использует правила выбранной/подходящей Strategy;
-- смотрит применимый объективный Dispatcher global/coin market context;
-- смотрит опубликованное Dispatcher состояние доступных средств;
-- проверяет обязательную техническую readiness;
-- принимает итоговое решение по попытке входа.
-
-Архитектура **не фиксирует сейчас** алгоритм выбора между несколькими Strategy. Такой механизм является отдельным будущим контрактом.
-
-После выбора Strategy конкретной попытки фиксируется точными:
+Логически Entry включает:
 
 ```text
+ACTIVE PLAN REGISTRY
+-> ENTRY WATCH
+-> STRATEGY SIGNAL
+-> ENTRY DECISION
+-> optional ExecutionRequest
+```
+
+Технический market-data/Monitor/Scanner поставляет причинные рыночные факты/события. Сам рыночный факт не является торговым signal конкретной Strategy.
+
+`StrategySignal` (`signal_id`) создаётся Entry Watch, когда causal market state и обязательный consumed context удовлетворяют декларативному EntryPlan конкретной активной Strategy.
+
+Entry может реализовывать универсальные операции `touch/break/retest/count/sequence/window/reset/AND/OR/NOT`, но их значения и торговый смысл задаются Strategy. Например, `candidate cooldown` является отключаемой Strategy-настройкой; исторические 30 минут не являются свойством универсального Entry.
+
+Для конкретной попытки фиксируются как минимум:
+
+```text
+signal_id
+strategy_attempt_id
 strategy_id
 strategy_version
 strategy_config_fingerprint
+entry_plan_fingerprint
+strategy_activation_id
 ```
 
-Entry не должен после fill менять Strategy позиции.
+Entry использует только те objective contexts, которые EntryPlan разрешает/требует, сохраняет `CONSUMED_CONTEXT`, проверяет применимый account-capacity state и mandatory technical readiness, затем принимает решение конкретной attempt.
+
+Entry не исполняет биржевую заявку. Только `ACCEPTED` создаёт `ExecutionRequest`, который передаётся Execution.
+
+После fill Entry не должен менять Strategy позиции.
 
 # 7. EXIT
 
@@ -223,27 +236,27 @@ Exchange — внешняя торговая площадка.
 
 Это не даёт ему права принимать торговое решение вместо Strategy.
 
-# 12. Monitor / Scanner и карточка попытки
+# 12. Рыночные факты, Monitor / Scanner и карточка сигнала
 
-Monitor/Scanner относится к техническому/наблюдательному обеспечению поиска торговых возможностей.
+Monitor/Scanner относится к техническому/наблюдательному обеспечению и публикует причинные рыночные факты/события. Он не выбирает Strategy и не является отдельным владельцем торговой policy.
 
-Его сообщение «возможность обнаружена и готова к проверке Entry» не равно приказу открыть позицию.
+Рыночный `MarketEvent`/source fact не равен StrategySignal.
 
-При `SIGNAL_DETECTED` создаётся постоянная причинная запись/карточка.
+При выполнении EntryPlan Entry Watch создаёт strategy-specific `signal_id` (`StrategySignal`) и постоянную причинную карточку. Карточка существует независимо от дальнейшего отказа, отсутствия средств, operational block, no-fill или execution rejection.
 
-Она существует даже если Entry отказал, Strategy не подошла, Dispatcher context был несовместим, не было свободных средств, technical readiness заблокировала действие, order не был создан или не исполнился.
+Точная source lineage к trade/candle/zone/context должна сохраняться; не требуется изобретать synthetic `market_event_id` для каждого тика, если уже есть точные source references.
 
-# 13. Один сигнал и несколько стратегий
+# 13. Несколько Strategy и сигналов
 
-Архитектура должна масштабироваться на множество Strategy и bot instances.
+Архитектура должна масштабироваться на множество Strategy, EntryPlan, bot instances и simultaneous attempts.
 
-Один `signal_id` может в будущем иметь несколько `strategy_attempt_id`.
+Один и тот же рыночный момент/набор причинных фактов может породить ноль, один или несколько независимых `StrategySignal` разных Strategy. Каждый signal связан с точной `strategy_id/version/fingerprint` и `entry_plan_fingerprint`.
 
-Разные Strategy могут принять противоположные решения по одному рыночному сигналу.
+Разные Strategy могут одновременно породить противоположные LONG/SHORT signals даже по одному symbol. Entry не имеет права выбирать между ними.
 
-Сегодня production может работать по одной Strategy. Это не архитектурное ограничение системы.
+Один strategy-specific signal может иметь несколько attempts только если это отдельно требуется явной моделью bot/account execution; скрытого cross-strategy arbitration не существует.
 
-Не устанавливать без отдельного решения владельца максимальное число Strategy, bot instances, одновременно открытых positions, механизм конкуренции Strategy за капитал или алгоритм автоматического выбора Strategy.
+Не устанавливать без отдельного решения владельца максимальное число Strategy, bot instances, одновременно открытых positions, механизм конкуренции Strategy за капитал или алгоритм приоритета/allocator между Strategy.
 
 # 14. Состояние денег и причина отказа
 
@@ -313,14 +326,17 @@ Operational safety относится к техническому поддерж
 
 # 18. Жизненный цикл и точные ID
 
-Корневая история начинается до реальной сделки.
+Корневая торговая история начинается со strategy-specific `StrategySignal`; causal market facts находятся upstream и сохраняются как source lineage.
 
 Целевая связь:
 
 ```text
-signal_id
-  -> strategy_attempt_id
+causal market source refs
+  -> signal_id                         # StrategySignal
   -> strategy_id/version/fingerprint
+  -> entry_plan_fingerprint
+  -> strategy_activation_id
+  -> strategy_attempt_id
   -> entry_decision_id
   -> entry_command_id
   -> exchange/client order IDs
@@ -361,7 +377,7 @@ STATISTICS
 
 # 22. Hard stop при конфликте
 
-Если код или более низкий документ делает `Risk` отдельным верхним владельцем, Dispatcher торговым исполнителем, technical service владельцем Strategy, MAYAK источником торговой команды, Exit независимым от Strategy binding конкретной позиции или exchange-specific правило универсальной архитектурой — это архитектурный конфликт.
+Если код или более низкий документ делает `Risk` отдельным верхним владельцем, Dispatcher торговым исполнителем/запускателем Strategy, technical service владельцем Strategy, MAYAK источником торговой команды, Entry владельцем выбора/ранжирования Strategy, universal Entry носителем скрытых strategy-specific торговых constants, Exit независимым от Strategy binding конкретной позиции или exchange-specific правило универсальной архитектурой — это архитектурный конфликт.
 
 Порядок:
 

@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 4.9
-**Дата:** 2026-09-07
+**Версия документа:** 5.0
+**Дата:** 2026-09-08
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -105,30 +105,56 @@ D0–D7 implementation: `dispatcher-v2.1`; persisted truth — `dispatcher_v2.gl
 
 ## 6. Strategy
 
-Owner-approved versioned policy.
+Канонический специализированный контракт: `STRATEGY_ENTRY_ARCHITECTURE_RU.md`.
 
-Внутри:
+Strategy — owner-approved immutable `StrategyCard`, то есть пассивная карточка всей торговой policy, а не бот/runtime.
+
+В Strategy находятся:
 
 ```text
-ENTRY
-EXIT
+ENTRY POLICY
+EXIT POLICY
+CAPITAL / LEVERAGE POLICY
+PROTECTION / HOLDING POLICY
+TOUCH / LIFECYCLE / RESET POLICY
+MAYAK-origin / DISPATCHER CONTEXT CONSUMPTION POLICY
 ```
 
-Strategy определяет размер, allocation, leverage, stop, допустимую просадку, holding и exit policy.
+Все торговые числа и timers принадлежат Strategy.
+
+`StrategyActivation` хранится отдельно и позволяет владельцу независимо включать/выключать любое количество Strategy. Противоречащие Strategy допустимы.
+
+Из StrategyCard materialize-ятся immutable `EntryPlan` и `ExitPlan` с fingerprint.
 
 ## 7. Entry
 
-Monitor/Scanner даёт candidate signal, не приказ на вход.
+Целевая архитектура Entry — один universal parameterized Entry Engine для любого числа активных EntryPlan.
 
-Entry рассматривает signal в рамках подходящей утверждённой Strategy.
+```text
+Active Plan Registry
+-> Entry Watch
+-> StrategySignal
+-> Entry Decision
+-> optional ExecutionRequest
+```
 
-Он может использовать objective Dispatcher global/coin context, Dispatcher account-capacity snapshot и technical readiness в соответствии с policy выбранной Strategy.
+Entry не выбирает, не ранжирует и не выключает Strategy. Рыночный Monitor/Scanner является источником causal market facts, а не владельцем strategy-specific торгового сигнала.
+
+Канонический `signal_id` — strategy-specific StrategySignal, который Entry Watch создаёт при выполнении конкретного EntryPlan.
+
+Candidate cooldown не является свойством Entry. В том числе исторические `30 минут` V1 являются отключаемой Strategy-настройкой, а не универсальным правилом.
 
 Отказ из-за отсутствия денег:
 
 ```text
 INSUFFICIENT_AVAILABLE_FUNDS
 ```
+
+### 7.1 Текущий implementation status
+
+На момент этого документа production Entry ещё реализует историческую V1-specific модель: в коде присутствуют фиксированные/default 30m candidate cooldown, 60m failure embargo, обязательный `pressure_then_reversal` и OI calibration/tail gate.
+
+Это **implementation finding относительно новой целевой архитектуры**, а не разрешение менять production автоматически. Universal Entry consumer cutover ещё не реализован. Следующий этап после документации — отдельный architecture test / implementation contract / аудит текущего кода.
 
 ## 8. Exit
 
@@ -142,21 +168,22 @@ INSUFFICIENT_AVAILABLE_FUNDS
 
 Внешняя торговая площадка. Архитектура не привязана к конкретному провайдеру.
 
-## 11. Signal / Attempt
+## 11. Market facts / StrategySignal / Attempt
 
-История начинается на `SIGNAL_DETECTED`.
+Market-data/monitoring создаёт causal facts. Торговая lifecycle конкретной Strategy начинается на `STRATEGY_SIGNAL_DETECTED`.
 
 ```text
-signal_id
+causal market/context refs
+-> signal_id                    # StrategySignal
+-> strategy + EntryPlan binding
 -> strategy_attempt_id
--> strategy binding
 -> Entry decision
 -> optional Execution
 -> optional position
 -> optional Exit
 ```
 
-Rejected/no-fill/no-funds attempts сохраняются.
+Один рыночный момент может породить несколько независимых StrategySignal разных Strategy. Rejected/no-fill/no-funds attempts сохраняются.
 
 ## 12. Аналитика
 
@@ -182,14 +209,19 @@ Temporal/cross-asset OOS frozen MAYAK components завершён без retunin
 
 ## 13. Масштабирование
 
-Архитектура допускает много Strategy/bots/positions.
+Архитектура допускает много одновременно включённых Strategy/EntryPlan/bots/positions.
+
+Universal Entry независимо обслуживает все активные планы. Strategy-specific concurrency не требует отдельного процесса на каждый plan; worker/event-loop model является implementation detail.
 
 Не определены и не должны придумыватьcя без отдельной задачи:
 
 - strategy selector;
 - capital allocator;
+- cross-strategy arbitration;
 - strategy priority;
 - global position cap.
+
+Dispatcher не выполняет эти функции.
 
 ## 14. Что читать
 
@@ -198,4 +230,5 @@ Temporal/cross-asset OOS frozen MAYAK components завершён без retunin
 3. `docs/PROJECT_ARCHITECTURE_RU.md`
 4. `docs/PROJECT_GOVERNANCE_RU.md`
 5. `docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md` при работе с MAYAK/Dispatcher/coin rating
-6. затрагиваемые специализированные контракты
+6. `docs/STRATEGY_ENTRY_ARCHITECTURE_RU.md` при работе со Strategy/Entry/EntryPlan/signal lifecycle
+7. затрагиваемые специализированные контракты

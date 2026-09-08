@@ -1,10 +1,10 @@
 # ДИСПЕТЧЕР — АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
-**Версия:** 2.1
-**Дата:** 2026-09-06
+**Версия:** 2.2
+**Дата:** 2026-09-08
 **Статус:** канонический специализированный контракт
-**Основание V2.1:** явное решение владельца 2026-09-06 — новый Dispatcher V2 создаётся как чистая реализация без profile-based ядра.
+**Основание V2.2:** решения владельца 2026-09-06 и 2026-09-08 — Dispatcher V2 остаётся чистым strategy-agnostic context layer и не получает функции запуска/выбора Strategy.
 
 Верхние контракты:
 
@@ -142,9 +142,13 @@ Dispatcher может объективно публиковать `money_inflow`
 
 ## 9. Несколько Strategy
 
-Один `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` могут быть прочитаны любым количеством Strategy/Entry consumers.
+Один `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` могут быть причинно использованы любым количеством Strategy/EntryPlan consumers.
 
 Dispatcher не создаёт отдельную «истину рынка» под каждую Strategy.
+
+Dispatcher не читает `StrategyActivation` для управления торговлей, не включает/выключает Strategy, не компилирует EntryPlan/ExitPlan, не сравнивает планы с рынком и не создаёт `StrategySignal`. Эти действия принадлежат соответственно управляющему контуру/Strategy materialization и universal Entry.
+
+Несколько противоречащих Strategy могут интерпретировать один objective context противоположно, и Dispatcher не разрешает этот конфликт.
 
 ## 10. Причинность и версии
 
@@ -209,8 +213,10 @@ D7  passive production runtime + status/health
 
 > Dispatcher универсально структурирует эти факты в global/coin context и публикует торговую ёмкость.
 
-> Strategy решает, что объективный контекст означает для её способа торговли.
+> StrategyCard определяет, что объективный контекст означает для конкретной торговой policy.
 
-> Entry принимает решение конкретной попытки.
+> StrategyActivation определяет только, включена ли утверждённая Strategy владельцем; Dispatcher к этому не относится.
+
+> EntryPlan переносит policy в universal Entry, Entry Watch создаёт StrategySignal и Entry принимает решение конкретной attempt.
 
 > Execution исполняет.

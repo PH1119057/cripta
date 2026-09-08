@@ -1,8 +1,8 @@
 # КРИПТА — АВТОРИТЕТНОСТЬ ДОКУМЕНТОВ
 
 **Документ:** `DOCUMENT_AUTHORITY_RU.md`
-**Версия:** 3.0
-**Дата:** 2026-09-07
+**Версия:** 3.1
+**Дата:** 2026-09-08
 **Статус:** канонический реестр авторитетности
 
 ## 1. Порядок авторитетности
@@ -22,6 +22,7 @@ LEVEL 3 — CURRENT ARCHITECTURE
 docs/PROJECT_ARCHITECTURE_RU.md
 docs/CURRENT_PROJECT_MAP_RU.md
 docs/STRATEGY_DISPATCHER_ARCHITECTURE_RU.md
+docs/STRATEGY_ENTRY_ARCHITECTURE_RU.md
 docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md
 docs/SIGNAL_LIFECYCLE_CONTRACT_RU.md
 docs/ANALYST_ARCHITECTURE_RU.md
@@ -71,6 +72,7 @@ connected Exchange / Trading Account
 - MAYAK: `MAYAK_ARCHITECTURE_PRINCIPLES_RU.md`
 - MAYAK V2 objective context implementation/research: `MAYAK_OBJECTIVE_CONTEXT_V2_IMPLEMENTATION_RU.md`
 - Dispatcher: `STRATEGY_DISPATCHER_ARCHITECTURE_RU.md`
+- Strategy / universal Entry: `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
 - Dispatcher V2 implementation D0–D7: `DISPATCHER_V2_IMPLEMENTATION_RU.md` (LEVEL 4, active implementation contract)
 - Dispatcher V2 D0–D7 runtime evidence: `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md` (LEVEL 5)
 - Dispatcher V2 D8 observed-context implementation: `DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md` (LEVEL 4)
@@ -87,6 +89,8 @@ connected Exchange / Trading Account
 ## 5. История
 
 Исторические документы сохраняют фактическую историю и не переписываются задним числом.
+
+`ENTRY_CONCEPT_V1_RU.md` и Pxx/EO/SE документы Entry сохраняют историческую исследовательскую семантику своих версий и не переопределяют новый universal Strategy/Entry contract.
 
 Следующие документы старого profile-based Dispatcher после owner decision 2026-09-06 имеют статус **LEVEL 6 / HISTORICAL LEGACY** и не являются заданием для V2:
 
