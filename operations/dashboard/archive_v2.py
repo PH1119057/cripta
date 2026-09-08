@@ -22,6 +22,7 @@ STAGING_ROOT = Path(os.environ.get("CRIPTA_ARCHIVE_STAGING", "/srv/cripta-share/
 JOB_ROOT = Path(os.environ.get("CRIPTA_ARCHIVE_JOB_ROOT", "/var/lib/cripta/archive_jobs"))
 DB_DSN = os.environ.get("CRIPTA_DB_DSN", "dbname=cripta user=cripta host=/var/run/postgresql")
 ARCHIVE_VERSION = "2.1"
+DATABASE_SCHEMA_VERSION = "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1/strategy-entry-u3"
 PROFILES = {"CODE", "ANALYSIS_FULL", "ANALYSIS_FULL_WITH_RESEARCH", "FULL_RECOVERY", "RESEARCH"}
 PERIODS = {"3d": 3, "10d": 10, "all": None}
 STAGES = (
@@ -228,6 +229,76 @@ TABLE_EXPORTS = (
         "research_context.dispatcher_v2_event_links",
         "analytics/dispatcher_v2_event_links.jsonl",
         ("occurred_at", "linked_at"),
+    ),
+    TableExport(
+        "strategy_entry.strategy_cards",
+        "strategy_entry/strategy_cards.jsonl",
+        ("approved_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.strategy_activations",
+        "strategy_entry/strategy_activations.jsonl",
+        ("updated_at", "created_at", "enabled_at", "disabled_at"),
+    ),
+    TableExport(
+        "strategy_entry.strategy_activation_events",
+        "strategy_entry/strategy_activation_events.jsonl",
+        ("occurred_at",),
+    ),
+    TableExport(
+        "strategy_entry.entry_plans",
+        "strategy_entry/entry_plans.jsonl",
+        ("created_at",),
+    ),
+    TableExport(
+        "strategy_entry.exit_plans",
+        "strategy_entry/exit_plans.jsonl",
+        ("created_at",),
+    ),
+    TableExport(
+        "strategy_entry.strategy_signals",
+        "strategy_entry/strategy_signals.jsonl",
+        ("detected_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.strategy_attempts",
+        "strategy_entry/strategy_attempts.jsonl",
+        ("created_at",),
+    ),
+    TableExport(
+        "strategy_entry.entry_decisions",
+        "strategy_entry/entry_decisions.jsonl",
+        ("decided_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.context_links",
+        "strategy_entry/context_links.jsonl",
+        ("linked_at", "context_observed_at"),
+    ),
+    TableExport(
+        "strategy_entry.sensor_links",
+        "strategy_entry/sensor_links.jsonl",
+        ("linked_at", "sensor_observed_at"),
+    ),
+    TableExport(
+        "strategy_entry.execution_requests",
+        "strategy_entry/execution_requests.jsonl",
+        ("requested_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.notifications",
+        "strategy_entry/notifications.jsonl",
+        ("occurred_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.shadow_parity_runs",
+        "strategy_entry/shadow_parity_runs.jsonl",
+        ("finished_at", "started_at", "created_at"),
+    ),
+    TableExport(
+        "strategy_entry.shadow_parity_events",
+        "strategy_entry/shadow_parity_events.jsonl",
+        ("event_at", "created_at"),
     ),
 )
 
@@ -487,6 +558,7 @@ def _postgres_dump(output: Path, cutoff: datetime) -> dict[str, Any]:
         raise RuntimeError("pg_dump завершился ошибкой: " + completed.stderr[-1000:])
     return {
         "database": "cripta",
+        "schema_version": DATABASE_SCHEMA_VERSION,
         "format": "custom",
         "no_owner": True,
         "no_privileges": True,

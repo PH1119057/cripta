@@ -1976,6 +1976,20 @@ def package_project() -> dict[str, object]:
                 "strategy_dispatcher.runs",
                 "strategy_dispatcher.assessments",
                 "research_context.event_links",
+                "strategy_entry.strategy_cards",
+                "strategy_entry.strategy_activations",
+                "strategy_entry.strategy_activation_events",
+                "strategy_entry.entry_plans",
+                "strategy_entry.exit_plans",
+                "strategy_entry.strategy_signals",
+                "strategy_entry.strategy_attempts",
+                "strategy_entry.entry_decisions",
+                "strategy_entry.context_links",
+                "strategy_entry.sensor_links",
+                "strategy_entry.execution_requests",
+                "strategy_entry.notifications",
+                "strategy_entry.shadow_parity_runs",
+                "strategy_entry.shadow_parity_events",
             )
             time_names = (
                 "exec_time_ms",
@@ -1991,6 +2005,19 @@ def package_project() -> dict[str, object]:
                 "refreshed_at_epoch_ms",
                 "decided_at_epoch_ms",
                 "observed_at_epoch_ms",
+                "approved_at",
+                "updated_at",
+                "created_at",
+                "linked_at",
+                "detected_at",
+                "context_observed_at",
+                "sensor_observed_at",
+                "requested_at",
+                "finished_at",
+                "started_at",
+                "event_at",
+                "enabled_at",
+                "disabled_at",
                 "observed_at",
                 "occurred_at",
             )
@@ -2110,7 +2137,10 @@ def package_project() -> dict[str, object]:
                 "database_dump_created_at": manifest["создано"],
                 "project_commit_fingerprint": commit_sha,
                 "project_tree_state": tree_state,
-                "schema_version": "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1",
+                "schema_version": (
+                    "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1/"
+                    "strategy-entry-u3"
+                ),
                 "tables": manifest["таблицы"],
             }
             archive.writestr(

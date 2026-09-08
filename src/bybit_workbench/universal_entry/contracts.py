@@ -373,6 +373,7 @@ class SensorLink:
     sensor_id: str
     observed: bool
     consumed: bool
+    observation_observed_at: datetime | None
     age_seconds: float | None
     quality: DataQuality | None
     status: str
@@ -381,14 +382,17 @@ class SensorLink:
 
 @dataclass(frozen=True, slots=True)
 class ContextLink:
-    context_id: str
-    context_type: str
+    requirement_id: str
+    context_id: str | None
+    context_type: str | None
     mode: ContextMode
     observed: bool
     consumed: bool
+    context_observed_at: datetime | None
     age_seconds: float | None
     quality: DataQuality | None
     status: str
+    source_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

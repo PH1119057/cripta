@@ -253,6 +253,7 @@ class UniversalEntryEngine:
                         False,
                         None,
                         None,
+                        None,
                         "MISSING",
                     )
                 )
@@ -273,6 +274,7 @@ class UniversalEntryEngine:
                     sensor.sensor_id,
                     True,
                     is_consumed,
+                    sensor.observed_at,
                     age,
                     sensor.quality,
                     status,
@@ -304,10 +306,12 @@ class UniversalEntryEngine:
                 links.append(
                     ContextLink(
                         requirement.context_id,
-                        "UNKNOWN",
+                        None,
+                        None,
                         requirement.mode,
                         False,
                         False,
+                        None,
                         None,
                         None,
                         "MISSING",
@@ -327,14 +331,17 @@ class UniversalEntryEngine:
             is_consumed = requirement.mode in _DECISION_MODES and status == "FRESH"
             links.append(
                 ContextLink(
+                    requirement.context_id,
                     context.context_id,
                     context.context_type,
                     requirement.mode,
                     True,
                     is_consumed,
+                    context.observed_at,
                     age,
                     context.quality,
                     status,
+                    context.source_refs,
                 )
             )
             if requirement.mode in _DECISION_MODES:

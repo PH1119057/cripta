@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.0
+**Версия документа:** 5.1
 **Дата:** 2026-09-08
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -152,9 +152,29 @@ INSUFFICIENT_AVAILABLE_FUNDS
 
 ### 7.1 Текущий implementation status
 
-На момент этого документа production Entry ещё реализует историческую V1-specific модель: в коде присутствуют фиксированные/default 30m candidate cooldown, 60m failure embargo, обязательный `pressure_then_reversal` и OI calibration/tail gate.
+Production Entry по-прежнему реализует историческую V1-specific модель: в коде присутствуют фиксированные/default 30m candidate cooldown, 60m failure embargo, обязательный `pressure_then_reversal` и OI calibration/tail gate.
 
-Это **implementation finding относительно новой целевой архитектуры**, а не разрешение менять production автоматически. Universal Entry consumer cutover ещё не реализован. Следующий этап после документации — отдельный architecture test / implementation contract / аудит текущего кода.
+Это **implementation finding относительно новой целевой архитектуры**, а не разрешение менять production автоматически. Universal Entry consumer cutover ещё не реализован.
+
+Отдельная clean-реализация universal Strategy/Entry уже имеет следующие green stages:
+
+```text
+U1/U2
+= immutable Strategy/Activation/Plan contracts
++ generic parameterized Entry DSL/engine/registry
++ exact StrategySignal/Attempt/Decision lineage in memory
+
+U3
+= PostgreSQL schema strategy_entry
++ immutable StrategyCard / EntryPlan / ExitPlan storage
++ separately mutable StrategyActivation with append-only activation journal
++ exact StrategySignal -> StrategyAttempt -> EntryDecision -> optional ExecutionRequest storage
++ separate OBSERVED_CONTEXT / CONSUMED_CONTEXT and observed/consumed sensor links
+```
+
+`strategy_entry` установлена в PostgreSQL с owner `postgres`; runtime role `cripta` имеет только минимальные SELECT/INSERT и narrow UPDATE для `strategy_activations`, без DELETE и без UPDATE immutable entities. Trading effect U1-U3: `NONE`.
+
+На U1-U3 нет systemd consumer cutover, exchange mutation, MICRO_LIVE/LIVE, mainnet re-arm, allocator или strategy selector. Следующий implementation stage после отдельного green U3 checkpoint — V1 compatibility/parity, где V1-specific значения допустимы только как данные V1 StrategyCard/EntryPlan.
 
 ## 8. Exit
 
