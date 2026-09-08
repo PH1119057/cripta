@@ -1,12 +1,12 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата:** 2026-09-08
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
-**Source baseline U4:** 9b5b4d8705cfa585875245ddba8e003b58dcd8e4
-**Основание V1.1:** owner clarification 2026-09-08 — границы generic causal market watch, post-signal Entry lifecycle, explicit cooldown anchor, V1 calibration provenance и deterministic parity diagnostics.
+**Source baseline U5:** 49670cb0631a8742b2bf8dace9ab33d6b29a107d
+**Основание V1.2:** owner decision 2026-09-08 — U5 parallel Universal Entry shadow runtime, single normalized causal fact source for both comparison engines, passive canonical V1 reference, online parity evidence and deterministic startup/restart contract.
 
 ## 1. Назначение
 
@@ -48,7 +48,7 @@
 
     GitHub PH1119057/cripta:main
     == /srv/cripta/source_checkout
-    == 68da299c720ecfc2d5b284970fe464d6b3bb6cf8
+    == 49670cb0631a8742b2bf8dace9ab33d6b29a107d
 
 Текущий Entry V1 находится в src/bybit_workbench/entry_bot. Production scanner service использует отдельный installed source tree и проверяется отдельно от source checkout.
 
@@ -425,7 +425,87 @@ Card sections: General; Entry; Touch; Lifecycle/cooldown/reset; Geometry/sensors
 
 Approved card is read-only. Editing means create new version. Saving new version does not activate it. Activation endpoint changes StrategyActivation only. During this implementation stage Strategy API cannot re-arm mainnet.
 
-## 20. Runtime migration stages
+## 20. U5 parallel shadow runtime contract
+
+### 20.1 Trading effect and isolation
+
+U5 создаёт отдельный technical shadow service `cripta-universal-entry-shadow.service`. Его trading effect строго `NONE`. Service не заменяет и не изменяет действующий legacy Entry service, не читает/не пишет `runtime.trade_commands`, не вызывает Execution transport, не имеет authenticated/private exchange credentials и не меняет `monitoring` legacy truth. Остановка/падение/restart U5 не должны влиять на legacy Entry.
+
+Pure `ExecutionRequest` value object допустим только внутри Universal evaluation/evidence. U5 не имеет downstream consumer для этого объекта.
+
+### 20.2 Один normalized causal fact source
+
+Оба сравниваемых движка получают один и тот же `MarketFactEnvelope` из одного technical public-data adapter внутри U5:
+
+    PUBLIC REST/WS transport (technical sensor contour, read-only)
+        -> normalize exactly once
+        -> one immutable causal MarketFactEnvelope
+        -> fan-out same object/data
+             -> passive canonical EntrySymbolEngine reference
+             -> Universal Entry + frozen V1 EntryPlan
+
+Legacy reference и Universal Entry сами transport не открывают. Нельзя иметь отдельный WS/REST stream для A и B. Adapter не является strategy-aware Scanner и не принимает торговых решений. Raw feed acquisition/normalization остаются technical sensor contour; Strategy geometry вычисляет только Entry Watch.
+
+U5 использует ровно 10 V1 trading symbols. Исторические BTC/ETH reference и DOGE/1000PEPE calibration rows не расширяют trading scope.
+
+Initial history fetch выполняется один раз на symbol для causal closed 5m/15m/60m candles и OI history; одни и те же нормализованные objects загружаются в обе стороны. Live fact kinds минимум: `PUBLIC_TRADE`, `BAR_OPEN`, `CANDLE_CLOSED`, `OPEN_INTEREST`. Каждый fact сохраняет exact source refs, `event_at`, `observed_at`, `received_at` и closed-bar boundaries.
+
+### 20.3 Passive canonical V1 reference
+
+Reference A = прямой `EntrySymbolEngine` с exact production V1 config и exact frozen calibration, но без `EntryBotRuntime`, `AuditStore`, `PositionHandoffStore`, `monitoring.opportunities` и иных production writes. Текущий изменённый `operations/monitoring/entry_shadow_scanner.py` не является reference и не вызывается comparator-ом.
+
+Reference adapter разрешено только вызвать pure/stateful methods `load_history`, `on_current_five_minute_open`, `on_closed_candle`, `on_open_interest`, `on_trade`, читать snapshot/audit state для сравнения и drain локального audit buffer. Он не публикует legacy signal наружу.
+
+### 20.4 Online parity comparator
+
+После каждого comparable causal input U5 вычисляет тот же semantic comparison set, что U4: candidate identity/time/direction, geometry, touch, cooldown decision+anchor, 5m/15m/60m readiness, shock/reset, rolling 60m swing, pressure/reversal, OI result, StrategySignal presence/absence, post-signal favorable/adverse resolution, future-entry embargo и causal refs.
+
+Счётчики ведутся по каждому comparable input. В PostgreSQL append-only `shadow_parity_events` обязательно пишутся: status transitions, semantic state transitions/checkpoints и любой mismatch. Первый mismatch пишется немедленно и содержит `run_id`, `causal_key`, category, legacy value/state, universal value/state, source refs, observed time, Strategy fingerprint и EntryPlan fingerprint. `COUNT_DIFF` без первой semantic причины запрещён.
+
+### 20.5 Startup and restart comparability
+
+State machine:
+
+    START/RESTART
+      -> WARMUP / NOT_COMPARABLE
+      -> exact causal seed/replay complete
+      -> required live sensor completeness complete
+      -> unknown pre-start Entry lifecycle influence expired or exactly replayed
+      -> PARITY_COMPARABLE
+
+Отсутствие signal в WARMUP не является mismatch.
+
+Для первого запуска неизвестный pre-start plan-local lifecycle нельзя считать пустым. Максимальный safe warmup horizon вычисляется **из EntryPlan**, а не hidden constant: максимум влияния enabled candidate cooldown и enabled post-signal outcome horizon + resulting embargo; исторические candle-based shock/swing/readiness восстанавливаются exact closed history seed. Для frozen V1 этот derived horizon равен 420 минутам (360m outcome horizon + 60m adverse embargo; candidate cooldown 30m меньше). Это derived compatibility evidence, не universal Entry constant.
+
+U5 ведёт durable local append-only normalized-fact/recovery journal под отдельным shadow state root. Journal не является trading truth и не заменяет PostgreSQL parity evidence. U5 не пытается переносить `PARITY_COMPARABLE` через restart/socket gap: незавершённый предыдущий run финализируется `NOT_COMPARABLE`, а новый service instance создаёт новый run и начинает отдельный `WARMUP`. Journal сохраняет exact уже полученные facts для аудита/детерминированного replay при диагностике; он не является основанием считать gap покрытым. Если в будущем будет утверждено продолжение одного run через restart, оно допустимо только после exact replay и доказательства отсутствия gap. Никакой nearest-time reconstruction.
+
+### 20.6 PostgreSQL parity runtime storage
+
+Existing U3 parity tables расширяются только для online evidence. `shadow_parity_run` identity immutable: Strategy identity/fingerprint, EntryPlan fingerprint, calibration SHA/size, baseline/universal commits, fact-source identity, service instance and started_at не меняются после insert.
+
+Operational fields run-а могут иметь только narrow audited transitions `WARMUP -> PARITY_COMPARABLE -> PASS|FAIL`, `WARMUP -> NOT_COMPARABLE` либо `PARITY_COMPARABLE -> NOT_COMPARABLE` при потере доказанной continuity; `finished_at` NULL до finalization. UPDATE других columns и DELETE запрещены. Runtime role получает UPDATE только разрешённых operational columns. Каждая status transition одновременно имеет append-only event.
+
+`shadow_parity_events` остаётся полностью append-only. В event evidence сохраняются category, causal key, exact source refs/times и Strategy/Plan fingerprints. Storage не содержит trading predicates/threshold logic.
+
+### 20.7 Frozen identity
+
+Каждый run фиксирует:
+
+    V1 trading symbols = exact 10-symbol Strategy scope
+    strategy_config_fingerprint
+    entry_plan_fingerprint
+    calibration_size = 4647
+    calibration_sha256 = b977bd42d76800a3eac63e42f67da7b75ecbf14e93c88761ff674cb084a32571
+    baseline_source_commit
+    universal_source_commit / loaded commit
+
+Calibration SHA является provenance, не generic constant.
+
+### 20.8 Deployment barrier
+
+U5 сначала проходит tests/Git checkpoint/push. Deploy разрешён только published commit. Systemd unit устанавливается отдельно и независимо, без изменения legacy service. Initial smoke обязан доказать service ACTIVE, legacy unaffected, same fact fan-out, parity run persistence, zero shadow writes to `runtime.trade_commands`, zero exchange mutation path и restart -> explicit WARMUP behavior. Реальный candidate не требуется для smoke.
+
+## 21. Runtime migration stages
 
     U0 implementation contract + forensic
     U1 immutable contracts/fingerprint/DSL/catalog
@@ -438,7 +518,7 @@ Approved card is read-only. Editing means create new version. Saving new version
 
 No live cutover stage exists in this task.
 
-## 21. Cutover barrier
+## 22. Cutover barrier
 
 Even after green checks:
 
@@ -448,11 +528,11 @@ Even after green checks:
 
 Future cutover requires separate owner task and normal MICRO_LIVE/LIVE process.
 
-## 22. Rollback
+## 23. Rollback
 
 Initial deployment is shadow-only. Rollback stops/disables only universal shadow service if required. Legacy Entry V1 is not replaced. New strategy_entry facts remain audit history. Source rollback uses exact Git checkpoint. No exchange reconciliation is required solely because universal shadow runtime has no mutation path.
 
-## 23. Acceptance
+## 24. Acceptance
 
     ARCHITECTURE_TESTS = PASS
     V1_COMPATIBILITY_CARD = COMPLETE

@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.2
+**Версия документа:** 5.3
 **Дата:** 2026-09-08
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -188,7 +188,11 @@ V1 compatibility card содержит historical V1 значения тольк
 
 Deterministic U4 parity проверяет candidate/time, direction, geometry, touch, cooldown anchor/state, 5m/15m/60m causal readiness, shock/reset, rolling swing, pressure/reversal, OI result, StrategySignal presence/absence, favorable/adverse post-signal resolution, future-entry embargo и causal refs. Legacy current shadow scanner не используется как parity baseline.
 
-Trading effect U1-U4: `NONE`. На U1-U4 нет systemd consumer cutover, parallel shadow runtime, exchange mutation, MICRO_LIVE/LIVE, mainnet re-arm, allocator или strategy selector. Следующий отдельный stage может начинаться только после U4 Git checkpoint и отдельной задачи по дальнейшему shadow/equivalence доказательству.
+U5 source добавляет отдельный parallel parity-shadow runtime `cripta-universal-entry-shadow.service`. Один public-only technical adapter нормализует causal REST/WS facts один раз и передаёт тот же `MarketFactEnvelope` passive canonical `EntrySymbolEngine` reference и Universal Entry + frozen V1 EntryPlan. Текущий изменённый `entry_shadow_scanner.py` reference не является. Online evidence хранится только в `strategy_entry.shadow_parity_runs/events`; pure `ExecutionRequest` downstream consumer не имеет.
+
+U5 startup/restart fail-honest: каждый новый service instance начинает `WARMUP`; неизвестное pre-start Entry lifecycle influence истекает по horizon, вычисленному из EntryPlan. Для frozen V1 это 420 минут. Незавершённый run при restart не продолжается через неизвестный socket gap и финализируется `NOT_COMPARABLE`; новый run получает новую identity. Exact local fact journal служит evidence/diagnostics, а не способом скрыто восстановить continuity по времени.
+
+Trading effect U1-U5: `NONE`. U5 не подключён к `runtime.trade_commands`, Execution mutation или monitoring legacy truth и не является consumer cutover. Наличие source unit не доказывает installed/loaded runtime; `INSTALLED_COMMIT/LOADED_COMMIT` и service state всегда проверяются отдельно после deploy опубликованного checkpoint. MICRO_LIVE/LIVE, mainnet re-arm, allocator и strategy selector отсутствуют.
 
 ## 8. Exit
 

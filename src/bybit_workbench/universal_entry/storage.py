@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Protocol
 
 from .contracts import (
@@ -18,11 +18,14 @@ from .contracts import (
     StrategyCard,
 )
 from .fingerprint import canonical_json, fingerprint
+from .shadow_runtime import ShadowParityObservation, ShadowRunIdentity
 
 
 class CursorLike(Protocol):
     @property
     def rowcount(self) -> int: ...
+
+    def fetchone(self) -> Sequence[object] | None: ...
 
 
 class PostgresConnectionLike(Protocol):
@@ -541,4 +544,225 @@ class StrategyEntryStore:
                     "sensor_id": sensor_id,
                 }
             )[:32]
+        )
+
+
+class ShadowParityStore:
+    """PostgreSQL audit store for U5 online parity only; it has no trading tables."""
+
+    def __init__(self, connection: PostgresConnectionLike) -> None:
+        self._connection = connection
+
+    def ensure_policy_identity(self, card: StrategyCard, plan: EntryPlan) -> None:
+        self._connection.execute(
+            """INSERT INTO strategy_entry.strategy_cards(
+                   strategy_id,strategy_version,strategy_config_fingerprint,
+                   name,description,card_json,approved_at,approved_source
+               ) VALUES(%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+               ON CONFLICT DO NOTHING""",
+            (
+                card.strategy_id,
+                card.strategy_version,
+                card.strategy_config_fingerprint,
+                card.name,
+                card.description,
+                _json(card),
+                card.approved_at,
+                card.approved_source,
+            ),
+        )
+        self._connection.execute(
+            """INSERT INTO strategy_entry.entry_plans(
+                   entry_plan_fingerprint,strategy_id,strategy_version,
+                   strategy_config_fingerprint,entry_plan_version,plan_json
+               ) VALUES(%s,%s,%s,%s,%s,%s::jsonb)
+               ON CONFLICT DO NOTHING""",
+            (
+                plan.entry_plan_fingerprint,
+                plan.strategy_id,
+                plan.strategy_version,
+                plan.strategy_config_fingerprint,
+                plan.entry_plan_version,
+                _entry_plan_json(plan),
+            ),
+        )
+
+    def finalize_unfinished_run_for_restart(
+        self,
+        *,
+        strategy_config_fingerprint: str,
+        entry_plan_fingerprint: str,
+        fact_source_id: str,
+        occurred_at: datetime,
+    ) -> str | None:
+        row = self._connection.execute(
+            """SELECT parity_run_id,strategy_id,strategy_version,
+                      strategy_config_fingerprint,entry_plan_fingerprint,
+                      calibration_sha256,calibration_size,baseline_source_commit,
+                      universal_source_commit,fact_source_id,service_instance_id,started_at
+               FROM strategy_entry.shadow_parity_runs
+               WHERE status IN ('WARMUP','PARITY_COMPARABLE')
+                 AND strategy_config_fingerprint=%s
+                 AND entry_plan_fingerprint=%s
+                 AND fact_source_id=%s
+               ORDER BY started_at DESC
+               LIMIT 1""",
+            (strategy_config_fingerprint, entry_plan_fingerprint, fact_source_id),
+        ).fetchone()
+        if row is None:
+            return None
+        identity = ShadowRunIdentity(
+            parity_run_id=str(row[0]),
+            strategy_id=str(row[1]),
+            strategy_version=str(row[2]),
+            strategy_config_fingerprint=str(row[3]),
+            entry_plan_fingerprint=str(row[4]),
+            calibration_sha256=str(row[5]),
+            calibration_size=int(str(row[6])),
+            baseline_source_commit=str(row[7]),
+            universal_source_commit=str(row[8]),
+            fact_source_id=str(row[9]),
+            service_instance_id=str(row[10]),
+            started_at=row[11]
+            if isinstance(row[11], datetime)
+            else datetime.fromisoformat(str(row[11])),
+        )
+        self.transition_run(
+            identity,
+            status="NOT_COMPARABLE",
+            occurred_at=occurred_at,
+            summary={
+                "trading_effect": "NONE",
+                "state": "NOT_COMPARABLE",
+                "reason": (
+                    "service restart detected unfinished parity run; "
+                    "continuity gap is not replay-safe"
+                ),
+            },
+        )
+        return identity.parity_run_id
+
+    def start_run(self, identity: ShadowRunIdentity, *, summary: dict[str, object]) -> None:
+        with self._connection.transaction():
+            self._connection.execute(
+                """INSERT INTO strategy_entry.shadow_parity_runs(
+                   parity_run_id,strategy_id,strategy_version,
+                   strategy_config_fingerprint,entry_plan_fingerprint,
+                   calibration_sha256,calibration_size,baseline_source_commit,
+                   universal_source_commit,fact_source_id,service_instance_id,
+                   status,started_at,finished_at,summary
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'WARMUP',%s,NULL,%s::jsonb)""",
+                (
+                    identity.parity_run_id,
+                    identity.strategy_id,
+                    identity.strategy_version,
+                    identity.strategy_config_fingerprint,
+                    identity.entry_plan_fingerprint,
+                    identity.calibration_sha256,
+                    identity.calibration_size,
+                    identity.baseline_source_commit,
+                    identity.universal_source_commit,
+                    identity.fact_source_id,
+                    identity.service_instance_id,
+                    identity.started_at,
+                    canonical_json(summary),
+                ),
+            )
+            self._insert_status_event(identity, "WARMUP", identity.started_at, summary)
+
+    def update_summary(self, identity: ShadowRunIdentity, summary: dict[str, object]) -> None:
+        self._connection.execute(
+            """UPDATE strategy_entry.shadow_parity_runs
+               SET summary=%s::jsonb
+               WHERE parity_run_id=%s""",
+            (canonical_json(summary), identity.parity_run_id),
+        )
+
+    def transition_run(
+        self,
+        identity: ShadowRunIdentity,
+        *,
+        status: str,
+        occurred_at: datetime,
+        summary: dict[str, object],
+    ) -> None:
+        finished = occurred_at if status in {"PASS", "FAIL", "NOT_COMPARABLE"} else None
+        with self._connection.transaction():
+            self._connection.execute(
+                """UPDATE strategy_entry.shadow_parity_runs
+                   SET status=%s,finished_at=%s,summary=%s::jsonb
+                   WHERE parity_run_id=%s""",
+                (status, finished, canonical_json(summary), identity.parity_run_id),
+            )
+            self._insert_status_event(identity, status, occurred_at, summary)
+
+    def record_observation(self, observation: ShadowParityObservation) -> None:
+        event_id = (
+            "spe-"
+            + fingerprint(
+                {
+                    "run": observation.parity_run_id,
+                    "causal_key": observation.causal_key,
+                    "category": observation.category,
+                }
+            )[:32]
+        )
+        self._connection.execute(
+            """INSERT INTO strategy_entry.shadow_parity_events(
+                   parity_event_id,parity_run_id,causal_key,event_at,category,
+                   observed_at,source_refs,strategy_config_fingerprint,
+                   entry_plan_fingerprint,legacy_payload,universal_payload,
+                   equivalent,difference
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb,%s::jsonb,%s,%s::jsonb)
+               ON CONFLICT(parity_run_id,causal_key) DO NOTHING""",
+            (
+                event_id,
+                observation.parity_run_id,
+                observation.causal_key,
+                observation.observed_at,
+                observation.category,
+                observation.observed_at,
+                canonical_json(observation.source_refs),
+                observation.strategy_config_fingerprint,
+                observation.entry_plan_fingerprint,
+                observation.legacy_payload.payload_json,
+                observation.universal_payload.payload_json,
+                observation.equivalent,
+                observation.difference.payload_json,
+            ),
+        )
+
+    def _insert_status_event(
+        self,
+        identity: ShadowRunIdentity,
+        status: str,
+        occurred_at: datetime,
+        summary: dict[str, object],
+    ) -> None:
+        causal_key = f"STATUS:{status}:{occurred_at.astimezone(UTC).isoformat()}"
+        event_id = (
+            "spe-" + fingerprint({"run": identity.parity_run_id, "causal_key": causal_key})[:32]
+        )
+        payload = canonical_json({"status": status, "summary": summary})
+        self._connection.execute(
+            """INSERT INTO strategy_entry.shadow_parity_events(
+                   parity_event_id,parity_run_id,causal_key,event_at,category,
+                   observed_at,source_refs,strategy_config_fingerprint,
+                   entry_plan_fingerprint,legacy_payload,universal_payload,
+                   equivalent,difference
+               ) VALUES(
+                     %s,%s,%s,%s,'STATUS_TRANSITION',%s,'[]'::jsonb,%s,%s,
+                     %s::jsonb,%s::jsonb,true,'{}'::jsonb
+               )""",
+            (
+                event_id,
+                identity.parity_run_id,
+                causal_key,
+                occurred_at,
+                occurred_at,
+                identity.strategy_config_fingerprint,
+                identity.entry_plan_fingerprint,
+                payload,
+                payload,
+            ),
         )

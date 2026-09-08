@@ -1,0 +1,26 @@
+[Unit]
+Description=Cripta Universal Entry U5 parity shadow
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/source_checkout
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/source_checkout/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
+EnvironmentFile=/etc/cripta/universal_entry_shadow.env
+ExecStart=/usr/bin/python3 /srv/cripta/monitoring/universal_entry_shadow.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027
+ReadOnlyPaths=/srv/cripta/source_checkout /srv/cripta/monitoring
+ReadWritePaths=/var/lib/cripta/universal_entry_shadow
+
+[Install]
+WantedBy=multi-user.target
