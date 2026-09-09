@@ -36,6 +36,18 @@ from bybit_workbench.universal_entry.shadow_runtime import (
     derive_unknown_prestart_horizon_seconds,
 )
 from bybit_workbench.universal_entry.storage import ShadowParityStore
+from bybit_workbench.universal_entry.transport_continuity import (
+    ContinuityAction,
+    ContinuityNotProvable,
+    ExactFactDeduper,
+    OiSampleCursor,
+    ReplayTrade,
+    TradeCursor,
+    assess_oi30s_continuity,
+    build_exact_trade_replay,
+    expected_boundaries,
+    resolve_continuity_action,
+)
 from bybit_workbench.universal_entry.v1_compat import load_v1_compatibility_bundle
 
 PROJECT_ROOT = Path(os.environ.get("CRIPTA_U5_SOURCE_ROOT", "/srv/cripta/source_checkout"))
@@ -236,7 +248,7 @@ def _ticker_oi_fact(
     message: Mapping[str, object],
     received_at: datetime,
     last_samples: dict[str, datetime],
-) -> MarketFactEnvelope | None:
+) -> tuple[MarketFactEnvelope, OiSampleCursor] | None:
     raw = message.get("data")
     if isinstance(raw, list):
         if not raw or not isinstance(raw[0], Mapping):
@@ -261,7 +273,7 @@ def _ticker_oi_fact(
         return None
     last_samples[symbol] = observed_at
     identity = f"{symbol}:{observed_ms}:{oi}"
-    return MarketFactEnvelope(
+    fact = MarketFactEnvelope(
         fact_id="oi-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32],
         event_kind="OPEN_INTEREST",
         symbol=symbol,
@@ -271,6 +283,12 @@ def _ticker_oi_fact(
         source_refs=(f"bybit:ticker-oi:{identity}",),
         attributes=FrozenPolicy.from_mapping({"open_interest": str(oi)}),
     )
+    raw_cs = message.get("cs")
+    try:
+        ticker_cs = None if raw_cs in (None, "") else int(str(raw_cs))
+    except ValueError as exc:
+        raise ContinuityNotProvable("ticker OI cross-sequence is invalid") from exc
+    return fact, OiSampleCursor(symbol, observed_at, ticker_cs)
 
 
 def _topics(symbols: tuple[str, ...]) -> tuple[str, ...]:
@@ -281,6 +299,396 @@ def _topics(symbols: tuple[str, ...]) -> tuple[str, ...]:
         topics.append(f"tickers.{symbol}")
         topics.append(f"publicTrade.{symbol}")
     return tuple(topics)
+
+
+def _fetch_server_time() -> datetime:
+    payload = _get_json("/v5/market/time", {})
+    try:
+        return datetime.fromtimestamp(int(str(payload["time"])) / 1000, UTC)
+    except (KeyError, ValueError) as exc:
+        raise ContinuityNotProvable(
+            "public server time is unavailable for continuity proof"
+        ) from exc
+
+
+def _trade_cursor(raw: Mapping[str, object]) -> TradeCursor:
+    try:
+        return TradeCursor(
+            symbol=str(raw["s"]).upper(),
+            exec_id=str(raw["i"]),
+            seq=int(str(raw["seq"])),
+            traded_at=datetime.fromtimestamp(int(str(raw["T"])) / 1000, UTC),
+        )
+    except (KeyError, ValueError) as exc:
+        raise ContinuityNotProvable("publicTrade row lacks exact execId/seq/time cursor") from exc
+
+
+def _replay_trade_fact(row: ReplayTrade, received_at: datetime) -> MarketFactEnvelope:
+    return MarketFactEnvelope(
+        fact_id="trade-" + row.exec_id,
+        event_kind="PUBLIC_TRADE",
+        symbol=row.symbol,
+        observed_at=row.traded_at,
+        event_at=row.traded_at,
+        received_at=received_at,
+        source_refs=(f"bybit:publicTrade:{row.symbol}:{row.exec_id}",),
+        attributes=FrozenPolicy.from_mapping(
+            {"price": row.price, "size": row.size, "taker_side": row.side}
+        ),
+    )
+
+
+def _candle_fact(candle: Candle, *, closed: bool, received_at: datetime) -> MarketFactEnvelope:
+    boundary = candle.closed_at if closed else candle.opened_at
+    kind = "CANDLE_CLOSED" if closed else "BAR_OPEN"
+    topic = f"kline.{candle.timeframe}.{candle.symbol}"
+    identity = fingerprint(
+        {
+            "topic": topic,
+            "symbol": candle.symbol,
+            "timeframe": candle.timeframe,
+            "boundary": boundary,
+            "closed": closed,
+        }
+    )[:32]
+    if closed:
+        attributes: dict[str, object] = {
+            "timeframe": candle.timeframe,
+            "opened_at": candle.opened_at.isoformat(),
+            "closed_at": candle.closed_at.isoformat(),
+            "open": str(candle.open),
+            "high": str(candle.high),
+            "low": str(candle.low),
+            "close": str(candle.close),
+            "volume": str(candle.volume),
+        }
+        observed_at = candle.closed_at
+    else:
+        attributes = {
+            "opened_at": candle.opened_at.isoformat(),
+            "open_price": str(candle.open),
+        }
+        # BAR_OPEN source semantics use receipt time as observed_at; event_at stays exact boundary.
+        observed_at = received_at
+    return MarketFactEnvelope(
+        fact_id=f"{kind.lower()}-{identity}",
+        event_kind=kind,
+        symbol=candle.symbol,
+        observed_at=observed_at,
+        event_at=boundary,
+        received_at=received_at,
+        source_refs=(f"bybit:{topic}:{candle.symbol}:{candle.timeframe}:{boundary.isoformat()}",),
+        attributes=FrozenPolicy.from_mapping(attributes),
+    )
+
+
+def _connect_and_subscribe(
+    symbols: tuple[str, ...],
+) -> tuple[Any, datetime, datetime, tuple[dict[str, Any], ...]]:
+    sock = websocket.create_connection(PUBLIC_WS, timeout=10.0, enable_multithread=False)
+    with suppress(AttributeError):
+        sock.settimeout(1.0)
+    pending: set[str] = set()
+    topics = _topics(symbols)
+    for chunk_index, start in enumerate(range(0, len(topics), 40), start=1):
+        req_id = f"u5-shadow-{chunk_index}"
+        pending.add(req_id)
+        sock.send(
+            json.dumps(
+                {
+                    "op": "subscribe",
+                    "req_id": req_id,
+                    "args": list(topics[start : start + 40]),
+                },
+                separators=(",", ":"),
+            )
+        )
+    buffered: list[dict[str, Any]] = []
+    deadline = time.monotonic() + 10.0
+    while pending:
+        if time.monotonic() >= deadline:
+            sock.close()
+            raise ConnectionError("public subscription acknowledgement timeout")
+        try:
+            raw_message = sock.recv()
+        except websocket.WebSocketTimeoutException:
+            continue
+        if raw_message in (None, ""):
+            sock.close()
+            raise websocket.WebSocketConnectionClosedException("public WebSocket closed")
+        parsed = json.loads(raw_message)
+        if not isinstance(parsed, dict):
+            continue
+        message = cast(dict[str, Any], parsed)
+        if message.get("op") == "subscribe":
+            if message.get("success") is False or message.get("retCode") not in (None, 0):
+                sock.close()
+                raise ConnectionError("U5 public subscription rejected")
+            req_id = str(message.get("req_id") or "")
+            pending.discard(req_id)
+        elif message.get("op") == "pong" or message.get("ret_msg") == "pong":
+            continue
+        else:
+            buffered.append(message)
+    ready_local_at = datetime.now(UTC)
+    ready_server_at = _fetch_server_time()
+    return sock, ready_local_at, ready_server_at, tuple(buffered)
+
+
+def _reconnect_until_oi_safe(
+    symbols: tuple[str, ...],
+    oi_cursors: Mapping[str, OiSampleCursor],
+    *,
+    connect_fn: Any | None = None,
+    server_time_fn: Any | None = None,
+    sleep_fn: Any | None = None,
+) -> tuple[Any, datetime, datetime, tuple[dict[str, Any], ...]]:
+    connect = _connect_and_subscribe if connect_fn is None else connect_fn
+    server_time = _fetch_server_time if server_time_fn is None else server_time_fn
+    sleeper = time.sleep if sleep_fn is None else sleep_fn
+    transport_errors = (
+        websocket.WebSocketConnectionClosedException,
+        ConnectionError,
+        OSError,
+        ssl.SSLError,
+    )
+    while True:
+        candidate_sock: Any | None = None
+        try:
+            candidate_sock, ready_local_at, ready_server_at, buffered = connect(symbols)
+            verdict = assess_oi30s_continuity(
+                oi_cursors,
+                required_symbols=symbols,
+                subscription_ready_server_at=ready_server_at,
+                sample_seconds=OI_SAMPLE_SECONDS,
+            )
+            if not verdict.proven:
+                with suppress(Exception):
+                    candidate_sock.close()
+                raise ContinuityNotProvable(verdict.reason)
+            return candidate_sock, ready_local_at, ready_server_at, buffered
+        except ContinuityNotProvable:
+            raise
+        except transport_errors as reconnect_exc:
+            with suppress(Exception):
+                if candidate_sock is not None:
+                    candidate_sock.close()
+            try:
+                server_now = server_time()
+            except Exception as time_exc:
+                raise ContinuityNotProvable(
+                    "cannot prove OI30S deadline while reconnecting: "
+                    f"{type(time_exc).__name__}: {time_exc}"
+                ) from time_exc
+            verdict = assess_oi30s_continuity(
+                oi_cursors,
+                required_symbols=symbols,
+                subscription_ready_server_at=server_now,
+                sample_seconds=OI_SAMPLE_SECONDS,
+            )
+            if not verdict.proven:
+                raise ContinuityNotProvable(
+                    verdict.reason
+                    + "; last reconnect error="
+                    + f"{type(reconnect_exc).__name__}: {reconnect_exc}"
+                ) from reconnect_exc
+            sleeper(0.25)
+
+
+def _transport_cursor_payload(
+    *,
+    trade_cursors: Mapping[str, TradeCursor],
+    oi_cursors: Mapping[str, OiSampleCursor],
+    closed_boundaries: Mapping[tuple[str, str], datetime],
+    bar_open_boundaries: Mapping[str, datetime],
+) -> dict[str, object]:
+    return {
+        "trade": {
+            symbol: {
+                "exec_id": cursor.exec_id,
+                "seq": cursor.seq,
+                "traded_at": cursor.traded_at.astimezone(UTC).isoformat(),
+            }
+            for symbol, cursor in sorted(trade_cursors.items())
+        },
+        "oi30s": {
+            symbol: {
+                "observed_at": cursor.observed_at.astimezone(UTC).isoformat(),
+                "ticker_cs": cursor.ticker_cross_sequence,
+            }
+            for symbol, cursor in sorted(oi_cursors.items())
+        },
+        "closed": {
+            f"{symbol}:{timeframe}": boundary.astimezone(UTC).isoformat()
+            for (symbol, timeframe), boundary in sorted(closed_boundaries.items())
+        },
+        "bar_open": {
+            symbol: boundary.astimezone(UTC).isoformat()
+            for symbol, boundary in sorted(bar_open_boundaries.items())
+        },
+    }
+
+
+def _record_transport_event(
+    connection: Any,
+    identity: ShadowRunIdentity,
+    *,
+    category: str,
+    occurred_at: datetime,
+    payload: Mapping[str, object],
+) -> None:
+    rendered = dict(payload)
+    causal_key = (
+        f"{category}:{occurred_at.astimezone(UTC).isoformat()}:" + fingerprint(rendered)[:16]
+    )
+    event_id = "spe-" + fingerprint({"run": identity.parity_run_id, "causal_key": causal_key})[:32]
+    encoded = json.dumps(
+        rendered, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.shadow_parity_events(
+               parity_event_id,parity_run_id,causal_key,event_at,category,
+               observed_at,source_refs,strategy_config_fingerprint,
+               entry_plan_fingerprint,legacy_payload,universal_payload,
+               equivalent,difference
+           ) VALUES(%s,%s,%s,%s,%s,%s,'[]'::jsonb,%s,%s,%s::jsonb,%s::jsonb,true,'{}'::jsonb)
+           ON CONFLICT(parity_run_id,causal_key) DO NOTHING""",
+        (
+            event_id,
+            identity.parity_run_id,
+            causal_key,
+            occurred_at,
+            category,
+            occurred_at,
+            identity.strategy_config_fingerprint,
+            identity.entry_plan_fingerprint,
+            encoded,
+            encoded,
+        ),
+    )
+
+
+def _fetch_gap_candles(
+    symbol: str,
+    timeframe: str,
+    ready_server_at: datetime,
+) -> tuple[Candle, ...]:
+    payload = _get_json(
+        "/v5/market/kline",
+        {
+            "category": "linear",
+            "symbol": symbol,
+            "interval": timeframe,
+            "limit": 10,
+        },
+    )
+    rows = map_rest_klines(
+        cast(list[list[Any]], _result_list(payload)),
+        symbol=symbol,
+        interval=timeframe,
+        observed_at=ready_server_at,
+    )
+    return tuple(rows)
+
+
+def _recover_public_gap(
+    *,
+    symbols: tuple[str, ...],
+    ready_local_at: datetime,
+    ready_server_at: datetime,
+    trade_cursors: Mapping[str, TradeCursor],
+    oi_cursors: Mapping[str, OiSampleCursor],
+    closed_boundaries: Mapping[tuple[str, str], datetime],
+    bar_open_boundaries: Mapping[str, datetime],
+) -> tuple[tuple[tuple[MarketFactEnvelope, TradeCursor | None], ...], dict[str, int]]:
+    oi_verdict = assess_oi30s_continuity(
+        oi_cursors,
+        required_symbols=symbols,
+        subscription_ready_server_at=ready_server_at,
+        sample_seconds=OI_SAMPLE_SECONDS,
+    )
+    if resolve_continuity_action(oi_verdict) is ContinuityAction.NOT_COMPARABLE:
+        raise ContinuityNotProvable(oi_verdict.reason)
+
+    replay: list[tuple[MarketFactEnvelope, TradeCursor | None]] = []
+    counts = {"PUBLIC_TRADE": 0, "CANDLE_CLOSED": 0, "BAR_OPEN": 0, "OPEN_INTEREST": 0}
+    for symbol in symbols:
+        anchor = trade_cursors.get(symbol)
+        if anchor is None:
+            raise ContinuityNotProvable(f"exact PUBLIC_TRADE cursor missing for {symbol}")
+        payload = _get_json(
+            "/v5/market/recent-trade",
+            {"category": "linear", "symbol": symbol, "limit": 1000},
+        )
+        raw_rows = [row for row in _result_list(payload) if isinstance(row, Mapping)]
+        rows = build_exact_trade_replay(
+            cast(list[Mapping[str, object]], raw_rows),
+            anchor=anchor,
+            cutoff_at=ready_server_at,
+        )
+        for row in rows:
+            cursor = TradeCursor(row.symbol, row.exec_id, row.seq, row.traded_at)
+            replay.append((_replay_trade_fact(row, ready_local_at), cursor))
+            counts["PUBLIC_TRADE"] += 1
+
+        cached: dict[str, tuple[Candle, ...]] = {}
+        for timeframe in ("5", "15", "60"):
+            last_closed = closed_boundaries.get((symbol, timeframe))
+            if last_closed is None:
+                raise ContinuityNotProvable(
+                    f"exact CANDLE_CLOSED cursor missing for {symbol}:{timeframe}"
+                )
+            expected = expected_boundaries(
+                last_closed,
+                ready_server_at,
+                timeframe_minutes=int(timeframe),
+            )
+            candles = _fetch_gap_candles(symbol, timeframe, ready_server_at)
+            cached[timeframe] = candles
+            by_closed = {row.closed_at: row for row in candles if row.is_closed}
+            missing = [boundary for boundary in expected if boundary not in by_closed]
+            if missing:
+                raise ContinuityNotProvable(
+                    f"exact closed-candle boundary missing for {symbol}:{timeframe}:"
+                    + ",".join(item.isoformat() for item in missing)
+                )
+            for boundary in expected:
+                replay.append(
+                    (
+                        _candle_fact(by_closed[boundary], closed=True, received_at=ready_local_at),
+                        None,
+                    )
+                )
+                counts["CANDLE_CLOSED"] += 1
+
+        last_open = bar_open_boundaries.get(symbol)
+        if last_open is None:
+            raise ContinuityNotProvable(f"exact BAR_OPEN cursor missing for {symbol}")
+        expected_open = expected_boundaries(last_open, ready_server_at, timeframe_minutes=5)
+        by_open = {row.opened_at: row for row in cached["5"]}
+        missing_open = [boundary for boundary in expected_open if boundary not in by_open]
+        if missing_open:
+            raise ContinuityNotProvable(
+                f"exact BAR_OPEN boundary missing for {symbol}:"
+                + ",".join(item.isoformat() for item in missing_open)
+            )
+        for boundary in expected_open:
+            replay.append(
+                (_candle_fact(by_open[boundary], closed=False, received_at=ready_local_at), None)
+            )
+            counts["BAR_OPEN"] += 1
+
+    priority = {"CANDLE_CLOSED": 0, "BAR_OPEN": 1, "PUBLIC_TRADE": 2, "OPEN_INTEREST": 3}
+    replay.sort(
+        key=lambda item: (
+            item[0].event_at,
+            priority[item[0].event_kind],
+            -int(str(item[0].attributes.to_dict().get("timeframe") or 0)),
+            -1 if item[1] is None else item[1].seq,
+            item[0].fact_id,
+        )
+    )
+    return tuple(replay), counts
 
 
 def _status_payload(
@@ -389,11 +797,14 @@ def main() -> None:
         "comparable_events": 0,
         "matched_events": 0,
         "mismatches_by_category": {},
+        "transport_reconnects": 0,
     }
     store.start_run(identity, summary=initial_summary)
 
     runners: dict[str, V1DeterministicParityRunner] = {}
+    sock: Any | None = None
     try:
+        closed_boundaries: dict[tuple[str, str], datetime] = {}
         for symbol in symbols:
             if stopping:
                 break
@@ -403,6 +814,10 @@ def main() -> None:
             runner_history: dict[str, tuple[object, ...]] = {
                 timeframe: tuple(rows) for timeframe, rows in history.items()
             }
+            for timeframe, rows in history.items():
+                if not rows:
+                    raise RuntimeError(f"causal history seed missing {symbol}:{timeframe}")
+                closed_boundaries[(symbol, timeframe)] = max(row.closed_at for row in rows)
             runners[symbol] = V1DeterministicParityRunner(
                 bundle,
                 symbol=symbol,
@@ -415,173 +830,383 @@ def main() -> None:
         gate.mark_seed_complete()
         comparator = OnlineParityComparator(identity, runners)
         state = gate.state_at(datetime.now(UTC))
+        last_state = state
         facts_received = 0
         flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
         last_oi_sample: dict[str, datetime] = {}
-        _atomic_json(
-            STATUS_PATH,
-            _status_payload(
+        trade_cursors: dict[str, TradeCursor] = {}
+        oi_cursors: dict[str, OiSampleCursor] = {}
+        bar_open_boundaries: dict[str, datetime] = {}
+        deduper = ExactFactDeduper()
+        transport_reconnects = 0
+
+        def write_status(
+            *, transport_state: str = "CONNECTED", extra: Mapping[str, object] | None = None
+        ) -> None:
+            payload = _status_payload(
                 identity=identity,
-                state=state,
+                state=gate.state_at(datetime.now(UTC)),
                 gate=gate,
                 comparator=comparator,
                 facts_received=facts_received,
                 seeded_symbols=len(runners),
                 total_symbols=len(symbols),
-            ),
+            ) | {
+                "transport_state": transport_state,
+                "transport_reconnects": transport_reconnects,
+                "service_instance_id": identity.service_instance_id,
+            }
+            if extra:
+                payload.update(dict(extra))
+            _atomic_json(STATUS_PATH, payload)
+
+        def process_fact(
+            fact: MarketFactEnvelope,
+            *,
+            trade_cursor: TradeCursor | None = None,
+            oi_cursor: OiSampleCursor | None = None,
+        ) -> bool:
+            nonlocal facts_received, last_state
+            if not deduper.accept(fact.fact_id):
+                return True
+            if fact.event_kind == "PUBLIC_TRADE":
+                if trade_cursor is None:
+                    raise ContinuityNotProvable(
+                        "PUBLIC_TRADE accepted without exact transport cursor"
+                    )
+                previous_trade = trade_cursors.get(fact.symbol)
+                if previous_trade is not None and trade_cursor.seq < previous_trade.seq:
+                    raise ContinuityNotProvable(
+                        f"PUBLIC_TRADE cross-sequence regressed for {fact.symbol}"
+                    )
+                trade_cursors[fact.symbol] = trade_cursor
+            elif fact.event_kind == "OPEN_INTEREST":
+                if oi_cursor is None:
+                    raise ContinuityNotProvable("OPEN_INTEREST accepted without exact OI30S cursor")
+                oi_cursors[fact.symbol] = oi_cursor
+            elif fact.event_kind == "CANDLE_CLOSED":
+                attrs = fact.attributes.to_dict()
+                timeframe = str(attrs["timeframe"])
+                boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+                previous_closed = closed_boundaries.get((fact.symbol, timeframe))
+                if previous_closed is not None and boundary < previous_closed:
+                    raise ContinuityNotProvable(
+                        f"CANDLE_CLOSED boundary regressed for {fact.symbol}:{timeframe}"
+                    )
+                closed_boundaries[(fact.symbol, timeframe)] = boundary
+            elif fact.event_kind == "BAR_OPEN":
+                attrs = fact.attributes.to_dict()
+                boundary = datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC)
+                previous_bar = bar_open_boundaries.get(fact.symbol)
+                if previous_bar is not None and boundary < previous_bar:
+                    raise ContinuityNotProvable(f"BAR_OPEN boundary regressed for {fact.symbol}")
+                bar_open_boundaries[fact.symbol] = boundary
+
+            journal.append(fact)
+            facts_received += 1
+            if fact.event_kind == "PUBLIC_TRADE":
+                flow_minutes[fact.symbol].add(
+                    fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+                )
+            if all(len(minutes) >= 5 for minutes in flow_minutes.values()):
+                gate.mark_live_sensor_complete()
+            current_state = gate.state_at(fact.observed_at)
+            if current_state is ShadowComparability.PARITY_COMPARABLE:
+                observation = comparator.process(fact)
+                store.record_observation(observation)
+                store.update_summary(
+                    identity,
+                    {
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+            else:
+                runners[fact.symbol].step(fact)
+            if current_state is not last_state:
+                store.transition_run(
+                    identity,
+                    status=current_state.value,
+                    occurred_at=fact.observed_at,
+                    summary={
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "reason": gate.reason,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+                last_state = current_state
+            if comparator.first_mismatch is not None:
+                final_summary = {
+                    "trading_effect": "NONE",
+                    "state": "FAIL",
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **comparator.summary(),
+                }
+                store.transition_run(
+                    identity,
+                    status="FAIL",
+                    occurred_at=fact.observed_at,
+                    summary=final_summary,
+                )
+                write_status(transport_state="CONNECTED", extra={"run_status": "FAIL"})
+                return False
+            return True
+
+        def message_items(
+            message: Mapping[str, object], received_at: datetime
+        ) -> tuple[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None], ...]:
+            topic = str(message.get("topic") or "")
+            result: list[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None]] = []
+            if topic.startswith("publicTrade."):
+                data = message.get("data")
+                if isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, Mapping):
+                            continue
+                        symbol = str(item.get("s") or "").upper()
+                        if symbol not in runners:
+                            continue
+                        result.append((_trade_fact(item, received_at), _trade_cursor(item), None))
+            elif topic.startswith("kline."):
+                result.extend(
+                    (fact, None, None)
+                    for fact in _kline_facts(message, received_at)
+                    if fact.symbol in runners
+                )
+            elif topic.startswith("tickers."):
+                oi_result = _ticker_oi_fact(message, received_at, last_oi_sample)
+                if oi_result is not None:
+                    fact, cursor = oi_result
+                    if fact.symbol in runners:
+                        result.append((fact, None, cursor))
+            return tuple(result)
+
+        def process_message(message: Mapping[str, object], received_at: datetime) -> bool:
+            if message.get("op") == "subscribe":
+                if message.get("success") is False or message.get("retCode") not in (None, 0):
+                    raise ConnectionError("U5 public subscription rejected")
+                return True
+            if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                return True
+            for fact, trade_cursor, oi_cursor in message_items(message, received_at):
+                if not process_fact(fact, trade_cursor=trade_cursor, oi_cursor=oi_cursor):
+                    return False
+            return True
+
+        write_status()
+        sock, _initial_ready_local, _initial_ready_server, initial_buffer = _connect_and_subscribe(
+            symbols
+        )
+        buffered_messages: list[dict[str, Any]] = list(initial_buffer)
+        next_ping = time.monotonic() + 20.0
+        next_status = time.monotonic()
+        transport_errors = (
+            websocket.WebSocketConnectionClosedException,
+            ConnectionError,
+            OSError,
+            ssl.SSLError,
         )
 
-        sock = websocket.create_connection(PUBLIC_WS, timeout=10.0, enable_multithread=False)
-        with suppress(AttributeError):
-            sock.settimeout(1.0)
-        try:
-            topics = _topics(symbols)
-            for chunk_index, start in enumerate(range(0, len(topics), 40), start=1):
-                sock.send(
-                    json.dumps(
-                        {
-                            "op": "subscribe",
-                            "req_id": f"u5-shadow-{chunk_index}",
-                            "args": list(topics[start : start + 40]),
-                        },
-                        separators=(",", ":"),
-                    )
-                )
-            next_ping = time.monotonic() + 20.0
-            next_status = time.monotonic()
-            last_state = state
-            while not stopping:
+        while not stopping:
+            try:
                 message: dict[str, Any] | None = None
                 received_at = datetime.now(UTC)
-                try:
-                    raw_message = sock.recv()
-                    received_at = datetime.now(UTC)
-                    if raw_message in (None, ""):
-                        raise ConnectionError("public WebSocket closed")
-                    parsed = json.loads(raw_message)
-                    if isinstance(parsed, dict):
-                        message = cast(dict[str, Any], parsed)
-                except websocket.WebSocketTimeoutException:
-                    pass
-                facts: tuple[MarketFactEnvelope, ...] = ()
-                if message is not None:
-                    if message.get("op") == "subscribe":
-                        if message.get("success") is False or message.get("retCode") not in (
-                            None,
-                            0,
-                        ):
-                            raise ConnectionError("U5 public subscription rejected")
-                    elif message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                if buffered_messages:
+                    message = buffered_messages.pop(0)
+                else:
+                    try:
+                        raw_message = sock.recv()
+                        received_at = datetime.now(UTC)
+                        if raw_message in (None, ""):
+                            raise websocket.WebSocketConnectionClosedException(
+                                "public WebSocket closed"
+                            )
+                        parsed = json.loads(raw_message)
+                        if isinstance(parsed, dict):
+                            message = cast(dict[str, Any], parsed)
+                    except websocket.WebSocketTimeoutException:
                         pass
-                    else:
-                        topic = str(message.get("topic") or "")
-                        if topic.startswith("publicTrade."):
-                            data = message.get("data")
-                            if isinstance(data, list):
-                                rows = [
-                                    _trade_fact(item, received_at)
-                                    for item in data
-                                    if isinstance(item, Mapping)
-                                    and str(item.get("s") or "").upper() in runners
-                                ]
-                                facts = tuple(rows)
-                        elif topic.startswith("kline."):
-                            facts = tuple(
-                                fact
-                                for fact in _kline_facts(message, received_at)
-                                if fact.symbol in runners
-                            )
-                        elif topic.startswith("tickers."):
-                            oi_fact = _ticker_oi_fact(message, received_at, last_oi_sample)
-                            if oi_fact is not None and oi_fact.symbol in runners:
-                                facts = (oi_fact,)
-                for fact in facts:
-                    journal.append(fact)
-                    facts_received += 1
-                    if fact.event_kind == "PUBLIC_TRADE":
-                        flow_minutes[fact.symbol].add(
-                            fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
-                        )
-                    if all(len(minutes) >= 5 for minutes in flow_minutes.values()):
-                        gate.mark_live_sensor_complete()
-                    current_state = gate.state_at(fact.observed_at)
-                    if current_state is ShadowComparability.PARITY_COMPARABLE:
-                        observation = comparator.process(fact)
-                        store.record_observation(observation)
-                        store.update_summary(
-                            identity,
-                            {
-                                "trading_effect": "NONE",
-                                "state": current_state.value,
-                                "facts_received": facts_received,
-                                **comparator.summary(),
-                            },
-                        )
-                    else:
-                        runners[fact.symbol].step(fact)
-                    if current_state is not last_state:
-                        store.transition_run(
-                            identity,
-                            status=current_state.value,
-                            occurred_at=fact.observed_at,
-                            summary={
-                                "trading_effect": "NONE",
-                                "state": current_state.value,
-                                "reason": gate.reason,
-                                "facts_received": facts_received,
-                                **comparator.summary(),
-                            },
-                        )
-                        last_state = current_state
-                    if comparator.first_mismatch is not None:
-                        final_summary = {
-                            "trading_effect": "NONE",
-                            "state": "FAIL",
-                            "facts_received": facts_received,
-                            **comparator.summary(),
-                        }
-                        store.transition_run(
-                            identity,
-                            status="FAIL",
-                            occurred_at=fact.observed_at,
-                            summary=final_summary,
-                        )
-                        _atomic_json(
-                            STATUS_PATH,
-                            _status_payload(
-                                identity=identity,
-                                state=current_state,
-                                gate=gate,
-                                comparator=comparator,
-                                facts_received=facts_received,
-                                seeded_symbols=len(runners),
-                                total_symbols=len(symbols),
-                            )
-                            | {"run_status": "FAIL"},
-                        )
-                        return
+                if message is not None and not process_message(message, received_at):
+                    return
                 now_monotonic = time.monotonic()
                 if now_monotonic >= next_ping:
                     sock.send('{"op":"ping"}')
                     next_ping = now_monotonic + 20.0
                 if now_monotonic >= next_status:
-                    state = gate.state_at(datetime.now(UTC))
-                    _atomic_json(
-                        STATUS_PATH,
-                        _status_payload(
-                            identity=identity,
-                            state=state,
-                            gate=gate,
-                            comparator=comparator,
-                            facts_received=facts_received,
-                            seeded_symbols=len(runners),
-                            total_symbols=len(symbols),
-                        ),
-                    )
+                    write_status()
                     next_status = now_monotonic + 2.0
-        finally:
-            with suppress(Exception):
-                sock.close()
+            except transport_errors as exc:
+                if stopping:
+                    break
+                disconnected_at = datetime.now(UTC)
+                cursor_snapshot = _transport_cursor_payload(
+                    trade_cursors=trade_cursors,
+                    oi_cursors=oi_cursors,
+                    closed_boundaries=closed_boundaries,
+                    bar_open_boundaries=bar_open_boundaries,
+                )
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_DISCONNECT",
+                    occurred_at=disconnected_at,
+                    payload={
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "state": last_state.value,
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                write_status(
+                    transport_state="PAUSED",
+                    extra={"transport_disconnect_at": disconnected_at.isoformat()},
+                )
+                with suppress(Exception):
+                    sock.close()
+
+                try:
+                    new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                        _reconnect_until_oi_safe(symbols, oi_cursors)
+                    )
+                except ContinuityNotProvable as gap_exc:
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
+
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_RECONNECT",
+                    occurred_at=ready_local_at,
+                    payload={
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "gap_seconds": max(0.0, (ready_local_at - disconnected_at).total_seconds()),
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                try:
+                    replay_items, replay_counts = _recover_public_gap(
+                        symbols=symbols,
+                        ready_local_at=ready_local_at,
+                        ready_server_at=ready_server_at,
+                        trade_cursors=trade_cursors,
+                        oi_cursors=oi_cursors,
+                        closed_boundaries=closed_boundaries,
+                        bar_open_boundaries=bar_open_boundaries,
+                    )
+                except ContinuityNotProvable as gap_exc:
+                    with suppress(Exception):
+                        new_sock.close()
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "subscription_ready_server_at": ready_server_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
+
+                for replay_fact, replay_trade_cursor in replay_items:
+                    if not process_fact(replay_fact, trade_cursor=replay_trade_cursor):
+                        with suppress(Exception):
+                            new_sock.close()
+                        return
+                transport_reconnects += 1
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_CONTINUITY",
+                    occurred_at=datetime.now(UTC),
+                    payload={
+                        "verdict": "PROVEN_COMPLETE",
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "same_parity_run_id": identity.parity_run_id,
+                        "same_service_instance_id": identity.service_instance_id,
+                        "same_started_at": identity.started_at.isoformat(),
+                        "replay_counts": replay_counts,
+                        "cursors_before": cursor_snapshot,
+                        "cursors_after": _transport_cursor_payload(
+                            trade_cursors=trade_cursors,
+                            oi_cursors=oi_cursors,
+                            closed_boundaries=closed_boundaries,
+                            bar_open_boundaries=bar_open_boundaries,
+                        ),
+                    },
+                )
+                sock = new_sock
+                buffered_messages = list(reconnect_buffer)
+                next_ping = time.monotonic() + 20.0
+                next_status = time.monotonic()
+                write_status(
+                    transport_state="CONNECTED",
+                    extra={
+                        "last_transport_continuity": "PROVEN_COMPLETE",
+                        "last_reconnect_at": ready_local_at.isoformat(),
+                    },
+                )
+                continue
 
         stopped_at = datetime.now(UTC)
         final_state = gate.state_at(stopped_at)
@@ -597,6 +1222,7 @@ def main() -> None:
                 "trading_effect": "NONE",
                 "state": final_status,
                 "facts_received": facts_received,
+                "transport_reconnects": transport_reconnects,
                 **comparator.summary(),
             },
         )
@@ -615,6 +1241,9 @@ def main() -> None:
             )
         raise
     finally:
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
         connection.close()
 
 

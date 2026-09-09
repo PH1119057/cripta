@@ -134,8 +134,7 @@ def test_lazy_universal_entry_public_engine_exports_remain_available() -> None:
 
 def test_u6_contract_is_frozen_before_dashboard_source() -> None:
     text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "**Версия:** 1.3" in text
-    assert "78e5e90753a3dffb2b61177174a94dc8ea4eea54" in text
+    assert "**Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54" in text
     assert "## 21. U6 Strategy dashboard control/read-model contract" in text
     assert "Activation = NOT SET" in text
     assert "STALE_ACTIVATION_STATE" in text

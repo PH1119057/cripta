@@ -1,12 +1,12 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.3
+**Версия:** 1.4
 **Дата:** 2026-09-08
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
 **Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
-**Основание V1.3:** owner decision 2026-09-09 — U6 Strategy dashboard control/read-model, immutable StrategyCard visibility/new-version creation, exact Plan fingerprints, narrow StrategyActivation ON/OFF with stale-write protection and no trading effect.
+**Основание V1.4:** owner decision 2026-09-09 — narrow U5 public-transport continuity repair for parity evidence only. V1 Strategy semantics, EntryPlan, comparator semantics, trading path, Execution, consumer cutover, re-arm, MICRO_LIVE and LIVE are outside scope. U6 dashboard contract remains unchanged.
 
 ## 1. Назначение
 
@@ -508,6 +508,39 @@ Calibration SHA является provenance, не generic constant.
 ### 20.8 Deployment barrier
 
 U5 сначала проходит tests/Git checkpoint/push. Deploy разрешён только published commit. Systemd unit устанавливается отдельно и независимо, без изменения legacy service. Initial smoke обязан доказать service ACTIVE, legacy unaffected, same fact fan-out, parity run persistence, zero shadow writes to `runtime.trade_commands`, zero exchange mutation path и restart -> explicit WARMUP behavior. Реальный candidate не требуется для smoke.
+
+
+### 20.9 U5 public transport continuity repair
+
+Owner-approved repair scope is technical continuity only. A transient public WebSocket disconnect is not itself a reason to reset a parity run, but reconnect alone is never proof of continuity.
+
+Required state machine:
+
+    WARMUP / PARITY_COMPARABLE
+      -> PUBLIC_TRANSPORT_PAUSED
+      -> reconnect + exact resubscribe
+      -> per-fact-kind continuity verification
+           -> PROVEN_COMPLETE: replay exact missing facts, same process/service_instance_id/parity_run_id/started_at, resume
+           -> NOT_PROVABLE: current run -> NOT_COMPARABLE; only a subsequent new process/run may restart WARMUP
+
+A recoverable reconnect MUST NOT reset the derived warmup clock. The 420-minute V1 horizon remains derived only from EntryPlan.
+
+Transport continuity is verified independently for every required fact kind:
+
+- `PUBLIC_TRADE`: keep exact trade ID and Bybit cross-sequence as transport cursor evidence. Gap replay may use public recent-trade only when the exact pre-gap trade anchor is present and the missing trade set can be enumerated by exact `execId`; otherwise continuity is `NOT_PROVABLE`. REST backfill rows use their exact execution ID/timestamp; no nearest-time reconstruction.
+- `CANDLE_CLOSED`: restore only exact missing closed 5m/15m/60m boundaries from public kline history. A missing expected boundary or conflicting OHLC is `NOT_PROVABLE`.
+- `BAR_OPEN`: repeated WS updates for one 5m bar are transport duplicates. Only one semantic `BAR_OPEN` per exact opened-at boundary is admitted. If a boundary was missed during a recoverable gap, it may be reconstructed only from the exact 5m candle boundary/open value; reconnect itself never creates another bar-open event.
+- `OPEN_INTEREST`: current frozen fact source remains `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S`. Public historical OI is not available at 30-second cadence and 5m OI is NOT semantically substitutable. Therefore OI continuity is provable only if all required ticker subscriptions are confirmed ready before the earliest `last_accepted_oi_sample_at + 30s` deadline for all 10 symbols. If this deadline is crossed, or an exact prior OI30S cursor is absent, the gap is `NOT_PROVABLE`. No OI cadence/source/fact_source_id change is permitted by this repair.
+
+Exact deduplication is by source identity only. Replayed `PUBLIC_TRADE` uses exact trade ID; candles/bar-open use exact timeframe boundary identity; OI uses its exact sampled ticker timestamp/value identity. A duplicate replay MUST NOT enter the comparator a second time.
+
+All disconnect/reconnect attempts append technical parity evidence containing at least disconnect time, reconnect/subscription-ready time, last accepted cursors/sequences, replay counts by fact kind, gap duration and verdict. These records are technical evidence, not market/trading facts, do not create StrategySignal and do not affect either engine state except through the exact replayed normalized facts.
+
+A disconnect after `PARITY_COMPARABLE` follows the identical fail-closed continuity contract. First-mismatch evidence remains immutable and unchanged by transport repair.
+
+Process restart continuation of one run remains forbidden. Systemd restart is only an emergency path after the current run has become `NOT_COMPARABLE` or the process has failed before continuity could be proven.
+
+Acceptance tests for this repair include: artificial close during WARMUP with in-process reconnect; recoverable gap preserving run identity/start time; unrecoverable gap finalizing `NOT_COMPARABLE`; exact replay dedup; disconnect after `PARITY_COMPARABLE`; first-mismatch preservation; zero `runtime.trade_commands`/`runtime.executions` identifiers; legacy Entry isolation; architecture/Ruff/mypy/full pytest gates.
 
 ## 21. U6 Strategy dashboard control/read-model contract
 
