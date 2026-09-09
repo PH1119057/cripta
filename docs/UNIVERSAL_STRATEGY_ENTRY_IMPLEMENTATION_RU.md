@@ -1,12 +1,12 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 2026-09-08
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
-**Source baseline U5:** 49670cb0631a8742b2bf8dace9ab33d6b29a107d
-**Основание V1.2:** owner decision 2026-09-08 — U5 parallel Universal Entry shadow runtime, single normalized causal fact source for both comparison engines, passive canonical V1 reference, online parity evidence and deterministic startup/restart contract.
+**Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
+**Основание V1.3:** owner decision 2026-09-09 — U6 Strategy dashboard control/read-model, immutable StrategyCard visibility/new-version creation, exact Plan fingerprints, narrow StrategyActivation ON/OFF with stale-write protection and no trading effect.
 
 ## 1. Назначение
 
@@ -48,7 +48,7 @@
 
     GitHub PH1119057/cripta:main
     == /srv/cripta/source_checkout
-    == 49670cb0631a8742b2bf8dace9ab33d6b29a107d
+    == 78e5e90753a3dffb2b61177174a94dc8ea4eea54
 
 Текущий Entry V1 находится в src/bybit_workbench/entry_bot. Production scanner service использует отдельный installed source tree и проверяется отдельно от source checkout.
 
@@ -427,6 +427,10 @@ Approved card is read-only. Editing means create new version. Saving new version
 
 ## 20. U5 parallel shadow runtime contract
 
+Historical U5 source baseline before runtime source modification:
+
+    49670cb0631a8742b2bf8dace9ab33d6b29a107d
+
 ### 20.1 Trading effect and isolation
 
 U5 создаёт отдельный technical shadow service `cripta-universal-entry-shadow.service`. Его trading effect строго `NONE`. Service не заменяет и не изменяет действующий legacy Entry service, не читает/не пишет `runtime.trade_commands`, не вызывает Execution transport, не имеет authenticated/private exchange credentials и не меняет `monitoring` legacy truth. Остановка/падение/restart U5 не должны влиять на legacy Entry.
@@ -505,7 +509,49 @@ Calibration SHA является provenance, не generic constant.
 
 U5 сначала проходит tests/Git checkpoint/push. Deploy разрешён только published commit. Systemd unit устанавливается отдельно и независимо, без изменения legacy service. Initial smoke обязан доказать service ACTIVE, legacy unaffected, same fact fan-out, parity run persistence, zero shadow writes to `runtime.trade_commands`, zero exchange mutation path и restart -> explicit WARMUP behavior. Реальный candidate не требуется для smoke.
 
-## 21. Runtime migration stages
+## 21. U6 Strategy dashboard control/read-model contract
+
+### 21.1 UI ownership boundary
+
+U6 расширяет существующий dashboard только как technical UI/read-model/control surface. Dashboard не становится владельцем Strategy policy, Entry, Execution или Exchange и не получает путь к `runtime.trade_commands`, Execution consumer, private exchange mutation, MAYAK/Dispatcher mutation, mainnet arm/re-arm, allocator или Strategy selection/ranking.
+
+UI читает persisted truth только из `strategy_entry`. Он не хранит отдельную историю Strategy и не подставляет собственные торговые defaults. Отсутствующее значение отображается как `UNKNOWN`, `NOT SET` или `DISABLED` по фактической семантике. Ноль/neutral не используется вместо отсутствующих данных.
+
+### 21.2 Strategy list and card read-model
+
+Список строится независимо для каждой exact Strategy version и показывает минимум `name`, `strategy_id`, `strategy_version`, полный `strategy_config_fingerprint`, description, direction policy, scope/symbols, exact Activation identity/state когда она существует, exact EntryPlan fingerprint и exact ExitPlan fingerprint. Никаких `primary`, `winner`, `priority`, `best strategy` или cross-Strategy ranking полей.
+
+Карточка раскрывает сохранённые policy sections: General; Entry; Touch; Lifecycle/cooldown/reset; Geometry/sensors; Capital/leverage; Protection; Exit; MAYAK usage; Dispatcher usage. Approved StrategyCard всегда read-only. Fingerprints Strategy/EntryPlan/ExitPlan визуально различаются и доступны полностью для копирования.
+
+### 21.3 Current production facts at U6 start
+
+Read-only PostgreSQL forensic на baseline U6 показывает: одна immutable V1 compatibility StrategyCard, один EntryPlan, `0` persisted StrategyActivation, `0` ExitPlan и `0` activation journal rows. Поэтому production UI обязан показать для этой card `Activation = NOT SET` и `ExitPlan = NOT SET`; `NOT SET` нельзя превращать в `OFF`. Frozen U5 parity runtime не зависит от `strategy_activations` и U6 smoke не создаёт/не переключает для него Activation.
+
+### 21.4 Create-new-version flow
+
+Текущая schema не имеет draft/approval lifecycle, и U6 его не изобретает. Owner-authenticated dashboard может создать новую immutable StrategyCard version только из полного explicit policy payload через canonical `StrategyCard.build`. Request обязан ссылаться на exact base `strategy_id/version/fingerprint`; existing row не UPDATE-ится. New `strategy_version` должна быть новой; policy payload валидируется typed contracts; canonical fingerprint вычисляется только общим Universal Entry builder.
+
+U6 version-save НЕ создаёт StrategyActivation, НЕ включает новую version и НЕ материализует EntryPlan/ExitPlan автоматически. В результате для новой version activation/plan fields остаются честно `NOT SET` до отдельного owner-approved materialization/activation control. Это сознательная граница U6, исключающая выдуманный hidden approval/activation layer.
+
+### 21.5 StrategyActivation control
+
+ON/OFF endpoint работает только для уже существующей exact `activation_id`. Создание новой Activation через U6 dashboard отсутствует. Mutation меняет только permitted operational Activation fields и проходит существующий PostgreSQL trigger/journal contract; StrategyCard/Plan fingerprints не меняются.
+
+Stale-write protection использует compare-and-set: request обязан нести exact `strategy_id/version/fingerprint`, `activation_id`, expected `enabled` и expected `updated_at`. UPDATE выполняется только если все expected values ещё совпадают. Если row уже изменён — `STALE_ACTIVATION_STATE`/HTTP 409 без overwrite. Повторный request, который просит уже текущее состояние при той же exact identity, возвращает `NO_CHANGE` и не создаёт ложный activation journal event.
+
+### 21.6 U5 isolation
+
+Все U6 write-tests выполняются только в disposable PostgreSQL или rollback-only transaction с test identity. Production smoke read-only; он не создаёт и не меняет V1 parity Activation. `cripta-universal-entry-shadow.service` не перезапускается ради U6 и его PID/state/fact counters фиксируются до/после deploy. Legacy Entry service проверяется так же.
+
+### 21.7 Dashboard runtime source boundary
+
+Dashboard backend использует canonical Universal Entry contracts/builders из отдельного installed source tree, собранного только из опубликованного U6 commit. Он не импортирует package из mutable development worktree. Dashboard deployment различает source commit и loaded dashboard/runtime source commit.
+
+### 21.8 U6 acceptance
+
+Минимальный gate: one/five/contradictory Strategy render; no winner/priority; immutable-card mutation absent; new-version creates new immutable card and stays unactivated; activation mutation changes only Activation and journals append-only; stale CAS rejected; missing values never become zero/neutral; exact three fingerprint classes rendered; no execution/mainnet path in Strategy API; U5/legacy unaffected; headless dashboard smoke; Ruff; mypy; full pytest. Trading effect remains `NONE`.
+
+## 22. Runtime migration stages
 
     U0 implementation contract + forensic
     U1 immutable contracts/fingerprint/DSL/catalog
@@ -518,7 +564,7 @@ U5 сначала проходит tests/Git checkpoint/push. Deploy разре�
 
 No live cutover stage exists in this task.
 
-## 22. Cutover barrier
+## 23. Cutover barrier
 
 Even after green checks:
 
@@ -528,11 +574,11 @@ Even after green checks:
 
 Future cutover requires separate owner task and normal MICRO_LIVE/LIVE process.
 
-## 23. Rollback
+## 24. Rollback
 
 Initial deployment is shadow-only. Rollback stops/disables only universal shadow service if required. Legacy Entry V1 is not replaced. New strategy_entry facts remain audit history. Source rollback uses exact Git checkpoint. No exchange reconciliation is required solely because universal shadow runtime has no mutation path.
 
-## 24. Acceptance
+## 25. Acceptance
 
     ARCHITECTURE_TESTS = PASS
     V1_COMPATIBILITY_CARD = COMPLETE

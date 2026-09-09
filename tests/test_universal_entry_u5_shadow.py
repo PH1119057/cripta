@@ -37,8 +37,9 @@ def _fact(index: int = 1) -> MarketFactEnvelope:
 
 def test_u5_contract_is_frozen_before_runtime_source() -> None:
     text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "**Версия:** 1.2" in text
+    assert "## 20. U5 parallel shadow runtime contract" in text
     assert "49670cb0631a8742b2bf8dace9ab33d6b29a107d" in text
+    assert "cripta-universal-entry-shadow.service" in text
     assert "один и тот же `MarketFactEnvelope`" in text
     assert "WARMUP / NOT_COMPARABLE" in text
     assert "420 минут" in text

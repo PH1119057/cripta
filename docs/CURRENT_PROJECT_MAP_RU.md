@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.3
-**Дата:** 2026-09-08
+**Версия документа:** 5.4
+**Дата:** 2026-09-09
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -192,7 +192,13 @@ U5 source добавляет отдельный parallel parity-shadow runtime `
 
 U5 startup/restart fail-honest: каждый новый service instance начинает `WARMUP`; неизвестное pre-start Entry lifecycle influence истекает по horizon, вычисленному из EntryPlan. Для frozen V1 это 420 минут. Незавершённый run при restart не продолжается через неизвестный socket gap и финализируется `NOT_COMPARABLE`; новый run получает новую identity. Exact local fact journal служит evidence/diagnostics, а не способом скрыто восстановить continuity по времени.
 
-Trading effect U1-U5: `NONE`. U5 не подключён к `runtime.trade_commands`, Execution mutation или monitoring legacy truth и не является consumer cutover. Наличие source unit не доказывает installed/loaded runtime; `INSTALLED_COMMIT/LOADED_COMMIT` и service state всегда проверяются отдельно после deploy опубликованного checkpoint. MICRO_LIVE/LIVE, mainnet re-arm, allocator и strategy selector отсутствуют.
+U6 source добавляет PostgreSQL-backed `Strategy` dashboard read-model/control: независимый список exact Strategy versions, read-only StrategyCard с полными `strategy_config_fingerprint` / `entry_plan_fingerprint` / `exit_plan_fingerprint`, реальные policy sections, Activation state/history и отдельный create-new-version flow. Missing persisted Activation/Plan показывается как `NOT SET`, а не как OFF/zero/neutral.
+
+U6 не создаёт draft/approval layer. Новая version создаётся только как новая immutable StrategyCard через canonical `StrategyCard.build`; existing card не UPDATE-ится, StrategyActivation и EntryPlan/ExitPlan автоматически не создаются и новая version автоматически не включается. ON/OFF доступен только для уже существующей exact StrategyActivation через compare-and-set по identity + expected enabled + expected updated_at; stale write отклоняется, no-op не создаёт ложный journal event.
+
+Текущий persisted production read-model на source-stage U6: одна V1 compatibility StrategyCard, один EntryPlan, `StrategyActivation = NOT SET`, `ExitPlan = NOT SET`. U5 parity identity не используется как test Activation и U6 production smoke не должен её переключать. Dashboard использует Universal Entry contracts из отдельно установленного published source tree, а не из mutable checkout.
+
+Trading effect U1-U6: `NONE`. U5/U6 не подключены к `runtime.trade_commands`, Execution mutation или monitoring legacy truth и не являются consumer cutover. `INSTALLED_COMMIT/LOADED_COMMIT` и service state всегда проверяются отдельно после deploy опубликованного checkpoint. MICRO_LIVE/LIVE, mainnet re-arm, allocator и strategy selector отсутствуют.
 
 ## 8. Exit
 

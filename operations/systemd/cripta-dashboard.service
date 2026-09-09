@@ -12,6 +12,8 @@ WorkingDirectory=/srv/cripta/dashboard
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_DATA_ROOT=/data/cripta
 Environment=CRIPTA_APP_ROOT=/srv/cripta
+Environment=CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/dashboard/universal_entry_source/src
+Environment=PYTHONPATH=/srv/cripta/dashboard/universal_entry_source/src
 ExecStart=/usr/bin/python3 /srv/cripta/dashboard/app.py
 Restart=on-failure
 RestartSec=3

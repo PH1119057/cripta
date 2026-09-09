@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import json
-import os
 import base64
-import csv
-import io
 import crypt
+import csv
 import hashlib
 import hmac
+import io
+import json
+import os
 import secrets
 import shutil
 import sqlite3
@@ -16,7 +16,14 @@ import threading
 import time
 import urllib.request
 import zipfile
+
 import psycopg
+
+from bybit_workbench.universal_entry.dashboard_control import (
+    StaleActivationState,
+    StrategyDashboardStore,
+    UnknownActivation,
+)
 
 try:
     from archive_v2 import read_job as read_archive_job
@@ -25,8 +32,8 @@ except ImportError:  # package import used by tests
     from operations.dashboard.archive_v2 import read_job as read_archive_job
     from operations.dashboard.archive_v2 import start_job as start_archive_job
 from datetime import UTC, datetime
-from http.cookies import SimpleCookie
 from html import escape
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from mimetypes import guess_type
 from pathlib import Path
@@ -2163,6 +2170,139 @@ def package_project() -> dict[str, object]:
         _package_lock.release()
 
 
+# U6_STRATEGY_API_BEGIN
+U6_STRATEGY_GET_PATH = "/api/strategies"
+U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
+U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
+U6_STRATEGY_POST_PATHS = {U6_STRATEGY_VERSION_PATH, U6_STRATEGY_ACTIVATION_PATH}
+
+
+def _u6_json(handler: object, status: int, payload: dict[str, object]) -> None:
+    body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+    handler.send_body(status, body, "application/json; charset=utf-8")
+
+
+def _u6_request_json(handler: object) -> dict[str, object]:
+    length = int(handler.headers.get("Content-Length", "0"))
+    if length <= 0 or length > 262_144:
+        raise ValueError("недопустимый размер Strategy request")
+    payload = json.loads(handler.rfile.read(length))
+    if not isinstance(payload, dict):
+        raise ValueError("Strategy request must be a JSON object")
+    return payload
+
+
+def _u6_parse_timestamp(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} is required")
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise ValueError(f"{label} must include timezone")
+    return parsed.astimezone(UTC)
+
+
+def _u6_send_catalog(handler: object) -> None:
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            strategies = StrategyDashboardStore(connection).list_catalog()
+        _u6_json(
+            handler,
+            200,
+            {
+                "strategies": strategies,
+                "generated_at": datetime.now(UTC).isoformat(),
+            },
+        )
+    except (ValueError, psycopg.Error) as exc:
+        _u6_json(handler, 500, {"error": str(exc)})
+
+
+def _u6_create_version(handler: object, request: dict[str, object]) -> None:
+    base = request.get("base")
+    card = request.get("card")
+    if not isinstance(base, dict) or not isinstance(card, dict):
+        raise ValueError("base and card objects are required")
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        created = StrategyDashboardStore(connection).create_new_version(
+            base_strategy_id=str(base.get("strategy_id") or ""),
+            base_strategy_version=str(base.get("strategy_version") or ""),
+            base_strategy_config_fingerprint=str(
+                base.get("strategy_config_fingerprint") or ""
+            ),
+            payload=card,
+            approved_at=datetime.now(UTC),
+            operator=operator,
+        )
+    _u6_json(
+        handler,
+        201,
+        {
+            "status": "CREATED",
+            "strategy_id": created.strategy_id,
+            "strategy_version": created.strategy_version,
+            "strategy_config_fingerprint": created.strategy_config_fingerprint,
+            "activation_state": "NOT SET",
+            "entry_plan_fingerprints": [],
+            "exit_plan_fingerprints": [],
+        },
+    )
+
+
+def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
+    expected_enabled = request.get("expected_enabled")
+    enabled = request.get("enabled")
+    if not isinstance(expected_enabled, bool) or not isinstance(enabled, bool):
+        raise ValueError("expected_enabled and enabled must be boolean")
+    expected_updated_at = _u6_parse_timestamp(
+        request.get("expected_updated_at"), "expected_updated_at"
+    )
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        result = StrategyDashboardStore(connection).set_activation_enabled_cas(
+            activation_id=str(request.get("activation_id") or ""),
+            strategy_id=str(request.get("strategy_id") or ""),
+            strategy_version=str(request.get("strategy_version") or ""),
+            strategy_config_fingerprint=str(
+                request.get("strategy_config_fingerprint") or ""
+            ),
+            expected_enabled=expected_enabled,
+            expected_updated_at=expected_updated_at,
+            enabled=enabled,
+            changed_at=datetime.now(UTC),
+            operator=operator,
+            source="dashboard-u6",
+            reason=str(request.get("reason") or "owner toggle"),
+        )
+    _u6_json(handler, 200, result)
+
+
+def _u6_handle_post(handler: object, path: str) -> None:
+    try:
+        request = _u6_request_json(handler)
+        if path == U6_STRATEGY_VERSION_PATH:
+            _u6_create_version(handler, request)
+        elif path == U6_STRATEGY_ACTIVATION_PATH:
+            _u6_set_activation(handler, request)
+        else:
+            _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
+    except StaleActivationState:
+        _u6_json(handler, 409, {"error": "STALE_ACTIVATION_STATE"})
+    except UnknownActivation:
+        _u6_json(handler, 404, {"error": "StrategyActivation NOT SET"})
+    except psycopg.errors.UniqueViolation:
+        _u6_json(handler, 409, {"error": "Strategy version already exists"})
+    except (KeyError, ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+        _u6_json(handler, 400, {"error": str(exc)})
+# U6_STRATEGY_API_END
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "CriptaDashboard/0.1"
 
@@ -2259,6 +2399,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         elif path == "/api/status":
             body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
+        elif path == U6_STRATEGY_GET_PATH:
+            _u6_send_catalog(self)
         elif path == "/api/live/state":
             view = str((query.get("view") or ["open"])[0])
             if view not in {"open", "closed", "monitor", "signals"}:
@@ -2348,6 +2490,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             self.end_headers()
             return
         if self.require_login():
+            return
+        if path in U6_STRATEGY_POST_PATHS:
+            _u6_handle_post(self, path)
             return
         if path in {"/api/project/package", "/api/project/archive-jobs"}:
             try:
