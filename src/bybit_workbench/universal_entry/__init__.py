@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from .contracts import (
     CandidateCooldown,
     ContextFailureAction,
@@ -21,8 +23,10 @@ from .contracts import (
     TradeDirection,
     TradingCapacitySnapshot,
 )
-from .engine import UniversalEntryEngine
-from .registry import ActivePlanRegistry
+
+if TYPE_CHECKING:
+    from .engine import UniversalEntryEngine
+    from .registry import ActivePlanRegistry
 
 __all__ = [
     "ActivePlanRegistry",
@@ -49,3 +53,15 @@ __all__ = [
     "TradingCapacitySnapshot",
     "UniversalEntryEngine",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "UniversalEntryEngine":
+        from .engine import UniversalEntryEngine
+
+        return UniversalEntryEngine
+    if name == "ActivePlanRegistry":
+        from .registry import ActivePlanRegistry
+
+        return ActivePlanRegistry
+    raise AttributeError(name)

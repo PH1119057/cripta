@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -97,6 +100,36 @@ def activation_row(card: StrategyCard, activation_id: str, enabled: bool) -> dic
         "created_at": NOW,
         "updated_at": NOW,
     }
+
+
+def test_dashboard_control_import_does_not_eagerly_require_trading_dependencies() -> None:
+    code = "\n".join(
+        [
+            "import builtins",
+            "real_import = builtins.__import__",
+            "def guarded(name, *args, **kwargs):",
+            "    if name == 'pydantic' or name.startswith('pydantic.'):",
+            "        raise ModuleNotFoundError('blocked for U6 import-boundary test')",
+            "    return real_import(name, *args, **kwargs)",
+            "builtins.__import__ = guarded",
+            "from bybit_workbench.universal_entry.dashboard_control import StrategyDashboardStore",
+            "print(StrategyDashboardStore.__name__)",
+        ]
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "StrategyDashboardStore"
+
+
+def test_lazy_universal_entry_public_engine_exports_remain_available() -> None:
+    from bybit_workbench.universal_entry import ActivePlanRegistry, UniversalEntryEngine
+
+    assert UniversalEntryEngine.__name__ == "UniversalEntryEngine"
+    assert ActivePlanRegistry.__name__ == "ActivePlanRegistry"
 
 
 def test_u6_contract_is_frozen_before_dashboard_source() -> None:
