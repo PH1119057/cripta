@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.5
-**Дата:** 2026-09-09
+**Версия документа:** 5.6
+**Дата:** 2026-09-10
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -193,6 +193,8 @@ U5 source добавляет отдельный parallel parity-shadow runtime `
 U5 startup/restart fail-honest: каждый новый service instance начинает `WARMUP`; неизвестное pre-start Entry lifecycle influence истекает по horizon, вычисленному из EntryPlan. Для frozen V1 это 420 минут. Незавершённый run при restart не продолжается через неизвестный socket gap и финализируется `NOT_COMPARABLE`; новый run получает новую identity. Exact local fact journal служит evidence/diagnostics, а не способом скрыто восстановить continuity по времени.
 
 U5 transport-continuity repair source-stage добавляет in-process public WebSocket reconnect без изменения Strategy/V1/EntryPlan/comparator semantics и без сброса `parity_run_id/started_at`, но только когда causal continuity доказана exact. `PUBLIC_TRADE` gap восстанавливается только через exact `execId + seq` anchor и public recent-trade window; `CANDLE_CLOSED` — по exact 5m/15m/60m boundaries; repeated `BAR_OPEN` дедуплируется только по exact source identity/boundary. Current `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` не имеет historical 30s replay: 5m OI history не считается эквивалентом. Поэтому continuation допустим только если все required ticker subscriptions восстановлены раньше earliest `last accepted OI30S + 30s`; иначе run fail-closed переходит в `NOT_COMPARABLE`. Disconnect/reconnect/continuity verdict сохраняются как append-only technical evidence и не являются trading facts. Наличие этого source-stage repair в `main` после публикации само по себе не доказывает installed/loaded runtime; deploy checkpoint проверяется отдельно.
+
+Owner decision 2026-09-10 вводит отдельную новую technical source identity `BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1`: один public current-tickers linear REST poll на каждый 30-second source slot, 10/10 frozen symbols, causal availability по фактическому response receive time, exact slot+symbol dedup, без 5m substitution/interpolation/carry-forward. Старый `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` остаётся historical evidence и не переименовывается. До нового U7 run новая source обязана пройти отдельный natural source-only soak >=480 минут с `missed_slots=0`, `incomplete_slots=0`, `silent_gaps=0`. На текущем source-stage soak/deploy/U7 PASS ещё НЕ объявлены.
 
 U6 source добавляет PostgreSQL-backed `Strategy` dashboard read-model/control: независимый список exact Strategy versions, read-only StrategyCard с полными `strategy_config_fingerprint` / `entry_plan_fingerprint` / `exit_plan_fingerprint`, реальные policy sections, Activation state/history и отдельный create-new-version flow. Missing persisted Activation/Plan показывается как `NOT SET`, а не как OFF/zero/neutral.
 

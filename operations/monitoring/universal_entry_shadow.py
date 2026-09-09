@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import signal
 import socket
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -26,6 +28,15 @@ from bybit_workbench.universal_entry import FrozenPolicy, MarketFactEnvelope
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.oi30s_source import (
+    CurrentOiResponse,
+    Oi30sConfig,
+    Oi30sHealthTracker,
+    OiSlotResult,
+    OiSlotState,
+    poll_current_oi_slot,
+    slot_at,
+)
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.shadow_runtime import (
     DurableFactJournal,
@@ -65,6 +76,8 @@ BASELINE_COMMIT = os.environ.get(
 ).strip()
 FACT_SOURCE_ID = os.environ.get("CRIPTA_U5_FACT_SOURCE_ID", "BYBIT_PUBLIC_NORMALIZED_U5_V1").strip()
 OI_SAMPLE_SECONDS = int(os.environ.get("CRIPTA_U5_OI_SAMPLE_SECONDS", "30"))
+REST_OI30S_SOURCE_ID = "BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1"
+LEGACY_WS_OI30S_SOURCE_ID = "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S"
 _HTTPS_CONTEXT = ssl.create_default_context()
 
 
@@ -118,6 +131,76 @@ def _get_json(endpoint: str, params: Mapping[str, object]) -> dict[str, Any]:
             )
         return cast(dict[str, Any], payload)
     raise RuntimeError("unreachable public REST retry state")
+
+
+def _fetch_current_oi_rest(timeout: float) -> CurrentOiResponse:
+    request_started_at = datetime.now(UTC)
+    query = urllib.parse.urlencode({"category": "linear"})
+    request = urllib.request.Request(
+        f"{PUBLIC_REST.rstrip('/')}/v5/market/tickers?{query}",
+        headers={"User-Agent": "Cripta-U5-OI30S/1"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout, context=_HTTPS_CONTEXT) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    response_received_at = datetime.now(UTC)
+    if not isinstance(payload, dict) or int(payload.get("retCode", -1)) != 0:
+        raise RuntimeError("public current-tickers request failed")
+    server_ms = payload.get("time")
+    if server_ms is None:
+        raise RuntimeError("public current-tickers response lacks server time")
+    result = payload.get("result")
+    if not isinstance(result, Mapping):
+        raise RuntimeError("public current-tickers result is not an object")
+    rows = result.get("list")
+    if not isinstance(rows, list):
+        raise RuntimeError("public current-tickers result.list is not a list")
+    values: dict[str, Decimal] = {}
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        symbol = str(row.get("symbol") or "").upper()
+        raw_oi = row.get("openInterest")
+        if not symbol or raw_oi in (None, ""):
+            continue
+        try:
+            value = Decimal(str(raw_oi))
+        except InvalidOperation:
+            continue
+        if value.is_finite() and value > 0:
+            values[symbol] = value
+    return CurrentOiResponse(
+        request_started_at=request_started_at,
+        response_received_at=response_received_at,
+        exchange_server_observed_at=datetime.fromtimestamp(int(str(server_ms)) / 1000, UTC),
+        open_interest=values,
+        provenance="GET /v5/market/tickers?category=linear",
+    )
+
+
+def _run_rest_oi30s_worker(
+    config: Oi30sConfig,
+    output: queue.Queue[OiSlotResult],
+    stop_event: threading.Event,
+    *,
+    fetch_fn: Any | None = None,
+) -> None:
+    fetch = _fetch_current_oi_rest if fetch_fn is None else fetch_fn
+    nominal = slot_at(datetime.now(UTC), config.slot_seconds) + timedelta(
+        seconds=config.slot_seconds
+    )
+    while not stop_event.is_set():
+        delay = (nominal - datetime.now(UTC)).total_seconds()
+        if delay > 0 and stop_event.wait(delay):
+            return
+        result = poll_current_oi_slot(
+            config,
+            nominal_slot_at=nominal,
+            fetch=fetch,
+        )
+        output.put(result)
+        if result.state is not OiSlotState.COMPLETE:
+            return
+        nominal += timedelta(seconds=config.slot_seconds)
 
 
 def _fetch_history(symbol: str, observed_at: datetime) -> dict[str, tuple[Candle, ...]]:
@@ -293,10 +376,12 @@ def _ticker_oi_fact(
 
 def _topics(symbols: tuple[str, ...]) -> tuple[str, ...]:
     topics: list[str] = []
+    use_rest_oi30s = FACT_SOURCE_ID == REST_OI30S_SOURCE_ID
     for symbol in symbols:
         for interval in ("5", "15", "60"):
             topics.append(f"kline.{interval}.{symbol}")
-        topics.append(f"tickers.{symbol}")
+        if not use_rest_oi30s:
+            topics.append(f"tickers.{symbol}")
         topics.append(f"publicTrade.{symbol}")
     return tuple(topics)
 
@@ -601,14 +686,15 @@ def _recover_public_gap(
     closed_boundaries: Mapping[tuple[str, str], datetime],
     bar_open_boundaries: Mapping[str, datetime],
 ) -> tuple[tuple[tuple[MarketFactEnvelope, TradeCursor | None], ...], dict[str, int]]:
-    oi_verdict = assess_oi30s_continuity(
-        oi_cursors,
-        required_symbols=symbols,
-        subscription_ready_server_at=ready_server_at,
-        sample_seconds=OI_SAMPLE_SECONDS,
-    )
-    if resolve_continuity_action(oi_verdict) is ContinuityAction.NOT_COMPARABLE:
-        raise ContinuityNotProvable(oi_verdict.reason)
+    if FACT_SOURCE_ID != REST_OI30S_SOURCE_ID:
+        oi_verdict = assess_oi30s_continuity(
+            oi_cursors,
+            required_symbols=symbols,
+            subscription_ready_server_at=ready_server_at,
+            sample_seconds=OI_SAMPLE_SECONDS,
+        )
+        if resolve_continuity_action(oi_verdict) is ContinuityAction.NOT_COMPARABLE:
+            raise ContinuityNotProvable(oi_verdict.reason)
 
     replay: list[tuple[MarketFactEnvelope, TradeCursor | None]] = []
     counts = {"PUBLIC_TRADE": 0, "CANDLE_CLOSED": 0, "BAR_OPEN": 0, "OPEN_INTEREST": 0}
@@ -727,6 +813,9 @@ def main() -> None:
         raise RuntimeError("CRIPTA_U5_LOADED_COMMIT is required")
     if OI_SAMPLE_SECONDS <= 0:
         raise RuntimeError("CRIPTA_U5_OI_SAMPLE_SECONDS must be positive")
+    use_rest_oi30s = FACT_SOURCE_ID == REST_OI30S_SOURCE_ID
+    if use_rest_oi30s and OI_SAMPLE_SECONDS != 30:
+        raise RuntimeError("REST current OI source requires exact 30-second slots")
     bundle = load_v1_compatibility_bundle(PROJECT_ROOT)
     plan, _ = materialize_plans(bundle.card, bundle.activation)
     calibration_path = PROJECT_ROOT / bundle.calibration_relative_path
@@ -803,6 +892,8 @@ def main() -> None:
 
     runners: dict[str, V1DeterministicParityRunner] = {}
     sock: Any | None = None
+    oi_stop_event: threading.Event | None = None
+    oi_thread: threading.Thread | None = None
     try:
         closed_boundaries: dict[tuple[str, str], datetime] = {}
         for symbol in symbols:
@@ -839,6 +930,20 @@ def main() -> None:
         bar_open_boundaries: dict[str, datetime] = {}
         deduper = ExactFactDeduper()
         transport_reconnects = 0
+        oi_config = (
+            Oi30sConfig(
+                fact_source_id=FACT_SOURCE_ID,
+                required_symbols=tuple(symbols),
+                slot_seconds=30,
+                request_timeout_seconds=5.0,
+                retry_interval_seconds=0.25,
+            )
+            if use_rest_oi30s
+            else None
+        )
+        oi_health = Oi30sHealthTracker(oi_config) if oi_config is not None else None
+        oi_results: queue.Queue[OiSlotResult] = queue.Queue()
+        oi_stop_event = threading.Event()
 
         def write_status(
             *, transport_state: str = "CONNECTED", extra: Mapping[str, object] | None = None
@@ -856,6 +961,8 @@ def main() -> None:
                 "transport_reconnects": transport_reconnects,
                 "service_instance_id": identity.service_instance_id,
             }
+            if oi_health is not None:
+                payload.update(oi_health.snapshot())
             if extra:
                 payload.update(dict(extra))
             _atomic_json(STATUS_PATH, payload)
@@ -881,9 +988,18 @@ def main() -> None:
                     )
                 trade_cursors[fact.symbol] = trade_cursor
             elif fact.event_kind == "OPEN_INTEREST":
-                if oi_cursor is None:
-                    raise ContinuityNotProvable("OPEN_INTEREST accepted without exact OI30S cursor")
-                oi_cursors[fact.symbol] = oi_cursor
+                if use_rest_oi30s:
+                    attrs = fact.attributes.to_dict()
+                    if attrs.get("fact_source_id") != FACT_SOURCE_ID or not attrs.get("slot_id"):
+                        raise ContinuityNotProvable(
+                            "REST OPEN_INTEREST fact lacks exact source/slot identity"
+                        )
+                else:
+                    if oi_cursor is None:
+                        raise ContinuityNotProvable(
+                            "OPEN_INTEREST accepted without exact OI30S cursor"
+                        )
+                    oi_cursors[fact.symbol] = oi_cursor
             elif fact.event_kind == "CANDLE_CLOSED":
                 attrs = fact.attributes.to_dict()
                 timeframe = str(attrs["timeframe"])
@@ -908,7 +1024,15 @@ def main() -> None:
                 flow_minutes[fact.symbol].add(
                     fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
                 )
-            if all(len(minutes) >= 5 for minutes in flow_minutes.values()):
+            flow_ready = all(len(minutes) >= 5 for minutes in flow_minutes.values())
+            oi_ready = True
+            if oi_health is not None:
+                oi_snapshot = oi_health.snapshot()
+                oi_ready = (
+                    int(str(oi_snapshot["complete_slots"])) > 0
+                    and oi_snapshot["oi_source_state"] == "HEALTHY"
+                )
+            if flow_ready and oi_ready:
                 gate.mark_live_sensor_complete()
             current_state = gate.state_at(fact.observed_at)
             if current_state is ShadowComparability.PARITY_COMPARABLE:
@@ -959,6 +1083,90 @@ def main() -> None:
                 return False
             return True
 
+        def collect_oi_results() -> list[OiSlotResult]:
+            pending: list[OiSlotResult] = []
+            while True:
+                try:
+                    pending.append(oi_results.get_nowait())
+                except queue.Empty:
+                    return pending
+
+        def record_oi_slot(result: OiSlotResult) -> bool:
+            if oi_health is None:
+                raise RuntimeError("REST OI slot received without OI health tracker")
+            oi_health.accept(result)
+            occurred_at = result.response_received_at or result.slot_end_at
+            _record_transport_event(
+                connection,
+                identity,
+                category="OI30S_SLOT",
+                occurred_at=occurred_at,
+                payload={
+                    "fact_source_id": result.fact_source_id,
+                    "slot_id": result.slot_id,
+                    "nominal_slot_at": result.nominal_slot_at.isoformat(),
+                    "slot_end_at": result.slot_end_at.isoformat(),
+                    "state": result.state.value,
+                    "attempts": result.attempts,
+                    "request_started_at": (
+                        None
+                        if result.request_started_at is None
+                        else result.request_started_at.isoformat()
+                    ),
+                    "response_received_at": (
+                        None
+                        if result.response_received_at is None
+                        else result.response_received_at.isoformat()
+                    ),
+                    "exchange_server_observed_at": (
+                        None
+                        if result.exchange_server_observed_at is None
+                        else result.exchange_server_observed_at.isoformat()
+                    ),
+                    "delivery_delay_seconds": result.delivery_delay_seconds,
+                    "missing_symbols": list(result.missing_symbols),
+                    "invalid_symbols": list(result.invalid_symbols),
+                    "accepted_symbols": [fact.symbol for fact in result.facts],
+                    "fact_ids": [fact.fact_id for fact in result.facts],
+                    "source_refs": [list(fact.source_refs) for fact in result.facts],
+                    "provenance": result.provenance,
+                    "reason": result.reason,
+                    "health": oi_health.snapshot(),
+                    "trading_effect": "NONE",
+                },
+            )
+            if result.state is OiSlotState.COMPLETE:
+                return True
+            reason = f"OI30S source slot {result.slot_id} is {result.state.value}: {result.reason}"
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=occurred_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **oi_health.snapshot(),
+                    **comparator.summary(),
+                },
+            )
+            write_status(
+                transport_state="CONNECTED",
+                extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+            )
+            return False
+
+        def process_oi_results(results: list[OiSlotResult]) -> bool:
+            for result in results:
+                if not record_oi_slot(result):
+                    return False
+                for fact in result.facts:
+                    if not process_fact(fact):
+                        return False
+            return True
+
         def message_items(
             message: Mapping[str, object], received_at: datetime
         ) -> tuple[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None], ...]:
@@ -980,7 +1188,7 @@ def main() -> None:
                     for fact in _kline_facts(message, received_at)
                     if fact.symbol in runners
                 )
-            elif topic.startswith("tickers."):
+            elif not use_rest_oi30s and topic.startswith("tickers."):
                 oi_result = _ticker_oi_fact(message, received_at, last_oi_sample)
                 if oi_result is not None:
                     fact, cursor = oi_result
@@ -1001,6 +1209,14 @@ def main() -> None:
             return True
 
         write_status()
+        if oi_config is not None:
+            oi_thread = threading.Thread(
+                target=_run_rest_oi30s_worker,
+                args=(oi_config, oi_results, oi_stop_event),
+                name="u5-rest-oi30s",
+                daemon=True,
+            )
+            oi_thread.start()
         sock, _initial_ready_local, _initial_ready_server, initial_buffer = _connect_and_subscribe(
             symbols
         )
@@ -1016,6 +1232,8 @@ def main() -> None:
 
         while not stopping:
             try:
+                if use_rest_oi30s and not process_oi_results(collect_oi_results()):
+                    return
                 message: dict[str, Any] | None = None
                 received_at = datetime.now(UTC)
                 if buffered_messages:
@@ -1070,10 +1288,26 @@ def main() -> None:
                 with suppress(Exception):
                     sock.close()
 
+                pending_gap_oi: list[OiSlotResult] = []
                 try:
-                    new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
-                        _reconnect_until_oi_safe(symbols, oi_cursors)
-                    )
+                    if use_rest_oi30s:
+                        reconnect_errors = transport_errors + (websocket.WebSocketTimeoutException,)
+                        while True:
+                            for oi_result in collect_oi_results():
+                                if not record_oi_slot(oi_result):
+                                    return
+                                pending_gap_oi.append(oi_result)
+                            try:
+                                new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                                    _connect_and_subscribe(symbols)
+                                )
+                                break
+                            except reconnect_errors:
+                                time.sleep(0.25)
+                    else:
+                        new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                            _reconnect_until_oi_safe(symbols, oi_cursors)
+                        )
                 except ContinuityNotProvable as gap_exc:
                     reason = str(gap_exc)
                     _record_transport_event(
@@ -1166,7 +1400,27 @@ def main() -> None:
                     )
                     return
 
-                for replay_fact, replay_trade_cursor in replay_items:
+                if use_rest_oi30s:
+                    for oi_result in collect_oi_results():
+                        if not record_oi_slot(oi_result):
+                            with suppress(Exception):
+                                new_sock.close()
+                            return
+                        pending_gap_oi.append(oi_result)
+                    oi_gap_facts = [fact for result in pending_gap_oi for fact in result.facts]
+                    replay_counts["OPEN_INTEREST"] = len(oi_gap_facts)
+                    combined_replay = list(replay_items) + [(fact, None) for fact in oi_gap_facts]
+                    combined_replay.sort(
+                        key=lambda item: (
+                            item[0].observed_at,
+                            item[0].event_at,
+                            item[0].event_kind,
+                            item[0].fact_id,
+                        )
+                    )
+                else:
+                    combined_replay = list(replay_items)
+                for replay_fact, replay_trade_cursor in combined_replay:
                     if not process_fact(replay_fact, trade_cursor=replay_trade_cursor):
                         with suppress(Exception):
                             new_sock.close()
@@ -1241,6 +1495,10 @@ def main() -> None:
             )
         raise
     finally:
+        if oi_stop_event is not None:
+            oi_stop_event.set()
+        if oi_thread is not None:
+            oi_thread.join(timeout=2.0)
         if sock is not None:
             with suppress(Exception):
                 sock.close()

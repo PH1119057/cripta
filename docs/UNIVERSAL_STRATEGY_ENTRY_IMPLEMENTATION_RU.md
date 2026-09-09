@@ -1,12 +1,12 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.4
-**Дата:** 2026-09-08
+**Версия:** 1.5
+**Дата:** 2026-09-10
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
 **Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
-**Основание V1.4:** owner decision 2026-09-09 — narrow U5 public-transport continuity repair for parity evidence only. V1 Strategy semantics, EntryPlan, comparator semantics, trading path, Execution, consumer cutover, re-arm, MICRO_LIVE and LIVE are outside scope. U6 dashboard contract remains unchanged.
+**Основание V1.5:** owner decision 2026-09-10 — отдельный технический OI30S source `BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1` для доказуемого parity evidence. Старый `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` сохраняется только как historical evidence; Strategy/V1 semantics, EntryPlan, comparator semantics, Universal Entry engine, trading path, Execution, consumer cutover, re-arm, MICRO_LIVE и LIVE не изменяются. Контракты U5 transport repair и U6 dashboard сохраняются.
 
 ## 1. Назначение
 
@@ -541,6 +541,52 @@ A disconnect after `PARITY_COMPARABLE` follows the identical fail-closed continu
 Process restart continuation of one run remains forbidden. Systemd restart is only an emergency path after the current run has become `NOT_COMPARABLE` or the process has failed before continuity could be proven.
 
 Acceptance tests for this repair include: artificial close during WARMUP with in-process reconnect; recoverable gap preserving run identity/start time; unrecoverable gap finalizing `NOT_COMPARABLE`; exact replay dedup; disconnect after `PARITY_COMPARABLE`; first-mismatch preservation; zero `runtime.trade_commands`/`runtime.executions` identifiers; legacy Entry isolation; architecture/Ruff/mypy/full pytest gates.
+
+### 20.10 U5/U7 доказуемый REST current-OI30S source
+
+Owner decision 2026-09-10 создаёт НОВУЮ technical source identity и не переписывает 20.9. Старый `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` доказал невозможность гарантировать непрерывный 30-секундный OI stream: public ticker WS может оставаться connected, но не публиковать новое OI значение десятки минут. Старые runs/evidence immutable и сохраняются как historical evidence.
+
+Новая identity:
+
+    BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1
+
+Семантика новой source:
+
+- public/read-only current OI через один `/v5/market/tickers?category=linear` poll, содержащий все 10 frozen V1 symbols;
+- один source-slot на каждые 30 секунд;
+- один accepted normalized `OPEN_INTEREST` fact на каждый required symbol в полном slot;
+- `slot_id` и `nominal_slot_at` описывают технический source schedule, но НЕ являются causal knowledge time;
+- `request_started_at`, `response_received_at` и Bybit top-level server time сохраняются отдельно; causal availability определяется фактическим `response_received_at`;
+- downstream normalized contract остаётся `event_kind=OPEN_INTEREST` + exact `open_interest`; legacy reference и Universal Entry получают один и тот же набор fact objects из одного poll result;
+- fact identity детерминирована по `fact_source_id + slot_id + symbol`; duplicate response/retry не создаёт второй semantic OI fact;
+- historical 5m OI, interpolation, nearest observation и carry-forward последнего значения запрещены.
+
+Slot continuity fail-closed:
+
+    required symbols = 10/10
+    AND response accepted before current slot deadline
+    -> COMPLETE slot
+
+    timeout/error/missing symbol/invalid OI/deadline crossed
+    -> INCOMPLETE or MISSED slot
+    -> OI30S_CONTINUITY = NOT_PROVABLE
+
+Retry допустим только внутри того же текущего slot и только пока ответ может быть causal accepted до slot end. Future-slot response не закрывает прошлый slot.
+
+OI health отделён от WebSocket health. Runtime/source evidence содержит минимум `oi_source_state`, `last_complete_oi_slot`, per-symbol `last_oi_received_at`, `complete_slots`, `missed_slots`, `incomplete_slots`, `max_slot_delay`, `consecutive_complete_slots`, `fact_source_id`. `WS CONNECTED` никогда не считается доказательством OI continuity.
+
+До нового U7 parity run новая source проходит отдельный source-only natural soak не менее 480 минут. PASS требует: 10/10 symbols в каждом expected slot, `missed_slots=0`, `incomplete_slots=0`, `silent_gaps=0`, constant source identity/provenance. Soak evidence append-only. При одном недоказуемом slot soak FAIL; данные не склеиваются.
+
+Только после published implementation + exact deploy + source-only soak PASS разрешён новый clean parity run с новым `run_id` и natural derived 420-minute warmup. Старые parity runs не продолжаются. Любой required fact continuity `NOT_PROVABLE` переводит новый run в `NOT_COMPARABLE`.
+
+Architecture flags остаются:
+
+    U5_TRADING_EFFECT = NONE
+    UNIVERSAL_ENTRY_MAINNET_CONSUMER = DISABLED
+    CONSUMER_CUTOVER = NO
+    MAINNET_REARM = NO
+    MICRO_LIVE = NO
+    LIVE = NO
 
 ## 21. U6 Strategy dashboard control/read-model contract
 

@@ -25,7 +25,6 @@ NOW = datetime(2026, 9, 9, 6, 0, tzinfo=UTC)
 
 def test_transport_repair_contract_is_frozen_before_source() -> None:
     text = CONTRACT.read_text(encoding="utf-8")
-    assert "**Версия:** 1.4" in text
     assert "### 20.9 U5 public transport continuity repair" in text
     assert "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S" in text
     assert "5m OI is NOT semantically substitutable" in text

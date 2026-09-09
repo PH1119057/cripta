@@ -1,0 +1,25 @@
+[Unit]
+Description=Cripta U5 public REST current OI30S source soak
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/u5_oi30s_source/current
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/u5_oi30s_source/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
+EnvironmentFile=/etc/cripta/u5_oi30s_source_soak.env
+ExecStart=/usr/bin/python3 /srv/cripta/u5_oi30s_source/current/operations/monitoring/u5_oi30s_source_soak.py
+Restart=no
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027
+ReadOnlyPaths=/srv/cripta/u5_oi30s_source/current
+ReadWritePaths=/var/lib/cripta/u5_oi30s_source_soak
+
+[Install]
+WantedBy=multi-user.target
