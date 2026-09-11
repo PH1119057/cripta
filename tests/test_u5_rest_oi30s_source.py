@@ -58,7 +58,7 @@ def _config() -> Oi30sConfig:
 
 def test_contract_declares_new_identity_without_rewriting_old_source() -> None:
     text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "**Версия:** 1.5" in text
+    assert "### 20.10 U5/U7 доказуемый REST current-OI30S source" in text
     assert SOURCE_ID in text
     assert "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S" in text
     assert "historical evidence" in text

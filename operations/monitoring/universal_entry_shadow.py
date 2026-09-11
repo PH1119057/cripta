@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -47,14 +48,17 @@ from bybit_workbench.universal_entry.shadow_runtime import (
     derive_unknown_prestart_horizon_seconds,
 )
 from bybit_workbench.universal_entry.storage import ShadowParityStore
+from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 from bybit_workbench.universal_entry.transport_continuity import (
     ContinuityAction,
     ContinuityNotProvable,
     ExactFactDeduper,
     OiSampleCursor,
+    PublicWsHeartbeat,
     ReplayTrade,
     TradeCursor,
     assess_oi30s_continuity,
+    audit_recent_trade_window,
     build_exact_trade_replay,
     expected_boundaries,
     resolve_continuity_action,
@@ -76,6 +80,13 @@ BASELINE_COMMIT = os.environ.get(
 ).strip()
 FACT_SOURCE_ID = os.environ.get("CRIPTA_U5_FACT_SOURCE_ID", "BYBIT_PUBLIC_NORMALIZED_U5_V1").strip()
 OI_SAMPLE_SECONDS = int(os.environ.get("CRIPTA_U5_OI_SAMPLE_SECONDS", "30"))
+
+PING_INTERVAL_SECONDS = 10.0
+PONG_TIMEOUT_SECONDS = 5.0
+TRADE_SILENCE_AUDIT_SECONDS = 10.0
+TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS = 4.0
+MIRROR_RETENTION_SECONDS = 600
+MIRROR_READY_TIMEOUT_SECONDS = 12.0
 REST_OI30S_SOURCE_ID = "BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1"
 LEGACY_WS_OI30S_SOURCE_ID = "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S"
 _HTTPS_CONTEXT = ssl.create_default_context()
@@ -396,6 +407,93 @@ def _fetch_server_time() -> datetime:
         ) from exc
 
 
+class PublicTradeStreamBehind(ConnectionError):
+    """Public recent-trade proves the accepted WS trade cursor is behind."""
+
+
+def _fetch_recent_trade_snapshot(
+    symbol: str,
+) -> tuple[list[Mapping[str, object]], datetime]:
+    query = urllib.parse.urlencode({"category": "linear", "symbol": symbol, "limit": 1000})
+    request = urllib.request.Request(
+        f"{PUBLIC_REST.rstrip('/')}/v5/market/recent-trade?{query}",
+        headers={"User-Agent": "Cripta-U5-Trade-Audit/1"},
+    )
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS,
+            context=_HTTPS_CONTEXT,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise ContinuityNotProvable(
+            f"PUBLIC_TRADE silence audit unavailable for {symbol}: {type(exc).__name__}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict) or int(payload.get("retCode", -1)) != 0:
+        raise ContinuityNotProvable(f"PUBLIC_TRADE silence audit failed for {symbol}")
+    server_ms = payload.get("time")
+    if server_ms is None:
+        raise ContinuityNotProvable(f"PUBLIC_TRADE silence audit lacks server time for {symbol}")
+    try:
+        server_at = datetime.fromtimestamp(int(str(server_ms)) / 1000, UTC)
+    except ValueError as exc:
+        raise ContinuityNotProvable(
+            f"PUBLIC_TRADE silence audit has invalid server time for {symbol}"
+        ) from exc
+    rows = [row for row in _result_list(payload) if isinstance(row, Mapping)]
+    return cast(list[Mapping[str, object]], rows), server_at
+
+
+def _audit_public_trade_silence(
+    symbols: tuple[str, ...],
+    trade_cursors: Mapping[str, TradeCursor],
+    known_current_seq_exec_ids: Mapping[str, set[str]],
+    *,
+    fetch_fn: Any | None = None,
+) -> dict[str, int]:
+    if not symbols:
+        return {}
+    for symbol in symbols:
+        if symbol not in trade_cursors:
+            raise ContinuityNotProvable(
+                f"PUBLIC_TRADE silence audit lacks exact cursor for {symbol}"
+            )
+
+    fetch = _fetch_recent_trade_snapshot if fetch_fn is None else fetch_fn
+    snapshots: dict[str, tuple[list[Mapping[str, object]], datetime]] = {}
+    if fetch_fn is None:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(10, len(symbols)),
+            thread_name_prefix="u5-trade-audit",
+        ) as executor:
+            pending = {executor.submit(fetch, symbol): symbol for symbol in symbols}
+            for future in concurrent.futures.as_completed(pending):
+                symbol = pending[future]
+                snapshots[symbol] = future.result()
+    else:
+        for symbol in symbols:
+            snapshots[symbol] = fetch(symbol)
+
+    missing_counts: dict[str, int] = {}
+    for symbol in symbols:
+        rows, cutoff_at = snapshots[symbol]
+        unknown_exec_ids = audit_recent_trade_window(
+            rows,
+            anchor=trade_cursors[symbol],
+            cutoff_at=cutoff_at,
+            known_exec_ids=known_current_seq_exec_ids.get(symbol, set()),
+        )
+        missing_counts[symbol] = len(unknown_exec_ids)
+    missing = {symbol: count for symbol, count in missing_counts.items() if count > 0}
+    if missing:
+        rendered = ",".join(f"{symbol}:{count}" for symbol, count in sorted(missing.items()))
+        raise PublicTradeStreamBehind(
+            f"PUBLIC_TRADE silence audit found missing exact trade(s): {rendered}"
+        )
+    return missing_counts
+
+
 def _trade_cursor(raw: Mapping[str, object]) -> TradeCursor:
     try:
         return TradeCursor(
@@ -580,6 +678,114 @@ def _reconnect_until_oi_safe(
             sleeper(0.25)
 
 
+def _mirror_topics(symbols: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(f"publicTrade.{symbol}" for symbol in symbols)
+
+
+def _connect_public_trade_mirror(
+    symbols: tuple[str, ...],
+) -> tuple[Any, datetime, tuple[tuple[dict[str, Any], datetime], ...]]:
+    sock = websocket.create_connection(PUBLIC_WS, timeout=10.0, enable_multithread=False)
+    with suppress(AttributeError):
+        sock.settimeout(1.0)
+    req_id = "u5-trade-mirror"
+    sock.send(
+        json.dumps(
+            {"op": "subscribe", "req_id": req_id, "args": list(_mirror_topics(symbols))},
+            separators=(",", ":"),
+        )
+    )
+    buffered: list[tuple[dict[str, Any], datetime]] = []
+    deadline = time.monotonic() + 10.0
+    while True:
+        if time.monotonic() >= deadline:
+            sock.close()
+            raise ConnectionError("publicTrade mirror subscription acknowledgement timeout")
+        try:
+            raw_message = sock.recv()
+        except websocket.WebSocketTimeoutException:
+            continue
+        received_at = datetime.now(UTC)
+        if raw_message in (None, ""):
+            sock.close()
+            raise websocket.WebSocketConnectionClosedException("publicTrade mirror closed")
+        parsed = json.loads(raw_message)
+        if not isinstance(parsed, dict):
+            continue
+        message = cast(dict[str, Any], parsed)
+        if message.get("op") == "subscribe" and str(message.get("req_id") or "") == req_id:
+            if message.get("success") is False or message.get("retCode") not in (None, 0):
+                sock.close()
+                raise ConnectionError("publicTrade mirror subscription rejected")
+            return sock, received_at, tuple(buffered)
+        if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+            continue
+        if str(message.get("topic") or "").startswith("publicTrade."):
+            buffered.append((message, received_at))
+
+
+def _run_public_trade_mirror(
+    symbols: tuple[str, ...],
+    mirror: PublicTradeMirrorBuffer,
+    stop_event: threading.Event,
+    ready_event: threading.Event,
+) -> None:
+    while not stop_event.is_set():
+        sock: Any | None = None
+        try:
+            sock, ready_at, buffered = _connect_public_trade_mirror(symbols)
+            mirror.start_epoch(ready_at)
+            for buffered_message, buffered_received_at in buffered:
+                mirror.record_message(
+                    buffered_message,
+                    received_at=buffered_received_at,
+                )
+            ready_event.set()
+            heartbeat = PublicWsHeartbeat(
+                PING_INTERVAL_SECONDS,
+                PONG_TIMEOUT_SECONDS,
+                started_monotonic=time.monotonic(),
+            )
+            while not stop_event.is_set():
+                message: dict[str, Any] | None = None
+                received_at = datetime.now(UTC)
+                try:
+                    raw_message = sock.recv()
+                    received_at = datetime.now(UTC)
+                    if raw_message in (None, ""):
+                        raise websocket.WebSocketConnectionClosedException(
+                            "publicTrade mirror closed"
+                        )
+                    parsed = json.loads(raw_message)
+                    if isinstance(parsed, dict):
+                        message = cast(dict[str, Any], parsed)
+                except websocket.WebSocketTimeoutException:
+                    pass
+                now_monotonic = time.monotonic()
+                if message is not None:
+                    if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                        heartbeat.note_pong(now_monotonic)
+                    elif message.get("op") != "subscribe":
+                        heartbeat.note_market_frame(now_monotonic)
+                        if str(message.get("topic") or "").startswith("publicTrade."):
+                            mirror.record_message(message, received_at=received_at)
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "publicTrade mirror application heartbeat deadline exceeded"
+                    )
+                if heartbeat.ping_due(now_monotonic):
+                    sock.send('{"op":"ping"}')
+                    heartbeat.note_ping_sent(now_monotonic)
+        except Exception as exc:
+            mirror.mark_gap(f"{type(exc).__name__}: {exc}")
+            if stop_event.wait(0.25):
+                break
+        finally:
+            if sock is not None:
+                with suppress(Exception):
+                    sock.close()
+
+
 def _transport_cursor_payload(
     *,
     trade_cursors: Mapping[str, TradeCursor],
@@ -685,6 +891,8 @@ def _recover_public_gap(
     oi_cursors: Mapping[str, OiSampleCursor],
     closed_boundaries: Mapping[tuple[str, str], datetime],
     bar_open_boundaries: Mapping[str, datetime],
+    known_trade_exec_ids: Mapping[str, set[str]] | None = None,
+    trade_replay_override: tuple[tuple[MarketFactEnvelope, TradeCursor], ...] | None = None,
 ) -> tuple[tuple[tuple[MarketFactEnvelope, TradeCursor | None], ...], dict[str, int]]:
     if FACT_SOURCE_ID != REST_OI30S_SOURCE_ID:
         oi_verdict = assess_oi30s_continuity(
@@ -698,24 +906,33 @@ def _recover_public_gap(
 
     replay: list[tuple[MarketFactEnvelope, TradeCursor | None]] = []
     counts = {"PUBLIC_TRADE": 0, "CANDLE_CLOSED": 0, "BAR_OPEN": 0, "OPEN_INTEREST": 0}
+    if trade_replay_override is not None:
+        replay.extend(trade_replay_override)
+        counts["PUBLIC_TRADE"] = len(trade_replay_override)
     for symbol in symbols:
-        anchor = trade_cursors.get(symbol)
-        if anchor is None:
-            raise ContinuityNotProvable(f"exact PUBLIC_TRADE cursor missing for {symbol}")
-        payload = _get_json(
-            "/v5/market/recent-trade",
-            {"category": "linear", "symbol": symbol, "limit": 1000},
-        )
-        raw_rows = [row for row in _result_list(payload) if isinstance(row, Mapping)]
-        rows = build_exact_trade_replay(
-            cast(list[Mapping[str, object]], raw_rows),
-            anchor=anchor,
-            cutoff_at=ready_server_at,
-        )
-        for row in rows:
-            cursor = TradeCursor(row.symbol, row.exec_id, row.seq, row.traded_at)
-            replay.append((_replay_trade_fact(row, ready_local_at), cursor))
-            counts["PUBLIC_TRADE"] += 1
+        if trade_replay_override is None:
+            anchor = trade_cursors.get(symbol)
+            if anchor is None:
+                raise ContinuityNotProvable(f"exact PUBLIC_TRADE cursor missing for {symbol}")
+            payload = _get_json(
+                "/v5/market/recent-trade",
+                {"category": "linear", "symbol": symbol, "limit": 1000},
+            )
+            raw_rows = [row for row in _result_list(payload) if isinstance(row, Mapping)]
+            rows = build_exact_trade_replay(
+                cast(list[Mapping[str, object]], raw_rows),
+                anchor=anchor,
+                cutoff_at=ready_server_at,
+                known_exec_ids=(
+                    set()
+                    if known_trade_exec_ids is None
+                    else known_trade_exec_ids.get(symbol, set())
+                ),
+            )
+            for row in rows:
+                cursor = TradeCursor(row.symbol, row.exec_id, row.seq, row.traded_at)
+                replay.append((_replay_trade_fact(row, ready_local_at), cursor))
+                counts["PUBLIC_TRADE"] += 1
 
         cached: dict[str, tuple[Candle, ...]] = {}
         for timeframe in ("5", "15", "60"):
@@ -771,7 +988,6 @@ def _recover_public_gap(
             priority[item[0].event_kind],
             -int(str(item[0].attributes.to_dict().get("timeframe") or 0)),
             -1 if item[1] is None else item[1].seq,
-            item[0].fact_id,
         )
     )
     return tuple(replay), counts
@@ -894,6 +1110,8 @@ def main() -> None:
     sock: Any | None = None
     oi_stop_event: threading.Event | None = None
     oi_thread: threading.Thread | None = None
+    trade_mirror_stop: threading.Event | None = None
+    trade_mirror_thread: threading.Thread | None = None
     try:
         closed_boundaries: dict[tuple[str, str], datetime] = {}
         for symbol in symbols:
@@ -926,10 +1144,14 @@ def main() -> None:
         flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
         last_oi_sample: dict[str, datetime] = {}
         trade_cursors: dict[str, TradeCursor] = {}
+        trade_current_seq_exec_ids: dict[str, set[str]] = {}
+        trade_proof_monotonic: dict[str, float] = {}
         oi_cursors: dict[str, OiSampleCursor] = {}
         bar_open_boundaries: dict[str, datetime] = {}
         deduper = ExactFactDeduper()
         transport_reconnects = 0
+        trade_audits = 0
+        trade_audit_reconnects = 0
         oi_config = (
             Oi30sConfig(
                 fact_source_id=FACT_SOURCE_ID,
@@ -944,6 +1166,12 @@ def main() -> None:
         oi_health = Oi30sHealthTracker(oi_config) if oi_config is not None else None
         oi_results: queue.Queue[OiSlotResult] = queue.Queue()
         oi_stop_event = threading.Event()
+        trade_mirror = PublicTradeMirrorBuffer(
+            tuple(symbols),
+            retention_seconds=MIRROR_RETENTION_SECONDS,
+        )
+        trade_mirror_stop = threading.Event()
+        trade_mirror_ready = threading.Event()
 
         def write_status(
             *, transport_state: str = "CONNECTED", extra: Mapping[str, object] | None = None
@@ -960,9 +1188,28 @@ def main() -> None:
                 "transport_state": transport_state,
                 "transport_reconnects": transport_reconnects,
                 "service_instance_id": identity.service_instance_id,
+                "ws_ping_interval_seconds": PING_INTERVAL_SECONDS,
+                "ws_pong_timeout_seconds": PONG_TIMEOUT_SECONDS,
+                "trade_silence_audit_seconds": TRADE_SILENCE_AUDIT_SECONDS,
+                "trade_audit_request_timeout_seconds": TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS,
+                "trade_audits": trade_audits,
+                "trade_audit_reconnects": trade_audit_reconnects,
+                "trade_proven_symbols": len(trade_proof_monotonic),
             }
             if oi_health is not None:
                 payload.update(oi_health.snapshot())
+            mirror_snapshot = trade_mirror.snapshot()
+            payload.update(
+                {
+                    "trade_mirror_state": mirror_snapshot["state"],
+                    "trade_mirror_epoch": mirror_snapshot["epoch"],
+                    "trade_mirror_events": mirror_snapshot["events"],
+                    "trade_mirror_duplicates": mirror_snapshot["duplicates"],
+                    "trade_mirror_gaps": mirror_snapshot["gaps"],
+                    "trade_mirror_last_received_at": mirror_snapshot["last_received_at"],
+                    "trade_mirror_retention_seconds": MIRROR_RETENTION_SECONDS,
+                }
+            )
             if extra:
                 payload.update(dict(extra))
             _atomic_json(STATUS_PATH, payload)
@@ -985,6 +1232,12 @@ def main() -> None:
                 if previous_trade is not None and trade_cursor.seq < previous_trade.seq:
                     raise ContinuityNotProvable(
                         f"PUBLIC_TRADE cross-sequence regressed for {fact.symbol}"
+                    )
+                if previous_trade is None or trade_cursor.seq > previous_trade.seq:
+                    trade_current_seq_exec_ids[fact.symbol] = {trade_cursor.exec_id}
+                else:
+                    trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(
+                        trade_cursor.exec_id
                     )
                 trade_cursors[fact.symbol] = trade_cursor
             elif fact.event_kind == "OPEN_INTEREST":
@@ -1181,6 +1434,7 @@ def main() -> None:
                         symbol = str(item.get("s") or "").upper()
                         if symbol not in runners:
                             continue
+                        trade_proof_monotonic[symbol] = time.monotonic()
                         result.append((_trade_fact(item, received_at), _trade_cursor(item), None))
             elif topic.startswith("kline."):
                 result.extend(
@@ -1208,6 +1462,19 @@ def main() -> None:
                     return False
             return True
 
+        trade_mirror_thread = threading.Thread(
+            target=_run_public_trade_mirror,
+            args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+            name="u5-public-trade-mirror",
+            daemon=True,
+        )
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("publicTrade mirror startup continuity is not active")
         write_status()
         if oi_config is not None:
             oi_thread = threading.Thread(
@@ -1221,7 +1488,11 @@ def main() -> None:
             symbols
         )
         buffered_messages: list[dict[str, Any]] = list(initial_buffer)
-        next_ping = time.monotonic() + 20.0
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
         next_status = time.monotonic()
         transport_errors = (
             websocket.WebSocketConnectionClosedException,
@@ -1232,6 +1503,66 @@ def main() -> None:
 
         while not stopping:
             try:
+                audit_now = time.monotonic()
+                stale_trade_symbols = tuple(
+                    symbol
+                    for symbol in symbols
+                    if symbol in trade_cursors
+                    and audit_now - trade_proof_monotonic.get(symbol, audit_now)
+                    >= TRADE_SILENCE_AUDIT_SECONDS
+                )
+                if stale_trade_symbols:
+                    try:
+                        _audit_public_trade_silence(
+                            stale_trade_symbols,
+                            trade_cursors,
+                            trade_current_seq_exec_ids,
+                        )
+                    except PublicTradeStreamBehind:
+                        trade_audit_reconnects += 1
+                        raise
+                    except ContinuityNotProvable as audit_exc:
+                        reason = str(audit_exc)
+                        occurred_at = datetime.now(UTC)
+                        _record_transport_event(
+                            connection,
+                            identity,
+                            category="TRANSPORT_CONTINUITY",
+                            occurred_at=occurred_at,
+                            payload={
+                                "verdict": "NOT_PROVABLE",
+                                "source": "PUBLIC_TRADE_SILENCE_AUDIT",
+                                "reason": reason,
+                                "symbols": list(stale_trade_symbols),
+                            },
+                        )
+                        store.transition_run(
+                            identity,
+                            status="NOT_COMPARABLE",
+                            occurred_at=occurred_at,
+                            summary={
+                                "trading_effect": "NONE",
+                                "state": "NOT_COMPARABLE",
+                                "reason": reason,
+                                "facts_received": facts_received,
+                                "transport_reconnects": transport_reconnects,
+                                "trade_audits": trade_audits,
+                                **comparator.summary(),
+                            },
+                        )
+                        write_status(
+                            transport_state="NOT_PROVABLE",
+                            extra={
+                                "run_status": "NOT_COMPARABLE",
+                                "continuity_reason": reason,
+                            },
+                        )
+                        return
+                    else:
+                        trade_audits += 1
+                        audit_proven_at = time.monotonic()
+                        for symbol in stale_trade_symbols:
+                            trade_proof_monotonic[symbol] = audit_proven_at
                 if use_rest_oi30s and not process_oi_results(collect_oi_results()):
                     return
                 message: dict[str, Any] | None = None
@@ -1251,12 +1582,21 @@ def main() -> None:
                             message = cast(dict[str, Any], parsed)
                     except websocket.WebSocketTimeoutException:
                         pass
-                if message is not None and not process_message(message, received_at):
-                    return
                 now_monotonic = time.monotonic()
-                if now_monotonic >= next_ping:
+                if message is not None:
+                    if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                        heartbeat.note_pong(now_monotonic)
+                    elif message.get("op") != "subscribe":
+                        heartbeat.note_market_frame(now_monotonic)
+                    if not process_message(message, received_at):
+                        return
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "application heartbeat deadline exceeded"
+                    )
+                if heartbeat.ping_due(now_monotonic):
                     sock.send('{"op":"ping"}')
-                    next_ping = now_monotonic + 20.0
+                    heartbeat.note_ping_sent(now_monotonic)
                 if now_monotonic >= next_status:
                     write_status()
                     next_status = now_monotonic + 2.0
@@ -1354,6 +1694,44 @@ def main() -> None:
                         "cursors": cursor_snapshot,
                     },
                 )
+                trade_recovery_source = "REST_RECENT_TRADE"
+                mirror_fallback_reason: str | None = None
+                trade_override: tuple[tuple[MarketFactEnvelope, TradeCursor], ...] | None = None
+                try:
+                    mirror_cursors, mirror_seq_ids = trade_mirror.current_cursors()
+                    if set(mirror_cursors) != set(symbols):
+                        raise ContinuityNotProvable(
+                            "publicTrade mirror lacks exact current cursors "
+                            "for all required symbols"
+                        )
+                    _audit_public_trade_silence(
+                        tuple(symbols),
+                        mirror_cursors,
+                        mirror_seq_ids,
+                    )
+                    mirror_events = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=ready_server_at,
+                    )
+                    trade_override = tuple(
+                        (
+                            _replay_trade_fact(
+                                event.as_replay_trade(),
+                                event.received_at,
+                            ),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                        for event in mirror_events
+                    )
+                    trade_recovery_source = "MIRROR_WS"
+                except (ContinuityNotProvable, PublicTradeStreamBehind) as mirror_exc:
+                    mirror_fallback_reason = f"{type(mirror_exc).__name__}: {mirror_exc}"
+
                 try:
                     replay_items, replay_counts = _recover_public_gap(
                         symbols=symbols,
@@ -1363,6 +1741,8 @@ def main() -> None:
                         oi_cursors=oi_cursors,
                         closed_boundaries=closed_boundaries,
                         bar_open_boundaries=bar_open_boundaries,
+                        known_trade_exec_ids=trade_current_seq_exec_ids,
+                        trade_replay_override=trade_override,
                     )
                 except ContinuityNotProvable as gap_exc:
                     with suppress(Exception):
@@ -1425,6 +1805,9 @@ def main() -> None:
                         with suppress(Exception):
                             new_sock.close()
                         return
+                recovery_proven_at = time.monotonic()
+                for symbol in symbols:
+                    trade_proof_monotonic[symbol] = recovery_proven_at
                 transport_reconnects += 1
                 _record_transport_event(
                     connection,
@@ -1440,6 +1823,8 @@ def main() -> None:
                         "same_service_instance_id": identity.service_instance_id,
                         "same_started_at": identity.started_at.isoformat(),
                         "replay_counts": replay_counts,
+                        "trade_recovery_source": trade_recovery_source,
+                        "mirror_fallback_reason": mirror_fallback_reason,
                         "cursors_before": cursor_snapshot,
                         "cursors_after": _transport_cursor_payload(
                             trade_cursors=trade_cursors,
@@ -1451,13 +1836,18 @@ def main() -> None:
                 )
                 sock = new_sock
                 buffered_messages = list(reconnect_buffer)
-                next_ping = time.monotonic() + 20.0
+                heartbeat = PublicWsHeartbeat(
+                    PING_INTERVAL_SECONDS,
+                    PONG_TIMEOUT_SECONDS,
+                    started_monotonic=time.monotonic(),
+                )
                 next_status = time.monotonic()
                 write_status(
                     transport_state="CONNECTED",
                     extra={
                         "last_transport_continuity": "PROVEN_COMPLETE",
                         "last_reconnect_at": ready_local_at.isoformat(),
+                        "last_trade_recovery_source": trade_recovery_source,
                     },
                 )
                 continue
@@ -1499,6 +1889,10 @@ def main() -> None:
             oi_stop_event.set()
         if oi_thread is not None:
             oi_thread.join(timeout=2.0)
+        if trade_mirror_stop is not None:
+            trade_mirror_stop.set()
+        if trade_mirror_thread is not None:
+            trade_mirror_thread.join(timeout=2.0)
         if sock is not None:
             with suppress(Exception):
                 sock.close()

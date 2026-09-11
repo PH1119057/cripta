@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -46,6 +46,53 @@ class ReplayTrade:
     price: str
     size: str
     side: str
+
+
+class PublicWsHeartbeat:
+    """Application-level public WebSocket liveness proof.
+
+    Socket openness and successful send() are not liveness evidence.  A received
+    public frame or explicit Bybit pong resets the heartbeat; a sent ping starts
+    a bounded proof deadline.
+    """
+
+    def __init__(
+        self,
+        ping_interval_seconds: float,
+        pong_timeout_seconds: float,
+        *,
+        started_monotonic: float,
+    ) -> None:
+        if ping_interval_seconds <= 0:
+            raise ValueError("ping_interval_seconds must be positive")
+        if pong_timeout_seconds <= 0:
+            raise ValueError("pong_timeout_seconds must be positive")
+        self.ping_interval_seconds = ping_interval_seconds
+        self.pong_timeout_seconds = pong_timeout_seconds
+        self._last_activity_monotonic = started_monotonic
+        self._pending_ping_sent_at: float | None = None
+
+    def ping_due(self, now_monotonic: float) -> bool:
+        return (
+            self._pending_ping_sent_at is None
+            and now_monotonic - self._last_activity_monotonic >= self.ping_interval_seconds
+        )
+
+    def note_ping_sent(self, now_monotonic: float) -> None:
+        if self._pending_ping_sent_at is None:
+            self._pending_ping_sent_at = now_monotonic
+
+    def note_pong(self, now_monotonic: float) -> None:
+        self._last_activity_monotonic = now_monotonic
+        self._pending_ping_sent_at = None
+
+    def note_market_frame(self, now_monotonic: float) -> None:
+        self._last_activity_monotonic = now_monotonic
+        self._pending_ping_sent_at = None
+
+    def deadline_exceeded(self, now_monotonic: float) -> bool:
+        sent_at = self._pending_ping_sent_at
+        return sent_at is not None and now_monotonic - sent_at >= self.pong_timeout_seconds
 
 
 class ExactFactDeduper:
@@ -136,17 +183,46 @@ def _parse_trade_row(row: Mapping[str, object], *, symbol: str) -> ReplayTrade:
     )
 
 
+def audit_recent_trade_window(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    anchor: TradeCursor,
+    cutoff_at: datetime,
+    known_exec_ids: Collection[str] = (),
+) -> tuple[str, ...]:
+    """Detect exact unknown trades without inventing their causal order.
+
+    This function is only a liveness/gap detector.  Any unknown exact execId in
+    the current anchor sequence or a later sequence proves the primary stream is
+    behind; ordering is deferred to mirror/strict replay recovery.
+    """
+
+    parsed = tuple(_parse_trade_row(row, symbol=anchor.symbol) for row in rows)
+    if not any(row.exec_id == anchor.exec_id and row.seq == anchor.seq for row in parsed):
+        raise ContinuityNotProvable("exact recent-trade execId+seq anchor not found")
+    cutoff = cutoff_at.astimezone(UTC)
+    known = set(known_exec_ids)
+    known.add(anchor.exec_id)
+    return tuple(
+        row.exec_id
+        for row in parsed
+        if row.traded_at <= cutoff and row.seq >= anchor.seq and row.exec_id not in known
+    )
+
+
 def build_exact_trade_replay(
     rows: Sequence[Mapping[str, object]],
     *,
     anchor: TradeCursor,
     cutoff_at: datetime,
+    known_exec_ids: Collection[str] = (),
 ) -> tuple[ReplayTrade, ...]:
     """Build exact causal trade replay from recent-trade using execId+seq anchor.
 
-    The REST endpoint is newest-first. Cross-sequence defines causal group order. If a
-    same-seq group has different timestamp/price/side, row order could affect V1 state,
-    so continuity is rejected instead of guessed.
+    The REST endpoint is newest-first. Cross-sequence defines causal group order.
+    Within one sequence, distinct exact trade timestamps define chronological order.
+    If multiple rows share the same exact timestamp but differ in price/size/side,
+    order can affect V1 state and continuity is rejected instead of guessed.
     """
 
     parsed = tuple(_parse_trade_row(row, symbol=anchor.symbol) for row in rows)
@@ -161,25 +237,41 @@ def build_exact_trade_replay(
     if anchor_index is None:
         raise ContinuityNotProvable("exact recent-trade execId+seq anchor not found")
     cutoff = cutoff_at.astimezone(UTC)
+    known = set(known_exec_ids)
     candidates = [
         row
         for row in parsed
-        if row.traded_at <= cutoff and row.seq >= anchor.seq and row.exec_id != anchor.exec_id
+        if row.traded_at <= cutoff
+        and row.seq >= anchor.seq
+        and row.exec_id != anchor.exec_id
+        and row.exec_id not in known
     ]
+    for row in candidates:
+        if row.seq == anchor.seq and row.traded_at <= anchor.traded_at.astimezone(UTC):
+            raise ContinuityNotProvable(
+                "anchor sequence "
+                f"{anchor.seq} contains unknown trade not strictly after exact anchor time"
+            )
     groups: dict[int, list[ReplayTrade]] = {}
     for row in candidates:
         groups.setdefault(row.seq, []).append(row)
     ordered: list[ReplayTrade] = []
     for seq in sorted(groups):
         group = groups[seq]
-        semantic_keys = {(row.traded_at, row.price, row.side) for row in group}
-        if len(semantic_keys) > 1:
-            raise ContinuityNotProvable(
-                f"same-seq trade group {seq} is not semantically commutative"
-            )
-        # Rows in one cross-sequence are simultaneous for this continuity contract.
-        # Stable exec-id order avoids depending on undocumented REST row order.
-        ordered.extend(sorted(group, key=lambda row: row.exec_id))
+        by_timestamp: dict[datetime, list[ReplayTrade]] = {}
+        for row in group:
+            by_timestamp.setdefault(row.traded_at, []).append(row)
+        for traded_at in sorted(by_timestamp):
+            timestamp_group = by_timestamp[traded_at]
+            semantic_keys = {(row.price, row.size, row.side) for row in timestamp_group}
+            if len(semantic_keys) > 1:
+                raise ContinuityNotProvable(
+                    f"same-seq trade group {seq} has ambiguous same timestamp order"
+                )
+            # At one exact timestamp, only fully identical trade semantics are
+            # permutation-safe for V1/Universal state. execId is then a stable
+            # transport-only tie breaker.
+            ordered.extend(sorted(timestamp_group, key=lambda row: row.exec_id))
     return tuple(ordered)
 
 

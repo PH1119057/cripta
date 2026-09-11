@@ -1,8 +1,8 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.5
-**Дата:** 2026-09-10
+**Версия:** 1.6
+**Дата:** 2026-09-11
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
 **Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
@@ -580,6 +580,48 @@ OI health отделён от WebSocket health. Runtime/source evidence соде
 Только после published implementation + exact deploy + source-only soak PASS разрешён новый clean parity run с новым `run_id` и natural derived 420-minute warmup. Старые parity runs не продолжаются. Любой required fact continuity `NOT_PROVABLE` переводит новый run в `NOT_COMPARABLE`.
 
 Architecture flags остаются:
+
+    U5_TRADING_EFFECT = NONE
+    UNIVERSAL_ENTRY_MAINNET_CONSUMER = DISABLED
+    CONSUMER_CUTOVER = NO
+    MAINNET_REARM = NO
+    MICRO_LIVE = NO
+    LIVE = NO
+
+
+### 20.11 U5 PUBLIC_TRADE silent-stall watchdog / exact replay repair
+
+Owner decision 2026-09-11 разрешает отдельный technical transport repair после фактического U7 blocker: public WebSocket мог оставаться локально открытым, тогда как все WS market-data cursors (`PUBLIC_TRADE` и 5m/15m/60m kline) переставали продвигаться на десятки минут. Новый REST OI30S source при этом продолжал работать исправно. Это не Strategy/V1/EntryPlan/comparator semantics change.
+
+Observed failure class:
+
+    socket object open / send(ping) succeeds
+    BUT no timely application pong/market frame
+    -> PUBLIC_TRADE + candle cursors silently stale
+    -> exact recent-trade anchor eventually leaves public 1000-trade window
+    -> later reconnect cannot prove continuity
+
+Repair contract:
+
+- Bybit application heartbeat обязателен: ping interval = 10 seconds, pong deadline = 5 seconds. Отсутствие timely pong после sent ping является transport continuity loss независимо от TCP/socket state и немедленно переводит runtime в существующий `PUBLIC_TRANSPORT_PAUSED -> reconnect -> exact replay` flow.
+- `send(ping)` сам по себе не является health proof. Timely Bybit `pong` либо received public market frame обновляет transport-liveness evidence; explicit heartbeat deadline violation сохраняется append-only в transport evidence.
+- Watchdog constants являются техническим transport contract и не торговыми параметрами. Они не входят в StrategyCard/EntryPlan и не меняют V1 decision thresholds.
+- Дополнительно действует per-symbol `PUBLIC_TRADE` silence audit: если exact live trade cursor не подтверждался 10 seconds, runtime делает bounded public `/v5/market/recent-trade` audit именно этого symbol. Audit request timeout = 4 seconds; stale symbols проверяются concurrently, чтобы audit сам не съедал recent-trade window. Exact anchor present + no unknown newer `execId` доказывает, что отсутствие trades было реальным. Unknown exact trades запускают тот же `PUBLIC_TRANSPORT_PAUSED -> reconnect -> exact replay`; audit сам market facts не эмитит. Missing anchor, unavailable audit или ambiguous ordering -> `NOT_COMPARABLE`.
+- Для anchor `seq` runtime хранит exact множество уже принятых `execId` этой текущей sequence. Они исключаются до same-seq ambiguity check, поэтому уже принятый split-message trade не превращается в ложную ambiguity. Retention ограничен только текущей anchor sequence и не является trading/event cap.
+- Поскольку Bybit publicTrade WS гарантирует ascending trade-time order внутри каждого received message, но допускает несколько messages для одной `seq`, а public recent-trade REST не даёт доказуемого intra-timestamp message order, U5 держит второй независимый publicTrade-only WebSocket mirror как recovery evidence. Mirror public/read-only, не использует credentials, не создаёт market facts в нормальном режиме и не кормит engines параллельно primary.
+- Mirror хранит exact received publicTrade order текущей непрерывной mirror epoch в bounded 600-second technical buffer. Buffer time horizon является transport evidence retention, не trading/event cap. Exact `execId` duplicates внутри mirror не размножаются. Mirror reconnect начинает новую epoch; данные разных epochs не склеиваются.
+- При primary gap exact trade replay сначала строится из непрерывной mirror epoch: для каждого required symbol должен присутствовать exact primary anchor `execId+seq`, а все последующие mirror trades до recovery cutoff воспроизводятся в реально полученном mirror order. Это разрешает same-timestamp/same-seq trades без выдуманной REST сортировки. Если mirror не покрывает exact anchor/interval, разрешён только прежний REST fallback с его строгим ambiguity fail-closed contract.
+- Mirror никогда не меняет `PUBLIC_TRADE` normalized semantics: `price`, `size`, `taker_side`, exact trade time и exact trade ID те же; меняется только technical recovery provenance. Legacy reference и Universal Entry по-прежнему получают один и тот же final normalized fact sequence.
+- В режиме `BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1` OI health остаётся независимым от WS health. OI slot acquisition продолжает жить отдельно, но parity processing при unproven WS continuity не имеет права объявлять comparable evidence до exact WS gap recovery.
+- `PUBLIC_TRADE` recovery остаётся только через exact `execId + seq` anchor в public recent-trade window. Repair не увеличивает окно синтетически, не использует nearest-time, не переносит last-known trade и не изобретает отсутствующие trades.
+- Same `seq` не означает автоматически commutative group. Cross-sequence задаёт group order; внутри одной `seq` точный `traded_at` используется как causal order только когда timestamps различимы. Если несколько trades имеют один и тот же exact timestamp и различаются по decision-affecting trade semantics (`price`, `size`, `side`), их order недоказуем и continuity остаётся `NOT_PROVABLE`. Exact-timestamp rows с полностью одинаковой trade semantics могут иметь stable `execId` order, поскольку перестановка этих идентичных engine inputs не меняет engine state.
+- Duplicate live/replay trade устраняется только по exact `execId`/normalized fact identity до входа в legacy reference или Universal Entry.
+- Любой anchor loss, ambiguous same-timestamp same-seq group, missing exact candle boundary или иной недоказуемый gap -> current parity run `NOT_COMPARABLE`.
+- Process restart continuation одного run остаётся запрещён. Deploy нового repair создаёт новый clean run и новый derived 420-minute warmup.
+
+Acceptance evidence включает: artificial half-open socket где `send(ping)` работает, но `pong` отсутствует; watchdog обнаруживает loss в пределах contract deadline и запускает same in-process recovery; short exact gap сохраняет run identity/start time; anchor-loss остаётся fail-closed; unique-timestamp same-seq group восстанавливается в exact chronological order; ambiguous equal-timestamp group остаётся fail-closed; first mismatch preservation; new REST OI30S health unchanged; zero trading writes; legacy/dashboard isolation; targeted/Ruff/mypy/full pytest gates.
+
+Architecture flags remain:
 
     U5_TRADING_EFFECT = NONE
     UNIVERSAL_ENTRY_MAINNET_CONSUMER = DISABLED
