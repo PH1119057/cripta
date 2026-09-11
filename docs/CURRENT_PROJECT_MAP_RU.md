@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.7
+**Версия документа:** 5.8
 **Дата:** 2026-09-11
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -282,3 +282,8 @@ Dispatcher не выполняет эти функции.
 5. `docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md` при работе с MAYAK/Dispatcher/coin rating
 6. `docs/STRATEGY_ENTRY_ARCHITECTURE_RU.md` при работе со Strategy/Entry/EntryPlan/signal lifecycle
 7. затрагиваемые специализированные контракты
+
+
+## U5 PUBLIC_TRADE mirror recovery repair — source stage
+
+A narrow technical repair is in progress to remove a false REST-vs-mirror race and preserve exact mirror receive order during recovery. Strategy/V1/EntryPlan/comparator semantics remain unchanged; trading effect NONE; U7 remains evidence-incomplete until a fresh natural run reaches PARITY_COMPARABLE.

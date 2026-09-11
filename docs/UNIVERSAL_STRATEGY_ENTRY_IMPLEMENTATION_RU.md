@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.6
+**Версия:** 1.7
 **Дата:** 2026-09-11
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -713,3 +713,16 @@ Initial deployment is shadow-only. Rollback stops/disables only universal shadow
     FULL_GATE = PASS
     SOURCE_HEAD = REMOTE_HEAD
     MAINNET_REARM = NO
+
+### 20.12 U5 mirror recovery race/order repair
+
+Owner-approved continuation of the technical PUBLIC_TRADE continuity repair. Trading semantics remain unchanged.
+
+The following are mandatory:
+
+- a continuously ACTIVE publicTrade mirror epoch with exact primary anchor coverage is itself the ordered transport proof for PUBLIC_TRADE recovery; it MUST NOT be invalidated by a later REST snapshot race;
+- REST recent-trade remains fallback only when mirror coverage is not provable; ambiguous REST same-timestamp ordering remains fail-closed;
+- mirror receive order for PUBLIC_TRADE rows MUST survive the final recovery merge; no secondary seq sort may reorder an already proven mirror sequence;
+- no Strategy/V1/EntryPlan/comparator/Universal engine/market-watch semantic change;
+- no trading effect, consumer cutover, MICRO_LIVE, LIVE or mainnet re-arm;
+- any unprovable mirror epoch/gap still yields NOT_COMPARABLE.

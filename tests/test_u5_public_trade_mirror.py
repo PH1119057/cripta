@@ -222,3 +222,68 @@ def test_runtime_recovery_override_does_not_call_rest_trade_or_reorder_tied_trad
     trades = [fact.fact_id for fact, _cursor in replay if fact.event_kind == "PUBLIC_TRADE"]
     assert trades == ["trade-first", "trade-second"]
     assert counts["PUBLIC_TRADE"] == 2
+
+
+def test_recovery_merge_preserves_mirror_receive_order_for_tied_trade_time(monkeypatch) -> None:
+    from decimal import Decimal
+
+    from bybit_workbench.domain.models import Candle
+    from bybit_workbench.universal_entry import FrozenPolicy, MarketFactEnvelope
+    from operations.monitoring import universal_entry_shadow as runtime
+
+    symbol = "UNIUSDT"
+    anchor = TradeCursor(symbol, "anchor", 100, NOW)
+    tied = NOW + timedelta(seconds=1)
+
+    def fact(exec_id: str, seq: int, price: str, side: str):
+        envelope = MarketFactEnvelope(
+            fact_id=f"trade-{exec_id}",
+            event_kind="PUBLIC_TRADE",
+            symbol=symbol,
+            observed_at=tied,
+            event_at=tied,
+            received_at=tied + timedelta(milliseconds=50),
+            source_refs=(f"mirror:{exec_id}",),
+            attributes=FrozenPolicy.from_mapping({"price": price, "size": "1", "taker_side": side}),
+        )
+        return envelope, TradeCursor(symbol, exec_id, seq, tied)
+
+    override = (fact("first", 102, "10.2", "Sell"), fact("second", 101, "10.1", "Buy"))
+    current_5 = Candle(
+        symbol=symbol,
+        timeframe="5",
+        opened_at=NOW,
+        closed_at=NOW + timedelta(minutes=5),
+        open=Decimal("10"),
+        high=Decimal("10.3"),
+        low=Decimal("9.9"),
+        close=Decimal("10.2"),
+        volume=Decimal("100"),
+        is_closed=False,
+    )
+    monkeypatch.setattr(runtime, "FACT_SOURCE_ID", runtime.REST_OI30S_SOURCE_ID)
+    monkeypatch.setattr(
+        runtime,
+        "_fetch_gap_candles",
+        lambda _symbol, timeframe, _ready: (current_5,) if timeframe == "5" else (),
+    )
+    replay, _counts = runtime._recover_public_gap(
+        symbols=(symbol,),
+        ready_local_at=NOW + timedelta(seconds=2),
+        ready_server_at=NOW + timedelta(seconds=2),
+        trade_cursors={symbol: anchor},
+        oi_cursors={},
+        closed_boundaries={(symbol, "5"): NOW, (symbol, "15"): NOW, (symbol, "60"): NOW},
+        bar_open_boundaries={symbol: NOW},
+        known_trade_exec_ids={symbol: {"anchor"}},
+        trade_replay_override=override,
+    )
+    trade_ids = [f.fact_id for f, _cursor in replay if f.event_kind == "PUBLIC_TRADE"]
+    assert trade_ids == ["trade-first", "trade-second"]
+
+
+def test_runtime_does_not_rest_audit_a_proven_mirror_before_recovery() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")
+    block = source.split("mirror_cursors, mirror_seq_ids = trade_mirror.current_cursors()", 1)[1]
+    block = block.split("mirror_events = trade_mirror.recover_after(", 1)[0]
+    assert "_audit_public_trade_silence" not in block

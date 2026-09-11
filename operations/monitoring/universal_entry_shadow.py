@@ -987,7 +987,6 @@ def _recover_public_gap(
             item[0].event_at,
             priority[item[0].event_kind],
             -int(str(item[0].attributes.to_dict().get("timeframe") or 0)),
-            -1 if item[1] is None else item[1].seq,
         )
     )
     return tuple(replay), counts
@@ -1704,11 +1703,10 @@ def main() -> None:
                             "publicTrade mirror lacks exact current cursors "
                             "for all required symbols"
                         )
-                    _audit_public_trade_silence(
-                        tuple(symbols),
-                        mirror_cursors,
-                        mirror_seq_ids,
-                    )
+                    # A continuously ACTIVE mirror epoch is itself the exact ordered
+                    # publicTrade transport proof. Do not race it against a later REST
+                    # snapshot here; that snapshot can contain newer trades and falsely
+                    # disqualify a healthy mirror.
                     mirror_events = trade_mirror.recover_after(
                         trade_cursors,
                         cutoff_at=ready_server_at,
