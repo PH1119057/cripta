@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.9
+**Версия документа:** 6.0
 **Дата:** 2026-09-11
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -291,3 +291,7 @@ A narrow technical repair is in progress to remove a false REST-vs-mirror race a
 ## U5 fail-honest service restart policy — source stage
 
 `cripta-universal-entry-shadow.service` is being changed from `Restart=always` to `Restart=on-failure` so a clean `NOT_COMPARABLE` evidence stop does not create repeated fresh runs. Unexpected crashes may still restart. Trading effect NONE.
+
+## U5 recovered-fact ordering / clean continuity stop — source stage
+
+Live verification proved Bybit publicTrade seq is monotonic in actual WS receive order; observed seq-regression was caused by local post-recovery re-sorting. A narrow technical repair now preserves mirror receive order through OI merge and converts continuity failures into clean `NOT_COMPARABLE` service stops. Trading effect NONE.

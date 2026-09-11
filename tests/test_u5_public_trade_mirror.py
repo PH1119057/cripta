@@ -287,3 +287,104 @@ def test_runtime_does_not_rest_audit_a_proven_mirror_before_recovery() -> None:
     block = source.split("mirror_cursors, mirror_seq_ids = trade_mirror.current_cursors()", 1)[1]
     block = block.split("mirror_events = trade_mirror.recover_after(", 1)[0]
     assert "_audit_public_trade_silence" not in block
+
+
+def test_mirror_replay_uses_receive_time_and_keeps_ws_order_even_if_trade_time_regresses(
+    monkeypatch,
+) -> None:
+    from bybit_workbench.universal_entry import FrozenPolicy, MarketFactEnvelope
+    from operations.monitoring import universal_entry_shadow as runtime
+
+    symbol = "UNIUSDT"
+    first_trade_time = NOW + timedelta(seconds=2)
+    second_trade_time = NOW + timedelta(seconds=1)
+    first_received = NOW + timedelta(seconds=3)
+    second_received = NOW + timedelta(seconds=3, milliseconds=1)
+
+    def item(exec_id: str, seq: int, event_at: datetime, received_at: datetime):
+        fact = MarketFactEnvelope(
+            fact_id=f"trade-{exec_id}",
+            event_kind="PUBLIC_TRADE",
+            symbol=symbol,
+            observed_at=event_at,
+            event_at=event_at,
+            received_at=received_at,
+            source_refs=(f"mirror:{exec_id}",),
+            attributes=FrozenPolicy.from_mapping({"price": "10", "size": "1", "taker_side": "Buy"}),
+        )
+        return fact, TradeCursor(symbol, exec_id, seq, event_at)
+
+    override = (
+        item("first", 101, first_trade_time, first_received),
+        item("second", 102, second_trade_time, second_received),
+    )
+    monkeypatch.setattr(runtime, "FACT_SOURCE_ID", runtime.REST_OI30S_SOURCE_ID)
+    monkeypatch.setattr(runtime, "_fetch_gap_candles", lambda *_args, **_kwargs: ())
+    replay, _counts = runtime._recover_public_gap(
+        symbols=(),
+        ready_local_at=NOW + timedelta(seconds=4),
+        ready_server_at=NOW + timedelta(seconds=4),
+        trade_cursors={},
+        oi_cursors={},
+        closed_boundaries={},
+        bar_open_boundaries={},
+        trade_replay_override=override,
+    )
+    assert [fact.fact_id for fact, _cursor in replay] == ["trade-first", "trade-second"]
+
+
+def test_oi_gap_merge_never_reorders_existing_replay() -> None:
+    from bybit_workbench.universal_entry import FrozenPolicy, MarketFactEnvelope
+    from operations.monitoring import universal_entry_shadow as runtime
+
+    symbol = "UNIUSDT"
+    tied = NOW + timedelta(seconds=1)
+    first = MarketFactEnvelope(
+        fact_id="trade-first",
+        event_kind="PUBLIC_TRADE",
+        symbol=symbol,
+        observed_at=tied,
+        event_at=tied,
+        received_at=tied,
+        source_refs=("mirror:first",),
+        attributes=FrozenPolicy.from_mapping({"price": "10", "size": "1", "taker_side": "Buy"}),
+    )
+    second = MarketFactEnvelope(
+        fact_id="trade-second",
+        event_kind="PUBLIC_TRADE",
+        symbol=symbol,
+        observed_at=tied,
+        event_at=tied,
+        received_at=tied + timedelta(milliseconds=2),
+        source_refs=("mirror:second",),
+        attributes=FrozenPolicy.from_mapping({"price": "11", "size": "1", "taker_side": "Sell"}),
+    )
+    oi = MarketFactEnvelope(
+        fact_id="oi-mid",
+        event_kind="OPEN_INTEREST",
+        symbol=symbol,
+        observed_at=tied,
+        event_at=tied,
+        received_at=tied + timedelta(milliseconds=1),
+        source_refs=("oi:mid",),
+        attributes=FrozenPolicy.from_mapping({"open_interest": "100"}),
+    )
+    replay = (
+        (first, TradeCursor(symbol, "first", 101, tied)),
+        (second, TradeCursor(symbol, "second", 102, tied)),
+    )
+    merged = runtime._merge_gap_oi_without_reordering_replay(replay, [oi])
+    trade_ids = [fact.fact_id for fact, _cursor in merged if fact.event_kind == "PUBLIC_TRADE"]
+    assert trade_ids == ["trade-first", "trade-second"]
+    assert [fact.fact_id for fact, _cursor in merged] == ["trade-first", "oi-mid", "trade-second"]
+
+
+def test_runtime_has_clean_continuity_stop_before_generic_crash_handler() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")
+    clean = source.index("except ContinuityNotProvable as exc:")
+    generic = source.index("except Exception as exc:", clean)
+    assert clean < generic
+    block = source[clean:generic]
+    assert 'status="NOT_COMPARABLE"' in block
+    assert "return" in block
+    assert "raise" not in block

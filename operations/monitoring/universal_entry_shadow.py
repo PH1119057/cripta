@@ -984,12 +984,31 @@ def _recover_public_gap(
     priority = {"CANDLE_CLOSED": 0, "BAR_OPEN": 1, "PUBLIC_TRADE": 2, "OPEN_INTEREST": 3}
     replay.sort(
         key=lambda item: (
-            item[0].event_at,
+            (
+                item[0].received_at
+                if trade_replay_override is not None and item[0].event_kind == "PUBLIC_TRADE"
+                else item[0].event_at
+            ),
             priority[item[0].event_kind],
             -int(str(item[0].attributes.to_dict().get("timeframe") or 0)),
         )
     )
     return tuple(replay), counts
+
+
+def _merge_gap_oi_without_reordering_replay(
+    replay_items: tuple[tuple[MarketFactEnvelope, TradeCursor | None], ...],
+    oi_facts: list[MarketFactEnvelope],
+) -> list[tuple[MarketFactEnvelope, TradeCursor | None]]:
+    """Insert exact OI facts by receipt time without changing proven replay order."""
+
+    combined = list(replay_items)
+    for fact in sorted(oi_facts, key=lambda item: (item.received_at, item.fact_id)):
+        index = 0
+        while index < len(combined) and combined[index][0].received_at <= fact.received_at:
+            index += 1
+        combined.insert(index, (fact, None))
+    return combined
 
 
 def _status_payload(
@@ -1787,14 +1806,9 @@ def main() -> None:
                         pending_gap_oi.append(oi_result)
                     oi_gap_facts = [fact for result in pending_gap_oi for fact in result.facts]
                     replay_counts["OPEN_INTEREST"] = len(oi_gap_facts)
-                    combined_replay = list(replay_items) + [(fact, None) for fact in oi_gap_facts]
-                    combined_replay.sort(
-                        key=lambda item: (
-                            item[0].observed_at,
-                            item[0].event_at,
-                            item[0].event_kind,
-                            item[0].fact_id,
-                        )
+                    combined_replay = _merge_gap_oi_without_reordering_replay(
+                        replay_items,
+                        oi_gap_facts,
                     )
                 else:
                     combined_replay = list(replay_items)
@@ -1868,6 +1882,36 @@ def main() -> None:
                 **comparator.summary(),
             },
         )
+    except ContinuityNotProvable as exc:
+        failed_at = datetime.now(UTC)
+        reason = f"{type(exc).__name__}: {exc}"
+        with suppress(Exception):
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=failed_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                },
+            )
+        with suppress(Exception):
+            _atomic_json(
+                STATUS_PATH,
+                {
+                    "updated_at": failed_at.isoformat(),
+                    "service": "cripta-universal-entry-shadow.service",
+                    "trading_effect": "NONE",
+                    "parity_run_id": identity.parity_run_id,
+                    "state": "NOT_COMPARABLE",
+                    "state_reason": reason,
+                    "source_commit": identity.universal_source_commit,
+                    "fact_source_id": identity.fact_source_id,
+                    "service_instance_id": identity.service_instance_id,
+                },
+            )
+        return
     except Exception as exc:
         failed_at = datetime.now(UTC)
         with suppress(Exception):

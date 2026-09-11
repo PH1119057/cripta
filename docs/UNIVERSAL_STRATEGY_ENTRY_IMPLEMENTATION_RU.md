@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.8
+**Версия:** 1.9
 **Дата:** 2026-09-11
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -730,3 +730,13 @@ The following are mandatory:
 ### 20.13 U5 fail-honest service restart policy
 
 The U5 parity shadow is evidence infrastructure, not a trading consumer. A normal fail-closed run termination such as `NOT_COMPARABLE` MUST remain stopped for inspection and MUST NOT create an automatic restart storm. The systemd unit therefore uses `Restart=on-failure`: unexpected process crashes may restart, while a clean evidence stop (exit 0) stays stopped. This changes no Strategy/V1/EntryPlan/comparator semantics and has trading effect NONE.
+
+### 20.14 U5 recovered-fact ordering / clean continuity stop
+
+Owner-approved continuation after live evidence showed that post-recovery sorting could reorder an already proven publicTrade mirror sequence. Requirements:
+
+- PUBLIC_TRADE rows recovered from an ACTIVE mirror use exact mirror `received_at` ordering; stable order inside one received WS message is preserved;
+- later merge with independently collected OI30S facts MUST NOT reorder the already proven replay sequence;
+- REST fallback ordering rules remain unchanged and fail closed when ambiguous;
+- any `ContinuityNotProvable` is an evidence outcome, not a process crash: the exact run is finalized `NOT_COMPARABLE` and the service exits cleanly so `Restart=on-failure` does not create a new run automatically;
+- no Strategy/V1/EntryPlan/comparator/Universal engine/market-watch semantic change and trading effect remains NONE.
