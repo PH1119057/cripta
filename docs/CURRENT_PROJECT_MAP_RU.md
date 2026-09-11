@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 5.8
+**Версия документа:** 5.9
 **Дата:** 2026-09-11
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -287,3 +287,7 @@ Dispatcher не выполняет эти функции.
 ## U5 PUBLIC_TRADE mirror recovery repair — source stage
 
 A narrow technical repair is in progress to remove a false REST-vs-mirror race and preserve exact mirror receive order during recovery. Strategy/V1/EntryPlan/comparator semantics remain unchanged; trading effect NONE; U7 remains evidence-incomplete until a fresh natural run reaches PARITY_COMPARABLE.
+
+## U5 fail-honest service restart policy — source stage
+
+`cripta-universal-entry-shadow.service` is being changed from `Restart=always` to `Restart=on-failure` so a clean `NOT_COMPARABLE` evidence stop does not create repeated fresh runs. Unexpected crashes may still restart. Trading effect NONE.

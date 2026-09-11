@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.7
+**Версия:** 1.8
 **Дата:** 2026-09-11
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -726,3 +726,7 @@ The following are mandatory:
 - no Strategy/V1/EntryPlan/comparator/Universal engine/market-watch semantic change;
 - no trading effect, consumer cutover, MICRO_LIVE, LIVE or mainnet re-arm;
 - any unprovable mirror epoch/gap still yields NOT_COMPARABLE.
+
+### 20.13 U5 fail-honest service restart policy
+
+The U5 parity shadow is evidence infrastructure, not a trading consumer. A normal fail-closed run termination such as `NOT_COMPARABLE` MUST remain stopped for inspection and MUST NOT create an automatic restart storm. The systemd unit therefore uses `Restart=on-failure`: unexpected process crashes may restart, while a clean evidence stop (exit 0) stays stopped. This changes no Strategy/V1/EntryPlan/comparator semantics and has trading effect NONE.

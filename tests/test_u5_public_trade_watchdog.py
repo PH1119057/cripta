@@ -38,7 +38,7 @@ def _row(
 
 def test_contract_freezes_public_trade_watchdog_before_source() -> None:
     text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "**Версия:** 1.7" in text
+    assert "**Версия:** 1.8" in text
     assert "### 20.12 U5 mirror recovery race/order repair" in text
     assert "### 20.11 U5 PUBLIC_TRADE silent-stall watchdog / exact replay repair" in text
     assert "ping interval = 10 seconds" in text
@@ -250,3 +250,11 @@ def test_silence_audit_same_seq_tied_unknown_forces_recovery_not_early_failure()
             {"UNIUSDT": {"anchor"}},
             fetch_fn=fetch,
         )
+
+
+def test_u5_service_does_not_restart_clean_not_comparable_forever() -> None:
+    unit = (ROOT / "operations/systemd/cripta-universal-entry-shadow.service").read_text(
+        encoding="utf-8"
+    )
+    assert "Restart=on-failure" in unit
+    assert "Restart=always" not in unit

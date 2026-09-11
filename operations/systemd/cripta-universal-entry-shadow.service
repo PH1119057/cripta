@@ -12,7 +12,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/cripta/source_checkout/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
 EnvironmentFile=/etc/cripta/universal_entry_shadow.env
 ExecStart=/usr/bin/python3 /srv/cripta/monitoring/universal_entry_shadow.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
