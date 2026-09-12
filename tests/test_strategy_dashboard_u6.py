@@ -1062,3 +1062,13 @@ def test_strategy_api_keeps_multi_strategy_observer_fail_closed_until_installed(
     assert "activate_exact_strategy(" in scope
     assert "enforce_readiness=True" in scope
     assert '"STRATEGY_RUNTIME_NOT_READY"' in scope
+
+
+def test_strategy_controls_are_global_not_nested_in_live_renderer() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    render_at = html.index("function renderLiveState(d){")
+    assert html.index("let u6StrategyCatalog=[]") < render_at
+    assert html.index("function openNewStrategyEditor()") < render_at
+    assert html.index("async function loadStrategies(") < render_at
+    assert html.index("async function toggleStrategyState(") < render_at
+    assert html.index("loadStrategies().catch") > render_at
