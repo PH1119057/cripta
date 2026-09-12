@@ -204,7 +204,7 @@ class UniversalEntryEngine:
                     technical_readiness=technical_readiness,
                 )
                 request = self._execution_request(
-                    plan, signal, attempt, decision, fact_for_predicate.observed_at
+                    plan, signal, attempt, decision, fact_for_predicate
                 )
                 notifications = self._notifications(
                     signal, attempt, decision, plan, capacity=capacity
@@ -643,14 +643,28 @@ class UniversalEntryEngine:
         signal: StrategySignal,
         attempt: StrategyAttempt,
         decision: EntryDecision,
-        now: datetime,
+        signal_fact: MarketFactEnvelope,
     ) -> ExecutionRequest | None:
         if decision.code is not EntryDecisionCode.ACCEPTED:
             return None
+        now = signal_fact.observed_at
         payload = FrozenPolicy.from_mapping(
             {
                 "capital_policy": plan.capital_policy.to_dict(),
                 "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                "signal_fact": {
+                    "fact_id": signal_fact.fact_id,
+                    "event_kind": signal_fact.event_kind,
+                    "symbol": signal_fact.symbol,
+                    "direction": (
+                        None if signal_fact.direction is None else signal_fact.direction.value
+                    ),
+                    "observed_at": signal_fact.observed_at.isoformat(),
+                    "event_at": signal_fact.event_at.isoformat(),
+                    "received_at": signal_fact.received_at.isoformat(),
+                    "source_refs": signal_fact.source_refs,
+                    "attributes": signal_fact.attributes.to_dict(),
+                },
             }
         )
         request_id = (

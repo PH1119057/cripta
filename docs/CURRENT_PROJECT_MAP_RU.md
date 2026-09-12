@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.0
-**Дата:** 2026-09-11
+**Версия документа:** 6.1
+**Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -295,3 +295,26 @@ A narrow technical repair is in progress to remove a false REST-vs-mirror race a
 ## U5 recovered-fact ordering / clean continuity stop — source stage
 
 Live verification proved Bybit publicTrade seq is monotonic in actual WS receive order; observed seq-regression was caused by local post-recovery re-sorting. A narrow technical repair now preserves mirror receive order through OI merge and converts continuity failures into clean `NOT_COMPARABLE` service stops. Trading effect NONE.
+
+## Universal Entry structural completion decision — 2026-09-12
+
+По прямому решению владельца длительный U7 parity observation больше не блокирует завершение dormant source structure. Shadow evidence продолжает накапливаться независимо; factual semantic mismatch по-прежнему запрещает cutover.
+
+Следующий structural stage завершает hard-disabled путь `ExecutionRequest -> existing Execution command contract`. По умолчанию production остаётся на `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`; реальное переключение требует отдельного owner-approved cutover и не выполняется этим этапом.
+
+### Structural source checkpoint
+
+По результату owner-approved structural completion source-stage:
+
+```text
+Universal Entry -> immutable ExecutionRequest
+-> pure exact-lineage execution bridge
+-> dormant DB consumer
+-> existing Execution command contract
+```
+
+реализован в source и прошёл gate: targeted structural tests `86/86 PASS`, полный pytest `1274 passed / 8 skipped`, Ruff для Universal/new source PASS, mypy Universal package `20 source files PASS`, private runtime compile PASS, default dormant consumer smoke `DISABLED / trading_effect=NONE`.
+
+Текущая forensic V1 compatibility StrategyCard намеренно НЕ становится live-ready автоматически: в ней нет явной Strategy-owned allocation/leverage/execution policy, а legacy `runtime.trade_settings` запрещён как скрытый fallback. Для будущего cutover требуется отдельная owner-approved live Strategy version с полными execution/capital параметрами.
+
+Production на этом source checkpoint не переключён: `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`. Shadow/parity evidence является отдельным длительным наблюдением и не объявлен PASS.

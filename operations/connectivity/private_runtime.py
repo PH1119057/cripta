@@ -46,6 +46,9 @@ _slippage_cache: dict[str, tuple[float, Decimal]] = {}
 EXCLUDED_TRADING_SYMBOLS = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
 SIGNAL_PICKUP_WINDOW_MS = int(os.environ.get("CRIPTA_SIGNAL_PICKUP_WINDOW_MS", "120000"))
 BOT_INSTANCE_ID = os.environ.get("CRIPTA_BOT_INSTANCE_ID", "m3-mainnet-primary")
+ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1").strip().upper()
+if ENTRY_COMMAND_SOURCE not in {"LEGACY_V1", "UNIVERSAL_ENTRY"}:
+    raise RuntimeError(f"unsupported CRIPTA_ENTRY_COMMAND_SOURCE={ENTRY_COMMAND_SOURCE}")
 PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 RECONCILIATION_MAX_AGE_MS = int(
     os.environ.get("CRIPTA_RECONCILIATION_MAX_AGE_MS", "15000")
@@ -1214,9 +1217,11 @@ def command_worker_loop(key: str, secret: str) -> None:
                 int(gate[1] or 0),
                 int(settings[3] or 0),
             )
-            signals=connection.execute("""SELECT signal_id,symbol,direction,signal_price,signal_at_epoch_ms FROM monitoring.opportunities
-                WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
-                ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
+            signals = []
+            if ENTRY_COMMAND_SOURCE == "LEGACY_V1":
+                signals=connection.execute("""SELECT signal_id,symbol,direction,signal_price,signal_at_epoch_ms FROM monitoring.opportunities
+                    WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
+                    ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
             for signal_id,symbol,direction,price,signal_at_ms in signals:
                 observed_context = None
                 if symbol in EXCLUDED_TRADING_SYMBOLS:
@@ -1344,7 +1349,21 @@ def command_worker_loop(key: str, secret: str) -> None:
                    FROM runtime.entry_geometry_bindings WHERE entry_command_id=%s""",
                 (entry_id,),
             ).fetchone()
-            if binding is not None and execution_rows:
+            universal_binding = None
+            if binding is None:
+                universal_binding = connection.execute(
+                    """SELECT d.execution_request_id,r.signal_id,r.strategy_id,r.strategy_version
+                         FROM strategy_entry.execution_dispatches d
+                         JOIN strategy_entry.execution_requests r
+                           ON r.execution_request_id=d.execution_request_id
+                        WHERE d.command_id=%s AND d.state='DISPATCHED'""",
+                    (entry_id,),
+                ).fetchone()
+                if universal_binding is not None and str(
+                    entry_payload.get("execution_request_id") or ""
+                ) != str(universal_binding[0]):
+                    raise RuntimeError("Universal Entry command/request lineage mismatch")
+            if execution_rows and (binding is not None or universal_binding is not None):
                 position_idx = int(raw.get("positionIdx") or 0)
                 first_execution_id = str(execution_rows[0][0])
                 first_fill_ms = int(execution_rows[0][3] or fill_time_ms)
@@ -1355,6 +1374,19 @@ def command_worker_loop(key: str, secret: str) -> None:
                     side=str(position_row[0]),
                     position_idx=position_idx,
                 )
+                if binding is not None:
+                    owner_bot = str(binding[2])
+                    owner_strategy_id = str(binding[3])
+                    owner_strategy_version = str(binding[4])
+                    owner_signal_id = str(binding[1])
+                    geometry_handoff_id = binding[0]
+                else:
+                    assert universal_binding is not None
+                    owner_bot = "universal-entry"
+                    owner_signal_id = str(universal_binding[1])
+                    owner_strategy_id = str(universal_binding[2])
+                    owner_strategy_version = str(universal_binding[3])
+                    geometry_handoff_id = None
                 connection.execute(
                     """INSERT INTO runtime.position_ownership(
                         position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
@@ -1372,8 +1404,9 @@ def command_worker_loop(key: str, secret: str) -> None:
                           exchange_position_key=excluded.exchange_position_key,
                           position_idx=excluded.position_idx""",
                     (
-                        position_id, trade_id, binding[2], binding[3], binding[4],
-                        binding[1], entry_id, binding[0], symbol, position_row[0],
+                        position_id, trade_id, owner_bot, owner_strategy_id,
+                        owner_strategy_version, owner_signal_id, entry_id,
+                        geometry_handoff_id, symbol, position_row[0],
                         actual_entry, Decimal(str(position_row[1])), first_fill_ms,
                         json.dumps(sorted({str(row[1]) for row in execution_rows})),
                         json.dumps(sorted({str(row[2]) for row in execution_rows})),

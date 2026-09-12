@@ -1,8 +1,8 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 1.9
-**Дата:** 2026-09-11
+**Версия:** 2.0
+**Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
 **Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
@@ -740,3 +740,85 @@ Owner-approved continuation after live evidence showed that post-recovery sortin
 - REST fallback ordering rules remain unchanged and fail closed when ambiguous;
 - any `ContinuityNotProvable` is an evidence outcome, not a process crash: the exact run is finalized `NOT_COMPARABLE` and the service exits cleanly so `Restart=on-failure` does not create a new run automatically;
 - no Strategy/V1/EntryPlan/comparator/Universal engine/market-watch semantic change and trading effect remains NONE.
+
+## 26. Owner decision 2026-09-12 — structural completion is independent of long parity observation
+
+Владелец прямо решил прекратить блокировать source/architecture completion длительными U7 parity windows.
+
+Новый порядок этапов:
+
+```text
+STRUCTURAL COMPLETION
+= продолжается немедленно
+
+SHADOW / PARITY EVIDENCE
+= накапливается независимо и может идти длительно
+
+REAL CONSUMER CUTOVER
+= по-прежнему запрещён без отдельного решения владельца
+```
+
+Это решение не объявляет U7 PASS и не разрешает обходить factual mismatch. Оно меняет только sequencing: отсутствие clean 420-minute parity run больше не запрещает закончить dormant production wiring, если wiring не имеет торгового эффекта и остаётся hard-disabled.
+
+### 26.1 Dormant Universal Entry -> Execution bridge
+
+Разрешён следующий source-only structural stage:
+
+```text
+StrategyCard / StrategyActivation
+        ↓
+EntryPlan + ExitPlan
+        ↓
+Universal Entry Engine
+        ↓
+EntryDecision ACCEPTED
+        ↓
+immutable ExecutionRequest
+        ↓
+DORMANT UNIVERSAL EXECUTION BRIDGE
+        ↓
+existing EXECUTION command contract
+```
+
+Bridge обязан:
+
+- не переоценивать Strategy conditions;
+- не читать `monitoring.opportunities` как источник Universal signal;
+- сохранять exact `execution_request_id`, `strategy_attempt_id`, `entry_decision_id`, `signal_id`, Strategy identity и plan fingerprints;
+- формировать deterministic idempotent execution command identity только из immutable request lineage;
+- брать size/allocation/leverage и entry execution parameters только из immutable Strategy policy; `runtime.trade_settings` не является fallback для отсутствующей Strategy policy;
+- брать initial protection только из exact immutable ExitPlan / protection policy той же Strategy version;
+- fail-closed при missing/ambiguous policy, identity mismatch или missing reference price;
+- не создавать allocator, priority или Strategy arbitration;
+- не менять existing Execution ownership exchange mutation, readiness, fills и reconciliation.
+
+### 26.2 Dormant activation barrier
+
+Source structure может содержать Universal consumer adapter и поддержку existing Execution, но default production state остаётся:
+
+```text
+ENTRY_COMMAND_SOURCE = LEGACY_V1
+UNIVERSAL_ENTRY_MAINNET_CONSUMER = DISABLED
+MAINNET_REARM = NO
+MICRO_LIVE = NO
+LIVE = NO
+```
+
+Для фактического Universal command publication одновременно требуются отдельное owner-approved cutover, explicit source selection `UNIVERSAL_ENTRY`, explicit consumer arm и обычный Execution mainnet gate. Один флаг не должен быть достаточен.
+
+### 26.3 U7 after structural completion
+
+U7/shadow evidence продолжает собираться как независимый контроль качества. Реальный semantic mismatch между legacy V1 и Universal Entry остаётся hard blocker для cutover и требует owner review. Transport/evidence gaps не блокируют source structural completion, но не могут быть выданы за parity PASS.
+
+### 26.4 Structural source acceptance checkpoint
+
+Source-stage считается structurally complete, когда одновременно доказаны:
+
+- Universal Entry создаёт immutable `ExecutionRequest` с exact causal signal-fact snapshot;
+- pure bridge детерминированно materialize-ит existing Execution command contract только из exact Strategy/Plan/Activation/request lineage;
+- отсутствующая live execution/capital policy блокируется, а не заменяется `runtime.trade_settings`;
+- dormant consumer требует одновременно `ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=ENABLED` и normal Execution mainnet gate;
+- legacy Entry command source остаётся default;
+- Universal fill ownership связывается с exact `execution_request_id`/signal/Strategy lineage без symbol+nearest-time reconstruction;
+- dispatch journal append-only;
+- никакой service не включается и никакой production runtime не перезапускается этим source-stage автоматически.
