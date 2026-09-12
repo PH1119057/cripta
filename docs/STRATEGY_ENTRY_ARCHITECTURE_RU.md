@@ -146,7 +146,7 @@ Disabled Entry Watch хранится только как `{enabled:false}` и �
 Когда Entry Watch включён, StrategyCard обязана явно содержать direction rules, required timeframes,
 flow/OI enabled state, candidate lifecycle и derived event contract.
 
-## 1.3 Решение владельца 2026-09-12 — Activation, observer и полнота исполнения policy
+## 1.4 Решение владельца 2026-09-12 — Activation, observer и полнота исполнения policy
 
 StrategyCard должна иметь явный owner-control `АКТИВНА / НЕАКТИВНА`. Одновременно могут
 существовать десятки immutable Strategy versions, но Universal Entry observer имеет право

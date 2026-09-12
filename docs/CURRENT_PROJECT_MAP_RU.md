@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.8
+**Версия документа:** 6.9
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -452,3 +452,20 @@ Universal→Execution adapter и private runtime совместимы с под�
 offset, local Entry, новые context feature rules и Strategy-specific post-fill Exit/Hedge пока
 не имеют полного end-to-end consumer. Любое включение такого поля блокирует activation вместо
 silent-ignore. Cutover остаётся `NO`; consumer disabled, mainnet gate закрыт.
+### Strategy readiness dashboard install checkpoint — 2026-09-12
+
+Functional source commit `a0c805bfff07b66d1c69c986aa1eafb01354c715` установлен в dashboard
+read-model contour по exact SHA. `cripta-dashboard.service` active PID `839222`, NRestarts 0.
+Create-Strategy action больше не использует browser implicit-id globals: editor host получается через
+explicit `document.getElementById('strategyNewEditor')`, а ошибки открытия показываются владельцу.
+
+Карточка теперь показывает `АКТИВНА / НЕАКТИВНА` и `runtime_readiness`. Backend first-enable умеет
+атомарно materialize/persist exact StrategyActivation + EntryPlan + ExitPlan, но installed
+`MULTI_STRATEGY_OBSERVER_READY=False`, поэтому до observer deployment activation блокируется до DB
+mutation. Post-deploy negative smoke сохранил counts: `strategy_activations=0`, `entry_plans=1`,
+`exit_plans=0`, `runtime.trade_commands=2166`, `runtime.executions=978`,
+`strategy_entry.execution_dispatches=0`.
+
+V1 observers остаются `disabled/inactive`, Universal consumer `disabled/inactive`, private/exit runtime
+не запускались, mainnet execution gate `enabled=0`. Full source gate: `1299 passed / 8 skipped`, Ruff
+PASS, mypy Universal `21 source files PASS`, frozen V1 fingerprint unchanged.

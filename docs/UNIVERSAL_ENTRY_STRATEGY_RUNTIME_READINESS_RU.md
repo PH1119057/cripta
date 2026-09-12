@@ -47,9 +47,14 @@ HEDGE RUNTIME                    = NOT READY
 ON/OFF являются CAS update mutable activation-state.
 
 Но текущий production observer новых Strategy отсутствует. Старый U5 shadow жёстко загружал frozen
-V1 compatibility bundle и не является универсальным observer. Поэтому installed dashboard держит
-`MULTI_STRATEGY_OBSERVER_READY=False`, и любое включение до появления нового observer отклоняется до
-DB mutation с `STRATEGY_RUNTIME_NOT_READY`.
+V1 compatibility bundle и не является универсальным observer. При runtime audit также подтверждено,
+что Dispatcher публикует account capacity, но текущий technical contour не предоставляет Entry
+общий persisted/IPC normalized stream `5m/15m CANDLE + PUBLIC_TRADE`. MAYAK читает public trades
+внутри своего процесса, но не является raw-feed API для Entry. Создание ещё одного независимого
+strategy observer WebSocket feed без отдельного архитектурного решения не выполнялось.
+
+Поэтому installed dashboard держит `MULTI_STRATEGY_OBSERVER_READY=False`, и любое включение до
+появления нового observer отклоняется до DB mutation с `STRATEGY_RUNTIME_NOT_READY`.
 
 ## 4. Universal Entry → existing Execution
 
@@ -127,3 +132,12 @@ CUTOVER_TO_NEW_ENTRY = NO
 
 До устранения этих блокеров `UNIVERSAL_ENTRY_MAINNET_CONSUMER` остаётся disabled и mainnet gate не
 переоткрывается.
+
+## 8. Published / installed checkpoint
+
+Functional source commit `a0c805bfff07b66d1c69c986aa1eafb01354c715` установлен в dashboard
+read-model contour по exact SHA. После restart `cripta-dashboard.service` active PID `839222`.
+Entry V1 services остаются disabled/inactive; Universal consumer disabled/inactive; private/exit
+runtime не запускались; mainnet execution gate остаётся закрыт. Negative activation smoke сохранил
+counts без изменений: `activations=0`, `entry_plans=1`, `exit_plans=0`, `trade_commands=2166`,
+`executions=978`, `execution_dispatches=0`.
