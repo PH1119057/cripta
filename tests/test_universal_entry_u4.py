@@ -19,7 +19,7 @@ from bybit_workbench.universal_entry import (
     TradeDirection,
     UniversalEntryEngine,
 )
-from bybit_workbench.universal_entry.market_watch import GenericOiPoint
+from bybit_workbench.universal_entry.market_watch import GenericOiPoint, _compute_range_atr_zone
 from bybit_workbench.universal_entry.parity import (
     ParityPoint,
     V1DeterministicParityRunner,
@@ -735,3 +735,112 @@ def test_v1_parity_requires_closed_sixty_minute_history_before_candidate() -> No
     assert result.report.passed, result.report.first_mismatch
     candidate = [point for point in result.legacy_points if point.category == "candidate"][-1]
     assert candidate.value is None
+
+
+def _shock_test_candles() -> tuple[Candle, ...]:
+    start = datetime(2026, 9, 8, tzinfo=UTC)
+    rows: list[Candle] = []
+    close = Decimal("100")
+    for index in range(12):
+        opened = start + timedelta(minutes=index * 5)
+        if index == 6:
+            high = close + Decimal("3.0")
+            low = close - Decimal("3.0")
+            next_close = close + Decimal("0.2")
+        else:
+            high = close + Decimal("0.5")
+            low = close - Decimal("0.5")
+            next_close = close + Decimal("0.1")
+        rows.append(
+            Candle(
+                symbol="UNIUSDT",
+                timeframe="5",
+                opened_at=opened,
+                closed_at=opened + timedelta(minutes=5),
+                open=close,
+                high=high,
+                low=low,
+                close=next_close,
+                volume=Decimal("10"),
+            )
+        )
+        close = next_close
+    return tuple(rows)
+
+
+def test_generic_zone_range_percent_shock_resets_old_zone_and_waits_for_maturity() -> None:
+    candles = _shock_test_candles()
+    shock_at = candles[6].closed_at
+    immature = _compute_range_atr_zone(
+        candles[:9],
+        timeframe="5",
+        lookback=8,
+        atr_period=3,
+        width_atr=Decimal("0.1"),
+        shock_period=1,
+        shock_multiple=Decimal("1"),
+        maturity_minutes=15,
+        shock_mode="RANGE_PERCENT",
+        shock_threshold_percent=Decimal("4.0"),
+    )
+    assert immature is None
+    mature = _compute_range_atr_zone(
+        candles,
+        timeframe="5",
+        lookback=8,
+        atr_period=3,
+        width_atr=Decimal("0.1"),
+        shock_period=1,
+        shock_multiple=Decimal("1"),
+        maturity_minutes=15,
+        shock_mode="RANGE_PERCENT",
+        shock_threshold_percent=Decimal("4.0"),
+    )
+    assert mature is not None
+    assert mature.regime_reset_at == shock_at
+    assert mature.effective_lookback == 5
+
+
+def test_generic_zone_range_percent_threshold_can_leave_same_history_unreset() -> None:
+    candles = _shock_test_candles()
+    zone = _compute_range_atr_zone(
+        candles,
+        timeframe="5",
+        lookback=8,
+        atr_period=3,
+        width_atr=Decimal("0.1"),
+        shock_period=1,
+        shock_multiple=Decimal("1"),
+        maturity_minutes=15,
+        shock_mode="RANGE_PERCENT",
+        shock_threshold_percent=Decimal("8.0"),
+    )
+    assert zone is not None
+    assert zone.regime_reset_at is None
+    assert zone.effective_lookback == 8
+
+
+def test_generic_zone_default_shock_mode_is_exact_legacy_atr_multiple() -> None:
+    candles = _shock_test_candles()
+    default = _compute_range_atr_zone(
+        candles,
+        timeframe="5",
+        lookback=8,
+        atr_period=3,
+        width_atr=Decimal("0.1"),
+        shock_period=3,
+        shock_multiple=Decimal("3.0"),
+        maturity_minutes=10,
+    )
+    explicit = _compute_range_atr_zone(
+        candles,
+        timeframe="5",
+        lookback=8,
+        atr_period=3,
+        width_atr=Decimal("0.1"),
+        shock_period=3,
+        shock_multiple=Decimal("3.0"),
+        maturity_minutes=10,
+        shock_mode="ATR_MULTIPLE",
+    )
+    assert default == explicit

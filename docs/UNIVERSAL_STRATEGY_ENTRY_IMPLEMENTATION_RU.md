@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.1
+**Версия:** 2.2
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -42,6 +42,29 @@ lineage позволяет связать `strategy_id + strategy_version` с im
 
 Trading effect этапа остаётся `NONE`: `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, legacy command
 source не переключается, MICRO_LIVE/LIVE/re-arm не выполняются.
+
+### Strategy universe / reset controls — owner decision 2026-09-12
+
+Structured authoring UI дополнительно обязан показывать и сохранять:
+
+- явный multi-select списка `symbols`; scope новой UI-version синхронизируется с этим exact list;
+- candidate cooldown: enabled, trigger TOUCH/SIGNAL/ATTEMPT, duration, unit, scope и causal anchor;
+- post-signal outcome/failure embargo: favorable/adverse thresholds, horizon, embargo duration/scope;
+- shock zone reset: enabled, detection mode `ATR_MULTIPLE` или `RANGE_PERCENT`, параметры detector и
+  post-shock maturity minutes;
+- rolling swing gate: enabled, timeframe, rolling window minutes/bars, range threshold percent.
+
+Для legacy compatibility data UI отображает фактические V1 значения (30m touch cooldown;
++0.50/-1.00 first-threshold over 360m with 60m adverse embargo; 3x/20-bar shock + 60m maturity;
+10% rolling range over 60m). Они не становятся defaults для новой Strategy автоматически.
+
+Dashboard также получает отдельный prominent `Создать Strategy` flow. Новый `strategy_id` создаётся
+как exact technical identity; owner задаёт human-readable name/version/direction/symbols/policy.
+Creation остаётся immutable-card-only: Activation/Plan/consumer/exchange mutation не создаются.
+
+Runtime compatibility: frozen V1 card и её fingerprint не изменяются. Universal market watch обязан
+сохранять legacy `geometry.shock` semantics byte-for-byte по смыслу; новая percent-mode policy может
+исполняться только когда она явно присутствует в новой Strategy version.
 
 ## 1. Назначение
 

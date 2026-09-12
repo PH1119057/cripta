@@ -1,7 +1,7 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
@@ -94,6 +94,40 @@ Strategy versions. Отдельная библиотека/общий mutable Ex
 В частности, локальное 3-часовое окно, исследовательские trailing/BE варианты и любые найденные
 корреляции MAYAK/Dispatcher сохраняются как настраиваемые кандидаты до явного owner-approved
 Strategy version.
+
+## 1.2 Решение владельца 2026-09-12 — universe и Entry lifecycle/reset в StrategyCard
+
+Перед переходом к следующей Entry policy owner уточнил, что StrategyCard обязана явно владеть не
+только геометрией входа, но и своим universe монет и всеми временными reset/cooldown/embargo
+правилами. Никакое историческое число Entry V1 не остаётся скрытым default универсального Entry.
+
+Для каждой Strategy version обязательно хранится непустой список `symbols`. Это позволяет разделять
+монеты по характеру движения через разные StrategyCards/versions без введения selector/allocator.
+Одна Strategy применима только к явно перечисленным инструментам.
+
+Entry authoring обязан различать как минимум четыре независимых механизма:
+
+1. `candidate_cooldown` — пауза после TOUCH/SIGNAL/ATTEMPT. Исторический V1: после любого TOUCH от
+   `candidate_bar_at`, `PER_SYMBOL`, 30 минут. Это не failure embargo.
+2. `post_signal_outcome_policy` — причинное наблюдение уже созданного StrategySignal. Исторический
+   V1: FIRST_THRESHOLD, `+0.50%` favorable против `-1.00%` adverse, horizon 360 минут; adverse
+   resolution запускает `PER_SYMBOL` embargo 60 минут от факта adverse outcome. Все эти числа
+   должны быть редактируемыми Strategy data.
+3. `shock_reset_policy` — забывание shock-candle и всей более старой zone history с обязательным
+   временем созревания новой зоны. Карточка должна поддерживать explicit detection mode. Минимально:
+   `ATR_MULTIPLE` (legacy V1: True Range >= 3.0 × mean True Range previous 20 bars) и
+   `RANGE_PERCENT` (True Range как процент previous close с явным threshold для каждого timeframe).
+   Maturity/wait after shock задаётся Strategy; исторический V1 = 60 минут.
+4. `rolling_swing_gate` — отдельный динамический запрет Entry по диапазону рынка за rolling window.
+   Исторический V1: 5m candles, 12 bars = 60 минут, high/low range >= 10%; блок снимается, когда
+   rolling condition больше не выполняется, а не через фиксированный дополнительный таймер.
+
+Эти механизмы независимы и не должны объединяться в одно поле `reset`. Missing/disabled policy не
+может тайно наследовать V1 30/60/10%/3x значения.
+
+Strategy dashboard должен иметь заметный верхний action создания Strategy, отдельно от action
+создания новой immutable version существующей Strategy. Создание Strategy/версии не создаёт
+StrategyActivation и не включает consumer.
 
 ## 2. StrategyCard
 

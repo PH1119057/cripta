@@ -23,6 +23,7 @@ from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
     UnknownActivation,
+    strategy_authoring_template,
     strategy_context_feature_catalog,
 )
 
@@ -2202,9 +2203,14 @@ def package_project() -> dict[str, object]:
 
 # U6_STRATEGY_API_BEGIN
 U6_STRATEGY_GET_PATH = "/api/strategies"
+U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
 U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
 U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
-U6_STRATEGY_POST_PATHS = {U6_STRATEGY_VERSION_PATH, U6_STRATEGY_ACTIVATION_PATH}
+U6_STRATEGY_POST_PATHS = {
+    U6_STRATEGY_CREATE_PATH,
+    U6_STRATEGY_VERSION_PATH,
+    U6_STRATEGY_ACTIVATION_PATH,
+}
 
 
 def _u6_json(handler: object, status: int, payload: dict[str, object]) -> None:
@@ -2242,6 +2248,16 @@ def _u6_send_catalog(handler: object) -> None:
             200,
             {
                 "strategies": strategies,
+                "strategy_template": strategy_authoring_template(),
+                "symbol_catalog": sorted(
+                    set(TRADING_UNIVERSE)
+                    | set(INDICATORS)
+                    | {
+                        str(symbol)
+                        for item in strategies
+                        for symbol in item.get("symbols", [])
+                    }
+                ),
                 "context_feature_catalog": strategy_context_feature_catalog(),
                 "context_modes": ["OFF", "OBSERVE", "CONDITION", "RANKING"],
                 "generated_at": datetime.now(UTC).isoformat(),
@@ -2249,6 +2265,36 @@ def _u6_send_catalog(handler: object) -> None:
         )
     except (ValueError, psycopg.Error) as exc:
         _u6_json(handler, 500, {"error": str(exc)})
+
+
+def _u6_create_strategy(handler: object, request: dict[str, object]) -> None:
+    card = request.get("card")
+    if not isinstance(card, dict):
+        raise ValueError("card object is required")
+    payload = dict(card)
+    payload["strategy_id"] = f"strategy-{secrets.token_hex(8)}"
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        created = StrategyDashboardStore(connection).create_strategy(
+            payload=payload,
+            approved_at=datetime.now(UTC),
+            operator=operator,
+        )
+    _u6_json(
+        handler,
+        201,
+        {
+            "status": "CREATED",
+            "strategy_id": created.strategy_id,
+            "strategy_version": created.strategy_version,
+            "strategy_config_fingerprint": created.strategy_config_fingerprint,
+            "activation_state": "NOT SET",
+            "entry_plan_fingerprints": [],
+            "exit_plan_fingerprints": [],
+        },
+    )
 
 
 def _u6_create_version(handler: object, request: dict[str, object]) -> None:
@@ -2318,7 +2364,9 @@ def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
 def _u6_handle_post(handler: object, path: str) -> None:
     try:
         request = _u6_request_json(handler)
-        if path == U6_STRATEGY_VERSION_PATH:
+        if path == U6_STRATEGY_CREATE_PATH:
+            _u6_create_strategy(handler, request)
+        elif path == U6_STRATEGY_VERSION_PATH:
             _u6_create_version(handler, request)
         elif path == U6_STRATEGY_ACTIVATION_PATH:
             _u6_set_activation(handler, request)

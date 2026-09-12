@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.4
+**Версия документа:** 6.5
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -362,6 +362,38 @@ legacy `cripta-entry-shadow-scanner.service` не перезапускался. 
 `runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`;
 Universal consumer остаётся `disabled/inactive`. Installed smoke подтвердил 34 context groups
 (19 global + 15 coin) и Hedge section в persisted read-model.
+
+### Strategy universe / Entry reset controls — source checkpoint 2026-09-12
+
+Owner дополнительно вынес в immutable StrategyCard весь universe и исторические Entry lifecycle/reset
+правила, которые раньше были V1-specific defaults. Structured Strategy UI теперь имеет заметный
+верхний action `Создать новую Strategy`, а создание новой version существующей Strategy остаётся
+отдельным действием внутри READ ONLY card.
+
+Каждая новая UI Strategy version требует exact непустой список `symbols` и одно направление
+`LONG` или `SHORT`. Для разных групп монет допускаются отдельные StrategyCards с разными порогами;
+selector/allocator при этом не вводится.
+
+Entry UI и source различают четыре независимых Strategy-owned механизма:
+
+- candidate cooldown после `TOUCH / SIGNAL / ATTEMPT`; forensic V1 = `TOUCH`, `PER_SYMBOL`, 30 минут
+  от `fact.candidate_bar_at`;
+- post-signal FIRST_THRESHOLD outcome + optional failure embargo; forensic V1 = `+0.50%` против
+  `-1.00%`, horizon 360 минут, adverse -> `PER_SYMBOL` embargo 60 минут от adverse observation;
+- post-shock zone reset/maturity; forensic V1 = True Range >= `3.0 ×` mean previous 20 True Ranges,
+  забывание shock-candle и старшей zone history, maturity 60 минут;
+- rolling range gate; forensic V1 = high/low >= 10% по 12×5m = 60 минут, dynamic unblock when the
+  rolling condition clears rather than a fixed extra timer.
+
+Новый `shock_reset_policy` поддерживает explicit `ATR_MULTIPLE`, `RANGE_PERCENT` или disabled.
+`RANGE_PERCENT` определяется причинно как `TrueRange / previous_close × 100` с отдельным threshold
+по timeframe. Если новый policy отсутствует, Universal market watch сохраняет legacy
+`geometry.shock` semantics; frozen V1 Strategy fingerprint остаётся
+`9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
+
+Новые Strategy cards создаются только как immutable card: server генерирует exact `strategy_id`,
+Activation/EntryPlan/ExitPlan автоматически не создаются, consumer и exchange mutation не
+включаются. Trading effect source-stage = `NONE`.
 
 ### Structural install checkpoint — 2026-09-12
 

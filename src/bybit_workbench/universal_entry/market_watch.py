@@ -224,6 +224,8 @@ def _compute_range_atr_zone(
     shock_period: int,
     shock_multiple: Decimal,
     maturity_minutes: int,
+    shock_mode: str = "ATR_MULTIPLE",
+    shock_threshold_percent: Decimal | None = None,
 ) -> GenericZone | None:
     count = len(candles)
     if count < max(lookback, atr_period):
@@ -234,20 +236,40 @@ def _compute_range_atr_zone(
     if atr is None or atr <= 0:
         return None
     shock_flags = [False] * count
-    if shock_period > 0 and count > shock_period:
-        rolling = sum(ranges[:shock_period], Decimal("0"))
-        for index in range(shock_period, count):
-            baseline = rolling / Decimal(shock_period)
-            shock_flags[index] = baseline > 0 and ranges[index] >= shock_multiple * baseline
-            rolling += ranges[index] - ranges[index - shock_period]
+    if shock_mode == "ATR_MULTIPLE":
+        if shock_period <= 0:
+            raise ValueError("ATR_MULTIPLE shock requires positive tr_period")
+        if shock_multiple <= 0:
+            raise ValueError("ATR_MULTIPLE shock requires positive multiple")
+        if count > shock_period:
+            rolling = sum(ranges[:shock_period], Decimal("0"))
+            for index in range(shock_period, count):
+                baseline = rolling / Decimal(shock_period)
+                shock_flags[index] = baseline > 0 and ranges[index] >= shock_multiple * baseline
+                rolling += ranges[index] - ranges[index - shock_period]
+        shock_search_floor = shock_period
+    elif shock_mode == "RANGE_PERCENT":
+        if shock_threshold_percent is None or shock_threshold_percent <= 0:
+            raise ValueError("RANGE_PERCENT shock requires positive threshold percent")
+        for index in range(1, count):
+            previous_close = candles[index - 1].close
+            if previous_close > 0:
+                move_percent = ranges[index] / previous_close * Decimal("100")
+                shock_flags[index] = move_percent >= shock_threshold_percent
+        shock_search_floor = 1
+    elif shock_mode == "OFF":
+        shock_search_floor = 0
+    else:
+        raise ValueError(f"unsupported shock mode: {shock_mode}")
     history_len = count
     last_index = history_len - 1
     window_start = history_len - lookback
     reset_index: int | None = None
-    for index in range(last_index, max(window_start, shock_period) - 1, -1):
-        if shock_flags[index]:
-            reset_index = index
-            break
+    if shock_mode != "OFF":
+        for index in range(last_index, max(window_start, shock_search_floor) - 1, -1):
+            if shock_flags[index]:
+                reset_index = index
+                break
     selected_start = window_start
     reset_at: datetime | None = None
     timeframe_minutes = _integer(timeframe, "geometry timeframe")
@@ -879,9 +901,46 @@ class ParameterizedCausalMarketWatch:
         lookback_map = _mapping(
             geometry_policy.get("lookback_by_timeframe"), "geometry.lookback_by_timeframe"
         )
-        shock = _mapping(geometry_policy.get("shock"), "geometry.shock")
+        shock_reset = geometry_policy.get("shock_reset_policy")
+        legacy_shock = geometry_policy.get("shock")
         zones: dict[str, GenericZone] = {}
         for timeframe in timeframes:
+            if shock_reset is not None:
+                shock = _mapping(shock_reset, "geometry.shock_reset_policy")
+                shock_enabled = bool(shock.get("enabled"))
+                shock_mode = str(shock.get("detection_mode") or "") if shock_enabled else "OFF"
+                maturity_minutes = (
+                    _integer(shock.get("maturity_minutes"), "shock maturity_minutes")
+                    if shock_enabled
+                    else 0
+                )
+                if shock_mode == "ATR_MULTIPLE":
+                    shock_period = _integer(shock.get("tr_period"), "shock tr_period")
+                    shock_multiple = _decimal(shock.get("multiple"), "shock multiple")
+                    threshold_percent = None
+                elif shock_mode == "RANGE_PERCENT":
+                    threshold_map = _mapping(
+                        shock.get("threshold_percent_by_timeframe"),
+                        "shock threshold_percent_by_timeframe",
+                    )
+                    threshold_percent = _decimal(
+                        threshold_map.get(timeframe), f"shock threshold {timeframe}"
+                    )
+                    shock_period = 1
+                    shock_multiple = Decimal("1")
+                elif shock_mode == "OFF":
+                    shock_period = 1
+                    shock_multiple = Decimal("1")
+                    threshold_percent = None
+                else:
+                    raise ValueError(f"unsupported shock_reset_policy mode: {shock_mode}")
+            else:
+                shock = _mapping(legacy_shock, "geometry.shock")
+                shock_mode = "ATR_MULTIPLE"
+                shock_period = _integer(shock.get("tr_period"), "shock tr_period")
+                shock_multiple = _decimal(shock.get("multiple"), "shock multiple")
+                maturity_minutes = _integer(shock.get("maturity_minutes"), "shock maturity_minutes")
+                threshold_percent = None
             geometry_rows = tuple(state.candles.get(timeframe, ()))
             zone = _compute_range_atr_zone(
                 geometry_rows,
@@ -891,9 +950,11 @@ class ParameterizedCausalMarketWatch:
                 width_atr=_decimal(
                     geometry_policy.get("zone_half_width_atr"), "zone_half_width_atr"
                 ),
-                shock_period=_integer(shock.get("tr_period"), "shock tr_period"),
-                shock_multiple=_decimal(shock.get("multiple"), "shock multiple"),
-                maturity_minutes=_integer(shock.get("maturity_minutes"), "shock maturity_minutes"),
+                shock_period=shock_period,
+                shock_multiple=shock_multiple,
+                maturity_minutes=maturity_minutes,
+                shock_mode=shock_mode,
+                shock_threshold_percent=threshold_percent,
             )
             if zone is None:
                 self._clear_candidate(state, observed_at, "causal geometry unavailable")

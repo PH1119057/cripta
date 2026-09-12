@@ -22,7 +22,9 @@ from bybit_workbench.universal_entry.dashboard_control import (
     StrategyDashboardStore,
     assemble_strategy_catalog,
     build_new_strategy_version,
+    card_from_editable,
     card_to_editable,
+    strategy_authoring_template,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json
 
@@ -607,3 +609,182 @@ def test_trade_cards_use_exact_strategy_identity_for_friendly_name() -> None:
     assert "strategy-name-chip" in html
     assert "p.strategy_name" in html
     assert "card.strategy_name" in html
+
+
+def test_strategy_authoring_template_is_inert_and_has_no_legacy_reset_numbers() -> None:
+    template = strategy_authoring_template()
+    assert template["symbols"] == []
+    assert template["direction_policy"] == []
+    entry = template["entry_policy"]
+    assert entry["watch_policy"]["enabled"] is False
+    geometry = entry["watch_policy"]["geometry"]
+    assert geometry["shock_reset_policy"] == {"enabled": False}
+    assert geometry["lookback_by_timeframe"] == {}
+    assert entry["watch_policy"]["hourly_swing"] == {"enabled": False}
+    assert template["touch_policy"]["candidate_cooldown"]["enabled"] is False
+    assert template["lifecycle_policy"]["post_signal_outcome_policy"] == {"enabled": False}
+    encoded = json.dumps(template, sort_keys=True)
+    for legacy_number in ('"30"', '"60"', '"10.0"', '"3.0"'):
+        assert legacy_number not in encoded
+
+
+def test_new_strategy_requires_exact_nonempty_symbol_scope() -> None:
+    template = strategy_authoring_template()
+    template["strategy_id"] = "strategy-new"
+    template["strategy_version"] = "1.0"
+    template["name"] = "LONG fast coins"
+    template["direction_policy"] = ["LONG"]
+    with pytest.raises(ValueError, match="at least one symbol"):
+        card_from_editable(template, approved_at=NOW, approved_source="dashboard:owner")
+    template["symbols"] = ["UNIUSDT", "LINKUSDT"]
+    template["scope"] = {"kind": "symbols", "symbols": ["UNIUSDT"]}
+    with pytest.raises(ValueError, match="scope symbols must exactly match"):
+        card_from_editable(template, approved_at=NOW, approved_source="dashboard:owner")
+    template["scope"] = {"kind": "symbols", "symbols": ["UNIUSDT", "LINKUSDT"]}
+    created = card_from_editable(template, approved_at=NOW, approved_source="dashboard:owner")
+    assert created.symbols == ("LINKUSDT", "UNIUSDT")
+
+
+def test_legacy_v1_card_can_reproduce_without_relaxing_new_authoring_rules() -> None:
+    from bybit_workbench.universal_entry.v1_compat import load_v1_compatibility_bundle
+
+    legacy = load_v1_compatibility_bundle(ROOT).card
+    editable = card_to_editable(legacy)
+    reproduced = card_from_editable(
+        editable,
+        approved_at=legacy.approved_at,
+        approved_source=legacy.approved_source,
+        validate_authoring=False,
+    )
+    assert reproduced.strategy_config_fingerprint == legacy.strategy_config_fingerprint
+    with pytest.raises(ValueError, match="exactly one direction"):
+        card_from_editable(
+            editable,
+            approved_at=NOW,
+            approved_source="dashboard:owner",
+        )
+
+
+def test_new_authoring_validates_explicit_shock_and_failure_embargo() -> None:
+    template = strategy_authoring_template()
+    template.update(
+        {
+            "strategy_id": "strategy-reset",
+            "strategy_version": "1.0",
+            "name": "LONG reset test",
+            "symbols": ["UNIUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["UNIUSDT"]},
+            "direction_policy": ["LONG"],
+        }
+    )
+    watch = template["entry_policy"]["watch_policy"]
+    geometry = watch["geometry"]
+    geometry.update(
+        {
+            "lookback_by_timeframe": {"5": 36, "15": 12},
+            "atr_period": 20,
+            "zone_half_width_atr": "0.5",
+            "confluence_max_gap_percent": "0.25",
+            "shock_reset_policy": {
+                "enabled": True,
+                "detection_mode": "RANGE_PERCENT",
+                "maturity_minutes": 45,
+                "threshold_percent_by_timeframe": {"5": "2.5", "15": "4.0"},
+            },
+        }
+    )
+    watch["enabled"] = True
+    watch["hourly_swing"] = {
+        "enabled": True,
+        "operator": "ROLLING_RANGE_PERCENT",
+        "timeframe": "5",
+        "window_bars": 12,
+        "threshold_percent": "8.0",
+        "comparator": "GTE",
+    }
+    template["lifecycle_policy"]["post_signal_outcome_policy"] = {
+        "enabled": True,
+        "observation_event_kind": "PUBLIC_TRADE",
+        "reference_value_path": "fact.entry_price",
+        "observation_value_path": "fact.price",
+        "metric": "DIRECTIONAL_PERCENT_CHANGE",
+        "favorable_threshold": "0.60",
+        "adverse_threshold": "-1.20",
+        "horizon": "240",
+        "horizon_unit": "minutes",
+        "resolution_semantics": "FIRST_THRESHOLD",
+        "favorable_resulting_entry_state": "CLEAR",
+        "adverse_resulting_entry_state": "EMBARGO",
+        "optional_embargo": {
+            "enabled": True,
+            "on_resolution": "ADVERSE",
+            "duration": "90",
+            "unit": "minutes",
+            "scope": "PER_SYMBOL",
+            "anchor": "fact.observed_at",
+        },
+    }
+    created = card_from_editable(template, approved_at=NOW, approved_source="dashboard:owner")
+    stored = card_to_editable(created)
+    assert (
+        stored["entry_policy"]["watch_policy"]["geometry"]["shock_reset_policy"]["detection_mode"]
+        == "RANGE_PERCENT"
+    )
+    assert stored["lifecycle_policy"]["post_signal_outcome_policy"]["adverse_threshold"] == "-1.20"
+
+
+def test_strategy_create_store_inserts_only_immutable_card() -> None:
+    template = strategy_authoring_template()
+    template.update(
+        {
+            "strategy_id": "strategy-new",
+            "strategy_version": "1.0",
+            "name": "SHORT group",
+            "symbols": ["UNIUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["UNIUSDT"]},
+            "direction_policy": ["SHORT"],
+        }
+    )
+    connection = FakeConnection()
+    created = StrategyDashboardStore(connection).create_strategy(
+        payload=template,
+        approved_at=NOW,
+        operator="owner",
+    )
+    assert created.strategy_id == "strategy-new"
+    sql = "\n".join(statement for statement, _ in connection.statements).lower()
+    assert "insert into strategy_entry.strategy_cards" in sql
+    assert "strategy_activations" not in sql
+    assert "entry_plans" not in sql
+    assert "exit_plans" not in sql
+
+
+def test_strategy_dashboard_exposes_prominent_create_symbols_and_reset_controls() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    for label in (
+        "＋ Создать новую Strategy",
+        "Монеты этой Strategy",
+        "Сброс старой зоны после резкого движения",
+        "ATR/True Range × среднее",
+        "True Range в % цены",
+        "Rolling swing gate",
+        "Повторный candidate после касания / сигнала / попытки",
+        "Неудачный StrategySignal → запрет нового входа",
+        "Entry V1: после любого TOUCH",
+        "+0,50%",
+        "−1,00%",
+        "/api/strategies/create",
+    ):
+        assert label in html
+
+
+def test_strategy_api_create_path_has_no_activation_or_execution_side_effect() -> None:
+    app = APP.read_text(encoding="utf-8")
+    start = app.index("# U6_STRATEGY_API_BEGIN")
+    end = app.index("# U6_STRATEGY_API_END")
+    scope = app[start:end].lower()
+    assert 'u6_strategy_create_path = "/api/strategies/create"' in scope
+    assert "strategy_authoring_template()" in scope
+    assert '"symbol_catalog"' in scope
+    for forbidden in ("runtime.trade_commands", "runtime.executions", "place_order", "mainnet"):
+        assert forbidden not in scope

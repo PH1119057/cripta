@@ -189,12 +189,225 @@ def _validate_feature_policy(value: object, label: str) -> None:
                 raise ValueError(f"{label}[{index}] RANKING weight cannot be zero")
 
 
+def strategy_authoring_template() -> dict[str, object]:
+    """Return an inert StrategyCard authoring skeleton with no trading-number defaults."""
+
+    disabled_numeric = {"enabled": False, "value": None, "unit": None, "scope": None}
+    disabled_cooldown = {
+        "enabled": False,
+        "duration": None,
+        "unit": None,
+        "scope": None,
+        "trigger_event": None,
+        "anchor": None,
+    }
+    return {
+        "strategy_id": "",
+        "strategy_version": "",
+        "name": "",
+        "description": "",
+        "scope": {"kind": "symbols", "symbols": []},
+        "symbols": [],
+        "direction_policy": [],
+        "entry_policy": {
+            "entry_plan_version": "entry-owner-1",
+            "predicate": {"op": "TOUCH"},
+            "entry_reference_policy": {
+                "enabled": False,
+                "reference": "CALCULATED_ENTRY",
+            },
+            "local_entry_policy": {
+                "enabled": False,
+                "lookback_by_timeframe": {},
+                "use_1m": False,
+                "require_5m_15m_confluence": False,
+                "require_macro_relation": False,
+            },
+            "watch_policy": {
+                "enabled": False,
+                "derived_event_kind": "TOUCH",
+                "candidate_timeframe_minutes": 5,
+                "candidate_lifecycle": {"clear_on_touch": True},
+                "events": {
+                    "bar_open": "BAR_OPEN",
+                    "candle_closed": "CANDLE_CLOSED",
+                    "open_interest": "OPEN_INTEREST",
+                    "trade": "PUBLIC_TRADE",
+                },
+                "geometry": {
+                    "operator": "RANGE_ATR_CONFLUENCE",
+                    "timeframes": ["5", "15"],
+                    "primary_timeframe": "5",
+                    "confirming_timeframe": "15",
+                    "lookback_by_timeframe": {},
+                    "shock_reset_policy": {"enabled": False},
+                },
+                "hourly_swing": {"enabled": False},
+            },
+            "execution_policy": {},
+            "context_feature_policy": [],
+        },
+        "exit_policy": {
+            "exit_plan_version": "exit-owner-1",
+            "context_feature_policy": [],
+        },
+        "capital_policy": {"require_capacity": False},
+        "protection_policy": {"initial_protection": {}},
+        "lifecycle_policy": {
+            "post_signal_outcome_policy": {"enabled": False},
+            "hedge_policy": {"enabled": False},
+        },
+        "touch_policy": {
+            "accepted_touch_numbers": [],
+            "accept_touch_from": None,
+            "require_exit_from_zone": False,
+            "minimum_exit_distance": dict(disabled_numeric),
+            "minimum_time_between_touches": dict(disabled_numeric),
+            "maximum_touch_count": None,
+            "reset_on": [],
+            "candidate_cooldown": disabled_cooldown,
+        },
+        "market_sensor_policy": [],
+        "mayak_context_policy": [],
+        "dispatcher_context_policy": [],
+    }
+
+
+def _validate_symbols_scope(raw: Mapping[str, object]) -> None:
+    symbols = [str(item).strip().upper() for item in _list(raw.get("symbols"), "symbols")]
+    if not symbols:
+        raise ValueError("Strategy requires at least one symbol")
+    if any(not symbol for symbol in symbols):
+        raise ValueError("Strategy symbols cannot be blank")
+    if len(set(symbols)) != len(symbols):
+        raise ValueError("Strategy symbols must be unique")
+    scope = _mapping(raw.get("scope"), "scope")
+    if str(scope.get("kind") or "") != "symbols":
+        raise ValueError("Strategy UI scope.kind must be symbols")
+    scoped_raw = scope.get("symbols", scope.get("trading_symbols"))
+    scoped = [str(item).strip().upper() for item in _list(scoped_raw, "scope symbols")]
+    if tuple(sorted(scoped)) != tuple(sorted(symbols)):
+        raise ValueError("Strategy scope symbols must exactly match Strategy symbols")
+
+
+def _validate_shock_reset_policy(geometry: Mapping[str, object]) -> None:
+    value = geometry.get("shock_reset_policy")
+    if value is None:
+        return
+    policy = _mapping(value, "geometry.shock_reset_policy")
+    enabled = _bool(policy.get("enabled"), "shock_reset_policy.enabled")
+    if not enabled:
+        return
+    mode = str(policy.get("detection_mode") or "")
+    if mode not in {"ATR_MULTIPLE", "RANGE_PERCENT"}:
+        raise ValueError("shock_reset_policy requires ATR_MULTIPLE or RANGE_PERCENT")
+    try:
+        maturity = int(str(policy.get("maturity_minutes")))
+    except (TypeError, ValueError):
+        raise ValueError("shock_reset_policy.maturity_minutes must be integer") from None
+    if maturity < 0:
+        raise ValueError("shock_reset_policy.maturity_minutes cannot be negative")
+    if mode == "ATR_MULTIPLE":
+        try:
+            period = int(str(policy.get("tr_period")))
+        except (TypeError, ValueError):
+            raise ValueError("shock_reset_policy.tr_period must be integer") from None
+        if period <= 0:
+            raise ValueError("shock_reset_policy.tr_period must be positive")
+        if _decimal(policy.get("multiple"), "shock_reset_policy.multiple") <= 0:
+            raise ValueError("shock_reset_policy.multiple must be positive")
+        return
+    thresholds = _mapping(
+        policy.get("threshold_percent_by_timeframe"),
+        "shock_reset_policy.threshold_percent_by_timeframe",
+    )
+    timeframes = [str(item) for item in _list(geometry.get("timeframes"), "geometry.timeframes")]
+    for timeframe in timeframes:
+        if (
+            _decimal(
+                thresholds.get(timeframe),
+                f"shock_reset_policy threshold {timeframe}",
+            )
+            <= 0
+        ):
+            raise ValueError(f"shock_reset_policy threshold {timeframe} must be positive")
+
+
+def _validate_rolling_swing_policy(watch: Mapping[str, object]) -> None:
+    value = watch.get("hourly_swing")
+    if value is None:
+        return
+    policy = _mapping(value, "entry_policy.watch_policy.hourly_swing")
+    enabled = _bool(policy.get("enabled"), "hourly_swing.enabled")
+    if not enabled:
+        return
+    if str(policy.get("operator") or "") != "ROLLING_RANGE_PERCENT":
+        raise ValueError("hourly_swing.operator must be ROLLING_RANGE_PERCENT")
+    try:
+        timeframe = int(str(policy.get("timeframe")))
+        window_bars = int(str(policy.get("window_bars")))
+    except (TypeError, ValueError):
+        raise ValueError("hourly_swing timeframe/window_bars must be integers") from None
+    if timeframe <= 0 or window_bars <= 0:
+        raise ValueError("hourly_swing timeframe/window_bars must be positive")
+    if _decimal(policy.get("threshold_percent"), "hourly_swing.threshold_percent") <= 0:
+        raise ValueError("hourly_swing.threshold_percent must be positive")
+    if str(policy.get("comparator") or "") != "GTE":
+        raise ValueError("hourly_swing.comparator must be GTE")
+
+
+def _validate_post_signal_policy(lifecycle: Mapping[str, object]) -> None:
+    value = lifecycle.get("post_signal_outcome_policy")
+    if value is None:
+        return
+    policy = _mapping(value, "lifecycle_policy.post_signal_outcome_policy")
+    enabled = _bool(policy.get("enabled"), "post_signal_outcome_policy.enabled")
+    if not enabled:
+        extra = {key for key, item in policy.items() if key != "enabled" and item not in (None, "")}
+        if extra:
+            raise ValueError("disabled post_signal_outcome_policy cannot carry hidden values")
+        return
+    favorable = _decimal(policy.get("favorable_threshold"), "post_signal favorable_threshold")
+    adverse = _decimal(policy.get("adverse_threshold"), "post_signal adverse_threshold")
+    if favorable <= 0:
+        raise ValueError("post_signal favorable_threshold must be positive")
+    if adverse >= 0:
+        raise ValueError("post_signal adverse_threshold must be negative")
+    horizon = _decimal(policy.get("horizon"), "post_signal horizon")
+    if horizon <= 0 or str(policy.get("horizon_unit") or "") not in {
+        "seconds",
+        "minutes",
+        "hours",
+    }:
+        raise ValueError("post_signal horizon requires positive value and explicit unit")
+    if str(policy.get("resolution_semantics") or "") != "FIRST_THRESHOLD":
+        raise ValueError("post_signal resolution_semantics must be FIRST_THRESHOLD")
+    embargo = _mapping(policy.get("optional_embargo"), "post_signal optional_embargo")
+    embargo_enabled = _bool(embargo.get("enabled"), "post_signal embargo.enabled")
+    if embargo_enabled:
+        if str(embargo.get("on_resolution") or "") != "ADVERSE":
+            raise ValueError("post_signal failure embargo must be anchored to ADVERSE")
+        if _decimal(embargo.get("duration"), "post_signal embargo.duration") <= 0:
+            raise ValueError("post_signal embargo.duration must be positive")
+        if str(embargo.get("unit") or "") not in {"seconds", "minutes", "hours"}:
+            raise ValueError("post_signal embargo requires explicit unit")
+        if str(embargo.get("scope") or "") not in {
+            "PER_SYMBOL",
+            "PER_STRATEGY",
+            "PER_ACCOUNT",
+        }:
+            raise ValueError("post_signal embargo requires explicit scope")
+        if not str(embargo.get("anchor") or ""):
+            raise ValueError("post_signal embargo requires causal anchor")
+
+
 def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     directions = _list(raw.get("direction_policy"), "direction_policy")
     if len(directions) != 1 or str(directions[0]) not in {"LONG", "SHORT"}:
         raise ValueError("new Strategy UI version requires exactly one direction: LONG or SHORT")
     if not str(raw.get("name") or "").strip():
         raise ValueError("Strategy name is required")
+    _validate_symbols_scope(raw)
 
     entry = _mapping(raw.get("entry_policy"), "entry_policy")
     reference = entry.get("entry_reference_policy")
@@ -244,6 +457,51 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 local_policy.get("require_macro_relation", False),
                 "local_entry_policy.require_macro_relation",
             )
+    watch_value = entry.get("watch_policy")
+    if watch_value is not None:
+        watch = _mapping(watch_value, "entry_policy.watch_policy")
+        watch_enabled = _bool(watch.get("enabled"), "entry_policy.watch_policy.enabled")
+        geometry_value = watch.get("geometry")
+        if geometry_value is not None:
+            geometry = _mapping(geometry_value, "entry_policy.watch_policy.geometry")
+            if watch_enabled:
+                if str(geometry.get("operator") or "") != "RANGE_ATR_CONFLUENCE":
+                    raise ValueError("enabled Strategy UI Entry requires RANGE_ATR_CONFLUENCE")
+                timeframes = [
+                    str(item) for item in _list(geometry.get("timeframes"), "geometry.timeframes")
+                ]
+                if set(timeframes) != {"5", "15"}:
+                    raise ValueError("enabled Strategy UI Entry requires 5m and 15m geometry")
+                lookbacks = _mapping(
+                    geometry.get("lookback_by_timeframe"), "geometry.lookback_by_timeframe"
+                )
+                for timeframe in ("5", "15"):
+                    try:
+                        bars = int(str(lookbacks.get(timeframe)))
+                    except (TypeError, ValueError):
+                        raise ValueError(f"geometry lookback {timeframe} must be integer") from None
+                    if bars <= 0:
+                        raise ValueError(f"geometry lookback {timeframe} must be positive")
+                try:
+                    atr_period = int(str(geometry.get("atr_period")))
+                except (TypeError, ValueError):
+                    raise ValueError("geometry atr_period must be integer") from None
+                if atr_period <= 0:
+                    raise ValueError("geometry atr_period must be positive")
+                if _decimal(geometry.get("zone_half_width_atr"), "zone_half_width_atr") <= 0:
+                    raise ValueError("zone_half_width_atr must be positive")
+                if (
+                    _decimal(
+                        geometry.get("confluence_max_gap_percent"),
+                        "confluence_max_gap_percent",
+                    )
+                    < 0
+                ):
+                    raise ValueError("confluence_max_gap_percent cannot be negative")
+            _validate_shock_reset_policy(geometry)
+        elif watch_enabled:
+            raise ValueError("enabled Strategy UI Entry requires geometry")
+        _validate_rolling_swing_policy(watch)
     _validate_feature_policy(
         entry.get("context_feature_policy"), "entry_policy.context_feature_policy"
     )
@@ -290,6 +548,7 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     )
 
     lifecycle = _mapping(raw.get("lifecycle_policy"), "lifecycle_policy")
+    _validate_post_signal_policy(lifecycle)
     hedge = lifecycle.get("hedge_policy")
     if hedge is not None:
         hedge_policy = _mapping(hedge, "lifecycle_policy.hedge_policy")
@@ -638,7 +897,11 @@ def editable_from_stored_card(card_json: object) -> dict[str, object]:
 
 
 def card_from_editable(
-    payload: Mapping[str, object], *, approved_at: datetime, approved_source: str
+    payload: Mapping[str, object],
+    *,
+    approved_at: datetime,
+    approved_source: str,
+    validate_authoring: bool = True,
 ) -> StrategyCard:
     raw = _mapping(payload, "StrategyCard payload")
     required = (
@@ -662,7 +925,8 @@ def card_from_editable(
     missing = tuple(name for name in required if name not in raw)
     if missing:
         raise ValueError(f"StrategyCard payload missing required fields: {missing}")
-    _validate_authoring_extensions(raw)
+    if validate_authoring:
+        _validate_authoring_extensions(raw)
     symbols = tuple(str(item).upper() for item in _list(raw["symbols"], "symbols"))
     directions = tuple(
         TradeDirection(str(item)) for item in _list(raw["direction_policy"], "direction_policy")
@@ -960,10 +1224,27 @@ class StrategyDashboardStore:
             editable,
             approved_at=approved_at,
             approved_source=str(row[2]),
+            validate_authoring=False,
         )
         if card.strategy_config_fingerprint != strategy_config_fingerprint:
             raise ValueError("stored StrategyCard fingerprint does not reproduce canonically")
         return card
+
+    def create_strategy(
+        self,
+        *,
+        payload: Mapping[str, object],
+        approved_at: datetime,
+        operator: str,
+    ) -> StrategyCard:
+        created = card_from_editable(
+            payload,
+            approved_at=approved_at,
+            approved_source=f"dashboard:{operator}",
+        )
+        with self._connection.transaction():
+            StrategyEntryStore(self._connection).insert_strategy_card(created)
+        return created
 
     def create_new_version(
         self,
