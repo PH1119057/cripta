@@ -47,6 +47,296 @@ class UnknownActivation(KeyError):
     """Exact activation_id does not exist."""
 
 
+STRATEGY_CONTEXT_FEATURE_CATALOG: tuple[dict[str, str], ...] = (
+    # Dispatcher V2.1 GlobalMarketContext: 19 objective features actually persisted now.
+    {"feature_id": "btc.state", "scope": "GLOBAL", "label": "BTC: состояние"},
+    {"feature_id": "eth.state", "scope": "GLOBAL", "label": "ETH: состояние"},
+    {"feature_id": "event.context", "scope": "GLOBAL", "label": "Событийный контекст"},
+    {"feature_id": "market.breadth", "scope": "GLOBAL", "label": "Ширина рынка"},
+    {"feature_id": "money.pressure", "scope": "GLOBAL", "label": "Общее денежное давление"},
+    {"feature_id": "liquidity.trend", "scope": "GLOBAL", "label": "Тренд ликвидности"},
+    {"feature_id": "event.importance", "scope": "GLOBAL", "label": "Важность события"},
+    {"feature_id": "market.direction", "scope": "GLOBAL", "label": "Направление рынка"},
+    {"feature_id": "liquidation.phase", "scope": "GLOBAL", "label": "Фаза ликвидаций"},
+    {"feature_id": "liquidation.breadth", "scope": "GLOBAL", "label": "Ширина ликвидаций"},
+    {"feature_id": "money.spot_pressure", "scope": "GLOBAL", "label": "Давление спотовых денег"},
+    {"feature_id": "liquidation.intensity", "scope": "GLOBAL", "label": "Интенсивность ликвидаций"},
+    {"feature_id": "positioning.oi_regime", "scope": "GLOBAL", "label": "Режим открытого интереса"},
+    {"feature_id": "market.synchronization", "scope": "GLOBAL", "label": "Синхронность рынка"},
+    {"feature_id": "liquidation.acceleration", "scope": "GLOBAL", "label": "Ускорение ликвидаций"},
+    {
+        "feature_id": "market.timeframe_alignment",
+        "scope": "GLOBAL",
+        "label": "Согласованность таймфреймов",
+    },
+    {
+        "feature_id": "money.derivatives_pressure",
+        "scope": "GLOBAL",
+        "label": "Давление фьючерсных денег",
+    },
+    {
+        "feature_id": "positioning.price_oi_state",
+        "scope": "GLOBAL",
+        "label": "Цена + открытый интерес",
+    },
+    {
+        "feature_id": "money.spot_derivatives_alignment",
+        "scope": "GLOBAL",
+        "label": "Согласованность spot / derivatives",
+    },
+    # CoinMarketContext: 15 meaningful groups over the current persisted objective payload.
+    {"feature_id": "money.spot", "scope": "COIN", "label": "Монета: спотовый денежный поток"},
+    {
+        "feature_id": "money.derivatives",
+        "scope": "COIN",
+        "label": "Монета: фьючерсный денежный поток",
+    },
+    {
+        "feature_id": "money.flow_dynamics",
+        "scope": "COIN",
+        "label": "Монета: скорость / ускорение денег",
+    },
+    {"feature_id": "money.large_trades", "scope": "COIN", "label": "Монета: крупные сделки"},
+    {"feature_id": "price.returns", "scope": "COIN", "label": "Монета: движение цены 1/5/15/60м"},
+    {
+        "feature_id": "liquidity.spot",
+        "scope": "COIN",
+        "label": "Монета: спотовая ликвидность / стакан",
+    },
+    {
+        "feature_id": "liquidity.derivatives",
+        "scope": "COIN",
+        "label": "Монета: фьючерсная ликвидность / стакан",
+    },
+    {
+        "feature_id": "positioning.open_interest",
+        "scope": "COIN",
+        "label": "Монета: открытый интерес",
+    },
+    {"feature_id": "positioning.funding", "scope": "COIN", "label": "Монета: funding"},
+    {
+        "feature_id": "positioning.long_short",
+        "scope": "COIN",
+        "label": "Монета: long / short positioning",
+    },
+    {
+        "feature_id": "positioning.mark_index_premium",
+        "scope": "COIN",
+        "label": "Монета: mark/index premium",
+    },
+    {"feature_id": "liquidations", "scope": "COIN", "label": "Монета: ликвидации"},
+    {"feature_id": "relative_strength", "scope": "COIN", "label": "Монета: относительная сила"},
+    {"feature_id": "event_context", "scope": "COIN", "label": "Монета: событийный контекст"},
+    {
+        "feature_id": "data_quality",
+        "scope": "COIN",
+        "label": "Монета: качество / полнота источников",
+    },
+)
+
+_CONTEXT_FEATURE_IDS = frozenset(item["feature_id"] for item in STRATEGY_CONTEXT_FEATURE_CATALOG)
+_CONTEXT_MODES = frozenset(mode.value for mode in ContextMode)
+_CONTEXT_FAILURE_ACTIONS = frozenset(action.value for action in ContextFailureAction)
+_CONTEXT_QUALITIES = frozenset(item.value for item in DataQuality)
+
+
+def strategy_context_feature_catalog() -> list[dict[str, str]]:
+    return [dict(item) for item in STRATEGY_CONTEXT_FEATURE_CATALOG]
+
+
+def _validate_feature_policy(value: object, label: str) -> None:
+    if value is None:
+        return
+    rows = _list(value, label)
+    seen: set[str] = set()
+    for index, item in enumerate(rows):
+        raw = _mapping(item, f"{label}[{index}]")
+        feature_id = str(raw.get("feature_id") or "")
+        if feature_id not in _CONTEXT_FEATURE_IDS:
+            raise ValueError(f"{label}[{index}] unknown feature_id: {feature_id}")
+        if feature_id in seen:
+            raise ValueError(f"{label} duplicate feature_id: {feature_id}")
+        seen.add(feature_id)
+        mode = str(raw.get("mode") or "")
+        if mode not in _CONTEXT_MODES:
+            raise ValueError(f"{label}[{index}] invalid mode: {mode}")
+        if mode in {ContextMode.CONDITION.value, ContextMode.RANKING.value}:
+            max_age = raw.get("max_age_seconds")
+            try:
+                max_age_value = int(str(max_age))
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"{label}[{index}] decision mode requires max_age_seconds"
+                ) from None
+            if max_age_value <= 0:
+                raise ValueError(f"{label}[{index}] max_age_seconds must be positive")
+            quality = str(raw.get("min_quality") or "")
+            if quality not in _CONTEXT_QUALITIES:
+                raise ValueError(f"{label}[{index}] decision mode requires min_quality")
+            for field in ("on_missing", "on_stale", "on_partial"):
+                action = str(raw.get(field) or "")
+                if action not in _CONTEXT_FAILURE_ACTIONS:
+                    raise ValueError(f"{label}[{index}] decision mode requires {field}")
+        if mode == ContextMode.CONDITION.value:
+            condition = _mapping(raw.get("condition"), f"{label}[{index}].condition")
+            if str(condition.get("operator") or "") not in {"EQ", "NE", "GT", "GTE", "LT", "LTE"}:
+                raise ValueError(f"{label}[{index}] CONDITION requires operator")
+            if condition.get("value") in (None, ""):
+                raise ValueError(f"{label}[{index}] CONDITION requires value")
+        if mode == ContextMode.RANKING.value:
+            weight = _decimal(raw.get("weight"), f"{label}[{index}].weight")
+            if weight == 0:
+                raise ValueError(f"{label}[{index}] RANKING weight cannot be zero")
+
+
+def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
+    directions = _list(raw.get("direction_policy"), "direction_policy")
+    if len(directions) != 1 or str(directions[0]) not in {"LONG", "SHORT"}:
+        raise ValueError("new Strategy UI version requires exactly one direction: LONG or SHORT")
+    if not str(raw.get("name") or "").strip():
+        raise ValueError("Strategy name is required")
+
+    entry = _mapping(raw.get("entry_policy"), "entry_policy")
+    reference = entry.get("entry_reference_policy")
+    if reference is not None:
+        policy = _mapping(reference, "entry_policy.entry_reference_policy")
+        enabled = _bool(policy.get("enabled"), "entry_reference_policy.enabled")
+        if enabled:
+            _decimal(policy.get("offset_pct_signed"), "entry_reference_policy.offset_pct_signed")
+            if str(policy.get("reference") or "") != "CALCULATED_ENTRY":
+                raise ValueError("entry_reference_policy.reference must be CALCULATED_ENTRY")
+    local = entry.get("local_entry_policy")
+    if local is not None:
+        local_policy = _mapping(local, "entry_policy.local_entry_policy")
+        enabled = _bool(local_policy.get("enabled"), "local_entry_policy.enabled")
+        if enabled:
+            try:
+                window_minutes = int(str(local_policy.get("window_minutes")))
+            except (TypeError, ValueError):
+                raise ValueError("local_entry_policy.window_minutes must be integer") from None
+            if window_minutes <= 0:
+                raise ValueError("local_entry_policy.window_minutes must be positive")
+            lookbacks = _mapping(
+                local_policy.get("lookback_by_timeframe"),
+                "local_entry_policy.lookback_by_timeframe",
+            )
+            for timeframe in ("5", "15"):
+                try:
+                    count = int(str(lookbacks.get(timeframe)))
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"local_entry_policy lookback {timeframe} must be integer"
+                    ) from None
+                if count <= 0:
+                    raise ValueError(f"local_entry_policy lookback {timeframe} must be positive")
+            if _bool(local_policy.get("use_1m", False), "local_entry_policy.use_1m"):
+                try:
+                    one_minute = int(str(lookbacks.get("1")))
+                except (TypeError, ValueError):
+                    raise ValueError("local_entry_policy lookback 1 must be integer") from None
+                if one_minute <= 0:
+                    raise ValueError("local_entry_policy lookback 1 must be positive")
+            _bool(
+                local_policy.get("require_5m_15m_confluence", False),
+                "local_entry_policy.require_5m_15m_confluence",
+            )
+            _bool(
+                local_policy.get("require_macro_relation", False),
+                "local_entry_policy.require_macro_relation",
+            )
+    _validate_feature_policy(
+        entry.get("context_feature_policy"), "entry_policy.context_feature_policy"
+    )
+
+    exit_policy = _mapping(raw.get("exit_policy"), "exit_policy")
+    for field in ("hard_stop", "take_profit"):
+        value = exit_policy.get(field)
+        if value is None:
+            continue
+        policy = _mapping(value, f"exit_policy.{field}")
+        enabled = _bool(policy.get("enabled"), f"exit_policy.{field}.enabled")
+        if enabled and _decimal(policy.get("percent"), f"exit_policy.{field}.percent") <= 0:
+            raise ValueError(f"exit_policy.{field}.percent must be positive")
+    for field in ("break_even", "trailing"):
+        value = exit_policy.get(field)
+        if value is None:
+            continue
+        policy = _mapping(value, f"exit_policy.{field}")
+        enabled = _bool(policy.get("enabled"), f"exit_policy.{field}.enabled")
+        if enabled and policy.get("activation_profit_pct") not in (None, ""):
+            _decimal(
+                policy.get("activation_profit_pct"),
+                f"exit_policy.{field}.activation_profit_pct",
+            )
+        if (
+            enabled
+            and field == "trailing"
+            and _decimal(policy.get("distance_pct"), "exit_policy.trailing.distance_pct") <= 0
+        ):
+            raise ValueError("exit_policy.trailing.distance_pct must be positive")
+    time_exit = exit_policy.get("time_exit")
+    if time_exit is not None:
+        policy = _mapping(time_exit, "exit_policy.time_exit")
+        enabled = _bool(policy.get("enabled"), "exit_policy.time_exit.enabled")
+        if enabled:
+            try:
+                horizon = int(str(policy.get("horizon_minutes")))
+            except (TypeError, ValueError):
+                raise ValueError("exit_policy.time_exit.horizon_minutes must be integer") from None
+            if horizon <= 0:
+                raise ValueError("exit_policy.time_exit.horizon_minutes must be positive")
+    _validate_feature_policy(
+        exit_policy.get("context_feature_policy"), "exit_policy.context_feature_policy"
+    )
+
+    lifecycle = _mapping(raw.get("lifecycle_policy"), "lifecycle_policy")
+    hedge = lifecycle.get("hedge_policy")
+    if hedge is not None:
+        hedge_policy = _mapping(hedge, "lifecycle_policy.hedge_policy")
+        enabled = _bool(hedge_policy.get("enabled"), "hedge_policy.enabled")
+        if enabled:
+            trigger = _mapping(hedge_policy.get("trigger"), "hedge_policy.trigger")
+            if str(trigger.get("reference") or "") != "PRIMARY_ENTRY":
+                raise ValueError("hedge trigger reference must be PRIMARY_ENTRY")
+            _decimal(trigger.get("offset_pct_signed"), "hedge trigger offset_pct_signed")
+            capital = _mapping(hedge_policy.get("capital"), "hedge_policy.capital")
+            size = _decimal(capital.get("size_percent_of_primary"), "hedge size_percent_of_primary")
+            if size <= 0:
+                raise ValueError("hedge size_percent_of_primary must be positive")
+            try:
+                leverage = int(str(capital.get("leverage")))
+            except (TypeError, ValueError):
+                raise ValueError("hedge leverage must be integer") from None
+            if leverage <= 0:
+                raise ValueError("hedge leverage must be positive")
+            for field in ("stop_loss", "take_profit"):
+                value = hedge_policy.get(field)
+                if value is None:
+                    continue
+                policy = _mapping(value, f"hedge_policy.{field}")
+                field_enabled = _bool(policy.get("enabled"), f"hedge_policy.{field}.enabled")
+                if (
+                    field_enabled
+                    and _decimal(policy.get("percent"), f"hedge_policy.{field}.percent") <= 0
+                ):
+                    raise ValueError(f"hedge_policy.{field}.percent must be positive")
+            trailing = hedge_policy.get("trailing")
+            if trailing is not None:
+                policy = _mapping(trailing, "hedge_policy.trailing")
+                trailing_enabled = _bool(policy.get("enabled"), "hedge_policy.trailing.enabled")
+                if trailing_enabled:
+                    if policy.get("activation_profit_pct") not in (None, ""):
+                        _decimal(
+                            policy.get("activation_profit_pct"),
+                            "hedge_policy.trailing.activation_profit_pct",
+                        )
+                    if (
+                        _decimal(policy.get("distance_pct"), "hedge_policy.trailing.distance_pct")
+                        <= 0
+                    ):
+                        raise ValueError("hedge_policy.trailing.distance_pct must be positive")
+
+
 def _mapping(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
@@ -372,6 +662,7 @@ def card_from_editable(
     missing = tuple(name for name in required if name not in raw)
     if missing:
         raise ValueError(f"StrategyCard payload missing required fields: {missing}")
+    _validate_authoring_extensions(raw)
     symbols = tuple(str(item).upper() for item in _list(raw["symbols"], "symbols"))
     directions = tuple(
         TradeDirection(str(item)) for item in _list(raw["direction_policy"], "direction_policy")
@@ -467,6 +758,9 @@ def _sections(editable: Mapping[str, object]) -> dict[str, object]:
         "capital_leverage": editable.get("capital_policy"),
         "protection": editable.get("protection_policy"),
         "exit": editable.get("exit_policy"),
+        "hedge": (
+            _mapping(editable.get("lifecycle_policy"), "lifecycle_policy").get("hedge_policy")
+        ),
         "mayak_usage": editable.get("mayak_context_policy"),
         "dispatcher_usage": editable.get("dispatcher_context_policy"),
     }

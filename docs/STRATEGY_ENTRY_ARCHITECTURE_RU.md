@@ -1,8 +1,8 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.0
-**Дата:** 2026-09-08
+**Версия:** 1.1
+**Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
 
@@ -49,6 +49,51 @@ Exchange
 ```
 
 Это не добавляет новый верхнеуровневый слой. `StrategyActivation`, materialization/compilation планов и Entry Watch являются внутренними техническими реализациями уже существующих уровней Strategy и Entry.
+
+## 1.1 Решение владельца 2026-09-12 — рабочая карточка Strategy
+
+Для будущего Universal Entry owner утвердил рабочую модель одной `StrategyCard` как одной
+неизменяемой версии всей торговой policy конкретного способа торговли. В пользовательском UI
+карточка имеет понятное владельцу `name` и один основной выбор направления: `LONG` или `SHORT`.
+Новые live-oriented версии, создаваемые через Strategy UI, не смешивают LONG и SHORT в одной
+карточке; одинаковая геометрия не отменяет возможные различия policy между направлениями.
+
+Внутри одной карточки отображаются три самостоятельные секции/вкладки:
+
+```text
+ENTRY
+EXIT
+HEDGE
+```
+
+Это не создаёт новые top-level layers. Канонические уровни остаются
+`MAYAK -> DISPATCHER -> STRATEGY(ENTRY/EXIT) -> EXECUTION -> EXCHANGE`.
+`HEDGE` является Strategy-owned post-fill/lifecycle sub-policy. Будущее фактическое решение о
+хеджирующем действии не даёт MAYAK, Dispatcher или UI права мутировать биржу; mutation остаётся
+за Execution, а post-fill policy принадлежит Strategy/Exit lifecycle.
+
+На текущем этапе допускается явное повторение одинаковой Exit policy в нескольких immutable
+Strategy versions. Отдельная библиотека/общий mutable Exit-template не вводится: это исключает
+скрытую связь, при которой изменение одной Exit-настройки молча меняет несколько Strategy.
+
+Карточка обязана позволять owner явно задать или выключить как минимум:
+
+- понятное имя Strategy и одно направление LONG/SHORT;
+- Entry: signed offset относительно рассчитанного Entry, базовый lookback по timeframe, optional
+  локальный поиск точки входа на коротком окне, touch/Nth-touch/cooldown/reset, signal/execution
+  lifetime, capital/leverage/execution parameters;
+- отдельное использование objective MAYAK/Dispatcher features в режимах `OFF / OBSERVE /
+  CONDITION / RANKING`, с explicit freshness/quality/missing/stale/partial semantics для
+  decision-affecting режимов;
+- Exit: hard stop, take profit, fee-aware break-even, trailing, optional time/zone/context exit
+  rules и используемые objective market/local-position features;
+- Hedge: explicit `enabled`, trigger depth/offset относительно основной позиции, size/leverage,
+  hedge stop loss, take profit и trailing. Не заданное поле не превращается в hidden default.
+
+Исторические/research числа не становятся live policy только из-за того, что UI умеет их хранить.
+В частности, локальное 3-часовое окно, исследовательские trailing/BE варианты и любые найденные
+корреляции MAYAK/Dispatcher сохраняются как настраиваемые кандидаты до явного owner-approved
+Strategy version.
 
 ## 2. StrategyCard
 

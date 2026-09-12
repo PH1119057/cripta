@@ -1,12 +1,47 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
 **Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54
 **Основание V1.5:** owner decision 2026-09-10 — отдельный технический OI30S source `BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1` для доказуемого parity evidence. Старый `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` сохраняется только как historical evidence; Strategy/V1 semantics, EntryPlan, comparator semantics, Universal Entry engine, trading path, Execution, consumer cutover, re-arm, MICRO_LIVE и LIVE не изменяются. Контракты U5 transport repair и U6 dashboard сохраняются.
+
+## 0.1 Owner-approved StrategyCard authoring UI — 2026-09-12
+
+После structural completion owner утвердил следующий source-stage: закончить рабочую карточку
+Strategy до consumer cutover. UI должен редактировать только будущую immutable version и иметь
+верхние поля `name`, `strategy_version`, single `LONG/SHORT`, а ниже три вкладки `Вход / Выход /
+Хедж`. Existing persisted StrategyCard остаётся READ ONLY. Сохранение по-прежнему создаёт только
+новую immutable card и не создаёт Activation, не включает consumer и не отправляет ExecutionRequest.
+
+Entry authoring минимум включает:
+
+- explicit enabled state;
+- signed percent offset от рассчитанного Entry (поле policy, без скрытой интерпретации legacy
+  `runtime.trade_settings`);
+- macro 5m/15m lookback counts и optional local-entry window/5m/15m/1m settings;
+- local-vs-macro and local 5m/15m confluence switches;
+- touch selection, optional cooldown/reset;
+- capital/execution fields, необходимые будущему dormant bridge;
+- objective context-feature selection.
+
+Context catalog для текущего Dispatcher V2.1 UI фиксируется как 34 meaningful groups: 19 реально
+публикуемых GlobalMarketContext features плюс 15 групп CoinMarketContext. Каждая строка имеет
+`OFF / OBSERVE / CONDITION / RANKING`; decision mode не получает hidden defaults.
+
+Exit authoring минимум включает hard stop, TP, fee-aware BE, trailing, optional local 5m zone use,
+time exit и context/local-position deterioration rules. Hedge authoring минимум включает enabled,
+trigger offset/depth from primary Entry, size/leverage, SL, TP and trailing. Hedge хранится внутри
+Strategy lifecycle policy и не является отдельным top-level layer или автоматически активным bot.
+
+Strategy display `name` должен показываться в open/closed trade card, когда exact position/trade
+lineage позволяет связать `strategy_id + strategy_version` с immutable `strategy_entry.strategy_cards`.
+Если exact card не найдена, UI показывает ID/version, а не угадывает имя.
+
+Trading effect этапа остаётся `NONE`: `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, legacy command
+source не переключается, MICRO_LIVE/LIVE/re-arm не выполняются.
 
 ## 1. Назначение
 

@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.2
+**Версия документа:** 6.3
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -318,6 +318,41 @@ Universal Entry -> immutable ExecutionRequest
 Текущая forensic V1 compatibility StrategyCard намеренно НЕ становится live-ready автоматически: в ней нет явной Strategy-owned allocation/leverage/execution policy, а legacy `runtime.trade_settings` запрещён как скрытый fallback. Для будущего cutover требуется отдельная owner-approved live Strategy version с полными execution/capital параметрами.
 
 Production на этом source checkpoint не переключён: `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`. Shadow/parity evidence является отдельным длительным наблюдением и не объявлен PASS.
+
+### StrategyCard authoring UI checkpoint — 2026-09-12
+
+По отдельному owner decision рабочая карточка Strategy теперь проектируется и реализована как одна
+immutable version всей policy с понятным `name`, одним выбранным направлением `LONG` или `SHORT`
+и тремя UI-вкладками: `Вход / Выход / Хедж`. Повтор одинаковой Exit policy в нескольких Strategy
+versions разрешён; общий mutable Exit-template на этом этапе не вводится. Hedge хранится внутри
+Strategy lifecycle policy и не является новым top-level layer.
+
+Структурированный authoring UI поддерживает:
+
+- signed offset относительно `CALCULATED_ENTRY`;
+- macro 5m/15m candle lookbacks и optional local-entry window с 5m/15m/1m настройками;
+- touch/Nth-touch, cooldown и reset;
+- explicit capital/leverage/execution fields без fallback в legacy `runtime.trade_settings`;
+- hard stop, take profit, fee-aware break-even, trailing, local 5m zone и time-exit policy;
+- Hedge enabled/trigger depth/size/leverage/SL/TP/trailing;
+- 34 фактически привязанные к текущему Dispatcher V2.1 context groups: 19 global + 15 coin groups,
+  каждая в режиме `OFF / OBSERVE / CONDITION / RANKING`, причём decision-affecting режимы требуют
+  explicit freshness/quality/missing/stale/partial semantics.
+
+Strategy API сохраняет прежнюю границу: existing cards READ ONLY; save создаёт только новую
+immutable StrategyCard, не создаёт Activation, не включает consumer и не пишет trading commands.
+Frozen V1 Strategy fingerprint остаётся
+`9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
+
+Open/closed trade cards показывают human-readable Strategy `name` только по exact persisted
+`strategy_id + strategy_version`; если exact StrategyCard не найдена, UI оставляет ID/version и не
+угадывает имя.
+
+Важно: authoring/storage support не равен runtime consumption. Новые signed-entry/local-entry,
+feature-level context, extended Exit и Hedge поля на этом checkpoint являются Strategy policy data;
+до cutover требуется отдельный wiring stage, который научит Universal Entry/Exit lifecycle
+исполнять только явно утверждённые поля. До этого trading effect = `NONE`,
+`UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, `ENTRY_COMMAND_SOURCE=LEGACY_V1`.
 
 ### Structural install checkpoint — 2026-09-12
 

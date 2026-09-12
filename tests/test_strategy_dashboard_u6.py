@@ -461,3 +461,149 @@ def test_u5_shadow_and_legacy_paths_are_not_controlled_by_u6_strategy_api_source
     assert "entry_shadow_scanner.service" not in lowered
     assert "runtime.trade_commands" not in lowered
     assert "runtime.executions" not in lowered
+
+
+def test_strategy_authoring_context_catalog_is_exact_current_34_groups() -> None:
+    from bybit_workbench.universal_entry.dashboard_control import strategy_context_feature_catalog
+
+    rows = strategy_context_feature_catalog()
+    assert len(rows) == 34
+    assert sum(item["scope"] == "GLOBAL" for item in rows) == 19
+    assert sum(item["scope"] == "COIN" for item in rows) == 15
+    ids = {item["feature_id"] for item in rows}
+    assert len(ids) == 34
+    for required in (
+        "money.pressure",
+        "market.synchronization",
+        "positioning.price_oi_state",
+        "money.spot",
+        "money.derivatives",
+        "positioning.open_interest",
+        "liquidity.derivatives",
+        "relative_strength",
+    ):
+        assert required in ids
+
+
+def test_new_strategy_ui_version_requires_exactly_one_direction() -> None:
+    base = make_card()
+    editable = card_to_editable(base)
+    editable["strategy_version"] = "2.0"
+    editable["direction_policy"] = ["LONG", "SHORT"]
+    with pytest.raises(ValueError, match="exactly one direction"):
+        build_new_strategy_version(
+            base, editable, approved_at=NOW, approved_source="dashboard:owner"
+        )
+    editable["direction_policy"] = ["SHORT"]
+    created = build_new_strategy_version(
+        base, editable, approved_at=NOW, approved_source="dashboard:owner"
+    )
+    assert created.direction_policy == (TradeDirection.SHORT,)
+
+
+def test_context_condition_requires_explicit_fail_honest_data_semantics() -> None:
+    base = make_card()
+    editable = card_to_editable(base)
+    editable["strategy_version"] = "2.0"
+    entry = dict(editable["entry_policy"])
+    entry["context_feature_policy"] = [
+        {
+            "feature_id": "money.pressure",
+            "scope": "GLOBAL",
+            "mode": "CONDITION",
+            "condition": {"operator": "EQ", "value": "STRONG_BUY"},
+        }
+    ]
+    editable["entry_policy"] = entry
+    with pytest.raises(ValueError, match="max_age_seconds"):
+        build_new_strategy_version(
+            base, editable, approved_at=NOW, approved_source="dashboard:owner"
+        )
+    entry["context_feature_policy"][0].update(
+        {
+            "max_age_seconds": 30,
+            "min_quality": "MEDIUM",
+            "on_missing": "REJECT_SIGNAL",
+            "on_stale": "REJECT_SIGNAL",
+            "on_partial": "REJECT_SIGNAL",
+        }
+    )
+    created = build_new_strategy_version(
+        base, editable, approved_at=NOW, approved_source="dashboard:owner"
+    )
+    assert created.strategy_version == "2.0"
+
+
+def test_enabled_hedge_requires_explicit_trigger_size_and_leverage() -> None:
+    base = make_card()
+    editable = card_to_editable(base)
+    editable["strategy_version"] = "2.0"
+    lifecycle = dict(editable["lifecycle_policy"])
+    lifecycle["hedge_policy"] = {"enabled": True}
+    editable["lifecycle_policy"] = lifecycle
+    with pytest.raises(ValueError, match="hedge_policy.trigger|hedge trigger reference"):
+        build_new_strategy_version(
+            base, editable, approved_at=NOW, approved_source="dashboard:owner"
+        )
+    lifecycle["hedge_policy"] = {
+        "enabled": True,
+        "opposite_direction": True,
+        "trigger": {"reference": "PRIMARY_ENTRY", "offset_pct_signed": "0.50"},
+        "capital": {"size_percent_of_primary": "100", "leverage": 1},
+        "stop_loss": {"enabled": True, "percent": "1.00"},
+        "take_profit": {"enabled": True, "percent": "0.60"},
+        "trailing": {"enabled": False},
+    }
+    created = build_new_strategy_version(
+        base, editable, approved_at=NOW, approved_source="dashboard:owner"
+    )
+    catalog = assemble_strategy_catalog([card_row(created)], [], [], [], [])
+    assert catalog[0]["sections"]["hedge"]["enabled"] is True
+
+
+def test_strategy_authoring_ui_has_entry_exit_hedge_and_friendly_strategy_name() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    for label in (
+        "Вход",
+        "Выход",
+        "Хедж",
+        "Понятное название стратегии",
+        "Смещение от рассчитанного Entry, %",
+        "Большая зона · 5m свечей",
+        "Большая зона · 15m свечей",
+        "Локальное окно, минут",
+        "180 = 3 часа",
+        "Hard stop",
+        "Take profit",
+        "Fee-aware",
+        "Trailing",
+        "Глубина/смещение от primary Entry, %",
+        "Размер хеджа, % основной позиции",
+        "context_feature_catalog",
+        "strategy-name-chip",
+    ):
+        assert label.lower() in html.lower()
+
+
+def test_strategy_api_exposes_objective_context_catalog_without_trading_rights() -> None:
+    app = APP.read_text(encoding="utf-8")
+    start = app.index("# U6_STRATEGY_API_BEGIN")
+    end = app.index("# U6_STRATEGY_API_END")
+    scope = app[start:end]
+    assert "strategy_context_feature_catalog()" in scope
+    assert '"context_modes": ["OFF", "OBSERVE", "CONDITION", "RANKING"]' in scope
+    lowered = scope.lower()
+    for forbidden in ("runtime.trade_commands", "place_order", "mainnet", "exchange"):
+        assert forbidden not in lowered
+
+
+def test_trade_cards_use_exact_strategy_identity_for_friendly_name() -> None:
+    app = APP.read_text(encoding="utf-8")
+    html = HTML.read_text(encoding="utf-8")
+    assert "LEFT JOIN strategy_entry.strategy_cards c" in app
+    assert "c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version" in app
+    assert '"strategy_name": None if ownership is None else ownership["strategy_name"]' in app
+    assert '"strategy_name": strategy_name_by_identity.get' in app
+    assert "strategy-name-chip" in html
+    assert "p.strategy_name" in html
+    assert "card.strategy_name" in html

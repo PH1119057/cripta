@@ -23,6 +23,7 @@ from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
     UnknownActivation,
+    strategy_context_feature_catalog,
 )
 
 try:
@@ -415,6 +416,19 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             available_balance,payload_json FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
         rows = connection.execute("""SELECT symbol,position_idx,side,size,entry_price,leverage,
             refreshed_at_epoch_ms,payload_json FROM runtime.hot_positions ORDER BY symbol""").fetchall()
+        ownership_rows = []
+        if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
+            ownership_rows = connection.execute(
+                """SELECT o.symbol,o.position_idx,o.side,o.strategy_id,o.strategy_version,c.name
+                   FROM runtime.position_ownership o
+                   LEFT JOIN strategy_entry.strategy_cards c
+                     ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
+                   WHERE o.state='OPEN'
+                   ORDER BY o.created_at DESC"""
+            ).fetchall()
+        strategy_name_rows = connection.execute(
+            "SELECT strategy_id,strategy_version,name FROM strategy_entry.strategy_cards"
+        ).fetchall()
         trailing_rows = connection.execute("""SELECT DISTINCT ON (symbol) symbol,
             payload_json,exchange_updated_ms FROM runtime.hot_orders
             WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
@@ -514,6 +528,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     reserved_for_positions = (
         wallet_raw.get("totalPositionIM") or wallet_usdt.get("totalPositionIM") or "0"
     )
+    ownership_by_position = {
+        (str(row[0]), int(row[1] or 0), str(row[2])): {
+            "strategy_id": str(row[3]),
+            "strategy_version": str(row[4]),
+            "strategy_name": None if row[5] is None else str(row[5]),
+        }
+        for row in ownership_rows
+    }
+    strategy_name_by_identity = {
+        (str(row[0]), str(row[1])): str(row[2]) for row in strategy_name_rows
+    }
     pending_orders = []
     configured_leverage = float(settings[1]) if settings and settings[1] else 1.0
     for row in pending_order_rows:
@@ -541,6 +566,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ticker = tickers.get(str(row[0]), {})
         executable_price = ticker.get("bid_price") if row[2] == "Buy" else ticker.get("ask_price")
         trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
+        ownership = ownership_by_position.get((str(row[0]), int(row[1] or 0), str(row[2])))
         positions.append(
             {
                 "symbol": row[0],
@@ -565,6 +591,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "unrealised_pnl": raw.get("unrealisedPnl"),
                 "position_value": raw.get("positionValue"),
                 "supervisor": supervisor_by_symbol.get(str(row[0])),
+                "strategy_id": None if ownership is None else ownership["strategy_id"],
+                "strategy_version": None if ownership is None else ownership["strategy_version"],
+                "strategy_name": None if ownership is None else ownership["strategy_name"],
             }
         )
     open_lots: dict[tuple[str, str], dict[str, float]] = {}
@@ -675,6 +704,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         card = {
             "trade_id": row[0], "position_id": row[1], "symbol": row[2], "side": row[3],
             "strategy_id": row[4], "strategy_version": row[5],
+            "strategy_name": strategy_name_by_identity.get((str(row[4]), str(row[5]))),
             "opened_at": None if row[6] is None else row[6].isoformat(),
             "closed_at": None if row[7] is None else row[7].isoformat(),
             "state": row[8], "data_completeness": row[9],
@@ -2212,6 +2242,8 @@ def _u6_send_catalog(handler: object) -> None:
             200,
             {
                 "strategies": strategies,
+                "context_feature_catalog": strategy_context_feature_catalog(),
+                "context_modes": ["OFF", "OBSERVE", "CONDITION", "RANKING"],
                 "generated_at": datetime.now(UTC).isoformat(),
             },
         )
