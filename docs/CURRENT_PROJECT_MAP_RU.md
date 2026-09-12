@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.6
+**Версия документа:** 6.7
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -400,6 +400,19 @@ watch fields: blank Entry хранит только `enabled=false`; при вк
 направление и required 5m/15m facts, а встроенные legacy flow/OI gates остаются `enabled=false`.
 Технический in-memory history buffer для новых plans выводится из их lookback/ATR/shock/swing
 requirements; forensic V1 сохраняет свой explicit `history_limit=1000` и все legacy fields.
+
+Final source checkpoint Entry universe/reset + Entry-2 decoupling опубликован commit
+`375b4717a44c891e49926962b2d4e425a2c88800` и установлен в dashboard/read-model source tree по exact
+SHA. `cripta-dashboard.service` после controlled restart active с PID `834287`. Legacy
+`cripta-entry-shadow-scanner.service` остался PID `806` / NRestarts 0; independent
+`cripta-universal-entry-shadow.service` остался PID `831288` / NRestarts 3 и не перезапускался;
+Universal consumer остаётся disabled/inactive. До/после установки counters одинаковы:
+`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`,
+`strategy_entry.strategy_cards=1`, `strategy_entry.strategy_activations=0`.
+
+Source gate final: full pytest `1292 passed / 8 skipped`, Ruff changed Universal/tests PASS,
+`app.py --select F` PASS, mypy Universal `20 source files PASS`, HTML structure/compile PASS. Frozen V1
+Strategy fingerprint остаётся `9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
 
 ### Structural install checkpoint — 2026-09-12
 
