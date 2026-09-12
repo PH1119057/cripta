@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.1
+**Версия документа:** 6.2
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -318,3 +318,18 @@ Universal Entry -> immutable ExecutionRequest
 Текущая forensic V1 compatibility StrategyCard намеренно НЕ становится live-ready автоматически: в ней нет явной Strategy-owned allocation/leverage/execution policy, а legacy `runtime.trade_settings` запрещён как скрытый fallback. Для будущего cutover требуется отдельная owner-approved live Strategy version с полными execution/capital параметрами.
 
 Production на этом source checkpoint не переключён: `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`. Shadow/parity evidence является отдельным длительным наблюдением и не объявлен PASS.
+
+### Structural install checkpoint — 2026-09-12
+
+Published structural source commit: `5e637c79a7328ccc58376d51e16e0bb32dca42f0`.
+
+Фактически установлено без consumer cutover:
+
+- additive append-only `strategy_entry.execution_dispatches`; runtime role `cripta` имеет только `SELECT/INSERT`, `UPDATE/DELETE` запрещены;
+- immutable dormant consumer release `/srv/cripta/universal_entry_consumer/releases/5e637c79a7328ccc58376d51e16e0bb32dca42f0`;
+- `cripta-universal-entry-consumer.service` установлен, но `disabled/inactive`; default smoke возвращает `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, `trading_effect=NONE`;
+- existing private Execution runtime не перезапускался ради этого этапа;
+- legacy Entry scanner PID/instance и dashboard не заменены;
+- `runtime.trade_commands` / `runtime.executions` не изменились установкой structural bridge.
+
+Отдельный shadow evidence runtime обновлён до exact source commit `5e637c79a7328ccc58376d51e16e0bb32dca42f0` и запущен только для длительного read-only накопления parity evidence. Его результат не блокирует structural completion; factual semantic mismatch остаётся hard blocker только для будущего cutover.
