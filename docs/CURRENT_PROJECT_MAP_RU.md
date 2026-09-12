@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.3
+**Версия документа:** 6.4
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -353,6 +353,15 @@ feature-level context, extended Exit и Hedge поля на этом checkpoint 
 до cutover требуется отдельный wiring stage, который научит Universal Entry/Exit lifecycle
 исполнять только явно утверждённые поля. До этого trading effect = `NONE`,
 `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, `ENTRY_COMMAND_SOURCE=LEGACY_V1`.
+
+StrategyCard authoring source опубликован commit
+`60e2c5e4421b8c92d18fc21a1241b71548761d9d` и установлен только в dashboard/read-model contour:
+`/srv/cripta/dashboard/app.py`, `/srv/cripta/dashboard/index.html` и installed Universal Entry
+read-model source tree совпали с published SHA. `cripta-dashboard.service` после controlled restart active;
+legacy `cripta-entry-shadow-scanner.service` не перезапускался. Post-deploy counters сохранились
+`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`;
+Universal consumer остаётся `disabled/inactive`. Installed smoke подтвердил 34 context groups
+(19 global + 15 coin) и Hedge section в persisted read-model.
 
 ### Structural install checkpoint — 2026-09-12
 
