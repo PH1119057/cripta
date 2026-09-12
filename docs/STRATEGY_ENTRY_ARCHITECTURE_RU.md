@@ -1,7 +1,7 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
@@ -128,6 +128,23 @@ Entry authoring обязан различать как минимум четыр
 Strategy dashboard должен иметь заметный верхний action создания Strategy, отдельно от action
 создания новой immutable version существующей Strategy. Создание Strategy/версии не создаёт
 StrategyActivation и не включает consumer.
+
+## 1.3 Решение владельца 2026-09-12 — Entry 2 не наследует скрытые V1 gates
+
+Новая Strategy/Entry policy не обязана иметь V1-specific `flow` или `oi` gate только потому, что
+legacy Entry V1 их использует. Если эти встроенные gates не выбраны owner, новая Strategy хранит их
+явно как `enabled=false`; они не участвуют в решении. Денежные, OI, liquidity и иные market-context
+условия Entry 2 подключаются только как явно выбранная Strategy policy из objective MAYAK/Dispatcher
+контекста либо как отдельная owner-approved sensor rule.
+
+`history_limit` causal watch является техническим размером in-memory history buffer, а не торговым
+числом Strategy. Если legacy card хранит explicit history_limit, он воспроизводится для parity. Для
+новой Strategy без explicit value буфер вычисляется детерминированно из её собственных lookback,
+ATR/shock и rolling-window требований и не меняет торговой семантики.
+
+Disabled Entry Watch хранится только как `{enabled:false}` и не может прятать геометрию/timers.
+Когда Entry Watch включён, StrategyCard обязана явно содержать direction rules, required timeframes,
+flow/OI enabled state, candidate lifecycle и derived event contract.
 
 ## 2. StrategyCard
 

@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.2
+**Версия:** 2.3
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -65,6 +65,16 @@ Creation остаётся immutable-card-only: Activation/Plan/consumer/exchange
 Runtime compatibility: frozen V1 card и её fingerprint не изменяются. Universal market watch обязан
 сохранять legacy `geometry.shock` semantics byte-for-byte по смыслу; новая percent-mode policy может
 исполняться только когда она явно присутствует в новой Strategy version.
+
+Entry-2 decoupling implementation requirement:
+
+- blank authoring template хранит `watch_policy={enabled:false}` без hidden geometry/timers;
+- при включении Entry UI пишет explicit 5m/15m direction rules, required timeframes, event contract,
+  candidate lifecycle, `flow={enabled:false}` и `oi={enabled:false}` если owner их не включал;
+- new Strategy не обязана хранить V1 `history_limit=1000`; Universal watch вычисляет technical buffer
+  из explicit Strategy geometry/window requirements;
+- legacy V1 explicit `history_limit`, flow, OI, required 60m readiness и остальные forensic fields
+  продолжают воспроизводиться без изменения parity semantics.
 
 ## 1. Назначение
 

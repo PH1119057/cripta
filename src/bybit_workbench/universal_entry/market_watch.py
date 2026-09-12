@@ -168,7 +168,6 @@ def _policy(plan: EntryPlan) -> dict[str, object]:
             raise ValueError("disabled watch_policy cannot carry hidden configuration")
         return payload
     required = (
-        "history_limit",
         "candidate_timeframe_minutes",
         "required_closed_timeframes",
         "events",
@@ -320,6 +319,31 @@ def _percent_change(current: Decimal, previous: Decimal) -> Decimal | None:
     return (current / previous - Decimal("1")) * Decimal("100")
 
 
+def _derived_history_limit(policy: Mapping[str, object]) -> int:
+    explicit = policy.get("history_limit")
+    if explicit is not None:
+        result = _integer(explicit, "history_limit")
+        if result <= 0:
+            raise ValueError("history_limit must be positive")
+        return result
+    geometry = _mapping(policy.get("geometry"), "geometry")
+    lookbacks = _mapping(geometry.get("lookback_by_timeframe"), "geometry.lookback_by_timeframe")
+    candidates = [_integer(value, f"lookback {key}") for key, value in lookbacks.items()]
+    if geometry.get("atr_period") is not None:
+        candidates.append(_integer(geometry.get("atr_period"), "atr_period"))
+    shock = geometry.get("shock_reset_policy") or geometry.get("shock")
+    if (
+        isinstance(shock, Mapping)
+        and bool(shock.get("enabled", True))
+        and shock.get("tr_period") is not None
+    ):
+        candidates.append(_integer(shock.get("tr_period"), "shock tr_period"))
+    swing = policy.get("hourly_swing")
+    if isinstance(swing, Mapping) and bool(swing.get("enabled")):
+        candidates.append(_integer(swing.get("window_bars"), "hourly_swing window_bars"))
+    return max(candidates, default=1) + 2
+
+
 class ParameterizedCausalMarketWatch:
     """Entry-plan-specific interpretation of already normalized causal market facts.
 
@@ -353,9 +377,7 @@ class ParameterizedCausalMarketWatch:
             return
         if symbol not in plan.symbols:
             raise ValueError("watch history symbol is outside EntryPlan scope")
-        history_limit = _integer(policy["history_limit"], "history_limit")
-        if history_limit <= 0:
-            raise ValueError("history_limit must be positive")
+        history_limit = _derived_history_limit(policy)
         state = self._state(plan, symbol)
         state.candles.clear()
         required = tuple(
@@ -469,7 +491,7 @@ class ParameterizedCausalMarketWatch:
         policy = _policy(plan)
         target = state.candles.get(candle.timeframe)
         if target is None:
-            target = deque(maxlen=_integer(policy["history_limit"], "history_limit"))
+            target = deque(maxlen=_derived_history_limit(policy))
             state.candles[candle.timeframe] = target
         if target and target[-1].opened_at == candle.opened_at:
             target[-1] = candle

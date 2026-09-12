@@ -844,3 +844,81 @@ def test_generic_zone_default_shock_mode_is_exact_legacy_atr_multiple() -> None:
         shock_mode="ATR_MULTIPLE",
     )
     assert default == explicit
+
+
+def test_new_strategy_watch_materializes_without_v1_flow_oi_or_history_limit() -> None:
+    from bybit_workbench.universal_entry.dashboard_control import (
+        card_from_editable,
+        strategy_authoring_template,
+    )
+
+    raw = strategy_authoring_template()
+    raw.update(
+        {
+            "strategy_id": "entry2-long",
+            "strategy_version": "1.0",
+            "name": "Entry 2 LONG",
+            "symbols": ["UNIUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["UNIUSDT"]},
+            "direction_policy": ["LONG"],
+        }
+    )
+    raw["entry_policy"]["watch_policy"] = {
+        "enabled": True,
+        "candidate_timeframe_minutes": 5,
+        "required_closed_timeframes": ["5", "15"],
+        "events": {
+            "bar_open": "BAR_OPEN",
+            "candle_closed": "CANDLE_CLOSED",
+            "open_interest": "OPEN_INTEREST",
+            "trade": "PUBLIC_TRADE",
+        },
+        "geometry": {
+            "operator": "RANGE_ATR_CONFLUENCE",
+            "timeframes": ["5", "15"],
+            "primary_timeframe": "5",
+            "confirming_timeframe": "15",
+            "lookback_by_timeframe": {"5": 8, "15": 8},
+            "atr_period": 5,
+            "zone_half_width_atr": "0.1",
+            "confluence_max_gap_percent": "2.0",
+            "shock_reset_policy": {"enabled": False},
+        },
+        "hourly_swing": {"enabled": False},
+        "direction_rules": {"LONG": {"entry_zone_field": "support_top", "touch_comparator": "LTE"}},
+        "direction_precedence": ["LONG"],
+        "candidate_lifecycle": {"clear_on_touch": True},
+        "flow": {"enabled": False},
+        "oi": {"enabled": False},
+        "derived_event_kind": "TOUCH",
+    }
+    card = card_from_editable(raw, approved_at=NOW, approved_source="u4-test")
+    activation = StrategyActivation(
+        activation_id="entry2-act",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        enabled=True,
+        enabled_at=NOW,
+    )
+    registry = ActivePlanRegistry()
+    registry.register_card(card)
+    plan = registry.activate(activation)
+    watch = plan.watch_policy.to_dict()
+    assert "history_limit" not in watch
+    assert watch["flow"] == {"enabled": False}
+    assert watch["oi"] == {"enabled": False}
+
+    engine = UniversalEntryEngine(registry)
+    five = _aligned_candles("UNIUSDT", "5", 12, 5, NOW)
+    fifteen = _aligned_candles("UNIUSDT", "15", 12, 15, NOW)
+    engine.load_watch_history(
+        "UNIUSDT",
+        {"5": five, "15": fifteen},
+        (),
+        observed_at=NOW,
+    )
+    snapshot = engine.watch_snapshot(plan.entry_plan_fingerprint, "UNIUSDT")
+    assert isinstance(snapshot.geometry, dict)
+    assert snapshot.last_flow_condition_met is None
+    assert snapshot.last_oi_condition_met is None

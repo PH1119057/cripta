@@ -616,11 +616,7 @@ def test_strategy_authoring_template_is_inert_and_has_no_legacy_reset_numbers() 
     assert template["symbols"] == []
     assert template["direction_policy"] == []
     entry = template["entry_policy"]
-    assert entry["watch_policy"]["enabled"] is False
-    geometry = entry["watch_policy"]["geometry"]
-    assert geometry["shock_reset_policy"] == {"enabled": False}
-    assert geometry["lookback_by_timeframe"] == {}
-    assert entry["watch_policy"]["hourly_swing"] == {"enabled": False}
+    assert entry["watch_policy"] == {"enabled": False}
     assert template["touch_policy"]["candidate_cooldown"]["enabled"] is False
     assert template["lifecycle_policy"]["post_signal_outcome_policy"] == {"enabled": False}
     encoded = json.dumps(template, sort_keys=True)
@@ -677,10 +673,33 @@ def test_new_authoring_validates_explicit_shock_and_failure_embargo() -> None:
             "direction_policy": ["LONG"],
         }
     )
-    watch = template["entry_policy"]["watch_policy"]
+    watch = {
+        "enabled": True,
+        "candidate_timeframe_minutes": 5,
+        "required_closed_timeframes": ["5", "15"],
+        "events": {
+            "bar_open": "BAR_OPEN",
+            "candle_closed": "CANDLE_CLOSED",
+            "open_interest": "OPEN_INTEREST",
+            "trade": "PUBLIC_TRADE",
+        },
+        "geometry": {},
+        "hourly_swing": {"enabled": False},
+        "direction_rules": {"LONG": {"entry_zone_field": "support_top", "touch_comparator": "LTE"}},
+        "direction_precedence": ["LONG"],
+        "candidate_lifecycle": {"clear_on_touch": True},
+        "flow": {"enabled": False},
+        "oi": {"enabled": False},
+        "derived_event_kind": "TOUCH",
+    }
+    template["entry_policy"]["watch_policy"] = watch
     geometry = watch["geometry"]
     geometry.update(
         {
+            "operator": "RANGE_ATR_CONFLUENCE",
+            "timeframes": ["5", "15"],
+            "primary_timeframe": "5",
+            "confirming_timeframe": "15",
             "lookback_by_timeframe": {"5": 36, "15": 12},
             "atr_period": 20,
             "zone_half_width_atr": "0.5",

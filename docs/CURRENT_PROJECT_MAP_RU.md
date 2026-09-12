@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.5
+**Версия документа:** 6.6
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -394,6 +394,12 @@ Entry UI и source различают четыре независимых Strate
 Новые Strategy cards создаются только как immutable card: server генерирует exact `strategy_id`,
 Activation/EntryPlan/ExitPlan автоматически не создаются, consumer и exchange mutation не
 включаются. Trading effect source-stage = `NONE`.
+
+Дополнительный Entry-2 decoupling gate убрал скрытую зависимость новой Strategy от V1-specific
+watch fields: blank Entry хранит только `enabled=false`; при включении UI явно пишет выбранное
+направление и required 5m/15m facts, а встроенные legacy flow/OI gates остаются `enabled=false`.
+Технический in-memory history buffer для новых plans выводится из их lookback/ATR/shock/swing
+requirements; forensic V1 сохраняет свой explicit `history_limit=1000` и все legacy fields.
 
 ### Structural install checkpoint — 2026-09-12
 
