@@ -22,6 +22,7 @@ import psycopg
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
+    StrategyRuntimeNotReady,
     UnknownActivation,
     strategy_authoring_template,
     strategy_context_feature_catalog,
@@ -2202,6 +2203,9 @@ def package_project() -> dict[str, object]:
 
 
 # U6_STRATEGY_API_BEGIN
+# Fail-closed until a production observer actually loads enabled DB activations.
+U6_MULTI_STRATEGY_OBSERVER_READY = False
+
 U6_STRATEGY_GET_PATH = "/api/strategies"
 U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
 U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
@@ -2242,7 +2246,9 @@ def _u6_send_catalog(handler: object) -> None:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
-            strategies = StrategyDashboardStore(connection).list_catalog()
+            strategies = StrategyDashboardStore(connection).list_catalog(
+                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY
+            )
         _u6_json(
             handler,
             200,
@@ -2332,32 +2338,64 @@ def _u6_create_version(handler: object, request: dict[str, object]) -> None:
 
 
 def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
-    expected_enabled = request.get("expected_enabled")
     enabled = request.get("enabled")
-    if not isinstance(expected_enabled, bool) or not isinstance(enabled, bool):
-        raise ValueError("expected_enabled and enabled must be boolean")
-    expected_updated_at = _u6_parse_timestamp(
-        request.get("expected_updated_at"), "expected_updated_at"
-    )
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    strategy_id = str(request.get("strategy_id") or "")
+    strategy_version = str(request.get("strategy_version") or "")
+    strategy_config_fingerprint = str(request.get("strategy_config_fingerprint") or "")
+    if not strategy_id or not strategy_version or not strategy_config_fingerprint:
+        raise ValueError("exact Strategy identity is required")
     operator = handler.session_user() or "UNKNOWN"
+    activation_id = str(request.get("activation_id") or "")
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
     ) as connection:
-        result = StrategyDashboardStore(connection).set_activation_enabled_cas(
-            activation_id=str(request.get("activation_id") or ""),
-            strategy_id=str(request.get("strategy_id") or ""),
-            strategy_version=str(request.get("strategy_version") or ""),
-            strategy_config_fingerprint=str(
-                request.get("strategy_config_fingerprint") or ""
-            ),
-            expected_enabled=expected_enabled,
-            expected_updated_at=expected_updated_at,
-            enabled=enabled,
-            changed_at=datetime.now(UTC),
-            operator=operator,
-            source="dashboard-u6",
-            reason=str(request.get("reason") or "owner toggle"),
-        )
+        store = StrategyDashboardStore(connection)
+        if not activation_id:
+            if not enabled:
+                _u6_json(
+                    handler,
+                    200,
+                    {
+                        "status": "NO_CHANGE",
+                        "enabled": False,
+                        "activation_state": "NOT SET",
+                    },
+                )
+                return
+            result = store.activate_exact_strategy(
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                changed_at=datetime.now(UTC),
+                operator=operator,
+                source="dashboard-strategy-control",
+                reason=str(request.get("reason") or "owner first activation"),
+                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY,
+            )
+        else:
+            expected_enabled = request.get("expected_enabled")
+            if not isinstance(expected_enabled, bool):
+                raise ValueError("expected_enabled must be boolean")
+            expected_updated_at = _u6_parse_timestamp(
+                request.get("expected_updated_at"), "expected_updated_at"
+            )
+            result = store.set_activation_enabled_cas(
+                activation_id=activation_id,
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                expected_enabled=expected_enabled,
+                expected_updated_at=expected_updated_at,
+                enabled=enabled,
+                changed_at=datetime.now(UTC),
+                operator=operator,
+                source="dashboard-strategy-control",
+                reason=str(request.get("reason") or "owner Strategy toggle"),
+                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY,
+                enforce_readiness=True,
+            )
     _u6_json(handler, 200, result)
 
 
@@ -2374,6 +2412,15 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
     except StaleActivationState:
         _u6_json(handler, 409, {"error": "STALE_ACTIVATION_STATE"})
+    except StrategyRuntimeNotReady as exc:
+        _u6_json(
+            handler,
+            409,
+            {
+                "error": "STRATEGY_RUNTIME_NOT_READY",
+                "runtime_readiness": exc.readiness.as_dict(),
+            },
+        )
     except UnknownActivation:
         _u6_json(handler, 404, {"error": "StrategyActivation NOT SET"})
     except psycopg.errors.UniqueViolation:

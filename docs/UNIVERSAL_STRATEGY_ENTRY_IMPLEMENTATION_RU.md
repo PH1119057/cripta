@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.3
+**Версия:** 2.4
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -75,6 +75,34 @@ Entry-2 decoupling implementation requirement:
   из explicit Strategy geometry/window requirements;
 - legacy V1 explicit `history_limit`, flow, OI, required 60m readiness и остальные forensic fields
   продолжают воспроизводиться без изменения parity semantics.
+
+## 0.4 Activation/readiness и Entry V1 retirement — 2026-09-12
+
+Dashboard обязан показывать для каждой exact Strategy version один owner-facing state
+`АКТИВНА / НЕАКТИВНА` и отдельный `runtime_readiness`. Первая попытка включения создаёт
+StrategyActivation + materialized EntryPlan/ExitPlan atomically; повторное включение/выключение
+использует CAS exact activation state. Создание/редактирование immutable StrategyCard само по себе
+activation не создаёт.
+
+Activation endpoint обязан вызвать fail-closed readiness audit. Минимальные блокирующие классы:
+
+- Entry policy stored but not consumed (`local_entry_policy`, неподключённые context/ranking rules);
+- Exit/Hedge policy включена, но соответствующий Strategy-specific runtime consumer отсутствует;
+- incomplete capital/execution/initial-protection contract для существующего Execution adapter;
+- production multi-Strategy observer не установлен или не умеет загрузить exact enabled activations.
+
+Readiness является доказательством отсутствия silent-ignore: каждое включённое поле либо имеет
+конкретного runtime consumer + acceptance test, либо exact Strategy activation запрещена с кодом.
+
+Legacy Entry V1 services переводятся в `disabled/inactive`, mutable state переносится в immutable
+операционный архив; PostgreSQL evidence, source и frozen V1 fingerprint не удаляются. V1 U5 parity
+shadow не переиспользуется как observer новых Strategy, потому что он hard-bound к frozen V1 bundle.
+
+Существующий Universal→Execution bridge считается готовым только для уже поддержанного subset:
+USDT amount, leverage, MARKET/LIMIT_OFFSET с explicit execution offset/TTL, request-age и initial
+Full/LastPrice SL+TP. Расширенный Strategy Exit/BE/trailing/local-zone/time/context и Hedge не могут
+считаться поддержанными только потому, что старый Execution умеет технически менять stop/close.
+Нужен exact Strategy/ExitPlan consumer.
 
 ## 1. Назначение
 

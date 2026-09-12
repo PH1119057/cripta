@@ -1,7 +1,7 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.3
+**Версия:** 1.4
 **Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
@@ -145,6 +145,36 @@ ATR/shock и rolling-window требований и не меняет торго
 Disabled Entry Watch хранится только как `{enabled:false}` и не может прятать геометрию/timers.
 Когда Entry Watch включён, StrategyCard обязана явно содержать direction rules, required timeframes,
 flow/OI enabled state, candidate lifecycle и derived event contract.
+
+## 1.3 Решение владельца 2026-09-12 — Activation, observer и полнота исполнения policy
+
+StrategyCard должна иметь явный owner-control `АКТИВНА / НЕАКТИВНА`. Одновременно могут
+существовать десятки immutable Strategy versions, но Universal Entry observer имеет право
+наблюдать только exact versions, для которых существует `StrategyActivation(enabled=true)`.
+Переключатель не изменяет StrategyCard: первая активация создаёт отдельную StrategyActivation и
+immutable EntryPlan/ExitPlan exact version; последующие переключения меняют только enabled-state с
+append-only journal.
+
+Активация запрещена fail-closed, если хотя бы одно включённое поле StrategyCard не имеет доказанного
+потребителя в полном runtime-path. Карточка обязана публиковать `runtime_readiness` с точными причинами.
+Недопустимо сохранять параметр в UI/JSON, но молча игнорировать его в Entry, Exit или Execution.
+
+Различаются:
+
+- `POLICY_READY` — все включённые поля карточки имеют определённую runtime-семантику;
+- `OBSERVER_READY` — production observer умеет загрузить enabled StrategyActivation и подать ей
+  причинные market/context/account facts;
+- `EXECUTION_READY` — созданный ExecutionRequest переводится в существующий Execution contract без
+  потери Strategy-owned параметров;
+- `ACTIVE` разрешён только при одновременной готовности обязательных контуров.
+
+Исторический Entry V1 и его parity-shadow после owner decision 2026-09-12 являются archive-only.
+Они не считаются production observer для новых StrategyCard и не должны автоматически запускаться.
+Immutable V1 source/data/evidence сохраняются для аудита и воспроизводимости.
+
+Особо: неоднозначная торговая семантика не достраивается разработчиком. Пока owner не утвердил
+точный алгоритм `local_entry_policy`, включённый local Entry обязан блокировать activation. Аналогично
+неподключённые Strategy-specific Exit/Hedge/context rules блокируют activation, а не игнорируются.
 
 ## 2. StrategyCard
 

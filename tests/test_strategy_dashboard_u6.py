@@ -20,6 +20,7 @@ from bybit_workbench.universal_entry.contracts import (
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
+    StrategyRuntimeNotReady,
     assemble_strategy_catalog,
     build_new_strategy_version,
     card_from_editable,
@@ -290,8 +291,13 @@ class Tx:
 
 
 class FakeConnection:
-    def __init__(self, activation: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        activation: dict[str, object] | None = None,
+        card: StrategyCard | None = None,
+    ) -> None:
         self.activation = activation
+        self.card = card
         self.statements: list[tuple[str, tuple[object, ...]]] = []
         self.activation_events = 0
 
@@ -300,6 +306,36 @@ class FakeConnection:
 
     def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> Cursor:
         self.statements.append((statement, parameters))
+        if (
+            "FROM strategy_entry.strategy_cards" in statement
+            and "WHERE strategy_id=%s" in statement
+        ):
+            if self.card is None:
+                return Cursor([], 0)
+            return Cursor(
+                [
+                    (
+                        json.loads(canonical_json(self.card)),
+                        self.card.approved_at,
+                        self.card.approved_source,
+                    )
+                ]
+            )
+        if (
+            "SELECT activation_id,enabled,updated_at" in statement
+            and "FROM strategy_entry.strategy_activations" in statement
+        ):
+            if self.activation is None:
+                return Cursor([], 0)
+            return Cursor(
+                [
+                    (
+                        self.activation["activation_id"],
+                        self.activation["enabled"],
+                        self.activation["updated_at"],
+                    )
+                ]
+            )
         if "FROM strategy_entry.strategy_activations" in statement and "FOR UPDATE" in statement:
             if self.activation is None:
                 return Cursor([], 0)
@@ -807,3 +843,222 @@ def test_strategy_api_create_path_has_no_activation_or_execution_side_effect() -
     assert '"symbol_catalog"' in scope
     for forbidden in ("runtime.trade_commands", "runtime.executions", "place_order", "mainnet"):
         assert forbidden not in scope
+
+
+def _runtime_ready_owner_card() -> StrategyCard:
+    from bybit_workbench.universal_entry.dashboard_control import (
+        card_from_editable,
+        strategy_authoring_template,
+    )
+
+    raw = strategy_authoring_template()
+    raw.update(
+        {
+            "strategy_id": "strategy-runtime-ready",
+            "strategy_version": "1.0",
+            "name": "Runtime ready LONG",
+            "symbols": ["UNIUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["UNIUSDT"]},
+            "direction_policy": ["LONG"],
+        }
+    )
+    raw["entry_policy"]["watch_policy"] = {
+        "enabled": True,
+        "candidate_timeframe_minutes": 5,
+        "required_closed_timeframes": ["5", "15"],
+        "events": {
+            "bar_open": "BAR_OPEN",
+            "candle_closed": "CANDLE_CLOSED",
+            "open_interest": "OPEN_INTEREST",
+            "trade": "PUBLIC_TRADE",
+        },
+        "geometry": {
+            "operator": "RANGE_ATR_CONFLUENCE",
+            "timeframes": ["5", "15"],
+            "primary_timeframe": "5",
+            "confirming_timeframe": "15",
+            "lookback_by_timeframe": {"5": 36, "15": 12},
+            "atr_period": 20,
+            "zone_half_width_atr": "0.5",
+            "confluence_max_gap_percent": "0.25",
+            "shock_reset_policy": {"enabled": False},
+        },
+        "hourly_swing": {"enabled": False},
+        "direction_rules": {"LONG": {"entry_zone_field": "support_top", "touch_comparator": "LTE"}},
+        "direction_precedence": ["LONG"],
+        "candidate_lifecycle": {"clear_on_touch": True},
+        "flow": {"enabled": False},
+        "oi": {"enabled": False},
+        "derived_event_kind": "TOUCH",
+    }
+    raw["entry_policy"]["execution_policy"] = {
+        "order_type": "MARKET",
+        "reference_value_path": "fact.entry_price",
+        "max_request_age_seconds": 30,
+    }
+    raw["capital_policy"] = {
+        "require_capacity": True,
+        "requested_amount": "10",
+        "amount_currency": "USDT",
+        "leverage": 1,
+        "capacity_max_age_seconds": 15,
+        "capacity_min_quality": "MEDIUM",
+    }
+    raw["exit_policy"].update(
+        {
+            "hard_stop": {"enabled": True, "percent": "1.00"},
+            "take_profit": {"enabled": True, "percent": "1.10"},
+            "break_even": {"enabled": False},
+            "trailing": {"enabled": False},
+            "local_zone_exit": {"enabled": False},
+            "time_exit": {"enabled": False},
+        }
+    )
+    raw["protection_policy"] = {
+        "initial_protection": {
+            "stop_loss_enabled": True,
+            "stop_loss_pct": "1.00",
+            "take_profit_enabled": True,
+            "take_profit_pct": "1.10",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        }
+    }
+    return card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
+
+
+def test_strategy_runtime_readiness_separates_policy_execution_and_observer() -> None:
+    from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+
+    card = _runtime_ready_owner_card()
+    without_observer = assess_strategy_runtime_readiness(card, observer_ready=False)
+    assert without_observer.policy_ready is True
+    assert without_observer.execution_ready is True
+    assert without_observer.observer_ready is False
+    assert without_observer.active_ready is False
+    assert [item.code for item in without_observer.reasons] == [
+        "MULTI_STRATEGY_OBSERVER_NOT_INSTALLED"
+    ]
+    complete = assess_strategy_runtime_readiness(card, observer_ready=True)
+    assert complete.active_ready is True
+    assert complete.reasons == ()
+
+
+def test_every_known_stored_only_policy_blocks_activation_instead_of_silent_ignore() -> None:
+    from bybit_workbench.universal_entry.dashboard_control import (
+        card_from_editable,
+        card_to_editable,
+    )
+    from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+
+    base = _runtime_ready_owner_card()
+    raw = card_to_editable(base)
+    raw["strategy_version"] = "2.0"
+    raw["entry_policy"]["entry_reference_policy"] = {
+        "enabled": True,
+        "reference": "CALCULATED_ENTRY",
+        "offset_pct_signed": "-0.20",
+    }
+    raw["entry_policy"]["local_entry_policy"] = {
+        "enabled": True,
+        "window_minutes": 180,
+        "lookback_by_timeframe": {"5": 36, "15": 12},
+        "use_1m": False,
+        "require_5m_15m_confluence": True,
+        "require_macro_relation": True,
+    }
+    raw["entry_policy"]["context_feature_policy"] = [
+        {"feature_id": "money.pressure", "scope": "GLOBAL", "mode": "OBSERVE"}
+    ]
+    raw["exit_policy"]["trailing"] = {
+        "enabled": True,
+        "activation_profit_pct": "0.50",
+        "distance_pct": "0.30",
+    }
+    raw["lifecycle_policy"]["hedge_policy"] = {
+        "enabled": True,
+        "opposite_direction": True,
+        "trigger": {"reference": "PRIMARY_ENTRY", "offset_pct_signed": "0.50"},
+        "capital": {"size_percent_of_primary": "100", "leverage": 1},
+        "stop_loss": {"enabled": False},
+        "take_profit": {"enabled": False},
+        "trailing": {"enabled": False},
+    }
+    card = card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
+    readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
+    codes = {item.code for item in readiness.reasons}
+    assert {
+        "ENTRY_REFERENCE_OFFSET_NOT_CONSUMED",
+        "LOCAL_ENTRY_POLICY_NOT_IMPLEMENTED",
+        "ENTRY_CONTEXT_FEATURE_POLICY_NOT_COMPILED",
+        "EXIT_TRAILING_NOT_WIRED",
+        "HEDGE_POLICY_NOT_IMPLEMENTED",
+    } <= codes
+    assert readiness.active_ready is False
+
+
+def test_first_activation_atomically_materializes_exact_entry_and_exit_plans() -> None:
+    card = _runtime_ready_owner_card()
+    connection = FakeConnection(card=card)
+    result = StrategyDashboardStore(connection).activate_exact_strategy(
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        changed_at=NOW,
+        operator="owner",
+        source="dashboard-strategy-control",
+        reason="owner enabled Strategy",
+        observer_ready=True,
+    )
+    assert result["status"] == "CREATED_ENABLED"
+    sql = "\n".join(statement for statement, _ in connection.statements).lower()
+    assert "insert into strategy_entry.strategy_activations" in sql
+    assert "insert into strategy_entry.entry_plans" in sql
+    assert "insert into strategy_entry.exit_plans" in sql
+    assert "runtime.trade_commands" not in sql
+
+
+def test_first_activation_is_blocked_before_db_mutation_without_observer() -> None:
+    card = _runtime_ready_owner_card()
+    connection = FakeConnection(card=card)
+    with pytest.raises(StrategyRuntimeNotReady) as caught:
+        StrategyDashboardStore(connection).activate_exact_strategy(
+            strategy_id=card.strategy_id,
+            strategy_version=card.strategy_version,
+            strategy_config_fingerprint=card.strategy_config_fingerprint,
+            changed_at=NOW,
+            operator="owner",
+            source="dashboard-strategy-control",
+            reason="owner enabled Strategy",
+            observer_ready=False,
+        )
+    assert caught.value.readiness.active_ready is False
+    writes = [
+        statement
+        for statement, _ in connection.statements
+        if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+    ]
+    assert writes == []
+
+
+def test_strategy_ui_has_active_toggle_readiness_and_explicit_limit_execution_offset() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    for token in (
+        "Сделать активной",
+        "Сделать неактивной",
+        "Runtime readiness",
+        "STRATEGY_RUNTIME_NOT_READY",
+        "Execution offset для LIMIT, %",
+        "document.getElementById('strategyNewEditor')",
+        "Архив Entry V1 · остановлен",
+    ):
+        assert token in html
+
+
+def test_strategy_api_keeps_multi_strategy_observer_fail_closed_until_installed() -> None:
+    app = APP.read_text(encoding="utf-8")
+    scope = app[app.index("# U6_STRATEGY_API_BEGIN") : app.index("# U6_STRATEGY_API_END")]
+    assert "U6_MULTI_STRATEGY_OBSERVER_READY = False" in scope
+    assert "activate_exact_strategy(" in scope
+    assert "enforce_readiness=True" in scope
+    assert '"STRATEGY_RUNTIME_NOT_READY"' in scope

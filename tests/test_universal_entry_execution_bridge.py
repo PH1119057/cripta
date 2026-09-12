@@ -66,9 +66,7 @@ def _bundle(*, enabled: bool = True, limit: bool = False) -> BridgePolicyBundle:
         "max_request_age_seconds": 30,
     }
     if limit:
-        execution_policy.update(
-            {"entry_offset_pct": "0.20", "entry_limit_ttl_seconds": 45}
-        )
+        execution_policy.update({"entry_offset_pct": "0.20", "entry_limit_ttl_seconds": 45})
     capital = {
         "require_capacity": True,
         "requested_amount": "10",
@@ -149,9 +147,7 @@ def test_disabled_exact_activation_is_fail_closed() -> None:
 
 def test_expired_request_is_fail_closed() -> None:
     with pytest.raises(ExecutionBridgeBlocked) as caught:
-        prepare_runtime_entry_command(
-            _request(), _bundle(), now=NOW + timedelta(seconds=31)
-        )
+        prepare_runtime_entry_command(_request(), _bundle(), now=NOW + timedelta(seconds=31))
     assert caught.value.code is ExecutionBridgeBlockCode.REQUEST_EXPIRED
 
 
@@ -259,7 +255,7 @@ def test_private_runtime_default_source_and_universal_fill_lineage() -> None:
     assert 'if ENTRY_COMMAND_SOURCE == "LEGACY_V1"' in source
     assert "strategy_entry.execution_dispatches" in source
     assert 'owner_bot = "universal-entry"' in source
-    assert 'geometry_handoff_id = None' in source
+    assert "geometry_handoff_id = None" in source
 
 
 def test_dispatch_storage_is_append_only_and_has_exact_lineage() -> None:
@@ -286,3 +282,176 @@ def test_systemd_template_is_hard_disabled_by_default() -> None:
     assert "CRIPTA_ENTRY_COMMAND_SOURCE=LEGACY_V1" in unit
     assert "CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
     assert "Restart=on-failure" in unit
+
+
+def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execution_contract() -> (
+    None
+):
+    from bybit_workbench.universal_entry.contracts import StrategyActivation
+    from bybit_workbench.universal_entry.dashboard_control import (
+        card_from_editable,
+        strategy_authoring_template,
+    )
+    from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+
+    raw = strategy_authoring_template()
+    raw.update(
+        {
+            "strategy_id": "owner-long",
+            "strategy_version": "1.0",
+            "name": "Owner LONG",
+            "symbols": ["UNIUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["UNIUSDT"]},
+            "direction_policy": ["LONG"],
+        }
+    )
+    raw["entry_policy"]["watch_policy"] = {
+        "enabled": True,
+        "candidate_timeframe_minutes": 5,
+        "required_closed_timeframes": ["5", "15"],
+        "events": {
+            "bar_open": "BAR_OPEN",
+            "candle_closed": "CANDLE_CLOSED",
+            "open_interest": "OPEN_INTEREST",
+            "trade": "PUBLIC_TRADE",
+        },
+        "geometry": {
+            "operator": "RANGE_ATR_CONFLUENCE",
+            "timeframes": ["5", "15"],
+            "primary_timeframe": "5",
+            "confirming_timeframe": "15",
+            "lookback_by_timeframe": {"5": 36, "15": 12},
+            "atr_period": 20,
+            "zone_half_width_atr": "0.5",
+            "confluence_max_gap_percent": "0.25",
+            "shock_reset_policy": {"enabled": False},
+        },
+        "hourly_swing": {"enabled": False},
+        "direction_rules": {"LONG": {"entry_zone_field": "support_top", "touch_comparator": "LTE"}},
+        "direction_precedence": ["LONG"],
+        "candidate_lifecycle": {"clear_on_touch": True},
+        "flow": {"enabled": False},
+        "oi": {"enabled": False},
+        "derived_event_kind": "TOUCH",
+    }
+    raw["entry_policy"]["execution_policy"] = {
+        "order_type": "LIMIT_OFFSET",
+        "reference_value_path": "fact.entry_price",
+        "max_request_age_seconds": 30,
+        "entry_offset_pct": "0.20",
+        "entry_limit_ttl_seconds": 45,
+    }
+    raw["capital_policy"] = {
+        "require_capacity": True,
+        "requested_amount": "25",
+        "amount_currency": "USDT",
+        "leverage": 2,
+        "capacity_max_age_seconds": 15,
+        "capacity_min_quality": "MEDIUM",
+    }
+    raw["exit_policy"].update(
+        {
+            "hard_stop": {"enabled": True, "percent": "1.00"},
+            "take_profit": {"enabled": True, "percent": "1.10"},
+            "break_even": {"enabled": False},
+            "trailing": {"enabled": False},
+            "local_zone_exit": {"enabled": False},
+            "time_exit": {"enabled": False},
+        }
+    )
+    raw["protection_policy"] = {
+        "initial_protection": {
+            "stop_loss_enabled": True,
+            "stop_loss_pct": "1.00",
+            "take_profit_enabled": True,
+            "take_profit_pct": "1.10",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        }
+    }
+    card = card_from_editable(raw, approved_at=NOW, approved_source="owner-test")
+    assert assess_strategy_runtime_readiness(card, observer_ready=True).active_ready is True
+    activation = StrategyActivation(
+        activation_id="owner-activation",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        enabled=True,
+        enabled_at=NOW,
+    )
+    entry_plan, exit_plan = materialize_plans(card, activation)
+    request = ExecutionRequest(
+        execution_request_id="owner-request",
+        strategy_attempt_id="owner-attempt",
+        entry_decision_id="owner-decision",
+        signal_id="owner-signal",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        entry_plan_fingerprint=entry_plan.entry_plan_fingerprint,
+        symbol="UNIUSDT",
+        direction=TradeDirection.LONG,
+        requested_at=NOW,
+        payload=FrozenPolicy.from_mapping(
+            {
+                "capital_policy": card.capital_policy.to_dict(),
+                "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+                "signal_fact": {
+                    "fact_id": "owner-touch",
+                    "event_kind": "TOUCH",
+                    "symbol": "UNIUSDT",
+                    "direction": "LONG",
+                    "observed_at": NOW.isoformat(),
+                    "event_at": NOW.isoformat(),
+                    "received_at": NOW.isoformat(),
+                    "source_refs": ["test:touch"],
+                    "attributes": {"entry_price": "7.50", "price": "7.50"},
+                },
+            }
+        ),
+    )
+    prepared = prepare_runtime_entry_command(
+        request,
+        BridgePolicyBundle(
+            strategy_card={
+                "strategy_id": card.strategy_id,
+                "strategy_version": card.strategy_version,
+                "strategy_config_fingerprint": card.strategy_config_fingerprint,
+                "entry_policy": card.entry_policy.to_dict(),
+                "capital_policy": card.capital_policy.to_dict(),
+            },
+            entry_plan={
+                "strategy_id": entry_plan.strategy_id,
+                "strategy_version": entry_plan.strategy_version,
+                "strategy_config_fingerprint": entry_plan.strategy_config_fingerprint,
+                "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+            },
+            exit_plan={
+                "strategy_id": exit_plan.strategy_id,
+                "strategy_version": exit_plan.strategy_version,
+                "strategy_config_fingerprint": exit_plan.strategy_config_fingerprint,
+                "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
+                "protection_policy": exit_plan.protection_policy.to_dict(),
+            },
+            activation={
+                "activation_id": activation.activation_id,
+                "enabled": True,
+                "strategy_id": activation.strategy_id,
+                "strategy_version": activation.strategy_version,
+                "strategy_config_fingerprint": activation.strategy_config_fingerprint,
+            },
+        ),
+        now=NOW + timedelta(seconds=1),
+    )
+    assert prepared.payload["source"] == "universal_entry"
+    assert prepared.payload["stake_usdt"] == "25"
+    assert prepared.payload["leverage"] == 2
+    assert prepared.payload["side"] == "Buy"
+    assert prepared.payload["price"] == "7.50"
+    assert prepared.payload["entry_offset_pct"] == "0.20"
+    assert prepared.payload["entry_limit_ttl_seconds"] == 45
+    assert prepared.payload["initial_protection"]["stop_loss_pct"] == "1.00"
+    assert prepared.payload["initial_protection"]["take_profit_pct"] == "1.10"
+    assert prepared.payload["strategy_id"] == card.strategy_id
+    assert prepared.payload["strategy_version"] == card.strategy_version
+    assert prepared.payload["signal_id"] == "owner-signal"

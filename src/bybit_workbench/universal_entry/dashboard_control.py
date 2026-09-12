@@ -17,10 +17,14 @@ from .contracts import (
     FrozenPolicy,
     NumericRule,
     SensorRequirement,
+    StrategyActivation,
     StrategyCard,
     TouchPolicy,
     TradeDirection,
 )
+from .fingerprint import fingerprint
+from .materializer import materialize_plans
+from .readiness import StrategyRuntimeReadiness, assess_strategy_runtime_readiness
 from .storage import StrategyEntryStore
 
 
@@ -45,6 +49,14 @@ class StaleActivationState(RuntimeError):
 
 class UnknownActivation(KeyError):
     """Exact activation_id does not exist."""
+
+
+class StrategyRuntimeNotReady(RuntimeError):
+    """Owner tried to activate a Strategy that would silently lose policy fields."""
+
+    def __init__(self, readiness: StrategyRuntimeReadiness) -> None:
+        super().__init__("STRATEGY_RUNTIME_NOT_READY")
+        self.readiness = readiness
 
 
 STRATEGY_CONTEXT_FEATURE_CATALOG: tuple[dict[str, str], ...] = (
@@ -1016,11 +1028,25 @@ def assemble_strategy_catalog(
     entry_plans: Sequence[Mapping[str, object]],
     exit_plans: Sequence[Mapping[str, object]],
     activation_events: Sequence[Mapping[str, object]],
+    *,
+    observer_ready: bool = False,
 ) -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for card in cards:
         key = _identity(card)
         editable = editable_from_stored_card(card.get("card_json"))
+        approved_at = card.get("approved_at")
+        if not isinstance(approved_at, datetime):
+            approved_at = datetime.fromisoformat(str(approved_at))
+        reproduced = card_from_editable(
+            editable,
+            approved_at=approved_at,
+            approved_source=str(card.get("approved_source") or "stored"),
+            validate_authoring=False,
+        )
+        readiness = assess_strategy_runtime_readiness(
+            reproduced, observer_ready=observer_ready
+        ).as_dict()
         card_activations = [dict(row) for row in activations if _identity(row) == key]
         card_entry = [dict(row) for row in entry_plans if _identity(row) == key]
         card_exit = [dict(row) for row in exit_plans if _identity(row) == key]
@@ -1047,6 +1073,7 @@ def assemble_strategy_catalog(
                 "scope": editable.get("scope"),
                 "symbols": editable.get("symbols"),
                 "activation_state": activation_state,
+                "runtime_readiness": readiness,
                 "activations": card_activations,
                 "entry_plan_fingerprints": [
                     str(row.get("entry_plan_fingerprint")) for row in card_entry
@@ -1133,7 +1160,7 @@ class StrategyDashboardStore:
     def __init__(self, connection: DashboardConnectionLike) -> None:
         self._connection = connection
 
-    def list_catalog(self) -> list[dict[str, object]]:
+    def list_catalog(self, *, observer_ready: bool = False) -> list[dict[str, object]]:
         cards = _dict_rows(
             _CARD_COLUMNS,
             self._connection.execute(
@@ -1182,7 +1209,14 @@ class StrategyDashboardStore:
                    ORDER BY activation_event_id"""
             ).fetchall(),
         )
-        return assemble_strategy_catalog(cards, activations, entry_plans, exit_plans, events)
+        return assemble_strategy_catalog(
+            cards,
+            activations,
+            entry_plans,
+            exit_plans,
+            events,
+            observer_ready=observer_ready,
+        )
 
     def _load_exact_base(
         self, strategy_id: str, strategy_version: str, strategy_config_fingerprint: str
@@ -1251,6 +1285,81 @@ class StrategyDashboardStore:
             StrategyEntryStore(self._connection).insert_strategy_card(created)
         return created
 
+    def activate_exact_strategy(
+        self,
+        *,
+        strategy_id: str,
+        strategy_version: str,
+        strategy_config_fingerprint: str,
+        changed_at: datetime,
+        operator: str,
+        source: str,
+        reason: str,
+        observer_ready: bool,
+    ) -> dict[str, object]:
+        with self._connection.transaction():
+            card = self._load_exact_base(strategy_id, strategy_version, strategy_config_fingerprint)
+            readiness = assess_strategy_runtime_readiness(card, observer_ready=observer_ready)
+            if not readiness.active_ready:
+                raise StrategyRuntimeNotReady(readiness)
+            rows = self._connection.execute(
+                """SELECT activation_id,enabled,updated_at
+                   FROM strategy_entry.strategy_activations
+                   WHERE strategy_id=%s AND strategy_version=%s
+                     AND strategy_config_fingerprint=%s
+                   ORDER BY created_at,activation_id
+                   FOR UPDATE""",
+                (strategy_id, strategy_version, strategy_config_fingerprint),
+            ).fetchall()
+            if len(rows) > 1:
+                raise ValueError(
+                    "exact Strategy version has multiple activations; manual repair required"
+                )
+            if rows:
+                activation_id = str(rows[0][0])
+                if bool(rows[0][1]):
+                    return {
+                        "status": "NO_CHANGE",
+                        "activation_id": activation_id,
+                        "enabled": True,
+                        "runtime_readiness": readiness.as_dict(),
+                    }
+                raise ValueError("existing disabled StrategyActivation must be re-enabled with CAS")
+            activation_id = (
+                "activation-"
+                + fingerprint(
+                    {
+                        "strategy_id": strategy_id,
+                        "strategy_version": strategy_version,
+                        "strategy_config_fingerprint": strategy_config_fingerprint,
+                    }
+                )[:32]
+            )
+            activation = StrategyActivation(
+                activation_id=activation_id,
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                enabled=True,
+                enabled_at=changed_at,
+                scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+                operator=operator,
+                source=source,
+            )
+            entry_plan, exit_plan = materialize_plans(card, activation)
+            store = StrategyEntryStore(self._connection)
+            store.insert_activation(activation, reason=reason)
+            store.insert_entry_plan(entry_plan)
+            store.insert_exit_plan(exit_plan)
+            return {
+                "status": "CREATED_ENABLED",
+                "activation_id": activation_id,
+                "enabled": True,
+                "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+                "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
+                "runtime_readiness": readiness.as_dict(),
+            }
+
     def set_activation_enabled_cas(
         self,
         *,
@@ -1265,8 +1374,17 @@ class StrategyDashboardStore:
         operator: str,
         source: str,
         reason: str,
+        observer_ready: bool = False,
+        enforce_readiness: bool = False,
     ) -> dict[str, object]:
         with self._connection.transaction():
+            if enabled and enforce_readiness:
+                card = self._load_exact_base(
+                    strategy_id, strategy_version, strategy_config_fingerprint
+                )
+                readiness = assess_strategy_runtime_readiness(card, observer_ready=observer_ready)
+                if not readiness.active_ready:
+                    raise StrategyRuntimeNotReady(readiness)
             row = self._connection.execute(
                 """SELECT activation_id,strategy_id,strategy_version,
                           strategy_config_fingerprint,enabled,enabled_at,disabled_at,

@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.7
+**Версия документа:** 6.8
 **Дата:** 2026-09-12
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -401,12 +401,11 @@ watch fields: blank Entry хранит только `enabled=false`; при вк
 Технический in-memory history buffer для новых plans выводится из их lookback/ATR/shock/swing
 requirements; forensic V1 сохраняет свой explicit `history_limit=1000` и все legacy fields.
 
-Final source checkpoint Entry universe/reset + Entry-2 decoupling опубликован commit
-`375b4717a44c891e49926962b2d4e425a2c88800` и установлен в dashboard/read-model source tree по exact
-SHA. `cripta-dashboard.service` после controlled restart active с PID `834287`. Legacy
-`cripta-entry-shadow-scanner.service` остался PID `806` / NRestarts 0; independent
-`cripta-universal-entry-shadow.service` остался PID `831288` / NRestarts 3 и не перезапускался;
-Universal consumer остаётся disabled/inactive. До/после установки counters одинаковы:
+Historical install checkpoint до последующего retirement Entry V1: Entry universe/reset + Entry-2
+decoupling был опубликован commit `375b4717a44c891e49926962b2d4e425a2c88800` и установлен в
+dashboard/read-model source tree по exact SHA. На момент того checkpoint dashboard был PID `834287`,
+а V1 observers ещё не перезапускались. Их актуальный retired state зафиксирован ниже. Universal
+consumer остаётся disabled/inactive. На том install checkpoint counters были:
 `runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`,
 `strategy_entry.strategy_cards=1`, `strategy_entry.strategy_activations=0`.
 
@@ -427,4 +426,29 @@ Published structural source commit: `5e637c79a7328ccc58376d51e16e0bb32dca42f0`.
 - legacy Entry scanner PID/instance и dashboard не заменены;
 - `runtime.trade_commands` / `runtime.executions` не изменились установкой structural bridge.
 
-Отдельный shadow evidence runtime обновлён до exact source commit `5e637c79a7328ccc58376d51e16e0bb32dca42f0` и запущен только для длительного read-only накопления parity evidence. Его результат не блокирует structural completion; factual semantic mismatch остаётся hard blocker только для будущего cutover.
+Исторически отдельный shadow evidence runtime был обновлён до exact source commit
+`5e637c79a7328ccc58376d51e16e0bb32dca42f0` для read-only parity evidence. Он больше не является
+активным runtime: актуальный retired state V1 зафиксирован ниже. Накопленная evidence остаётся
+исторической и не является разрешением на future cutover.
+## Strategy activation/readiness и retirement Entry V1 — 2026-09-12
+
+По owner decision legacy Entry V1 больше не является активным наблюдателем.
+`cripta-entry-shadow-scanner.service` и V1-specific `cripta-universal-entry-shadow.service`
+переведены в `disabled/inactive`; их mutable state (5.4G) перемещён в
+`/var/lib/cripta/archive/entry_v1_20260912T024510Z`. PostgreSQL evidence, source и frozen
+fingerprint сохранены. Operational manifest находится в
+`/srv/cripta-share/reports/entry_v1_archive_20260912T024510Z`.
+
+Strategy dashboard получает owner-facing `АКТИВНА / НЕАКТИВНА` и fail-closed
+`runtime_readiness`. Первая активация должна атомарно создать exact StrategyActivation +
+EntryPlan + ExitPlan; повторные ON/OFF меняют только Activation. Но source/runtime checkpoint
+явно фиксирует `MULTI_STRATEGY_OBSERVER_READY=False`: production observer, читающий все enabled
+StrategyActivation из PostgreSQL, ещё не установлен. Поэтому ACTIVE до его установки запрещён
+до DB mutation.
+
+Аудит `docs/UNIVERSAL_ENTRY_STRATEGY_RUNTIME_READINESS_RU.md` зафиксировал: существующий
+Universal→Execution adapter и private runtime совместимы с поддержанным entry subset
+(amount/leverage/MARKET|LIMIT_OFFSET/request-age/TTL/initial SL+TP + exact lineage), но signed Entry
+offset, local Entry, новые context feature rules и Strategy-specific post-fill Exit/Hedge пока
+не имеют полного end-to-end consumer. Любое включение такого поля блокирует activation вместо
+silent-ignore. Cutover остаётся `NO`; consumer disabled, mainnet gate закрыт.
