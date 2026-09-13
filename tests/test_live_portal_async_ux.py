@@ -39,7 +39,7 @@ def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> Non
     assert "setInterval(()=>refreshEntryShadow" not in html
     assert "if(activeTradePage()==='open')positionRows.innerHTML" in html
     assert "if(activeTradePage()==='closed')realClosedRows.innerHTML" in html
-    assert "if(activeTradePage()==='signals')liveRows.innerHTML" in html
+    assert "if(activeTradePage()==='signals')renderSignalObservation" in html
     assert "if(page==='monitor')renderEntryShadow" in html
 
 

@@ -34,7 +34,7 @@ try:
 except ImportError:  # package import used by tests
     from operations.dashboard.archive_v2 import read_job as read_archive_job
     from operations.dashboard.archive_v2 import start_job as start_archive_job
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from html import escape
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -259,6 +259,258 @@ def opportunity_state() -> dict[str, object]:
         for row in rows
     ]
     return {"counts": counts, "items": items}
+
+
+
+
+def _signal_monitor_summary(items: list[dict[str, object]]) -> dict[str, object]:
+    positive = sum(1 for item in items if item.get("result_class") == "positive")
+    negative = sum(1 for item in items if item.get("result_class") == "negative")
+    open_count = sum(1 for item in items if item.get("result_class") == "open")
+    no_entry = sum(1 for item in items if item.get("result_class") == "no_entry")
+    neutral = sum(1 for item in items if item.get("result_class") == "neutral")
+    closed_pnl = sum(
+        float(item["pnl_usdt"])
+        for item in items
+        if item.get("pnl_kind") == "closed" and item.get("pnl_usdt") is not None
+    )
+    open_pnl = sum(
+        float(item["pnl_usdt"])
+        for item in items
+        if item.get("pnl_kind") == "open" and item.get("pnl_usdt") is not None
+    )
+    pnl_rows = sum(1 for item in items if item.get("pnl_usdt") is not None)
+    return {
+        "total": len(items),
+        "positive": positive,
+        "negative": negative,
+        "open": open_count,
+        "no_entry": no_entry,
+        "neutral": neutral,
+        "closed_pnl_usdt": closed_pnl,
+        "open_pnl_usdt": open_pnl,
+        "total_pnl_usdt": closed_pnl + open_pnl,
+        "pnl_rows": pnl_rows,
+        "closed_pnl_rows": sum(
+            1 for item in items if item.get("pnl_kind") == "closed" and item.get("pnl_usdt") is not None
+        ),
+        "open_pnl_rows": sum(
+            1 for item in items if item.get("pnl_kind") == "open" and item.get("pnl_usdt") is not None
+        ),
+    }
+
+
+def _legacy_signal_outcome(hits: dict[str, object], state: str) -> tuple[str, str]:
+    tp = hits.get("+1.1")
+    sl = hits.get("-1.0")
+    if tp is not None and (sl is None or float(tp) < float(sl)):
+        return "positive", "цель +1,10% раньше стопа"
+    if sl is not None and (tp is None or float(sl) < float(tp)):
+        return "negative", "стоп −1,00% раньше цели"
+    if state == "tracking":
+        return "open", "наблюдение продолжается"
+    return "neutral", "24 часа завершены без цели и стопа"
+
+
+def strategy_signal_monitor_state(*, window_hours: int = 24) -> dict[str, object]:
+    now = datetime.now(UTC)
+    window_start = now - timedelta(hours=window_hours)
+    cutoff_epoch_ms = int(window_start.timestamp() * 1000)
+    try:
+        tickers = live_tickers()
+    except Exception:
+        tickers = {}
+    items: list[dict[str, object]] = []
+    active: dict[str, dict[str, object]] = {}
+    with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+        if connection.execute(
+            "SELECT to_regclass('strategy_entry.strategy_activations')"
+        ).fetchone()[0] is not None:
+            for row in connection.execute(
+                """SELECT a.strategy_id,a.strategy_version,c.name
+                     FROM strategy_entry.strategy_activations a
+                     JOIN strategy_entry.strategy_cards c
+                       ON c.strategy_id=a.strategy_id
+                      AND c.strategy_version=a.strategy_version
+                      AND c.strategy_config_fingerprint=a.strategy_config_fingerprint
+                    WHERE a.enabled=true
+                    ORDER BY c.name,a.strategy_version"""
+            ).fetchall():
+                key = f"{row[0]}::{row[1]}"
+                active[key] = {
+                    "strategy_key": key,
+                    "strategy_id": row[0],
+                    "strategy_version": row[1],
+                    "strategy_name": row[2],
+                    "active": True,
+                    "legacy": False,
+                }
+        paper_installed = bool(
+            connection.execute("SELECT to_regclass('strategy_entry.paper_orders')").fetchone()[0]
+        ) and bool(
+            connection.execute("SELECT to_regclass('strategy_entry.paper_positions')").fetchone()[0]
+        )
+        if paper_installed:
+            rows = connection.execute(
+                """SELECT o.paper_order_id,o.signal_id,o.strategy_id,o.strategy_version,c.name,
+                          o.symbol,o.direction,o.state,o.order_type,o.requested_at,
+                          o.reference_price,o.limit_price,o.expires_at,
+                          p.paper_position_id,p.state,p.opened_at,p.entry_price,p.quantity,
+                          p.closed_at,p.exit_price,p.exit_reason,p.gross_pnl_usdt,
+                          p.gross_return_pct,p.mfe_pct,p.mae_pct
+                     FROM strategy_entry.paper_orders o
+                     LEFT JOIN strategy_entry.strategy_cards c
+                       ON c.strategy_id=o.strategy_id
+                      AND c.strategy_version=o.strategy_version
+                      AND c.strategy_config_fingerprint=o.strategy_config_fingerprint
+                     LEFT JOIN strategy_entry.paper_positions p
+                       ON p.paper_order_id=o.paper_order_id AND p.leg_type='PRIMARY'
+                    WHERE o.requested_at >= %s
+                    ORDER BY o.requested_at DESC,o.paper_order_id DESC""",
+                (window_start,),
+            ).fetchall()
+            for row in rows:
+                strategy_key = f"{row[2]}::{row[3]}"
+                position_state = None if row[14] is None else str(row[14])
+                order_state = str(row[7])
+                pnl: float | None = None
+                pnl_kind: str | None = None
+                current_price: float | None = None
+                result_class = "neutral"
+                result_text = order_state
+                if position_state == "OPEN":
+                    result_class = "open"
+                    result_text = "псевдосделка открыта"
+                    ticker = tickers.get(str(row[5])) or {}
+                    raw_price = ticker.get("mark_price") or ticker.get("last_price")
+                    if raw_price not in (None, "") and row[16] is not None and row[17] is not None:
+                        current_price = float(raw_price)
+                        entry_price = float(row[16])
+                        quantity = float(row[17])
+                        pnl = (
+                            (current_price - entry_price) * quantity
+                            if str(row[6]) == "LONG"
+                            else (entry_price - current_price) * quantity
+                        )
+                        pnl_kind = "open"
+                elif position_state == "CLOSED":
+                    pnl = None if row[21] is None else float(row[21])
+                    pnl_kind = "closed" if pnl is not None else None
+                    result_class = (
+                        "positive" if pnl is not None and pnl > 0
+                        else "negative" if pnl is not None and pnl < 0
+                        else "neutral"
+                    )
+                    result_text = f"закрыта · {row[20] or 'без причины'}"
+                elif order_state == "PENDING":
+                    result_class = "open"
+                    result_text = "ждёт входа"
+                elif order_state in {"EXPIRED", "CANCELLED"}:
+                    result_class = "no_entry"
+                    result_text = "вход не состоялся"
+                items.append(
+                    {
+                        "source": "paper",
+                        "strategy_key": strategy_key,
+                        "strategy_id": row[2],
+                        "strategy_version": row[3],
+                        "strategy_name": row[4] or row[2],
+                        "active_strategy": strategy_key in active,
+                        "signal_id": row[1],
+                        "paper_order_id": row[0],
+                        "paper_position_id": row[13],
+                        "signal_at": row[9].isoformat(),
+                        "signal_at_epoch_ms": int(row[9].timestamp() * 1000),
+                        "symbol": row[5],
+                        "direction": row[6],
+                        "order_type": row[8],
+                        "order_state": order_state,
+                        "position_state": position_state,
+                        "signal_price": None if row[10] is None else float(row[10]),
+                        "limit_price": None if row[11] is None else float(row[11]),
+                        "entry_price": None if row[16] is None else float(row[16]),
+                        "current_price": current_price,
+                        "exit_price": None if row[19] is None else float(row[19]),
+                        "result_class": result_class,
+                        "result_text": result_text,
+                        "pnl_usdt": pnl,
+                        "pnl_kind": pnl_kind,
+                        "return_pct": None if row[22] is None else float(row[22]),
+                        "mfe_pct": None if row[23] is None else float(row[23]),
+                        "mae_pct": None if row[24] is None else float(row[24]),
+                    }
+                )
+        legacy_rows = connection.execute(
+            """SELECT signal_id,bot_id,strategy_version,symbol,direction,signal_price,state,
+                      max_favorable_pct,max_adverse_pct,first_hits_json,samples,signal_at_epoch_ms
+                 FROM monitoring.opportunities
+                WHERE signal_at_epoch_ms >= %s
+                ORDER BY signal_at_epoch_ms DESC""",
+            (cutoff_epoch_ms,),
+        ).fetchall()
+    for row in legacy_rows:
+        hits = json.loads(row[9] or "{}")
+        result_class, result_text = _legacy_signal_outcome(hits, str(row[6]))
+        key = f"legacy-entry-v1::{row[2]}"
+        items.append(
+            {
+                "source": "legacy",
+                "strategy_key": key,
+                "strategy_id": "legacy-entry-v1",
+                "strategy_version": row[2],
+                "strategy_name": "Entry V1 · legacy",
+                "active_strategy": False,
+                "signal_id": row[0],
+                "signal_at": datetime.fromtimestamp(row[11] / 1000, tz=UTC).isoformat(),
+                "signal_at_epoch_ms": row[11],
+                "symbol": row[3],
+                "direction": str(row[4]).upper(),
+                "order_type": None,
+                "order_state": None,
+                "position_state": "OPEN" if row[6] == "tracking" else "CLOSED",
+                "signal_price": row[5],
+                "limit_price": None,
+                "entry_price": row[5],
+                "current_price": None,
+                "exit_price": None,
+                "result_class": result_class,
+                "result_text": result_text,
+                "pnl_usdt": None,
+                "pnl_kind": None,
+                "return_pct": None,
+                "mfe_pct": row[7],
+                "mae_pct": row[8],
+                "samples": row[10],
+            }
+        )
+    items.sort(key=lambda item: int(item["signal_at_epoch_ms"]), reverse=True)
+    strategies: dict[str, dict[str, object]] = dict(active)
+    for item in items:
+        key = str(item["strategy_key"])
+        if key not in strategies:
+            strategies[key] = {
+                "strategy_key": key,
+                "strategy_id": item["strategy_id"],
+                "strategy_version": item["strategy_version"],
+                "strategy_name": item["strategy_name"],
+                "active": bool(item.get("active_strategy")),
+                "legacy": item.get("source") == "legacy",
+            }
+    strategy_summaries: list[dict[str, object]] = []
+    for strategy in strategies.values():
+        related = [item for item in items if item["strategy_key"] == strategy["strategy_key"]]
+        strategy_summaries.append({**strategy, **_signal_monitor_summary(related)})
+    strategy_summaries.sort(
+        key=lambda item: (not bool(item["active"]), str(item["strategy_name"]), str(item["strategy_version"]))
+    )
+    return {
+        "window_hours": window_hours,
+        "window_start": window_start.isoformat(),
+        "window_end": now.isoformat(),
+        "items": items,
+        "summary": _signal_monitor_summary(items),
+        "strategies": strategy_summaries,
+    }
 
 
 def entry_shadow_state() -> dict[str, object]:
@@ -2538,6 +2790,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "opportunities": opportunity_state()
                     if view == "signals"
                     else {"counts": {}, "items": []},
+                    "signal_monitor": strategy_signal_monitor_state()
+                    if view == "signals"
+                    else None,
                     "entry_shadow": entry_shadow_state() if view == "monitor" else None,
                     "mayak_v2": mayak_v2_state() if view == "open" else None,
                     "view": view,
