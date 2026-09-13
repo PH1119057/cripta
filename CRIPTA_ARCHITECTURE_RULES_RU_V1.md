@@ -1,6 +1,6 @@
 # CRIPTA — архитектурные правила проекта
 
-Версия: 1.3 · 2026-09-08
+Версия: 1.4 · 2026-09-12
 Назначение: верхняя модель проекта, владельцы прикладных решений, технический поддерживающий контур, жизненный цикл торговой попытки и обязательные архитектурные границы.
 
 Процесс patch/install/Git вынесен в `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`.
@@ -126,6 +126,16 @@ Strategy является единственным владельцем торг
 Никто из MAYAK, Dispatcher, Analyst, Supervisor или технического контура не изменяет утверждённую Strategy автоматически.
 
 Изменение торговой policy = новая утверждённая владельцем версия/fingerprint.
+
+## 5.1 Полнота Strategy contract
+
+Strategy не может содержать decision/execution-affecting параметр без полного пути исполнения. Любое
+такое поле обязано materialize-иться в точный план, быть причинно наблюдаемым/аудируемым, реально
+потребляться Entry или Exit и без потери доходить до Execution там, где оно меняет требуемое торговое
+действие. Совместимость проверяется acceptance-test.
+
+`UI/STORAGE ONLY` для торгового параметра запрещён. Unknown/unsupported downstream consumer означает
+fail-closed и запрет Activation exact Strategy version. Metadata обязана быть явно non-decision-affecting.
 
 # 6. ENTRY
 

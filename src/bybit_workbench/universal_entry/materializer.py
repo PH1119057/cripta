@@ -117,6 +117,25 @@ def materialize_plans(
         raise ValueError("entry_policy requires explicit watch_policy.enabled")
     predicate = predicate_from_mapping(predicate_raw)
     watch_policy = FrozenPolicy.from_mapping(watch_raw)
+    # Historical immutable cards may predate these policy fields. New authoring
+    # requires them explicitly; the disabled compatibility form is never used as
+    # a live authoring default.
+    reference_raw = entry_raw.get("entry_reference_policy", {"enabled": False})
+    if not isinstance(reference_raw, Mapping) or "enabled" not in reference_raw:
+        raise ValueError("entry_policy requires explicit entry_reference_policy.enabled")
+    local_raw = entry_raw.get("local_entry_policy", {"enabled": False})
+    if not isinstance(local_raw, Mapping) or "enabled" not in local_raw:
+        raise ValueError("entry_policy requires explicit local_entry_policy.enabled")
+    context_features_raw = entry_raw.get("context_feature_policy", [])
+    if not isinstance(context_features_raw, list):
+        raise ValueError("entry_policy.context_feature_policy must be a list")
+    ranking_raw = entry_raw.get("context_ranking_policy", {"enabled": False})
+    if not isinstance(ranking_raw, Mapping) or "enabled" not in ranking_raw:
+        raise ValueError("entry_policy requires explicit context_ranking_policy.enabled")
+    entry_reference_policy = FrozenPolicy.from_mapping(reference_raw)
+    local_entry_policy = FrozenPolicy.from_mapping(local_raw)
+    context_feature_policy = FrozenPolicy.from_mapping({"features": context_features_raw})
+    context_ranking_policy = FrozenPolicy.from_mapping(ranking_raw)
     post_signal_policy = _post_signal_policy(card)
     context_policy = card.mayak_context_policy + card.dispatcher_context_policy
     entry_payload = {
@@ -133,6 +152,18 @@ def materialize_plans(
         "lifecycle_policy": card.lifecycle_policy,
         "post_signal_outcome_policy": post_signal_policy,
     }
+    # Backward fingerprint compatibility: an immutable historical card that did not
+    # contain a newly introduced policy field must retain its original EntryPlan
+    # fingerprint. New cards carry the fields explicitly and therefore fingerprint
+    # every new Strategy-owned parameter.
+    if "entry_reference_policy" in entry_raw:
+        entry_payload["entry_reference_policy"] = entry_reference_policy
+    if "local_entry_policy" in entry_raw:
+        entry_payload["local_entry_policy"] = local_entry_policy
+    if "context_feature_policy" in entry_raw:
+        entry_payload["context_feature_policy"] = context_feature_policy
+    if "context_ranking_policy" in entry_raw:
+        entry_payload["context_ranking_policy"] = context_ranking_policy
     entry_plan = EntryPlan(
         strategy_id=card.strategy_id,
         strategy_version=card.strategy_version,
@@ -144,6 +175,10 @@ def materialize_plans(
         directions=card.direction_policy,
         predicate=predicate,
         watch_policy=watch_policy,
+        entry_reference_policy=entry_reference_policy,
+        local_entry_policy=local_entry_policy,
+        context_feature_policy=context_feature_policy,
+        context_ranking_policy=context_ranking_policy,
         touch_policy=card.touch_policy,
         sensor_policy=card.market_sensor_policy,
         context_policy=context_policy,

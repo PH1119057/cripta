@@ -80,10 +80,15 @@ class _Candidate:
     bar_reference_price: Decimal
     long_entry: Decimal | None
     short_entry: Decimal | None
+    long_calculated_entry: Decimal | None
+    short_calculated_entry: Decimal | None
+    entry_reference_source: str
+    entry_offset_pct_signed: Decimal
     long_gap_percent: Decimal | None
     short_gap_percent: Decimal | None
     oi_features: _OiFeatures | None
     geometry: dict[str, GenericZone]
+    local_geometry: dict[str, GenericZone]
     source_refs: tuple[str, ...]
 
 
@@ -305,6 +310,117 @@ def _compute_range_atr_zone(
     )
 
 
+def _apply_entry_reference_policy(
+    plan: EntryPlan, calculated_entry: Decimal
+) -> tuple[Decimal, Decimal]:
+    policy = plan.entry_reference_policy.to_dict()
+    if not bool(policy.get("enabled", False)):
+        return calculated_entry, Decimal("0")
+    if str(policy.get("reference") or "") != "CALCULATED_ENTRY":
+        raise ValueError("unsupported entry reference")
+    offset = _decimal(policy.get("offset_pct_signed"), "entry offset_pct_signed")
+    result = calculated_entry * (Decimal("1") + offset / Decimal("100"))
+    if result <= 0:
+        raise ValueError("Strategy signed Entry offset produced non-positive price")
+    return result, offset
+
+
+def _local_entry_levels(
+    plan: EntryPlan,
+    state: _WatchState,
+    *,
+    bar_open: datetime,
+    reference: Decimal,
+    macro_zones: Mapping[str, GenericZone],
+    macro_primary: str,
+) -> tuple[Decimal | None, Decimal | None, dict[str, GenericZone]]:
+    policy = plan.local_entry_policy.to_dict()
+    if not bool(policy.get("enabled", False)):
+        return None, None, {}
+    if str(policy.get("operator") or "") != "RANGE_ATR":
+        raise ValueError("unsupported local_entry_policy.operator")
+    window_minutes = _integer(policy.get("window_minutes"), "local entry window_minutes")
+    if window_minutes <= 0:
+        raise ValueError("local entry window_minutes must be positive")
+    lookbacks = _mapping(policy.get("lookback_by_timeframe"), "local lookback_by_timeframe")
+    use_1m = bool(policy.get("use_1m", False))
+    timeframes = ["5", "15"] + (["1"] if use_1m else [])
+    atr_period = _integer(policy.get("atr_period"), "local atr_period")
+    width_atr = _decimal(policy.get("zone_half_width_atr"), "local zone_half_width_atr")
+    zones: dict[str, GenericZone] = {}
+    window_start = bar_open - timedelta(minutes=window_minutes)
+    for timeframe in timeframes:
+        rows = tuple(
+            item
+            for item in state.candles.get(timeframe, ())
+            if window_start < item.closed_at <= bar_open
+        )
+        zone = _compute_range_atr_zone(
+            rows,
+            timeframe=timeframe,
+            lookback=_integer(lookbacks.get(timeframe), f"local lookback {timeframe}"),
+            atr_period=atr_period,
+            width_atr=width_atr,
+            shock_period=1,
+            shock_multiple=Decimal("1"),
+            maturity_minutes=0,
+            shock_mode="OFF",
+        )
+        if zone is None:
+            return None, None, {}
+        zones[timeframe] = zone
+
+    allowed_long = TradeDirection.LONG in plan.directions
+    allowed_short = TradeDirection.SHORT in plan.directions
+    if bool(policy.get("require_5m_15m_confluence", False)):
+        max_gap = _decimal(
+            policy.get("confluence_max_gap_percent"),
+            "local confluence_max_gap_percent",
+        )
+        long_gap = _zone_gap_percent(
+            zones["5"].support_bottom,
+            zones["5"].support_top,
+            zones["15"].support_bottom,
+            zones["15"].support_top,
+            reference,
+        )
+        short_gap = _zone_gap_percent(
+            zones["5"].resistance_bottom,
+            zones["5"].resistance_top,
+            zones["15"].resistance_bottom,
+            zones["15"].resistance_top,
+            reference,
+        )
+        allowed_long = allowed_long and long_gap <= max_gap
+        allowed_short = allowed_short and short_gap <= max_gap
+
+    price_timeframe = str(policy.get("price_timeframe") or "")
+    if price_timeframe not in zones:
+        raise ValueError("local price_timeframe is not available")
+    direction_fields = _mapping(policy.get("direction_zone_fields"), "local direction_zone_fields")
+
+    def field_value(direction: str) -> Decimal:
+        field = str(direction_fields.get(direction) or "")
+        if not hasattr(zones[price_timeframe], field):
+            raise ValueError(f"unknown local {direction} entry zone field")
+        return _decimal(getattr(zones[price_timeframe], field), f"local {direction} entry")
+
+    long_entry = field_value("LONG") if allowed_long else None
+    short_entry = field_value("SHORT") if allowed_short else None
+    if bool(policy.get("require_macro_relation", False)):
+        relation = _mapping(policy.get("macro_relation"), "local macro_relation")
+        if str(relation.get("operator") or "") != "INSIDE_DIRECTIONAL_ZONE":
+            raise ValueError("unsupported local macro relation operator")
+        macro = macro_zones[macro_primary]
+        if long_entry is not None and not (macro.support_bottom <= long_entry <= macro.support_top):
+            long_entry = None
+        if short_entry is not None and not (
+            macro.resistance_bottom <= short_entry <= macro.resistance_top
+        ):
+            short_entry = None
+    return long_entry, short_entry, zones
+
+
 def _directional_delta(direction: TradeDirection, buy: Decimal, sell: Decimal) -> Decimal:
     total = buy + sell
     if total <= 0:
@@ -378,6 +494,17 @@ class ParameterizedCausalMarketWatch:
         if symbol not in plan.symbols:
             raise ValueError("watch history symbol is outside EntryPlan scope")
         history_limit = _derived_history_limit(policy)
+        local_policy = plan.local_entry_policy.to_dict()
+        if bool(local_policy.get("enabled", False)):
+            local_lookbacks = _mapping(
+                local_policy.get("lookback_by_timeframe"), "local lookback_by_timeframe"
+            )
+            local_candidates = [
+                _integer(value, f"local lookback {key}")
+                for key, value in local_lookbacks.items()
+            ]
+            local_candidates.append(_integer(local_policy.get("atr_period"), "local atr_period"))
+            history_limit = max(history_limit, max(local_candidates, default=1) + 2)
         state = self._state(plan, symbol)
         state.candles.clear()
         required = tuple(
@@ -390,7 +517,10 @@ class ParameterizedCausalMarketWatch:
         geometry_timeframes = tuple(
             str(item) for item in _sequence(geometry.get("timeframes"), "geometry.timeframes")
         )
-        for timeframe in dict.fromkeys(required + geometry_timeframes):
+        local_timeframes: tuple[str, ...] = ()
+        if bool(local_policy.get("enabled", False)):
+            local_timeframes = ("5", "15") + (("1",) if bool(local_policy.get("use_1m")) else ())
+        for timeframe in dict.fromkeys(required + geometry_timeframes + local_timeframes):
             target: deque[Candle] = deque(maxlen=history_limit)
             for candle in sorted(candles.get(timeframe, ()), key=lambda item: item.opened_at):
                 if candle.symbol != symbol or candle.timeframe != timeframe:
@@ -795,9 +925,30 @@ class ParameterizedCausalMarketWatch:
             "direction": direction.value,
             "candidate_bar_at": candidate.bar_opened_at,
             "entry_price": entry,
+            "calculated_entry_price": (
+                candidate.long_calculated_entry
+                if direction is TradeDirection.LONG
+                else candidate.short_calculated_entry
+            ),
+            "entry_reference_source": candidate.entry_reference_source,
+            "entry_offset_pct_signed": candidate.entry_offset_pct_signed,
             "price": price,
             "zone_gap_percent": gap,
             "geometry": geometry_payload,
+            "local_geometry": {
+                timeframe: {
+                    "observed_at": zone.observed_at,
+                    "range_high": zone.range_high,
+                    "range_low": zone.range_low,
+                    "atr": zone.atr,
+                    "resistance_top": zone.resistance_top,
+                    "resistance_bottom": zone.resistance_bottom,
+                    "support_top": zone.support_top,
+                    "support_bottom": zone.support_bottom,
+                    "effective_lookback": zone.effective_lookback,
+                }
+                for timeframe, zone in candidate.local_geometry.items()
+            },
             "hourly_swing_blocked": state.hourly_swing_blocked,
             "hourly_swing_percent": state.hourly_swing_percent,
             "flow_ready": flow_ready,
@@ -1009,23 +1160,49 @@ class ParameterizedCausalMarketWatch:
             geometry_policy.get("confluence_max_gap_percent"), "confluence_max_gap_percent"
         )
         direction_rules = _mapping(policy["direction_rules"], "direction_rules")
-        long_entry: Decimal | None = None
-        short_entry: Decimal | None = None
+        macro_long_entry: Decimal | None = None
+        macro_short_entry: Decimal | None = None
         if TradeDirection.LONG in plan.directions and long_gap <= max_gap:
             rule = _mapping(direction_rules.get("LONG"), "direction_rules.LONG")
             field = str(rule.get("entry_zone_field") or "")
             if not hasattr(zones[primary], field):
                 raise ValueError("LONG entry_zone_field is unknown")
-            long_entry = _decimal(getattr(zones[primary], field), "LONG entry level")
+            macro_long_entry = _decimal(getattr(zones[primary], field), "LONG entry level")
         if TradeDirection.SHORT in plan.directions and short_gap <= max_gap:
             rule = _mapping(direction_rules.get("SHORT"), "direction_rules.SHORT")
             field = str(rule.get("entry_zone_field") or "")
             if not hasattr(zones[primary], field):
                 raise ValueError("SHORT entry_zone_field is unknown")
-            short_entry = _decimal(getattr(zones[primary], field), "SHORT entry level")
-        if long_entry is None and short_entry is None:
-            self._clear_candidate(state, observed_at, "confluence absent")
+            macro_short_entry = _decimal(getattr(zones[primary], field), "SHORT entry level")
+        if macro_long_entry is None and macro_short_entry is None:
+            self._clear_candidate(state, observed_at, "macro confluence absent")
             return
+
+        local_long, local_short, local_zones = _local_entry_levels(
+            plan,
+            state,
+            bar_open=bar_open,
+            reference=reference,
+            macro_zones=zones,
+            macro_primary=primary,
+        )
+        local_enabled = bool(plan.local_entry_policy.to_dict().get("enabled", False))
+        calculated_long = local_long if local_enabled else macro_long_entry
+        calculated_short = local_short if local_enabled else macro_short_entry
+        if calculated_long is None and calculated_short is None:
+            self._clear_candidate(state, observed_at, "local Entry conditions unavailable")
+            return
+        long_entry: Decimal | None = None
+        short_entry: Decimal | None = None
+        offset_pct = Decimal("0")
+        if calculated_long is not None:
+            long_entry, offset_pct = _apply_entry_reference_policy(plan, calculated_long)
+        if calculated_short is not None:
+            short_entry, short_offset = _apply_entry_reference_policy(plan, calculated_short)
+            if long_entry is not None and short_offset != offset_pct:
+                raise ValueError("entry reference offset differs across directions")
+            offset_pct = short_offset
+        entry_reference_source = "LOCAL_ENTRY" if local_enabled else "MACRO_ENTRY"
         oi_policy = _mapping(policy["oi"], "oi")
         oi_features = self._oi_features(state, bar_open, oi_policy)
         source_refs = tuple(
@@ -1043,23 +1220,33 @@ class ParameterizedCausalMarketWatch:
                     "reference": reference,
                     "long_entry": long_entry,
                     "short_entry": short_entry,
+                    "long_calculated_entry": calculated_long,
+                    "short_calculated_entry": calculated_short,
+                    "entry_reference_source": entry_reference_source,
+                    "entry_offset_pct_signed": offset_pct,
                     "long_gap": long_gap,
                     "short_gap": short_gap,
                     "geometry": zones,
+                    "local_geometry": local_zones,
                 }
             )[:24]
         )
         candidate = _Candidate(
-            candidate_id,
-            bar_open,
-            reference,
-            long_entry,
-            short_entry,
-            long_gap if long_entry is not None else None,
-            short_gap if short_entry is not None else None,
-            oi_features,
-            zones,
-            source_refs,
+            candidate_id=candidate_id,
+            bar_opened_at=bar_open,
+            bar_reference_price=reference,
+            long_entry=long_entry,
+            short_entry=short_entry,
+            long_calculated_entry=calculated_long,
+            short_calculated_entry=calculated_short,
+            entry_reference_source=entry_reference_source,
+            entry_offset_pct_signed=offset_pct,
+            long_gap_percent=long_gap if long_entry is not None else None,
+            short_gap_percent=short_gap if short_entry is not None else None,
+            oi_features=oi_features,
+            geometry=zones,
+            local_geometry=local_zones,
+            source_refs=source_refs,
         )
         if state.candidate == candidate:
             return
@@ -1075,6 +1262,10 @@ class ParameterizedCausalMarketWatch:
                         "candidate_bar_at": bar_open,
                         "long_entry": long_entry,
                         "short_entry": short_entry,
+                        "long_calculated_entry": calculated_long,
+                        "short_calculated_entry": calculated_short,
+                        "entry_reference_source": entry_reference_source,
+                        "entry_offset_pct_signed": offset_pct,
                         "long_gap_percent": candidate.long_gap_percent,
                         "short_gap_percent": candidate.short_gap_percent,
                         "geometry": {

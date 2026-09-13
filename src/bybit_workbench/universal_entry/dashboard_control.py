@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
 
+from .context_features import require_context_feature
 from .contracts import (
     CandidateCooldown,
     ContextFailureAction,
@@ -166,6 +167,9 @@ def _validate_feature_policy(value: object, label: str) -> None:
         feature_id = str(raw.get("feature_id") or "")
         if feature_id not in _CONTEXT_FEATURE_IDS:
             raise ValueError(f"{label}[{index}] unknown feature_id: {feature_id}")
+        spec = require_context_feature(feature_id)
+        if str(raw.get("scope") or "") != spec.scope:
+            raise ValueError(f"{label}[{index}] scope does not match feature catalog")
         if feature_id in seen:
             raise ValueError(f"{label} duplicate feature_id: {feature_id}")
         seen.add(feature_id)
@@ -173,9 +177,8 @@ def _validate_feature_policy(value: object, label: str) -> None:
         if mode not in _CONTEXT_MODES:
             raise ValueError(f"{label}[{index}] invalid mode: {mode}")
         if mode in {ContextMode.CONDITION.value, ContextMode.RANKING.value}:
-            max_age = raw.get("max_age_seconds")
             try:
-                max_age_value = int(str(max_age))
+                max_age_value = int(str(raw.get("max_age_seconds")))
             except (TypeError, ValueError):
                 raise ValueError(
                     f"{label}[{index}] decision mode requires max_age_seconds"
@@ -189,16 +192,43 @@ def _validate_feature_policy(value: object, label: str) -> None:
                 action = str(raw.get(field) or "")
                 if action not in _CONTEXT_FAILURE_ACTIONS:
                     raise ValueError(f"{label}[{index}] decision mode requires {field}")
-        if mode == ContextMode.CONDITION.value:
+            value_path = str(raw.get("value_path") or "").strip()
+            if spec.scope == "COIN" and not value_path:
+                raise ValueError(
+                    f"{label}[{index}] COIN decision feature requires exact value_path"
+                )
+            if spec.scope == "GLOBAL" and value_path:
+                raise ValueError(f"{label}[{index}] GLOBAL scalar feature cannot use value_path")
             condition = _mapping(raw.get("condition"), f"{label}[{index}].condition")
             if str(condition.get("operator") or "") not in {"EQ", "NE", "GT", "GTE", "LT", "LTE"}:
-                raise ValueError(f"{label}[{index}] CONDITION requires operator")
+                raise ValueError(f"{label}[{index}] decision mode requires operator")
             if condition.get("value") in (None, ""):
-                raise ValueError(f"{label}[{index}] CONDITION requires value")
-        if mode == ContextMode.RANKING.value:
-            weight = _decimal(raw.get("weight"), f"{label}[{index}].weight")
-            if weight == 0:
-                raise ValueError(f"{label}[{index}] RANKING weight cannot be zero")
+                raise ValueError(f"{label}[{index}] decision mode requires value")
+        if (
+            mode == ContextMode.RANKING.value
+            and _decimal(raw.get("weight"), f"{label}[{index}].weight") == 0
+        ):
+            raise ValueError(f"{label}[{index}] RANKING weight cannot be zero")
+
+
+def _validate_context_ranking_policy(
+    feature_policy: object, ranking_policy: object, label: str
+) -> None:
+    rows = _list(feature_policy or [], f"{label}.features")
+    ranking_rows = []
+    for item in rows:
+        row = _mapping(item, f"{label}.feature")
+        if str(row.get("mode") or "") == ContextMode.RANKING.value:
+            ranking_rows.append(row)
+    raw = _mapping(ranking_policy or {"enabled": False}, f"{label}.ranking")
+    enabled = _bool(raw.get("enabled", False), f"{label}.ranking.enabled")
+    if not ranking_rows:
+        if enabled:
+            raise ValueError(f"{label} ranking cannot be enabled without RANKING features")
+        return
+    if not enabled:
+        raise ValueError(f"{label} RANKING features require context_ranking_policy.enabled")
+    _decimal(raw.get("minimum_score"), f"{label}.ranking.minimum_score")
 
 
 def strategy_authoring_template() -> dict[str, object]:
@@ -228,20 +258,16 @@ def strategy_authoring_template() -> dict[str, object]:
                 "enabled": False,
                 "reference": "CALCULATED_ENTRY",
             },
-            "local_entry_policy": {
-                "enabled": False,
-                "lookback_by_timeframe": {},
-                "use_1m": False,
-                "require_5m_15m_confluence": False,
-                "require_macro_relation": False,
-            },
+            "local_entry_policy": {"enabled": False},
             "watch_policy": {"enabled": False},
             "execution_policy": {},
             "context_feature_policy": [],
+            "context_ranking_policy": {"enabled": False},
         },
         "exit_policy": {
             "exit_plan_version": "exit-owner-1",
             "context_feature_policy": [],
+            "context_ranking_policy": {"enabled": False},
         },
         "capital_policy": {"require_capacity": False},
         "protection_policy": {"initial_protection": {}},
@@ -415,12 +441,25 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         local_policy = _mapping(local, "entry_policy.local_entry_policy")
         enabled = _bool(local_policy.get("enabled"), "local_entry_policy.enabled")
         if enabled:
+            if str(local_policy.get("operator") or "") != "RANGE_ATR":
+                raise ValueError("local_entry_policy.operator must be RANGE_ATR")
             try:
                 window_minutes = int(str(local_policy.get("window_minutes")))
+                atr_period = int(str(local_policy.get("atr_period")))
             except (TypeError, ValueError):
-                raise ValueError("local_entry_policy.window_minutes must be integer") from None
-            if window_minutes <= 0:
-                raise ValueError("local_entry_policy.window_minutes must be positive")
+                raise ValueError(
+                    "local_entry_policy window_minutes/atr_period must be integers"
+                ) from None
+            if window_minutes <= 0 or atr_period <= 0:
+                raise ValueError("local_entry_policy window_minutes/atr_period must be positive")
+            if (
+                _decimal(
+                    local_policy.get("zone_half_width_atr"),
+                    "local_entry_policy.zone_half_width_atr",
+                )
+                <= 0
+            ):
+                raise ValueError("local_entry_policy.zone_half_width_atr must be positive")
             lookbacks = _mapping(
                 local_policy.get("lookback_by_timeframe"),
                 "local_entry_policy.lookback_by_timeframe",
@@ -434,21 +473,58 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     ) from None
                 if count <= 0:
                     raise ValueError(f"local_entry_policy lookback {timeframe} must be positive")
-            if _bool(local_policy.get("use_1m", False), "local_entry_policy.use_1m"):
+            use_1m = _bool(local_policy.get("use_1m", False), "local_entry_policy.use_1m")
+            if use_1m:
                 try:
                     one_minute = int(str(lookbacks.get("1")))
                 except (TypeError, ValueError):
                     raise ValueError("local_entry_policy lookback 1 must be integer") from None
                 if one_minute <= 0:
                     raise ValueError("local_entry_policy lookback 1 must be positive")
-            _bool(
+            require_confluence = _bool(
                 local_policy.get("require_5m_15m_confluence", False),
                 "local_entry_policy.require_5m_15m_confluence",
             )
-            _bool(
+            if (
+                require_confluence
+                and _decimal(
+                    local_policy.get("confluence_max_gap_percent"),
+                    "local_entry_policy.confluence_max_gap_percent",
+                )
+                < 0
+            ):
+                raise ValueError("local_entry_policy.confluence_max_gap_percent cannot be negative")
+            valid_timeframes = {"5", "15"} | ({"1"} if use_1m else set())
+            if str(local_policy.get("price_timeframe") or "") not in valid_timeframes:
+                raise ValueError("local_entry_policy.price_timeframe must be an enabled timeframe")
+            fields = _mapping(
+                local_policy.get("direction_zone_fields"),
+                "local_entry_policy.direction_zone_fields",
+            )
+            selected_direction = str(directions[0])
+            if str(fields.get(selected_direction) or "") not in {
+                "support_top",
+                "support_bottom",
+                "resistance_top",
+                "resistance_bottom",
+            }:
+                raise ValueError(
+                    "local_entry_policy requires exact zone field for Strategy direction"
+                )
+            require_macro = _bool(
                 local_policy.get("require_macro_relation", False),
                 "local_entry_policy.require_macro_relation",
             )
+            if require_macro:
+                relation = _mapping(
+                    local_policy.get("macro_relation"),
+                    "local_entry_policy.macro_relation",
+                )
+                if str(relation.get("operator") or "") != "INSIDE_DIRECTIONAL_ZONE":
+                    raise ValueError(
+                        "local_entry_policy macro_relation must be INSIDE_DIRECTIONAL_ZONE"
+                    )
+
     watch_value = entry.get("watch_policy")
     if watch_value is not None:
         watch = _mapping(watch_value, "entry_policy.watch_policy")
@@ -497,6 +573,11 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     _validate_feature_policy(
         entry.get("context_feature_policy"), "entry_policy.context_feature_policy"
     )
+    _validate_context_ranking_policy(
+        entry.get("context_feature_policy"),
+        entry.get("context_ranking_policy"),
+        "entry_policy.context",
+    )
 
     exit_policy = _mapping(raw.get("exit_policy"), "exit_policy")
     for field in ("hard_stop", "take_profit"):
@@ -513,11 +594,20 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
             continue
         policy = _mapping(value, f"exit_policy.{field}")
         enabled = _bool(policy.get("enabled"), f"exit_policy.{field}.enabled")
-        if enabled and policy.get("activation_profit_pct") not in (None, ""):
+        if enabled:
+            if policy.get("activation_profit_pct") in (None, ""):
+                raise ValueError(
+                    f"exit_policy.{field}.activation_profit_pct is required when enabled"
+                )
             _decimal(
                 policy.get("activation_profit_pct"),
                 f"exit_policy.{field}.activation_profit_pct",
             )
+            if field == "break_even":
+                if policy.get("buffer_pct") in (None, ""):
+                    raise ValueError("exit_policy.break_even.buffer_pct is required when enabled")
+                if _decimal(policy.get("buffer_pct"), "exit_policy.break_even.buffer_pct") < 0:
+                    raise ValueError("exit_policy.break_even.buffer_pct cannot be negative")
         if (
             enabled
             and field == "trailing"
@@ -538,6 +628,16 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     _validate_feature_policy(
         exit_policy.get("context_feature_policy"), "exit_policy.context_feature_policy"
     )
+    _validate_context_ranking_policy(
+        exit_policy.get("context_feature_policy"),
+        exit_policy.get("context_ranking_policy"),
+        "exit_policy.context",
+    )
+    if any(
+        str(_mapping(item, "exit context feature").get("mode") or "OFF") != "OFF"
+        for item in _list(exit_policy.get("context_feature_policy", []), "exit context features")
+    ) and str(exit_policy.get("context_trigger_mode") or "") not in {"ANY", "ALL"}:
+        raise ValueError("exit_policy.context_trigger_mode must be ANY or ALL")
 
     lifecycle = _mapping(raw.get("lifecycle_policy"), "lifecycle_policy")
     _validate_post_signal_policy(lifecycle)
@@ -576,11 +676,14 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 policy = _mapping(trailing, "hedge_policy.trailing")
                 trailing_enabled = _bool(policy.get("enabled"), "hedge_policy.trailing.enabled")
                 if trailing_enabled:
-                    if policy.get("activation_profit_pct") not in (None, ""):
-                        _decimal(
-                            policy.get("activation_profit_pct"),
-                            "hedge_policy.trailing.activation_profit_pct",
+                    if policy.get("activation_profit_pct") in (None, ""):
+                        raise ValueError(
+                            "hedge_policy.trailing.activation_profit_pct is required when enabled"
                         )
+                    _decimal(
+                        policy.get("activation_profit_pct"),
+                        "hedge_policy.trailing.activation_profit_pct",
+                    )
                     if (
                         _decimal(policy.get("distance_pct"), "hedge_policy.trailing.distance_pct")
                         <= 0
@@ -1030,6 +1133,7 @@ def assemble_strategy_catalog(
     activation_events: Sequence[Mapping[str, object]],
     *,
     observer_ready: bool = False,
+    execution_permissions: Sequence[Mapping[str, object]] = (),
 ) -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for card in cards:
@@ -1050,6 +1154,10 @@ def assemble_strategy_catalog(
         card_activations = [dict(row) for row in activations if _identity(row) == key]
         card_entry = [dict(row) for row in entry_plans if _identity(row) == key]
         card_exit = [dict(row) for row in exit_plans if _identity(row) == key]
+        card_permissions = [dict(row) for row in execution_permissions if _identity(row) == key]
+        if len(card_permissions) > 1:
+            raise ValueError("exact Strategy version has multiple ExecutionPermission rows")
+        permission = card_permissions[0] if card_permissions else None
         activation_ids = {str(row.get("activation_id")) for row in card_activations}
         history = [
             dict(row)
@@ -1075,6 +1183,12 @@ def assemble_strategy_catalog(
                 "activation_state": activation_state,
                 "runtime_readiness": readiness,
                 "activations": card_activations,
+                "execution_permission": permission,
+                "execution_effective_enabled": bool(
+                    permission
+                    and permission.get("enabled")
+                    and any(bool(row.get("enabled")) for row in card_activations)
+                ),
                 "entry_plan_fingerprints": [
                     str(row.get("entry_plan_fingerprint")) for row in card_entry
                 ],
@@ -1148,6 +1262,20 @@ _EVENT_COLUMNS = (
     "reason",
     "scope",
 )
+_EXECUTION_PERMISSION_COLUMNS = (
+    "execution_permission_id",
+    "strategy_id",
+    "strategy_version",
+    "strategy_config_fingerprint",
+    "enabled",
+    "enabled_at",
+    "disabled_at",
+    "operator",
+    "source",
+    "change_reason",
+    "created_at",
+    "updated_at",
+)
 
 
 def _dict_rows(columns: Sequence[str], rows: Sequence[Sequence[object]]) -> list[dict[str, object]]:
@@ -1200,6 +1328,16 @@ class StrategyDashboardStore:
                             exit_plan_fingerprint"""
             ).fetchall(),
         )
+        permissions = _dict_rows(
+            _EXECUTION_PERMISSION_COLUMNS,
+            self._connection.execute(
+                """SELECT execution_permission_id,strategy_id,strategy_version,
+                          strategy_config_fingerprint,enabled,enabled_at,disabled_at,
+                          operator,source,change_reason,created_at,updated_at
+                   FROM strategy_entry.execution_permissions
+                   ORDER BY strategy_id,strategy_version,created_at"""
+            ).fetchall(),
+        )
         events = _dict_rows(
             _EVENT_COLUMNS,
             self._connection.execute(
@@ -1216,6 +1354,7 @@ class StrategyDashboardStore:
             exit_plans,
             events,
             observer_ready=observer_ready,
+            execution_permissions=permissions,
         )
 
     def _load_exact_base(
@@ -1360,6 +1499,115 @@ class StrategyDashboardStore:
                 "runtime_readiness": readiness.as_dict(),
             }
 
+    def set_execution_permission(
+        self,
+        *,
+        strategy_id: str,
+        strategy_version: str,
+        strategy_config_fingerprint: str,
+        enabled: bool,
+        changed_at: datetime,
+        operator: str,
+        source: str,
+        reason: str,
+        observer_ready: bool,
+    ) -> dict[str, object]:
+        with self._connection.transaction():
+            card = self._load_exact_base(strategy_id, strategy_version, strategy_config_fingerprint)
+            readiness = assess_strategy_runtime_readiness(card, observer_ready=observer_ready)
+            activation = self._connection.execute(
+                """SELECT activation_id,enabled FROM strategy_entry.strategy_activations
+                   WHERE strategy_id=%s AND strategy_version=%s
+                     AND strategy_config_fingerprint=%s
+                   ORDER BY created_at,activation_id FOR UPDATE""",
+                (strategy_id, strategy_version, strategy_config_fingerprint),
+            ).fetchall()
+            if enabled:
+                if len(activation) != 1 or not bool(activation[0][1]):
+                    raise ValueError("EXECUTION_REQUIRES_ACTIVE_STRATEGY")
+                if not readiness.execution_ready:
+                    raise StrategyRuntimeNotReady(readiness)
+            rows = self._connection.execute(
+                """SELECT execution_permission_id,enabled,updated_at
+                   FROM strategy_entry.execution_permissions
+                   WHERE strategy_id=%s AND strategy_version=%s
+                     AND strategy_config_fingerprint=%s
+                   FOR UPDATE""",
+                (strategy_id, strategy_version, strategy_config_fingerprint),
+            ).fetchall()
+            if len(rows) > 1:
+                raise ValueError("multiple ExecutionPermission rows for exact Strategy")
+            if not rows:
+                if not enabled:
+                    return {"status": "NO_CHANGE", "enabled": False}
+                permission_id = (
+                    "execperm-"
+                    + fingerprint(
+                        {
+                            "strategy_id": strategy_id,
+                            "strategy_version": strategy_version,
+                            "strategy_config_fingerprint": strategy_config_fingerprint,
+                        }
+                    )[:32]
+                )
+                self._connection.execute(
+                    """INSERT INTO strategy_entry.execution_permissions(
+                           execution_permission_id,strategy_id,strategy_version,
+                           strategy_config_fingerprint,enabled,enabled_at,disabled_at,
+                           operator,source,change_reason)
+                       VALUES(%s,%s,%s,%s,true,%s,NULL,%s,%s,%s)""",
+                    (
+                        permission_id,
+                        strategy_id,
+                        strategy_version,
+                        strategy_config_fingerprint,
+                        changed_at,
+                        operator,
+                        source,
+                        reason,
+                    ),
+                )
+                return {
+                    "status": "CREATED_ENABLED",
+                    "execution_permission_id": permission_id,
+                    "enabled": True,
+                    "enabled_at": changed_at,
+                }
+            permission_id = str(rows[0][0])
+            current = bool(rows[0][1])
+            if current == enabled:
+                return {
+                    "status": "NO_CHANGE",
+                    "execution_permission_id": permission_id,
+                    "enabled": enabled,
+                    "updated_at": rows[0][2],
+                }
+            self._connection.execute(
+                """UPDATE strategy_entry.execution_permissions
+                      SET enabled=%s,
+                          enabled_at=CASE WHEN %s THEN %s ELSE enabled_at END,
+                          disabled_at=CASE WHEN %s THEN NULL ELSE %s END,
+                          operator=%s,source=%s,change_reason=%s
+                    WHERE execution_permission_id=%s""",
+                (
+                    enabled,
+                    enabled,
+                    changed_at,
+                    enabled,
+                    changed_at,
+                    operator,
+                    source,
+                    reason,
+                    permission_id,
+                ),
+            )
+            return {
+                "status": "UPDATED",
+                "execution_permission_id": permission_id,
+                "enabled": enabled,
+                "enabled_at": changed_at if enabled else None,
+            }
+
     def set_activation_enabled_cas(
         self,
         *,
@@ -1418,6 +1666,22 @@ class StrategyDashboardStore:
                     "enabled": enabled,
                     "updated_at": current_updated_at,
                 }
+            if not enabled:
+                self._connection.execute(
+                    """UPDATE strategy_entry.execution_permissions
+                          SET enabled=false,disabled_at=%s,operator=%s,source=%s,
+                              change_reason='Strategy deactivated: execution permission forced OFF'
+                        WHERE strategy_id=%s AND strategy_version=%s
+                          AND strategy_config_fingerprint=%s AND enabled=true""",
+                    (
+                        changed_at,
+                        operator,
+                        source,
+                        strategy_id,
+                        strategy_version,
+                        strategy_config_fingerprint,
+                    ),
+                )
             cursor = self._connection.execute(
                 """UPDATE strategy_entry.strategy_activations
                    SET enabled=%s,

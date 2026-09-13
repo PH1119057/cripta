@@ -25,9 +25,7 @@ DB_DSN = os.environ.get(
     "dbname=cripta user=cripta host=/var/run/postgresql application_name=universal-entry-consumer",
 )
 ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1").strip().upper()
-CONSUMER_ARM = os.environ.get(
-    "CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED"
-).strip().upper()
+CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
 
 running = True
@@ -69,13 +67,22 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
         """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
                   a.strategy_id AS activation_strategy_id,
                   a.strategy_version AS activation_strategy_version,
-                  a.strategy_config_fingerprint AS activation_strategy_config_fingerprint
+                  a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
+                  p.execution_permission_id,p.enabled_at AS execution_enabled_at
              FROM strategy_entry.execution_requests r
              JOIN strategy_entry.strategy_attempts t
                ON t.strategy_attempt_id=r.strategy_attempt_id
               AND t.signal_id=r.signal_id
              JOIN strategy_entry.strategy_activations a
                ON a.activation_id=t.strategy_activation_id
+              AND a.enabled=true
+             JOIN strategy_entry.execution_permissions p
+               ON p.strategy_id=r.strategy_id
+              AND p.strategy_version=r.strategy_version
+              AND p.strategy_config_fingerprint=r.strategy_config_fingerprint
+              AND p.enabled=true
+              AND p.enabled_at IS NOT NULL
+              AND r.requested_at >= p.enabled_at
             WHERE NOT EXISTS (
                   SELECT 1 FROM strategy_entry.execution_dispatches d
                    WHERE d.execution_request_id=r.execution_request_id
@@ -135,9 +142,10 @@ def _policy_bundle(
 
 
 def _dispatch_id(execution_request_id: str, state: str) -> str:
-    return "dispatch-" + fingerprint(
-        {"execution_request_id": execution_request_id, "state": state}
-    )[:32]
+    return (
+        "dispatch-"
+        + fingerprint({"execution_request_id": execution_request_id, "state": state})[:32]
+    )
 
 
 def _record_blocked(

@@ -1,0 +1,30 @@
+[Unit]
+Description=Cripta Universal Entry multi-Strategy production observer
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/universal_entry_observer/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
+WorkingDirectory=/srv/cripta/universal_entry_observer/current
+Environment=CRIPTA_U5_RUNTIME_MODE=MULTI_STRATEGY_OBSERVER
+Environment=CRIPTA_U5_FACT_SOURCE_ID=BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1
+Environment=CRIPTA_U5_OI_SAMPLE_SECONDS=30
+Environment=CRIPTA_UNIVERSAL_ENTRY_OBSERVER_STATE_ROOT=/var/lib/cripta/universal_entry_observer
+EnvironmentFile=-/etc/cripta/universal_entry_observer.env
+ExecStart=/usr/bin/python3 /srv/cripta/universal_entry_observer/current/operations/monitoring/universal_entry_shadow.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0027
+ReadOnlyPaths=/srv/cripta/universal_entry_observer/current
+ReadWritePaths=/var/lib/cripta/universal_entry_observer
+
+[Install]
+WantedBy=multi-user.target

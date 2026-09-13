@@ -40,7 +40,10 @@ def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> Non
     assert "if(activeTradePage()==='open')positionRows.innerHTML" in html
     assert "if(activeTradePage()==='closed')realClosedRows.innerHTML" in html
     assert "if(activeTradePage()==='signals')renderSignalObservation" in html
-    assert "if(page==='monitor')renderEntryShadow" in html
+    assert (
+        "if(page==='monitor'){renderStrategyPaper(d.paper_strategy);renderEntryShadow(d.entry_shadow)}"
+        in html
+    )
 
 
 def test_live_state_requests_only_data_for_visible_trade_view() -> None:

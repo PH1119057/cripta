@@ -396,6 +396,10 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
             {
                 "capital_policy": card.capital_policy.to_dict(),
                 "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+                "entry_reference_policy": entry_plan.entry_reference_policy.to_dict(),
+                "local_entry_policy": entry_plan.local_entry_policy.to_dict(),
+                "context_feature_policy": entry_plan.context_feature_policy.to_dict(),
+                "context_ranking_policy": entry_plan.context_ranking_policy.to_dict(),
                 "signal_fact": {
                     "fact_id": "owner-touch",
                     "event_kind": "TOUCH",
@@ -425,6 +429,10 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
                 "strategy_version": entry_plan.strategy_version,
                 "strategy_config_fingerprint": entry_plan.strategy_config_fingerprint,
                 "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+                "entry_reference_policy": entry_plan.entry_reference_policy.to_dict(),
+                "local_entry_policy": entry_plan.local_entry_policy.to_dict(),
+                "context_feature_policy": entry_plan.context_feature_policy.to_dict(),
+                "context_ranking_policy": entry_plan.context_ranking_policy.to_dict(),
             },
             exit_plan={
                 "strategy_id": exit_plan.strategy_id,

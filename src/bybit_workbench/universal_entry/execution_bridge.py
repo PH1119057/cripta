@@ -158,7 +158,13 @@ def _resolve_fact_reference(request: ExecutionRequest, path: str) -> Decimal:
 def _validate_policy_identity(
     request: ExecutionRequest,
     bundle: BridgePolicyBundle,
-) -> tuple[str, Mapping[str, object], Mapping[str, object], Mapping[str, object]]:
+) -> tuple[
+    str,
+    Mapping[str, object],
+    Mapping[str, object],
+    Mapping[str, object],
+    Mapping[str, object],
+]:
     card = _mapping(bundle.strategy_card, "StrategyCard")
     entry = _mapping(bundle.entry_plan, "EntryPlan")
     exit_plan = _mapping(bundle.exit_plan, "ExitPlan")
@@ -179,7 +185,7 @@ def _validate_policy_identity(
             "exact StrategyActivation is disabled",
         )
     _require_text(exit_plan, "exit_plan_fingerprint", "ExitPlan")
-    return activation_id, card, exit_plan, activation
+    return activation_id, card, entry, exit_plan, activation
 
 
 def prepare_runtime_entry_command(
@@ -196,7 +202,9 @@ def prepare_runtime_entry_command(
     """
 
     current = now.astimezone(UTC)
-    activation_id, card, exit_plan, _activation = _validate_policy_identity(request, bundle)
+    activation_id, card, entry_plan, exit_plan, _activation = _validate_policy_identity(
+        request, bundle
+    )
 
     entry_policy = _unwrap_policy(card.get("entry_policy"), "StrategyCard.entry_policy")
     execution_policy = _mapping(
@@ -207,14 +215,51 @@ def prepare_runtime_entry_command(
         exit_plan.get("protection_policy"), "ExitPlan.protection_policy"
     )
 
+    request_payload = request.payload.to_dict()
     request_capital = _mapping(
-        request.payload.to_dict().get("capital_policy"), "ExecutionRequest.capital_policy"
+        request_payload.get("capital_policy"), "ExecutionRequest.capital_policy"
     )
     if canonical_json(request_capital) != canonical_json(capital_policy):
         raise ExecutionBridgeBlocked(
             ExecutionBridgeBlockCode.IDENTITY_MISMATCH,
             "ExecutionRequest capital policy differs from immutable StrategyCard",
         )
+
+    card_policy_pairs = (
+        ("entry_reference_policy", entry_policy.get("entry_reference_policy")),
+        ("local_entry_policy", entry_policy.get("local_entry_policy")),
+        (
+            "context_feature_policy",
+            {"features": entry_policy.get("context_feature_policy", [])},
+        ),
+        ("context_ranking_policy", entry_policy.get("context_ranking_policy")),
+    )
+    for field, card_value in card_policy_pairs:
+        card_present = field in entry_policy
+        plan_present = field in entry_plan
+        request_present = field in request_payload
+        if not (card_present or plan_present or request_present):
+            # Historical immutable Strategy/Plan/Request created before this policy
+            # existed.  Absence is accepted only when all three layers agree.
+            continue
+        if not (card_present and plan_present and request_present):
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.IDENTITY_MISMATCH,
+                f"{field} presence differs across StrategyCard/EntryPlan/ExecutionRequest",
+            )
+        request_value = _mapping(request_payload.get(field), f"ExecutionRequest.{field}")
+        plan_value = _unwrap_policy(entry_plan.get(field), f"EntryPlan.{field}")
+        card_mapping = _mapping(card_value, f"StrategyCard.entry_policy.{field}")
+        if canonical_json(request_value) != canonical_json(plan_value):
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.IDENTITY_MISMATCH,
+                f"ExecutionRequest {field} differs from immutable EntryPlan",
+            )
+        if canonical_json(plan_value) != canonical_json(card_mapping):
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.IDENTITY_MISMATCH,
+                f"EntryPlan {field} differs from immutable StrategyCard",
+            )
 
     amount_currency = _require_text(capital_policy, "amount_currency", "capital_policy").upper()
     if amount_currency != "USDT":
@@ -239,9 +284,7 @@ def prepare_runtime_entry_command(
             f"ExecutionRequest age {age:.3f}s exceeds Strategy policy",
         )
 
-    reference_path = _require_text(
-        execution_policy, "reference_value_path", "execution_policy"
-    )
+    reference_path = _require_text(execution_policy, "reference_value_path", "execution_policy")
     reference_price = _resolve_fact_reference(request, reference_path)
     order_type = _require_text(execution_policy, "order_type", "execution_policy").upper()
     if order_type == "MARKET":
@@ -281,6 +324,10 @@ def prepare_runtime_entry_command(
             "current Execution supports initial protection only as Full/LastPrice",
         )
 
+    signal_fact = _mapping(request_payload.get("signal_fact"), "ExecutionRequest.signal_fact")
+    signal_attributes = _mapping(
+        signal_fact.get("attributes"), "ExecutionRequest.signal_fact.attributes"
+    )
     side = "Buy" if request.direction is TradeDirection.LONG else "Sell"
     command_id = "ue-" + fingerprint({"execution_request_id": request.execution_request_id})[:32]
     exit_fp = str(exit_plan["exit_plan_fingerprint"])
@@ -306,6 +353,10 @@ def prepare_runtime_entry_command(
         "entry_plan_fingerprint": request.entry_plan_fingerprint,
         "exit_plan_fingerprint": exit_fp,
         "strategy_activation_id": activation_id,
+        "calculated_entry_price": signal_attributes.get("calculated_entry_price"),
+        "entry_reference_source": signal_attributes.get("entry_reference_source"),
+        "strategy_entry_offset_pct_signed": signal_attributes.get("entry_offset_pct_signed"),
+        "strategy_context_features": signal_attributes.get("strategy_context_features"),
         "stake_usdt": str(requested_amount),
         "leverage": leverage,
         "side": side,
@@ -317,6 +368,17 @@ def prepare_runtime_entry_command(
         "bot_instance_id": "universal-entry",
         "initial_protection": protection,
     }
+    snapshot_payload_keys = {
+        "entry_reference_policy": "strategy_entry_reference_policy",
+        "local_entry_policy": "strategy_local_entry_policy",
+        "context_feature_policy": "strategy_context_feature_policy",
+        "context_ranking_policy": "strategy_context_ranking_policy",
+    }
+    for request_key, command_key in snapshot_payload_keys.items():
+        if request_key in request_payload:
+            payload[command_key] = dict(
+                _mapping(request_payload.get(request_key), f"ExecutionRequest.{request_key}")
+            )
     return PreparedRuntimeEntryCommand(
         command_id=command_id,
         execution_request_id=request.execution_request_id,

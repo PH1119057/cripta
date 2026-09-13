@@ -1,6 +1,6 @@
 # CRIPTA — правила работы для ChatGPT / разработчика
 
-**Версия:** 1.2 · 2026-09-06
+**Версия:** 1.3 · 2026-09-12
 **Назначение:** обязательный процесс разработки, диагностики, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
@@ -103,6 +103,40 @@ EXCHANGE
 ```
 
 Это пять верхнеуровневых слоёв. `Risk` не является самостоятельным верхним архитектурным слоем. Технический поддерживающий контур обеспечивает данные, связь, хранение, исполнение, восстановление, наблюдаемость и аудит, но не становится дополнительным торговым уровнем.
+
+## 5.1 Обязательный end-to-end contract любого поля Strategy
+
+Любое новое поле, параметр, policy, переключатель или сущность внутри `StrategyCard` /
+`StrategyActivation` / `EntryPlan` / `ExitPlan` до merge обязано иметь явную классификацию и
+матрицу потребителей. Простого хранения в JSON/UI недостаточно.
+
+Для каждого поля фиксируется минимум:
+
+```text
+FIELD / POLICY
+SEMANTIC_CLASS = DECISION_AFFECTING | EXECUTION_AFFECTING | METADATA
+STRATEGY MATERIALIZER
+MONITORING / CAUSAL EVIDENCE CONSUMER
+ENTRY OR EXIT CONSUMER
+EXECUTION CONSUMER / PROPAGATION
+COMPATIBILITY CHECK
+ACCEPTANCE TEST
+MISSING / UNSUPPORTED = FAIL_CLOSED
+```
+
+Если поле влияет на торговый смысл, оно обязано фактически влиять на соответствующие
+`Entry/Exit`, наблюдение и downstream `Execution`; downstream contract расширяется одновременно.
+Запрещено добавлять decision/execution-affecting поле, которое только сохраняется, отображается или
+теряется между слоями.
+
+Если поле является только metadata (`name`, `description` и подобное), это должно быть явно
+классифицировано как `METADATA / NON_DECISION_AFFECTING`; оно всё равно сохраняется в lineage/read-model
+и не может неявно использоваться как торговая policy.
+
+Новый параметр без совместимого consumer является `HARD STOP` для активации соответствующей Strategy,
+а не разрешением игнорировать параметр. Ревизия, обнаружившая silent-ignore или несовместимость, должна
+сразу исправить её в рамках разрешённого scope; отдельное решение владельца требуется только если для
+исправления необходимо выбрать новый торговый смысл, которого нет в каноне/Strategy data.
 
 ## 6. Каждый patch имеет точный baseline
 

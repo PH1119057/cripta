@@ -419,6 +419,10 @@ class EntryPlan:
     directions: tuple[TradeDirection, ...]
     predicate: object
     watch_policy: FrozenPolicy
+    entry_reference_policy: FrozenPolicy
+    local_entry_policy: FrozenPolicy
+    context_feature_policy: FrozenPolicy
+    context_ranking_policy: FrozenPolicy
     touch_policy: TouchPolicy
     sensor_policy: tuple[SensorRequirement, ...]
     context_policy: tuple[ContextRequirement, ...]

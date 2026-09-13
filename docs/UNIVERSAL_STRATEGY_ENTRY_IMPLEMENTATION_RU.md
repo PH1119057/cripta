@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.4
+**Версия:** 2.5
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -103,6 +103,57 @@ USDT amount, leverage, MARKET/LIMIT_OFFSET с explicit execution offset/TTL, req
 Full/LastPrice SL+TP. Расширенный Strategy Exit/BE/trailing/local-zone/time/context и Hedge не могут
 считаться поддержанными только потому, что старый Execution умеет технически менять stop/close.
 Нужен exact Strategy/ExitPlan consumer.
+
+## 0.5 End-to-end Strategy field gate — owner decision 2026-09-12
+
+Каждое поле authoring schema имеет machine-checkable consumer contract. Decision/execution field считается
+поддержанным только после materialization, observer evidence, Entry/Exit consumption, Execution
+propagation (если применимо) и acceptance test. Readiness больше не является ручным списком известных
+исключений: неизвестное новое enabled поле/оператор обязано блокироваться fail-closed.
+
+`MULTI_STRATEGY_OBSERVER` расширяет proven U5 public transport: загружает из PostgreSQL все enabled exact
+activations, cross-check-ит persisted EntryPlan/ExitPlan fingerprints и подаёт один normalized causal fact
+stream в один `UniversalEntryEngine/ActivePlanRegistry`. Market-data feed общий; plan evaluation независима.
+
+Entry reference pipeline:
+
+```text
+Strategy geometry -> calculated reference selected by Strategy
+-> local/macro relation selected by Strategy (если enabled)
+-> signed Strategy price offset
+-> fact.entry_price
+-> Strategy execution_policy (MARKET/LIMIT_OFFSET)
+-> ExecutionRequest -> Execution
+```
+
+Signed Strategy offset и execution LIMIT offset — разные параметры и оба обязаны сохраняться в lineage.
+
+## 0.6 Multi-Strategy monitoring + paper lifecycle / ExecutionPermission — 2026-09-13
+
+Production monitoring mode использует existing proven public market transport и runtime mode
+`MULTI_STRATEGY_OBSERVER`. Он живёт постоянно, в том числе при `0 ACTIVE`, и периодически перечитывает
+exact enabled StrategyActivation. Смена active set создаёт новый observer epoch; планы не выбираются и
+не ранжируются. Один causal stream fan-out-ится всем exact active plans.
+
+`monitor_ready` и `execution_ready` независимы. Для ACTIVE требуется policy + observer + paper lifecycle
+readiness; live Execution readiness не требуется. `ExecutionPermission` является отдельным mutable
+операционным правом exact Strategy version и по умолчанию отсутствует/OFF. Universal consumer обязан
+проверять ACTIVE + enabled permission + request.requested_at >= permission.enabled_at.
+
+PostgreSQL paper contour:
+
+```text
+strategy_entry.paper_orders
+strategy_entry.paper_positions
+strategy_entry.paper_position_events
+```
+
+Paper order создаётся из exact ACCEPTED ExecutionRequest через тот же bridge contract, поэтому stake,
+leverage, reference/limit/TTL, initial protection и lineage не имеют отдельной paper-семантики. MARKET
+fill = next public trade. LIMIT_OFFSET fill = first real public-trade crossing at Strategy limit before
+TTL; fill price фиксируется Strategy limit, а не придумывается как более выгодная цена. Paper Exit
+исполняет поддержанные exact Exit/Hedge policy и сохраняет MFE/MAE/gross PnL/outcome. Реальных exchange
+mutation этот contour не имеет.
 
 ## 1. Назначение
 

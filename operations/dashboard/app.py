@@ -53,6 +53,7 @@ PRIVATE_API_STATE = Path("/var/lib/cripta/connectivity/private_api.json")
 SAFETY_STATE = Path("/var/lib/cripta/safety/latest.json")
 BACKUP_STATE = Path("/var/lib/cripta/backup/latest.json")
 PRIVATE_RUNTIME_STATE = Path("/var/lib/cripta/private_runtime/status.json")
+UNIVERSAL_ENTRY_OBSERVER_STATE = Path("/var/lib/cripta/universal_entry_observer/status.json")
 HEALTH_STATE = Path("/var/lib/cripta/health/status.json")
 ENTRY_SHADOW_STATE = Path("/var/lib/cripta/entry_shadow/status.json")
 MAYAK_V2_STATE = Path("/var/lib/cripta/mayak_v2/status.json")
@@ -660,6 +661,103 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
 
 def live_trading_state() -> dict[str, object]:
     return _live_trading_state(include_history=True)
+
+
+def strategy_paper_state() -> dict[str, object]:
+    with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+        if connection.execute(
+            "SELECT to_regclass('strategy_entry.paper_positions')"
+        ).fetchone()[0] is None:
+            return {"installed": False, "pending": [], "open": [], "closed": [], "summary": {}}
+        pending_rows = connection.execute(
+            """SELECT o.paper_order_id,o.strategy_id,o.strategy_version,c.name,o.symbol,
+                      o.direction,o.order_type,o.requested_at,o.reference_price,o.limit_price,
+                      o.expires_at,o.execution_request_id
+                 FROM strategy_entry.paper_orders o
+                 LEFT JOIN strategy_entry.strategy_cards c
+                   ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
+                  AND c.strategy_config_fingerprint=o.strategy_config_fingerprint
+                WHERE o.state='PENDING'
+                ORDER BY o.requested_at DESC LIMIT 200"""
+        ).fetchall()
+        position_rows = connection.execute(
+            """SELECT p.paper_position_id,p.parent_position_id,p.leg_type,p.strategy_id,
+                      p.strategy_version,c.name,p.symbol,p.direction,p.state,p.opened_at,
+                      p.entry_price,p.stake_usdt,p.leverage,p.notional_usdt,p.quantity,
+                      p.best_price,p.mfe_pct,p.mae_pct,p.active_stop_price,p.trailing_active,
+                      p.hedge_opened,p.closed_at,p.exit_price,p.exit_reason,p.gross_pnl_usdt,
+                      p.gross_return_pct,p.signal_id,p.entry_plan_fingerprint,
+                      p.exit_plan_fingerprint
+                 FROM strategy_entry.paper_positions p
+                 LEFT JOIN strategy_entry.strategy_cards c
+                   ON c.strategy_id=p.strategy_id AND c.strategy_version=p.strategy_version
+                  AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
+                ORDER BY p.opened_at DESC LIMIT 1000"""
+        ).fetchall()
+        aggregate_rows = connection.execute(
+            """SELECT p.strategy_id,p.strategy_version,c.name,
+                      count(*) FILTER (WHERE p.leg_type='PRIMARY') AS positions,
+                      count(*) FILTER (WHERE p.state='OPEN') AS open_positions,
+                      count(*) FILTER (WHERE p.state='CLOSED') AS closed_positions,
+                      coalesce(sum(p.gross_pnl_usdt) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(avg(p.gross_return_pct) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(avg(p.mfe_pct) FILTER (WHERE p.leg_type='PRIMARY'),0),
+                      coalesce(avg(p.mae_pct) FILTER (WHERE p.leg_type='PRIMARY'),0)
+                 FROM strategy_entry.paper_positions p
+                 LEFT JOIN strategy_entry.strategy_cards c
+                   ON c.strategy_id=p.strategy_id AND c.strategy_version=p.strategy_version
+                  AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
+                GROUP BY p.strategy_id,p.strategy_version,c.name
+                ORDER BY p.strategy_id,p.strategy_version"""
+        ).fetchall()
+    pending = [
+        {
+            "paper_order_id": row[0], "strategy_id": row[1], "strategy_version": row[2],
+            "strategy_name": row[3], "symbol": row[4], "direction": row[5],
+            "order_type": row[6], "requested_at": row[7].isoformat(),
+            "reference_price": str(row[8]),
+            "limit_price": None if row[9] is None else str(row[9]),
+            "expires_at": None if row[10] is None else row[10].isoformat(),
+            "execution_request_id": row[11],
+        }
+        for row in pending_rows
+    ]
+    positions = [
+        {
+            "paper_position_id": row[0], "parent_position_id": row[1], "leg_type": row[2],
+            "strategy_id": row[3], "strategy_version": row[4], "strategy_name": row[5],
+            "symbol": row[6], "direction": row[7], "state": row[8],
+            "opened_at": row[9].isoformat(), "entry_price": str(row[10]),
+            "stake_usdt": str(row[11]), "leverage": row[12], "notional_usdt": str(row[13]),
+            "quantity": str(row[14]), "best_price": str(row[15]), "mfe_pct": str(row[16]),
+            "mae_pct": str(row[17]),
+            "active_stop_price": None if row[18] is None else str(row[18]),
+            "trailing_active": bool(row[19]), "hedge_opened": bool(row[20]),
+            "closed_at": None if row[21] is None else row[21].isoformat(),
+            "exit_price": None if row[22] is None else str(row[22]), "exit_reason": row[23],
+            "gross_pnl_usdt": None if row[24] is None else str(row[24]),
+            "gross_return_pct": None if row[25] is None else str(row[25]),
+            "signal_id": row[26], "entry_plan_fingerprint": row[27],
+            "exit_plan_fingerprint": row[28],
+        }
+        for row in position_rows
+    ]
+    summary = [
+        {
+            "strategy_id": row[0], "strategy_version": row[1], "strategy_name": row[2],
+            "positions": int(row[3]), "open_positions": int(row[4]),
+            "closed_positions": int(row[5]), "gross_pnl_usdt": str(row[6]),
+            "avg_return_pct": str(row[7]), "avg_mfe_pct": str(row[8]), "avg_mae_pct": str(row[9]),
+        }
+        for row in aggregate_rows
+    ]
+    return {
+        "installed": True,
+        "pending": pending,
+        "open": [item for item in positions if item["state"] == "OPEN"],
+        "closed": [item for item in positions if item["state"] == "CLOSED"],
+        "summary": summary,
+    }
 
 
 def _live_trading_state(*, include_history: bool) -> dict[str, object]:
@@ -2455,17 +2553,32 @@ def package_project() -> dict[str, object]:
 
 
 # U6_STRATEGY_API_BEGIN
-# Fail-closed until a production observer actually loads enabled DB activations.
-U6_MULTI_STRATEGY_OBSERVER_READY = False
+def _u6_multi_strategy_observer_ready() -> bool:
+    try:
+        payload = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        updated = datetime.fromisoformat(str(payload.get("updated_at") or ""))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    if updated.tzinfo is None:
+        return False
+    age = (datetime.now(UTC) - updated.astimezone(UTC)).total_seconds()
+    return (
+        -1.0 <= age <= 10.0
+        and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
+        and bool(payload.get("observer_ready"))
+        and payload.get("state") in {"IDLE", "WARMUP", "RUNNING", "RELOADING"}
+    )
 
 U6_STRATEGY_GET_PATH = "/api/strategies"
 U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
 U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
 U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
+U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
     U6_STRATEGY_VERSION_PATH,
     U6_STRATEGY_ACTIVATION_PATH,
+    U6_STRATEGY_EXECUTION_PERMISSION_PATH,
 }
 
 
@@ -2499,7 +2612,7 @@ def _u6_send_catalog(handler: object) -> None:
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection:
             strategies = StrategyDashboardStore(connection).list_catalog(
-                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY
+                observer_ready=_u6_multi_strategy_observer_ready()
             )
         _u6_json(
             handler,
@@ -2624,7 +2737,7 @@ def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
                 operator=operator,
                 source="dashboard-strategy-control",
                 reason=str(request.get("reason") or "owner first activation"),
-                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY,
+                observer_ready=_u6_multi_strategy_observer_ready(),
             )
         else:
             expected_enabled = request.get("expected_enabled")
@@ -2645,9 +2758,39 @@ def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
                 operator=operator,
                 source="dashboard-strategy-control",
                 reason=str(request.get("reason") or "owner Strategy toggle"),
-                observer_ready=U6_MULTI_STRATEGY_OBSERVER_READY,
+                observer_ready=_u6_multi_strategy_observer_ready(),
                 enforce_readiness=True,
             )
+    _u6_json(handler, 200, result)
+
+
+def _u6_set_execution_permission(handler: object, request: dict[str, object]) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    strategy_id = str(request.get("strategy_id") or "")
+    strategy_version = str(request.get("strategy_version") or "")
+    strategy_config_fingerprint = str(request.get("strategy_config_fingerprint") or "")
+    if not strategy_id or not strategy_version or not strategy_config_fingerprint:
+        raise ValueError("exact Strategy identity is required")
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        result = StrategyDashboardStore(connection).set_execution_permission(
+            strategy_id=strategy_id,
+            strategy_version=strategy_version,
+            strategy_config_fingerprint=strategy_config_fingerprint,
+            enabled=enabled,
+            changed_at=datetime.now(UTC),
+            operator=operator,
+            source="dashboard-strategy-execution-control",
+            reason=str(
+                request.get("reason")
+                or ("owner enabled live execution" if enabled else "owner disabled live execution")
+            ),
+            observer_ready=_u6_multi_strategy_observer_ready(),
+        )
     _u6_json(handler, 200, result)
 
 
@@ -2660,6 +2803,8 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_create_version(handler, request)
         elif path == U6_STRATEGY_ACTIVATION_PATH:
             _u6_set_activation(handler, request)
+        elif path == U6_STRATEGY_EXECUTION_PERMISSION_PATH:
+            _u6_set_execution_permission(handler, request)
         else:
             _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
     except StaleActivationState:
@@ -2794,6 +2939,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     if view == "signals"
                     else None,
                     "entry_shadow": entry_shadow_state() if view == "monitor" else None,
+                    "paper_strategy": strategy_paper_state()
+                    if view in {"monitor", "closed"}
+                    else None,
                     "mayak_v2": mayak_v2_state() if view == "open" else None,
                     "view": view,
                     "generated_at_epoch": int(time.time()),

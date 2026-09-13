@@ -1,8 +1,8 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 6.9
-**Дата:** 2026-09-12
+**Версия документа:** 7.0
+**Дата:** 2026-09-13
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
 ## 1. Source checkpoint
@@ -469,3 +469,24 @@ mutation. Post-deploy negative smoke сохранил counts: `strategy_activati
 V1 observers остаются `disabled/inactive`, Universal consumer `disabled/inactive`, private/exit runtime
 не запускались, mainnet execution gate `enabled=0`. Full source gate: `1299 passed / 8 skipped`, Ruff
 PASS, mypy Universal `21 source files PASS`, frozen V1 fingerprint unchanged.
+## Multi-Strategy monitoring / paper source checkpoint — 2026-09-13
+
+Owner operational model разделён на два независимых разрешения. `StrategyActivation(enabled=true)` =
+Strategy наблюдается по реальному рынку и создаёт полноценные zero-mutation paper сделки. Отдельный
+`ExecutionPermission(enabled=true)` = разрешение real Execution exact Strategy version; по умолчанию
+permission отсутствует/OFF. ACTIVE не означает LIVE.
+
+Source реализует runtime mode `MULTI_STRATEGY_OBSERVER` поверх existing proven public market transport.
+Observer загружает все enabled exact activations из PostgreSQL, cross-check-ит materialized EntryPlan/
+ExitPlan fingerprints и fan-out-ит один causal stream во все планы без selector/ranking/winner. При
+смене active set начинается новый observer epoch с fail-closed state handling.
+
+Zero-mutation paper lifecycle хранится отдельно в `strategy_entry.paper_orders`,
+`strategy_entry.paper_positions`, `strategy_entry.paper_position_events`. ACCEPTED ExecutionRequest
+проходит тот же bridge contract. MARKET ждёт следующий causal PUBLIC_TRADE; LIMIT_OFFSET ждёт реального
+касания лимита до TTL, иначе EXPIRED. Paper position исполняет supported hard stop/TP, BE, trailing,
+time/context Exit и Hedge policy и сохраняет exact lineage, MFE/MAE и gross PnL.
+
+Universal consumer дополнительно ограничен exact ExecutionPermission и не имеет права исполнять
+старые paper-era requests после позднего включения permission. Mainnet consumer/private runtime остаются
+отдельными и не включаются этим monitoring checkpoint.

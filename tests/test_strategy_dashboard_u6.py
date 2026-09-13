@@ -927,24 +927,26 @@ def _runtime_ready_owner_card() -> StrategyCard:
     return card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
 
 
-def test_strategy_runtime_readiness_separates_policy_execution_and_observer() -> None:
+def test_strategy_runtime_readiness_separates_monitoring_from_live_execution() -> None:
     from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 
     card = _runtime_ready_owner_card()
     without_observer = assess_strategy_runtime_readiness(card, observer_ready=False)
     assert without_observer.policy_ready is True
+    assert without_observer.paper_ready is True
     assert without_observer.execution_ready is True
     assert without_observer.observer_ready is False
+    assert without_observer.monitor_ready is False
     assert without_observer.active_ready is False
-    assert [item.code for item in without_observer.reasons] == [
-        "MULTI_STRATEGY_OBSERVER_NOT_INSTALLED"
-    ]
+    assert [item.code for item in without_observer.reasons] == ["MULTI_STRATEGY_OBSERVER_NOT_READY"]
     complete = assess_strategy_runtime_readiness(card, observer_ready=True)
+    assert complete.monitor_ready is True
     assert complete.active_ready is True
+    assert complete.execution_ready is True
     assert complete.reasons == ()
 
 
-def test_every_known_stored_only_policy_blocks_activation_instead_of_silent_ignore() -> None:
+def test_entry_extensions_are_monitor_consumed_while_live_exit_and_hedge_are_separate() -> None:
     from bybit_workbench.universal_entry.dashboard_control import (
         card_from_editable,
         card_to_editable,
@@ -961,11 +963,18 @@ def test_every_known_stored_only_policy_blocks_activation_instead_of_silent_igno
     }
     raw["entry_policy"]["local_entry_policy"] = {
         "enabled": True,
+        "operator": "RANGE_ATR",
         "window_minutes": 180,
         "lookback_by_timeframe": {"5": 36, "15": 12},
         "use_1m": False,
         "require_5m_15m_confluence": True,
+        "confluence_max_gap_percent": "0.25",
         "require_macro_relation": True,
+        "macro_relation": {"operator": "INSIDE_DIRECTIONAL_ZONE"},
+        "atr_period": 20,
+        "zone_half_width_atr": "0.50",
+        "price_timeframe": "5",
+        "direction_zone_fields": {"LONG": "support_top"},
     }
     raw["entry_policy"]["context_feature_policy"] = [
         {"feature_id": "money.pressure", "scope": "GLOBAL", "mode": "OBSERVE"}
@@ -978,7 +987,7 @@ def test_every_known_stored_only_policy_blocks_activation_instead_of_silent_igno
     raw["lifecycle_policy"]["hedge_policy"] = {
         "enabled": True,
         "opposite_direction": True,
-        "trigger": {"reference": "PRIMARY_ENTRY", "offset_pct_signed": "0.50"},
+        "trigger": {"reference": "PRIMARY_ENTRY", "offset_pct_signed": "-0.50"},
         "capital": {"size_percent_of_primary": "100", "leverage": 1},
         "stop_loss": {"enabled": False},
         "take_profit": {"enabled": False},
@@ -987,14 +996,12 @@ def test_every_known_stored_only_policy_blocks_activation_instead_of_silent_igno
     card = card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
     readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
     codes = {item.code for item in readiness.reasons}
-    assert {
-        "ENTRY_REFERENCE_OFFSET_NOT_CONSUMED",
-        "LOCAL_ENTRY_POLICY_NOT_IMPLEMENTED",
-        "ENTRY_CONTEXT_FEATURE_POLICY_NOT_COMPILED",
-        "EXIT_TRAILING_NOT_WIRED",
-        "HEDGE_POLICY_NOT_IMPLEMENTED",
-    } <= codes
-    assert readiness.active_ready is False
+    assert readiness.monitor_ready is True
+    assert readiness.active_ready is True
+    assert readiness.execution_ready is False
+    assert "LIVE_EXIT_TRAILING_NOT_WIRED" in codes
+    assert "LIVE_HEDGE_EXECUTION_NOT_WIRED" in codes
+    assert not any(code.startswith("ENTRY_") for code in codes)
 
 
 def test_first_activation_atomically_materializes_exact_entry_and_exit_plans() -> None:
@@ -1041,26 +1048,32 @@ def test_first_activation_is_blocked_before_db_mutation_without_observer() -> No
     assert writes == []
 
 
-def test_strategy_ui_has_active_toggle_readiness_and_explicit_limit_execution_offset() -> None:
+def test_strategy_ui_has_independent_monitor_and_execution_controls() -> None:
     html = HTML.read_text(encoding="utf-8")
     for token in (
-        "Сделать активной",
-        "Сделать неактивной",
+        "Запустить мониторинг",
+        "Остановить мониторинг",
+        "EXECUTION ON",
+        "Разрешить реальное исполнение",
+        "/api/strategies/execution-permission",
         "Runtime readiness",
-        "STRATEGY_RUNTIME_NOT_READY",
         "Execution offset для LIMIT, %",
         "document.getElementById('strategyNewEditor')",
+        "Активные Strategy · псевдосделки по реальному рынку",
         "Архив Entry V1 · остановлен",
     ):
         assert token in html
 
 
-def test_strategy_api_keeps_multi_strategy_observer_fail_closed_until_installed() -> None:
+def test_strategy_api_reads_real_observer_state_and_has_separate_execution_permission() -> None:
     app = APP.read_text(encoding="utf-8")
     scope = app[app.index("# U6_STRATEGY_API_BEGIN") : app.index("# U6_STRATEGY_API_END")]
-    assert "U6_MULTI_STRATEGY_OBSERVER_READY = False" in scope
+    assert "_u6_multi_strategy_observer_ready()" in scope
+    assert 'runtime_mode") == "MULTI_STRATEGY_OBSERVER"' in scope
     assert "activate_exact_strategy(" in scope
     assert "enforce_readiness=True" in scope
+    assert 'U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"' in scope
+    assert "set_execution_permission(" in scope
     assert '"STRATEGY_RUNTIME_NOT_READY"' in scope
 
 

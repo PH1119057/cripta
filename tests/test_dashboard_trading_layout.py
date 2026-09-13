@@ -7,7 +7,7 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
         "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection,closedTradesSection,"
-        "coinMonitorSection,signalObservationSection)"
+        "strategyPaperSection,coinMonitorSection,signalObservationSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
@@ -23,7 +23,7 @@ def test_open_position_card_is_compact_and_expands_from_left_triangle() -> None:
     assert 'class="row-toggle"' in SOURCE
     assert "expandedPositions=new Set()" in SOURCE
     assert "function togglePositionCard(symbol)" in SOURCE
-    assert 'cardRow.hidden=!open' in SOURCE
+    assert "cardRow.hidden=!open" in SOURCE
     assert 'colspan="10" class="position-card-cell"' in SOURCE
 
 
@@ -31,8 +31,7 @@ def test_closed_trades_have_internal_scroll_and_exports_remain() -> None:
     assert 'class="closed-scroll"' in SOURCE
     assert "installExportControl('Завершённые сделки Bybit','closed','closed')" in SOURCE
     assert (
-        "installExportControl('Независимое наблюдение за "
-        "сигналами','signals','signals')"
+        "installExportControl('Независимое наблюдение за сигналами','signals','signals')"
     ) in SOURCE
 
 
@@ -55,9 +54,7 @@ def test_live_refresh_does_not_destroy_text_selection() -> None:
 
 
 def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
-    compact_row = SOURCE.split("positionRows.innerHTML=", 1)[1].split(
-        "const safe=", 1
-    )[0]
+    compact_row = SOURCE.split("positionRows.innerHTML=", 1)[1].split("const safe=", 1)[0]
     assert "supervisorBlock(p.supervisor)" not in compact_row
     assert "Положение и обоснование" in SOURCE
 

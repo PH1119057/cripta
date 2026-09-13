@@ -1,7 +1,7 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.4
+**Версия:** 1.5
 **Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
@@ -175,6 +175,44 @@ Immutable V1 source/data/evidence сохраняются для аудита и 
 Особо: неоднозначная торговая семантика не достраивается разработчиком. Пока owner не утвердил
 точный алгоритм `local_entry_policy`, включённый local Entry обязан блокировать activation. Аналогично
 неподключённые Strategy-specific Exit/Hedge/context rules блокируют activation, а не игнорируются.
+
+## 1.4 Решение владельца 2026-09-12 — обязательная полнота любого параметра Strategy
+
+Любой новый Strategy-параметр проходит end-to-end одновременно: immutable Strategy data ->
+materialized EntryPlan/ExitPlan -> production observer/causal evidence -> Entry/Exit consumption ->
+Execution propagation/consumer, если параметр влияет на требуемое действие. Для каждого поля обязателен
+compatibility/acceptance test. Silent-ignore запрещён.
+
+Локальная Entry-математика не является глобальной константой Universal Entry. Конкретная Strategy
+обязана декларативно задавать локальную геометрию, price reference (timeframe + zone field/operator),
+relation с macro geometry и signed price offset. Universal Entry реализует только generic operators.
+Новый оператор добавляется вместе со всеми downstream consumers/tests; неизвестный оператор fail-closed.
+
+Production observer является одним техническим runtime и независимо исполняет все exact
+`StrategyActivation(enabled=true)`; он не ранжирует и не выбирает Strategy. Существующий proven public
+market-data transport расширяется до multi-Strategy режима, а не дублируется отдельным strategy-aware
+Scanner.
+
+## 1.5 Решение владельца 2026-09-13 — ACTIVE = monitoring, ExecutionPermission = реальные деньги
+
+`StrategyActivation(enabled=true)` означает только то, что exact Strategy version должна участвовать
+в production monitoring: observer обязан загрузить её EntryPlan, создавать strategy-specific
+StrategySignal/Attempt/Decision, формировать тот же ExecutionRequest, а zero-mutation paper contour
+обязан моделировать фактическое открытие/неисполнение и сопровождение сделки по exact ExitPlan/Hedge
+policy на реальном causal market stream. ACTIVE не является разрешением на биржевую mutation.
+
+Право реального исполнения хранится отдельно как mutable exact-version `ExecutionPermission`.
+`ExecutionPermission(enabled=true)` допустим только при ACTIVE Strategy и отдельном
+`execution_ready=true`. Consumer обязан принимать только ExecutionRequest, созданные не раньше
+`ExecutionPermission.enabled_at`; накопленные paper-запросы не могут быть отправлены на биржу задним
+числом после включения execution. Выключение Strategy делает реальное исполнение невозможным независимо
+от сохранённого permission-state.
+
+Paper truth хранится отдельно от live positions/orders и не подменяет exchange truth. Минимальный
+lineage: Strategy/Activation/EntryPlan/ExitPlan -> signal -> attempt -> decision -> ExecutionRequest ->
+paper order -> optional paper position -> paper exit/hedge events/outcome. MARKET paper-order считается
+исполненным только на следующем causal public trade; LIMIT_OFFSET — только при фактическом пересечении
+limit до TTL, иначе EXPIRED.
 
 ## 2. StrategyCard
 
