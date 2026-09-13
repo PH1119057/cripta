@@ -573,3 +573,23 @@ Supervisor state отдельными колонками. Ручные operator 
 Эта UI/read-model переработка не включает реальную торговлю и не меняет Strategy/Entry/Exit policy.
 До отдельного owner разрешения `ExecutionPermission` и consumer остаются отдельными рубежами, а global
 execution gate при deployment сохраняется закрытым.
+
+### Installed operator Trade UI checkpoint — 2026-09-13
+
+Functional source commit `c1e742452f3edfbd91a70ee0839fa14b516de8d8` установлен только в
+`cripta-dashboard.service`: installed `app.py` и `index.html` совпали с published SHA. Dashboard после
+controlled restart active/running PID `1038946`, `NRestarts=0`; multi-Strategy observer не
+перезапускался и сохранил PID `1010661`.
+
+Installed backend readiness fail-honest показывает реальные operational blockers global gate:
+`private runtime state is stale`, `fresh exchange reconciliation is required`, `mandatory exchange
+state is stale`. Global mainnet gate остаётся `enabled=0`; `ExecutionPermission enabled=0`, Universal
+consumer `disabled/inactive`, private runtime `inactive`. Post-deploy counters неизменны:
+`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`,
+реальных открытых позиций `0`.
+
+Installed HTML contract подтверждён структурным smoke: sticky `tradeOperatorBar`, exact gate reasons,
+connection/account freshness, Strategy + Supervisor state в таблице открытых сделок и прежние ручные
+position actions присутствуют; legacy global Strategy/entry settings и M3 cards на Trade page
+отсутствуют. На сервере нет JS runtime checker/browser, поэтому отдельный headless browser click-through
+этим checkpoint не заявляется.
