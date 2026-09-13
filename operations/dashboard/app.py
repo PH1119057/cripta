@@ -683,12 +683,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     ).fetchone()
     if not wallet or now_ms - int(wallet[0]) > 15_000:
         reasons.append("mandatory exchange state is stale")
-    settings = connection.execute(
-        "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
-    ).fetchone()
-    settings_version = None if not settings else str(settings[0])
-    if settings is None:
-        reasons.append("server trading settings are missing")
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running') LIMIT 1"""
@@ -722,7 +716,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     return {
         "rearm_ready": not reasons,
         "reasons": reasons,
-        "settings_version": settings_version,
     }
 
 
@@ -3232,17 +3225,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         if enabled and request.get("confirmed") is not True:
                             raise ValueError("включение новых входов не подтверждено")
                         if enabled:
-                            current_settings = connection.execute(
-                                "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
-                            ).fetchone()
-                            requested_version = str(request.get("settings_version") or "")
-                            current_version = (
-                                "" if not current_settings else str(current_settings[0])
-                            )
-                            if not requested_version or requested_version != current_version:
-                                raise ValueError(
-                                    "settings_version mismatch: reload server state before re-arm"
-                                )
                             readiness = live_rearm_readiness(connection)
                             if not bool(readiness.get("rearm_ready")):
                                 raise ValueError(

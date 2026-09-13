@@ -30,7 +30,7 @@ def test_latest_matching_protection_event_wins_when_exchange_order_id_is_reused(
     )
 
 
-def test_dashboard_requires_server_confirmation_for_gate_and_symbol_settings() -> None:
+def test_dashboard_requires_server_confirmation_for_global_gate_without_legacy_settings() -> None:
     source = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
     assert "async function confirmGateState(expected)" in source
     assert "await confirmGateState(enabled)" in source
@@ -38,11 +38,12 @@ def test_dashboard_requires_server_confirmation_for_gate_and_symbol_settings() -
     handler_end = source.index("function processAudio", handler_start)
     handler = source[handler_start:handler_end]
     assert "saveSettings()" not in handler
-    assert "settings_version:serverSettingsVersion" in handler
-    assert "confirmed:true" in handler
-    assert "Сервер не подтвердил выбранный список монет" in source
-    assert "autoSaveStatus" in source
+    assert "settings_version" not in handler
+    assert "confirmed:enabled" in source
+    assert "Сервер не подтвердил выбранный список монет" not in source
+    assert "autoSaveStatus" not in source
     assert "Ошибка обновления live-state" in source
+    assert "tradeGateReasons" in source
 
 
 def test_dashboard_persists_gate_audit_event() -> None:

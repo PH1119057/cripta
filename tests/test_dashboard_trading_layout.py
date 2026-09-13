@@ -6,7 +6,7 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
-        "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection,closedTradesSection,"
+        "tradeSubnav.after(tradeOperatorBar,openTradesSection,closedTradesSection,"
         "strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
@@ -26,7 +26,7 @@ def test_open_position_card_is_compact_and_expands_from_left_triangle() -> None:
     assert "expandedPositions=new Set()" in SOURCE
     assert "function togglePositionCard(symbol)" in SOURCE
     assert "cardRow.hidden=!open" in SOURCE
-    assert 'colspan="10" class="position-card-cell"' in SOURCE
+    assert 'colspan="12" class="position-card-cell"' in SOURCE
 
 
 def test_closed_trades_have_internal_scroll_and_exports_remain() -> None:
@@ -61,10 +61,19 @@ def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
     assert "Положение и обоснование" in SOURCE
 
 
-def test_trading_uses_real_subpages_and_open_settings_precede_positions() -> None:
+def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
     assert "function selectTradeSubpage(name)" in SOURCE
     assert "trade-subpage-hidden" in SOURCE
-    assert "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection" in SOURCE
+    assert "tradeSubnav.after(tradeOperatorBar,openTradesSection" in SOURCE
+    assert 'id="tradeOperatorBar" class="trade-operator-bar"' in SOURCE
+    assert ".trade-operator-bar{grid-column:1/-1;position:sticky" in SOURCE
+    for legacy in (
+        "Общие параметры новых сделок",
+        "Площадка live-сделок",
+        "Воронка M3 Entry",
+        "Управление M3 FULL LIVE V1.1",
+    ):
+        assert legacy not in SOURCE
 
 
 def test_strategy_monitor_is_read_only_and_has_no_symbol_permission_checkbox() -> None:
@@ -79,10 +88,24 @@ def test_strategy_monitor_is_read_only_and_has_no_symbol_permission_checkbox() -
     assert "setAllAuto(" not in monitor
 
 
-def test_legacy_market_guard_is_not_selectable_and_advisory_wording_is_current() -> None:
-    assert "entryPolicy.querySelector('option[value=\"market_guard_v1\"]')?.remove()" in SOURCE
-    assert '"base_entry_v1", "m3_full_live_v1"' in APP_SOURCE
-    assert "Они сами не создают, не запрещают и не закрывают сделки" in SOURCE
+def test_legacy_global_entry_policy_is_not_exposed_on_trade_page() -> None:
+    assert 'id="entryPolicy"' not in SOURCE
+    assert 'id="tradeStake"' not in SOURCE
+    assert 'id="tradeLeverage"' not in SOURCE
+    assert 'id="entryOffset"' not in SOURCE
+    assert 'id="entryLimitTtl"' not in SOURCE
+    assert "StrategyCard" in SOURCE
+
+
+def test_open_trade_table_has_explicit_strategy_column_and_operator_actions() -> None:
+    open_section = SOURCE[
+        SOURCE.index('id="openTradesSection"') : SOURCE.index('id="strategyPaperOpenSection"')
+    ]
+    assert "<th>Стратегия</th>" in open_section
+    assert "<th>Состояние</th>" in open_section
+    assert "Защитить чистую прибыль" in SOURCE
+    assert "Стоп −0,20%" in SOURCE
+    assert "Закрыть" in SOURCE
 
 
 def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:

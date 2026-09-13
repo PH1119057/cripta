@@ -10,10 +10,12 @@ def test_closed_trade_rows_have_strategy_and_exchange_reasons() -> None:
     assert "strategy_reason" in APP
 
 
-def test_closed_trade_card_and_entry_funnel_are_visible() -> None:
+def test_closed_trade_card_remains_but_legacy_entry_funnel_is_not_on_trade_page() -> None:
     assert "closed-trade-row" in HTML
     assert "cardHtml" in HTML
-    assert "m3EntryFunnel" in HTML
+    assert "m3EntryFunnel" not in HTML
+    assert "Воронка M3 Entry" not in HTML
+    # Historical read-model may remain server-side; it is no longer operator UI.
     assert "entry_funnel" in APP
 
 

@@ -8,8 +8,20 @@ def test_dashboard_live_actions_use_strategy_owned_symbols_not_monitor_checkbox_
     assert "beginTimedStatus" in html
     assert "gateChanging" in html
     assert "livePostTimed('/api/live/gate'" in html
-    assert "StrategyCard.symbols" in html
+    assert "Список монет задаётся только StrategyCard" in html
     assert "Нельзя открыть шлюз: не выбрана ни одна торговая монета" not in html
+    for legacy_id in (
+        "tradeStake",
+        "tradeLeverage",
+        "entryOffset",
+        "entryLimitTtl",
+        "entryPolicy",
+        "saveTradeSettings",
+    ):
+        assert f'id="{legacy_id}"' not in html
+    assert 'id="tradeOperatorBar"' in html
+    assert 'id="operatorConnection"' in html
+    assert 'id="tradeGateReasons"' in html
     assert "select at least one trading symbol before re-arm" not in app
     assert "нельзя открыть шлюз: не выбрана ни одна торговая монета" not in app
     monitor_start = html.index('id="coinMonitorSection"')
@@ -24,11 +36,11 @@ def test_live_state_polling_is_single_flight_and_operations_are_bounded() -> Non
     assert "liveStateInFlight=null" in html
     assert "async function fetchLiveStateData()" in html
     assert "if(liveStateInFlight)return liveStateInFlight" in html
-    assert "if(gateChanging||settingsSaving)return" in html
+    assert "if(gateChanging)return" in html
     assert "fetchWithTimeout(path,{cache:'no-store'},8000)" in html
     assert "const deadline=Date.now()+20000" in html
-    assert "Глобальный Execution gate открыт" in html
-    assert "StrategyCard.symbols" in html
+    assert "Глобальный допуск новых реальных входов открыт" in html
+    assert "Список монет задаётся только StrategyCard" in html
     assert html.count("fetch('/api/live/state'") == 0
 
 

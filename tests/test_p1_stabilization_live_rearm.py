@@ -37,9 +37,7 @@ def test_position_cycle_id_is_stable_across_partial_fills() -> None:
 def test_partial_fill_summary_updates_qty_and_weighted_average() -> None:
     module = load_position_cycle()
     decimal = __import__("decimal").Decimal
-    first = module.summarize_entry_fills(
-        [("exec-1", decimal("2"), decimal("10"))]
-    )
+    first = module.summarize_entry_fills([("exec-1", decimal("2"), decimal("10"))])
     second = module.summarize_entry_fills(
         [
             ("exec-1", decimal("2"), decimal("10")),
@@ -114,15 +112,15 @@ def test_dashboard_rearm_is_separate_from_settings_save() -> None:
     handler_end = html.index("function processAudio", handler_start)
     handler = html[handler_start:handler_end]
     assert "saveSettings()" not in handler
-    assert "settings_version:serverSettingsVersion" in handler
-    assert "confirmed:true" in handler
+    assert "settings_version" not in handler
+    assert "confirmed:enabled" in html
     assert "rearmReady" in html
 
 
 def test_dashboard_server_rechecks_rearm_readiness() -> None:
     source = (ROOT / "operations" / "dashboard" / "app.py").read_text(encoding="utf-8")
     assert "def live_rearm_readiness(" in source
-    assert "settings_version mismatch" in source
+    assert "settings_version mismatch" not in source
     assert "rearm_ready" in source
     assert "current real position has no exchange-confirmed protection" in source
 
@@ -141,7 +139,6 @@ def test_entry_gate_disarm_honors_smallint_schema_contract() -> None:
     assert "SET enabled=FALSE" not in source
 
 
-
 def test_private_runtime_startup_is_ddl_free_and_schema_versioned() -> None:
     source = (ROOT / "operations" / "connectivity" / "private_runtime.py").read_text(
         encoding="utf-8"
@@ -154,13 +151,9 @@ def test_private_runtime_startup_is_ddl_free_and_schema_versioned() -> None:
     assert "CREATE TABLE " not in source
     assert "CREATE SCHEMA " not in source
     assert "validate_runtime_schema_contract(bootstrap)" in source
-    bootstrap_index = source.index(
-        'bootstrap = db("cripta-private-bootstrap")'
-    )
+    bootstrap_index = source.index('bootstrap = db("cripta-private-bootstrap")')
     disarm_index = source.index("disarm_new_entries(", bootstrap_index)
-    validation_index = source.index(
-        "validate_runtime_schema_contract(bootstrap)"
-    )
+    validation_index = source.index("validate_runtime_schema_contract(bootstrap)")
     assert disarm_index < validation_index
     assert "SET LOCAL lock_timeout" in schema
     assert "LOCK_TIMEOUT_MS = 2000" in schema
@@ -169,22 +162,21 @@ def test_private_runtime_startup_is_ddl_free_and_schema_versioned() -> None:
 
 
 def test_runtime_schema_ddl_is_installer_only() -> None:
-    private_source = (
-        ROOT / "operations" / "connectivity" / "private_runtime.py"
-    ).read_text(encoding="utf-8")
-    schema_source = (
-        ROOT / "operations" / "connectivity" / "runtime_schema.py"
-    ).read_text(encoding="utf-8")
+    private_source = (ROOT / "operations" / "connectivity" / "private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    schema_source = (ROOT / "operations" / "connectivity" / "runtime_schema.py").read_text(
+        encoding="utf-8"
+    )
     assert "migrate_runtime_schema_contract" not in private_source
     assert "def migrate_runtime_schema_contract(" in schema_source
     assert "CREATE TABLE IF NOT EXISTS runtime.schema_contract" in schema_source
 
 
-
 def test_shadow_scanner_owns_postgres_transactions_explicitly() -> None:
-    source = (
-        ROOT / "operations" / "monitoring" / "entry_shadow_scanner.py"
-    ).read_text(encoding="utf-8")
+    source = (ROOT / "operations" / "monitoring" / "entry_shadow_scanner.py").read_text(
+        encoding="utf-8"
+    )
     assert "autocommit=True" in source
     assert "with connection.transaction():" in source
     assert "selected_symbols = enabled_symbols(connection)" not in source

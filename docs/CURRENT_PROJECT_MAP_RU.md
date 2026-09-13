@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 7.1
+**Версия документа:** 7.2
 **Дата:** 2026-09-13
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -541,3 +541,35 @@ Post-deploy execution isolation: `ExecutionPermission enabled=0`, Universal cons
 `disabled/inactive`, private runtime `inactive`, legacy Entry V1 services `disabled/inactive`; counters
 `runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`.
 Trading effect observer = `NONE`.
+
+## Operator Trade UI и global execution gate — 2026-09-13
+
+Вкладка `Торговля -> Открытые сделки` приведена к новой Strategy-owned модели. Устаревшие
+операторские блоки `Общий контекст рынка`, `МАЯК — РЫНОК И ДЕНЬГИ`, `Площадка live-сделок`,
+`Общие параметры новых сделок`, `Воронка M3 Entry` и `Управление M3 FULL LIVE V1.1` с этой
+подстраницы удалены. Они либо относятся к другим read-model/разделам, либо содержали legacy
+глобальные параметры, которые после перехода на immutable StrategyCard больше не являются
+источником торговой policy.
+
+В верхней части торгового раздела находится закреплённая operator bar. Она показывает только
+операционные факты: exchange equity, сумму занятой маржи позиций + резерв ожидающих заявок,
+доступную торговую ёмкость, количество реальных открытых позиций и свежесть связи dashboard/account
+state. При отсутствии свежего live-state или account snapshot это отображается как отдельное
+операторское состояние, а не как нормальный ноль. В той же панели находятся global execution gate,
+точные причины operational hard stop и пользовательские настройки звуковых уведомлений.
+
+Global execution gate больше не зависит от legacy `runtime.trade_settings.settings_version` и не
+требует глобальных `stake/leverage/entry offset/TTL/entry policy`. Эти торговые параметры принадлежат
+exact StrategyCard и materialized Entry/Exit plans. При попытке открыть global gate dashboard заново
+проверяет обязательную operational readiness: private Bybit connectivity/freshness, fresh exchange
+reconciliation, fresh account snapshot, отсутствие ambiguous/pending Entry mutation и подтверждённую
+защиту уже открытых реальных позиций. Gate не выбирает Strategy и не даёт ей `ExecutionPermission`.
+
+Основная таблица открытых реальных сделок теперь явно показывает Strategy attribution и текущее
+Supervisor state отдельными колонками. Ручные operator actions сохранены: защита прибыли/безубыток,
+ручной stop, per-position trailing и закрытие. Развёрнутая карточка сделки остаётся доступна через
+левый toggle и сохраняет exact Strategy/position context.
+
+Эта UI/read-model переработка не включает реальную торговлю и не меняет Strategy/Entry/Exit policy.
+До отдельного owner разрешения `ExecutionPermission` и consumer остаются отдельными рубежами, а global
+execution gate при deployment сохраняется закрытым.
