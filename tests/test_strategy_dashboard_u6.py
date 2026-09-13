@@ -927,6 +927,27 @@ def _runtime_ready_owner_card() -> StrategyCard:
     return card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
 
 
+def test_paper_monitoring_allows_fixed_amount_without_live_capacity_permission() -> None:
+    from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
+
+    raw = card_to_editable(_runtime_ready_owner_card())
+    raw["strategy_version"] = "paper-no-capacity-1"
+    raw["capital_policy"] = {
+        "require_capacity": False,
+        "requested_amount": "10",
+        "amount_currency": "USDT",
+        "leverage": 1,
+    }
+    card = card_from_editable(raw, approved_at=NOW, approved_source="dashboard:owner")
+    readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
+    assert readiness.policy_ready is True
+    assert readiness.paper_ready is True
+    assert readiness.monitor_ready is True
+    assert readiness.active_ready is True
+    assert readiness.execution_ready is False
+    assert "LIVE_CAPACITY_POLICY_REQUIRED" in {reason.code for reason in readiness.reasons}
+
+
 def test_strategy_runtime_readiness_separates_monitoring_from_live_execution() -> None:
     from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 

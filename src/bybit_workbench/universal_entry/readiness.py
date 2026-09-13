@@ -110,9 +110,8 @@ def assess_strategy_runtime_readiness(
     # Universal Entry engine.  Authoring validation owns their field completeness.
     typed_contexts = card.mayak_context_policy + card.dispatcher_context_policy
     for item in typed_contexts:
-        if (
-            item.mode in {ContextMode.CONDITION, ContextMode.RANKING}
-            and (item.max_age_seconds is None or item.min_quality is None)
+        if item.mode in {ContextMode.CONDITION, ContextMode.RANKING} and (
+            item.max_age_seconds is None or item.min_quality is None
         ):
             policy_reasons.append(
                 RuntimeReadinessReason(
@@ -139,14 +138,7 @@ def assess_strategy_runtime_readiness(
             )
 
     capital = card.capital_policy.to_dict()
-    if not bool(capital.get("require_capacity", False)):
-        paper_reasons.append(
-            RuntimeReadinessReason(
-                "PAPER_CAPITAL_NOT_CONFIGURED",
-                "PAPER",
-                "Псевдосделке нужна явная ставка и проверка доступного капитала.",
-            )
-        )
+    require_capacity = bool(capital.get("require_capacity", False))
     if str(capital.get("amount_currency") or "").upper() != "USDT":
         paper_reasons.append(
             RuntimeReadinessReason(
@@ -236,9 +228,31 @@ def assess_strategy_runtime_readiness(
             )
         )
 
-    # Live Execution currently supports the same basic entry contract but does not
-    # yet consume Strategy-specific post-fill lifecycle rules.
+    # Live Execution requires a fresh account-capacity contract even though PAPER
+    # monitoring is allowed to simulate a fixed Strategy amount without tying the
+    # experiment to current wallet availability.
     execution_reasons.extend(paper_reasons)
+    if not require_capacity:
+        execution_reasons.append(
+            RuntimeReadinessReason(
+                "LIVE_CAPACITY_POLICY_REQUIRED",
+                "EXECUTION",
+                (
+                    "Execution ON требует явную проверку доступного капитала; "
+                    "PAPER может работать без неё."
+                ),
+            )
+        )
+    elif not _positive_int(capital.get("capacity_max_age_seconds")) or not str(
+        capital.get("capacity_min_quality") or ""
+    ):
+        execution_reasons.append(
+            RuntimeReadinessReason(
+                "LIVE_CAPACITY_POLICY_INCOMPLETE",
+                "EXECUTION",
+                "Execution ON требует freshness и quality TradingCapacitySnapshot.",
+            )
+        )
     if str(initial.get("trigger_by") or "") != "LastPrice":
         execution_reasons.append(
             RuntimeReadinessReason(
