@@ -224,3 +224,15 @@ def test_multi_strategy_observer_uses_exact_trade_mirror_recovery() -> None:
     assert "trade_mirror.recover_after" in scope
     assert "except PublicTradeStreamBehind" in scope
     assert "_replay_trade_fact" in scope
+
+
+def test_multi_strategy_observer_reports_exact_sensor_warmup_status() -> None:
+    source = Path("operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")
+    start = source.index("def _run_observer_epoch(")
+    end = source.index("\ndef _run_multi_strategy_observer", start)
+    scope = source[start:end]
+    assert '"flow_minute_counts"' in scope
+    assert '"flow_missing_symbols"' in scope
+    assert '"oi_seen_symbols"' in scope
+    assert '"oi_missing_symbols"' in scope
+    assert "sensor_status=sensor_status(datetime.now(UTC))" in scope

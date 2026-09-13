@@ -1195,6 +1195,7 @@ def _observer_status(
     signals: int = 0,
     warmup_until: datetime | None = None,
     reason: str = "",
+    sensor_status: Mapping[str, object] | None = None,
 ) -> None:
     _atomic_json(
         OBSERVER_STATUS_PATH,
@@ -1221,6 +1222,7 @@ def _observer_status(
             "evaluations": evaluations,
             "signals": signals,
             "warmup_until": None if warmup_until is None else warmup_until.isoformat(),
+            "sensor_status": dict(sensor_status or {}),
         },
     )
 
@@ -1357,10 +1359,27 @@ def _run_observer_epoch(
         }
     )
 
+    def sensor_status(now: datetime) -> dict[str, object]:
+        flow_counts = {symbol: len(flow_minutes[symbol]) for symbol in sorted(required_flow_symbols)}
+        missing_flow = [symbol for symbol, count in flow_counts.items() if count < 5]
+        missing_oi = sorted(required_oi_symbols.difference(oi_seen))
+        return {
+            "time_ready": now >= warmup_until,
+            "flow_required_symbols": sorted(required_flow_symbols),
+            "flow_minute_counts": flow_counts,
+            "flow_missing_symbols": missing_flow,
+            "oi_required_symbols": sorted(required_oi_symbols),
+            "oi_seen_symbols": sorted(oi_seen),
+            "oi_missing_symbols": missing_oi,
+        }
+
     def sensor_ready(now: datetime) -> bool:
-        flow_ready = all(len(flow_minutes[symbol]) >= 5 for symbol in required_flow_symbols)
-        oi_ready = required_oi_symbols.issubset(oi_seen)
-        return now >= warmup_until and flow_ready and oi_ready
+        status = sensor_status(now)
+        return bool(
+            status["time_ready"]
+            and not status["flow_missing_symbols"]
+            and not status["oi_missing_symbols"]
+        )
 
     def refresh_inputs(fact_at: datetime) -> None:
         nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
@@ -1475,6 +1494,7 @@ def _run_observer_epoch(
             symbols=symbols,
             warmup_until=warmup_until,
             reason="causal seed complete",
+            sensor_status=sensor_status(datetime.now(UTC)),
         )
         while not stopping():
             now_mono = time.monotonic()
@@ -1600,6 +1620,7 @@ def _run_observer_epoch(
                         if running
                         else "waiting for plan-owned pre-start influence/sensor completeness"
                     ),
+                    sensor_status=sensor_status(datetime.now(UTC)),
                 )
                 next_status = now_mono + 2.0
         return "STOP"
