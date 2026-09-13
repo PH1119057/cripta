@@ -369,6 +369,17 @@ research/OOS/holdout, re-arm/MICRO_LIVE/LIVE или изменением арх�
   taker-money flow and whether price progresses with that flow; volume impulse or
   exhaustion; open-interest/basis/crowding context when available; volatility/noise
   allowance; and one current mutually exclusive position state.
+- The position card must also preserve the frozen global Entry-zone snapshot that
+  actually produced the Entry and append a causal time series for the lineage of
+  that same global Entry zone after fill. Store its current boundaries/reference
+  extreme, displacement versus the previous observation and original Entry zone,
+  and `WITH / AGAINST / FLAT / UNKNOWN` direction relative to the position. For
+  LONG, support drifting down is `AGAINST` and support drifting up is `WITH`; for
+  SHORT, resistance drifting up is `AGAINST` and drifting down is `WITH`. If zone
+  continuity breaks, record the lineage break; never silently replace the original
+  Entry zone with an unrelated current zone. This is observation/advisory evidence
+  only until a separate owner-approved Strategy/Exit version gives it trading
+  effect; it must not by itself move stops, trailing, or close a position.
 - The mutually exclusive states are: `developing`, `movement_confirmed`,
   `exhausting`, `structure_broken`, and `runner`. User-facing reports must render
   these in Russian. State priority is broken > exhausting > confirmed > developing;
