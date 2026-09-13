@@ -1,7 +1,7 @@
 # STRATEGY / ENTRY — УНИВЕРСАЛЬНЫЙ АРХИТЕКТУРНЫЙ КОНТРАКТ
 
 **Документ:** `STRATEGY_ENTRY_ARCHITECTURE_RU.md`
-**Версия:** 1.5
+**Версия:** 1.6
 **Дата:** 2026-09-12
 **Статус:** канонический специализированный архитектурный контракт
 **Основание:** явное решение владельца 2026-09-08
@@ -192,6 +192,22 @@ Production observer является одним техническим runtime �
 `StrategyActivation(enabled=true)`; он не ранжирует и не выбирает Strategy. Существующий proven public
 market-data transport расширяется до multi-Strategy режима, а не дублируется отдельным strategy-aware
 Scanner.
+
+## 1.6 Решение владельца 2026-09-13 — Strategy выбирает universe, Monitor только показывает
+
+Owner утвердил устранение двойного управления монетами. Exact `StrategyCard.symbols` является
+единственным universe этой Strategy для monitoring/PAPER/live Entry. ACTIVE Strategy наблюдается
+только по своим symbols; другая Strategy может иметь другой набор и другие точки Entry по той же
+монете.
+
+`runtime.trade_settings.enabled_symbols_json` и исторические чекбоксы старого «Монитора монет»
+не являются разрешением или запретом Universal Entry/Execution. Поле сохраняется только ради
+legacy history/rollback старого Entry V1, но Universal consumer не может читать его как gate.
+
+Рабочий монитор обязан иметь выбор exact Strategy (и optional «Все») и показывать строки
+`Strategy × symbol`, включая Strategy-owned direction, candidate/Entry, текущую цену/расстояние,
+geometry/sensor state и cooldown/embargo. При «Все» один symbol закономерно может присутствовать
+несколько раз для разных Strategy.
 
 ## 1.5 Решение владельца 2026-09-13 — ACTIVE = monitoring, ExecutionPermission = реальные деньги
 

@@ -1,7 +1,7 @@
 # UNIVERSAL STRATEGY / ENTRY — IMPLEMENTATION CONTRACT
 
 **Документ:** UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md
-**Версия:** 2.5
+**Версия:** 2.6
 **Дата:** 2026-09-12
 **Статус:** LEVEL 4 / implementation contract
 **Торговый эффект этапа:** NONE до отдельного owner-approved cutover
@@ -42,6 +42,17 @@ lineage позволяет связать `strategy_id + strategy_version` с im
 
 Trading effect этапа остаётся `NONE`: `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, legacy command
 source не переключается, MICRO_LIVE/LIVE/re-arm не выполняются.
+
+### Strategy-owned symbol universe — owner decision 2026-09-13
+
+- `StrategyCard.symbols -> EntryPlan.symbols -> ActivePlanRegistry.plans_for(symbol)` является
+  единственным decision-affecting symbol path Universal Entry.
+- multi-Strategy observer строит transport union всех ACTIVE Strategy symbols только для доставки
+  market facts; это не объединяет policy и не создаёт общий symbol permission.
+- dashboard monitor является read-only Strategy selector/read-model и не пишет symbol permissions.
+- legacy `runtime.trade_settings.enabled_symbols_json` не участвует в Universal Entry consumer,
+  Strategy ExecutionPermission или mainnet gate readiness.
+- acceptance gate обязан падать, если Universal path получает второй независимый symbol allowlist.
 
 ### Strategy universe / reset controls — owner decision 2026-09-12
 

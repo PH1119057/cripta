@@ -1196,6 +1196,7 @@ def _observer_status(
     warmup_until: datetime | None = None,
     reason: str = "",
     sensor_status: Mapping[str, object] | None = None,
+    strategy_monitors: tuple[Mapping[str, object], ...] = (),
 ) -> None:
     _atomic_json(
         OBSERVER_STATUS_PATH,
@@ -1223,14 +1224,28 @@ def _observer_status(
             "signals": signals,
             "warmup_until": None if warmup_until is None else warmup_until.isoformat(),
             "sensor_status": dict(sensor_status or {}),
+            "strategy_monitors": [dict(item) for item in strategy_monitors],
         },
     )
+
+
+def _observer_unknown_prestart_warmup_seconds(
+    bundles: tuple[object, ...], service_started_at: datetime
+) -> int:
+    horizons = [
+        derive_unknown_prestart_horizon_seconds(cast(Any, bundle).entry_plan)
+        if cast(Any, bundle).activation.enabled_at < service_started_at
+        else 0
+        for bundle in bundles
+    ]
+    return max(horizons, default=0)
 
 
 def _run_observer_epoch(
     connection: Any,
     bundles: tuple[object, ...],
     stopping: Callable[[], bool],
+    service_started_at: datetime,
 ) -> str:
     epoch_started = datetime.now(UTC)
     signature = _observer_light_signature(connection)
@@ -1267,14 +1282,7 @@ def _run_observer_epoch(
             }
         )[:32]
     )
-    warmup_seconds = max(
-        (
-            derive_unknown_prestart_horizon_seconds(cast(Any, bundle).entry_plan)
-            if cast(Any, bundle).activation.enabled_at < epoch_started - timedelta(seconds=5)
-            else 0
-        )
-        for bundle in bundles
-    )
+    warmup_seconds = _observer_unknown_prestart_warmup_seconds(bundles, service_started_at)
     warmup_until = epoch_started + timedelta(seconds=warmup_seconds)
     required_flow_symbols = {
         symbol
@@ -1308,6 +1316,7 @@ def _run_observer_epoch(
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
+    last_trade_prices: dict[str, Decimal] = {}
     oi_seen: set[str] = set()
     trade_cursors: dict[str, TradeCursor] = {}
     trade_current_seq_exec_ids: dict[str, set[str]] = {}
@@ -1360,7 +1369,9 @@ def _run_observer_epoch(
     )
 
     def sensor_status(now: datetime) -> dict[str, object]:
-        flow_counts = {symbol: len(flow_minutes[symbol]) for symbol in sorted(required_flow_symbols)}
+        flow_counts = {
+            symbol: len(flow_minutes[symbol]) for symbol in sorted(required_flow_symbols)
+        }
         missing_flow = [symbol for symbol, count in flow_counts.items() if count < 5]
         missing_oi = sorted(required_oi_symbols.difference(oi_seen))
         return {
@@ -1380,6 +1391,126 @@ def _run_observer_epoch(
             and not status["flow_missing_symbols"]
             and not status["oi_missing_symbols"]
         )
+
+    def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
+        rows: list[Mapping[str, object]] = []
+        for raw_bundle in bundles:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                watch = engine.watch_snapshot(plan.entry_plan_fingerprint, symbol)
+                lifecycle = engine.lifecycle_snapshot(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                cooldown_until = engine.candidate_cooldown_until(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                current_price = last_trade_prices.get(symbol)
+                geometry = {
+                    timeframe: {
+                        "range_high": str(zone.range_high),
+                        "range_low": str(zone.range_low),
+                        "atr": str(zone.atr),
+                        "resistance_top": str(zone.resistance_top),
+                        "resistance_bottom": str(zone.resistance_bottom),
+                        "support_top": str(zone.support_top),
+                        "support_bottom": str(zone.support_bottom),
+                        "effective_lookback": zone.effective_lookback,
+                        "regime_reset_at": (
+                            None
+                            if zone.regime_reset_at is None
+                            else zone.regime_reset_at.isoformat()
+                        ),
+                    }
+                    for timeframe, zone in watch.geometry.items()
+                }
+                for direction in plan.directions:
+                    entry_price = (
+                        watch.long_entry if direction.value == "LONG" else watch.short_entry
+                    )
+                    distance_pct: Decimal | None = None
+                    if current_price is not None and entry_price is not None and entry_price > 0:
+                        if direction.value == "LONG":
+                            distance_pct = (
+                                (current_price - entry_price) / entry_price * Decimal("100")
+                            )
+                        else:
+                            distance_pct = (
+                                (entry_price - current_price) / entry_price * Decimal("100")
+                            )
+                    embargo_active = (
+                        lifecycle.entry_embargo_until is not None
+                        and now < lifecycle.entry_embargo_until
+                    )
+                    cooldown_active = cooldown_until is not None and now < cooldown_until
+                    if embargo_active:
+                        state = "EMBARGO"
+                    elif cooldown_active:
+                        state = "COOLDOWN"
+                    elif watch.hourly_swing_blocked:
+                        state = "SWING_BLOCK"
+                    elif entry_price is None:
+                        state = "WAITING"
+                    elif distance_pct is not None and distance_pct <= 0:
+                        state = "AT_OR_BEYOND_ENTRY"
+                    elif distance_pct is not None and distance_pct <= Decimal("1"):
+                        state = "APPROACH"
+                    else:
+                        state = "WATCH"
+                    rows.append(
+                        {
+                            "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                            "strategy_id": plan.strategy_id,
+                            "strategy_version": plan.strategy_version,
+                            "strategy_name": bundle.card.name,
+                            "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                            "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                            "activation_id": plan.strategy_activation_id,
+                            "symbol": symbol,
+                            "direction": direction.value,
+                            "state": state,
+                            "current_price": None if current_price is None else str(current_price),
+                            "entry_price": None if entry_price is None else str(entry_price),
+                            "distance_pct": None if distance_pct is None else str(distance_pct),
+                            "candidate_id": watch.candidate_id,
+                            "candidate_bar_at": (
+                                None
+                                if watch.candidate_bar_at is None
+                                else watch.candidate_bar_at.isoformat()
+                            ),
+                            "geometry": geometry,
+                            "hourly_swing_blocked": watch.hourly_swing_blocked,
+                            "hourly_swing_percent": (
+                                None
+                                if watch.hourly_swing_percent is None
+                                else str(watch.hourly_swing_percent)
+                            ),
+                            "flow_condition_met": watch.last_flow_condition_met,
+                            "oi_condition_met": watch.last_oi_condition_met,
+                            "last_touch_at": (
+                                None
+                                if watch.last_touch_at is None
+                                else watch.last_touch_at.isoformat()
+                            ),
+                            "candidate_cooldown_until": (
+                                None if cooldown_until is None else cooldown_until.isoformat()
+                            ),
+                            "tracked_outcomes": lifecycle.tracked_outcomes,
+                            "last_resolution": lifecycle.last_resolution,
+                            "last_resolution_at": (
+                                None
+                                if lifecycle.last_resolution_at is None
+                                else lifecycle.last_resolution_at.isoformat()
+                            ),
+                            "entry_embargo_until": (
+                                None
+                                if lifecycle.entry_embargo_until is None
+                                else lifecycle.entry_embargo_until.isoformat()
+                            ),
+                            "updated_at": now.isoformat(),
+                        }
+                    )
+        return tuple(rows)
 
     def refresh_inputs(fact_at: datetime) -> None:
         nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
@@ -1409,6 +1540,8 @@ def _run_observer_epoch(
                 trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(cursor.exec_id)
             trade_cursors[fact.symbol] = cursor
             trade_proof_monotonic[fact.symbol] = time.monotonic()
+            trade_attrs = fact.attributes.to_dict()
+            last_trade_prices[fact.symbol] = Decimal(str(trade_attrs["price"]))
             flow_minutes[fact.symbol].add(
                 fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
             )
@@ -1495,6 +1628,7 @@ def _run_observer_epoch(
             warmup_until=warmup_until,
             reason="causal seed complete",
             sensor_status=sensor_status(datetime.now(UTC)),
+            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
         )
         while not stopping():
             now_mono = time.monotonic()
@@ -1511,6 +1645,8 @@ def _run_observer_epoch(
                         signals=signals_count,
                         warmup_until=warmup_until,
                         reason="StrategyActivation set changed",
+                        sensor_status=sensor_status(datetime.now(UTC)),
+                        strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
                     )
                     return "RELOAD"
                 next_signature = now_mono + 1.0
@@ -1523,7 +1659,7 @@ def _run_observer_epoch(
             if stale:
                 try:
                     _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
-                except PublicTradeStreamBehind:
+                except PublicTradeStreamBehind as audit_exc:
                     cutoff_at = datetime.now(UTC)
                     recovered = trade_mirror.recover_after(
                         trade_cursors,
@@ -1532,7 +1668,7 @@ def _run_observer_epoch(
                     if not recovered:
                         raise ContinuityNotProvable(
                             "observer mirror recovery returned no exact PUBLIC_TRADE events"
-                        )
+                        ) from audit_exc
                     for event in recovered:
                         if event.symbol not in stale:
                             continue
@@ -1621,6 +1757,7 @@ def _run_observer_epoch(
                         else "waiting for plan-owned pre-start influence/sensor completeness"
                     ),
                     sensor_status=sensor_status(datetime.now(UTC)),
+                    strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
                 )
                 next_status = now_mono + 2.0
         return "STOP"
@@ -1642,6 +1779,7 @@ def _run_multi_strategy_observer() -> None:
             "multi-Strategy observer requires BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1 at 30s"
         )
     OBSERVER_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    service_started_at = datetime.now(UTC)
     stopping_flag = False
 
     def stop(_signum: int, _frame: object) -> None:
@@ -1665,7 +1803,10 @@ def _run_multi_strategy_observer() -> None:
                     time.sleep(1.0)
                     continue
                 outcome = _run_observer_epoch(
-                    connection, cast(tuple[object, ...], bundles), lambda: stopping_flag
+                    connection,
+                    cast(tuple[object, ...], bundles),
+                    lambda: stopping_flag,
+                    service_started_at,
                 )
                 if outcome == "STOP":
                     break

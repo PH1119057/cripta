@@ -1,6 +1,6 @@
 # CRIPTA — архитектурные правила проекта
 
-Версия: 1.4 · 2026-09-12
+Версия: 1.5 · 2026-09-13
 Назначение: верхняя модель проекта, владельцы прикладных решений, технический поддерживающий контур, жизненный цикл торговой попытки и обязательные архитектурные границы.
 
 Процесс patch/install/Git вынесен в `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`.
@@ -126,6 +126,27 @@ Strategy является единственным владельцем торг
 Никто из MAYAK, Dispatcher, Analyst, Supervisor или технического контура не изменяет утверждённую Strategy автоматически.
 
 Изменение торговой policy = новая утверждённая владельцем версия/fingerprint.
+
+## 5.2 Strategy-owned universe монет
+
+`StrategyCard.symbols` является единственным прикладным источником истины о том, к каким
+инструментам применяется exact Strategy version. После materialization тот же exact список обязан
+сохраняться в `EntryPlan.symbols` и использоваться observer/Entry/PAPER/Execution без второго
+независимого symbol gate.
+
+UI «Монитор монет», legacy `runtime.trade_settings.enabled_symbols_json`, старый Scanner/Monitor,
+операционная таблица монет и любые пользовательские фильтры отображения не имеют права
+расширять, сужать, разрешать или запрещать Strategy-owned universe. Они могут быть только
+read-model/legacy/operational data.
+
+Если несколько ACTIVE Strategy содержат один symbol, этот symbol наблюдается независимо для
+каждого EntryPlan и может иметь разные Entry, direction, geometry, cooldown/embargo и outcome.
+Монитор обязан показывать эти состояния раздельно по exact Strategy, а не сводить их в одну
+«состояние монеты».
+
+Реальное исполнение требует одновременно exact Strategy scope, ACTIVE StrategyActivation,
+`ExecutionPermission=ON` и global execution gate. Отдельной глобальной галочки «монета разрешена
+для торговли» в Universal контуре нет.
 
 ## 5.1 Полнота Strategy contract
 

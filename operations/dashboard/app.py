@@ -527,6 +527,80 @@ def entry_shadow_state() -> dict[str, object]:
     return state
 
 
+def strategy_monitor_state() -> dict[str, object]:
+    state: dict[str, object]
+    if not UNIVERSAL_ENTRY_OBSERVER_STATE.exists():
+        state = {
+            "state": "OFF",
+            "observer_ready": False,
+            "reason": "multi-Strategy observer status is missing",
+            "updated_at": None,
+            "strategy_monitors": [],
+            "sensor_status": {},
+        }
+    else:
+        try:
+            loaded = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+            state = loaded if isinstance(loaded, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            state = {
+                "state": "ERROR",
+                "observer_ready": False,
+                "reason": "cannot read multi-Strategy observer status",
+                "updated_at": None,
+                "strategy_monitors": [],
+                "sensor_status": {},
+            }
+    items = [
+        dict(item)
+        for item in state.get("strategy_monitors", [])
+        if isinstance(item, dict) and str(item.get("symbol") or "") not in BYBIT_KZ_UNSUPPORTED
+    ]
+    risks = execution_liquidity_risks()
+    for item in items:
+        item["liquidity_risk"] = risks.get(str(item.get("symbol") or ""))
+    strategies: dict[str, dict[str, object]] = {}
+    try:
+        with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+            rows = connection.execute(
+                """SELECT a.strategy_id,a.strategy_version,c.name,
+                          c.card_json->'direction_policy',c.card_json->'symbols'
+                     FROM strategy_entry.strategy_activations a
+                     JOIN strategy_entry.strategy_cards c
+                       ON c.strategy_id=a.strategy_id
+                      AND c.strategy_version=a.strategy_version
+                      AND c.strategy_config_fingerprint=a.strategy_config_fingerprint
+                    WHERE a.enabled=true
+                    ORDER BY c.name,a.strategy_version"""
+            ).fetchall()
+        for row in rows:
+            key = f"{row[0]}::{row[1]}"
+            strategies[key] = {
+                "strategy_key": key,
+                "strategy_id": str(row[0]),
+                "strategy_version": str(row[1]),
+                "strategy_name": str(row[2]),
+                "directions": row[3] if isinstance(row[3], list) else json.loads(row[3] or "[]"),
+                "symbols": row[4] if isinstance(row[4], list) else json.loads(row[4] or "[]"),
+            }
+    except (psycopg.Error, json.JSONDecodeError, TypeError):
+        strategies = {}
+    return {
+        "state": str(state.get("state") or "UNKNOWN"),
+        "observer_ready": bool(state.get("observer_ready")),
+        "reason": str(state.get("reason") or ""),
+        "updated_at": state.get("updated_at"),
+        "source_commit": state.get("source_commit"),
+        "observer_epoch_id": state.get("observer_epoch_id"),
+        "facts_received": int(state.get("facts_received") or 0),
+        "evaluations": int(state.get("evaluations") or 0),
+        "signals": int(state.get("signals") or 0),
+        "sensor_status": state.get("sensor_status") or {},
+        "strategies": list(strategies.values()),
+        "items": items,
+    }
+
+
 def mayak_v2_state() -> dict[str, object]:
     if not MAYAK_V2_STATE.exists():
         return {"state": "не запущен", "confidence": 0, "coins": {}}
@@ -610,18 +684,11 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     if not wallet or now_ms - int(wallet[0]) > 15_000:
         reasons.append("mandatory exchange state is stale")
     settings = connection.execute(
-        """SELECT updated_at_epoch_ms,enabled_symbols_json
-           FROM runtime.trade_settings WHERE singleton=1"""
+        "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
     ).fetchone()
     settings_version = None if not settings else str(settings[0])
     if settings is None:
         reasons.append("server trading settings are missing")
-    else:
-        enabled_symbols = {
-            str(symbol).upper() for symbol in json.loads(settings[1] or "[]")
-        } - BYBIT_KZ_UNSUPPORTED
-        if not enabled_symbols:
-            reasons.append("select at least one trading symbol before re-arm")
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running') LIMIT 1"""
@@ -2927,7 +2994,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             _u6_send_catalog(self)
         elif path == "/api/live/state":
             view = str((query.get("view") or ["open"])[0])
-            if view not in {"open", "closed", "monitor", "signals"}:
+            if view not in {"open", "closed", "paper_open", "paper_closed", "monitor", "signals"}:
                 view = "open"
             body = json.dumps(
                 {
@@ -2938,9 +3005,10 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "signal_monitor": strategy_signal_monitor_state()
                     if view == "signals"
                     else None,
-                    "entry_shadow": entry_shadow_state() if view == "monitor" else None,
+                    "strategy_monitor": strategy_monitor_state() if view == "monitor" else None,
+                    "entry_shadow": None,
                     "paper_strategy": strategy_paper_state()
-                    if view in {"monitor", "closed"}
+                    if view in {"paper_open", "paper_closed"}
                     else None,
                     "mayak_v2": mayak_v2_state() if view == "open" else None,
                     "view": view,
@@ -3165,25 +3233,12 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             raise ValueError("включение новых входов не подтверждено")
                         if enabled:
                             current_settings = connection.execute(
-                                """SELECT updated_at_epoch_ms,enabled_symbols_json
-                                   FROM runtime.trade_settings WHERE singleton=1"""
+                                "SELECT updated_at_epoch_ms FROM runtime.trade_settings WHERE singleton=1"
                             ).fetchone()
                             requested_version = str(request.get("settings_version") or "")
                             current_version = (
                                 "" if not current_settings else str(current_settings[0])
                             )
-                            current_symbols = (
-                                set()
-                                if not current_settings
-                                else {
-                                    str(symbol).upper()
-                                    for symbol in json.loads(current_settings[1] or "[]")
-                                } - BYBIT_KZ_UNSUPPORTED
-                            )
-                            if not current_symbols:
-                                raise ValueError(
-                                    "нельзя открыть шлюз: не выбрана ни одна торговая монета"
-                                )
                             if not requested_version or requested_version != current_version:
                                 raise ValueError(
                                     "settings_version mismatch: reload server state before re-arm"

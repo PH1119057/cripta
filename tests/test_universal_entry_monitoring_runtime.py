@@ -236,3 +236,80 @@ def test_multi_strategy_observer_reports_exact_sensor_warmup_status() -> None:
     assert '"oi_seen_symbols"' in scope
     assert '"oi_missing_symbols"' in scope
     assert "sensor_status=sensor_status(datetime.now(UTC))" in scope
+
+
+def test_observer_warmup_uses_service_start_not_slow_epoch_seed(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from operations.monitoring import universal_entry_shadow as observer
+
+    monkeypatch.setattr(observer, "derive_unknown_prestart_horizon_seconds", lambda _plan: 420)
+    service_started = NOW
+    activated_before_service = SimpleNamespace(
+        activation=SimpleNamespace(enabled_at=service_started - timedelta(seconds=1)),
+        entry_plan=object(),
+    )
+    activated_after_service = SimpleNamespace(
+        activation=SimpleNamespace(enabled_at=service_started + timedelta(seconds=1)),
+        entry_plan=object(),
+    )
+    assert (
+        observer._observer_unknown_prestart_warmup_seconds(
+            (activated_after_service,), service_started
+        )
+        == 0
+    )
+    assert (
+        observer._observer_unknown_prestart_warmup_seconds(
+            (activated_before_service,), service_started
+        )
+        == 420
+    )
+    assert (
+        observer._observer_unknown_prestart_warmup_seconds(
+            (activated_after_service, activated_before_service), service_started
+        )
+        == 420
+    )
+
+
+def test_universal_symbol_universe_has_no_legacy_enabled_symbols_gate() -> None:
+    consumer = (ROOT / "operations/connectivity/universal_entry_consumer.py").read_text(
+        encoding="utf-8"
+    )
+    dashboard = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    architecture = (ROOT / "CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(encoding="utf-8")
+
+    assert "enabled_symbols" not in consumer
+    rearm = dashboard[
+        dashboard.index("def live_rearm_readiness(") : dashboard.index(
+            "\ndef live_trading_state", dashboard.index("def live_rearm_readiness(")
+        )
+    ]
+    assert "enabled_symbols" not in rearm
+    assert "select at least one trading symbol before re-arm" not in dashboard
+    assert "нельзя открыть шлюз: не выбрана ни одна торговая монета" not in dashboard
+    monitor_start = html.index('id="coinMonitorSection"')
+    monitor_end = html.index('id="signalObservationSection"', monitor_start)
+    monitor = html[monitor_start:monitor_end]
+    assert "auto-check" not in monitor
+    assert "setAuto(" not in monitor
+    assert "Список монет задаётся только StrategyCard" in monitor
+    assert "StrategyCard.symbols" in architecture
+    assert "единственным прикладным источником истины" in architecture
+
+
+def test_observer_status_publishes_strategy_specific_monitor_rows() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")
+    for token in (
+        '"strategy_monitors"',
+        "engine.watch_snapshot",
+        "engine.lifecycle_snapshot",
+        "engine.candidate_cooldown_until",
+        '"strategy_name": bundle.card.name',
+        '"entry_price"',
+        '"distance_pct"',
+        '"entry_embargo_until"',
+    ):
+        assert token in source

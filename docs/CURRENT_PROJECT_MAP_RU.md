@@ -1,7 +1,7 @@
 # Текущее устройство и архитектурные границы проекта CRIPTA
 
 **Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 7.0
+**Версия документа:** 7.1
 **Дата:** 2026-09-13
 **Статус:** краткая текущая карта; не отдельный архитектурный контракт
 
@@ -490,3 +490,36 @@ time/context Exit и Hedge policy и сохраняет exact lineage, MFE/MAE �
 Universal consumer дополнительно ограничен exact ExecutionPermission и не имеет права исполнять
 старые paper-era requests после позднего включения permission. Mainnet consumer/private runtime остаются
 отдельными и не включаются этим monitoring checkpoint.
+## Strategy-owned universe и рабочие monitoring views — 2026-09-13
+
+Owner устранил двойное управление монетами. Для Universal-контура exact `StrategyCard.symbols`
+является единственным application universe конкретной Strategy; тот же список materialize-ится в
+`EntryPlan.symbols`, observer строит только transport-union ACTIVE plans, а Entry применяет каждый
+plan независимо через `ActivePlanRegistry.plans_for(symbol)`. Legacy
+`runtime.trade_settings.enabled_symbols_json` остаётся только историческим V1/settings полем и не
+участвует в Universal consumer, Strategy ExecutionPermission, global re-arm readiness или mainnet
+gate.
+
+Dashboard trading pages разделены на `Открытые сделки`, `Завершённые сделки`, `Открытые
+псевдосделки`, `Завершённые псевдосделки`, `Монитор Strategy`, `Наблюдение за сигналами`. Paper
+позиции больше не смешиваются с coin-monitor page. `Монитор Strategy` является read-only view:
+владелец выбирает exact ACTIVE Strategy или `Все`, после чего строки имеют identity
+`Strategy × symbol × direction` и показывают Strategy-specific current price, calculated Entry,
+distance, candidate/5m+15m geometry, flow/OI, swing block, exact candidate cooldown и post-signal
+embargo. Один symbol закономерно может иметь несколько строк с разными Entry у разных Strategy.
+На monitor page нет symbol permission checkbox.
+
+Multi-Strategy observer публикует эти rows из собственного Universal Entry state через
+`watch_snapshot`, lifecycle snapshot и exact cooldown state; dashboard не пересчитывает Entry
+самостоятельно. Observer warmup также разделён корректно: full unknown-prestart horizon применяется
+только к Strategy, уже ACTIVE до старта observer process. Strategy, включённая после старта процесса,
+не получает длинный recovery warmup из-за времени, потраченного на causal history seed; ей остаются
+только реально обязательные sensor readiness gates.
+
+До отдельного owner разрешения real Execution остаётся выключен. ACTIVE продолжает означать только
+monitoring + PAPER; `ExecutionPermission=ON` и global execution gate остаются отдельными правами.
+
+Source gate перед deployment: full pytest `1317 passed / 8 skipped`; targeted Strategy/UI/observer/
+Execution `122/122`; Ruff changed files PASS; mypy Universal `24 source files PASS`; compile/HTML and
+`git diff --check` PASS; direct read-model smoke на реальной PostgreSQL schema видит две ACTIVE
+V1-equivalent Strategy и их exact symbol sets.

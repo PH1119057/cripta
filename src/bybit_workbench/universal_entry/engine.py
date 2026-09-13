@@ -108,9 +108,7 @@ class UniversalEntryEngine:
                 }:
                     self._reset_plan_state(plan, state, account_ref)
 
-                independent_touch = is_independent_touch(
-                    evaluation_fact, state, plan.touch_policy
-                )
+                independent_touch = is_independent_touch(evaluation_fact, state, plan.touch_policy)
                 (
                     sensor_links,
                     consumed_sensors,
@@ -151,9 +149,7 @@ class UniversalEntryEngine:
                     observed_at=evaluation_fact.observed_at,
                     account_ref=account_ref,
                 )
-                fact_with_context = self._with_feature_evidence(
-                    evaluation_fact, feature_evidence
-                )
+                fact_with_context = self._with_feature_evidence(evaluation_fact, feature_evidence)
                 fact_for_predicate = self._with_lifecycle_evidence(
                     fact_with_context,
                     enabled=plan.post_signal_outcome_policy.enabled,
@@ -180,11 +176,7 @@ class UniversalEntryEngine:
 
                 state.observe(fact_for_predicate, independent_touch=independent_touch)
                 cooldown = plan.touch_policy.candidate_cooldown
-                if (
-                    independent_touch
-                    and cooldown.enabled
-                    and cooldown.trigger_event == "TOUCH"
-                ):
+                if independent_touch and cooldown.enabled and cooldown.trigger_event == "TOUCH":
                     self._start_cooldown(
                         cooldown,
                         plan,
@@ -308,9 +300,7 @@ class UniversalEntryEngine:
             if not bool(plan.watch_policy.to_dict().get("enabled")):
                 continue
             state = self._state_for(plan, symbol)
-            allow_candidate = not self._cooldown_active(
-                plan, state, observed_at, account_ref
-            )
+            allow_candidate = not self._cooldown_active(plan, state, observed_at, account_ref)
             self._market_watch.load_history(
                 plan,
                 symbol,
@@ -320,9 +310,7 @@ class UniversalEntryEngine:
                 allow_candidate=allow_candidate,
             )
 
-    def watch_snapshot(
-        self, entry_plan_fingerprint: str, symbol: str
-    ) -> MarketWatchSnapshot:
+    def watch_snapshot(self, entry_plan_fingerprint: str, symbol: str) -> MarketWatchSnapshot:
         return self._market_watch.snapshot(entry_plan_fingerprint, symbol)
 
     def drain_watch_trace(
@@ -348,6 +336,37 @@ class UniversalEntryEngine:
         if plan is None:
             raise KeyError(f"unknown active EntryPlan: {entry_plan_fingerprint}")
         return self._post_signal_lifecycle.snapshot(plan, symbol, account_ref=account_ref)
+
+    def candidate_cooldown_until(
+        self,
+        entry_plan_fingerprint: str,
+        symbol: str,
+        *,
+        account_ref: str | None = None,
+    ) -> datetime | None:
+        plan = next(
+            (
+                item
+                for item in self._registry.active_entry_plans()
+                if item.entry_plan_fingerprint == entry_plan_fingerprint
+            ),
+            None,
+        )
+        if plan is None:
+            raise KeyError(f"unknown active EntryPlan: {entry_plan_fingerprint}")
+        cooldown = plan.touch_policy.candidate_cooldown
+        if not cooldown.enabled:
+            return None
+        state = self._state_for(plan, symbol)
+        if cooldown.scope is CooldownScope.PER_SYMBOL:
+            return state.cooldown_until
+        if cooldown.scope is CooldownScope.PER_STRATEGY:
+            return self._strategy_cooldowns.get(plan.strategy_activation_id)
+        if cooldown.scope is CooldownScope.PER_ACCOUNT:
+            if not account_ref:
+                raise ValueError("PER_ACCOUNT cooldown requires account_ref")
+            return self._account_cooldowns.get((plan.strategy_activation_id, account_ref))
+        raise ValueError(f"unsupported cooldown scope: {cooldown.scope}")
 
     def _state_for(self, plan: EntryPlan, symbol: str) -> PlanState:
         return self._states.setdefault((plan.entry_plan_fingerprint, symbol), PlanState())
@@ -479,9 +498,7 @@ class UniversalEntryEngine:
         plan: EntryPlan,
         sensors: Mapping[str, SensorObservation],
         observed_at: datetime,
-    ) -> tuple[
-        tuple[SensorLink, ...], dict[str, SensorObservation], bool, str | None
-    ]:
+    ) -> tuple[tuple[SensorLink, ...], dict[str, SensorObservation], bool, str | None]:
         links: list[SensorLink] = []
         consumed: dict[str, SensorObservation] = {}
         signal_ready = True
@@ -552,9 +569,7 @@ class UniversalEntryEngine:
         plan: EntryPlan,
         contexts: Mapping[str, ObjectiveContext],
         observed_at: datetime,
-    ) -> tuple[
-        tuple[ContextLink, ...], dict[str, ObjectiveContext], bool, str | None
-    ]:
+    ) -> tuple[tuple[ContextLink, ...], dict[str, ObjectiveContext], bool, str | None]:
         links: list[ContextLink] = []
         consumed: dict[str, ObjectiveContext] = {}
         signal_ready = True
@@ -662,9 +677,7 @@ class UniversalEntryEngine:
             if context is not None:
                 quality = context.quality
                 max_age = (
-                    None
-                    if mode is ContextMode.OBSERVE
-                    else int(str(raw.get("max_age_seconds")))
+                    None if mode is ContextMode.OBSERVE else int(str(raw.get("max_age_seconds")))
                 )
                 min_quality = (
                     None

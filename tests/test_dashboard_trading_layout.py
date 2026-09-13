@@ -7,12 +7,14 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
         "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection,closedTradesSection,"
-        "strategyPaperSection,coinMonitorSection,signalObservationSection)"
+        "strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
         "openTradesSection",
         "closedTradesSection",
+        "strategyPaperOpenSection",
+        "strategyPaperClosedSection",
         "coinMonitorSection",
         "signalObservationSection",
     ):
@@ -65,9 +67,16 @@ def test_trading_uses_real_subpages_and_open_settings_precede_positions() -> Non
     assert "tradeSubnav.after(tradePlatformSection,tradeSettingsSection,openTradesSection" in SOURCE
 
 
-def test_master_symbol_checkbox_has_unambiguous_toggle() -> None:
-    assert "autoAll.onchange=null" in SOURCE
-    assert "const enable=enabledSymbols.size===0" in SOURCE
+def test_strategy_monitor_is_read_only_and_has_no_symbol_permission_checkbox() -> None:
+    start = SOURCE.index('id="coinMonitorSection"')
+    end = SOURCE.index('id="signalObservationSection"', start)
+    monitor = SOURCE[start:end]
+    assert 'id="strategyMonitorFilter"' in monitor
+    assert 'id="strategyMonitorNear"' in monitor
+    assert "Список монет задаётся только StrategyCard" in monitor
+    assert "auto-check" not in monitor
+    assert "setAuto(" not in monitor
+    assert "setAllAuto(" not in monitor
 
 
 def test_legacy_market_guard_is_not_selectable_and_advisory_wording_is_current() -> None:

@@ -1080,8 +1080,10 @@ def test_strategy_ui_has_independent_monitor_and_execution_controls() -> None:
         "Runtime readiness",
         "Execution offset для LIMIT, %",
         "document.getElementById('strategyNewEditor')",
-        "Активные Strategy · псевдосделки по реальному рынку",
-        "Архив Entry V1 · остановлен",
+        "Открытые псевдосделки",
+        "Завершённые псевдосделки",
+        "Монитор Strategy · монеты и точки входа",
+        "Список монет задаётся только StrategyCard",
     ):
         assert token in html
 
