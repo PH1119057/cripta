@@ -523,3 +523,21 @@ Source gate перед deployment: full pytest `1317 passed / 8 skipped`; target
 Execution `122/122`; Ruff changed files PASS; mypy Universal `24 source files PASS`; compile/HTML and
 `git diff --check` PASS; direct read-model smoke на реальной PostgreSQL schema видит две ACTIVE
 V1-equivalent Strategy и их exact symbol sets.
+### Installed Strategy-universe monitoring checkpoint — 2026-09-13
+
+Functional source `87a3f1eee2a4ca90044ecd26fb3769de4d11bfac` установлен exact в dashboard и
+`cripta-universal-entry-observer.service`. Dashboard PID `1010667`, observer PID `1010661`, оба
+`active/running`, `NRestarts=0`. Installed read-model smoke подтвердил 2 ACTIVE Strategy по 10 symbols
+и 20 independent `Strategy × symbol × direction` monitor rows. Пример фактического различия одной
+монеты: LONG и SHORT V1-equivalent Strategy имеют разные exact calculated Entry и distance.
+
+После deploy, поскольку до него для обеих Strategy было строго 0 StrategySignal / ExecutionRequest /
+paper order / paper position, Activation были один раз causal-safe переотмечены OFF→ON уже после
+старта нового observer process. Новый warmup contract подтвердился: `time_ready=true`; прежний
+7-часовой recovery timer отсутствует. Пока обязательные V1 flow/OI sensors собирают первые причинные
+минуты, status честно `WARMUP`; затем тот же epoch обязан перейти в `RUNNING` без ручного действия.
+
+Post-deploy execution isolation: `ExecutionPermission enabled=0`, Universal consumer
+`disabled/inactive`, private runtime `inactive`, legacy Entry V1 services `disabled/inactive`; counters
+`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`.
+Trading effect observer = `NONE`.
