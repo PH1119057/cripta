@@ -46,6 +46,9 @@ def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> Non
     assert "if(activeTradePage()==='closed')realClosedRows.innerHTML" in html
     assert "if(activeTradePage()==='signals')renderSignalObservation" in html
     assert "if(page==='monitor')renderStrategyMonitor(d.strategy_monitor)" in html
+    assert "Сервис работает, но новые сигналы временно заблокированы" in html
+    assert "Flow ${flowReady}/${flowRequired}" in html
+    assert "OI ${oiReady}/${oiRequired}" in html
     assert (
         "if(page==='paper_open'||page==='paper_closed')renderStrategyPaper(d.paper_strategy)"
         in html
