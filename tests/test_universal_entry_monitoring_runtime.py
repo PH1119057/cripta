@@ -212,3 +212,15 @@ def test_multi_strategy_observer_creates_paper_trades_but_has_no_exchange_mutati
     scope = source[source.index("def _run_multi_strategy_observer") :]
     assert "runtime.trade_commands" not in scope
     assert "api_post(" not in scope
+
+
+def test_multi_strategy_observer_uses_exact_trade_mirror_recovery() -> None:
+    source = Path("operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")
+    start = source.index("def _run_observer_epoch(")
+    end = source.index("\ndef _run_multi_strategy_observer", start)
+    scope = source[start:end]
+    assert "PublicTradeMirrorBuffer" in scope
+    assert "_run_public_trade_mirror" in scope
+    assert "trade_mirror.recover_after" in scope
+    assert "except PublicTradeStreamBehind" in scope
+    assert "_replay_trade_fact" in scope

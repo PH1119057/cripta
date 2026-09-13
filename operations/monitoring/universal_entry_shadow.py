@@ -1321,6 +1321,18 @@ def _run_observer_epoch(
     oi_health = Oi30sHealthTracker(oi_config)
     oi_results: queue.Queue[OiSlotResult] = queue.Queue()
     oi_stop = threading.Event()
+    trade_mirror = PublicTradeMirrorBuffer(
+        tuple(symbols),
+        retention_seconds=MIRROR_RETENTION_SECONDS,
+    )
+    trade_mirror_stop = threading.Event()
+    trade_mirror_ready = threading.Event()
+    trade_mirror_thread = threading.Thread(
+        target=_run_public_trade_mirror,
+        args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+        name="universal-entry-observer-public-trade-mirror",
+        daemon=True,
+    )
     oi_thread = threading.Thread(
         target=_run_rest_oi30s_worker,
         args=(oi_config, oi_results, oi_stop),
@@ -1439,6 +1451,13 @@ def _run_observer_epoch(
             signals_count += 1
 
     try:
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "observer publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
         buffered_messages = list(buffered)
@@ -1482,7 +1501,30 @@ def _run_observer_epoch(
                 >= TRADE_SILENCE_AUDIT_SECONDS
             )
             if stale:
-                _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
+                try:
+                    _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
+                except PublicTradeStreamBehind:
+                    cutoff_at = datetime.now(UTC)
+                    recovered = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=cutoff_at,
+                    )
+                    if not recovered:
+                        raise ContinuityNotProvable(
+                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
+                        )
+                    for event in recovered:
+                        if event.symbol not in stale:
+                            continue
+                        process_fact(
+                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
                 proven_at = time.monotonic()
                 for symbol in stale:
                     trade_proof_monotonic[symbol] = proven_at
@@ -1564,6 +1606,8 @@ def _run_observer_epoch(
     finally:
         oi_stop.set()
         oi_thread.join(timeout=2.0)
+        trade_mirror_stop.set()
+        trade_mirror_thread.join(timeout=2.0)
         if sock is not None:
             with suppress(Exception):
                 sock.close()
