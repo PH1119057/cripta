@@ -1,11 +1,13 @@
-# CRIPTA — правила работы для ChatGPT / разработчика
+# CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 1.3 · 2026-09-12
-**Назначение:** обязательный процесс разработки, диагностики, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
-**Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / разработчика.
+**Версия:** 1.4 · 2026-09-16
+**Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
+**Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
 
 > Эта версия включает обязательные выводы из инцидента установки P1 LIVE STABILIZATION 2026-09-05/06, когда небольшой по коду patch потребовал большого числа подготовительных сборок и почти полного рабочего дня из-за ошибок среды, installer contract, PostgreSQL schema/permissions, Git metadata и Git transport/auth. Повторение этих классов ошибок считается нарушением процесса подготовки.
+
+> Версия 1.4 дополнительно закрепляет обязательные уроки research/compute-разработки сентября 2026: доказуемые статусы запуска, повторную runtime-проверку через 5–10 секунд, малый сквозной тест, проверку семантики исходных данных, bounded-memory/streaming обработку, безопасный parallelism по CPU+RAM+I/O, причинность point-in-time данных, явный `NO_DATA`, lifecycle-first datasets и запрет делать выводы по пилоту без full-universe/economic validation.
 
 ---
 
@@ -745,6 +747,119 @@ Live paths берутся только из installer/deployment contract. Verif
 
 ---
 
+
+## 49. Статусы работы нельзя смешивать
+
+Для разработки, research, patch, миграции, длительного расчёта и установки использовать явные состояния:
+
+```text
+PREPARED
+RUNNING
+COMPLETE
+FAILED
+BLOCKED
+```
+
+`PREPARED` = код подготовлен, выполнение не доказано. `RUNNING` = реальный worker подтверждён runtime evidence. `COMPLETE` = выполнение успешно закончено и результат проверен. `FAILED` = процесс упал/убит/результат неполон или некорректен. `BLOCKED` = действие запрещено gate/архитектурой/отсутствием обязательных данных.
+
+Запрещено считать PID оболочки доказательством вычисления, `exit_code=0` доказательством корректности данных, наличие output-файла доказательством полноты, а установленный файл — доказательством `LOADED/RUNNING`.
+
+## 50. Runtime-проверка после запуска
+
+Длительный процесс проверяется минимум дважды: сразу после старта и повторно примерно через 5–10 секунд. Проверять, где применимо: реальные worker PID, runner/parent PID, process state, CPU, RAM/RSS, stderr, рост output/progress и ожидаемое число workers.
+
+Если процесс завершился раньше, нужно доказать успешное завершение и проверить результат. На `?`, «проверь», «состояние» статус всегда получать заново с сервера, а не из памяти предыдущего ответа.
+
+## 51. Малый сквозной тест до массового запуска
+
+До полного тяжёлого расчёта выполнить минимальный end-to-end проход на реальных данных и проверить source path, schema/headers, timestamp semantics, units, side/direction semantics, границы дат, output schema и несколько значений вручную.
+
+Технически успешный скрипт с пустыми, неверно прочитанными или семантически неверными данными = `FAILED`.
+
+## 52. Dependency и interpreter preflight
+
+До запуска проверить exact runtime: Python executable/version, required modules/binaries, permissions, source mounts/paths, free disk и available RAM. Нельзя впервые обнаруживать отсутствующую зависимость в полном расчёте. Для автономного research предпочитать stdlib Python, если внешняя зависимость заранее не проверена и не даёт существенной выгоды.
+
+## 53. Большие данные обрабатывать потоково
+
+Raw trades, orderbook tapes и большие market archives по умолчанию обрабатывать streaming/chunk/bucket способом с bounded cache. Полный период нельзя складывать в RAM, если это не доказано безопасным и необходимым.
+
+```text
+stream source -> causal aggregation -> bounded cache -> intermediate output -> release memory
+```
+
+Перед масштабированием измерить peak/RSS одного worker.
+
+## 54. Parallelism определяется CPU + RAM + I/O
+
+Число workers выбирается по CPU, RAM per worker, disk/decompression I/O, source contention и независимости частей задачи. Запрещено механически делать `workers = symbols`.
+
+Если сервер имеет 4 CPU и независимый research безопасно делится, доступные CPU следует использовать. Но сначала доказать безопасность по RAM/I/O. Для неравномерных задач использовать ограниченное число workers с очередью символов/chunks.
+
+## 55. Причинность research-данных
+
+Любой point-in-time dataset обязан соблюдать `feature_time <= decision_time`. На `T` используются только данные, реально известные к `T`. Future MFE/MAE, stop, recovery, final outcome, будущие zone shifts и будущие MAYAK/Dispatcher states допустимы только как последующие labels/targets, но не входные признаки.
+
+Отсутствие данных хранится как `NO_DATA` и не превращается молча в `0`, `NONE` или `NORMAL`. Для liquidation exact history при отсутствии исходных событий = `NO_DATA`; proxy допустим только как отдельно названный и версионированный `LIQUIDATION_PROXY`.
+
+## 56. Сначала универсальный dataset, потом гипотезы
+
+Если тяжёлые raw-источники нужны многим анализам, сначала строится нейтральный причинный dataset общего назначения:
+
+```text
+ALL ENTRY -> minute-by-minute causal state -> reusable research dataset -> analytical passes
+```
+
+Нельзя заставлять каждый Exit-кандидат повторно читать многомесячный raw archive, если первичные состояния можно один раз сохранить без future leakage. Существующий Exit/stop не должен заранее определять классы, если исследуется новый способ оценки сделки.
+
+## 57. Пилот не является доказательством
+
+Пилот нужен для проверки механики, данных, наличия явления и стоимости расчёта. Общий вывод требует full-universe проверки и, где применимо, разрезов symbol/direction/time regime, coverage, false positives/negatives и economics after commissions.
+
+Для кандидата считать минимум: пойманные/пропущенные проблемные случаи, испорченные хорошие сделки, saved losses, lost good trades, destroyed recoveries, extra fees/slippage и итог после комиссий.
+
+## 58. Не смешивать наблюдение, причину и интерпретацию
+
+H3/H9 shift, orderbook, OI, flow, liquidation и Dispatcher context — наблюдаемые события/состояния. Нельзя автоматически считать structural shift причиной движения, алгоритмическую заявку spoofing, а очищенный стакан «реальными людьми».
+
+Research должен по возможности проверять цепочку `market facts/state -> MAYAK/objective context -> structural change -> subsequent trade path`. Семантика полей подтверждается источником/каноническим parser contract до экономической интерпретации.
+
+## 59. Обязательный launch/complete checklist
+
+До `RUNNING` тяжёлого compute/research:
+
+```text
+SOURCE_SAMPLE_CHECK=PASS
+SCHEMA_SEMANTICS_CHECK=PASS
+INTERPRETER_DEPENDENCIES=PASS
+SMALL_E2E=PASS
+ONE_WORKER_MEMORY_MEASURED=YES
+PARALLELISM_SAFE=YES
+WORKERS_EXPECTED=<N>
+WORKERS_ACTUAL=<N>
+CHECK_AFTER_5_10_SECONDS=PASS
+STDERR_EMPTY_OR_EXPLAINED=YES
+OUTPUT_GROWING_OR_COMPLETE=YES
+```
+
+До `COMPLETE`:
+
+```text
+RUNNER_EXIT=PASS
+ALL_WORKERS_ACCOUNTED=YES
+EXPECTED_UNIVERSE=ACTUAL_UNIVERSE
+EXPECTED_ROWS/RANGE=VERIFIED
+ERROR_LOGS=CHECKED
+NO_OOM_KILL=VERIFIED_IF_RELEVANT
+OUTPUT_SCHEMA=VERIFIED
+DATA_NOT_EMPTY=YES
+QUALITY/NO_DATA_EXPLICIT=YES
+RESULT_MANIFEST=WRITTEN
+```
+
+Без обязательного evidence статус остаётся `RUNNING`, `FAILED` или `BLOCKED`, но не `COMPLETE`.
+
+
 # Приложение A. Инцидент 2026-09-05/06 — обязательные уроки
 
 | № | Класс ошибки | Что произошло | Постоянное правило |
@@ -828,7 +943,7 @@ STOP=YES
 
 ---
 
-# 49. Главный процессный принцип
+# 60. Главный процессный принцип
 
 Цель не в том, чтобы «в конце концов установить patch».
 
@@ -844,4 +959,4 @@ STOP=YES
 
 Если небольшой patch требует длинной цепочки подготовительных версий, это признак дефекта процесса подготовки, а не нормальная стоимость разработки.
 
-ChatGPT / разработчик обязан остановить такой цикл и исправить сам процесс.
+ChatGPT / Codex / разработчик обязан остановить такой цикл и исправить сам процесс.
