@@ -1,6 +1,6 @@
 # CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 1.4 · 2026-09-16
+**Версия:** 1.5 · 2026-09-16
 **Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
@@ -8,6 +8,8 @@
 > Эта версия включает обязательные выводы из инцидента установки P1 LIVE STABILIZATION 2026-09-05/06, когда небольшой по коду patch потребовал большого числа подготовительных сборок и почти полного рабочего дня из-за ошибок среды, installer contract, PostgreSQL schema/permissions, Git metadata и Git transport/auth. Повторение этих классов ошибок считается нарушением процесса подготовки.
 
 > Версия 1.4 дополнительно закрепляет обязательные уроки research/compute-разработки сентября 2026: доказуемые статусы запуска, повторную runtime-проверку через 5–10 секунд, малый сквозной тест, проверку семантики исходных данных, bounded-memory/streaming обработку, безопасный parallelism по CPU+RAM+I/O, причинность point-in-time данных, явный `NO_DATA`, lifecycle-first datasets и запрет делать выводы по пилоту без full-universe/economic validation.
+
+> Версия 1.5 закрепляет изоляцию файловых пространств: ChatGPT runtime, server filesystem, GitHub/connectors, Project Source и локальная машина пользователя не считаются взаимно доступными без явного проверенного механизма передачи.
 
 ---
 
@@ -824,7 +826,36 @@ H3/H9 shift, orderbook, OI, flow, liquidation и Dispatcher context — набл
 
 Research должен по возможности проверять цепочку `market facts/state -> MAYAK/objective context -> structural change -> subsequent trade path`. Семантика полей подтверждается источником/каноническим parser contract до экономической интерпретации.
 
-## 59. Обязательный launch/complete checklist
+## 59. Файловые пространства разных сред не взаимозаменяемы
+
+ChatGPT runtime/container, удалённый сервер, GitHub/connector storage, Project Source/File Library и локальный компьютер пользователя являются разными файловыми пространствами. Одинаковый путь или имя файла не означает, что объект существует или доступен в другой среде.
+
+Перед любой операцией чтения, записи, копирования, упаковки, скачивания или передачи файла обязательно определить:
+
+```text
+SOURCE_ENVIRONMENT
+SOURCE_PATH_OR_RESOURCE
+DESTINATION_ENVIRONMENT
+DESTINATION_PATH_OR_RESOURCE
+TRANSFER_MECHANISM
+SOURCE_EXISTS=YES
+DESTINATION_PARENT_EXISTS=YES
+ACCESS_ALLOWED=YES
+```
+
+Запрещено:
+
+- использовать `/mnt/data/...` как путь удалённого сервера только потому, что он существует в ChatGPT runtime;
+- использовать `/srv/...`, `C:\...` или другой server/local path внутри ChatGPT runtime без фактического mount/transfer;
+- считать GitHub/connector file reference обычным локальным файлом;
+- придумывать `sandbox:/mnt/data/...` ссылку, если файл не создан и не проверен именно в активном ChatGPT runtime;
+- сообщать пользователю, что файл «выгружен», «скачан» или «готов», пока destination object не проверен в той среде, откуда пользователь реально сможет его получить.
+
+Перед cross-environment transfer используется только поддерживаемый механизм передачи: connector/file action, явная загрузка/скачивание, staged attachment или другой проверенный transport. После передачи сравнить размер и, когда возможно, SHA256 либо иной устойчивый идентификатор содержимого.
+
+Если прямого transport между двумя средами нет, статус = `BLOCKED`; нельзя имитировать передачу путём обращения к пути другой среды.
+
+## 60. Обязательный launch/complete checklist
 
 До `RUNNING` тяжёлого compute/research:
 
@@ -943,7 +974,7 @@ STOP=YES
 
 ---
 
-# 60. Главный процессный принцип
+# 61. Главный процессный принцип
 
 Цель не в том, чтобы «в конце концов установить patch».
 
