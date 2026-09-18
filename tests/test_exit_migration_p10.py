@@ -19,6 +19,10 @@ CUTOVER = (ROOT / "operations/implementation/TRADING_LIFECYCLE_P10_CUTOVER_PLAN_
     encoding="utf-8"
 )
 
+PRIVATE_DROPIN = (
+    ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf"
+).read_text(encoding="utf-8")
+
 
 def test_legacy_exit_excludes_universal_ownership_at_selection() -> None:
     assert "o.bot_instance_id <> 'universal-entry'" in LEGACY_EXIT
@@ -76,3 +80,10 @@ def test_cutover_plan_forbids_mid_position_owner_transfer_and_requires_owner_dec
     assert "не передаётся legacy Exit" in CUTOVER
     assert "не заменяется legacy defaults" in CUTOVER
     assert "MICRO_LIVE" in CUTOVER
+
+
+def test_private_runtime_uses_tested_trade_lifecycle_release_tree() -> None:
+    assert (
+        "Environment=PYTHONPATH=/srv/cripta/trade_lifecycle/current/src:/srv/cripta/connectivity"
+    ) in PRIVATE_DROPIN
+    assert "/srv/cripta/production/src" not in PRIVATE_DROPIN
