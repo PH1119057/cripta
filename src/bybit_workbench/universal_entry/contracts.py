@@ -560,7 +560,7 @@ class EntryDecision:
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRequest:
+class EntryExecutionRequest:
     execution_request_id: str
     strategy_attempt_id: str
     entry_decision_id: str
@@ -577,8 +577,9 @@ class ExecutionRequest:
     capital_reservation_id: str | None = None
 
 
-# Backward-compatible name for the historically Entry-only request contract.
-EntryExecutionRequest = ExecutionRequest
+# Backward-compatible import name for code written before Entry/Exit requests
+# became explicitly typed. New code should use EntryExecutionRequest.
+ExecutionRequest = EntryExecutionRequest
 
 
 @dataclass(frozen=True, slots=True)

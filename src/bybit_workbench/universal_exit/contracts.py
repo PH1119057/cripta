@@ -129,6 +129,7 @@ class ExitExecutionRequest:
     action_kind: ExitActionKind
     requested_mutation: FrozenPolicy
     requested_at: datetime
+    expires_at: datetime
 
     def __post_init__(self) -> None:
         for field in (
@@ -147,8 +148,10 @@ class ExitExecutionRequest:
                 raise ValueError(f"ExitExecutionRequest requires {field}")
         if self.position_idx < 0:
             raise ValueError("position_idx cannot be negative")
-        if self.requested_at.tzinfo is None:
-            raise ValueError("ExitExecutionRequest.requested_at must be timezone-aware")
+        if self.requested_at.tzinfo is None or self.expires_at.tzinfo is None:
+            raise ValueError("ExitExecutionRequest timestamps must be timezone-aware")
+        if self.expires_at <= self.requested_at:
+            raise ValueError("ExitExecutionRequest.expires_at must be after requested_at")
 
     @classmethod
     def from_decision(
@@ -158,6 +161,7 @@ class ExitExecutionRequest:
         decision: ExitDecision,
         position: StrategyPosition,
         requested_at: datetime,
+        expires_at: datetime,
     ) -> ExitExecutionRequest:
         if decision.strategy_position_id != position.strategy_position_id:
             raise ValueError("ExitDecision/StrategyPosition identity mismatch")
@@ -191,4 +195,5 @@ class ExitExecutionRequest:
             action_kind=decision.action_kind,
             requested_mutation=decision.requested_mutation,
             requested_at=requested_at.astimezone(UTC),
+            expires_at=expires_at.astimezone(UTC),
         )

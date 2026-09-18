@@ -43,6 +43,9 @@ from bybit_workbench.strategy_position_binding import (
     persist_universal_strategy_position,
     release_position_capital_reservation,
 )
+from bybit_workbench.universal_exit.contracts import ExitActionKind
+from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
+from bybit_workbench.universal_exit.execution_store import mark_ambiguous_exit_command
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -756,6 +759,11 @@ def handle_exchange_mutation_barrier(
                 reason=error,
                 mutation_ambiguous=True,
             )
+            mark_ambiguous_exit_command(
+                connection,
+                command_id=command_id,
+                reason=error,
+            )
             connection.execute(
                 """UPDATE runtime.trade_commands
                    SET error=%s
@@ -984,6 +992,230 @@ def record_protection_or_owner_event(
         )
 
 
+def _step_aligned(value: Decimal, step: Decimal, label: str) -> Decimal:
+    if value <= 0 or step <= 0:
+        raise RuntimeError(f"{label} must be positive")
+    units = value / step
+    if units != units.to_integral_value():
+        raise RuntimeError(f"{label} is not aligned to exchange step {step}")
+    return value
+
+
+def _universal_exit_position(
+    connection: psycopg.Connection,
+    *,
+    payload: dict[str, object],
+    symbol: str,
+    positions_payload: dict[str, object],
+) -> dict[str, object]:
+    if str(payload.get("source") or "") != "universal_exit":
+        raise RuntimeError("STRATEGY_EXIT_SOURCE_INVALID")
+    position_id = str(payload.get("strategy_position_id") or "")
+    if not position_id:
+        raise RuntimeError("STRATEGY_EXIT_POSITION_ID_MISSING")
+    expected_idx = int(str(payload.get("position_idx")))
+    expected_direction = str(payload.get("direction") or "")
+    expected_side = (
+        "Buy"
+        if expected_direction == "LONG"
+        else "Sell" if expected_direction == "SHORT" else ""
+    )
+    if not expected_side:
+        raise RuntimeError("STRATEGY_EXIT_DIRECTION_INVALID")
+    expiry_raw = str(payload.get("expires_at") or "")
+    try:
+        expires_at = datetime.fromisoformat(expiry_raw)
+    except ValueError as exc:
+        raise RuntimeError("STRATEGY_EXIT_EXPIRY_INVALID") from exc
+    if expires_at.tzinfo is None or datetime.now(UTC) >= expires_at.astimezone(UTC):
+        raise RuntimeError("STRATEGY_EXIT_REQUEST_EXPIRED")
+
+    owner = connection.execute(
+        """SELECT position_id,account_ref,exchange_position_key,position_idx,
+                  strategy_id,strategy_version,strategy_config_fingerprint,
+                  exit_plan_fingerprint,symbol,side,state
+             FROM runtime.position_ownership
+            WHERE position_id=%s""",
+        (position_id,),
+    ).fetchone()
+    if owner is None:
+        raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISSING")
+    expected_owner = (
+        position_id,
+        str(payload.get("account_ref") or ""),
+        str(payload.get("exchange_position_key") or ""),
+        expected_idx,
+        str(payload.get("strategy_id") or ""),
+        str(payload.get("strategy_version") or ""),
+        str(payload.get("strategy_config_fingerprint") or ""),
+        str(payload.get("exit_plan_fingerprint") or ""),
+        symbol,
+        expected_side,
+        "OPEN",
+    )
+    actual_owner = tuple(owner)
+    if actual_owner != expected_owner:
+        raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISMATCH")
+    if expected_owner[1] != "BYBIT:UNIFIED":
+        raise RuntimeError("STRATEGY_EXIT_ACCOUNT_UNSUPPORTED")
+    expected_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
+    if expected_owner[2] != expected_key:
+        raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
+
+    exchange_position = next(
+        (
+            item
+            for item in ((positions_payload.get("result") or {}).get("list") or [])
+            if int(item.get("positionIdx") or 0) == expected_idx
+            and str(item.get("side") or "") == expected_side
+            and Decimal(str(item.get("size") or 0)) > 0
+        ),
+        None,
+    )
+    if exchange_position is None:
+        raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_NOT_FOUND")
+    return exchange_position
+
+
+def _execute_universal_exit_command(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+    *,
+    command_id: str,
+    symbol: str,
+    payload: dict[str, object],
+    positions_payload: dict[str, object],
+    tick: Decimal,
+    qty_step: Decimal,
+) -> dict[str, object]:
+    position = _universal_exit_position(
+        connection,
+        payload=payload,
+        symbol=symbol,
+        positions_payload=positions_payload,
+    )
+    try:
+        action_kind = ExitActionKind(str(payload.get("action_kind") or ""))
+    except ValueError as exc:
+        raise RuntimeError("STRATEGY_EXIT_ACTION_UNSUPPORTED") from exc
+    mutation_raw = payload.get("requested_mutation")
+    if not isinstance(mutation_raw, dict):
+        raise RuntimeError("STRATEGY_EXIT_MUTATION_INVALID")
+    mutation = validate_exit_mutation(action_kind, mutation_raw)
+    position_idx = int(position.get("positionIdx") or 0)
+
+    if action_kind is ExitActionKind.SET_STOP:
+        stop = _step_aligned(Decimal(str(mutation["stop_price"])), tick, "stop_price")
+        return api_post(
+            "/v5/position/trading-stop",
+            {
+                "category": "linear",
+                "symbol": symbol,
+                "positionIdx": position_idx,
+                "tpslMode": str(mutation["tpsl_mode"]),
+                "stopLoss": str(stop),
+                "slTriggerBy": str(mutation["trigger_by"]),
+                "slOrderType": str(mutation["order_type"]),
+            },
+            key,
+            secret,
+        )
+
+    if action_kind is ExitActionKind.SET_TP:
+        target = _step_aligned(
+            Decimal(str(mutation["take_profit_price"])), tick, "take_profit_price"
+        )
+        return api_post(
+            "/v5/position/trading-stop",
+            {
+                "category": "linear",
+                "symbol": symbol,
+                "positionIdx": position_idx,
+                "tpslMode": str(mutation["tpsl_mode"]),
+                "takeProfit": str(target),
+                "tpTriggerBy": str(mutation["trigger_by"]),
+                "tpOrderType": str(mutation["order_type"]),
+            },
+            key,
+            secret,
+        )
+
+    if action_kind is ExitActionKind.SET_PROTECTION:
+        stop = _step_aligned(Decimal(str(mutation["stop_price"])), tick, "stop_price")
+        target = _step_aligned(
+            Decimal(str(mutation["take_profit_price"])), tick, "take_profit_price"
+        )
+        return api_post(
+            "/v5/position/trading-stop",
+            {
+                "category": "linear",
+                "symbol": symbol,
+                "positionIdx": position_idx,
+                "tpslMode": str(mutation["tpsl_mode"]),
+                "stopLoss": str(stop),
+                "takeProfit": str(target),
+                "slTriggerBy": str(mutation["sl_trigger_by"]),
+                "tpTriggerBy": str(mutation["tp_trigger_by"]),
+                "slOrderType": str(mutation["sl_order_type"]),
+                "tpOrderType": str(mutation["tp_order_type"]),
+            },
+            key,
+            secret,
+        )
+
+    if action_kind is ExitActionKind.SET_TRAILING:
+        distance = _step_aligned(
+            Decimal(str(mutation["distance"])), tick, "trailing distance"
+        )
+        params: dict[str, object] = {
+            "category": "linear",
+            "symbol": symbol,
+            "positionIdx": position_idx,
+            "tpslMode": str(mutation["tpsl_mode"]),
+            "trailingStop": str(distance),
+        }
+        if "active_price" in mutation:
+            active = _step_aligned(
+                Decimal(str(mutation["active_price"])), tick, "trailing active_price"
+            )
+            params["activePrice"] = str(active)
+        return api_post("/v5/position/trading-stop", params, key, secret)
+
+    current_qty = Decimal(str(position.get("size") or 0))
+    if action_kind is ExitActionKind.REDUCE:
+        qty = _step_aligned(Decimal(str(mutation["quantity"])), qty_step, "reduce quantity")
+        if qty > current_qty:
+            raise RuntimeError("STRATEGY_EXIT_REDUCE_EXCEEDS_POSITION")
+    elif action_kind is ExitActionKind.CLOSE:
+        qty = _step_aligned(current_qty, qty_step, "close quantity")
+    else:
+        raise RuntimeError("STRATEGY_EXIT_ACTION_UNSUPPORTED")
+
+    result = api_post(
+        "/v5/order/create",
+        {
+            "category": "linear",
+            "symbol": symbol,
+            "side": "Sell" if str(position["side"]) == "Buy" else "Buy",
+            "orderType": "Market",
+            "qty": str(qty),
+            "positionIdx": position_idx,
+            "orderLinkId": command_id[:36],
+            "reduceOnly": True,
+            "closeOnTrigger": False,
+        },
+        key,
+        secret,
+    )
+    exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
+    if not exchange_order_id:
+        raise ExchangeMutationBarrier(
+            "Universal Exit order acknowledged without exchange orderId"
+        )
+    return result
+
+
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
@@ -998,7 +1230,19 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     if tick <= 0 or qty_step <= 0:
         raise RuntimeError("Bybit did not return price/quantity steps")
     result: dict[str, object]
-    if kind == "close":
+    if kind == "strategy_exit":
+        result = _execute_universal_exit_command(
+            connection,
+            key,
+            secret,
+            command_id=command_id,
+            symbol=symbol,
+            payload=payload,
+            positions_payload=positions,
+            tick=tick,
+            qty_step=qty_step,
+        )
+    elif kind == "close":
         if not position: raise RuntimeError("open position not found")
         result = api_post("/v5/order/create", {"category":"linear","symbol":symbol,"side":"Sell" if position["side"]=="Buy" else "Buy","orderType":"Market","qty":str(position["size"]),"positionIdx":int(position.get("positionIdx") or 0),"orderLinkId":command_id[:36],"reduceOnly":True,"closeOnTrigger":False}, key, secret)
     elif kind in {"break_even", "current_stop", "initial_protection"}:

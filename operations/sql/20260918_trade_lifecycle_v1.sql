@@ -461,6 +461,18 @@ CREATE TABLE IF NOT EXISTS strategy_exit.shadow_evaluations (
         REFERENCES strategy_exit.exit_decisions(exit_decision_id)
 );
 
+CREATE TABLE IF NOT EXISTS strategy_exit.execution_materialization_blocks (
+    block_id text PRIMARY KEY,
+    exit_decision_id text NOT NULL UNIQUE
+        REFERENCES strategy_exit.exit_decisions(exit_decision_id),
+    strategy_position_id text NOT NULL
+        REFERENCES runtime.position_ownership(position_id),
+    reason text NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (jsonb_typeof(payload)='object')
+);
+
 CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests (
     execution_request_id text PRIMARY KEY,
     exit_decision_id text NOT NULL,
@@ -477,6 +489,7 @@ CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests (
     action_kind text NOT NULL,
     requested_mutation jsonb NOT NULL,
     requested_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     CHECK (position_idx >= 0),
     CHECK (direction IN ('LONG','SHORT')),
@@ -493,6 +506,9 @@ CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests (
         strategy_config_fingerprint,exit_plan_fingerprint
     )
 );
+
+ALTER TABLE strategy_exit.execution_requests
+    ADD COLUMN IF NOT EXISTS expires_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS strategy_exit.execution_dispatches (
     dispatch_id text PRIMARY KEY,
@@ -525,6 +541,12 @@ FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
 DROP TRIGGER IF EXISTS exit_decisions_immutable ON strategy_exit.exit_decisions;
 CREATE TRIGGER exit_decisions_immutable
 BEFORE UPDATE OR DELETE ON strategy_exit.exit_decisions
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+DROP TRIGGER IF EXISTS exit_execution_materialization_blocks_immutable
+    ON strategy_exit.execution_materialization_blocks;
+CREATE TRIGGER exit_execution_materialization_blocks_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.execution_materialization_blocks
 FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
 
 DROP TRIGGER IF EXISTS exit_execution_requests_immutable ON strategy_exit.execution_requests;
@@ -658,13 +680,16 @@ GRANT SELECT,INSERT,UPDATE ON runtime.lifecycle_faults TO cripta;
 
 REVOKE ALL ON strategy_exit.exit_observations,
     strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
+    strategy_exit.execution_materialization_blocks,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM PUBLIC;
 GRANT SELECT,INSERT ON strategy_exit.exit_observations,
     strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
+    strategy_exit.execution_materialization_blocks,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches TO cripta;
 
 REVOKE UPDATE,DELETE ON strategy_exit.exit_observations,
     strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
+    strategy_exit.execution_materialization_blocks,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM cripta;
 REVOKE DELETE ON runtime.plan_consumptions,runtime.capital_reservations,
     runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM cripta;

@@ -125,15 +125,35 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - migration second apply: PASS;
 - NEW_DIAGNOSTICS = 0.
 
-## P6 — typed Execution bridge — TODO
-- [ ] EntryExecutionRequest finalized
-- [ ] ExitExecutionRequest persistence
-- [ ] exact StrategyPosition/ExitPlan validation
-- [ ] map only to technical Execution mechanisms
-- [ ] Execution does not invent trading policy
-- [ ] duplicate request idempotency
-- [ ] ambiguous result => reconciliation, no blind retry
-- [ ] separate P6 commit
+## P6 — typed Execution bridge — DONE
+- [x] EntryExecutionRequest finalized
+- [x] ExitExecutionRequest persistence
+- [x] exact StrategyPosition/ExitPlan validation
+- [x] map only to technical Execution mechanisms
+- [x] Execution does not invent trading policy
+- [x] duplicate request idempotency
+- [x] ambiguous result => reconciliation, no blind retry
+- [x] separate P6 commit
+
+## P6 evidence
+
+- EntryExecutionRequest имеет отдельный runtime type; старое ExecutionRequest оставлено только alias;
+- ExitExecutionRequest хранит exact StrategyPosition/ExitDecision/ExitPlan lineage;
+- request lifetime принадлежит exact ExitPlan.execution_policy.max_request_age_seconds;
+- accepted ExitDecision материализуется в immutable request; expired request блокируется до Exchange;
+- SET_STOP / SET_TP / SET_PROTECTION / SET_TRAILING / REDUCE / CLOSE имеют строгие technical mutation schemas;
+- неизвестные поля mutation не игнорируются, а fail-closed;
+- private runtime повторно сверяет exact StrategyPosition/account/exchange_position_key/positionIdx/direction/expiry;
+- новый strategy_exit path не использует legacy break_even/current_stop/protection_plan/default percentages;
+- duplicate request/dispatch idempotent;
+- invalid decision получает immutable execution_materialization_block и не starvation-ит очередь;
+- ambiguous post-mutation outcome -> StrategyPosition RECONCILIATION_REQUIRED + process mutation barrier;
+- P3..P6 combined PostgreSQL integration: 25 passed;
+- P6 pure/source tests: 23 passed;
+- affected regression: 107 passed;
+- full branch: 1364 passed / 35 skipped / 18 baseline stale-doc failed;
+- migration second apply: PASS;
+- NEW_DIAGNOSTICS = 0.
 
 ## P7 — Lifecycle Supervisor — TODO
 - [ ] activation -> plans -> Entry -> fill -> position -> Exit -> close -> economics

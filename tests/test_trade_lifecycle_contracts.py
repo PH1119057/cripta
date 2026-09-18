@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -120,6 +120,7 @@ def test_exit_request_preserves_exact_position_and_plan_lineage() -> None:
         decision=decision,
         position=pos,
         requested_at=NOW,
+        expires_at=NOW + timedelta(seconds=30),
     )
     assert request.strategy_position_id == "SP-1"
     assert request.exit_plan_fingerprint == "exit-fp"
@@ -148,6 +149,7 @@ def test_exit_request_rejects_cross_position_lineage() -> None:
             decision=bad,
             position=pos,
             requested_at=NOW,
+            expires_at=NOW + timedelta(seconds=30),
         )
 
 
@@ -157,3 +159,13 @@ def test_strategy_position_rejects_incomplete_identity() -> None:
     values["exit_plan_fingerprint"] = ""
     with pytest.raises(ValueError, match="exit_plan_fingerprint"):
         StrategyPosition(**values)
+
+
+def test_entry_execution_request_has_explicit_typed_runtime_name() -> None:
+    from bybit_workbench.universal_entry.contracts import (
+        EntryExecutionRequest,
+        ExecutionRequest,
+    )
+
+    assert EntryExecutionRequest.__name__ == "EntryExecutionRequest"
+    assert ExecutionRequest is EntryExecutionRequest

@@ -11,6 +11,7 @@ def test_trade_lifecycle_schema_declares_required_support_entities() -> None:
         "strategy_exit.exit_observations",
         "strategy_exit.shadow_evaluations",
         "strategy_exit.exit_decisions",
+        "strategy_exit.execution_materialization_blocks",
         "strategy_exit.execution_requests",
         "strategy_exit.execution_dispatches",
         "runtime.trade_lifecycle_events",
@@ -74,6 +75,13 @@ def test_p5_shadow_evidence_is_immutable_and_separate_from_execution_requests() 
     assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests" in SQL
 
 
+def test_p6_exit_execution_storage_has_lifetime_and_terminal_materialization_blocks() -> None:
+    assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_materialization_blocks" in SQL
+    assert "exit_execution_materialization_blocks_immutable" in SQL
+    assert "expires_at timestamptz NOT NULL" in SQL
+    assert "strategy_exit.execution_requests" in SQL
+
+
 def test_exit_storage_is_separate_from_entry_execution_storage() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS strategy_exit" in SQL
     assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests" in SQL
@@ -100,6 +108,7 @@ def test_runtime_role_cannot_delete_lifecycle_evidence() -> None:
         "strategy_exit.exit_observations",
         "strategy_exit.shadow_evaluations",
         "strategy_exit.exit_decisions",
+        "strategy_exit.execution_materialization_blocks",
         "strategy_exit.execution_requests",
         "strategy_exit.execution_dispatches",
     ):
