@@ -1,6 +1,6 @@
 # CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 2.0 · 2026-09-18
+**Версия:** 2.1 · 2026-09-18
 **Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
@@ -49,13 +49,20 @@ GitHub PH1119057/cripta:main
 
 ### 3.1 В начале нового чата проекта
 
-Прочитать только активный комплект:
+Для ChatGPT сначала прочитать:
 
-1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
-2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
-3. `docs/DOCUMENTATION_INDEX_RU.md`;
-4. `docs/CRIPTA_GLOSSARY_RU.md`;
-5. `docs/CURRENT_PROJECT_MAP_RU.md`.
+1. `docs/CHATGPT_INTERACTION_RULES_RU.md`.
+
+Затем прочитать активный стартовый комплект:
+
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
+3. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
+4. `docs/DOCUMENTATION_INDEX_RU.md`;
+5. `docs/CRIPTA_GLOSSARY_RU.md`;
+6. `docs/CURRENT_PROJECT_MAP_RU.md`.
+
+В Project Instructions ссылки на документы должны использовать устойчивое
+семейство имени, а не жёсткий version/UI suffix.
 
 ### 3.2 Перед архитектурно чувствительной работой
 

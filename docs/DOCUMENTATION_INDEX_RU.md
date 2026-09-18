@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.0  
+**Версия:** 2.1  
 **Дата:** 2026-09-18  
 **Статус:** канонический индекс документации
 
@@ -34,20 +34,25 @@ HARD_STOP=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-# 3. Семь файлов ChatGPT Project Source
+# 3. Восемь файлов ChatGPT Project Source
 
-Для ChatGPT Project Source используется ровно этот основной комплект:
+Для ChatGPT Project Source используется этот основной комплект:
 
-1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-3. `docs/DOCUMENTATION_INDEX_RU.md`
-4. `docs/CRIPTA_GLOSSARY_RU.md`
-5. `docs/CURRENT_PROJECT_MAP_RU.md`
-6. `docs/TRADING_CONTOUR_RU.md`
-7. `docs/OBSERVATION_ANALYTICS_RU.md`
+1. `docs/CHATGPT_INTERACTION_RULES_RU.md`
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
+3. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
+4. `docs/DOCUMENTATION_INDEX_RU.md`
+5. `docs/CRIPTA_GLOSSARY_RU.md`
+6. `docs/CURRENT_PROJECT_MAP_RU.md`
+7. `docs/TRADING_CONTOUR_RU.md`
+8. `docs/OBSERVATION_ANALYTICS_RU.md`
 
-Это оставляет свободные места Project Source для временно нужных владельцу
-дополнительных материалов.
+`CHATGPT_INTERACTION_RULES_RU.md` читается ChatGPT первым.
+
+Смысловые ссылки в Project Instructions используют семейство имени документа,
+а не жёсткий номер версии или UI-суффикс.
+
+Это оставляет свободные места Project Source для дополнительных материалов.
 
 # 4. AGENTS.md
 
@@ -58,13 +63,17 @@ OWNER_DECISION_REQUIRED=YES
 
 # 5. Обязательный pre-read нового чата
 
-Минимальный pre-read:
+Сначала прочитать:
 
-1. `../CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-2. `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-3. `DOCUMENTATION_INDEX_RU.md`
-4. `CRIPTA_GLOSSARY_RU.md`
-5. `CURRENT_PROJECT_MAP_RU.md`
+1. `CHATGPT_INTERACTION_RULES_RU.md`
+
+Затем минимальный проектный pre-read:
+
+2. `../CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
+3. `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
+4. `DOCUMENTATION_INDEX_RU.md`
+5. `CRIPTA_GLOSSARY_RU.md`
+6. `CURRENT_PROJECT_MAP_RU.md`
 
 Перед работой с торговым контуром дополнительно читать:
 - `TRADING_CONTOUR_RU.md`.
@@ -105,7 +114,7 @@ Analyst/research дополнительно читать:
 
 1. GitHub `main` обновляется;
 2. `/srv/cripta/source_checkout` синхронизируется и сверяется с `main`;
-3. создаётся пакет из семи файлов Project Source;
+3. создаётся пакет из восьми канонических файлов Project Source;
 4. владелец полностью заменяет старые Project Source;
 5. дополнительные временные источники добавляются только в свободные места и
    не получают статус канона автоматически.

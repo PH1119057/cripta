@@ -1,6 +1,8 @@
 # CRIPTA — bootstrap для исполнителя
 
-Перед любой работой по проекту читать только актуальный активный канон:
+Для ChatGPT первым читать `docs/CHATGPT_INTERACTION_RULES_RU.md`.
+
+Перед любой работой по проекту читать актуальный активный канон:
 
 1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
 2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
