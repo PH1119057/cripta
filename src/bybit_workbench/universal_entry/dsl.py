@@ -388,3 +388,42 @@ def evaluate_predicate(
             return elapsed < timedelta(seconds=seconds)
         raise UnsupportedOperatorError(f"UNSUPPORTED_TIMER_MODE:{mode}")
     raise UnsupportedOperatorError(f"UNSUPPORTED_OPERATOR:{op}")
+
+
+def evaluate_stateless_predicate(
+    node: PredicateNode,
+    *,
+    fact: MarketFactEnvelope,
+) -> bool:
+    """Evaluate the shared DSL without inventing state/touch/context semantics.
+
+    Universal Exit P5 uses this subset until an ExitPlan explicitly carries
+    persistent state and context-consumption contracts for stateful operators.
+    """
+
+    op = node.operator
+    params = node.params.to_dict()
+
+    if op is DslOperator.AND:
+        return all(evaluate_stateless_predicate(child, fact=fact) for child in node.children)
+    if op is DslOperator.OR:
+        return any(evaluate_stateless_predicate(child, fact=fact) for child in node.children)
+    if op is DslOperator.NOT:
+        if len(node.children) != 1:
+            raise ValueError("NOT requires exactly one child")
+        return not evaluate_stateless_predicate(node.children[0], fact=fact)
+    if op is DslOperator.COMPARE:
+        path = str(params.get("path") or "")
+        if path.startswith("sensor.") or path.startswith("context."):
+            raise UnsupportedOperatorError(
+                f"STATELESS_EXIT_PATH_REQUIRES_EXPLICIT_CONTEXT_CONTRACT:{path}"
+            )
+        left = _path_value(path, fact, {}, {}, {}, {})
+        if left is None:
+            return False
+        return _compare(left, str(params["comparator"]), params.get("value"))
+    if op in {DslOperator.BREAK, DslOperator.RETEST, DslOperator.RECLAIM}:
+        return fact.event_kind.upper() == op.value
+    raise UnsupportedOperatorError(
+        f"STATEFUL_EXIT_OPERATOR_REQUIRES_EXPLICIT_STATE_CONTRACT:{op.value}"
+    )

@@ -8,6 +8,68 @@ from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, TradeDirection
 
 
+class ExitEvaluationStatus(StrEnum):
+    NO_EXECUTABLE_EXIT_RULES = "NO_EXECUTABLE_EXIT_RULES"
+    NO_MATCH = "NO_MATCH"
+    DECISION_CREATED = "DECISION_CREATED"
+    BLOCKED = "BLOCKED"
+
+
+class ExitRepeatPolicy(StrEnum):
+    ONCE_PER_POSITION = "ONCE_PER_POSITION"
+    EACH_MATCH = "EACH_MATCH"
+
+
+@dataclass(frozen=True, slots=True)
+class ExitObservation:
+    observation_id: str
+    strategy_position_id: str
+    symbol: str
+    event_at: datetime
+    observed_at: datetime
+    received_at: datetime
+    event_kind: str
+    attributes: FrozenPolicy
+    source_refs: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for field in ("observation_id", "strategy_position_id", "symbol", "event_kind"):
+            if not str(getattr(self, field)).strip():
+                raise ValueError(f"ExitObservation requires {field}")
+        for field in ("event_at", "observed_at", "received_at"):
+            if getattr(self, field).tzinfo is None:
+                raise ValueError(f"ExitObservation.{field} must be timezone-aware")
+        if not self.source_refs or any(not str(ref).strip() for ref in self.source_refs):
+            raise ValueError("ExitObservation requires non-empty source_refs")
+
+
+@dataclass(frozen=True, slots=True)
+class ExitEvaluation:
+    evaluation_id: str
+    observation: ExitObservation
+    status: ExitEvaluationStatus
+    reason: str
+    matched_rule_ids: tuple[str, ...] = ()
+    decision: ExitDecision | None = None
+    selected_priority: int | None = None
+    repeat_policy: ExitRepeatPolicy | None = None
+
+    def __post_init__(self) -> None:
+        if not self.evaluation_id.strip():
+            raise ValueError("ExitEvaluation requires evaluation_id")
+        if self.status is ExitEvaluationStatus.DECISION_CREATED:
+            if self.decision is None:
+                raise ValueError("DECISION_CREATED evaluation requires decision")
+            if self.selected_priority is None or self.repeat_policy is None:
+                raise ValueError("DECISION_CREATED requires selected rule metadata")
+        elif (
+            self.decision is not None
+            or self.selected_priority is not None
+            or self.repeat_policy is not None
+        ):
+            raise ValueError("non-decision evaluation cannot carry selected rule metadata")
+
+
 class ExitActionKind(StrEnum):
     SET_STOP = "SET_STOP"
     SET_TP = "SET_TP"

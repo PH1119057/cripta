@@ -97,14 +97,33 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - [x] affected/full regression NEW_DIAGNOSTICS=0
 - [x] separate P4.1 commit
 
-## P5 — Universal Exit Engine shadow — TODO
-- [ ] exact StrategyPosition + exact ExitPlan input
-- [ ] no hidden H3/H9/percent defaults
-- [ ] typed rules and conflict semantics from ExitPlan
-- [ ] SET_STOP / SET_TP / SET_PROTECTION / SET_TRAILING / REDUCE / CLOSE
-- [ ] unsupported action fail-closed
-- [ ] shadow persistence only; no exchange mutation
-- [ ] separate P5 commit
+## P5 — Universal Exit Engine shadow — DONE
+- [x] exact StrategyPosition + exact ExitPlan input
+- [x] no hidden H3/H9/percent defaults
+- [x] typed rules and conflict semantics from ExitPlan
+- [x] SET_STOP / SET_TP / SET_PROTECTION / SET_TRAILING / REDUCE / CLOSE
+- [x] unsupported action fail-closed
+- [x] shadow persistence only; no exchange mutation
+- [x] separate P5 commit
+
+## P5 evidence
+
+- UniversalExitEngine принимает только exact StrategyPosition + exact ExitPlan + causal ExitObservation;
+- ExitObservation хранит отдельные event_at / observed_at / received_at и exact source_refs;
+- compatibility ExitPlan без explicit rules -> NO_EXECUTABLE_EXIT_RULES;
+- supported actions: SET_STOP / SET_TP / SET_PROTECTION / SET_TRAILING / REDUCE / CLOSE;
+- action mutation передаётся дословно из ExitPlan; Engine не добавляет уровни/проценты/defaults;
+- conflict_policy обязателен и явно задаёт PRIORITY + HIGHER_WINS/LOWER_WINS + FAIL_CLOSED tie;
+- unsupported action / unsupported stateful operator / missing required fact / unknown context contract -> BLOCKED;
+- ONCE_PER_POSITION использует durable prior ExitDecision evidence;
+- shadow persistence: exit_observations + shadow_evaluations + optional exit_decisions;
+- P5 не создаёт strategy_exit.execution_requests и не пишет runtime.trade_commands;
+- P3 + P4 + P4.1 + P5 PostgreSQL integration: 20 passed;
+- P5 unit: 19 passed;
+- affected regression: 136 passed;
+- full branch: 1344 passed / 30 skipped / 18 baseline stale-doc failed;
+- migration second apply: PASS;
+- NEW_DIAGNOSTICS = 0.
 
 ## P6 — typed Execution bridge — TODO
 - [ ] EntryExecutionRequest finalized

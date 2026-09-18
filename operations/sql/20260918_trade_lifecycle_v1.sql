@@ -336,6 +336,29 @@ CREATE SCHEMA IF NOT EXISTS strategy_exit AUTHORIZATION postgres;
 REVOKE ALL ON SCHEMA strategy_exit FROM PUBLIC;
 GRANT USAGE ON SCHEMA strategy_exit TO cripta;
 
+CREATE TABLE IF NOT EXISTS strategy_exit.exit_observations (
+    observation_id text PRIMARY KEY,
+    strategy_position_id text NOT NULL
+        REFERENCES runtime.position_ownership(position_id),
+    exit_plan_fingerprint text NOT NULL
+        REFERENCES strategy_entry.exit_plans(exit_plan_fingerprint),
+    symbol text NOT NULL,
+    event_kind text NOT NULL,
+    event_at timestamptz NOT NULL,
+    observed_at timestamptz NOT NULL,
+    received_at timestamptz NOT NULL,
+    attributes jsonb NOT NULL,
+    source_refs jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (jsonb_typeof(attributes)='object'),
+    CHECK (jsonb_typeof(source_refs)='array'),
+    UNIQUE (observation_id,strategy_position_id,exit_plan_fingerprint)
+);
+
+ALTER TABLE strategy_exit.exit_observations
+    ADD COLUMN IF NOT EXISTS event_at timestamptz,
+    ADD COLUMN IF NOT EXISTS received_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS strategy_exit.exit_decisions (
     exit_decision_id text PRIMARY KEY,
     strategy_position_id text NOT NULL
@@ -344,7 +367,10 @@ CREATE TABLE IF NOT EXISTS strategy_exit.exit_decisions (
     strategy_version text NOT NULL,
     strategy_config_fingerprint text NOT NULL,
     exit_plan_fingerprint text NOT NULL,
+    observation_id text NOT NULL,
     rule_id text NOT NULL,
+    rule_priority integer NOT NULL,
+    repeat_policy text NOT NULL,
     action_kind text NOT NULL,
     requested_mutation jsonb NOT NULL,
     source_refs jsonb NOT NULL,
@@ -353,6 +379,8 @@ CREATE TABLE IF NOT EXISTS strategy_exit.exit_decisions (
     CHECK (action_kind IN (
         'SET_STOP','SET_TP','SET_PROTECTION','SET_TRAILING','REDUCE','CLOSE'
     )),
+    CONSTRAINT exit_decisions_repeat_policy_check
+        CHECK (repeat_policy IN ('ONCE_PER_POSITION','EACH_MATCH')),
     CHECK (jsonb_typeof(requested_mutation)='object'),
     CHECK (jsonb_typeof(source_refs)='array'),
     UNIQUE (
@@ -363,7 +391,74 @@ CREATE TABLE IF NOT EXISTS strategy_exit.exit_decisions (
         exit_plan_fingerprint,strategy_id,strategy_version,strategy_config_fingerprint
     ) REFERENCES strategy_entry.exit_plans(
         exit_plan_fingerprint,strategy_id,strategy_version,strategy_config_fingerprint
-    )
+    ),
+    CONSTRAINT exit_decisions_observation_fkey
+        FOREIGN KEY (
+            observation_id,strategy_position_id,exit_plan_fingerprint
+        ) REFERENCES strategy_exit.exit_observations(
+            observation_id,strategy_position_id,exit_plan_fingerprint
+        )
+);
+
+ALTER TABLE strategy_exit.exit_decisions
+    ADD COLUMN IF NOT EXISTS observation_id text,
+    ADD COLUMN IF NOT EXISTS rule_priority integer,
+    ADD COLUMN IF NOT EXISTS repeat_policy text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='exit_decisions_observation_fkey'
+          AND conrelid='strategy_exit.exit_decisions'::regclass
+    ) THEN
+        ALTER TABLE strategy_exit.exit_decisions
+            ADD CONSTRAINT exit_decisions_observation_fkey
+            FOREIGN KEY (observation_id,strategy_position_id,exit_plan_fingerprint)
+            REFERENCES strategy_exit.exit_observations(
+                observation_id,strategy_position_id,exit_plan_fingerprint
+            ) NOT VALID;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='exit_decisions_repeat_policy_check'
+          AND conrelid='strategy_exit.exit_decisions'::regclass
+    ) THEN
+        ALTER TABLE strategy_exit.exit_decisions
+            ADD CONSTRAINT exit_decisions_repeat_policy_check
+            CHECK (
+                repeat_policy IS NULL
+                OR repeat_policy IN ('ONCE_PER_POSITION','EACH_MATCH')
+            ) NOT VALID;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS strategy_exit.shadow_evaluations (
+    evaluation_id text PRIMARY KEY,
+    observation_id text NOT NULL,
+    strategy_position_id text NOT NULL,
+    exit_plan_fingerprint text NOT NULL,
+    status text NOT NULL,
+    reason text NOT NULL,
+    matched_rule_ids jsonb NOT NULL,
+    exit_decision_id text,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (status IN (
+        'NO_EXECUTABLE_EXIT_RULES','NO_MATCH','DECISION_CREATED','BLOCKED'
+    )),
+    CHECK (jsonb_typeof(matched_rule_ids)='array'),
+    CHECK (
+        (status='DECISION_CREATED' AND exit_decision_id IS NOT NULL)
+        OR
+        (status<>'DECISION_CREATED' AND exit_decision_id IS NULL)
+    ),
+    FOREIGN KEY (
+        observation_id,strategy_position_id,exit_plan_fingerprint
+    ) REFERENCES strategy_exit.exit_observations(
+        observation_id,strategy_position_id,exit_plan_fingerprint
+    ),
+    FOREIGN KEY (exit_decision_id)
+        REFERENCES strategy_exit.exit_decisions(exit_decision_id)
 );
 
 CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests (
@@ -416,6 +511,16 @@ CREATE TABLE IF NOT EXISTS strategy_exit.execution_dispatches (
         (state='BLOCKED' AND command_id IS NULL)
     )
 );
+
+DROP TRIGGER IF EXISTS exit_observations_immutable ON strategy_exit.exit_observations;
+CREATE TRIGGER exit_observations_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.exit_observations
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+DROP TRIGGER IF EXISTS exit_shadow_evaluations_immutable ON strategy_exit.shadow_evaluations;
+CREATE TRIGGER exit_shadow_evaluations_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.shadow_evaluations
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
 
 DROP TRIGGER IF EXISTS exit_decisions_immutable ON strategy_exit.exit_decisions;
 CREATE TRIGGER exit_decisions_immutable
@@ -551,12 +656,15 @@ GRANT SELECT,INSERT,UPDATE ON runtime.capital_reservations TO cripta;
 GRANT SELECT,INSERT ON runtime.trade_lifecycle_events TO cripta;
 GRANT SELECT,INSERT,UPDATE ON runtime.lifecycle_faults TO cripta;
 
-REVOKE ALL ON strategy_exit.exit_decisions,
+REVOKE ALL ON strategy_exit.exit_observations,
+    strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM PUBLIC;
-GRANT SELECT,INSERT ON strategy_exit.exit_decisions,
+GRANT SELECT,INSERT ON strategy_exit.exit_observations,
+    strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches TO cripta;
 
-REVOKE UPDATE,DELETE ON strategy_exit.exit_decisions,
+REVOKE UPDATE,DELETE ON strategy_exit.exit_observations,
+    strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM cripta;
 REVOKE DELETE ON runtime.plan_consumptions,runtime.capital_reservations,
     runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM cripta;

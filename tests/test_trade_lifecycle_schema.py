@@ -8,6 +8,8 @@ def test_trade_lifecycle_schema_declares_required_support_entities() -> None:
     required = (
         "runtime.plan_consumptions",
         "runtime.capital_reservations",
+        "strategy_exit.exit_observations",
+        "strategy_exit.shadow_evaluations",
         "strategy_exit.exit_decisions",
         "strategy_exit.execution_requests",
         "strategy_exit.execution_dispatches",
@@ -51,6 +53,27 @@ def test_capital_reservation_has_strategy_owned_pre_dispatch_lease() -> None:
     assert "ix_capital_reservations_reserved_expiry" in SQL
 
 
+def test_p5_exit_shadow_storage_preserves_causal_observation_and_rule_identity() -> None:
+    for token in (
+        "event_at timestamptz NOT NULL",
+        "observed_at timestamptz NOT NULL",
+        "received_at timestamptz NOT NULL",
+        "observation_id text NOT NULL",
+        "rule_priority integer NOT NULL",
+        "repeat_policy text NOT NULL",
+        "NO_EXECUTABLE_EXIT_RULES",
+        "DECISION_CREATED",
+    ):
+        assert token in SQL
+
+
+def test_p5_shadow_evidence_is_immutable_and_separate_from_execution_requests() -> None:
+    assert "exit_observations_immutable" in SQL
+    assert "exit_shadow_evaluations_immutable" in SQL
+    assert "CREATE TABLE IF NOT EXISTS strategy_exit.shadow_evaluations" in SQL
+    assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests" in SQL
+
+
 def test_exit_storage_is_separate_from_entry_execution_storage() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS strategy_exit" in SQL
     assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests" in SQL
@@ -69,4 +92,15 @@ def test_lifecycle_supervisor_tokens_are_storage_contract() -> None:
 
 def test_runtime_role_cannot_delete_lifecycle_evidence() -> None:
     assert "REVOKE DELETE ON runtime.plan_consumptions" in SQL
-    assert "REVOKE UPDATE,DELETE ON strategy_exit.exit_decisions" in SQL
+    immutable_revoke = SQL[
+        SQL.index("REVOKE UPDATE,DELETE ON strategy_exit.exit_observations")
+        : SQL.index("REVOKE DELETE ON runtime.plan_consumptions")
+    ]
+    for table in (
+        "strategy_exit.exit_observations",
+        "strategy_exit.shadow_evaluations",
+        "strategy_exit.exit_decisions",
+        "strategy_exit.execution_requests",
+        "strategy_exit.execution_dispatches",
+    ):
+        assert table in immutable_revoke
