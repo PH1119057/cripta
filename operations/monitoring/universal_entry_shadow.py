@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -23,6 +23,7 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from bybit_workbench.capital_reservation import PostgresCapitalReservationPort
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
 from bybit_workbench.universal_entry import (
@@ -1100,10 +1101,14 @@ def _observer_intervals(bundles: tuple[object, ...]) -> tuple[str, ...]:
 
 
 def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
     rows = connection.execute(
         """SELECT a.activation_id,a.strategy_id,a.strategy_version,
                   a.strategy_config_fingerprint,a.updated_at,
-                  ep.entry_plan_fingerprint,xp.exit_plan_fingerprint
+                  ep.entry_plan_fingerprint,xp.exit_plan_fingerprint,
+                  coalesce(p.enabled,false),coalesce(p.updated_at::text,'')
              FROM strategy_entry.strategy_activations a
              JOIN strategy_entry.entry_plans ep
                ON ep.strategy_id=a.strategy_id
@@ -1113,10 +1118,45 @@ def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
                ON xp.strategy_id=a.strategy_id
               AND xp.strategy_version=a.strategy_version
               AND xp.strategy_config_fingerprint=a.strategy_config_fingerprint
+             LEFT JOIN strategy_entry.execution_permissions p
+               ON p.strategy_id=a.strategy_id
+              AND p.strategy_version=a.strategy_version
+              AND p.strategy_config_fingerprint=a.strategy_config_fingerprint
             WHERE a.enabled=true
             ORDER BY a.activation_id,ep.entry_plan_fingerprint,xp.exit_plan_fingerprint"""
     ).fetchall()
-    return tuple(tuple(str(item) for item in row) for row in rows)
+    gate_enabled = bool(gate and gate[0])
+    return (
+        ("MAINNET_GATE", str(gate_enabled)),
+        *(tuple(str(item) for item in row) for row in rows),
+    )
+
+
+def _real_execution_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+) -> frozenset[str]:
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    if not gate or not bool(gate[0]):
+        return frozenset()
+    rows = connection.execute(
+        """SELECT strategy_id,strategy_version,strategy_config_fingerprint
+             FROM strategy_entry.execution_permissions
+            WHERE enabled=true AND enabled_at IS NOT NULL"""
+    ).fetchall()
+    allowed = {tuple(str(value) for value in row) for row in rows}
+    return frozenset(
+        cast(Any, bundle).activation.activation_id
+        for bundle in bundles
+        if (
+            cast(Any, bundle).card.strategy_id,
+            cast(Any, bundle).card.strategy_version,
+            cast(Any, bundle).card.strategy_config_fingerprint,
+        )
+        in allowed
+    )
 
 
 def _observer_objective_inputs(
@@ -1261,6 +1301,12 @@ def _run_observer_epoch(
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     paper = PaperTradeRuntime(connection)
+    reservation_required_for = _real_execution_activation_ids(connection, bundles)
+    capital_reservation_port = (
+        PostgresCapitalReservationPort(connection)
+        if reservation_required_for
+        else None
+    )
     bundle_by_entry_plan = {
         cast(Any, item).entry_plan.entry_plan_fingerprint: cast(Any, item) for item in bundles
     }
@@ -1581,26 +1627,32 @@ def _run_observer_epoch(
             fact.observed_at,
             "multi-Strategy observer causal transport is continuous",
         )
-        evaluations = engine.process(
-            fact,
-            contexts=contexts,
-            capacity=capacity,
-            technical_readiness=readiness,
-            account_ref="BYBIT:UNIFIED",
-            allow_new_signals=sensor_ready(fact.observed_at),
+        evaluation_transaction = (
+            connection.transaction() if reservation_required_for else nullcontext()
         )
-        facts_received += 1
-        for evaluation in evaluations:
-            store.record_evaluation(evaluation, provenance=provenance)
-            if evaluation.execution_request is not None:
-                bundle = bundle_by_entry_plan.get(
-                    evaluation.execution_request.entry_plan_fingerprint
-                )
-                if bundle is None:
-                    raise RuntimeError("paper runtime exact EntryPlan bundle is missing")
-                paper.create_order(evaluation, bundle, now=fact.observed_at)
-            evaluations_count += 1
-            signals_count += 1
+        with evaluation_transaction:
+            evaluations = engine.process(
+                fact,
+                contexts=contexts,
+                capacity=capacity,
+                technical_readiness=readiness,
+                account_ref="BYBIT:UNIFIED",
+                capital_reservation_port=capital_reservation_port,
+                capital_reservation_required_for=reservation_required_for,
+                allow_new_signals=sensor_ready(fact.observed_at),
+            )
+            facts_received += 1
+            for evaluation in evaluations:
+                store.record_evaluation(evaluation, provenance=provenance)
+                if evaluation.execution_request is not None:
+                    bundle = bundle_by_entry_plan.get(
+                        evaluation.execution_request.entry_plan_fingerprint
+                    )
+                    if bundle is None:
+                        raise RuntimeError("paper runtime exact EntryPlan bundle is missing")
+                    paper.create_order(evaluation, bundle, now=fact.observed_at)
+                evaluations_count += 1
+                signals_count += 1
 
     try:
         trade_mirror_thread.start()

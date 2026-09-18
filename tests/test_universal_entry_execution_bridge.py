@@ -29,6 +29,8 @@ def _request(*, direction: TradeDirection = TradeDirection.LONG) -> ExecutionReq
         strategy_version="2.0",
         strategy_config_fingerprint="strategy-fp",
         entry_plan_fingerprint="entry-fp",
+        exit_plan_fingerprint="exit-fp",
+        capital_reservation_id="cap-test-1",
         symbol="UNIUSDT",
         direction=direction,
         requested_at=NOW,
@@ -161,6 +163,29 @@ def test_identity_mismatch_is_fail_closed() -> None:
     assert caught.value.code is ExecutionBridgeBlockCode.IDENTITY_MISMATCH
 
 
+def test_missing_capital_reservation_is_fail_closed() -> None:
+    request = _request()
+    request = ExecutionRequest(
+        execution_request_id=request.execution_request_id,
+        strategy_attempt_id=request.strategy_attempt_id,
+        entry_decision_id=request.entry_decision_id,
+        signal_id=request.signal_id,
+        strategy_id=request.strategy_id,
+        strategy_version=request.strategy_version,
+        strategy_config_fingerprint=request.strategy_config_fingerprint,
+        entry_plan_fingerprint=request.entry_plan_fingerprint,
+        symbol=request.symbol,
+        direction=request.direction,
+        requested_at=request.requested_at,
+        payload=request.payload,
+        exit_plan_fingerprint=request.exit_plan_fingerprint,
+        capital_reservation_id=None,
+    )
+    with pytest.raises(ExecutionBridgeBlocked) as caught:
+        prepare_runtime_entry_command(request, _bundle(), now=NOW)
+    assert caught.value.code is ExecutionBridgeBlockCode.CAPITAL_RESERVATION_MISSING
+
+
 def test_missing_reference_path_is_not_zero_or_neutral() -> None:
     bundle = _bundle()
     card = dict(bundle.strategy_card)
@@ -187,6 +212,8 @@ def test_current_v1_card_cannot_use_legacy_trade_settings_as_hidden_defaults() -
         strategy_version=compatibility.card.strategy_version,
         strategy_config_fingerprint=compatibility.card.strategy_config_fingerprint,
         entry_plan_fingerprint=entry_plan.entry_plan_fingerprint,
+        exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
+        capital_reservation_id="cap-v1-test",
         symbol="UNIUSDT",
         direction=TradeDirection.LONG,
         requested_at=NOW,
@@ -389,6 +416,8 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
         strategy_version=card.strategy_version,
         strategy_config_fingerprint=card.strategy_config_fingerprint,
         entry_plan_fingerprint=entry_plan.entry_plan_fingerprint,
+        exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
+        capital_reservation_id="cap-owner-test",
         symbol="UNIUSDT",
         direction=TradeDirection.LONG,
         requested_at=NOW,

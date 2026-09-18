@@ -225,8 +225,9 @@ class StrategyEntryStore:
                            execution_request_id,strategy_attempt_id,entry_decision_id,
                            signal_id,strategy_id,strategy_version,
                            strategy_config_fingerprint,entry_plan_fingerprint,
-                           symbol,direction,requested_at,payload
-                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                           symbol,direction,requested_at,payload,
+                           exit_plan_fingerprint,capital_reservation_id
+                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
                     (
                         request.execution_request_id,
                         request.strategy_attempt_id,
@@ -240,6 +241,8 @@ class StrategyEntryStore:
                         request.direction.value,
                         request.requested_at,
                         request.payload.payload_json,
+                        request.exit_plan_fingerprint,
+                        request.capital_reservation_id,
                     ),
                 )
             for notice in evaluation.notifications:
@@ -360,8 +363,8 @@ class StrategyEntryStore:
         self._connection.execute(
             """INSERT INTO strategy_entry.entry_decisions(
                    entry_decision_id,strategy_attempt_id,signal_id,decision_code,
-                   reason,decided_at,capacity_snapshot_id,payload
-               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                   reason,decided_at,capacity_snapshot_id,capital_reservation_id,payload
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
             (
                 decision.entry_decision_id,
                 decision.strategy_attempt_id,
@@ -370,6 +373,7 @@ class StrategyEntryStore:
                 decision.reason,
                 decision.decided_at,
                 decision.capacity_snapshot_id,
+                decision.capital_reservation_id,
                 _json(decision),
             ),
         )

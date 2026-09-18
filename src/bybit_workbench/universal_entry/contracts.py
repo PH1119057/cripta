@@ -556,6 +556,7 @@ class EntryDecision:
     reason: str
     decided_at: datetime
     capacity_snapshot_id: str | None = None
+    capital_reservation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,6 +573,12 @@ class ExecutionRequest:
     direction: TradeDirection
     requested_at: datetime
     payload: FrozenPolicy
+    exit_plan_fingerprint: str | None = None
+    capital_reservation_id: str | None = None
+
+
+# Backward-compatible name for the historically Entry-only request contract.
+EntryExecutionRequest = ExecutionRequest
 
 
 @dataclass(frozen=True, slots=True)

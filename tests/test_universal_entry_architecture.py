@@ -8,6 +8,12 @@ from typing import Any
 
 import pytest
 
+from bybit_workbench.capital_reservation import (
+    CapitalReservation,
+    CapitalReservationRequest,
+    CapitalReservationState,
+    InsufficientCapital,
+)
 from bybit_workbench.universal_entry import (
     ActivePlanRegistry,
     CandidateCooldown,
@@ -699,6 +705,105 @@ def test_capacity_insufficient_is_attempt_reason_not_strategy_selection() -> Non
     assert result[0].decision.code is EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
     assert result[0].execution_request is None
     assert result[0].notifications[0].available_amount == Decimal("20")
+
+
+def test_real_entry_without_reservation_port_is_operationally_blocked() -> None:
+    card = make_card(
+        "live-no-port",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+    )
+    _, engine = setup_engine(card)
+    capacity = TradingCapacitySnapshot(
+        "cap-live-no-port",
+        NOW,
+        Decimal("10"),
+        DataQuality.HIGH,
+        "exchange:test",
+    )
+    result = evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        account_ref="BYBIT:UNIFIED",
+        capital_reservation_required_for=frozenset({"act-0"}),
+    )
+    assert result[0].decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+    assert result[0].decision.capital_reservation_id is None
+    assert result[0].execution_request is None
+
+
+def test_failed_atomic_reservation_becomes_insufficient_available_funds() -> None:
+    class RejectingReservationPort:
+        def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
+            raise InsufficientCapital(request.requested_amount, Decimal("0"))
+
+    card = make_card(
+        "live-loser",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+    )
+    _, engine = setup_engine(card)
+    capacity = TradingCapacitySnapshot(
+        "cap-live-race",
+        NOW,
+        Decimal("10"),
+        DataQuality.HIGH,
+        "exchange:test",
+    )
+    result = evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        account_ref="BYBIT:UNIFIED",
+        capital_reservation_port=RejectingReservationPort(),
+        capital_reservation_required_for=frozenset({"act-0"}),
+    )
+    assert result[0].decision.code is EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
+    assert result[0].decision.capital_reservation_id is None
+    assert result[0].execution_request is None
+
+
+def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
+    class AcceptingReservationPort:
+        def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
+            return CapitalReservation(
+                reservation_id="cap-reserved-test",
+                account_ref=request.account_ref,
+                strategy_attempt_id=request.strategy_attempt_id,
+                requested_amount=request.requested_amount,
+                amount_currency=request.amount_currency,
+                capacity_snapshot_id=request.capacity_snapshot_id,
+                state=CapitalReservationState.RESERVED,
+                created_at=request.requested_at,
+                updated_at=request.requested_at,
+            )
+
+    card = make_card(
+        "live-winner",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+    )
+    registry, engine = setup_engine(card)
+    capacity = TradingCapacitySnapshot(
+        "cap-live-success",
+        NOW,
+        Decimal("10"),
+        DataQuality.HIGH,
+        "exchange:test",
+    )
+    result = evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        account_ref="BYBIT:UNIFIED",
+        capital_reservation_port=AcceptingReservationPort(),
+        capital_reservation_required_for=frozenset({"act-0"}),
+    )
+    item = result[0]
+    assert item.decision.code is EntryDecisionCode.ACCEPTED
+    assert item.decision.capital_reservation_id == "cap-reserved-test"
+    assert item.execution_request is not None
+    assert item.execution_request.capital_reservation_id == "cap-reserved-test"
+    exact_exit = registry.exact_plan_pair("act-0")[1]
+    assert item.execution_request.exit_plan_fingerprint == exact_exit.exit_plan_fingerprint
 
 
 def test_capacity_quality_threshold_is_plan_data_not_engine_default() -> None:

@@ -59,6 +59,14 @@ def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
         direction=TradeDirection(str(row["direction"])),
         requested_at=requested_at.astimezone(UTC),
         payload=FrozenPolicy.from_mapping(_mapping(row["payload"], "execution request payload")),
+        exit_plan_fingerprint=(
+            None if row.get("exit_plan_fingerprint") is None
+            else str(row["exit_plan_fingerprint"])
+        ),
+        capital_reservation_id=(
+            None if row.get("capital_reservation_id") is None
+            else str(row["capital_reservation_id"])
+        ),
     )
 
 
@@ -68,7 +76,9 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
                   a.strategy_id AS activation_strategy_id,
                   a.strategy_version AS activation_strategy_version,
                   a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
-                  p.execution_permission_id,p.enabled_at AS execution_enabled_at
+                  p.execution_permission_id,p.enabled_at AS execution_enabled_at,
+                  c.state AS capital_reservation_state,
+                  c.account_ref AS capital_reservation_account_ref
              FROM strategy_entry.execution_requests r
              JOIN strategy_entry.strategy_attempts t
                ON t.strategy_attempt_id=r.strategy_attempt_id
@@ -83,6 +93,9 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
               AND p.enabled=true
               AND p.enabled_at IS NOT NULL
               AND r.requested_at >= p.enabled_at
+             LEFT JOIN runtime.capital_reservations c
+               ON c.reservation_id=r.capital_reservation_id
+              AND c.strategy_attempt_id=r.strategy_attempt_id
             WHERE NOT EXISTS (
                   SELECT 1 FROM strategy_entry.execution_dispatches d
                    WHERE d.execution_request_id=r.execution_request_id
@@ -117,15 +130,18 @@ def _policy_bundle(
     ).fetchone()
     if entry is None:
         raise RuntimeError("exact EntryPlan is missing")
-    exits = connection.execute(
+    exit_plan_fingerprint = str(row.get("exit_plan_fingerprint") or "")
+    if not exit_plan_fingerprint:
+        raise RuntimeError("EntryExecutionRequest exact ExitPlan fingerprint is missing")
+    exit_row = connection.execute(
         """SELECT plan_json FROM strategy_entry.exit_plans
-            WHERE strategy_id=%s AND strategy_version=%s
-              AND strategy_config_fingerprint=%s
-            ORDER BY exit_plan_fingerprint""",
-        identity,
-    ).fetchall()
-    if len(exits) != 1:
-        raise RuntimeError(f"exact Strategy version must have one ExitPlan, found {len(exits)}")
+            WHERE exit_plan_fingerprint=%s
+              AND strategy_id=%s AND strategy_version=%s
+              AND strategy_config_fingerprint=%s""",
+        (exit_plan_fingerprint, *identity),
+    ).fetchone()
+    if exit_row is None:
+        raise RuntimeError("exact EntryExecutionRequest ExitPlan is missing")
     activation: dict[str, object] = {
         "activation_id": str(row["activation_id"]),
         "enabled": bool(row["activation_enabled"]),
@@ -136,7 +152,7 @@ def _policy_bundle(
     return BridgePolicyBundle(
         strategy_card=_mapping(card["card_json"], "StrategyCard"),
         entry_plan=_mapping(entry["plan_json"], "EntryPlan"),
-        exit_plan=_mapping(exits[0]["plan_json"], "ExitPlan"),
+        exit_plan=_mapping(exit_row["plan_json"], "ExitPlan"),
         activation=activation,
     )
 
@@ -160,8 +176,9 @@ def _record_blocked(
                dispatch_id,execution_request_id,command_id,state,reason,
                strategy_attempt_id,entry_decision_id,signal_id,
                strategy_id,strategy_version,strategy_config_fingerprint,
-               entry_plan_fingerprint,exit_plan_fingerprint,payload
-           ) VALUES(%s,%s,NULL,'BLOCKED',%s,%s,%s,%s,%s,%s,%s,%s,NULL,%s::jsonb)
+               entry_plan_fingerprint,exit_plan_fingerprint,payload,
+               capital_reservation_id
+           ) VALUES(%s,%s,NULL,'BLOCKED',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
            ON CONFLICT(execution_request_id) DO NOTHING""",
         (
             _dispatch_id(request.execution_request_id, "BLOCKED"),
@@ -174,7 +191,9 @@ def _record_blocked(
             request.strategy_version,
             request.strategy_config_fingerprint,
             request.entry_plan_fingerprint,
+            request.exit_plan_fingerprint,
             canonical_json(payload),
+            request.capital_reservation_id,
         ),
     )
 
@@ -214,9 +233,10 @@ def _publish_command(
                dispatch_id,execution_request_id,command_id,state,reason,
                strategy_attempt_id,entry_decision_id,signal_id,
                strategy_id,strategy_version,strategy_config_fingerprint,
-               entry_plan_fingerprint,exit_plan_fingerprint,payload
-           ) VALUES(%s,%s,%s,'DISPATCHED','prepared exact Universal ExecutionRequest',
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+               entry_plan_fingerprint,exit_plan_fingerprint,payload,
+               capital_reservation_id
+           ) VALUES(%s,%s,%s,'DISPATCHED','prepared exact Universal EntryExecutionRequest',
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
            ON CONFLICT(execution_request_id) DO NOTHING""",
         (
             _dispatch_id(prepared.execution_request_id, "DISPATCHED"),
@@ -231,8 +251,17 @@ def _publish_command(
             prepared.entry_plan_fingerprint,
             prepared.exit_plan_fingerprint,
             canonical_json(prepared.payload),
+            prepared.capital_reservation_id,
         ),
     )
+    updated = connection.execute(
+        """UPDATE runtime.capital_reservations
+              SET state='DISPATCHED'
+            WHERE reservation_id=%s AND state='RESERVED'""",
+        (prepared.capital_reservation_id,),
+    )
+    if updated.rowcount != 1:
+        raise RuntimeError("atomic capital reservation is not RESERVED at dispatch")
 
 
 def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
@@ -250,6 +279,22 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     if row is None:
         return "NO_REQUEST"
     request = _request_from_row(row)
+    reservation_state = row.get("capital_reservation_state")
+    if request.capital_reservation_id is None or reservation_state != "RESERVED":
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason=(
+                    "CAPITAL_RESERVATION_INVALID:"
+                    f"{request.capital_reservation_id}:{reservation_state}"
+                ),
+                payload={
+                    "capital_reservation_id": request.capital_reservation_id,
+                    "capital_reservation_state": reservation_state,
+                },
+            )
+        return "BLOCKED:CAPITAL_RESERVATION_INVALID"
     try:
         bundle = _policy_bundle(connection, row)
         prepared = prepare_runtime_entry_command(request, bundle, now=current)

@@ -18,6 +18,7 @@ class ExecutionBridgeBlockCode(StrEnum):
     POLICY_UNSUPPORTED = "POLICY_UNSUPPORTED"
     REQUEST_EXPIRED = "REQUEST_EXPIRED"
     REFERENCE_PRICE_MISSING = "REFERENCE_PRICE_MISSING"
+    CAPITAL_RESERVATION_MISSING = "CAPITAL_RESERVATION_MISSING"
 
 
 class ExecutionBridgeBlocked(ValueError):
@@ -39,6 +40,7 @@ class PreparedRuntimeEntryCommand:
     strategy_config_fingerprint: str
     entry_plan_fingerprint: str
     exit_plan_fingerprint: str
+    capital_reservation_id: str
     strategy_activation_id: str
     symbol: str
     direction: TradeDirection
@@ -184,7 +186,19 @@ def _validate_policy_identity(
             ExecutionBridgeBlockCode.ACTIVATION_DISABLED,
             "exact StrategyActivation is disabled",
         )
-    _require_text(exit_plan, "exit_plan_fingerprint", "ExitPlan")
+    exit_plan_fingerprint = _require_text(
+        exit_plan, "exit_plan_fingerprint", "ExitPlan"
+    )
+    if request.exit_plan_fingerprint != exit_plan_fingerprint:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.IDENTITY_MISMATCH,
+            "ExitPlan fingerprint does not match EntryExecutionRequest",
+        )
+    if not request.capital_reservation_id:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.CAPITAL_RESERVATION_MISSING,
+            "real EntryExecutionRequest requires atomic capital reservation",
+        )
     return activation_id, card, entry, exit_plan, activation
 
 
@@ -205,6 +219,12 @@ def prepare_runtime_entry_command(
     activation_id, card, entry_plan, exit_plan, _activation = _validate_policy_identity(
         request, bundle
     )
+    capital_reservation_id = request.capital_reservation_id
+    if not capital_reservation_id:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.CAPITAL_RESERVATION_MISSING,
+            "real EntryExecutionRequest requires atomic capital reservation",
+        )
 
     entry_policy = _unwrap_policy(card.get("entry_policy"), "StrategyCard.entry_policy")
     execution_policy = _mapping(
@@ -352,6 +372,7 @@ def prepare_runtime_entry_command(
         "strategy_config_fingerprint": request.strategy_config_fingerprint,
         "entry_plan_fingerprint": request.entry_plan_fingerprint,
         "exit_plan_fingerprint": exit_fp,
+        "capital_reservation_id": capital_reservation_id,
         "strategy_activation_id": activation_id,
         "calculated_entry_price": signal_attributes.get("calculated_entry_price"),
         "entry_reference_source": signal_attributes.get("entry_reference_source"),
@@ -390,6 +411,7 @@ def prepare_runtime_entry_command(
         strategy_config_fingerprint=request.strategy_config_fingerprint,
         entry_plan_fingerprint=request.entry_plan_fingerprint,
         exit_plan_fingerprint=exit_fp,
+        capital_reservation_id=capital_reservation_id,
         strategy_activation_id=activation_id,
         symbol=request.symbol,
         direction=request.direction,

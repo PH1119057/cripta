@@ -179,12 +179,16 @@ CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
     strategy_attempt_id text NOT NULL UNIQUE,
     requested_amount numeric NOT NULL,
     amount_currency text NOT NULL,
-    capacity_snapshot_id text,
+    capacity_snapshot_id text NOT NULL,
+    capacity_observed_at timestamptz NOT NULL,
+    capacity_available_at_reservation numeric NOT NULL,
     state text NOT NULL,
     exchange_commitment_ref text,
+    exchange_commitment_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     CHECK (requested_amount > 0),
+    CHECK (capacity_available_at_reservation >= 0),
     CHECK (amount_currency <> ''),
     CHECK (state IN (
         'RESERVED',
@@ -200,7 +204,7 @@ CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
     ) REFERENCES strategy_entry.strategy_attempts(
         strategy_attempt_id,signal_id,strategy_id,strategy_version,
         strategy_config_fingerprint,entry_plan_fingerprint
-    )
+    ) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX IF NOT EXISTS ix_capital_reservations_account_active
@@ -217,12 +221,14 @@ BEGIN
         OLD.reservation_id,OLD.account_ref,OLD.strategy_id,OLD.strategy_version,
         OLD.strategy_config_fingerprint,OLD.entry_plan_fingerprint,OLD.signal_id,
         OLD.strategy_attempt_id,OLD.requested_amount,OLD.amount_currency,
-        OLD.capacity_snapshot_id,OLD.created_at
+        OLD.capacity_snapshot_id,OLD.capacity_observed_at,
+        OLD.capacity_available_at_reservation,OLD.created_at
     ) IS DISTINCT FROM ROW(
         NEW.reservation_id,NEW.account_ref,NEW.strategy_id,NEW.strategy_version,
         NEW.strategy_config_fingerprint,NEW.entry_plan_fingerprint,NEW.signal_id,
         NEW.strategy_attempt_id,NEW.requested_amount,NEW.amount_currency,
-        NEW.capacity_snapshot_id,NEW.created_at
+        NEW.capacity_snapshot_id,NEW.capacity_observed_at,
+        NEW.capacity_available_at_reservation,NEW.created_at
     ) THEN
         RAISE EXCEPTION 'capital reservation identity is immutable';
     END IF;
@@ -235,6 +241,23 @@ DROP TRIGGER IF EXISTS capital_reservations_guard_update ON runtime.capital_rese
 CREATE TRIGGER capital_reservations_guard_update
 BEFORE UPDATE ON runtime.capital_reservations
 FOR EACH ROW EXECUTE FUNCTION runtime.guard_capital_reservation_update();
+
+ALTER TABLE strategy_entry.entry_decisions
+    ADD COLUMN IF NOT EXISTS capital_reservation_id text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='entry_decisions_capital_reservation_fkey'
+          AND conrelid='strategy_entry.entry_decisions'::regclass
+    ) THEN
+        ALTER TABLE strategy_entry.entry_decisions
+            ADD CONSTRAINT entry_decisions_capital_reservation_fkey
+            FOREIGN KEY (capital_reservation_id)
+            REFERENCES runtime.capital_reservations(reservation_id);
+    END IF;
+END $$;
 
 ALTER TABLE strategy_entry.execution_requests
     ADD COLUMN IF NOT EXISTS exit_plan_fingerprint text,

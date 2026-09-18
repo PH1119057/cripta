@@ -5,6 +5,12 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
+from bybit_workbench.capital_reservation import (
+    CapitalReservationPort,
+    CapitalReservationRequest,
+    InsufficientCapital,
+)
+
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import (
     CandidateCooldown,
@@ -72,6 +78,8 @@ class UniversalEntryEngine:
         capacity: TradingCapacitySnapshot | None = None,
         technical_readiness: TechnicalReadiness | None = None,
         account_ref: str | None = None,
+        capital_reservation_port: CapitalReservationPort | None = None,
+        capital_reservation_required_for: frozenset[str] = frozenset(),
         allow_new_signals: bool = True,
     ) -> tuple[EntryEvaluation, ...]:
         available_sensors = dict(sensors or {})
@@ -234,6 +242,11 @@ class UniversalEntryEngine:
                     fact_for_predicate.observed_at,
                     capacity=capacity,
                     technical_readiness=technical_readiness,
+                    account_ref=account_ref,
+                    capital_reservation_port=capital_reservation_port,
+                    require_capital_reservation=(
+                        plan.strategy_activation_id in capital_reservation_required_for
+                    ),
                     policy_attempt_block=policy_attempt_block,
                 )
                 request = self._execution_request(
@@ -850,11 +863,15 @@ class UniversalEntryEngine:
         *,
         capacity: TradingCapacitySnapshot | None,
         technical_readiness: TechnicalReadiness | None,
+        account_ref: str | None,
+        capital_reservation_port: CapitalReservationPort | None,
+        require_capital_reservation: bool,
         policy_attempt_block: str | None = None,
     ) -> EntryDecision:
         code = EntryDecisionCode.ACCEPTED
         reason = "strategy conditions matched"
         capacity_id: str | None = None
+        reservation_id: str | None = None
         if policy_attempt_block is not None:
             code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
             reason = policy_attempt_block
@@ -866,6 +883,13 @@ class UniversalEntryEngine:
             reason = technical_readiness.reason
 
         requested, max_age, min_quality = self._capital_settings(plan)
+        if (
+            code is EntryDecisionCode.ACCEPTED
+            and require_capital_reservation
+            and requested is None
+        ):
+            code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+            reason = "real Entry requires explicit Strategy capital reservation policy"
         if code is EntryDecisionCode.ACCEPTED and requested is not None:
             if capacity is None or capacity.available_for_new_trading is None:
                 code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
@@ -884,11 +908,58 @@ class UniversalEntryEngine:
                 elif capacity.available_for_new_trading < requested:
                     code = EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
                     reason = "available trading capacity is below Strategy request"
+                elif require_capital_reservation:
+                    capital_policy = plan.capital_policy.to_dict()
+                    amount_currency = str(capital_policy.get("amount_currency") or "").strip()
+                    if not account_ref:
+                        code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                        reason = "real Entry requires account_ref for atomic capital reservation"
+                    elif capital_reservation_port is None:
+                        code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                        reason = "real Entry requires atomic capital reservation port"
+                    elif not amount_currency:
+                        code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
+                        reason = "Strategy capital_policy.amount_currency is missing"
+                    else:
+                        try:
+                            reservation = capital_reservation_port.reserve(
+                                CapitalReservationRequest(
+                                    account_ref=account_ref,
+                                    strategy_id=plan.strategy_id,
+                                    strategy_version=plan.strategy_version,
+                                    strategy_config_fingerprint=(
+                                        plan.strategy_config_fingerprint
+                                    ),
+                                    entry_plan_fingerprint=plan.entry_plan_fingerprint,
+                                    signal_id=signal.signal_id,
+                                    strategy_attempt_id=attempt.strategy_attempt_id,
+                                    requested_amount=requested,
+                                    amount_currency=amount_currency,
+                                    capacity_snapshot_id=capacity.capacity_snapshot_id,
+                                    capacity_observed_at=capacity.observed_at,
+                                    capacity_available=capacity.available_for_new_trading,
+                                    requested_at=now,
+                                )
+                            )
+                        except InsufficientCapital as exc:
+                            code = EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
+                            reason = (
+                                "atomic capital reservation failed: effective available "
+                                f"{exc.effective_available} below Strategy request {exc.requested}"
+                            )
+                        else:
+                            reservation_id = reservation.reservation_id
+                            reason = "strategy conditions matched and capital reserved atomically"
         decision_id = (
             "decision-"
-            + fingerprint({"attempt": attempt.strategy_attempt_id, "code": code, "reason": reason})[
-                :32
-            ]
+            + fingerprint(
+                {
+                    "attempt": attempt.strategy_attempt_id,
+                    "code": code,
+                    "reason": reason,
+                    "capital_reservation_id": reservation_id,
+                }
+            )[:32]
         )
         return EntryDecision(
             decision_id,
@@ -898,6 +969,7 @@ class UniversalEntryEngine:
             reason,
             now.astimezone(UTC),
             capacity_id,
+            reservation_id,
         )
 
     def _execution_request(
@@ -938,19 +1010,22 @@ class UniversalEntryEngine:
             "request-"
             + fingerprint({"decision": decision.entry_decision_id, "signal": signal.signal_id})[:32]
         )
+        exit_plan = self._registry.exact_plan_pair(plan.strategy_activation_id)[1]
         return ExecutionRequest(
-            request_id,
-            attempt.strategy_attempt_id,
-            decision.entry_decision_id,
-            signal.signal_id,
-            signal.strategy_id,
-            signal.strategy_version,
-            signal.strategy_config_fingerprint,
-            signal.entry_plan_fingerprint,
-            signal.symbol,
-            signal.direction,
-            now.astimezone(UTC),
-            payload,
+            execution_request_id=request_id,
+            strategy_attempt_id=attempt.strategy_attempt_id,
+            entry_decision_id=decision.entry_decision_id,
+            signal_id=signal.signal_id,
+            strategy_id=signal.strategy_id,
+            strategy_version=signal.strategy_version,
+            strategy_config_fingerprint=signal.strategy_config_fingerprint,
+            entry_plan_fingerprint=signal.entry_plan_fingerprint,
+            symbol=signal.symbol,
+            direction=signal.direction,
+            requested_at=now.astimezone(UTC),
+            payload=payload,
+            exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
+            capital_reservation_id=decision.capital_reservation_id,
         )
 
     def _notifications(
