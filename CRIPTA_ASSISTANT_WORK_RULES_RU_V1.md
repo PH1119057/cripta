@@ -1,6 +1,6 @@
 # CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 2.2 · 2026-09-18
+**Версия:** 2.3 · 2026-09-19
 **Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
@@ -129,6 +129,36 @@ Research/evidence, завершённый месяц назад, вчера ил
 - доказана физическая совместимость dataset и новый вопрос допускает reuse.
 
 Переиспользование dataset не означает переиспользование старой торговой логики.
+
+## 4.2.1 Strategy settings authoring и экспериментальные значения
+
+При работе со StrategyCard нельзя превращать исследовательский пример,
+историческое число или временную protective boundary в runtime default.
+
+Обязательные правила authoring:
+
+- Strategy-specific decision/execution settings живут только в явных policy-
+  блоках StrategyCard, а не в отдельном скрытом global/runtime config;
+- каждый optional setting имеет явный `enabled`;
+- `enabled=false` не может сохранять скрытое торговое число, которое downstream
+  способен применить;
+- шаблон новой Strategy не содержит числовых trading defaults;
+- новое decision/execution-affecting поле требует consumer matrix из §5.1;
+- `enabled=true` при отсутствующем/неподдержанном exact consumer означает
+  fail-closed для activation/execution;
+- research/example/history разрешено хранить как evidence, но не как
+  автоматически исполняемую Strategy policy;
+- `protection_policy.initial_protection` разрешено утверждать отдельно от
+  динамического `exit_policy`; это не означает автоматическое утверждение H3,
+  touch, break-even, trailing или другой Exit logic;
+- legacy immutable StrategyCard не переписывается при появлении новых slots;
+  новая версия может получить только инертные structural slots, если владелец
+  не утвердил соответствующие значения.
+
+Эксперимент с нестабильными параметрами проводится через
+`Strategy Candidate / Strategy Draft`. Если нужен воспроизводимый
+shadow/MICRO_LIVE проход, владелец утверждает exact snapshot как новую immutable
+experimental Strategy version. Следующий вариант получает новую version.
 
 ## 4.3 Один активный документационный контур
 

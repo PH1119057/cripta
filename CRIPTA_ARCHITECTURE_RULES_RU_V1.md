@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.1  
-**Дата:** 2026-09-18  
+**Версия:** 2.2
+**Дата:** 2026-09-19
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -107,6 +107,49 @@ StrategyCard содержит все торговые параметры кон�
 
 Ни Materializer, ни Entry, ни Exit, ни Execution не имеют права подменять
 отсутствующие Strategy-owned значения скрытыми defaults.
+
+## 4.4 Strategy settings и экспериментальные версии
+
+Decision/execution-affecting настройки конкретной Strategy принадлежат только
+её immutable `StrategyCard` и раскладываются по явным owner-owned policy-блокам:
+
+- `entry_policy` — условия и параметры Entry;
+- `touch_policy` — касания/retest/cooldown/reset;
+- `capital_policy` — капитал/leverage;
+- `protection_policy.initial_protection` — базовая защитная рамка, известная уже
+  при открытии;
+- `exit_policy` — динамические правила сопровождения/Exit;
+- `lifecycle_policy` — hedge и другие сквозные правила;
+- MAYAK/Dispatcher context policies — только явно разрешённое конкретной
+  Strategy потребление контекста.
+
+Не создаётся отдельный скрытый runtime-мешок `strategy_settings`, который мог бы
+иметь торговый смысл независимо от StrategyCard.
+
+`initial_protection` и динамический Exit — разные сущности. Strategy может
+утвердить базовую защитную рамку для Entry, пока H3/касания/break-even/trailing
+или другие правила сопровождения остаются исследовательскими. Наличие такой
+рамки не означает, что динамический Exit уже утверждён.
+
+Для optional decision/execution setting обязательно:
+- явное `enabled`;
+- при `enabled=false` отсутствуют скрытые торговые числа;
+- authoring template не содержит числовых trading defaults;
+- при `enabled=true` должен существовать exact consumer contract;
+- unsupported/missing consumer означает fail-closed, а не silent-ignore.
+
+Неустойчивые параметры сначала принадлежат `Strategy Candidate / Strategy
+Draft`. Для воспроизводимого shadow/MICRO_LIVE эксперимента владелец может
+утвердить exact snapshot как новую experimental immutable Strategy version.
+Следующий вариант получает новую version и не переписывает предыдущую карточку.
+
+Research/example/history, включая временные protective boundaries, H3/touch,
+fee-aware break-even или trailing values, не становятся глобальными defaults и
+не получают торговых прав без отдельного owner-approved Strategy snapshot.
+
+Legacy immutable StrategyCard не изменяется при появлении новых structural
+slots. При создании новой версии compatibility может добавить только
+инертные `enabled=false` slots и не имеет права изобретать числовые значения.
 
 # 5. ENTRY
 

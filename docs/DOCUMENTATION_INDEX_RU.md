@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.4  
-**Дата:** 2026-09-19  
+**Версия:** 2.5
+**Дата:** 2026-09-19
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -127,3 +127,27 @@ Hard Stop, не использовать память/history как канон 
 3. формируется набор восьми текущих файлов;
 4. владелец полностью заменяет старые Project Source;
 5. дополнительные материалы не получают authority автоматически.
+
+# 10. Согласованная ревизия Strategy settings — 2026-09-19
+
+Текущее решение владельца о Strategy-specific настройках отражено согласованно
+в активном пакете:
+
+- `CRIPTA_ARCHITECTURE_RULES_RU_*.md` — ownership policy-блоков StrategyCard,
+  разделение initial protection и dynamic Exit, правила experimental version;
+- `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md` — authoring/fail-closed дисциплина и
+  запрет research/history как trading default;
+- `docs/CRIPTA_GLOSSARY_RU*.md` — термины Strategy settings, initial protection,
+  Strategy Candidate/Draft и experimental Strategy version;
+- `docs/TRADING_CONTOUR_RU*.md` — точное распределение настроек по policy-
+  блокам и различие protective envelope / dynamic Exit;
+- `docs/CURRENT_PROJECT_MAP_RU*.md` — текущий implementation status authoring.
+
+В этой ревизии не утверждается конкретный канонический Exit и не закрепляются
+исследовательские числа как global defaults. H3/touch/break-even/trailing и
+временные protective boundaries становятся торговой policy только внутри exact
+owner-approved Strategy version.
+
+`CHATGPT_INTERACTION_RULES_RU*.md` и `OBSERVATION_ANALYTICS_RU*.md` не требуют
+содержательного изменения: META routing и наблюдательно-аналитические границы
+этим решением не меняются.
