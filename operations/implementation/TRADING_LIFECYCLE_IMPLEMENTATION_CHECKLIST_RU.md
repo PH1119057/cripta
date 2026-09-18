@@ -210,14 +210,37 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - migration second apply: PASS;
 - NEW_DIAGNOSTICS = 0.
 
-## P9 — shadow deployment / recovery — TODO
-- [ ] verified overlay before install
-- [ ] DB precheck / migration / grants
-- [ ] services wired disarmed
-- [ ] repeated runtime checks
-- [ ] restart/recovery
-- [ ] no duplicate mutation / lost reservation / lost Exit owner
-- [ ] mainnet remains closed
+## P9 — shadow deployment / recovery — DONE
+- [x] verified overlay before install
+- [x] DB precheck / migration / grants
+- [x] services wired disarmed
+- [x] repeated runtime checks
+- [x] restart/recovery
+- [x] no duplicate mutation / lost reservation / lost Exit owner
+- [x] mainnet remains closed
+
+## P9 evidence
+
+- candidate code commit: 14780008a02fc3948e82467e0983e89913ee2068;
+- temp overlay built by git archive from exact candidate commit; changed-file SHA256 = MATCH;
+- overlay Ruff/mypy/systemd verify = PASS;
+- overlay full suite = 1385 passed / 47 skipped / same 18 stale-doc baseline failed;
+- overlay P3..P9 PostgreSQL = 37 passed; migration second apply = PASS;
+- Installation Readiness Matrix checked source/remote/worktree, owners, Python, pytest, Ruff, mypy, uv 0.11.33, PostgreSQL owner/roles/grants, systemd/live paths, Git transport, disk and permissions;
+- pre-mutation backup: /srv/cripta/backups/trade_lifecycle_p9_20260918T204213Z;
+- GitHub main and /srv/cripta/source_checkout fast-forwarded to exact candidate before live deploy;
+- live migration = PASS; required runtime/strategy_exit/analytics objects and grants verified;
+- Universal Entry observer loaded exact candidate source and wrote 2 exact ENTRY_ENGINE plan consumption acknowledgements;
+- initial 2 ENTRY_PLAN_NOT_CONSUMED faults were automatically RESOLVED after real observer acknowledgements;
+- Universal Exit shadow runtime = RUNNING, execution_rights=NONE;
+- Lifecycle Supervisor runtime = RUNNING, trading_rights=NONE;
+- Universal Entry consumer remains disabled/inactive with CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED;
+- live restart changed both P9 service PIDs and recovered cleanly;
+- before/after restart: trade_commands=2166 unchanged; ExitExecutionRequest=0; exit dispatches=0; reservations=0; claims=0 because no open Universal StrategyPosition;
+- seeded disposable recovery tests prove stale/lost Exit owner fault/reclaim and reservation preservation;
+- malformed legacy/test StrategyPosition cannot starve valid ownership heartbeat; blocked per-position fail-closed;
+- mainnet gate before migration, before start, after start and after restart = 0;
+- P9 runtime verification = PASS in SHADOW; no LIVE/MICRO_LIVE re-arm.
 
 ## P10 — controlled legacy Exit migration readiness — TODO
 - [ ] legacy/Universal ownership boundary explicit
