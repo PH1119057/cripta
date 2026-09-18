@@ -1,23 +1,20 @@
-# Текущее устройство и архитектурные границы проекта CRIPTA
+# CRIPTA — текущая карта проекта
 
-**Документ:** `CURRENT_PROJECT_MAP_RU.md`
-**Версия документа:** 7.2
-**Дата:** 2026-09-13
-**Статус:** краткая текущая карта; не отдельный архитектурный контракт
+**Версия:** 8.0  
+**Дата:** 2026-09-18  
+**Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
-## 1. Source checkpoint
-
-Текущий source checkpoint определяется фактически проверенным равенством:
+# 1. Source of truth
 
 ```text
 GitHub PH1119057/cripta:main
 ==
-/srv/cripta/source_checkout
+синхронизированный /srv/cripta/source_checkout
 ```
 
-Последний runtime checkpoint хранится отдельно и не считается автоматически текущим состоянием.
+Installed runtime и PostgreSQL проверяются отдельно от source.
 
-## 2. Верхняя прикладная архитектура
+# 2. Верхняя архитектура
 
 ```text
 MAYAK
@@ -33,563 +30,167 @@ EXECUTION
 EXCHANGE
 ```
 
-Пять верхних уровней.
+# 3. Документационный контур
 
-`Risk` не является отдельным верхним слоем.
+После ревизии 2026-09-18 активным считается только комплект из
+`docs/DOCUMENTATION_INDEX_RU.md`.
 
-## 3. Два контура
+Прежняя markdown-документация до ревизии удалена из текущего дерева и сохранена
+в Git history/отдельном историческом архиве. Она не является текущей инструкцией.
 
-### Прикладной
+# 4. MAYAK
 
-Определяет смысл: что происходит на рынке, какова общая обстановка, какая Strategy policy применяется, разрешён ли вход, как сопровождать позицию и какое действие требуется.
+Текущая архитектура MAYAK — strategy-agnostic объективное наблюдение.
+Он не имеет торговых mutation rights.
 
-### Технический поддерживающий
+Точные текущие services/schema/version перед изменением MAYAK проверяются по
+runtime/source, а не копируются из старого research report.
 
-Обеспечивает market/account connectivity, exchange adapters, private account sync, clock/reconnect, PostgreSQL, IDs/audit, Position Supervisor, Analyst, UI/read models, services, restart/reconciliation и operational safety.
+# 5. Dispatcher
 
-Технический контур поддерживает прикладной, но не становится владельцем Strategy.
+Текущая архитектура Dispatcher — strategy-agnostic:
+- global market context;
+- per-coin context;
+- trading capacity snapshot;
+- объективный rating только после отдельного утверждения формулы.
 
-## 4. MAYAK
+Старый profile/suitability Dispatcher не является текущей архитектурой.
 
-Наблюдает внешний рынок. Trading effect: `NONE`.
+# 6. Strategy / Universal Entry
 
-Текущая source-реализация objective context: `mayak-v2.2` /
-`objective-coin-context-v2`. Она добавляет strategy-agnostic
-`CoinMarketContext` для каждого наблюдаемого инструмента и сохраняет его append-only
-в `mayak_v2.coin_market_contexts`. Внутри MAYAK не вычисляется Strategy-specific
-пригодность монеты и не принимается решение LONG/SHORT.
+В source существует Universal Entry contour:
+- immutable StrategyCard;
+- StrategyActivation;
+- materialization EntryPlan/ExitPlan;
+- ActivePlanRegistry;
+- `UniversalEntryEngine`;
+- `ParameterizedCausalMarketWatch`;
+- StrategySignal/Attempt/Decision/ExecutionRequest;
+- PostgreSQL strategy_entry evidence/read-model;
+- Strategy dashboard/monitoring;
+- execution bridge.
 
-Live и historical replay используют один `LiveMayakEngine`; replay только причинно
-подаёт нормализованные события в тот же движок. Исторический replay без точного raw
-источника ликвидаций обязан сохранять этот слой как `NO_DATA`, а не выводить ложное
-`NONE`.
+Фактический source-код подтверждает принцип:
+`ParameterizedCausalMarketWatch` не выбирает Strategy и получает торговые
+числа через EntryPlan.
 
-`CoinMarketRating` остаётся объектом Dispatcher поверх объективных MAYAK-фактов;
-формула рейтинга в MAYAK не зашивается. Состояние установленного/загруженного runtime
-проверяется отдельно от source checkpoint.
+`UniversalEntryEngine` обрабатывает все `plans_for(symbol)` и создаёт
+strategy-specific StrategySignal при выполнении правил плана.
 
-MAYAK V2 historical stage 2026-09-06 завершён отдельным evidence report
-`MAYAK_V2_STAGE_RESULTS_RU.md`: exact causal replay по frozen ALL9/1063 включает
-derivatives/Spot executed flow, OI, funding/mark/index premium, account ratio и
-derivatives depth-200 liquidity. Frozen component research = 251 признак;
-`CoinMarketRating` не фитился, live Entry policy не менялась. Следующий research gate —
-новый temporal/cross-asset OOS с теми же frozen definitions.
+Execution bridge валидирует immutable Strategy/Plan identity и не использует
+legacy global trading settings как fallback.
 
-OOS protocol V1 из `MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md` полностью выполнен на NEW15/14024 signals с BTC/ETH только как reference-only. Итог зафиксирован в `MAYAK_COMPONENT_OOS_RESULTS_V1_RU.md`: `CONFIRMED=1`, `MIXED=11`, `REJECTED=0`, `INSUFFICIENT_DATA=0`. Единственный подтверждённый frozen effect — более низкий entry-aligned long/short crowding для исхода `+1.10% раньше -1.00%` (directional AUC 0.53225, ожидаемый знак 12/15 активов, frozen Q1 53.33% против Q4 44.50%). `CoinMarketRating` по-прежнему не фитился; следующий обязательный рубеж — owner review, затем отдельный rating research contract.
+# 7. Текущая исследуемая первая Strategy
 
-## 5. Dispatcher
-
-Публикует три strategy-agnostic класса показателей:
-
-1. объективный global market context;
-2. объективный per-coin context / `CoinMarketRating`;
-3. состояние торговой ёмкости аккаунта.
-
-Dispatcher не знает тип Entry и не определяет пригодность рынка за конкретную Strategy. Интерпретация принадлежит Strategy.
-
-Account capacity минимум:
-
-```text
-total
-used
-reserved
-free
-available_for_new_trading
-freshness
-source_exchange/account
-```
-
-Источник фактов — подключённая торговая площадка через technical account-sync.
-
-D0–D7 implementation: `dispatcher-v2.1`; persisted truth — `dispatcher_v2.global_market_contexts`, `dispatcher_v2.coin_market_contexts`, `dispatcher_v2.trading_capacity_snapshots`; runtime — `cripta-dispatcher-v2.service`. Формула `CoinMarketRating` отложена до следующего research-этапа.
-
-## 6. Strategy
-
-Канонический специализированный контракт: `STRATEGY_ENTRY_ARCHITECTURE_RU.md`.
-
-Strategy — owner-approved immutable `StrategyCard`, то есть пассивная карточка всей торговой policy, а не бот/runtime.
-
-В Strategy находятся:
+Текущая геометрическая Strategy, которую владелец продолжает прорабатывать,
+использует H9 как одинаковую временную глубину:
 
 ```text
-ENTRY POLICY
-EXIT POLICY
-CAPITAL / LEVERAGE POLICY
-PROTECTION / HOLDING POLICY
-TOUCH / LIFECYCLE / RESET POLICY
-MAYAK-origin / DISPATCHER CONTEXT CONSUMPTION POLICY
+H9 = 9 часов = 540 минут
+
+5m component  = 108 закрытых 5m свечей
+15m component = 36 закрытых 15m свечей
 ```
 
-Все торговые числа и timers принадлежат Strategy.
+Совмещение 5m и 15m формирует геометрию этой Strategy.
 
-`StrategyActivation` хранится отдельно и позволяет владельцу независимо включать/выключать любое количество Strategy. Противоречащие Strategy допустимы.
+Это не универсальная константа Entry Engine.
 
-Из StrategyCard materialize-ятся immutable `EntryPlan` и `ExitPlan` с fingerprint.
+Исторический Entry V1 с 130 барами 5m и 130 барами 15m относится к старому
+исследовательскому/implementation этапу и не определяет H9.
 
-## 7. Entry
-
-Целевая архитектура Entry — один universal parameterized Entry Engine для любого числа активных EntryPlan.
+# 8. H3
 
 ```text
-Active Plan Registry
--> Entry Watch
--> StrategySignal
--> Entry Decision
--> optional ExecutionRequest
+H3 = 3 часа = 180 минут
 ```
 
-Entry не выбирает, не ранжирует и не выключает Strategy. Рыночный Monitor/Scanner является источником causal market facts, а не владельцем strategy-specific торгового сигнала.
+H3 является совмещением 5m- и 15m-геометрий на одинаковой глубине 3 часа.
 
-Канонический `signal_id` — strategy-specific StrategySignal, который Entry Watch создаёт при выполнении конкретного EntryPlan.
+H3 сейчас не является условием Entry текущей первой Strategy.
+Она относится к сопровождению/Exit research.
 
-Candidate cooldown не является свойством Entry. В том числе исторические `30 минут` V1 являются отключаемой Strategy-настройкой, а не универсальным правилом.
+# 9. Стабилизация
 
-Отказ из-за отсутствия денег:
+Стабилизация используется для подавления вибрации геометрии:
+зона/геометрия должна не изменяться заданное Strategy время в минутах.
+
+Конкретные найденные значения являются параметрами конкретной Strategy и не
+фиксируются здесь как глобальный канон.
+
+# 10. Post-fill geometry
+
+Фактическая Entry price фиксируется навсегда как факт сделки.
+
+Текущая H9 после Entry продолжает пересчитываться и может многократно двигаться.
+Для сопровождения требуется хранить текущие snapshots и сравнивать их с fixed
+Entry price и предыдущим состоянием.
+
+Старое правило о необходимости сопровождать только причинную «ту же исходную
+Entry-зону» больше не является каноном.
+
+# 11. Execution / Exchange
+
+Execution получает только уже сформированный ExecutionRequest и использует
+Strategy-owned параметры.
+
+Bybit — текущий подключённый provider, но не архитектурная константа.
+
+# 12. Analytics
+
+Analyst/Research — поддерживающий контур без торговых прав.
+
+Никакое исследование, включая сегодняшнее, не является архитектурой или Strategy
+до отдельного решения владельца.
+
+# 13. Граница этой ревизии
+
+Документационная ревизия:
+- меняет документационный канон;
+- не меняет production source logic;
+- не меняет Strategy records в PostgreSQL;
+- не активирует real Execution;
+- не меняет runtime services;
+- не переименовывает исторические IDs/DB rows задним числом.
+
+Следующий шаг после замены Project Source — ревизия ChatGPT Project instructions
+под новый комплект.
+
+# 14. Проверенный runtime checkpoint 2026-09-18
+
+Этот раздел фиксирует только ключевые факты безопасности/активности на момент
+документационной ревизии. Он не превращает изменяемое runtime-состояние в
+архитектурную константу.
+
+Проверено на сервере:
 
 ```text
-INSUFFICIENT_AVAILABLE_FUNDS
+cripta-mayak-v2.service                         active/running
+cripta-dispatcher-v2.service                    active/running
+cripta-dispatcher-v2-context-correlator.service active/running
+cripta-universal-entry-observer.service         active/running
+cripta-universal-entry-consumer.service         disabled/inactive
+cripta-private-runtime.service                  active/running
+cripta-exit-runtime.service                     active/running
 ```
 
-### 7.1 Текущий implementation status
-
-Production Entry по-прежнему реализует историческую V1-specific модель: в коде присутствуют фиксированные/default 30m candidate cooldown, 60m failure embargo, обязательный `pressure_then_reversal` и OI calibration/tail gate.
-
-Это **implementation finding относительно новой целевой архитектуры**, а не разрешение менять production автоматически. Universal Entry consumer cutover ещё не реализован.
-
-Отдельная clean-реализация universal Strategy/Entry уже имеет следующие green stages:
+Торговые разрешения:
 
 ```text
-U1/U2
-= immutable Strategy/Activation/Plan contracts
-+ generic parameterized Entry DSL/engine/registry
-+ exact StrategySignal/Attempt/Decision lineage in memory
-
-U3
-= PostgreSQL schema strategy_entry
-+ immutable StrategyCard / EntryPlan / ExitPlan storage
-+ separately mutable StrategyActivation with append-only activation journal
-+ exact StrategySignal -> StrategyAttempt -> EntryDecision -> optional ExecutionRequest storage
-+ separate OBSERVED_CONTEXT / CONSUMED_CONTEXT and observed/consumed sensor links
-
-U4
-= generic parameterized causal market watch inside Entry Watch
-+ explicit causal cooldown anchor without hidden defaults
-+ generic post-signal Entry lifecycle / optional future-entry embargo
-+ forensic V1 compatibility StrategyCard for exactly 10 trading symbols
-+ exact frozen OI calibration provenance
-+ deterministic causal-sequence parity runner against canonical legacy EntrySymbolEngine
+strategy_entry.execution_permissions: enabled = 0, total = 0
+control.execution_gates mainnet: enabled = 0
 ```
 
-`strategy_entry` установлена в PostgreSQL с owner `postgres`; runtime role `cripta` имеет только минимальные SELECT/INSERT и narrow UPDATE для `strategy_activations`, без DELETE и без UPDATE immutable entities.
+Следовательно, работа observer/private-state/Exit runtime сама по себе не
+означает разрешение новой real Entry через Universal Entry.
 
-U4 не переносит ownership raw market-data/feed normalization в Entry: technical sensor contour поставляет нормализованные causal facts, а Entry Watch только интерпретирует их по конкретному EntryPlan. Generic post-signal lifecycle относится только к будущим Entry и не является stop/TP/Exit сопровождением позиции.
-
-V1 compatibility card содержит historical V1 значения только как Strategy/EntryPlan data. Trading scope = ровно 10 legacy `WORKING_SYMBOLS`; дополнительные BTC/ETH/DOGE/1000PEPE строки frozen calibration artifact scope не расширяют. Calibration provenance SHA-256: `b977bd42d76800a3eac63e42f67da7b75ecbf14e93c88761ff674cb084a32571`.
-
-Deterministic U4 parity проверяет candidate/time, direction, geometry, touch, cooldown anchor/state, 5m/15m/60m causal readiness, shock/reset, rolling swing, pressure/reversal, OI result, StrategySignal presence/absence, favorable/adverse post-signal resolution, future-entry embargo и causal refs. Legacy current shadow scanner не используется как parity baseline.
-
-U5 source добавляет отдельный parallel parity-shadow runtime `cripta-universal-entry-shadow.service`. Один public-only technical adapter нормализует causal REST/WS facts один раз и передаёт тот же `MarketFactEnvelope` passive canonical `EntrySymbolEngine` reference и Universal Entry + frozen V1 EntryPlan. Текущий изменённый `entry_shadow_scanner.py` reference не является. Online evidence хранится только в `strategy_entry.shadow_parity_runs/events`; pure `ExecutionRequest` downstream consumer не имеет.
-
-U5 startup/restart fail-honest: каждый новый service instance начинает `WARMUP`; неизвестное pre-start Entry lifecycle influence истекает по horizon, вычисленному из EntryPlan. Для frozen V1 это 420 минут. Незавершённый run при restart не продолжается через неизвестный socket gap и финализируется `NOT_COMPARABLE`; новый run получает новую identity. Exact local fact journal служит evidence/diagnostics, а не способом скрыто восстановить continuity по времени.
-
-U5 transport-continuity repair source-stage добавляет in-process public WebSocket reconnect без изменения Strategy/V1/EntryPlan/comparator semantics и без сброса `parity_run_id/started_at`, но только когда causal continuity доказана exact. `PUBLIC_TRADE` gap восстанавливается только через exact `execId + seq` anchor и public recent-trade window; `CANDLE_CLOSED` — по exact 5m/15m/60m boundaries; repeated `BAR_OPEN` дедуплируется только по exact source identity/boundary. Current `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` не имеет historical 30s replay: 5m OI history не считается эквивалентом. Поэтому continuation допустим только если все required ticker subscriptions восстановлены раньше earliest `last accepted OI30S + 30s`; иначе run fail-closed переходит в `NOT_COMPARABLE`. Disconnect/reconnect/continuity verdict сохраняются как append-only technical evidence и не являются trading facts. Наличие этого source-stage repair в `main` после публикации само по себе не доказывает installed/loaded runtime; deploy checkpoint проверяется отдельно.
-
-Owner decision 2026-09-10 вводит отдельную новую technical source identity `BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1`: один public current-tickers linear REST poll на каждый 30-second source slot, 10/10 frozen symbols, causal availability по фактическому response receive time, exact slot+symbol dedup, без 5m substitution/interpolation/carry-forward. Старый `BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S` остаётся historical evidence и не переименовывается. До нового U7 run новая source обязана пройти отдельный natural source-only soak >=480 минут с `missed_slots=0`, `incomplete_slots=0`, `silent_gaps=0`. На текущем source-stage soak/deploy/U7 PASS ещё НЕ объявлены.
-
-Фактический source-only soak новой OI identity завершён PASS: 960/960 complete 30s slots, 10/10 symbols, `missed=0`, `incomplete=0`, `silent_gaps=0`, max delivery delay 2.603690s. Последующие fresh parity runs показали следующий independent blocker: полный silent WS market-data stall при локально открытом socket; `PUBLIC_TRADE` и candle cursors могли замереть до выпадения exact recent-trade anchor. Owner-approved 2026-09-11 source-stage repair добавляет application ping/pong watchdog (10s interval / 5s deadline), per-symbol 10s `PUBLIC_TRADE` silence audit через bounded public recent-trade и уточняет exact same-seq replay: уже принятые exact `execId` текущей anchor sequence исключаются до ambiguity check, различимые timestamps задают порядок; одинаковый timestamp с различающимися decision-affecting trade semantics остаётся fail-closed. Дополнительно repair использует independent publicTrade-only mirror WS только как exact recovery evidence: mirror не кормит engines при healthy primary, хранит received order одной непрерывной epoch и позволяет восстановить same-timestamp/same-seq gap без недокументированной REST сортировки; при отсутствии mirror anchor остаётся строгий REST fail-closed fallback. Strategy/V1/EntryPlan/comparator semantics не меняются. U7 остаётся `EVIDENCE_INCOMPLETE` до нового clean natural 420m run после published/deployed repair.
-
-U6 source добавляет PostgreSQL-backed `Strategy` dashboard read-model/control: независимый список exact Strategy versions, read-only StrategyCard с полными `strategy_config_fingerprint` / `entry_plan_fingerprint` / `exit_plan_fingerprint`, реальные policy sections, Activation state/history и отдельный create-new-version flow. Missing persisted Activation/Plan показывается как `NOT SET`, а не как OFF/zero/neutral.
-
-U6 не создаёт draft/approval layer. Новая version создаётся только как новая immutable StrategyCard через canonical `StrategyCard.build`; existing card не UPDATE-ится, StrategyActivation и EntryPlan/ExitPlan автоматически не создаются и новая version автоматически не включается. ON/OFF доступен только для уже существующей exact StrategyActivation через compare-and-set по identity + expected enabled + expected updated_at; stale write отклоняется, no-op не создаёт ложный journal event.
-
-Текущий persisted production read-model на source-stage U6: одна V1 compatibility StrategyCard, один EntryPlan, `StrategyActivation = NOT SET`, `ExitPlan = NOT SET`. U5 parity identity не используется как test Activation и U6 production smoke не должен её переключать. Dashboard использует Universal Entry contracts из отдельно установленного published source tree, а не из mutable checkout.
-
-Trading effect U1-U6: `NONE`. U5/U6 не подключены к `runtime.trade_commands`, Execution mutation или monitoring legacy truth и не являются consumer cutover. `INSTALLED_COMMIT/LOADED_COMMIT` и service state всегда проверяются отдельно после deploy опубликованного checkpoint. MICRO_LIVE/LIVE, mainnet re-arm, allocator и strategy selector отсутствуют.
-
-## 8. Exit
-
-После fill работает по той же Strategy binding.
-
-## 9. Execution
-
-Исполняет готовое решение и владеет exchange mutation mechanics, fill truth, IDs, protection, reconciliation и durable handoff.
-
-## 10. Exchange
-
-Внешняя торговая площадка. Архитектура не привязана к конкретному провайдеру.
-
-## 11. Market facts / StrategySignal / Attempt
-
-Market-data/monitoring создаёт causal facts. Торговая lifecycle конкретной Strategy начинается на `STRATEGY_SIGNAL_DETECTED`.
+На сервере также существует активный технический service identifier:
 
 ```text
-causal market/context refs
--> signal_id                    # StrategySignal
--> strategy + EntryPlan binding
--> strategy_attempt_id
--> Entry decision
--> optional Execution
--> optional position
--> optional Exit
+cripta-m3-trade-analyst.service
 ```
 
-Один рыночный момент может породить несколько независимых StrategySignal разных Strategy. Rejected/no-fill/no-funds attempts сохраняются.
-
-## 12. Аналитика
-
-Supervisor/Analyst/PostgreSQL/UI находятся в поддерживающем наблюдательно-аналитическом контуре.
-
-`StrategyCoinFit` — отдельный Analyst/research показатель исторической совместимости конкретной Strategy с конкретной монетой. Он не смешивается с объективным `CoinMarketRating`.
-
-Они не являются новыми trading layers.
-
-## 12.1 Dispatcher V2.1 runtime
-
-Owner decision 2026-09-06 прекратил profile-based legacy runtime. `cripta-strategy-dispatcher.service` и старый `cripta-causal-context-correlator.service` отключены; исторические `strategy_dispatcher.*` и `research_context.event_links` не переписываются. Первичные signal/Entry/fill/position/MAYAK данные продолжают накапливаться и допускают последующий causal backfill.
-
-Активная целевая реализация D0–D7 — clean `dispatcher_v2`: отдельный package/runtime/schema без Strategy profiles. Она публикует `GlobalMarketContext`, `CoinMarketContext` и `TradingCapacitySnapshot` с `trading_effect=NONE`. `CoinMarketRating` на этом этапе **не реализован**. Strategy/Entry/Exit consumer cutover остаётся следующим отдельным этапом.
-
-D0–D7 production runtime подтверждён evidence report `DISPATCHER_V2_D0_D7_STAGE_RESULTS_RU.md`: `cripta-dispatcher-v2.service` active/enabled, installed/loaded source commit `ff259fdc173841a02cc6bb633af5ed5765614df1`, bootstrap from current MAYAK PASS, 20 coin contexts per source snapshot, restart/idempotency PASS.
-
-D8 завершён и подтверждён `DISPATCHER_V2_D8_STAGE_RESULTS_RU.md`. `cripta-dispatcher-v2-context-correlator.service` active/enabled и причинно пишет append-only `research_context.dispatcher_v2_event_links`. На контрольной production-точке: 23 links, negative context age = 0, duplicates = 0, `NOT_CONSUMED=23/23`, `trading_effect=NONE=23/23`; Global/Coin event-time age доходил примерно до 540 секунд и сохраняется как фактическое качество observed context, а не исправляется задним числом.
-
-Exact-ID discipline остаётся fail-honest: если событие не имеет доказанной exact lineage к `signal_id/position_id/trade_id`, D8 оставляет поля `NULL` и не восстанавливает ownership по `symbol + время`.
-
-Temporal/cross-asset OOS frozen MAYAK components завершён без retuning. По frozen V1 подтверждён 1 из 12 эффектов, 11 получили `MIXED`; Seen frozen ALL9 не используется для post-hoc выбора формулы. Следующий обязательный gate перед `CoinMarketRating` — owner review результата `MAYAK_COMPONENT_OOS_RESULTS_V1_RU.md`, затем отдельный research/implementation contract рейтинга.
-
-## 13. Масштабирование
-
-Архитектура допускает много одновременно включённых Strategy/EntryPlan/bots/positions.
-
-Universal Entry независимо обслуживает все активные планы. Strategy-specific concurrency не требует отдельного процесса на каждый plan; worker/event-loop model является implementation detail.
-
-Не определены и не должны придумыватьcя без отдельной задачи:
-
-- strategy selector;
-- capital allocator;
-- cross-strategy arbitration;
-- strategy priority;
-- global position cap.
-
-Dispatcher не выполняет эти функции.
-
-## 14. Что читать
-
-1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-3. `docs/PROJECT_ARCHITECTURE_RU.md`
-4. `docs/PROJECT_GOVERNANCE_RU.md`
-5. `docs/MARKET_CONTEXT_AND_COIN_RATING_ARCHITECTURE_RU.md` при работе с MAYAK/Dispatcher/coin rating
-6. `docs/STRATEGY_ENTRY_ARCHITECTURE_RU.md` при работе со Strategy/Entry/EntryPlan/signal lifecycle
-7. затрагиваемые специализированные контракты
-
-
-## U5 PUBLIC_TRADE mirror recovery repair — source stage
-
-A narrow technical repair is in progress to remove a false REST-vs-mirror race and preserve exact mirror receive order during recovery. Strategy/V1/EntryPlan/comparator semantics remain unchanged; trading effect NONE; U7 remains evidence-incomplete until a fresh natural run reaches PARITY_COMPARABLE.
-
-## U5 fail-honest service restart policy — source stage
-
-`cripta-universal-entry-shadow.service` is being changed from `Restart=always` to `Restart=on-failure` so a clean `NOT_COMPARABLE` evidence stop does not create repeated fresh runs. Unexpected crashes may still restart. Trading effect NONE.
-
-## U5 recovered-fact ordering / clean continuity stop — source stage
-
-Live verification proved Bybit publicTrade seq is monotonic in actual WS receive order; observed seq-regression was caused by local post-recovery re-sorting. A narrow technical repair now preserves mirror receive order through OI merge and converts continuity failures into clean `NOT_COMPARABLE` service stops. Trading effect NONE.
-
-## Universal Entry structural completion decision — 2026-09-12
-
-По прямому решению владельца длительный U7 parity observation больше не блокирует завершение dormant source structure. Shadow evidence продолжает накапливаться независимо; factual semantic mismatch по-прежнему запрещает cutover.
-
-Следующий structural stage завершает hard-disabled путь `ExecutionRequest -> existing Execution command contract`. По умолчанию production остаётся на `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`; реальное переключение требует отдельного owner-approved cutover и не выполняется этим этапом.
-
-### Structural source checkpoint
-
-По результату owner-approved structural completion source-stage:
-
-```text
-Universal Entry -> immutable ExecutionRequest
--> pure exact-lineage execution bridge
--> dormant DB consumer
--> existing Execution command contract
-```
-
-реализован в source и прошёл gate: targeted structural tests `86/86 PASS`, полный pytest `1274 passed / 8 skipped`, Ruff для Universal/new source PASS, mypy Universal package `20 source files PASS`, private runtime compile PASS, default dormant consumer smoke `DISABLED / trading_effect=NONE`.
-
-Текущая forensic V1 compatibility StrategyCard намеренно НЕ становится live-ready автоматически: в ней нет явной Strategy-owned allocation/leverage/execution policy, а legacy `runtime.trade_settings` запрещён как скрытый fallback. Для будущего cutover требуется отдельная owner-approved live Strategy version с полными execution/capital параметрами.
-
-Production на этом source checkpoint не переключён: `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`. Shadow/parity evidence является отдельным длительным наблюдением и не объявлен PASS.
-
-### StrategyCard authoring UI checkpoint — 2026-09-12
-
-По отдельному owner decision рабочая карточка Strategy теперь проектируется и реализована как одна
-immutable version всей policy с понятным `name`, одним выбранным направлением `LONG` или `SHORT`
-и тремя UI-вкладками: `Вход / Выход / Хедж`. Повтор одинаковой Exit policy в нескольких Strategy
-versions разрешён; общий mutable Exit-template на этом этапе не вводится. Hedge хранится внутри
-Strategy lifecycle policy и не является новым top-level layer.
-
-Структурированный authoring UI поддерживает:
-
-- signed offset относительно `CALCULATED_ENTRY`;
-- macro 5m/15m candle lookbacks и optional local-entry window с 5m/15m/1m настройками;
-- touch/Nth-touch, cooldown и reset;
-- explicit capital/leverage/execution fields без fallback в legacy `runtime.trade_settings`;
-- hard stop, take profit, fee-aware break-even, trailing, local 5m zone и time-exit policy;
-- Hedge enabled/trigger depth/size/leverage/SL/TP/trailing;
-- 34 фактически привязанные к текущему Dispatcher V2.1 context groups: 19 global + 15 coin groups,
-  каждая в режиме `OFF / OBSERVE / CONDITION / RANKING`, причём decision-affecting режимы требуют
-  explicit freshness/quality/missing/stale/partial semantics.
-
-Strategy API сохраняет прежнюю границу: existing cards READ ONLY; save создаёт только новую
-immutable StrategyCard, не создаёт Activation, не включает consumer и не пишет trading commands.
-Frozen V1 Strategy fingerprint остаётся
-`9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
-
-Open/closed trade cards показывают human-readable Strategy `name` только по exact persisted
-`strategy_id + strategy_version`; если exact StrategyCard не найдена, UI оставляет ID/version и не
-угадывает имя.
-
-Важно: authoring/storage support не равен runtime consumption. Новые signed-entry/local-entry,
-feature-level context, extended Exit и Hedge поля на этом checkpoint являются Strategy policy data;
-до cutover требуется отдельный wiring stage, который научит Universal Entry/Exit lifecycle
-исполнять только явно утверждённые поля. До этого trading effect = `NONE`,
-`UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, `ENTRY_COMMAND_SOURCE=LEGACY_V1`.
-
-StrategyCard authoring source опубликован commit
-`60e2c5e4421b8c92d18fc21a1241b71548761d9d` и установлен только в dashboard/read-model contour:
-`/srv/cripta/dashboard/app.py`, `/srv/cripta/dashboard/index.html` и installed Universal Entry
-read-model source tree совпали с published SHA. `cripta-dashboard.service` после controlled restart active;
-legacy `cripta-entry-shadow-scanner.service` не перезапускался. Post-deploy counters сохранились
-`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`;
-Universal consumer остаётся `disabled/inactive`. Installed smoke подтвердил 34 context groups
-(19 global + 15 coin) и Hedge section в persisted read-model.
-
-### Strategy universe / Entry reset controls — source checkpoint 2026-09-12
-
-Owner дополнительно вынес в immutable StrategyCard весь universe и исторические Entry lifecycle/reset
-правила, которые раньше были V1-specific defaults. Structured Strategy UI теперь имеет заметный
-верхний action `Создать новую Strategy`, а создание новой version существующей Strategy остаётся
-отдельным действием внутри READ ONLY card.
-
-Каждая новая UI Strategy version требует exact непустой список `symbols` и одно направление
-`LONG` или `SHORT`. Для разных групп монет допускаются отдельные StrategyCards с разными порогами;
-selector/allocator при этом не вводится.
-
-Entry UI и source различают четыре независимых Strategy-owned механизма:
-
-- candidate cooldown после `TOUCH / SIGNAL / ATTEMPT`; forensic V1 = `TOUCH`, `PER_SYMBOL`, 30 минут
-  от `fact.candidate_bar_at`;
-- post-signal FIRST_THRESHOLD outcome + optional failure embargo; forensic V1 = `+0.50%` против
-  `-1.00%`, horizon 360 минут, adverse -> `PER_SYMBOL` embargo 60 минут от adverse observation;
-- post-shock zone reset/maturity; forensic V1 = True Range >= `3.0 ×` mean previous 20 True Ranges,
-  забывание shock-candle и старшей zone history, maturity 60 минут;
-- rolling range gate; forensic V1 = high/low >= 10% по 12×5m = 60 минут, dynamic unblock when the
-  rolling condition clears rather than a fixed extra timer.
-
-Новый `shock_reset_policy` поддерживает explicit `ATR_MULTIPLE`, `RANGE_PERCENT` или disabled.
-`RANGE_PERCENT` определяется причинно как `TrueRange / previous_close × 100` с отдельным threshold
-по timeframe. Если новый policy отсутствует, Universal market watch сохраняет legacy
-`geometry.shock` semantics; frozen V1 Strategy fingerprint остаётся
-`9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
-
-Новые Strategy cards создаются только как immutable card: server генерирует exact `strategy_id`,
-Activation/EntryPlan/ExitPlan автоматически не создаются, consumer и exchange mutation не
-включаются. Trading effect source-stage = `NONE`.
-
-Дополнительный Entry-2 decoupling gate убрал скрытую зависимость новой Strategy от V1-specific
-watch fields: blank Entry хранит только `enabled=false`; при включении UI явно пишет выбранное
-направление и required 5m/15m facts, а встроенные legacy flow/OI gates остаются `enabled=false`.
-Технический in-memory history buffer для новых plans выводится из их lookback/ATR/shock/swing
-requirements; forensic V1 сохраняет свой explicit `history_limit=1000` и все legacy fields.
-
-Historical install checkpoint до последующего retirement Entry V1: Entry universe/reset + Entry-2
-decoupling был опубликован commit `375b4717a44c891e49926962b2d4e425a2c88800` и установлен в
-dashboard/read-model source tree по exact SHA. На момент того checkpoint dashboard был PID `834287`,
-а V1 observers ещё не перезапускались. Их актуальный retired state зафиксирован ниже. Universal
-consumer остаётся disabled/inactive. На том install checkpoint counters были:
-`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`,
-`strategy_entry.strategy_cards=1`, `strategy_entry.strategy_activations=0`.
-
-Source gate final: full pytest `1292 passed / 8 skipped`, Ruff changed Universal/tests PASS,
-`app.py --select F` PASS, mypy Universal `20 source files PASS`, HTML structure/compile PASS. Frozen V1
-Strategy fingerprint остаётся `9199f1d2a19aa7f3bc54b465e00f14c3acba81886060d4893c23fff11943422e`.
-
-### Structural install checkpoint — 2026-09-12
-
-Published structural source commit: `5e637c79a7328ccc58376d51e16e0bb32dca42f0`.
-
-Фактически установлено без consumer cutover:
-
-- additive append-only `strategy_entry.execution_dispatches`; runtime role `cripta` имеет только `SELECT/INSERT`, `UPDATE/DELETE` запрещены;
-- immutable dormant consumer release `/srv/cripta/universal_entry_consumer/releases/5e637c79a7328ccc58376d51e16e0bb32dca42f0`;
-- `cripta-universal-entry-consumer.service` установлен, но `disabled/inactive`; default smoke возвращает `ENTRY_COMMAND_SOURCE=LEGACY_V1`, `UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED`, `trading_effect=NONE`;
-- existing private Execution runtime не перезапускался ради этого этапа;
-- legacy Entry scanner PID/instance и dashboard не заменены;
-- `runtime.trade_commands` / `runtime.executions` не изменились установкой structural bridge.
-
-Исторически отдельный shadow evidence runtime был обновлён до exact source commit
-`5e637c79a7328ccc58376d51e16e0bb32dca42f0` для read-only parity evidence. Он больше не является
-активным runtime: актуальный retired state V1 зафиксирован ниже. Накопленная evidence остаётся
-исторической и не является разрешением на future cutover.
-## Strategy activation/readiness и retirement Entry V1 — 2026-09-12
-
-По owner decision legacy Entry V1 больше не является активным наблюдателем.
-`cripta-entry-shadow-scanner.service` и V1-specific `cripta-universal-entry-shadow.service`
-переведены в `disabled/inactive`; их mutable state (5.4G) перемещён в
-`/var/lib/cripta/archive/entry_v1_20260912T024510Z`. PostgreSQL evidence, source и frozen
-fingerprint сохранены. Operational manifest находится в
-`/srv/cripta-share/reports/entry_v1_archive_20260912T024510Z`.
-
-Strategy dashboard получает owner-facing `АКТИВНА / НЕАКТИВНА` и fail-closed
-`runtime_readiness`. Первая активация должна атомарно создать exact StrategyActivation +
-EntryPlan + ExitPlan; повторные ON/OFF меняют только Activation. Но source/runtime checkpoint
-явно фиксирует `MULTI_STRATEGY_OBSERVER_READY=False`: production observer, читающий все enabled
-StrategyActivation из PostgreSQL, ещё не установлен. Поэтому ACTIVE до его установки запрещён
-до DB mutation.
-
-Аудит `docs/UNIVERSAL_ENTRY_STRATEGY_RUNTIME_READINESS_RU.md` зафиксировал: существующий
-Universal→Execution adapter и private runtime совместимы с поддержанным entry subset
-(amount/leverage/MARKET|LIMIT_OFFSET/request-age/TTL/initial SL+TP + exact lineage), но signed Entry
-offset, local Entry, новые context feature rules и Strategy-specific post-fill Exit/Hedge пока
-не имеют полного end-to-end consumer. Любое включение такого поля блокирует activation вместо
-silent-ignore. Cutover остаётся `NO`; consumer disabled, mainnet gate закрыт.
-### Strategy readiness dashboard install checkpoint — 2026-09-12
-
-Functional source commit `a0c805bfff07b66d1c69c986aa1eafb01354c715` установлен в dashboard
-read-model contour по exact SHA. `cripta-dashboard.service` active PID `839222`, NRestarts 0.
-Create-Strategy action больше не использует browser implicit-id globals: editor host получается через
-explicit `document.getElementById('strategyNewEditor')`, а ошибки открытия показываются владельцу.
-
-Карточка теперь показывает `АКТИВНА / НЕАКТИВНА` и `runtime_readiness`. Backend first-enable умеет
-атомарно materialize/persist exact StrategyActivation + EntryPlan + ExitPlan, но installed
-`MULTI_STRATEGY_OBSERVER_READY=False`, поэтому до observer deployment activation блокируется до DB
-mutation. Post-deploy negative smoke сохранил counts: `strategy_activations=0`, `entry_plans=1`,
-`exit_plans=0`, `runtime.trade_commands=2166`, `runtime.executions=978`,
-`strategy_entry.execution_dispatches=0`.
-
-V1 observers остаются `disabled/inactive`, Universal consumer `disabled/inactive`, private/exit runtime
-не запускались, mainnet execution gate `enabled=0`. Full source gate: `1299 passed / 8 skipped`, Ruff
-PASS, mypy Universal `21 source files PASS`, frozen V1 fingerprint unchanged.
-## Multi-Strategy monitoring / paper source checkpoint — 2026-09-13
-
-Owner operational model разделён на два независимых разрешения. `StrategyActivation(enabled=true)` =
-Strategy наблюдается по реальному рынку и создаёт полноценные zero-mutation paper сделки. Отдельный
-`ExecutionPermission(enabled=true)` = разрешение real Execution exact Strategy version; по умолчанию
-permission отсутствует/OFF. ACTIVE не означает LIVE.
-
-Source реализует runtime mode `MULTI_STRATEGY_OBSERVER` поверх existing proven public market transport.
-Observer загружает все enabled exact activations из PostgreSQL, cross-check-ит materialized EntryPlan/
-ExitPlan fingerprints и fan-out-ит один causal stream во все планы без selector/ranking/winner. При
-смене active set начинается новый observer epoch с fail-closed state handling.
-
-Zero-mutation paper lifecycle хранится отдельно в `strategy_entry.paper_orders`,
-`strategy_entry.paper_positions`, `strategy_entry.paper_position_events`. ACCEPTED ExecutionRequest
-проходит тот же bridge contract. MARKET ждёт следующий causal PUBLIC_TRADE; LIMIT_OFFSET ждёт реального
-касания лимита до TTL, иначе EXPIRED. Paper position исполняет supported hard stop/TP, BE, trailing,
-time/context Exit и Hedge policy и сохраняет exact lineage, MFE/MAE и gross PnL.
-
-Universal consumer дополнительно ограничен exact ExecutionPermission и не имеет права исполнять
-старые paper-era requests после позднего включения permission. Mainnet consumer/private runtime остаются
-отдельными и не включаются этим monitoring checkpoint.
-## Strategy-owned universe и рабочие monitoring views — 2026-09-13
-
-Owner устранил двойное управление монетами. Для Universal-контура exact `StrategyCard.symbols`
-является единственным application universe конкретной Strategy; тот же список materialize-ится в
-`EntryPlan.symbols`, observer строит только transport-union ACTIVE plans, а Entry применяет каждый
-plan независимо через `ActivePlanRegistry.plans_for(symbol)`. Legacy
-`runtime.trade_settings.enabled_symbols_json` остаётся только историческим V1/settings полем и не
-участвует в Universal consumer, Strategy ExecutionPermission, global re-arm readiness или mainnet
-gate.
-
-Dashboard trading pages разделены на `Открытые сделки`, `Завершённые сделки`, `Открытые
-псевдосделки`, `Завершённые псевдосделки`, `Монитор Strategy`, `Наблюдение за сигналами`. Paper
-позиции больше не смешиваются с coin-monitor page. `Монитор Strategy` является read-only view:
-владелец выбирает exact ACTIVE Strategy или `Все`, после чего строки имеют identity
-`Strategy × symbol × direction` и показывают Strategy-specific current price, calculated Entry,
-distance, candidate/5m+15m geometry, flow/OI, swing block, exact candidate cooldown и post-signal
-embargo. Один symbol закономерно может иметь несколько строк с разными Entry у разных Strategy.
-На monitor page нет symbol permission checkbox.
-
-Multi-Strategy observer публикует эти rows из собственного Universal Entry state через
-`watch_snapshot`, lifecycle snapshot и exact cooldown state; dashboard не пересчитывает Entry
-самостоятельно. Observer warmup также разделён корректно: full unknown-prestart horizon применяется
-только к Strategy, уже ACTIVE до старта observer process. Strategy, включённая после старта процесса,
-не получает длинный recovery warmup из-за времени, потраченного на causal history seed; ей остаются
-только реально обязательные sensor readiness gates.
-
-До отдельного owner разрешения real Execution остаётся выключен. ACTIVE продолжает означать только
-monitoring + PAPER; `ExecutionPermission=ON` и global execution gate остаются отдельными правами.
-
-Source gate перед deployment: full pytest `1317 passed / 8 skipped`; targeted Strategy/UI/observer/
-Execution `122/122`; Ruff changed files PASS; mypy Universal `24 source files PASS`; compile/HTML and
-`git diff --check` PASS; direct read-model smoke на реальной PostgreSQL schema видит две ACTIVE
-V1-equivalent Strategy и их exact symbol sets.
-### Installed Strategy-universe monitoring checkpoint — 2026-09-13
-
-Functional source `87a3f1eee2a4ca90044ecd26fb3769de4d11bfac` установлен exact в dashboard и
-`cripta-universal-entry-observer.service`. Dashboard PID `1010667`, observer PID `1010661`, оба
-`active/running`, `NRestarts=0`. Installed read-model smoke подтвердил 2 ACTIVE Strategy по 10 symbols
-и 20 independent `Strategy × symbol × direction` monitor rows. Пример фактического различия одной
-монеты: LONG и SHORT V1-equivalent Strategy имеют разные exact calculated Entry и distance.
-
-После deploy, поскольку до него для обеих Strategy было строго 0 StrategySignal / ExecutionRequest /
-paper order / paper position, Activation были один раз causal-safe переотмечены OFF→ON уже после
-старта нового observer process. Новый warmup contract подтвердился: `time_ready=true`; прежний
-7-часовой recovery timer отсутствует. Пока обязательные V1 flow/OI sensors собирают первые причинные
-минуты, status честно `WARMUP`; затем тот же epoch обязан перейти в `RUNNING` без ручного действия.
-
-Post-deploy execution isolation: `ExecutionPermission enabled=0`, Universal consumer
-`disabled/inactive`, private runtime `inactive`, legacy Entry V1 services `disabled/inactive`; counters
-`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`.
-Trading effect observer = `NONE`.
-
-## Operator Trade UI и global execution gate — 2026-09-13
-
-Вкладка `Торговля -> Открытые сделки` приведена к новой Strategy-owned модели. Устаревшие
-операторские блоки `Общий контекст рынка`, `МАЯК — РЫНОК И ДЕНЬГИ`, `Площадка live-сделок`,
-`Общие параметры новых сделок`, `Воронка M3 Entry` и `Управление M3 FULL LIVE V1.1` с этой
-подстраницы удалены. Они либо относятся к другим read-model/разделам, либо содержали legacy
-глобальные параметры, которые после перехода на immutable StrategyCard больше не являются
-источником торговой policy.
-
-В верхней части торгового раздела находится закреплённая operator bar. Она показывает только
-операционные факты: exchange equity, сумму занятой маржи позиций + резерв ожидающих заявок,
-доступную торговую ёмкость, количество реальных открытых позиций и свежесть связи dashboard/account
-state. При отсутствии свежего live-state или account snapshot это отображается как отдельное
-операторское состояние, а не как нормальный ноль. В той же панели находятся global execution gate,
-точные причины operational hard stop и пользовательские настройки звуковых уведомлений.
-
-Global execution gate больше не зависит от legacy `runtime.trade_settings.settings_version` и не
-требует глобальных `stake/leverage/entry offset/TTL/entry policy`. Эти торговые параметры принадлежат
-exact StrategyCard и materialized Entry/Exit plans. При попытке открыть global gate dashboard заново
-проверяет обязательную operational readiness: private Bybit connectivity/freshness, fresh exchange
-reconciliation, fresh account snapshot, отсутствие ambiguous/pending Entry mutation и подтверждённую
-защиту уже открытых реальных позиций. Gate не выбирает Strategy и не даёт ей `ExecutionPermission`.
-
-Основная таблица открытых реальных сделок теперь явно показывает Strategy attribution и текущее
-Supervisor state отдельными колонками. Ручные operator actions сохранены: защита прибыли/безубыток,
-ручной stop, per-position trailing и закрытие. Развёрнутая карточка сделки остаётся доступна через
-левый toggle и сохраняет exact Strategy/position context.
-
-Эта UI/read-model переработка не включает реальную торговлю и не меняет Strategy/Entry/Exit policy.
-До отдельного owner разрешения `ExecutionPermission` и consumer остаются отдельными рубежами, а global
-execution gate при deployment сохраняется закрытым.
-
-### Installed operator Trade UI checkpoint — 2026-09-13
-
-Functional source commit `c1e742452f3edfbd91a70ee0839fa14b516de8d8` установлен только в
-`cripta-dashboard.service`: installed `app.py` и `index.html` совпали с published SHA. Dashboard после
-controlled restart active/running PID `1038946`, `NRestarts=0`; multi-Strategy observer не
-перезапускался и сохранил PID `1010661`.
-
-Installed backend readiness fail-honest показывает реальные operational blockers global gate:
-`private runtime state is stale`, `fresh exchange reconciliation is required`, `mandatory exchange
-state is stale`. Global mainnet gate остаётся `enabled=0`; `ExecutionPermission enabled=0`, Universal
-consumer `disabled/inactive`, private runtime `inactive`. Post-deploy counters неизменны:
-`runtime.trade_commands=2166`, `runtime.executions=978`, `strategy_entry.execution_dispatches=0`,
-реальных открытых позиций `0`.
-
-Installed HTML contract подтверждён структурным smoke: sticky `tradeOperatorBar`, exact gate reasons,
-connection/account freshness, Strategy + Supervisor state в таблице открытых сделок и прежние ручные
-position actions присутствуют; legacy global Strategy/entry settings и M3 cards на Trade page
-отсутствуют. На сервере нет JS runtime checker/browser, поэтому отдельный headless browser click-through
-этим checkpoint не заявляется.
+Это legacy-имя, возникшее на историческом этапе. Оно не создаёт сущность
+`M3` и не отменяет словарь. Переименование systemd/service/code identifiers
+требует отдельной migration-задачи с проверкой ссылок, state и operational
+совместимости; документационная ревизия этого не делает.

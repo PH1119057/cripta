@@ -1,0 +1,13 @@
+CRIPTA LEGACY DOCUMENTATION NOTICE
+date=2026-09-18
+status=HISTORICAL_ONLY_DO_NOT_USE_AS_ACTIVE_INSTRUCTION
+parent_commit_with_full_pre_revision_docs=fb8d3f221fe06979555cf005e0812acfefc17c49
+
+The pre-2026-09-18 markdown documentation was removed from the active main tree.
+It remains recoverable from Git history. A separate owner-downloadable ZIP was
+also created during the revision.
+
+Do not read historical documentation during normal project pre-read.
+Do not use it to infer current architecture, terminology, Strategy parameters,
+Entry/Exit rules, or research methodology unless the owner explicitly requests
+a historical audit/comparison.

@@ -1,430 +1,194 @@
-# CRIPTA — архитектурные правила проекта
+# CRIPTA — верхние архитектурные правила
 
-Версия: 1.5 · 2026-09-13
-Назначение: верхняя модель проекта, владельцы прикладных решений, технический поддерживающий контур, жизненный цикл торговой попытки и обязательные архитектурные границы.
+**Версия:** 2.0  
+**Дата:** 2026-09-18  
+**Статус:** верхний канонический архитектурный контракт
 
-Процесс patch/install/Git вынесен в `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`.
+Этот документ определяет верхнюю архитектуру и межслойные запреты.
+Детали каждого слоя находятся в активных документах из
+`docs/DOCUMENTATION_INDEX_RU.md`.
 
-# 1. Главный принцип
-
-Проект имеет:
-
-1. **прикладной торговый контур** — отвечает на вопрос, что система понимает о рынке, какую Strategy применяет и какое торговое действие требуется;
-2. **технический поддерживающий контур** — обеспечивает прикладной контур данными, связью, хранением, исполнением, восстановлением, наблюдаемостью и аудитом.
-
-Эти контуры связаны и взаимозависимы, но не являются двумя конкурирующими торговыми системами.
-
-Технический контур поддерживает прикладной. Он не получает права самостоятельно изобретать торговую логику только потому, что без него прикладной контур не может работать.
-
-# 2. Пять верхнеуровневых архитектурных уровней
-
-Каноническая прикладная цепочка:
+# 1. Верхняя модель
 
 ```text
-1. MAYAK
-      ↓
-2. DISPATCHER
-      ↓
-3. STRATEGY
-   ├── ENTRY
-   └── EXIT
-      ↓
-4. EXECUTION
-      ↓
-5. EXCHANGE
+MAYAK
+  ↓
+DISPATCHER
+  ↓
+STRATEGY
+ ├─ ENTRY
+ └─ EXIT
+  ↓
+EXECUTION
+  ↓
+EXCHANGE
 ```
 
-Это верхняя архитектурная карта проекта.
+Верхних уровней пять.
 
-Не каждый процесс, daemon, таблица, сервис, библиотека или аналитический компонент является отдельным верхнеуровневым слоем.
+Технический поддерживающий контур обеспечивает данные, связь, хранение,
+наблюдаемость, восстановление, UI и аудит, но не является дополнительным
+торговым уровнем.
 
-# 3. MAYAK
+`Risk` не является самостоятельным верхнеуровневым слоем.
 
-MAYAK — независимый наблюдатель внешнего рынка.
+# 2. MAYAK
 
-Он отвечает:
+MAYAK независимо и причинно наблюдает внешний рынок.
 
-> Что происходит на рынке?
+Он не знает торговый смысл конкретной Strategy, не создаёт `StrategySignal`,
+не открывает и не закрывает позиции, не запрещает и не разрешает Entry,
+не двигает stop/trailing и не меняет Strategy.
 
-MAYAK может наблюдать цену, сделки, объём, деньги, открытый интерес, funding, стакан, ликвидации, ширину и синхронность рынка, разные торговые площадки, on-chain и внешний макро/политический контекст, если он утверждён как источник.
+Результат MAYAK — объективные факты/снимки рынка с качеством, свежестью и
+происхождением данных.
 
-MAYAK не выбирает Strategy, не открывает и не закрывает позиции, не задаёт размер позиции, не блокирует Entry, не двигает stop, не меняет торговый счёт и не учится автоматически на PnL конкретной стратегии.
+# 3. DISPATCHER
 
-Его результат — причинный, версионированный снимок внешнего рынка.
+Dispatcher структурирует объективный рыночный контекст и состояние торговой
+ёмкости аккаунта.
 
-# 4. DISPATCHER
+Он не определяет пригодность рынка для конкретной Strategy, не включает
+Strategy, не создаёт `StrategySignal` и не владеет торговыми мутациями.
 
-Dispatcher — прикладной слой общей обстановки между MAYAK и торговыми стратегиями.
+# 4. STRATEGY
 
-Он публикует **показатели**, а не торговые команды.
+Strategy — единственный владелец торгового смысла.
 
-## 4.1 Объективный рыночный контекст
+Канонически Strategy является пассивной, утверждённой владельцем,
+неизменяемой и версионированной `StrategyCard`.
 
-На основе MAYAK Dispatcher структурирует и публикует причинное состояние рынка, не зная тип Entry, правила Strategy или фактический PnL.
+Strategy хранит все торговые параметры конкретного способа торговли:
+- universe инструментов;
+- направление;
+- геометрию и её параметры;
+- таймфреймы и временную глубину;
+- правила совмещения геометрий;
+- стабилизацию;
+- touch/retest/sequence/cooldown/reset;
+- условия использования MAYAK/Dispatcher;
+- капитал, размер и плечо;
+- Entry policy;
+- Exit policy;
+- protection/holding/hedge policy, если они включены.
 
-Dispatcher не отвечает на вопрос «подходит ли рынок конкретной Strategy». Это интерпретация Strategy. Один и тот же объективный контекст разные Strategy могут трактовать противоположно.
+Ни Entry, ни Execution не имеют права подменять отсутствующие параметры
+Strategy собственными торговыми значениями по умолчанию.
 
-Минимально различаются:
+Изменение торгового смысла или числа = новая утверждённая версия Strategy.
 
-- общерыночное состояние;
-- состояние конкретного инструмента/монеты;
-- фактический исполненный денежный поток на spot и derivatives раздельно;
-- OI/positioning;
-- ликвидность и её изменение;
-- ликвидации и фаза/ускорение каскада;
-- relative strength / synchronization / divergence;
-- freshness, coverage, quality и provenance.
+# 5. ENTRY
 
-Dispatcher не имеет торговых mutation rights.
+Entry — универсальный параметризованный исполнитель `EntryPlan`.
 
-## 4.2 Состояние торгового счёта
+Entry Engine:
+1. получает причинные нормализованные рыночные факты;
+2. получает активные `EntryPlan`;
+3. независимо проверяет каждый план по его правилам;
+4. при выполнении правил сам фиксирует strategy-specific `StrategySignal`;
+5. создаёт attempt/decision;
+6. только при принятом решении создаёт `ExecutionRequest`.
 
-Dispatcher также публикует фактическое состояние доступной торговой ёмкости аккаунта, полученное из технического контура подключения к текущей торговой площадке.
+Strategy сама не является daemon и сама физически сигнал во времени не
+отправляет.
 
-Минимально должны быть различимы:
+Entry не имеет права выбирать или ранжировать Strategy, устранять конфликт
+LONG/SHORT между Strategy, хранить H9/H3/130 баров/30 минут/60 минут или иное
+торговое число как глобальную константу, а также наследовать старые правила
+без явного значения в Strategy.
 
-- общий торговый баланс / equity, где применимо;
-- уже занятые средства;
-- зарезервированные средства;
-- свободные средства;
-- фактически доступная сумма для новой торговли;
-- freshness и provenance такого состояния.
+Один `signal_id` принадлежит ровно одной Strategy version. Один рыночный момент
+может породить независимые сигналы нескольких Strategy.
 
-Архитектура не привязана к конкретной бирже.
+# 6. EXIT
 
-Источник фактической истины — подключённая торговая площадка и её торговый аккаунт. Технический контур получает и нормализует эту истину; Dispatcher публикует её прикладным потребителям как показатель.
+После fill Entry больше не владеет сопровождением позиции.
 
-Dispatcher не «владеет деньгами», не резервирует их по собственной воле и не создаёт ордер.
+Exit следует policy той же exact Strategy version, которая открыла позицию.
+Exit может использовать текущую причинную геометрию, MAYAK/Dispatcher context,
+состояние позиции и другие данные только если это определено Strategy.
 
-## 4.3 Объективный рейтинг монеты
+Фактическая Entry price неизменяема как историческая точка входа.
+Текущая рыночная геометрия после Entry продолжает пересчитываться и может
+двигаться независимо от Entry price.
 
-MAYAK может рассчитывать причинные strategy-agnostic признаки состояния конкретной монеты. Dispatcher может собирать их в версионированный `CoinMarketRating` / карточку монеты.
+# 7. EXECUTION
 
-Такой рейтинг описывает сам рынок: приток/отток реально исполненных денег, активность, ликвидность, ликвидации, OI, относительную силу, синхронность, качество данных и событийный риск. Он не использует результаты нашей Strategy/Entry и не является рекомендацией LONG/SHORT.
+Execution исполняет уже сформированный `ExecutionRequest`.
 
-Историческая совместимость конкретной Strategy с монетой (`StrategyCoinFit`) является отдельным аналитическим/Strategy-specific объектом и не должна менять MAYAK или объективный Dispatcher rating.
+Он валидирует точную Strategy/Plan identity, применяет параметры исполнения из
+Strategy/планов, обеспечивает idempotency, order/fill truth, protection и
+reconciliation и работает через адаптер площадки.
 
-# 5. STRATEGY
+Execution не переоценивает рынок и не изобретает торговую policy.
 
-Strategy — утверждённая владельцем пассивная, неизменяемая и версионированная торговая policy (`StrategyCard`). Она не является ботом, монитором или исполнителем.
+# 8. EXCHANGE
 
-Strategy является единственным владельцем торгового смысла конкретного способа торговли. В ней живут:
+Exchange — внешний источник фактической истины об ордерах, fills, positions,
+балансе и ограничениях площадки.
 
-- условия подходящей среды;
-- Entry policy, включая геометрию, касания, последовательности, timers/cooldown/reset и все численные параметры;
-- правила использования объективного MAYAK/Dispatcher context;
-- размер входа, allocation и leverage policy;
-- stop, допустимая просадка, holding и initial protection;
-- Exit policy.
+Архитектура выше адаптера не привязана к Bybit. Bybit является текущим
+провайдером, а не архитектурной константой.
 
-Все торговые числа принадлежат Strategy. Универсальный Entry не должен хранить strategy-specific значения как собственные магические константы.
+# 9. Технический поддерживающий контур
 
-Включение/выключение Strategy хранится отдельно как `StrategyActivation` и не изменяет immutable StrategyCard. Владельцем через управляющий контур может быть одновременно включено любое число утверждённых Strategy, в том числе противоречащих друг другу.
-
-Из StrategyCard конкретной версии материализуются immutable `EntryPlan` и `ExitPlan` с собственными fingerprint. Materializer/compiler является внутренней технической функцией уровня Strategy и не мониторит рынок.
-
-Никто из MAYAK, Dispatcher, Analyst, Supervisor или технического контура не изменяет утверждённую Strategy автоматически.
-
-Изменение торговой policy = новая утверждённая владельцем версия/fingerprint.
-
-## 5.2 Strategy-owned universe монет
-
-`StrategyCard.symbols` является единственным прикладным источником истины о том, к каким
-инструментам применяется exact Strategy version. После materialization тот же exact список обязан
-сохраняться в `EntryPlan.symbols` и использоваться observer/Entry/PAPER/Execution без второго
-независимого symbol gate.
-
-UI «Монитор монет», legacy `runtime.trade_settings.enabled_symbols_json`, старый Scanner/Monitor,
-операционная таблица монет и любые пользовательские фильтры отображения не имеют права
-расширять, сужать, разрешать или запрещать Strategy-owned universe. Они могут быть только
-read-model/legacy/operational data.
-
-Если несколько ACTIVE Strategy содержат один symbol, этот symbol наблюдается независимо для
-каждого EntryPlan и может иметь разные Entry, direction, geometry, cooldown/embargo и outcome.
-Монитор обязан показывать эти состояния раздельно по exact Strategy, а не сводить их в одну
-«состояние монеты».
-
-Реальное исполнение требует одновременно exact Strategy scope, ACTIVE StrategyActivation,
-`ExecutionPermission=ON` и global execution gate. Отдельной глобальной галочки «монета разрешена
-для торговли» в Universal контуре нет.
-
-## 5.1 Полнота Strategy contract
-
-Strategy не может содержать decision/execution-affecting параметр без полного пути исполнения. Любое
-такое поле обязано materialize-иться в точный план, быть причинно наблюдаемым/аудируемым, реально
-потребляться Entry или Exit и без потери доходить до Execution там, где оно меняет требуемое торговое
-действие. Совместимость проверяется acceptance-test.
-
-`UI/STORAGE ONLY` для торгового параметра запрещён. Unknown/unsupported downstream consumer означает
-fail-closed и запрет Activation exact Strategy version. Metadata обязана быть явно non-decision-affecting.
-
-# 6. ENTRY
-
-Entry — специализированная часть Strategy и единый универсальный параметризованный механизм исполнения активных `EntryPlan`.
-
-Entry **не выбирает Strategy**, не сравнивает их, не ранжирует и не выключает. Если включено несколько Strategy, их EntryPlan наблюдаются независимо. Противоречащие LONG/SHORT планы допустимы и не разрешаются Entry скрытым arbitration.
-
-Логически Entry включает:
-
-```text
-ACTIVE PLAN REGISTRY
--> ENTRY WATCH
--> STRATEGY SIGNAL
--> ENTRY DECISION
--> optional ExecutionRequest
-```
-
-Технический market-data/Monitor/Scanner поставляет причинные рыночные факты/события. Сам рыночный факт не является торговым signal конкретной Strategy.
-
-`StrategySignal` (`signal_id`) создаётся Entry Watch, когда causal market state и обязательный consumed context удовлетворяют декларативному EntryPlan конкретной активной Strategy.
-
-Entry может реализовывать универсальные операции `touch/break/retest/count/sequence/window/reset/AND/OR/NOT`, но их значения и торговый смысл задаются Strategy. Например, `candidate cooldown` является отключаемой Strategy-настройкой; исторические 30 минут не являются свойством универсального Entry.
-
-Для конкретной попытки фиксируются как минимум:
-
-```text
-signal_id
-strategy_attempt_id
-strategy_id
-strategy_version
-strategy_config_fingerprint
-entry_plan_fingerprint
-strategy_activation_id
-```
-
-Entry использует только те objective contexts, которые EntryPlan разрешает/требует, сохраняет `CONSUMED_CONTEXT`, проверяет применимый account-capacity state и mandatory technical readiness, затем принимает решение конкретной attempt.
-
-Entry не исполняет биржевую заявку. Только `ACCEPTED` создаёт `ExecutionRequest`, который передаётся Execution.
-
-После fill Entry не должен менять Strategy позиции.
-
-# 7. EXIT
-
-Exit — специализированная часть той же Strategy.
-
-После confirmed fill Exit сопровождает позицию по той же `strategy_id/version/fingerprint`, по которой был выполнен Entry.
-
-Разные Strategy могут иметь принципиально разные stop, допустимую глубину отката, break-even, trailing, holding и причины закрытия.
-
-Нельзя молча применить Exit policy одной Strategy к позиции другой Strategy.
-
-# 8. Risk — не верхнеуровневый слой
-
-В проекте не существует самостоятельного верхнеуровневого архитектурного слоя `Risk`.
-
-Слово `Risk` может оставаться в коде, исторических документах, research и специализированных формулах.
-
-Архитектурно соответствующие обязанности распределены:
-
-- MAYAK — наблюдает опасные/нестабильные состояния рынка как факты;
-- Dispatcher — показывает рыночный контекст и состояние доступной торговой ёмкости;
-- Strategy — задаёт размер, плечо, stop, допустимую просадку и правила удержания;
-- Entry — фиксирует решение конкретной попытки;
-- Exit — сопровождает позицию по strategy policy;
-- Execution / technical safety — не выполняет небезопасную mutation при неизвестном обязательном состоянии;
-- Exchange — является фактическим ограничителем по доступным средствам, позициям, правилам инструмента и исполнению.
-
-Нельзя заново создать отдельный top-level `Risk` layer без решения владельца и новой версии архитектурного контракта.
-
-# 9. EXECUTION
-
-Execution реализует принятое прикладное торговое решение на подключённой торговой площадке.
-
-Execution владеет readiness непосредственно перед mutation, order requests, exchange/client IDs, actual fills, qty, actual avg fill, protection mutations, reconciliation и durable handoff.
-
-Execution не выбирает Strategy, не придумывает Entry/Exit и не меняет стратегический размер, stop или holding policy по собственной инициативе.
-
-# 10. EXCHANGE
-
-Exchange — внешняя торговая площадка.
-
-Архитектура CRIPTA не привязана к одной конкретной бирже.
-
-Фактическая торговая площадка является live truth по доступным ей данным, включая торговый баланс/account equity, свободные/занятые средства, positions, orders, fills, instrument rules, leverage/margin/position mode, fees/funding/break-even, если площадка их предоставляет.
-
-# 11. Технический поддерживающий контур
-
-Технический контур не является шестым торговым уровнем.
-
-Он включает компоненты, необходимые для работы пяти верхних уровней, например:
-
-- connectivity / market data adapters;
-- private account/exchange sync;
-- clock/reconnect/watchdog;
-- нормализацию exchange/account state;
+Сюда относятся, в частности:
+- market-data adapters;
+- account sync;
 - PostgreSQL;
-- журналы и audit trail;
+- Monitor;
 - Position Supervisor;
 - Analyst;
-- UI/read models;
-- service management;
-- restart/reconciliation;
-- архивирование;
+- UI/read-model;
+- service/watchdog/recovery;
 - operational safety;
-- monitoring/health.
+- архивирование и аудит.
 
-Технический компонент может обслуживать несколько прикладных уровней.
+Поддерживающий компонент не получает торговых прав из-за своего технического
+положения.
 
-Это не даёт ему права принимать торговое решение вместо Strategy.
+# 10. Исследование не является архитектурой
 
-# 12. Рыночные факты, Monitor / Scanner и карточка сигнала
+Любое исследование, backtest, replay, OOS, holdout, исторический Entry,
+экспериментальная геометрия и найденная статистическая зависимость являются
+доказательным материалом.
 
-Monitor/Scanner относится к техническому/наблюдательному обеспечению и публикует причинные рыночные факты/события. Он не выбирает Strategy и не является отдельным владельцем торговой policy.
+Они не могут переопределить архитектуру, изменить Strategy автоматически,
+стать скрытым значением Entry/Exit/Execution или ограничить постановку нового
+исследования.
 
-Рыночный `MarketEvent`/source fact не равен StrategySignal.
-
-При выполнении EntryPlan Entry Watch создаёт strategy-specific `signal_id` (`StrategySignal`) и постоянную причинную карточку. Карточка существует независимо от дальнейшего отказа, отсутствия средств, operational block, no-fill или execution rejection.
-
-Точная source lineage к trade/candle/zone/context должна сохраняться; не требуется изобретать synthetic `market_event_id` для каждого тика, если уже есть точные source references.
-
-# 13. Несколько Strategy и сигналов
-
-Архитектура должна масштабироваться на множество Strategy, EntryPlan, bot instances и simultaneous attempts.
-
-Один и тот же рыночный момент/набор причинных фактов может породить ноль, один или несколько независимых `StrategySignal` разных Strategy. Каждый signal связан с точной `strategy_id/version/fingerprint` и `entry_plan_fingerprint`.
-
-Разные Strategy могут одновременно породить противоположные LONG/SHORT signals даже по одному symbol. Entry не имеет права выбирать между ними.
-
-Один strategy-specific signal может иметь несколько attempts только если это отдельно требуется явной моделью bot/account execution; скрытого cross-strategy arbitration не существует.
-
-Не устанавливать без отдельного решения владельца максимальное число Strategy, bot instances, одновременно открытых positions, механизм конкуренции Strategy за капитал или алгоритм приоритета/allocator между Strategy.
-
-# 14. Состояние денег и причина отказа
-
-Цепочка:
+Путь торгового изменения:
 
 ```text
-EXCHANGE ACCOUNT TRUTH
-      ↓
-TECHNICAL ACCOUNT SYNC
-      ↓
-DISPATCHER TRADING-CAPACITY CONTEXT
-      ↓
-STRATEGY / ENTRY
-```
-
-Strategy определяет, сколько она хочет использовать.
-
-Entry сравнивает потребность выбранной Strategy с актуально опубликованной доступной торговой ёмкостью и принимает решение.
-
-Если средств недостаточно, это отдельная причина:
-
-```text
-INSUFFICIENT_AVAILABLE_FUNDS
-```
-
-Она не смешивается с `STRATEGY_CONDITION_REJECTED`, `OPERATIONAL_SAFETY_BLOCKED` или `EXCHANGE_REJECTED`. Исторический token `DISPATCHER_MARKET_INCOMPATIBLE` допускается только как legacy-аудит старого profile-based механизма и не является канонической новой причиной отказа.
-
-# 15. Dispatcher не является торговым gate
-
-Dispatcher показывает context.
-
-Правильная причинная цепочка:
-
-```text
-Dispatcher objective global/coin context
-      ↓
-Strategy interpretation / policy
-      ↓
-Entry decision
-```
-
-Dispatcher не создаёт order block mutation.
-
-# 16. Global Market State
-
-Dispatcher может публиковать общий advisory indicator:
-
-```text
-NORMAL
-CAUTION
-HIGH_RISK
-CRITICAL
-UNKNOWN
-```
-
-Разные Strategy могут трактовать его по-разному.
-
-Универсальная рыночная команда `CLOSE ALL` из Dispatcher запрещена без отдельного нового архитектурного решения.
-
-# 17. Operational Safety
-
-Operational safety относится к техническому поддерживающему контуру.
-
-Он может fail-closed блокировать unsafe mutation при stale/unknown mandatory account state, clock/reconnect failure, reconciliation failure, unknown position/qty/fill/protection, неподтверждённом состоянии доступных средств, невозможности безопасно выполнить exchange mutation или owner emergency kill.
-
-Это не торговое мнение о рынке и не Strategy.
-
-# 18. Жизненный цикл и точные ID
-
-Корневая торговая история начинается со strategy-specific `StrategySignal`; causal market facts находятся upstream и сохраняются как source lineage.
-
-Целевая связь:
-
-```text
-causal market source refs
-  -> signal_id                         # StrategySignal
-  -> strategy_id/version/fingerprint
-  -> entry_plan_fingerprint
-  -> strategy_activation_id
-  -> strategy_attempt_id
-  -> entry_decision_id
-  -> entry_command_id
-  -> exchange/client order IDs
-  -> execution IDs
-  -> trade_id / position_id
-  -> exit_decision_id
-```
-
-Нельзя восстанавливать ownership по `symbol + ближайшее время`.
-
-# 19. Analyst / Supervisor
-
-Position Supervisor и Analyst находятся в поддерживающем наблюдательно-аналитическом контуре.
-
-Они не выбирают Strategy, не меняют Strategy автоматически, не открывают/закрывают позиции напрямую и не становятся новыми top-level trading layers.
-
-# 20. Research != Production
-
-Разрешённый путь:
-
-```text
-STATISTICS
--> RESEARCH
--> OWNER-APPROVED NEW VERSION
--> SHADOW
+ИССЛЕДОВАНИЕ / ДОКАЗАТЕЛЬСТВА
+-> РЕШЕНИЕ ВЛАДЕЛЬЦА
+-> НОВАЯ ВЕРСИЯ STRATEGY / ДОКУМЕНТА
+-> ТЕСТ / SHADOW
 -> LIVE EQUIVALENCE
 -> MICRO_LIVE
 -> LIVE
 ```
 
-# 21. Масштабирование
+# 11. Терминология
 
-Верхняя архитектура не должна быть зажата текущим числом позиций или одной Strategy.
+Физическая геометрия называется нейтрально и не переименовывается из-за
+LONG/SHORT.
 
-Будущая система может иметь много Strategy, много bot instances, много одновременных positions и разные торговые площадки.
+Канонические определения находятся только в `docs/CRIPTA_GLOSSARY_RU.md`.
 
-Точные portfolio limits, allocator, strategy arbitration и capital competition не определяются этим документом.
+Если термин отсутствует или неоднозначен — Hard Stop до уточнения владельцем.
 
-# 22. Hard stop при конфликте
-
-Если код или более низкий документ делает `Risk` отдельным верхним владельцем, Dispatcher торговым исполнителем/запускателем Strategy, technical service владельцем Strategy, MAYAK источником торговой команды, Entry владельцем выбора/ранжирования Strategy, universal Entry носителем скрытых strategy-specific торговых constants, Exit независимым от Strategy binding конкретной позиции или exchange-specific правило универсальной архитектурой — это архитектурный конфликт.
-
-Порядок:
+# 12. Изменение архитектуры
 
 ```text
-HARD STOP
--> report mismatch
--> owner decision if needed
--> canonical docs
--> architecture tests
--> code
+РЕШЕНИЕ ВЛАДЕЛЬЦА
+-> ОБНОВЛЕНИЕ ДОКУМЕНТА
+-> АРХИТЕКТУРНАЯ ПРОВЕРКА
+-> РЕАЛИЗАЦИЯ
+-> ТЕСТЫ
+-> GITHUB
+-> DEPLOY
+-> RUNTIME EVIDENCE
 ```
 
-# 23. Текущий production checkpoint
-
-Текущий production может не реализовывать все целевые элементы этого документа.
-
-Новая архитектура не является автоматическим разрешением немедленно менять production-код.
-
-Сначала документация становится каноном. Затем отдельной задачей проводится аудит соответствия текущей реализации.
+Код не является автоматическим источником новой архитектуры.
