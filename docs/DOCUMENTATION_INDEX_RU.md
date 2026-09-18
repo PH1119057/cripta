@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 1.0  
+**Версия:** 2.0  
 **Дата:** 2026-09-18  
 **Статус:** канонический индекс документации
 
@@ -14,12 +14,17 @@
 
 ```text
 LEVEL 0 — явное текущее решение владельца
+
 LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md
           CRIPTA_ARCHITECTURE_RULES_RU_V1.md
           docs/CRIPTA_GLOSSARY_RU.md
-LEVEL 2 — активные документы слоёв
+
+LEVEL 2 — docs/TRADING_CONTOUR_RU.md
+          docs/OBSERVATION_ANALYTICS_RU.md
+
 LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU.md
-LEVEL H — архив, Git history, старые research/evidence
+
+LEVEL H — Git history, архив, старые research/evidence
 ```
 
 При конфликте активных документов:
@@ -29,57 +34,78 @@ HARD_STOP=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-# 3. Активные документы
+# 3. Семь файлов ChatGPT Project Source
 
-## Обязательные в начале нового чата
+Для ChatGPT Project Source используется ровно этот основной комплект:
 
-- `../CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-- `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-- `DOCUMENTATION_INDEX_RU.md`
-- `CRIPTA_GLOSSARY_RU.md`
-- `CURRENT_PROJECT_MAP_RU.md`
+1. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
+2. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
+3. `docs/DOCUMENTATION_INDEX_RU.md`
+4. `docs/CRIPTA_GLOSSARY_RU.md`
+5. `docs/CURRENT_PROJECT_MAP_RU.md`
+6. `docs/TRADING_CONTOUR_RU.md`
+7. `docs/OBSERVATION_ANALYTICS_RU.md`
 
-## По слоям
+Это оставляет свободные места Project Source для временно нужных владельцу
+дополнительных материалов.
 
-- `MAYAK_RU.md`
-- `DISPATCHER_RU.md`
-- `STRATEGY_RU.md`
-- `ENTRY_RU.md`
-- `EXIT_RU.md`
-- `EXECUTION_RU.md`
-- `ANALYTICS_RU.md`
-- `MONITORING_RU.md`
+# 4. AGENTS.md
 
-`AGENTS.md` является bootstrap-файлом и не создаёт отдельной архитектуры.
+`AGENTS.md` остаётся в GitHub как технический bootstrap для Codex/разработчика.
 
-# 4. Запрет неявного использования других документов
+Он не является восьмым обязательным файлом ChatGPT Project Source и не создаёт
+самостоятельный архитектурный контракт.
 
-Любой markdown-файл в `docs/`, который не перечислен выше, не должен
-существовать в активном документационном контуре.
+# 5. Обязательный pre-read нового чата
 
-Историческая документация до ревизии 2026-09-18 удалена из текущего `main`.
-Она остаётся в Git history и в отдельном архиве владельца.
+Минимальный pre-read:
+
+1. `../CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
+2. `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
+3. `DOCUMENTATION_INDEX_RU.md`
+4. `CRIPTA_GLOSSARY_RU.md`
+5. `CURRENT_PROJECT_MAP_RU.md`
+
+Перед работой с торговым контуром дополнительно читать:
+- `TRADING_CONTOUR_RU.md`.
+
+Перед работой с MAYAK, Dispatcher, monitoring, Position Supervisor,
+Analyst/research дополнительно читать:
+- `OBSERVATION_ANALYTICS_RU.md`.
+
+Если задача затрагивает оба контура — читать оба.
+
+# 6. Запрет неявного использования других документов
+
+Другие markdown-файлы в `docs/` не должны существовать в активном
+документационном контуре.
+
+Историческая документация остаётся в Git history/legacy archive.
 
 Историю:
 - не читать в стандартном pre-read;
-- не использовать для генерации ТЗ;
+- не использовать для генерации текущего ТЗ;
 - не использовать как источник текущих параметров;
 - не использовать для толкования терминов;
-- открывать только по явному запросу владельца на исторический аудит.
+- открывать только по явному запросу владельца на исторический аудит,
+  сравнение или воспроизводимость.
 
-# 5. Исследования и evidence
+# 7. Исследования и evidence
 
 Исследовательский файл никогда не получает статус канона автоматически.
+
 Даже исследование, завершённое сегодня, остаётся evidence.
 
-Если результат исследования принят владельцем, канон меняется отдельным
-явным решением и обновлением соответствующего активного документа/Strategy.
+Если результат исследования принят владельцем, канон меняется отдельным явным
+решением и обновлением соответствующей Strategy/активного документа.
 
-# 6. Обновление Project Source в ChatGPT
+# 8. Обновление Project Source в ChatGPT
 
 После изменения активного комплекта:
+
 1. GitHub `main` обновляется;
 2. `/srv/cripta/source_checkout` синхронизируется и сверяется с `main`;
-3. создаётся ZIP только активного комплекта;
-4. владелец полностью заменяет Project Source этим комплектом;
-5. старые Project Source удаляются.
+3. создаётся пакет из семи файлов Project Source;
+4. владелец полностью заменяет старые Project Source;
+5. дополнительные временные источники добавляются только в свободные места и
+   не получают статус канона автоматически.

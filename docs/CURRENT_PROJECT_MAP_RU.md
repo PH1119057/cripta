@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.0  
+**Версия:** 8.1  
 **Дата:** 2026-09-18  
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -32,8 +32,21 @@ EXCHANGE
 
 # 3. Документационный контур
 
-После ревизии 2026-09-18 активным считается только комплект из
-`docs/DOCUMENTATION_INDEX_RU.md`.
+После укрупнения 2026-09-18 активный Project Source состоит из семи файлов,
+перечисленных в `docs/DOCUMENTATION_INDEX_RU.md`.
+
+Специализированные документы укрупнены в два контракта:
+
+```text
+TRADING_CONTOUR_RU.md
+= STRATEGY + ENTRY + EXIT + EXECUTION
+
+OBSERVATION_ANALYTICS_RU.md
+= MAYAK + DISPATCHER + MONITORING + POSITION SUPERVISOR + ANALYTICS/RESEARCH
+```
+
+`AGENTS.md` остаётся GitHub-only bootstrap и не требуется как отдельный файл
+ChatGPT Project Source.
 
 Прежняя markdown-документация до ревизии удалена из текущего дерева и сохранена
 в Git history/отдельном историческом архиве. Она не является текущей инструкцией.
