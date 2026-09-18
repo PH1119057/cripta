@@ -1,0 +1,513 @@
+BEGIN;
+
+-- Technical support schema additions for the owner-approved Strategy/Entry/Exit lifecycle.
+-- This migration adds no trading policy and does not enable any execution gate.
+
+ALTER TABLE runtime.position_ownership
+    ADD COLUMN IF NOT EXISTS account_ref text,
+    ADD COLUMN IF NOT EXISTS strategy_config_fingerprint text,
+    ADD COLUMN IF NOT EXISTS strategy_activation_id text,
+    ADD COLUMN IF NOT EXISTS strategy_attempt_id text,
+    ADD COLUMN IF NOT EXISTS entry_decision_id text,
+    ADD COLUMN IF NOT EXISTS entry_execution_request_id text,
+    ADD COLUMN IF NOT EXISTS entry_plan_fingerprint text,
+    ADD COLUMN IF NOT EXISTS exit_plan_fingerprint text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_strategy_activation_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_strategy_activation_fkey
+            FOREIGN KEY (strategy_activation_id)
+            REFERENCES strategy_entry.strategy_activations(activation_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_strategy_attempt_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_strategy_attempt_fkey
+            FOREIGN KEY (strategy_attempt_id)
+            REFERENCES strategy_entry.strategy_attempts(strategy_attempt_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_entry_decision_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_entry_decision_fkey
+            FOREIGN KEY (entry_decision_id)
+            REFERENCES strategy_entry.entry_decisions(entry_decision_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_entry_request_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_entry_request_fkey
+            FOREIGN KEY (entry_execution_request_id)
+            REFERENCES strategy_entry.execution_requests(execution_request_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_entry_plan_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_entry_plan_fkey
+            FOREIGN KEY (entry_plan_fingerprint)
+            REFERENCES strategy_entry.entry_plans(entry_plan_fingerprint);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_exit_plan_fkey'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_exit_plan_fkey
+            FOREIGN KEY (exit_plan_fingerprint)
+            REFERENCES strategy_entry.exit_plans(exit_plan_fingerprint);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='position_ownership_universal_lineage_check'
+          AND conrelid='runtime.position_ownership'::regclass
+    ) THEN
+        ALTER TABLE runtime.position_ownership
+            ADD CONSTRAINT position_ownership_universal_lineage_check
+            CHECK (
+                bot_instance_id <> 'universal-entry'
+                OR (
+                    account_ref IS NOT NULL
+                    AND strategy_config_fingerprint IS NOT NULL
+                    AND strategy_activation_id IS NOT NULL
+                    AND strategy_attempt_id IS NOT NULL
+                    AND entry_decision_id IS NOT NULL
+                    AND entry_execution_request_id IS NOT NULL
+                    AND entry_plan_fingerprint IS NOT NULL
+                    AND exit_plan_fingerprint IS NOT NULL
+                    AND exchange_position_key IS NOT NULL
+                )
+            );
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_position_ownership_open_exchange_slot
+    ON runtime.position_ownership(exchange_position_key)
+    WHERE state='OPEN' AND exchange_position_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS runtime.plan_consumptions (
+    plan_consumption_id text PRIMARY KEY,
+    plan_kind text NOT NULL,
+    entry_plan_fingerprint text REFERENCES strategy_entry.entry_plans(entry_plan_fingerprint),
+    exit_plan_fingerprint text REFERENCES strategy_entry.exit_plans(exit_plan_fingerprint),
+    strategy_activation_id text NOT NULL
+        REFERENCES strategy_entry.strategy_activations(activation_id),
+    consumer_kind text NOT NULL,
+    consumer_instance_id text NOT NULL,
+    loaded_at timestamptz NOT NULL,
+    last_seen_at timestamptz NOT NULL,
+    status text NOT NULL,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (plan_kind IN ('ENTRY','EXIT')),
+    CHECK (consumer_kind IN ('ENTRY_ENGINE','EXIT_ENGINE')),
+    CHECK (status IN ('LOADED','STALE','ERROR')),
+    CHECK (jsonb_typeof(payload)='object'),
+    CHECK (
+        (plan_kind='ENTRY' AND entry_plan_fingerprint IS NOT NULL
+                           AND exit_plan_fingerprint IS NULL
+                           AND consumer_kind='ENTRY_ENGINE')
+        OR
+        (plan_kind='EXIT' AND exit_plan_fingerprint IS NOT NULL
+                          AND entry_plan_fingerprint IS NULL
+                          AND consumer_kind='EXIT_ENGINE')
+    ),
+    UNIQUE NULLS NOT DISTINCT (
+        plan_kind,entry_plan_fingerprint,exit_plan_fingerprint,
+        strategy_activation_id,consumer_kind,consumer_instance_id
+    )
+);
+
+CREATE OR REPLACE FUNCTION runtime.guard_plan_consumption_update()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(
+        OLD.plan_consumption_id,OLD.plan_kind,OLD.entry_plan_fingerprint,
+        OLD.exit_plan_fingerprint,OLD.strategy_activation_id,OLD.consumer_kind,
+        OLD.consumer_instance_id,OLD.loaded_at,OLD.created_at
+    ) IS DISTINCT FROM ROW(
+        NEW.plan_consumption_id,NEW.plan_kind,NEW.entry_plan_fingerprint,
+        NEW.exit_plan_fingerprint,NEW.strategy_activation_id,NEW.consumer_kind,
+        NEW.consumer_instance_id,NEW.loaded_at,NEW.created_at
+    ) THEN
+        RAISE EXCEPTION 'plan consumption identity is immutable';
+    END IF;
+    IF NEW.last_seen_at < OLD.last_seen_at THEN
+        RAISE EXCEPTION 'plan consumption last_seen_at cannot move backwards';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS plan_consumptions_guard_update ON runtime.plan_consumptions;
+CREATE TRIGGER plan_consumptions_guard_update
+BEFORE UPDATE ON runtime.plan_consumptions
+FOR EACH ROW EXECUTE FUNCTION runtime.guard_plan_consumption_update();
+
+CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
+    reservation_id text PRIMARY KEY,
+    account_ref text NOT NULL,
+    strategy_id text NOT NULL,
+    strategy_version text NOT NULL,
+    strategy_config_fingerprint text NOT NULL,
+    entry_plan_fingerprint text NOT NULL,
+    signal_id text NOT NULL,
+    strategy_attempt_id text NOT NULL UNIQUE,
+    requested_amount numeric NOT NULL,
+    amount_currency text NOT NULL,
+    capacity_snapshot_id text,
+    state text NOT NULL,
+    exchange_commitment_ref text,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (requested_amount > 0),
+    CHECK (amount_currency <> ''),
+    CHECK (state IN (
+        'RESERVED',
+        'DISPATCHED',
+        'PENDING_EXCHANGE_REFLECTION',
+        'CONSUMED',
+        'RELEASED',
+        'RECONCILIATION_REQUIRED'
+    )),
+    FOREIGN KEY (
+        strategy_attempt_id,signal_id,strategy_id,strategy_version,
+        strategy_config_fingerprint,entry_plan_fingerprint
+    ) REFERENCES strategy_entry.strategy_attempts(
+        strategy_attempt_id,signal_id,strategy_id,strategy_version,
+        strategy_config_fingerprint,entry_plan_fingerprint
+    )
+);
+
+CREATE INDEX IF NOT EXISTS ix_capital_reservations_account_active
+    ON runtime.capital_reservations(account_ref,state,created_at)
+    WHERE state IN (
+        'RESERVED','DISPATCHED','PENDING_EXCHANGE_REFLECTION',
+        'CONSUMED','RECONCILIATION_REQUIRED'
+    );
+
+CREATE OR REPLACE FUNCTION runtime.guard_capital_reservation_update()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(
+        OLD.reservation_id,OLD.account_ref,OLD.strategy_id,OLD.strategy_version,
+        OLD.strategy_config_fingerprint,OLD.entry_plan_fingerprint,OLD.signal_id,
+        OLD.strategy_attempt_id,OLD.requested_amount,OLD.amount_currency,
+        OLD.capacity_snapshot_id,OLD.created_at
+    ) IS DISTINCT FROM ROW(
+        NEW.reservation_id,NEW.account_ref,NEW.strategy_id,NEW.strategy_version,
+        NEW.strategy_config_fingerprint,NEW.entry_plan_fingerprint,NEW.signal_id,
+        NEW.strategy_attempt_id,NEW.requested_amount,NEW.amount_currency,
+        NEW.capacity_snapshot_id,NEW.created_at
+    ) THEN
+        RAISE EXCEPTION 'capital reservation identity is immutable';
+    END IF;
+    NEW.updated_at := clock_timestamp();
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS capital_reservations_guard_update ON runtime.capital_reservations;
+CREATE TRIGGER capital_reservations_guard_update
+BEFORE UPDATE ON runtime.capital_reservations
+FOR EACH ROW EXECUTE FUNCTION runtime.guard_capital_reservation_update();
+
+ALTER TABLE strategy_entry.execution_requests
+    ADD COLUMN IF NOT EXISTS exit_plan_fingerprint text,
+    ADD COLUMN IF NOT EXISTS capital_reservation_id text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='execution_requests_exit_plan_fkey'
+          AND conrelid='strategy_entry.execution_requests'::regclass
+    ) THEN
+        ALTER TABLE strategy_entry.execution_requests
+            ADD CONSTRAINT execution_requests_exit_plan_fkey
+            FOREIGN KEY (exit_plan_fingerprint)
+            REFERENCES strategy_entry.exit_plans(exit_plan_fingerprint);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='execution_requests_capital_reservation_fkey'
+          AND conrelid='strategy_entry.execution_requests'::regclass
+    ) THEN
+        ALTER TABLE strategy_entry.execution_requests
+            ADD CONSTRAINT execution_requests_capital_reservation_fkey
+            FOREIGN KEY (capital_reservation_id)
+            REFERENCES runtime.capital_reservations(reservation_id);
+    END IF;
+END $$;
+
+ALTER TABLE strategy_entry.execution_dispatches
+    ADD COLUMN IF NOT EXISTS capital_reservation_id text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='execution_dispatches_capital_reservation_fkey'
+          AND conrelid='strategy_entry.execution_dispatches'::regclass
+    ) THEN
+        ALTER TABLE strategy_entry.execution_dispatches
+            ADD CONSTRAINT execution_dispatches_capital_reservation_fkey
+            FOREIGN KEY (capital_reservation_id)
+            REFERENCES runtime.capital_reservations(reservation_id);
+    END IF;
+END $$;
+
+CREATE SCHEMA IF NOT EXISTS strategy_exit AUTHORIZATION postgres;
+REVOKE ALL ON SCHEMA strategy_exit FROM PUBLIC;
+GRANT USAGE ON SCHEMA strategy_exit TO cripta;
+
+CREATE TABLE IF NOT EXISTS strategy_exit.exit_decisions (
+    exit_decision_id text PRIMARY KEY,
+    strategy_position_id text NOT NULL
+        REFERENCES runtime.position_ownership(position_id),
+    strategy_id text NOT NULL,
+    strategy_version text NOT NULL,
+    strategy_config_fingerprint text NOT NULL,
+    exit_plan_fingerprint text NOT NULL,
+    rule_id text NOT NULL,
+    action_kind text NOT NULL,
+    requested_mutation jsonb NOT NULL,
+    source_refs jsonb NOT NULL,
+    decided_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (action_kind IN (
+        'SET_STOP','SET_TP','SET_PROTECTION','SET_TRAILING','REDUCE','CLOSE'
+    )),
+    CHECK (jsonb_typeof(requested_mutation)='object'),
+    CHECK (jsonb_typeof(source_refs)='array'),
+    UNIQUE (
+        exit_decision_id,strategy_position_id,strategy_id,strategy_version,
+        strategy_config_fingerprint,exit_plan_fingerprint
+    ),
+    FOREIGN KEY (
+        exit_plan_fingerprint,strategy_id,strategy_version,strategy_config_fingerprint
+    ) REFERENCES strategy_entry.exit_plans(
+        exit_plan_fingerprint,strategy_id,strategy_version,strategy_config_fingerprint
+    )
+);
+
+CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests (
+    execution_request_id text PRIMARY KEY,
+    exit_decision_id text NOT NULL,
+    strategy_position_id text NOT NULL,
+    strategy_id text NOT NULL,
+    strategy_version text NOT NULL,
+    strategy_config_fingerprint text NOT NULL,
+    exit_plan_fingerprint text NOT NULL,
+    account_ref text NOT NULL,
+    exchange_position_key text NOT NULL,
+    position_idx integer NOT NULL,
+    symbol text NOT NULL,
+    direction text NOT NULL,
+    action_kind text NOT NULL,
+    requested_mutation jsonb NOT NULL,
+    requested_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (position_idx >= 0),
+    CHECK (direction IN ('LONG','SHORT')),
+    CHECK (action_kind IN (
+        'SET_STOP','SET_TP','SET_PROTECTION','SET_TRAILING','REDUCE','CLOSE'
+    )),
+    CHECK (jsonb_typeof(requested_mutation)='object'),
+    UNIQUE (execution_request_id,exit_decision_id,strategy_position_id),
+    FOREIGN KEY (
+        exit_decision_id,strategy_position_id,strategy_id,strategy_version,
+        strategy_config_fingerprint,exit_plan_fingerprint
+    ) REFERENCES strategy_exit.exit_decisions(
+        exit_decision_id,strategy_position_id,strategy_id,strategy_version,
+        strategy_config_fingerprint,exit_plan_fingerprint
+    )
+);
+
+CREATE TABLE IF NOT EXISTS strategy_exit.execution_dispatches (
+    dispatch_id text PRIMARY KEY,
+    execution_request_id text NOT NULL UNIQUE
+        REFERENCES strategy_exit.execution_requests(execution_request_id),
+    command_id text UNIQUE,
+    state text NOT NULL,
+    reason text NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (state IN ('DISPATCHED','BLOCKED')),
+    CHECK (jsonb_typeof(payload)='object'),
+    CHECK (
+        (state='DISPATCHED' AND command_id IS NOT NULL)
+        OR
+        (state='BLOCKED' AND command_id IS NULL)
+    )
+);
+
+DROP TRIGGER IF EXISTS exit_decisions_immutable ON strategy_exit.exit_decisions;
+CREATE TRIGGER exit_decisions_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.exit_decisions
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+DROP TRIGGER IF EXISTS exit_execution_requests_immutable ON strategy_exit.execution_requests;
+CREATE TRIGGER exit_execution_requests_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.execution_requests
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+DROP TRIGGER IF EXISTS exit_execution_dispatches_immutable ON strategy_exit.execution_dispatches;
+CREATE TRIGGER exit_execution_dispatches_immutable
+BEFORE UPDATE OR DELETE ON strategy_exit.execution_dispatches
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+CREATE TABLE IF NOT EXISTS runtime.trade_lifecycle_events (
+    lifecycle_event_id text PRIMARY KEY,
+    event_type text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    strategy_id text,
+    strategy_version text,
+    strategy_config_fingerprint text,
+    strategy_activation_id text,
+    signal_id text,
+    strategy_attempt_id text,
+    entry_decision_id text,
+    entry_execution_request_id text,
+    strategy_position_id text REFERENCES runtime.position_ownership(position_id),
+    exit_plan_fingerprint text,
+    exit_decision_id text,
+    exit_execution_request_id text,
+    exact_ids jsonb NOT NULL,
+    payload jsonb NOT NULL,
+    provenance jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (event_type IN (
+        'STRATEGY_ACTIVATED',
+        'PLANS_MATERIALIZED',
+        'PLANS_PUBLISHED',
+        'ENTRY_PLAN_CONSUMED',
+        'STRATEGY_SIGNAL_CREATED',
+        'ENTRY_ATTEMPT_CREATED',
+        'CAPITAL_RESERVED',
+        'ENTRY_DECIDED',
+        'ENTRY_REQUEST_CREATED',
+        'ENTRY_REQUEST_DISPATCHED',
+        'ENTRY_ORDER_ACKNOWLEDGED',
+        'ENTRY_FILLED',
+        'STRATEGY_POSITION_CREATED',
+        'EXIT_PLAN_BOUND',
+        'EXIT_POSITION_CLAIMED',
+        'EXIT_DECISION_CREATED',
+        'EXIT_REQUEST_CREATED',
+        'EXIT_REQUEST_DISPATCHED',
+        'EXIT_MUTATION_ACKNOWLEDGED',
+        'EXIT_MUTATION_CONFIRMED',
+        'POSITION_CLOSED',
+        'ECONOMICS_FINALIZED',
+        'LIFECYCLE_FAULT'
+    )),
+    CHECK (jsonb_typeof(exact_ids)='object'),
+    CHECK (jsonb_typeof(payload)='object'),
+    CHECK (jsonb_typeof(provenance)='object')
+);
+
+DROP TRIGGER IF EXISTS trade_lifecycle_events_immutable ON runtime.trade_lifecycle_events;
+CREATE TRIGGER trade_lifecycle_events_immutable
+BEFORE UPDATE OR DELETE ON runtime.trade_lifecycle_events
+FOR EACH ROW EXECUTE FUNCTION runtime.reject_immutable_change();
+
+CREATE TABLE IF NOT EXISTS runtime.lifecycle_faults (
+    fault_id text PRIMARY KEY,
+    fault_code text NOT NULL,
+    severity text NOT NULL,
+    state text NOT NULL,
+    strategy_position_id text REFERENCES runtime.position_ownership(position_id),
+    detected_at timestamptz NOT NULL,
+    resolved_at timestamptz,
+    exact_ids jsonb NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (fault_code IN (
+        'PLAN_PAIR_INCOMPLETE',
+        'ENTRY_PLAN_NOT_CONSUMED',
+        'ENTRY_REQUEST_NOT_DISPATCHED',
+        'ENTRY_EXECUTION_AMBIGUOUS',
+        'POSITION_LINEAGE_INCOMPLETE',
+        'POSITION_WITHOUT_EXIT_PLAN',
+        'POSITION_WITHOUT_EXIT_OWNER',
+        'EXIT_REQUEST_NOT_DISPATCHED',
+        'EXIT_EXECUTION_AMBIGUOUS',
+        'EXCHANGE_POSITION_OWNERSHIP_CONFLICT',
+        'EXCHANGE_STATE_DIVERGED',
+        'CAPITAL_RESERVATION_STUCK'
+    )),
+    CHECK (severity IN ('WARNING','ERROR','CRITICAL')),
+    CHECK (state IN ('OPEN','RESOLVED')),
+    CHECK (
+        (state='OPEN' AND resolved_at IS NULL)
+        OR
+        (state='RESOLVED' AND resolved_at IS NOT NULL)
+    ),
+    CHECK (jsonb_typeof(exact_ids)='object'),
+    CHECK (jsonb_typeof(payload)='object')
+);
+
+CREATE OR REPLACE FUNCTION runtime.guard_lifecycle_fault_update()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(
+        OLD.fault_id,OLD.fault_code,OLD.severity,OLD.strategy_position_id,
+        OLD.detected_at,OLD.exact_ids,OLD.created_at
+    ) IS DISTINCT FROM ROW(
+        NEW.fault_id,NEW.fault_code,NEW.severity,NEW.strategy_position_id,
+        NEW.detected_at,NEW.exact_ids,NEW.created_at
+    ) THEN
+        RAISE EXCEPTION 'lifecycle fault identity is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS lifecycle_faults_guard_update ON runtime.lifecycle_faults;
+CREATE TRIGGER lifecycle_faults_guard_update
+BEFORE UPDATE ON runtime.lifecycle_faults
+FOR EACH ROW EXECUTE FUNCTION runtime.guard_lifecycle_fault_update();
+
+REVOKE ALL ON runtime.plan_consumptions,runtime.capital_reservations,
+    runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM PUBLIC;
+GRANT SELECT,INSERT,UPDATE ON runtime.plan_consumptions TO cripta;
+GRANT SELECT,INSERT,UPDATE ON runtime.capital_reservations TO cripta;
+GRANT SELECT,INSERT ON runtime.trade_lifecycle_events TO cripta;
+GRANT SELECT,INSERT,UPDATE ON runtime.lifecycle_faults TO cripta;
+
+REVOKE ALL ON strategy_exit.exit_decisions,
+    strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM PUBLIC;
+GRANT SELECT,INSERT ON strategy_exit.exit_decisions,
+    strategy_exit.execution_requests,strategy_exit.execution_dispatches TO cripta;
+
+REVOKE UPDATE,DELETE ON strategy_exit.exit_decisions,
+    strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM cripta;
+REVOKE DELETE ON runtime.plan_consumptions,runtime.capital_reservations,
+    runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM cripta;
+
+COMMIT;
