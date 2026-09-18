@@ -155,13 +155,34 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - migration second apply: PASS;
 - NEW_DIAGNOSTICS = 0.
 
-## P7 — Lifecycle Supervisor — TODO
-- [ ] activation -> plans -> Entry -> fill -> position -> Exit -> close -> economics
-- [ ] V1 lifecycle fault codes
-- [ ] POSITION_WITHOUT_EXIT_OWNER critical path
-- [ ] no trading authority
-- [ ] restart/recovery tests
-- [ ] separate P7 commit
+## P7 — Lifecycle Supervisor — DONE
+- [x] activation -> plans -> Entry -> fill -> position -> Exit -> close -> economics
+- [x] V1 lifecycle fault codes
+- [x] POSITION_WITHOUT_EXIT_OWNER critical path
+- [x] no trading authority
+- [x] restart/recovery tests
+- [x] separate P7 commit
+
+## P7 evidence
+
+- Lifecycle Supervisor проектирует immutable lifecycle events из durable P2–P6 truth;
+- сквозной projection проверен от StrategyActivation до POSITION_CLOSED и ECONOMICS_FINALIZED;
+- runtime.position_exit_claims добавляет exact position-level Exit Engine claim;
+- shadow Exit evidence не создаёт ложный live ownership;
+- Universal Entry observer пишет фактический ENTRY_ENGINE plan-consumption acknowledgement;
+- второй Exit Engine не может тихо перехватить уже claim-нутую StrategyPosition;
+- POSITION_WITHOUT_EXIT_OWNER = CRITICAL и автоматически RESOLVED только после exact claim/завершения условия;
+- все V1 lifecycle fault codes управляются Supervisor;
+- EXCHANGE_STATE_DIVERGED проверяется только при explicit freshness policy + fresh successful reconciliation;
+- stale/unknown exchange evidence не закрывает ранее открытый divergence fault;
+- Lifecycle Supervisor не пишет trade_commands, не создаёт StrategySignal/EntryDecision/ExitDecision и не вызывает Exchange API;
+- restart/recovery: новая instance повторно сканирует durable truth без дублей и закрывает восстановленный fault;
+- P3..P7 combined PostgreSQL integration: 29 passed;
+- P7 source/schema tests: 19 passed;
+- affected regression: 124 passed + 2 known stale-doc baseline failed;
+- full branch: 1372 passed / 39 skipped / 18 baseline stale-doc failed;
+- migration second apply: PASS;
+- NEW_DIAGNOSTICS = 0.
 
 ## P8 — Counterfactual / Analyst — TODO
 - [ ] insufficient-capital candidate

@@ -169,6 +169,50 @@ CREATE TRIGGER plan_consumptions_guard_update
 BEFORE UPDATE ON runtime.plan_consumptions
 FOR EACH ROW EXECUTE FUNCTION runtime.guard_plan_consumption_update();
 
+CREATE TABLE IF NOT EXISTS runtime.position_exit_claims (
+    claim_id text PRIMARY KEY,
+    strategy_position_id text NOT NULL UNIQUE
+        REFERENCES runtime.position_ownership(position_id),
+    exit_plan_fingerprint text NOT NULL
+        REFERENCES strategy_entry.exit_plans(exit_plan_fingerprint),
+    strategy_activation_id text NOT NULL
+        REFERENCES strategy_entry.strategy_activations(activation_id),
+    consumer_instance_id text NOT NULL,
+    claimed_at timestamptz NOT NULL,
+    last_seen_at timestamptz NOT NULL,
+    status text NOT NULL,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (status IN ('CLAIMED','STALE','ERROR')),
+    CHECK (jsonb_typeof(payload)='object')
+);
+
+CREATE OR REPLACE FUNCTION runtime.guard_position_exit_claim_update()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF ROW(
+        OLD.claim_id,OLD.strategy_position_id,OLD.exit_plan_fingerprint,
+        OLD.strategy_activation_id,OLD.consumer_instance_id,OLD.claimed_at,
+        OLD.created_at
+    ) IS DISTINCT FROM ROW(
+        NEW.claim_id,NEW.strategy_position_id,NEW.exit_plan_fingerprint,
+        NEW.strategy_activation_id,NEW.consumer_instance_id,NEW.claimed_at,
+        NEW.created_at
+    ) THEN
+        RAISE EXCEPTION 'position exit claim identity is immutable';
+    END IF;
+    IF NEW.last_seen_at < OLD.last_seen_at THEN
+        RAISE EXCEPTION 'position exit claim last_seen_at cannot move backwards';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS position_exit_claims_guard_update ON runtime.position_exit_claims;
+CREATE TRIGGER position_exit_claims_guard_update
+BEFORE UPDATE ON runtime.position_exit_claims
+FOR EACH ROW EXECUTE FUNCTION runtime.guard_position_exit_claim_update();
+
 CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
     reservation_id text PRIMARY KEY,
     account_ref text NOT NULL,
@@ -671,9 +715,11 @@ CREATE TRIGGER lifecycle_faults_guard_update
 BEFORE UPDATE ON runtime.lifecycle_faults
 FOR EACH ROW EXECUTE FUNCTION runtime.guard_lifecycle_fault_update();
 
-REVOKE ALL ON runtime.plan_consumptions,runtime.capital_reservations,
-    runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM PUBLIC;
+REVOKE ALL ON runtime.plan_consumptions,runtime.position_exit_claims,
+    runtime.capital_reservations,runtime.trade_lifecycle_events,
+    runtime.lifecycle_faults FROM PUBLIC;
 GRANT SELECT,INSERT,UPDATE ON runtime.plan_consumptions TO cripta;
+GRANT SELECT,INSERT,UPDATE ON runtime.position_exit_claims TO cripta;
 GRANT SELECT,INSERT,UPDATE ON runtime.capital_reservations TO cripta;
 GRANT SELECT,INSERT ON runtime.trade_lifecycle_events TO cripta;
 GRANT SELECT,INSERT,UPDATE ON runtime.lifecycle_faults TO cripta;
@@ -691,7 +737,8 @@ REVOKE UPDATE,DELETE ON strategy_exit.exit_observations,
     strategy_exit.shadow_evaluations,strategy_exit.exit_decisions,
     strategy_exit.execution_materialization_blocks,
     strategy_exit.execution_requests,strategy_exit.execution_dispatches FROM cripta;
-REVOKE DELETE ON runtime.plan_consumptions,runtime.capital_reservations,
-    runtime.trade_lifecycle_events,runtime.lifecycle_faults FROM cripta;
+REVOKE DELETE ON runtime.plan_consumptions,runtime.position_exit_claims,
+    runtime.capital_reservations,runtime.trade_lifecycle_events,
+    runtime.lifecycle_faults FROM cripta;
 
 COMMIT;

@@ -7,6 +7,7 @@ SQL = (ROOT / "operations/sql/20260918_trade_lifecycle_v1.sql").read_text(encodi
 def test_trade_lifecycle_schema_declares_required_support_entities() -> None:
     required = (
         "runtime.plan_consumptions",
+        "runtime.position_exit_claims",
         "runtime.capital_reservations",
         "strategy_exit.exit_observations",
         "strategy_exit.shadow_evaluations",
@@ -40,6 +41,14 @@ def test_universal_position_lineage_is_fail_closed() -> None:
 def test_open_exchange_slot_has_single_logical_owner() -> None:
     assert "ux_position_ownership_active_exchange_slot" in SQL
     assert "state IN ('OPEN','RECONCILIATION_REQUIRED')" in SQL
+
+
+def test_p7_position_exit_claim_is_exact_support_contract() -> None:
+    assert "CREATE TABLE IF NOT EXISTS runtime.position_exit_claims" in SQL
+    assert "position_exit_claims_guard_update" in SQL
+    assert "position exit claim identity is immutable" in SQL
+    assert "position exit claim last_seen_at cannot move backwards" in SQL
+    assert "strategy_position_id text NOT NULL UNIQUE" in SQL
 
 
 def test_capital_reservation_unknown_states_remain_reserved() -> None:
@@ -99,10 +108,11 @@ def test_lifecycle_supervisor_tokens_are_storage_contract() -> None:
 
 
 def test_runtime_role_cannot_delete_lifecycle_evidence() -> None:
-    assert "REVOKE DELETE ON runtime.plan_consumptions" in SQL
+    assert "REVOKE DELETE ON runtime.plan_consumptions,runtime.position_exit_claims" in SQL
     immutable_revoke = SQL[
-        SQL.index("REVOKE UPDATE,DELETE ON strategy_exit.exit_observations")
-        : SQL.index("REVOKE DELETE ON runtime.plan_consumptions")
+        SQL.index("REVOKE UPDATE,DELETE ON strategy_exit.exit_observations") : SQL.index(
+            "REVOKE DELETE ON runtime.plan_consumptions"
+        )
     ]
     for table in (
         "strategy_exit.exit_observations",

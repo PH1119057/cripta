@@ -26,6 +26,7 @@ import websocket
 from bybit_workbench.capital_reservation import PostgresCapitalReservationPort
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
+from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.universal_entry import (
     DataQuality,
     FrozenPolicy,
@@ -1292,12 +1293,29 @@ def _run_observer_epoch(
     if not signature:
         return "RELOAD"
     registry = ActivePlanRegistry()
+    consumer_instance_id = (
+        f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
+        f"{service_started_at.isoformat()}"
+    )
     for raw_bundle in bundles:
         bundle = cast(Any, raw_bundle)
         registry.register_card(bundle.card)
         materialized = registry.activate(bundle.activation)
         if materialized.entry_plan_fingerprint != bundle.entry_plan.entry_plan_fingerprint:
             raise RuntimeError("observer materialized EntryPlan fingerprint mismatch")
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "universal_entry_multi_strategy_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     paper = PaperTradeRuntime(connection)
