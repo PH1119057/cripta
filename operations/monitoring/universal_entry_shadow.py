@@ -24,6 +24,10 @@ import psycopg
 import websocket
 
 from bybit_workbench.capital_reservation import PostgresCapitalReservationPort
+from bybit_workbench.counterfactual import (
+    AnalystCounterfactualStore,
+    build_insufficient_funds_candidate,
+)
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
 from bybit_workbench.lifecycle_ack import record_plan_consumption
@@ -1318,6 +1322,7 @@ def _run_observer_epoch(
         )
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
+    counterfactual_store = AnalystCounterfactualStore(connection)
     paper = PaperTradeRuntime(connection)
     reservation_required_for = _real_execution_activation_ids(connection, bundles)
     capital_reservation_port = (
@@ -1662,12 +1667,26 @@ def _run_observer_epoch(
             facts_received += 1
             for evaluation in evaluations:
                 store.record_evaluation(evaluation, provenance=provenance)
-                if evaluation.execution_request is not None:
-                    bundle = bundle_by_entry_plan.get(
-                        evaluation.execution_request.entry_plan_fingerprint
+                bundle = bundle_by_entry_plan.get(
+                    evaluation.signal.entry_plan_fingerprint
+                )
+                if bundle is None:
+                    raise RuntimeError(
+                        "observer exact Strategy/EntryPlan bundle is missing"
                     )
-                    if bundle is None:
-                        raise RuntimeError("paper runtime exact EntryPlan bundle is missing")
+                if (
+                    evaluation.signal.strategy_activation_id
+                    in reservation_required_for
+                ):
+                    candidate = build_insufficient_funds_candidate(
+                        evaluation,
+                        entry_plan=bundle.entry_plan,
+                        exit_plan=bundle.exit_plan,
+                        captured_at=fact.observed_at,
+                    )
+                    if candidate is not None:
+                        counterfactual_store.record_candidate(candidate)
+                if evaluation.execution_request is not None:
                     paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1

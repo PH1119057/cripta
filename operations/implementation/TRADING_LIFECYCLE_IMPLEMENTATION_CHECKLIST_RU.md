@@ -184,12 +184,31 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - migration second apply: PASS;
 - NEW_DIAGNOSTICS = 0.
 
-## P8 — Counterfactual / Analyst — TODO
-- [ ] insufficient-capital candidate
-- [ ] exact Strategy/EntryPlan/ExitPlan lineage
-- [ ] no reservation / no ExecutionRequest / no exchange path
-- [ ] actual and counterfactual economics isolated
-- [ ] separate P8 commit
+## P8 — Counterfactual / Analyst — DONE
+- [x] insufficient-capital candidate
+- [x] exact Strategy/EntryPlan/ExitPlan lineage
+- [x] no reservation / no ExecutionRequest / no exchange path
+- [x] actual and counterfactual economics isolated
+- [x] separate P8 commit
+
+## P8 evidence
+
+- canonical counterfactual создаётся только из EntryDecision=INSUFFICIENT_AVAILABLE_FUNDS;
+- capture включён только для StrategyActivation из real-execution set;
+- обычная нехватка capacity и проигранная atomic reservation race обе дают Analyst candidate;
+- candidate несёт exact StrategyActivation / Strategy / EntryPlan / ExitPlan / signal / attempt / EntryDecision lineage;
+- candidate физически не имеет capital_reservation_id, ExecutionRequest, StrategyPosition, command/order/exchange identity;
+- illegal counterfactual + reservation или counterfactual + ExecutionRequest fail-closed;
+- cross-lineage ExitPlan fail-closed;
+- старый PaperTradeRuntime не используется как surrogate, потому что его paper_orders требуют реальный execution_request_id;
+- analytics.counterfactual_candidates и analytics.counterfactual_outcomes append-only;
+- counterfactual outcome economics отделены от runtime.position_exit_attribution;
+- P8 pure/source/schema: 21 passed;
+- P3..P8 combined PostgreSQL integration: 33 passed;
+- affected regression: 132 passed + 2 known stale-doc baseline failed;
+- full branch: 1381 passed / 43 skipped / 18 baseline stale-doc failed;
+- migration second apply: PASS;
+- NEW_DIAGNOSTICS = 0.
 
 ## P9 — shadow deployment / recovery — TODO
 - [ ] verified overlay before install

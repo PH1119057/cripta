@@ -715,6 +715,119 @@ CREATE TRIGGER lifecycle_faults_guard_update
 BEFORE UPDATE ON runtime.lifecycle_faults
 FOR EACH ROW EXECUTE FUNCTION runtime.guard_lifecycle_fault_update();
 
+CREATE SCHEMA IF NOT EXISTS analytics;
+
+CREATE TABLE IF NOT EXISTS analytics.counterfactual_candidates (
+    counterfactual_id text PRIMARY KEY,
+    strategy_activation_id text NOT NULL
+        REFERENCES strategy_entry.strategy_activations(activation_id),
+    strategy_id text NOT NULL,
+    strategy_version text NOT NULL,
+    strategy_config_fingerprint text NOT NULL,
+    entry_plan_fingerprint text NOT NULL,
+    exit_plan_fingerprint text NOT NULL,
+    signal_id text NOT NULL,
+    strategy_attempt_id text NOT NULL,
+    entry_decision_id text NOT NULL,
+    symbol text NOT NULL,
+    direction text NOT NULL,
+    decided_at timestamptz NOT NULL,
+    captured_at timestamptz NOT NULL,
+    decision_code text NOT NULL,
+    requested_amount numeric NOT NULL,
+    amount_currency text,
+    capacity_snapshot_id text,
+    reported_available_amount numeric,
+    decision_reason text NOT NULL,
+    evidence jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (decision_code='INSUFFICIENT_AVAILABLE_FUNDS'),
+    CHECK (direction IN ('LONG','SHORT')),
+    CHECK (requested_amount > 0),
+    CHECK (reported_available_amount IS NULL OR reported_available_amount >= 0),
+    CHECK (jsonb_typeof(evidence)='object'),
+    FOREIGN KEY (
+        entry_decision_id,strategy_attempt_id,signal_id
+    ) REFERENCES strategy_entry.entry_decisions(
+        entry_decision_id,strategy_attempt_id,signal_id
+    ),
+    FOREIGN KEY (
+        entry_plan_fingerprint,strategy_id,strategy_version,
+        strategy_config_fingerprint
+    ) REFERENCES strategy_entry.entry_plans(
+        entry_plan_fingerprint,strategy_id,strategy_version,
+        strategy_config_fingerprint
+    ),
+    FOREIGN KEY (
+        exit_plan_fingerprint,strategy_id,strategy_version,
+        strategy_config_fingerprint
+    ) REFERENCES strategy_entry.exit_plans(
+        exit_plan_fingerprint,strategy_id,strategy_version,
+        strategy_config_fingerprint
+    )
+);
+
+DROP TRIGGER IF EXISTS counterfactual_candidates_immutable
+    ON analytics.counterfactual_candidates;
+CREATE TRIGGER counterfactual_candidates_immutable
+BEFORE UPDATE OR DELETE ON analytics.counterfactual_candidates
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+CREATE TABLE IF NOT EXISTS analytics.counterfactual_outcomes (
+    outcome_id text PRIMARY KEY,
+    counterfactual_id text NOT NULL
+        REFERENCES analytics.counterfactual_candidates(counterfactual_id),
+    status text NOT NULL,
+    evaluated_at timestamptz NOT NULL,
+    opened_at timestamptz,
+    entry_price numeric,
+    closed_at timestamptz,
+    exit_price numeric,
+    exit_reason text,
+    gross_pnl numeric,
+    fees numeric,
+    funding numeric,
+    slippage numeric,
+    net_pnl_after_fees numeric,
+    economics_status text NOT NULL,
+    evidence jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CHECK (status IN ('NO_ENTRY','OPEN_AT_CUTOFF','CLOSED')),
+    CHECK (economics_status IN (
+        'NO_ENTRY','OPEN_UNREALIZED','PARTIAL_NO_FUNDING','COMPLETE'
+    )),
+    CHECK (entry_price IS NULL OR entry_price > 0),
+    CHECK (exit_price IS NULL OR exit_price > 0),
+    CHECK (jsonb_typeof(evidence)='object'),
+    CHECK (
+        (status='NO_ENTRY'
+            AND opened_at IS NULL AND entry_price IS NULL
+            AND closed_at IS NULL AND exit_price IS NULL)
+        OR
+        (status='OPEN_AT_CUTOFF'
+            AND opened_at IS NOT NULL AND entry_price IS NOT NULL
+            AND closed_at IS NULL AND exit_price IS NULL)
+        OR
+        (status='CLOSED'
+            AND opened_at IS NOT NULL AND entry_price IS NOT NULL
+            AND closed_at IS NOT NULL AND exit_price IS NOT NULL)
+    ),
+    UNIQUE(counterfactual_id,evaluated_at,status)
+);
+
+DROP TRIGGER IF EXISTS counterfactual_outcomes_immutable
+    ON analytics.counterfactual_outcomes;
+CREATE TRIGGER counterfactual_outcomes_immutable
+BEFORE UPDATE OR DELETE ON analytics.counterfactual_outcomes
+FOR EACH ROW EXECUTE FUNCTION strategy_entry.reject_immutable_change();
+
+REVOKE ALL ON analytics.counterfactual_candidates,
+    analytics.counterfactual_outcomes FROM PUBLIC;
+GRANT SELECT,INSERT ON analytics.counterfactual_candidates,
+    analytics.counterfactual_outcomes TO cripta;
+REVOKE UPDATE,DELETE ON analytics.counterfactual_candidates,
+    analytics.counterfactual_outcomes FROM cripta;
+
 REVOKE ALL ON runtime.plan_consumptions,runtime.position_exit_claims,
     runtime.capital_reservations,runtime.trade_lifecycle_events,
     runtime.lifecycle_faults FROM PUBLIC;

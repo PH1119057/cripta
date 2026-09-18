@@ -17,6 +17,8 @@ def test_trade_lifecycle_schema_declares_required_support_entities() -> None:
         "strategy_exit.execution_dispatches",
         "runtime.trade_lifecycle_events",
         "runtime.lifecycle_faults",
+        "analytics.counterfactual_candidates",
+        "analytics.counterfactual_outcomes",
     )
     for name in required:
         assert name in SQL
@@ -105,6 +107,35 @@ def test_lifecycle_supervisor_tokens_are_storage_contract() -> None:
         "EXIT_EXECUTION_AMBIGUOUS",
     ):
         assert f"'{token}'" in SQL
+
+
+def test_p8_counterfactual_storage_is_analyst_only_and_separate() -> None:
+    assert "CREATE TABLE IF NOT EXISTS analytics.counterfactual_candidates" in SQL
+    assert "CREATE TABLE IF NOT EXISTS analytics.counterfactual_outcomes" in SQL
+    assert "counterfactual_candidates_immutable" in SQL
+    assert "counterfactual_outcomes_immutable" in SQL
+    assert "decision_code='INSUFFICIENT_AVAILABLE_FUNDS'" in SQL
+    assert "net_pnl_after_fees numeric" in SQL
+
+    start = SQL.index("CREATE TABLE IF NOT EXISTS analytics.counterfactual_candidates")
+    end = SQL.index("CREATE TABLE IF NOT EXISTS analytics.counterfactual_outcomes", start)
+    candidate_ddl = SQL[start:end]
+    for forbidden in (
+        "execution_request_id",
+        "capital_reservation_id",
+        "command_id",
+        "exchange_order_id",
+        "strategy_position_id",
+    ):
+        assert forbidden not in candidate_ddl
+
+    grants = SQL[
+        SQL.index("REVOKE ALL ON analytics.counterfactual_candidates") : SQL.index(
+            "REVOKE ALL ON runtime.plan_consumptions"
+        )
+    ]
+    assert "GRANT SELECT,INSERT ON analytics.counterfactual_candidates" in grants
+    assert "REVOKE UPDATE,DELETE ON analytics.counterfactual_candidates" in grants
 
 
 def test_runtime_role_cannot_delete_lifecycle_evidence() -> None:
