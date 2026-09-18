@@ -33,6 +33,12 @@ from runtime_schema import (
 )
 from safety_observer import api_get
 
+from bybit_workbench.strategy_position_binding import (
+    load_universal_entry_lineage,
+    persist_universal_strategy_position,
+    release_position_capital_reservation,
+)
+
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
 STATUS = Path("/var/lib/cripta/private_runtime/status.json")
@@ -1349,21 +1355,19 @@ def command_worker_loop(key: str, secret: str) -> None:
                    FROM runtime.entry_geometry_bindings WHERE entry_command_id=%s""",
                 (entry_id,),
             ).fetchone()
-            universal_binding = None
+            universal_lineage = None
             if binding is None:
-                universal_binding = connection.execute(
-                    """SELECT d.execution_request_id,r.signal_id,r.strategy_id,r.strategy_version
-                         FROM strategy_entry.execution_dispatches d
-                         JOIN strategy_entry.execution_requests r
-                           ON r.execution_request_id=d.execution_request_id
-                        WHERE d.command_id=%s AND d.state='DISPATCHED'""",
-                    (entry_id,),
-                ).fetchone()
-                if universal_binding is not None and str(
-                    entry_payload.get("execution_request_id") or ""
-                ) != str(universal_binding[0]):
-                    raise RuntimeError("Universal Entry command/request lineage mismatch")
-            if execution_rows and (binding is not None or universal_binding is not None):
+                universal_lineage = load_universal_entry_lineage(
+                    connection,
+                    command_id=str(entry_id),
+                    command_payload=entry_payload,
+                )
+                if (
+                    str(entry_payload.get("source") or "") == "universal_entry"
+                    and universal_lineage is None
+                ):
+                    raise RuntimeError("Universal Entry fill lost durable request lineage")
+            if execution_rows and (binding is not None or universal_lineage is not None):
                 position_idx = int(raw.get("positionIdx") or 0)
                 first_execution_id = str(execution_rows[0][0])
                 first_fill_ms = int(execution_rows[0][3] or fill_time_ms)
@@ -1374,47 +1378,61 @@ def command_worker_loop(key: str, secret: str) -> None:
                     side=str(position_row[0]),
                     position_idx=position_idx,
                 )
+                exchange_order_ids = sorted({str(row[1]) for row in execution_rows})
+                client_order_ids = sorted({str(row[2]) for row in execution_rows})
+                execution_ids = [str(row[0]) for row in execution_rows]
                 if binding is not None:
                     owner_bot = str(binding[2])
                     owner_strategy_id = str(binding[3])
                     owner_strategy_version = str(binding[4])
                     owner_signal_id = str(binding[1])
                     geometry_handoff_id = binding[0]
+                    connection.execute(
+                        """INSERT INTO runtime.position_ownership(
+                            position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
+                            signal_id,entry_command_id,geometry_handoff_id,symbol,side,
+                            actual_avg_fill,actual_qty,fill_at,exchange_order_ids,
+                            client_order_ids,execution_ids,exchange_position_key,position_idx)
+                            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                   to_timestamp(%s/1000.0),%s,%s,%s,%s,%s)
+                            ON CONFLICT(entry_command_id) DO UPDATE SET
+                              actual_avg_fill=excluded.actual_avg_fill,
+                              actual_qty=excluded.actual_qty,
+                              exchange_order_ids=excluded.exchange_order_ids,
+                              client_order_ids=excluded.client_order_ids,
+                              execution_ids=excluded.execution_ids,
+                              exchange_position_key=excluded.exchange_position_key,
+                              position_idx=excluded.position_idx""",
+                        (
+                            position_id, trade_id, owner_bot, owner_strategy_id,
+                            owner_strategy_version, owner_signal_id, entry_id,
+                            geometry_handoff_id, symbol, position_row[0],
+                            actual_entry, Decimal(str(position_row[1])), first_fill_ms,
+                            json.dumps(exchange_order_ids),
+                            json.dumps(client_order_ids),
+                            json.dumps(execution_ids),
+                            f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
+                            position_idx,
+                        ),
+                    )
                 else:
-                    assert universal_binding is not None
-                    owner_bot = "universal-entry"
-                    owner_signal_id = str(universal_binding[1])
-                    owner_strategy_id = str(universal_binding[2])
-                    owner_strategy_version = str(universal_binding[3])
-                    geometry_handoff_id = None
-                connection.execute(
-                    """INSERT INTO runtime.position_ownership(
-                        position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
-                        signal_id,entry_command_id,geometry_handoff_id,symbol,side,
-                        actual_avg_fill,actual_qty,fill_at,exchange_order_ids,
-                        client_order_ids,execution_ids,exchange_position_key,position_idx)
-                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                               to_timestamp(%s/1000.0),%s,%s,%s,%s,%s)
-                        ON CONFLICT(entry_command_id) DO UPDATE SET
-                          actual_avg_fill=excluded.actual_avg_fill,
-                          actual_qty=excluded.actual_qty,
-                          exchange_order_ids=excluded.exchange_order_ids,
-                          client_order_ids=excluded.client_order_ids,
-                          execution_ids=excluded.execution_ids,
-                          exchange_position_key=excluded.exchange_position_key,
-                          position_idx=excluded.position_idx""",
-                    (
-                        position_id, trade_id, owner_bot, owner_strategy_id,
-                        owner_strategy_version, owner_signal_id, entry_id,
-                        geometry_handoff_id, symbol, position_row[0],
-                        actual_entry, Decimal(str(position_row[1])), first_fill_ms,
-                        json.dumps(sorted({str(row[1]) for row in execution_rows})),
-                        json.dumps(sorted({str(row[2]) for row in execution_rows})),
-                        json.dumps([str(row[0]) for row in execution_rows]),
-                        f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
-                        position_idx,
-                    ),
-                )
+                    assert universal_lineage is not None
+                    persist_universal_strategy_position(
+                        connection,
+                        lineage=universal_lineage,
+                        position_id=position_id,
+                        trade_id=trade_id,
+                        entry_command_id=str(entry_id),
+                        symbol=str(symbol),
+                        side=str(position_row[0]),
+                        actual_avg_fill=actual_entry,
+                        actual_qty=Decimal(str(position_row[1])),
+                        fill_at=datetime.fromtimestamp(first_fill_ms / 1000, tz=UTC),
+                        exchange_order_ids=exchange_order_ids,
+                        client_order_ids=client_order_ids,
+                        execution_ids=execution_ids,
+                        position_idx=position_idx,
+                    )
             current_stop=Decimal(str(raw.get("stopLoss") or 0))
             profit_already_protected=current_stop > 0 and (
                 (position_row[0] == "Buy" and current_stop >= actual_entry)
@@ -1508,7 +1526,8 @@ def reconcile_position_ownership(
     }
     rows = connection.execute(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
-                  extract(epoch from fill_at)*1000,position_idx,entry_command_id
+                  extract(epoch from fill_at)*1000,position_idx,entry_command_id,
+                  entry_execution_request_id
            FROM runtime.position_ownership
            WHERE state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'
            ORDER BY fill_at"""
@@ -1572,6 +1591,11 @@ def reconcile_position_ownership(
                        close_link_status='UNRESOLVED_EXACT_LINK'
                    WHERE position_id=%s""",
                 (position_id,),
+            )
+            release_position_capital_reservation(
+                connection,
+                position_id=position_id,
+                entry_execution_request_id=None if row[9] is None else str(row[9]),
             )
             continue
         protection_rows = connection.execute(
@@ -1698,6 +1722,11 @@ def reconcile_position_ownership(
                WHERE position_id=%s""",
             (closed_ms, close.exit_order_id, json.dumps(close.exit_order_ids),
              json.dumps(close.exit_execution_ids), position_id),
+        )
+        release_position_capital_reservation(
+            connection,
+            position_id=position_id,
+            entry_execution_request_id=None if row[9] is None else str(row[9]),
         )
 
 

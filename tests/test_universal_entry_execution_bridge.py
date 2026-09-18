@@ -278,11 +278,22 @@ def test_dormant_consumer_requires_two_explicit_activation_switches() -> None:
 
 def test_private_runtime_default_source_and_universal_fill_lineage() -> None:
     source = (ROOT / "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    binding = (ROOT / "src/bybit_workbench/strategy_position_binding.py").read_text(
+        encoding="utf-8"
+    )
     assert 'CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1"' in source
     assert 'if ENTRY_COMMAND_SOURCE == "LEGACY_V1"' in source
-    assert "strategy_entry.execution_dispatches" in source
-    assert 'owner_bot = "universal-entry"' in source
-    assert "geometry_handoff_id = None" in source
+    assert "load_universal_entry_lineage(" in source
+    assert "persist_universal_strategy_position(" in source
+    for token in (
+        "strategy_entry.execution_dispatches",
+        "strategy_entry.execution_requests",
+        "strategy_entry.strategy_attempts",
+        "runtime.capital_reservations",
+        "'universal-entry'",
+        "geometry_handoff_id",
+    ):
+        assert token in binding
 
 
 def test_dispatch_storage_is_append_only_and_has_exact_lineage() -> None:

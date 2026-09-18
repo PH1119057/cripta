@@ -70,14 +70,14 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - [x] P3 commit
 - [x] worktree clean after commit
 
-## P4 — StrategyPosition binding — TODO
-- [ ] confirmed fill -> exact StrategyPosition
-- [ ] exact Strategy/activation/EntryPlan/ExitPlan lineage
-- [ ] actual fill/qty/order identities
-- [ ] physical exchange slot conflict => fail-closed
-- [ ] historical rows never guessed
-- [ ] recovery/idempotency test
-- [ ] separate P4 commit
+## P4 — StrategyPosition binding — DONE
+- [x] confirmed fill -> exact StrategyPosition
+- [x] exact Strategy/activation/EntryPlan/ExitPlan lineage
+- [x] actual fill/qty/order identities
+- [x] physical exchange slot conflict => fail-closed
+- [x] historical rows never guessed
+- [x] recovery/idempotency test
+- [x] separate P4 commit
 
 ## P5 — Universal Exit Engine shadow — TODO
 - [ ] exact StrategyPosition + exact ExitPlan input
@@ -158,3 +158,20 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 
 Возвращать исторические документы в активный канон ради этих тестов запрещено.
 Их исправление — отдельный maintenance scope.
+
+## P4 evidence
+
+- exact fill binding проверен на disposable PostgreSQL;
+- command payload сверяется с durable
+  execution_dispatches -> execution_requests -> strategy_attempts -> capital_reservations;
+- reservation связывается с StrategyPosition и становится CONSUMED;
+- confirmed close переводит связанную reservation в RELEASED;
+- повторный identical fill binding idempotent;
+- второй OPEN StrategyPosition того же exchange slot отвергается DB;
+- RECONCILIATION_REQUIRED также удерживает exchange slot;
+- Universal Entry consumer блокирует occupied/pending slot до создания trade command;
+- pre-exchange ownership conflict освобождает RESERVED capital;
+- P3+P4 PostgreSQL integration: 9 passed;
+- targeted P4: 87 passed;
+- full branch: 1316 passed / 19 skipped / 18 baseline stale-doc failed;
+- NEW_DIAGNOSTICS = 0.

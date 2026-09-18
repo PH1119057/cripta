@@ -35,8 +35,8 @@ def test_universal_position_lineage_is_fail_closed() -> None:
 
 
 def test_open_exchange_slot_has_single_logical_owner() -> None:
-    assert "ux_position_ownership_open_exchange_slot" in SQL
-    assert "WHERE state='OPEN' AND exchange_position_key IS NOT NULL" in SQL
+    assert "ux_position_ownership_active_exchange_slot" in SQL
+    assert "state IN ('OPEN','RECONCILIATION_REQUIRED')" in SQL
 
 
 def test_capital_reservation_unknown_states_remain_reserved() -> None:

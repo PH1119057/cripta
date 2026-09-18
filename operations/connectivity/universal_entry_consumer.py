@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
     BridgePolicyBundle,
@@ -19,6 +20,9 @@ from bybit_workbench.universal_entry.execution_bridge import (
     prepare_runtime_entry_command,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
+
+CURRENT_ACCOUNT_REF = "BYBIT:UNIFIED"
+CURRENT_POSITION_IDX = 0
 
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
@@ -264,6 +268,81 @@ def _publish_command(
         raise RuntimeError("atomic capital reservation is not RESERVED at dispatch")
 
 
+def _exchange_position_slot_conflict(
+    connection: psycopg.Connection[Any],
+    row: Mapping[str, object],
+    request: ExecutionRequest,
+) -> str | None:
+    account_ref = str(row.get("capital_reservation_account_ref") or "")
+    if account_ref != CURRENT_ACCOUNT_REF:
+        return f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
+
+    key = exchange_position_key(request.symbol, CURRENT_POSITION_IDX)
+    owned = connection.execute(
+        """SELECT position_id,state
+             FROM runtime.position_ownership
+            WHERE exchange_position_key=%s
+              AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+            ORDER BY fill_at DESC
+            LIMIT 1""",
+        (key,),
+    ).fetchone()
+    if owned is not None:
+        return f"OWNED_POSITION:{owned['position_id']}:{owned['state']}"
+
+    hot_position = connection.execute(
+        """SELECT side,size
+             FROM runtime.hot_positions
+            WHERE symbol=%s AND position_idx=%s
+              AND NULLIF(size,'')::numeric > 0
+            LIMIT 1""",
+        (request.symbol, CURRENT_POSITION_IDX),
+    ).fetchone()
+    if hot_position is not None:
+        return f"EXCHANGE_POSITION:{hot_position['side']}:{hot_position['size']}"
+
+    pending_command = connection.execute(
+        """SELECT command_id,state
+             FROM runtime.trade_commands
+            WHERE command_type='entry'
+              AND symbol=%s
+              AND state IN ('queued','running')
+            ORDER BY requested_at_epoch_ms
+            LIMIT 1""",
+        (request.symbol,),
+    ).fetchone()
+    if pending_command is not None:
+        return f"PENDING_ENTRY_COMMAND:{pending_command['command_id']}:{pending_command['state']}"
+
+    pending_order = connection.execute(
+        """SELECT order_id,order_status
+             FROM runtime.hot_orders
+            WHERE symbol=%s
+              AND order_status IN ('New','PartiallyFilled','Untriggered')
+              AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
+            ORDER BY order_id
+            LIMIT 1""",
+        (request.symbol,),
+    ).fetchone()
+    if pending_order is not None:
+        return f"PENDING_ENTRY_ORDER:{pending_order['order_id']}:{pending_order['order_status']}"
+    return None
+
+
+def _release_pre_exchange_reservation(
+    connection: psycopg.Connection[Any],
+    reservation_id: str,
+) -> None:
+    updated = connection.execute(
+        """UPDATE runtime.capital_reservations
+              SET state='RELEASED'
+            WHERE reservation_id=%s AND state='RESERVED'""",
+        (reservation_id,),
+    )
+    if updated.rowcount != 1:
+        raise RuntimeError("pre-exchange capital reservation release race")
+
+
 def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
     row = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
@@ -295,6 +374,27 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 },
             )
         return "BLOCKED:CAPITAL_RESERVATION_INVALID"
+    conflict = _exchange_position_slot_conflict(connection, row, request)
+    if conflict is not None:
+        assert request.capital_reservation_id is not None
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason=f"EXCHANGE_POSITION_OWNERSHIP_CONFLICT:{conflict}",
+                payload={
+                    "fault_code": "EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
+                    "conflict": conflict,
+                    "exchange_position_key": exchange_position_key(
+                        request.symbol, CURRENT_POSITION_IDX
+                    ),
+                },
+            )
+            _release_pre_exchange_reservation(
+                connection,
+                request.capital_reservation_id,
+            )
+        return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_CONFLICT"
     try:
         bundle = _policy_bundle(connection, row)
         prepared = prepare_runtime_entry_command(request, bundle, now=current)

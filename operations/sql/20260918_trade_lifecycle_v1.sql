@@ -105,9 +105,10 @@ BEGIN
     END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_position_ownership_open_exchange_slot
+CREATE UNIQUE INDEX IF NOT EXISTS ux_position_ownership_active_exchange_slot
     ON runtime.position_ownership(exchange_position_key)
-    WHERE state='OPEN' AND exchange_position_key IS NOT NULL;
+    WHERE state IN ('OPEN','RECONCILIATION_REQUIRED')
+      AND exchange_position_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS runtime.plan_consumptions (
     plan_consumption_id text PRIMARY KEY,
@@ -206,6 +207,23 @@ CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
         strategy_config_fingerprint,entry_plan_fingerprint
     ) DEFERRABLE INITIALLY DEFERRED
 );
+
+ALTER TABLE runtime.capital_reservations
+    ADD COLUMN IF NOT EXISTS strategy_position_id text;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname='capital_reservations_strategy_position_fkey'
+          AND conrelid='runtime.capital_reservations'::regclass
+    ) THEN
+        ALTER TABLE runtime.capital_reservations
+            ADD CONSTRAINT capital_reservations_strategy_position_fkey
+            FOREIGN KEY (strategy_position_id)
+            REFERENCES runtime.position_ownership(position_id);
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS ix_capital_reservations_account_active
     ON runtime.capital_reservations(account_ref,state,created_at)
