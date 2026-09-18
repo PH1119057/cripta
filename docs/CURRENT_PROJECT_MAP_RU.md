@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.3  
+**Версия:** 8.4  
 **Дата:** 2026-09-18  
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -41,7 +41,7 @@ EXCHANGE
 `TRADING_CONTOUR_RU*.md` объединяет Strategy + Entry + Exit + Execution.
 
 `OBSERVATION_ANALYTICS_RU*.md` объединяет MAYAK + Dispatcher + Monitoring +
-Position Supervisor + Analyst/Research.
+Lifecycle Supervisor + Position Supervisor + Analyst/Research.
 
 Старые самостоятельные корневые концептуальные/PASS/Workbench документы
 перенесены в `archive/documentation_pre_2026-09-18/root/`.
@@ -74,18 +74,33 @@ CHECKED HERE 2026-09-18:
 Последний пункт — `FINDING`, а не текущая архитектура. Перед разработкой
 старого profile-кода требуется отдельная migration/cleanup задача.
 
-# 6. Strategy / Universal Entry
+# 6. Strategy / Entry / Exit
 
-В source существует Universal Entry contour:
-- immutable StrategyCard;
+CANON после решения владельца 2026-09-18:
+
+- StrategyCard остаётся passive immutable policy;
+- Strategy layer включает Strategy Materializer;
+- Materializer создаёт exact immutable EntryPlan + ExitPlan;
+- Entry Engine универсально исполняет EntryPlan;
+- после confirmed fill создаётся StrategyPosition;
+- Exit Engine универсально исполняет exact ExitPlan этой StrategyPosition;
+- Entry/Exit Engines не зависят от количества Strategy и не содержат скрытой
+  Strategy-specific policy;
+- Execution исполняет typed Entry/Exit requests.
+
+Текущий source частично реализует старую сторону этой модели:
 - StrategyActivation;
 - EntryPlan/ExitPlan materialization;
 - ActivePlanRegistry;
-- `UniversalEntryEngine`;
-- `ParameterizedCausalMarketWatch`;
-- StrategySignal/Attempt/Decision/ExecutionRequest;
+- UniversalEntryEngine;
+- ParameterizedCausalMarketWatch;
+- StrategySignal/Attempt/Decision;
 - PostgreSQL evidence/read-model;
 - execution bridge.
+
+Полная runtime-реализация нового канона (универсальный Exit Engine,
+StrategyPosition/lifecycle handoff, typed Exit execution path) ещё не считается
+IMPLEMENTED до отдельного ТЗ, разработки и проверки.
 
 # 7. Текущий первый Strategy Candidate
 
@@ -123,12 +138,25 @@ Entry price фиксируется как факт сделки.
 Execution исполняет уже принятое торговое решение.
 Bybit — текущий provider, но не архитектурная константа.
 
-Точный универсальный контракт будущих Exit-мутаций в Execution пока не
-утверждён; это открытый архитектурный вопрос.
+Канонически Execution должен принимать решения как Entry, так и Exit через
+различимые EntryExecutionRequest/ExitExecutionRequest с exact lineage.
 
-# 12. Analytics
+Физическая реализация этого нового interface contract ещё не проверена и не
+считается IMPLEMENTED.
 
-Analyst/Research — доказательный контур без trading rights.
+# 12. Lifecycle / Position / Analytics
+
+Канонически:
+- Lifecycle Supervisor контролирует handoff от Strategy activation/materialized
+  plans до final close/economics;
+- Position Supervisor наблюдает фактическое состояние StrategyPosition;
+- Analyst/Research занимается постфактум-аналитикой и counterfactual
+  псевдосделками;
+- Monitoring/UI показывает состояния, но не владеет trading policy.
+
+Новый Lifecycle Supervisor contract пока является CANON, но его соответствие
+текущему production source/runtime должно быть проверено в отдельной
+implementation-задаче.
 
 # 13. ChatGPT Project Instructions
 
@@ -145,7 +173,10 @@ state и не подтверждается одним только GitHub.
 - не меняет Strategy records в PostgreSQL;
 - не активирует real Execution;
 - не переименовывает historical IDs/DB rows;
-- не превращает обсуждаемый Exit Engine contract в канон до отдельного решения.
+- фиксирует новое owner-approved устройство Strategy Materializer / Entry
+  Engine / Exit Engine / Lifecycle Supervisor как CANON;
+- не объявляет это IMPLEMENTED/DEPLOYED до отдельного ТЗ, разработки и
+  runtime verification.
 
 # 15. Проверенный runtime/source checkpoint 2026-09-18
 
@@ -168,3 +199,25 @@ Mainnet gate в этом проходе повторно не подтвержд
 поэтому прошлое значение не выдаётся как `CHECKED HERE`.
 
 Legacy identifiers с `M3` — технический долг и не создают термин `M3`.
+
+
+# 16. Capital allocation V1
+
+CANON:
+
+```text
+Strategy задаёт требуемую сумму
+-> Entry condition fulfilled
+-> atomic capital reservation
+-> первый успешный reservation получает доступный капитал
+```
+
+Entry не ранжирует Strategy.
+
+Если средств недостаточно:
+- real Entry получает INSUFFICIENT_AVAILABLE_FUNDS;
+- Execution не создаётся;
+- Analyst может вести counterfactual/псевдосделку.
+
+Это owner-approved архитектурное правило. Текущая production реализация
+reservation/counterfactual path должна проверяться отдельно.

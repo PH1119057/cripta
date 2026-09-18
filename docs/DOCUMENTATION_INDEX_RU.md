@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.2  
+**Версия:** 2.3  
 **Дата:** 2026-09-18  
 **Статус:** канонический индекс документации
 
@@ -77,8 +77,8 @@ OWNER_DECISION_REQUIRED=YES
 Перед Strategy / Entry / Exit / Execution:
 - `TRADING_CONTOUR_RU*.md`.
 
-Перед MAYAK / Dispatcher / monitoring / Position Supervisor /
-Analyst / research / replay / OOS / holdout:
+Перед MAYAK / Dispatcher / monitoring / Lifecycle Supervisor /
+Position Supervisor / Analyst / research / replay / OOS / holdout:
 - `OBSERVATION_ANALYTICS_RU*.md`.
 
 Если затрагиваются оба контура — читать оба.

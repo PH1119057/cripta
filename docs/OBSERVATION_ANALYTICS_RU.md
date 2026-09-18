@@ -1,11 +1,11 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.0  
+**Версия:** 1.1  
 **Дата:** 2026-09-18  
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
-Этот документ объединяет MAYAK, Dispatcher, Monitoring, Position Supervisor,
-Analyst и Research. Ни один из этих компонентов не получает торговые права из-за
+Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
+Position Supervisor, Analyst и Research. Ни один из этих компонентов не получает торговые права из-за
 того, что наблюдает, классифицирует или анализирует рынок.
 
 # 1. MAYAK — независимое наблюдение рынка
@@ -173,9 +173,65 @@ UI/read-model:
 - не пересчитывает Entry независимо от канонического runtime;
 - неизвестное показывает как неизвестное.
 
-## 3.5 Position Supervisor
+## 3.5 Lifecycle Supervisor
 
-Position Supervisor наблюдает конкретную фактически открытую позицию.
+Lifecycle Supervisor — технический сквозной контролёр прохождения торгового
+lifecycle. Он не является новым торговым слоем и не владеет trading policy.
+
+Его область наблюдения начинается с activation/materialization Strategy и
+заканчивается подтверждённым завершением позиции и финальным audit/economics:
+
+```text
+StrategyActivation
+-> EntryPlan/ExitPlan materialized
+-> plans published
+-> Entry Engine consumption acknowledgement
+-> StrategySignal / EntryDecision
+-> EntryExecutionRequest
+-> Execution acknowledgement
+-> exchange order / fill
+-> StrategyPosition
+-> ExitPlan binding
+-> Exit Engine claim
+-> ExitDecision
+-> ExitExecutionRequest
+-> Execution acknowledgement
+-> close/reduce/protection result
+-> final close
+-> final audit/economics
+```
+
+Lifecycle Supervisor обязан видеть exact IDs/fingerprints и выявлять:
+- plan не опубликован/не подхвачен;
+- request не acknowledgement;
+- order/fill потерял causal binding;
+- открытая StrategyPosition не получила exact ExitPlan;
+- позиция не claim-нута Exit Engine;
+- lifecycle завис/разорвался;
+- фактическое Exchange state не соответствует ожидаемому lifecycle state.
+
+Пример критического состояния:
+
+```text
+POSITION_WITHOUT_EXIT_OWNER
+```
+
+Lifecycle Supervisor:
+- не создаёт StrategySignal;
+- не создаёт EntryDecision/ExitDecision;
+- не меняет stop/TP/trailing;
+- не закрывает позицию по собственной оценке;
+- не выбирает Strategy;
+- не является транспортом сообщений.
+
+Durable registry/queue/storage, idempotency и acknowledgement обеспечивают
+доставку и восстановление. Lifecycle Supervisor проверяет, что handoff
+фактически состоялся, и может поднять operational-safety fault/fail-closed
+state без изобретения торговой policy.
+
+## 3.6 Position Supervisor
+
+Position Supervisor наблюдает конкретную фактически открытую StrategyPosition.
 
 Он может сохранять:
 - current price;
@@ -185,7 +241,11 @@ Position Supervisor наблюдает конкретную фактически
 - смещения;
 - current MAYAK/Dispatcher context.
 
-Supervisor не получает право самостоятельно изменить Exit policy.
+Position Supervisor не получает право самостоятельно изменить Exit policy.
+
+Он отвечает на вопрос «что фактически происходит с этой позицией сейчас?»,
+тогда как Lifecycle Supervisor отвечает «правильно ли эта сущность проходит
+обязательный сквозной lifecycle?».
 
 # 4. ANALYTICS / RESEARCH — доказательный контур
 
@@ -198,13 +258,16 @@ Analyst/research объясняет, что произошло, и создаё�
 ## 4.2 Единица анализа
 
 ```text
-causal market refs
+StrategyActivation / exact Strategy version
+-> EntryPlan + ExitPlan fingerprints
+-> causal market refs
 -> signal_id (одна Strategy)
 -> strategy_attempt_id
 -> EntryDecision
--> optional ExecutionRequest/order/fill
--> optional position
--> Exit
+-> optional EntryExecutionRequest/order/fill
+-> optional StrategyPosition
+-> optional ExitDecision
+-> optional ExitExecutionRequest/close/protection fill
 -> actual economics
 ```
 
@@ -276,7 +339,23 @@ Strategy, старого Entry, старых названий или стары�
 - working_range_width;
 - exact depth/timeframe.
 
-## 4.9 Экономика
+## 4.9 Counterfactual / псевдосделки
+
+Если Entry condition выполнился, но real Entry не состоялся из-за
+`INSUFFICIENT_AVAILABLE_FUNDS`, Analyst может вести отдельную
+counterfactual/псевдосделку.
+
+Она:
+- сохраняет exact Strategy/EntryPlan/ExitPlan lineage;
+- не резервирует капитал;
+- не создаёт ExecutionRequest;
+- не имеет exchange mutation rights;
+- существует только для последующего сравнения распределения капитала и
+  качества Strategy.
+
+Counterfactual outcome всегда отделяется от фактического PnL.
+
+## 4.10 Экономика
 
 Торговые отчёты пользователю формулировать по-русски и различать:
 - до комиссий;
@@ -287,7 +366,7 @@ Strategy, старого Entry, старых названий или стары�
 - фактический PnL;
 - counterfactual.
 
-## 4.10 Из исследования в live
+## 4.11 Из исследования в live
 
 ```text
 ДОКАЗАТЕЛЬСТВА
@@ -301,8 +380,8 @@ Strategy, старого Entry, старых названий или стары�
 
 # 5. Общая граница наблюдательного контура
 
-MAYAK, Dispatcher, Monitoring, Position Supervisor и Analyst могут расширять
-видимость системы, но не становятся владельцами торговой policy.
+MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor, Position Supervisor и
+Analyst могут расширять видимость системы, но не становятся владельцами торговой policy.
 
 Наблюдение, классификация, рейтинг, корреляция и статистическая полезность сами
 по себе не создают право открыть, закрыть или изменить позицию.

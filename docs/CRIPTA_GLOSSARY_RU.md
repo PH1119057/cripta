@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.1  
+**Версия:** 1.2  
 **Дата:** 2026-09-18  
 **Статус:** обязательный канонический терминологический контракт
 
@@ -9,12 +9,16 @@
 
 # 1. Strategy
 
-**Strategy / Стратегия** — пассивная утверждённая владельцем версия правил
-конкретного способа торговли.
+**Strategy / Стратегия** — утверждённый владельцем торговый смысл конкретного
+способа торговли и его lifecycle внутри Strategy layer.
 
-Strategy не является процессом и сама не создаёт сигнал во времени.
+**StrategyCard** — пассивная неизменяемая версионированная карточка утверждённой
+Strategy. Она не наблюдает рынок и сама не создаёт сигнал во времени.
 
-**StrategyCard** — неизменяемая версионированная карточка утверждённой Strategy.
+**Strategy Materializer** — компонент внутри Strategy layer, который
+детерминированно преобразует exact StrategyCard/version в immutable EntryPlan и
+ExitPlan и публикует их для универсальных Engines. Он не является отдельным
+верхнеуровневым слоем и не добавляет торговую policy от себя.
 
 **Strategy Candidate / Strategy Draft / кандидат / черновик Strategy** —
 изменяемое исследовательское описание предполагаемого способа торговли до
@@ -28,7 +32,11 @@ immutable StrategyCard/version.
 StrategyCard.
 
 **EntryPlan / ExitPlan** — материализованные неизменяемые планы exact Strategy
-version для универсальных Entry/Exit механизмов.
+version для универсальных Entry/Exit Engines.
+
+**StrategyPosition** — логическая позиция exact Strategy version после
+confirmed open fill, связанная с Strategy/EntryPlan/ExitPlan lineage и
+фактическими exchange/order/fill refs.
 
 # 2. Entry
 
@@ -45,6 +53,14 @@ Strategy допускает/ищет вход. Не является одной 
 **Entry point / Entry price / точка входа** — конкретная цена фактического или
 моделируемого входа. После состоявшегося fill фактическая Entry price является
 неизменяемым историческим фактом.
+
+**Exit Engine** — активный универсальный исполнитель ExitPlan. Получает
+StrategyPosition + exact ExitPlan, наблюдает разрешённые планом факты и при
+выполнении условия создаёт ExitDecision.
+
+**ExitDecision** — формализованное решение Exit Engine выполнить конкретную
+разрешённую ExitPlan мутацию: protection change, reduce, close или иной
+предусмотренный планом action.
 
 # 3. StrategySignal
 
@@ -171,7 +187,12 @@ LONG/SHORT не переименовывают физические объект
 # 11. Execution
 
 **ExecutionRequest** — неизменяемый запрос на исполнение уже принятого Entry
-decision с точной Strategy/Plan lineage.
+или Exit decision с точной Strategy/Plan/decision lineage.
+
+**EntryExecutionRequest** — ExecutionRequest для принятого EntryDecision.
+
+**ExitExecutionRequest** — ExecutionRequest для принятого ExitDecision и exact
+StrategyPosition.
 
 **Execution** — технический слой биржевой мутации и reconciliation.
 
@@ -180,10 +201,20 @@ orders/fills/positions/account state.
 
 # 12. Аналитика и исследование
 
-**Analyst** — постфактум-аналитика без торговых прав.
+**Lifecycle Supervisor** — технический наблюдатель сквозного lifecycle от
+Strategy activation/materialization до final close/economics. Проверяет exact
+handoff/acknowledgement/IDs, но не создаёт торговых решений и не изменяет
+позицию по собственной оценке.
 
-**Position Supervisor** — наблюдение конкретной фактически открытой позиции;
-не владелец Strategy/Exit.
+**Position Supervisor** — наблюдение фактического состояния конкретной
+StrategyPosition; не владелец Strategy/Exit.
+
+**Analyst** — постфактум-аналитика и research без торговых прав.
+
+**Counterfactual trade / псевдосделка** — аналитическая моделируемая сделка,
+которая могла бы быть открыта по Strategy, но не стала real Execution
+(например, из-за недостатка доступного капитала). Не резервирует средства и не
+имеет exchange mutation rights.
 
 **Исследование / research** — получение доказательств. Не канон и не Strategy.
 
@@ -192,12 +223,26 @@ orders/fills/positions/account state.
 **Канон** — только явно утверждённые владельцем активные документы и точная
 owner-approved Strategy version.
 
-# 13. Качество данных
+# 13. Капитал и lifecycle
+
+**Atomic capital reservation** — техническая атомарная фиксация части
+доступного капитала за принятым real Entry до биржевой отправки. Не является
+отдельным торговым слоем и не ранжирует Strategy.
+
+**First-come-first-served capital V1** — если несколько независимых Entry
+конкурируют за ограниченный капитал, право получает первый успешно завершивший
+atomic reservation. При нехватке средств real Execution не создаётся.
+
+**POSITION_WITHOUT_EXIT_OWNER** — critical lifecycle fault: подтверждённая
+StrategyPosition не имеет подтверждённого exact ExitPlan binding/Exit Engine
+claim.
+
+# 14. Качество данных
 
 `NO_DATA`, `UNKNOWN`, `STALE`, `PARTIAL` — реальные состояния качества.
 Их нельзя превращать в ноль, `NONE`, neutral или safe.
 
-# 14. Запрещённые/исторические обозначения
+# 15. Запрещённые/исторические обозначения
 
 **M3** — ошибочный исторический артефакт голосового распознавания слова
 `Entry`. Самостоятельного смысла, таймфрейма, Strategy или математической

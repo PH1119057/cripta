@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.0  
+**Версия:** 1.1  
 **Дата:** 2026-09-18  
 **Статус:** активный канонический контракт торгового контура
 
@@ -8,13 +8,17 @@
 Strategy, Entry, Exit и Execution. Верхняя архитектура определяется
 `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`, терминология — `CRIPTA_GLOSSARY_RU.md`.
 
-# 1. STRATEGY — владелец торгового смысла
+# 1. STRATEGY — владелец торгового смысла и планов
 
-Strategy — пассивный справочник точных правил одного способа торговли.
+Strategy layer владеет торговым смыслом и lifecycle утверждённой Strategy.
 
-Она не мониторит рынок и сама не создаёт сигнал во времени. Активное наблюдение
-выполняют универсальные runtime-компоненты Entry/Exit, используя планы,
-материализованные из Strategy.
+Пассивным immutable справочником является `StrategyCard`. Сам торговый смысл
+не живёт внутри Entry/Exit Engines.
+
+Внутри Strategy layer существует `Strategy Materializer`, который
+детерминированно создаёт `EntryPlan` и `ExitPlan` exact Strategy version и
+публикует их в устойчивый active-plan registry. Materializer не наблюдает рынок
+и не создаёт `StrategySignal`/ExitDecision.
 
 ## 1.1 StrategyCard
 
@@ -90,7 +94,19 @@ H3 сейчас не является Entry condition текущей перво�
 
 ## 1.6 Материализация
 
-Из exact Strategy version создаются immutable `EntryPlan` и `ExitPlan`.
+Из exact StrategyCard/version `Strategy Materializer` создаёт immutable
+`EntryPlan` и `ExitPlan`.
+
+Материализация выполняется при activation/load/restart/recovery в тех местах,
+где это требуется реализации. Materializer может быть функцией, классом или
+service; это implementation detail внутри Strategy layer, а не новый
+верхнеуровневый слой.
+
+Каждый план обязан нести exact:
+- strategy_id;
+- strategy_version;
+- strategy_fingerprint;
+- собственный plan fingerprint.
 
 Любое поле, влияющее на решение или исполнение, должно иметь доказанный
 сквозной consumer path. Неподдержанный параметр означает fail-closed для
@@ -198,22 +214,51 @@ StrategySignal сам по себе ещё не равен биржевому fi
 - EXPIRED;
 - CANCELLED.
 
-Только ACCEPTED создаёт `ExecutionRequest`.
+Только ACCEPTED после успешной обязательной technical/capital reservation
+создаёт `EntryExecutionRequest`.
 
-## 2.7 После fill
+## 2.7 Капитал и atomic reservation
 
-После confirmed fill Entry не сопровождает позицию и не становится Exit.
+Размер/лимит капитала задаёт Strategy/EntryPlan.
+
+Dispatcher публикует account-capacity facts, но не распределяет капитал между
+Strategy.
+
+Перед real Entry требуется атомарная reservation разрешённой Strategy суммы.
+
+Правило V1:
+- кто первым успешно зарезервировал доступную сумму, тот её использует;
+- Entry Engine не ранжирует Strategy и не выбирает «лучшую»;
+- если средств недостаточно, `EntryDecision = INSUFFICIENT_AVAILABLE_FUNDS`;
+- real ExecutionRequest не создаётся;
+- Analyst может продолжить событие как counterfactual/псевдосделку.
+
+Unknown order/fill state не освобождает reservation до reconciliation истины.
+
+## 2.8 После fill
+
+После confirmed open fill создаётся logical `StrategyPosition` с exact
+Strategy/EntryPlan/ExitPlan lineage и фактическими exchange/order/fill refs.
+
+Entry больше не сопровождает позицию.
 
 Фактическая Entry price и causal snapshot сохраняются в истории.
 
-# 3. EXIT — сопровождение и выход
+# 3. EXIT — универсальный Exit Engine
 
-## 3.1 Ownership
+## 3.1 Назначение и ownership
 
-После confirmed fill сопровождение принадлежит Exit policy той же exact
-Strategy version, которая открыла позицию.
+`Exit Engine` — универсальный активный исполнитель `ExitPlan`.
 
-Entry больше не владеет позицией.
+Количество Strategy ему не важно. Он получает StrategyPosition + exact
+ExitPlan, наблюдает только разрешённые этим планом причинные facts/context и
+создаёт `ExitDecision` при выполнении конкретного правила.
+
+После confirmed fill сопровождение принадлежит ExitPlan той же exact Strategy
+version, которая открыла позицию.
+
+Exit Engine обязан claim/acknowledge StrategyPosition. Entry больше не владеет
+позицией.
 
 ## 3.2 Неизменяемая точка входа
 
@@ -259,22 +304,39 @@ H3 не является Entry condition текущей первой Strategy.
 trailing или закрывала позицию, правило должно быть явно утверждено в новой
 Strategy version.
 
-## 3.5 Возможные Exit policy
+## 3.5 Initial protection и возможные Exit actions
 
-Strategy может определять:
-- hard stop;
-- TP;
+Initial protection принадлежит Strategy и передаётся в Execution при открытии,
+чтобы позиция не оставалась без базовой биржевой защиты, даже если динамическое
+Exit-сопровождение временно недоступно.
+
+ExitPlan может разрешать:
+- SET/REPLACE stop;
+- SET/REPLACE TP;
 - fee-aware break-even;
 - trailing;
+- REDUCE;
+- CLOSE;
 - time exit;
 - zone/geometry exit;
-- MAYAK/Dispatcher context;
+- MAYAK/Dispatcher context-based exit;
 - protection/holding;
 - hedge lifecycle.
 
+Exit Engine не может выполнить action, отсутствующий в ExitPlan.
+
 Никакое старое исследовательское число не является default.
 
-## 3.6 Position observation
+## 3.6 ExitDecision и Execution
+
+Когда условие ExitPlan выполнено, Exit Engine создаёт exact `ExitDecision`.
+
+Принятое ExitDecision создаёт `ExitExecutionRequest` с exact
+StrategyPosition/Strategy/ExitPlan lineage.
+
+Exit Engine не мутирует Exchange напрямую.
+
+## 3.7 Position observation
 
 Карточка позиции должна позволять сохранять:
 - fixed Entry price;
@@ -297,13 +359,18 @@ Execution — техническая граница между уже приня
 
 ## 4.2 Вход Execution
 
-Execution получает `ExecutionRequest` с точной lineage:
-- signal_id;
-- strategy_id/version/fingerprint;
-- entry_plan_fingerprint;
-- attempt/decision identity;
-- symbol/direction;
-- Strategy-owned execution/capital/protection parameters.
+Execution получает typed `ExecutionRequest`.
+
+Логически различаются:
+- `EntryExecutionRequest` — от принятого EntryDecision;
+- `ExitExecutionRequest` — от принятого ExitDecision.
+
+Entry request несёт signal/attempt/EntryDecision/EntryPlan lineage.
+
+Exit request несёт StrategyPosition/ExitDecision/ExitPlan lineage.
+
+Оба несут exact strategy_id/version/fingerprint, symbol/direction и необходимые
+Strategy-owned execution/protection параметры.
 
 ## 4.3 Запрет собственной торговой логики
 
@@ -347,3 +414,32 @@ Strategy/Entry semantics.
 fill/qty/protection или owner kill имеют право технически остановить mutation.
 
 Это safety, а не новая оценка рынка.
+
+
+# 5. Сквозной handoff
+
+Торговый contour обязан оставлять доказуемый lifecycle:
+
+```text
+StrategyActivation
+-> EntryPlan/ExitPlan materialized + published
+-> Entry Engine consumed
+-> StrategySignal
+-> EntryDecision
+-> EntryExecutionRequest
+-> Execution ack
+-> order/fill
+-> StrategyPosition
+-> ExitPlan binding
+-> Exit Engine claim
+-> ExitDecision
+-> ExitExecutionRequest
+-> Execution ack
+-> final exchange result
+```
+
+Контроль того, что каждый обязательный handoff состоялся, принадлежит
+`Lifecycle Supervisor` из technical support contour.
+
+Entry/Exit/Execution не должны молча подменять потерянный handoff новой
+торговой логикой.

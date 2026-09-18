@@ -1,12 +1,12 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.0  
+**Версия:** 2.1  
 **Дата:** 2026-09-18  
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
 Детали каждого слоя находятся в активных документах из
-`docs/DOCUMENTATION_INDEX_RU.md`.
+`docs/DOCUMENTATION_INDEX_RU*.md`.
 
 # 1. Верхняя модель
 
@@ -26,9 +26,12 @@ EXCHANGE
 
 Верхних уровней пять.
 
+Внутри `STRATEGY` существует компонент материализации планов. Он не образует
+шестой верхнеуровневый слой.
+
 Технический поддерживающий контур обеспечивает данные, связь, хранение,
-наблюдаемость, восстановление, UI и аудит, но не является дополнительным
-торговым уровнем.
+наблюдаемость, lifecycle-контроль, восстановление, UI и аудит, но не является
+дополнительным торговым уровнем.
 
 `Risk` не является самостоятельным верхнеуровневым слоем.
 
@@ -45,119 +48,259 @@ MAYAK независимо и причинно наблюдает внешний
 
 # 3. DISPATCHER
 
-Dispatcher структурирует объективный рыночный контекст и состояние торговой
-ёмкости аккаунта.
+Dispatcher структурирует объективный strategy-agnostic рыночный контекст и
+состояние торговой ёмкости аккаунта.
 
-Он не определяет пригодность рынка для конкретной Strategy, не включает
-Strategy, не создаёт `StrategySignal` и не владеет торговыми мутациями.
+Он публикует факты `total/equity/used/reserved/free/available`, но сам не
+решает, какой Strategy дать капитал, не резервирует его и не создаёт торговую
+мутацию.
 
 # 4. STRATEGY
 
-Strategy — единственный владелец торгового смысла.
+Strategy layer — единственный владелец торгового смысла и lifecycle своих
+утверждённых правил.
 
-Канонически Strategy является пассивной, утверждённой владельцем,
-неизменяемой и версионированной `StrategyCard`.
+## 4.1 StrategyCard
 
-Strategy хранит все торговые параметры конкретного способа торговли:
-- universe инструментов;
-- направление;
-- геометрию и её параметры;
-- таймфреймы и временную глубину;
-- правила совмещения геометрий;
-- стабилизацию;
-- touch/retest/sequence/cooldown/reset;
-- условия использования MAYAK/Dispatcher;
-- капитал, размер и плечо;
-- Entry policy;
-- Exit policy;
-- protection/holding/hedge policy, если они включены.
+`StrategyCard` остаётся пассивной, immutable, утверждённой владельцем и
+версионированной карточкой торговых правил.
 
-Ни Entry, ни Execution не имеют права подменять отсутствующие параметры
-Strategy собственными торговыми значениями по умолчанию.
+Она не наблюдает рынок, не является daemon и сама не создаёт рыночный сигнал.
 
-Изменение торгового смысла или числа = новая утверждённая версия Strategy.
+Изменение торгового смысла или числа = новая утверждённая Strategy version.
+
+## 4.2 Strategy Materializer
+
+Внутри Strategy layer существует `Strategy Materializer`.
+
+Он:
+- берёт exact immutable StrategyCard/version;
+- детерминированно создаёт immutable `EntryPlan` и `ExitPlan`;
+- сохраняет exact strategy/version/fingerprint и plan fingerprints;
+- публикует планы в устойчивый active-plan registry;
+- может выполняться при activation/load/restart/recovery;
+- не наблюдает рынок;
+- не решает, выполнены ли условия Entry/Exit;
+- не имеет права добавлять торговые defaults, отсутствующие в StrategyCard.
+
+Форма реализации Materializer — функция, класс или service — является
+implementation detail и не создаёт отдельного торгового слоя.
+
+## 4.3 Ownership Strategy
+
+StrategyCard содержит все торговые параметры конкретного способа торговли,
+включая:
+- universe/symbols;
+- direction;
+- Entry/Exit geometry;
+- timeframe/depth;
+- stabilization/touch/retest/sequence/cooldown/reset;
+- MAYAK/Dispatcher context consumption;
+- capital amount/allocation;
+- leverage;
+- execution order policy;
+- initial protection;
+- hard stop/TP/BE/trailing;
+- holding;
+- Exit rules;
+- hedge policy, если включена.
+
+Ни Materializer, ни Entry, ни Exit, ни Execution не имеют права подменять
+отсутствующие Strategy-owned значения скрытыми defaults.
 
 # 5. ENTRY
 
-Entry — универсальный параметризованный исполнитель `EntryPlan`.
+`Entry Engine` — универсальный активный исполнитель `EntryPlan`.
 
-Entry Engine:
-1. получает причинные нормализованные рыночные факты;
-2. получает активные `EntryPlan`;
-3. независимо проверяет каждый план по его правилам;
-4. при выполнении правил сам фиксирует strategy-specific `StrategySignal`;
-5. создаёт attempt/decision;
-6. только при принятом решении создаёт `ExecutionRequest`.
+Количество Strategy ему не важно. Он получает активные планы, независимо
+проверяет каждый план на причинных данных и при выполнении условий создаёт
+strategy-specific `StrategySignal`, attempt и `EntryDecision`.
 
-Strategy сама не является daemon и сама физически сигнал во времени не
-отправляет.
+Entry не выбирает winner/priority между Strategy и не устраняет конфликт
+LONG/SHORT между независимыми Strategy.
 
-Entry не имеет права выбирать или ранжировать Strategy, устранять конфликт
-LONG/SHORT между Strategy, хранить H9/H3/130 баров/30 минут/60 минут или иное
-торговое число как глобальную константу, а также наследовать старые правила
-без явного значения в Strategy.
+## 5.1 Капитал
 
-Один `signal_id` принадлежит ровно одной Strategy version. Один рыночный момент
-может породить независимые сигналы нескольких Strategy.
+Запрошенный размер капитала принадлежит Strategy/EntryPlan.
+
+Перед принятым real Entry выполняется атомарная техническая reservation
+доступного капитала.
+
+Правило V1:
+
+```text
+первый Entry, успешно получивший atomic reservation,
+получает разрешённую Strategy сумму
+```
+
+Нет дополнительного ранжирования Strategy.
+
+Если доступного капитала недостаточно:
+- real Entry не создаёт биржевую мутацию;
+- `EntryDecision = INSUFFICIENT_AVAILABLE_FUNDS`;
+- событие может продолжить жизнь как counterfactual/псевдосделка в Analyst,
+  без Execution и без reservation.
+
+Reservation не освобождается при неизвестном результате ордера до
+reconciliation истины.
 
 # 6. EXIT
 
-После fill Entry больше не владеет сопровождением позиции.
+`Exit Engine` — универсальный активный исполнитель `ExitPlan`.
 
-Exit следует policy той же exact Strategy version, которая открыла позицию.
-Exit может использовать текущую причинную геометрию, MAYAK/Dispatcher context,
-состояние позиции и другие данные только если это определено Strategy.
+После confirmed open fill создаётся логическая `StrategyPosition`, привязанная
+к exact Strategy version, `EntryPlan`, `ExitPlan` и фактическому
+exchange/order/fill lifecycle.
 
-Фактическая Entry price неизменяема как историческая точка входа.
-Текущая рыночная геометрия после Entry продолжает пересчитываться и может
-двигаться независимо от Entry price.
+Exit Engine получает/claim-ит эту StrategyPosition и сопровождает её только по
+exact `ExitPlan`, который был материализован из той же Strategy version.
+
+Entry после confirmed fill сопровождением позиции не владеет.
+
+Exit Engine может сформировать `ExitDecision` для:
+- изменения stop;
+- изменения TP;
+- break-even;
+- trailing;
+- reduce;
+- full close;
+- time/geometry/context exit;
+- hedge lifecycle,
+только если соответствующее действие определено ExitPlan.
+
+Exit Engine не изобретает торговое правило и не заменяет отсутствующее правило
+старым default.
+
+Initial protection, требуемая Strategy, должна устанавливаться через Execution
+при открытии позиции и оставаться защитным каркасом, пока Exit Engine не
+потребовал разрешённую ExitPlan мутацию.
 
 # 7. EXECUTION
 
-Execution исполняет уже сформированный `ExecutionRequest`.
+Execution — техническая граница биржевой мутации.
 
-Он валидирует точную Strategy/Plan identity, применяет параметры исполнения из
-Strategy/планов, обеспечивает idempotency, order/fill truth, protection и
-reconciliation и работает через адаптер площадки.
+Он исполняет уже сформированное решение Entry или Exit и не переоценивает
+рынок.
 
-Execution не переоценивает рынок и не изобретает торговую policy.
+Логически различаются:
+- `EntryExecutionRequest` — исполнение принятого EntryDecision;
+- `ExitExecutionRequest` — исполнение принятого ExitDecision.
+
+Оба являются видами `ExecutionRequest` и обязаны нести exact Strategy/Plan/
+decision/position lineage, достаточную для idempotency, audit и reconciliation.
+
+Execution отвечает за:
+- validation identities/fingerprints;
+- exchange adapter;
+- order preparation/submission;
+- idempotency;
+- client/exchange IDs;
+- fill truth;
+- fees/slippage, где измеримы;
+- initial protection и разрешённые protection mutations;
+- retries без двойной мутации;
+- reconciliation;
+- durable handoff/recovery;
+- technical fail-closed.
+
+Execution не вычисляет H9/H3 как собственную policy и не придумывает
+stop/TP/leverage/TTL.
 
 # 8. EXCHANGE
 
-Exchange — внешний источник фактической истины об ордерах, fills, positions,
+Exchange — внешний источник фактической истины об orders/fills/positions,
 балансе и ограничениях площадки.
 
-Архитектура выше адаптера не привязана к Bybit. Bybit является текущим
-провайдером, а не архитектурной константой.
+Архитектура выше адаптера не привязана к Bybit.
 
 # 9. Технический поддерживающий контур
 
-Сюда относятся, в частности:
+Сюда относятся:
 - market-data adapters;
-- account sync;
+- account/private-state sync;
 - PostgreSQL;
-- Monitor;
+- active plan/position durable registries;
+- atomic capital reservation;
+- Lifecycle Supervisor;
 - Position Supervisor;
-- Analyst;
-- UI/read-model;
+- Monitoring/UI;
+- Analyst/Research;
 - service/watchdog/recovery;
 - operational safety;
 - архивирование и аудит.
 
-Поддерживающий компонент не получает торговых прав из-за своего технического
-положения.
+## 9.1 Lifecycle Supervisor
 
-# 10. Исследование не является архитектурой
+`Lifecycle Supervisor` контролирует сквозную корректность жизненного цикла,
+но не является торговым владельцем.
 
-Любое исследование, backtest, replay, OOS, holdout, исторический Entry,
-экспериментальная геометрия и найденная статистическая зависимость являются
-доказательным материалом.
+Его область наблюдения:
 
-Они не могут переопределить архитектуру, изменить Strategy автоматически,
-стать скрытым значением Entry/Exit/Execution или ограничить постановку нового
-исследования.
+```text
+StrategyActivation
+-> plan materialization/publication
+-> Entry Engine consumption
+-> StrategySignal / EntryDecision
+-> EntryExecutionRequest
+-> Execution acknowledgement
+-> order / fill
+-> StrategyPosition
+-> ExitPlan binding
+-> Exit Engine claim
+-> ExitDecision
+-> ExitExecutionRequest
+-> close/reduce/protection execution
+-> final close
+-> final economics/audit
+```
 
-Путь торгового изменения:
+Он проверяет exact IDs/fingerprints, обязательные handoff/acknowledgement и
+отсутствие потерянных/осиротевших lifecycle-состояний.
+
+Lifecycle Supervisor:
+- не доставляет торговый смысл;
+- не выбирает Strategy;
+- не создаёт Entry/Exit decision;
+- не двигает stop/TP;
+- не закрывает позицию по собственной торговой оценке;
+- может зафиксировать lifecycle fault и инициировать предусмотренный
+  operational-safety/fail-closed путь, не изобретая торговую policy.
+
+Надёжная доставка обеспечивается durable storage/registry/queue,
+idempotency и acknowledgement. Supervisor проверяет, что этот механизм
+сработал.
+
+## 9.2 Position Supervisor
+
+`Position Supervisor` наблюдает фактическое состояние конкретной открытой
+StrategyPosition и Exchange state: qty, price, protection, MFE/MAE, geometry,
+context, reconciliation.
+
+Он не является владельцем Exit policy.
+
+## 9.3 Analyst
+
+`Analyst` выполняет постфактум-аналитику, research и counterfactual
+псевдосделки. Он не контролирует оперативную доставку и не торгует.
+
+# 10. Разложение исторического Risk
+
+Отдельного торгового слоя Risk нет.
+
+Исторические обязанности распределены так:
+
+```text
+внешний рынок и account-capacity facts -> Dispatcher
+Entry conditions и Strategy capital request -> Strategy/EntryPlan + Entry Engine
+сопровождение открытой позиции -> ExitPlan + Exit Engine
+биржевая мутация и unknown exchange state -> Execution operational safety
+сквозная потеря lifecycle/handoff -> Lifecycle Supervisor + operational safety
+```
+
+# 11. Исследование не является архитектурой
+
+Любое исследование/backtest/replay/OOS/holdout остаётся evidence до отдельного
+решения владельца и новой Strategy/document version.
 
 ```text
 ИССЛЕДОВАНИЕ / ДОКАЗАТЕЛЬСТВА
@@ -169,20 +312,17 @@ Exchange — внешний источник фактической истины
 -> LIVE
 ```
 
-# 11. Терминология
+# 12. Терминология и изменение архитектуры
 
-Физическая геометрия называется нейтрально и не переименовывается из-за
-LONG/SHORT.
+Канонические определения находятся в `docs/CRIPTA_GLOSSARY_RU*.md`.
 
-Канонические определения находятся только в `docs/CRIPTA_GLOSSARY_RU.md`.
+Если термин отсутствует или неоднозначен — Hard Stop.
 
-Если термин отсутствует или неоднозначен — Hard Stop до уточнения владельцем.
-
-# 12. Изменение архитектуры
+Изменение архитектуры:
 
 ```text
 РЕШЕНИЕ ВЛАДЕЛЬЦА
--> ОБНОВЛЕНИЕ ДОКУМЕНТА
+-> ОБНОВЛЕНИЕ КАНОНА
 -> АРХИТЕКТУРНАЯ ПРОВЕРКА
 -> РЕАЛИЗАЦИЯ
 -> ТЕСТЫ
