@@ -31,6 +31,7 @@ def atomic_status(state: str, *, error: str | None = None) -> None:
         "authority": "EXIT_RUNTIME_V36_1",
         "early_loss": "DISABLED_NOT_PROVEN_NO_CLOSE_IMPLEMENTATION",
         "structural_break_rule": STRUCTURAL_BREAK_RULE,
+        "ownership_boundary": "UNIVERSAL_ENTRY_EXCLUDED_V1",
     }
     if error:
         document["error"] = error
@@ -301,15 +302,20 @@ def cycle(connection: psycopg.Connection) -> None:
     trailing_pct = Decimal(str(settings[2] or "0.30"))
     rows = connection.execute(
         """SELECT o.position_id,o.entry_command_id,o.symbol,o.side,
-                  o.actual_avg_fill,o.actual_qty,p.payload_json
+                  o.actual_avg_fill,o.actual_qty,p.payload_json,o.bot_instance_id
            FROM runtime.position_ownership o
            JOIN runtime.hot_positions p
              ON p.symbol=o.symbol AND p.position_idx=o.position_idx AND p.side=o.side
            WHERE o.state='OPEN' AND o.close_link_status='OPEN'
+             AND o.bot_instance_id IS NOT NULL
+             AND o.bot_instance_id <> 'universal-entry'
            ORDER BY o.fill_at"""
     ).fetchall()
     for row in rows:
         position_id, entry_id, symbol, side = map(str, row[:4])
+        bot_instance_id = str(row[7])
+        if bot_instance_id == "universal-entry":
+            raise RuntimeError(f"LEGACY_EXIT_OWNERSHIP_CONFLICT:{position_id}")
         entry = Decimal(str(row[4]))
         qty = Decimal(str(row[5]))
         decoded = _json(row[6])

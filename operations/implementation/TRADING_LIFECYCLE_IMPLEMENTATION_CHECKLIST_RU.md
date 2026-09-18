@@ -242,12 +242,28 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - mainnet gate before migration, before start, after start and after restart = 0;
 - P9 runtime verification = PASS in SHADOW; no LIVE/MICRO_LIVE re-arm.
 
-## P10 — controlled legacy Exit migration readiness — TODO
-- [ ] legacy/Universal ownership boundary explicit
-- [ ] mutual exclusion proven
+## P10 — controlled legacy Exit migration readiness — BLOCKED
+- [x] legacy/Universal ownership boundary explicit
+- [x] mutual exclusion proven
 - [ ] shadow comparison against exact Strategy/ExitPlan
-- [ ] cutover plan prepared
-- [ ] no live cutover without owner decision
+- [x] cutover plan prepared
+- [x] no live cutover without owner decision
+
+## P10 evidence / blocker
+
+- legacy exit_runtime selects only non-Universal owned positions and reports ownership_boundary=UNIVERSAL_ENTRY_EXCLUDED_V1;
+- private runtime blocks non-manual legacy break_even/trailing_stop before any Exchange API when exact ownership is Universal or unknown;
+- behavior proof: UNIVERSAL_AUTO -> LEGACY_EXIT_OWNERSHIP_CONFLICT; LEGACY_AUTO -> ALLOWED; OWNER_MANUAL -> ALLOWED; UNKNOWN_AUTO -> LEGACY_EXIT_OWNERSHIP_UNKNOWN;
+- Universal Exit loader/execution already requires bot_instance_id=universal-entry;
+- read-only exit_migration_readiness.py never authorizes LIVE and reports live_cutover_authorized=false;
+- cutover/rollback plan prepared in operations/implementation/TRADING_LIFECYCLE_P10_CUTOVER_PLAN_RU.md;
+- affected regression: 80 passed;
+- full branch: 1391 passed / 47 skipped / same 18 stale-doc baseline failed;
+- NEW_PRIVATE_DIAGNOSTICS=0;
+- live readiness: active_exit_plans=2, executable_rules=0, open_legacy_positions=0, open_universal_positions=0, open_lifecycle_faults=0, real_execution_permissions=0, mainnet=false;
+- current blockers: ACTIVE_EXIT_PLAN_WITHOUT_EXECUTABLE_RULES and NO_LIVE_UNIVERSAL_SHADOW_SAMPLE;
+- shadow comparison against exact StrategyPosition + exact executable ExitPlan remains NOT PROVEN HERE;
+- P10 live cutover is NOT AUTHORIZED.
 
 ## Final completion gate
 - [ ] StrategyCard passive immutable

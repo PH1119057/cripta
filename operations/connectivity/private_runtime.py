@@ -1077,6 +1077,51 @@ def _universal_exit_position(
     return exchange_position
 
 
+def assert_legacy_automated_exit_ownership(
+    connection: psycopg.Connection,
+    *,
+    command_id: str,
+    kind: str,
+    symbol: str,
+    payload: dict[str, object],
+) -> None:
+    if kind not in {"break_even", "trailing_stop"}:
+        return
+    if command_id.startswith("web-"):
+        return
+    source = str(payload.get("source") or "")
+    if source and not source.startswith("exit_runtime_v36"):
+        raise ExchangeMutationBarrier(
+            f"LEGACY_EXIT_SOURCE_UNSUPPORTED:{source}"
+        )
+    entry_command_id = str(payload.get("entry_command_id") or "")
+    if entry_command_id:
+        rows = connection.execute(
+            """SELECT position_id,bot_instance_id FROM runtime.position_ownership
+               WHERE entry_command_id=%s
+                 AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+               ORDER BY fill_at DESC""",
+            (entry_command_id,),
+        ).fetchall()
+    else:
+        rows = connection.execute(
+            """SELECT position_id,bot_instance_id FROM runtime.position_ownership
+               WHERE symbol=%s
+                 AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+               ORDER BY fill_at DESC""",
+            (symbol,),
+        ).fetchall()
+    if not rows:
+        raise ExchangeMutationBarrier(
+            "LEGACY_EXIT_OWNERSHIP_UNKNOWN:" + (entry_command_id or symbol)
+        )
+    for position_id, bot_instance_id in rows:
+        if str(bot_instance_id or "") == "universal-entry":
+            raise ExchangeMutationBarrier(
+                f"LEGACY_EXIT_OWNERSHIP_CONFLICT:{position_id}"
+            )
+
+
 def _execute_universal_exit_command(
     connection: psycopg.Connection,
     key: str,
@@ -1219,6 +1264,13 @@ def _execute_universal_exit_command(
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
+    assert_legacy_automated_exit_ownership(
+        connection,
+        command_id=command_id,
+        kind=kind,
+        symbol=symbol,
+        payload=payload,
+    )
     positions, _ = api_get("/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret)
     position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
