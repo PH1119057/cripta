@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -26,10 +28,18 @@ class ExitMigrationReadiness:
     open_lifecycle_faults: int
     mainnet_gate_enabled: bool
     real_execution_permissions: int
+    private_runtime_source_live_match: bool
+    legacy_exit_runtime_source_live_match: bool
     shadow_comparison_state: str
     technical_blockers: tuple[str, ...]
     owner_decision_required: bool
     live_cutover_authorized: bool
+
+
+def _same_file(left: Path, right: Path) -> bool:
+    if not left.is_file() or not right.is_file():
+        return False
+    return hashlib.sha256(left.read_bytes()).digest() == hashlib.sha256(right.read_bytes()).digest()
 
 
 def _has_executable_rules(plan_json: object) -> bool:
@@ -131,6 +141,26 @@ def inspect_readiness(connection: psycopg.Connection[Any]) -> ExitMigrationReadi
             raise RuntimeError("strategy execution permission count unavailable")
         real_permissions = int(permissions_row["n"])
 
+    source_root = Path(os.environ.get("CRIPTA_SOURCE_ROOT", "/srv/cripta/source_checkout"))
+    private_runtime_source_live_match = _same_file(
+        source_root / "operations/connectivity/private_runtime.py",
+        Path(
+            os.environ.get(
+                "CRIPTA_PRIVATE_RUNTIME_LIVE_PATH",
+                "/srv/cripta/connectivity/private_runtime.py",
+            )
+        ),
+    )
+    legacy_exit_runtime_source_live_match = _same_file(
+        source_root / "operations/monitoring/exit_runtime.py",
+        Path(
+            os.environ.get(
+                "CRIPTA_LEGACY_EXIT_RUNTIME_LIVE_PATH",
+                "/srv/cripta/monitoring/exit_runtime.py",
+            )
+        ),
+    )
+
     blockers: list[str] = []
     if without_rules:
         blockers.append("ACTIVE_EXIT_PLAN_WITHOUT_EXECUTABLE_RULES")
@@ -150,6 +180,10 @@ def inspect_readiness(connection: psycopg.Connection[Any]) -> ExitMigrationReadi
         blockers.append("MAINNET_GATE_MUST_REMAIN_CLOSED_DURING_READINESS")
     if real_permissions:
         blockers.append("REAL_EXECUTION_PERMISSIONS_PRESENT_DURING_READINESS")
+    if not private_runtime_source_live_match:
+        blockers.append("PRIVATE_RUNTIME_SOURCE_LIVE_DIVERGENCE")
+    if not legacy_exit_runtime_source_live_match:
+        blockers.append("LEGACY_EXIT_RUNTIME_SOURCE_LIVE_DIVERGENCE")
 
     return ExitMigrationReadiness(
         active_exit_plans=len(active_rows),
@@ -162,6 +196,8 @@ def inspect_readiness(connection: psycopg.Connection[Any]) -> ExitMigrationReadi
         open_lifecycle_faults=open_faults,
         mainnet_gate_enabled=mainnet_enabled,
         real_execution_permissions=real_permissions,
+        private_runtime_source_live_match=private_runtime_source_live_match,
+        legacy_exit_runtime_source_live_match=legacy_exit_runtime_source_live_match,
         shadow_comparison_state=comparison_state,
         technical_blockers=tuple(blockers),
         owner_decision_required=True,

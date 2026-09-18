@@ -261,7 +261,9 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - full branch: 1391 passed / 47 skipped / same 18 stale-doc baseline failed;
 - NEW_PRIVATE_DIAGNOSTICS=0;
 - live readiness: active_exit_plans=2, executable_rules=0, open_legacy_positions=0, open_universal_positions=0, open_lifecycle_faults=0, real_execution_permissions=0, mainnet=false;
-- current blockers: ACTIVE_EXIT_PLAN_WITHOUT_EXECUTABLE_RULES and NO_LIVE_UNIVERSAL_SHADOW_SAMPLE;
+- current blockers: ACTIVE_EXIT_PLAN_WITHOUT_EXECUTABLE_RULES, NO_LIVE_UNIVERSAL_SHADOW_SAMPLE and PRIVATE_RUNTIME_SOURCE_LIVE_DIVERGENCE;
+- legacy exit_runtime P10 ownership filter is DEPLOYED exact from source while service remains inactive;
+- private_runtime P10 defense-in-depth guard is IMPLEMENTED but NOT DEPLOYED because current live private_runtime materially predates source; blind overwrite is forbidden;
 - shadow comparison against exact StrategyPosition + exact executable ExitPlan remains NOT PROVEN HERE;
 - P10 live cutover is NOT AUTHORIZED.
 

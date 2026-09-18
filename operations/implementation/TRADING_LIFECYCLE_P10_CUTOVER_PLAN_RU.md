@@ -35,7 +35,9 @@ LIVE-права.
 9. Universal Exit consumer остаётся disabled до отдельного OWNER DECISION.
 10. real execution permission не выдаётся автоматически.
 11. legacy/private runtime mutual exclusion tests green.
-12. rollback checkpoint и current exchange state проверены непосредственно перед
+12. private_runtime source/live hash exact; staged current source passes disarmed
+    startup/recovery verification before any execution arm.
+13. rollback checkpoint и current exchange state проверены непосредственно перед
     mutation.
 
 ## 3. Controlled cutover after OWNER DECISION only

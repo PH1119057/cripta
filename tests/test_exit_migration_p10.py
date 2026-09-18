@@ -54,6 +54,8 @@ def test_readiness_auditor_is_read_only_and_never_authorizes_cutover() -> None:
     assert "live_cutover_authorized=False" in READINESS
     assert "ACTIVE_EXIT_PLAN_WITHOUT_EXECUTABLE_RULES" in READINESS
     assert "NO_LIVE_UNIVERSAL_SHADOW_SAMPLE" in READINESS
+    assert "PRIVATE_RUNTIME_SOURCE_LIVE_DIVERGENCE" in READINESS
+    assert "LEGACY_EXIT_RUNTIME_SOURCE_LIVE_DIVERGENCE" in READINESS
     assert any(
         isinstance(node, ast.FunctionDef) and node.name == "inspect_readiness"
         for node in ast.walk(tree)
