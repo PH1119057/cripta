@@ -183,7 +183,9 @@ CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
     capacity_snapshot_id text NOT NULL,
     capacity_observed_at timestamptz NOT NULL,
     capacity_available_at_reservation numeric NOT NULL,
+    pre_dispatch_expires_at timestamptz NOT NULL,
     state text NOT NULL,
+    state_reason text,
     exchange_commitment_ref text,
     exchange_commitment_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -209,7 +211,9 @@ CREATE TABLE IF NOT EXISTS runtime.capital_reservations (
 );
 
 ALTER TABLE runtime.capital_reservations
-    ADD COLUMN IF NOT EXISTS strategy_position_id text;
+    ADD COLUMN IF NOT EXISTS strategy_position_id text,
+    ADD COLUMN IF NOT EXISTS pre_dispatch_expires_at timestamptz,
+    ADD COLUMN IF NOT EXISTS state_reason text;
 
 DO $$
 BEGIN
@@ -224,6 +228,10 @@ BEGIN
             REFERENCES runtime.position_ownership(position_id);
     END IF;
 END $$;
+
+CREATE INDEX IF NOT EXISTS ix_capital_reservations_reserved_expiry
+    ON runtime.capital_reservations(pre_dispatch_expires_at)
+    WHERE state='RESERVED';
 
 CREATE INDEX IF NOT EXISTS ix_capital_reservations_account_active
     ON runtime.capital_reservations(account_ref,state,created_at)
@@ -240,13 +248,15 @@ BEGIN
         OLD.strategy_config_fingerprint,OLD.entry_plan_fingerprint,OLD.signal_id,
         OLD.strategy_attempt_id,OLD.requested_amount,OLD.amount_currency,
         OLD.capacity_snapshot_id,OLD.capacity_observed_at,
-        OLD.capacity_available_at_reservation,OLD.created_at
+        OLD.capacity_available_at_reservation,OLD.pre_dispatch_expires_at,
+        OLD.created_at
     ) IS DISTINCT FROM ROW(
         NEW.reservation_id,NEW.account_ref,NEW.strategy_id,NEW.strategy_version,
         NEW.strategy_config_fingerprint,NEW.entry_plan_fingerprint,NEW.signal_id,
         NEW.strategy_attempt_id,NEW.requested_amount,NEW.amount_currency,
         NEW.capacity_snapshot_id,NEW.capacity_observed_at,
-        NEW.capacity_available_at_reservation,NEW.created_at
+        NEW.capacity_available_at_reservation,NEW.pre_dispatch_expires_at,
+        NEW.created_at
     ) THEN
         RAISE EXCEPTION 'capital reservation identity is immutable';
     END IF;

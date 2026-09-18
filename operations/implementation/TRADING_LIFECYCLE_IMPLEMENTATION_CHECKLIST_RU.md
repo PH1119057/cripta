@@ -79,6 +79,24 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - [x] recovery/idempotency test
 - [x] separate P4 commit
 
+## P4.1 — Entry expiry & capital release safety — DONE
+
+- [x] INSUFFICIENT_AVAILABLE_FUNDS remains terminal; no waiting/retry of same attempt
+- [x] reservation carries exact Strategy-owned pre-dispatch expiry
+- [x] expired RESERVED is released even while mainnet gate is disarmed
+- [x] pre-exchange bridge/structural block releases RESERVED
+- [x] dispatch changes reservation to DISPATCHED atomically with trade command
+- [x] exchange order acknowledgement changes reservation to PENDING_EXCHANGE_REFLECTION
+- [x] deterministic failure before order acknowledgement releases capital
+- [x] ambiguous outcome after possible mutation -> RECONCILIATION_REQUIRED
+- [x] confirmed expired limit cancellation with zero fill -> RELEASED
+- [x] partial/unknown cancellation outcome never releases capital blindly
+- [x] confirmed fill still -> CONSUMED
+- [x] confirmed position close still -> RELEASED
+- [x] disposable PostgreSQL lifecycle tests
+- [x] affected/full regression NEW_DIAGNOSTICS=0
+- [x] separate P4.1 commit
+
 ## P5 — Universal Exit Engine shadow — TODO
 - [ ] exact StrategyPosition + exact ExitPlan input
 - [ ] no hidden H3/H9/percent defaults
@@ -174,4 +192,23 @@ Commit: 73e8a55d056368150945e6344cd3aa134908592f
 - P3+P4 PostgreSQL integration: 9 passed;
 - targeted P4: 87 passed;
 - full branch: 1316 passed / 19 skipped / 18 baseline stale-doc failed;
+- NEW_DIAGNOSTICS = 0.
+
+## P4.1 evidence
+
+- INSUFFICIENT_AVAILABLE_FUNDS remains terminal: no reservation, no ExecutionRequest, no wait/retry;
+- next market opportunity must create a new StrategySignal/StrategyAttempt;
+- pre-dispatch reservation expiry is derived from exact Strategy max_request_age_seconds;
+- expired RESERVED is swept before mainnet gate evaluation;
+- request expiry/pre-exchange structural block/ownership conflict releases capital;
+- successful dispatch: RESERVED -> DISPATCHED;
+- confirmed exchange order acknowledgement: DISPATCHED -> PENDING_EXCHANGE_REFLECTION;
+- deterministic no-order failure from DISPATCHED -> RELEASED;
+- post-ack/ambiguous failure -> RECONCILIATION_REQUIRED;
+- confirmed zero-fill TTL cancellation -> RELEASED;
+- partial/unknown cancellation never releases blindly;
+- hidden 30-second limit TTL fallback removed from Execution runtime;
+- P3 + P4 + P4.1 PostgreSQL integration: 16 passed;
+- affected regression: 125 passed;
+- full branch: 1322 passed / 26 skipped / 18 baseline stale-doc failed;
 - NEW_DIAGNOSTICS = 0.

@@ -33,6 +33,11 @@ from runtime_schema import (
 )
 from safety_observer import api_get
 
+from bybit_workbench.entry_reservation_lifecycle import (
+    finalize_failed_entry_command_reservation,
+    mark_entry_order_acknowledged,
+    resolve_cancelled_entry_reservation_after_reconcile,
+)
 from bybit_workbench.strategy_position_binding import (
     load_universal_entry_lineage,
     persist_universal_strategy_position,
@@ -745,6 +750,12 @@ def handle_exchange_mutation_barrier(
     try:
         connection.rollback()
         if command_id:
+            finalize_failed_entry_command_reservation(
+                connection,
+                command_id=command_id,
+                reason=error,
+                mutation_ambiguous=True,
+            )
             connection.execute(
                 """UPDATE runtime.trade_commands
                    SET error=%s
@@ -1097,6 +1108,23 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if offset > 0:
             order.update({"price": str(price), "timeInForce": "GTC"})
         result=api_post("/v5/order/create", order, key, secret)
+        exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
+        if not exchange_order_id:
+            raise ExchangeMutationBarrier(
+                "entry order acknowledged without exchange orderId"
+            )
+        try:
+            mark_entry_order_acknowledged(
+                connection,
+                command_id=command_id,
+                exchange_order_id=exchange_order_id,
+                acknowledged_at=datetime.now(UTC),
+            )
+            connection.commit()
+        except Exception as exc:
+            raise ExchangeMutationBarrier(
+                f"entry order acknowledged but reservation handoff failed: {exc}"
+            ) from exc
         if offset == 0:
             filled_position = None
             for _ in range(20):
@@ -1162,14 +1190,25 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
 def cancel_expired_entry_limits(
     connection: psycopg.Connection, key: str, secret: str, now_ms: int
 ) -> None:
-    rows = connection.execute("""SELECT o.order_id,o.symbol,c.requested_at_epoch_ms,c.payload_json
+    rows = connection.execute("""SELECT o.order_id,o.symbol,c.command_id,
+               c.requested_at_epoch_ms,c.payload_json
         FROM runtime.hot_orders o JOIN runtime.trade_commands c ON o.order_link_id=c.command_id
         WHERE c.command_type='entry' AND c.state='completed'""").fetchall()
-    for order_id, symbol, requested_at, raw_payload in rows:
+    for order_id, symbol, command_id, requested_at, raw_payload in rows:
         payload = json.loads(raw_payload)
         if Decimal(str(payload.get("entry_offset_pct") or 0)) <= 0:
             continue
-        ttl_ms = int(payload.get("entry_limit_ttl_seconds") or 30) * 1000
+        raw_ttl = payload.get("entry_limit_ttl_seconds")
+        if raw_ttl is None:
+            raise ExchangeMutationBarrier(
+                "limit Entry is missing Strategy-owned entry_limit_ttl_seconds"
+            )
+        ttl_seconds = int(raw_ttl)
+        if ttl_seconds <= 0:
+            raise ExchangeMutationBarrier(
+                "limit Entry has non-positive Strategy-owned entry_limit_ttl_seconds"
+            )
+        ttl_ms = ttl_seconds * 1000
         if now_ms - int(requested_at) < ttl_ms:
             continue
         api_post(
@@ -1181,6 +1220,18 @@ def cancel_expired_entry_limits(
         )
         try:
             reconcile(connection, key, secret, "expired_entry_limit")
+            reservation_state = resolve_cancelled_entry_reservation_after_reconcile(
+                connection,
+                command_id=str(command_id),
+                exchange_order_id=str(order_id),
+            )
+            connection.commit()
+            if reservation_state == "RECONCILIATION_REQUIRED":
+                raise ExchangeMutationBarrier(
+                    "expired-entry cancel did not prove zero-fill outcome"
+                )
+        except ExchangeMutationBarrier:
+            raise
         except Exception as exc:
             raise ExchangeMutationBarrier(
                 f"expired-entry cancel reconciliation failed: {exc}"
@@ -1464,6 +1515,12 @@ def command_worker_loop(key: str, secret: str) -> None:
                        WHERE command_id=%s AND state='queued'""",
                     (int(time.time()*1000), f"ENTRY_BLOCKED:{readiness_reason}", command_id),
                 )
+                finalize_failed_entry_command_reservation(
+                    connection,
+                    command_id=command_id,
+                    reason=f"ENTRY_BLOCKED:{readiness_reason}",
+                    mutation_ambiguous=False,
+                )
                 connection.commit()
                 continue
         connection.execute(
@@ -1481,6 +1538,12 @@ def command_worker_loop(key: str, secret: str) -> None:
             )
         except Exception as exc:
             connection.rollback()
+            reservation_state = finalize_failed_entry_command_reservation(
+                connection,
+                command_id=command_id,
+                reason=f"{type(exc).__name__}:{exc}",
+                mutation_ambiguous=False,
+            )
             connection.execute(
                 """UPDATE runtime.trade_commands
                    SET state='failed',finished_at_epoch_ms=%s,error=%s
@@ -1492,6 +1555,16 @@ def command_worker_loop(key: str, secret: str) -> None:
                 ),
             )
             connection.commit()
+            if reservation_state == "RECONCILIATION_REQUIRED":
+                handle_exchange_mutation_barrier(
+                    connection,
+                    key,
+                    secret,
+                    command_id,
+                    ExchangeMutationBarrier(
+                        f"post-ack Entry failure requires reconciliation: {exc}"
+                    ),
+                )
 
 
 def command_loop(key: str, secret: str) -> None:

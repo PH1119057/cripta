@@ -61,12 +61,15 @@ def make_card(
     sensors: tuple[SensorRequirement, ...] = (),
     contexts: tuple[ContextRequirement, ...] = (),
     capital: dict[str, object] | None = None,
+    execution: dict[str, object] | None = None,
 ) -> StrategyCard:
     entry: dict[str, object] = {
         "entry_plan_version": "1",
         "predicate": predicate or {"op": "TOUCH"},
         "watch_policy": {"enabled": False},
     }
+    if execution is not None:
+        entry["execution_policy"] = execution
     return StrategyCard.build(
         strategy_id=name,
         strategy_version="1.0.0",
@@ -711,6 +714,7 @@ def test_real_entry_without_reservation_port_is_operationally_blocked() -> None:
     card = make_card(
         "live-no-port",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
     )
     _, engine = setup_engine(card)
     capacity = TradingCapacitySnapshot(
@@ -740,6 +744,7 @@ def test_failed_atomic_reservation_becomes_insufficient_available_funds() -> Non
     card = make_card(
         "live-loser",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
     )
     _, engine = setup_engine(card)
     capacity = TradingCapacitySnapshot(
@@ -763,8 +768,11 @@ def test_failed_atomic_reservation_becomes_insufficient_available_funds() -> Non
 
 
 def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
+    captured: list[CapitalReservationRequest] = []
+
     class AcceptingReservationPort:
         def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
+            captured.append(request)
             return CapitalReservation(
                 reservation_id="cap-reserved-test",
                 account_ref=request.account_ref,
@@ -775,11 +783,14 @@ def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
                 state=CapitalReservationState.RESERVED,
                 created_at=request.requested_at,
                 updated_at=request.requested_at,
+                pre_dispatch_expires_at=request.pre_dispatch_expires_at,
+                state_reason="TEST",
             )
 
     card = make_card(
         "live-winner",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
     )
     registry, engine = setup_engine(card)
     capacity = TradingCapacitySnapshot(
@@ -799,6 +810,8 @@ def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
     )
     item = result[0]
     assert item.decision.code is EntryDecisionCode.ACCEPTED
+    assert captured
+    assert captured[0].pre_dispatch_expires_at == NOW + timedelta(seconds=30)
     assert item.decision.capital_reservation_id == "cap-reserved-test"
     assert item.execution_request is not None
     assert item.execution_request.capital_reservation_id == "cap-reserved-test"

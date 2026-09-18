@@ -278,6 +278,7 @@ def persist_universal_strategy_position(
         updated = connection.execute(
             """UPDATE runtime.capital_reservations
                   SET state='CONSUMED',
+                      state_reason='CONFIRMED_ENTRY_FILL',
                       strategy_position_id=%s,
                       exchange_commitment_ref=%s,
                       exchange_commitment_at=%s
@@ -353,7 +354,7 @@ def release_position_capital_reservation(
         raise RuntimeError(f"cannot release capital reservation from state {state}")
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
-              SET state='RELEASED'
+              SET state='RELEASED',state_reason='CONFIRMED_POSITION_CLOSE'
             WHERE reservation_id=%s
               AND state='CONSUMED'
               AND strategy_position_id=%s""",

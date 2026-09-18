@@ -260,7 +260,7 @@ def _publish_command(
     )
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
-              SET state='DISPATCHED'
+              SET state='DISPATCHED',state_reason='DISPATCHED_TO_EXECUTION'
             WHERE reservation_id=%s AND state='RESERVED'""",
         (prepared.capital_reservation_id,),
     )
@@ -332,15 +332,70 @@ def _exchange_position_slot_conflict(
 def _release_pre_exchange_reservation(
     connection: psycopg.Connection[Any],
     reservation_id: str,
+    *,
+    reason: str,
 ) -> None:
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
-              SET state='RELEASED'
+              SET state='RELEASED',state_reason=%s
             WHERE reservation_id=%s AND state='RESERVED'""",
-        (reservation_id,),
+        (reason, reservation_id),
     )
-    if updated.rowcount != 1:
-        raise RuntimeError("pre-exchange capital reservation release race")
+    if updated.rowcount == 1:
+        return
+    existing = connection.execute(
+        "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
+        (reservation_id,),
+    ).fetchone()
+    if existing is not None and str(existing["state"]) == "RELEASED":
+        return
+    raise RuntimeError("pre-exchange capital reservation release race")
+
+
+def _release_expired_reserved_requests(
+    connection: psycopg.Connection[Any],
+    *,
+    now: datetime,
+) -> int:
+    with connection.transaction():
+        rows = connection.execute(
+            """SELECT r.*,c.state AS capital_reservation_state,
+                      c.account_ref AS capital_reservation_account_ref,
+                      c.pre_dispatch_expires_at AS pre_dispatch_expires_at
+                 FROM strategy_entry.execution_requests r
+                 JOIN runtime.capital_reservations c
+                   ON c.reservation_id=r.capital_reservation_id
+                  AND c.strategy_attempt_id=r.strategy_attempt_id
+                WHERE c.state='RESERVED'
+                  AND c.pre_dispatch_expires_at IS NOT NULL
+                  AND c.pre_dispatch_expires_at <= %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM strategy_entry.execution_dispatches d
+                       WHERE d.execution_request_id=r.execution_request_id
+                  )
+                ORDER BY c.pre_dispatch_expires_at,r.execution_request_id
+                FOR UPDATE OF c SKIP LOCKED""",
+            (now.astimezone(UTC),),
+        ).fetchall()
+        for row in rows:
+            request = _request_from_row(row)
+            if request.capital_reservation_id is None:
+                raise RuntimeError("expired real Entry request lost capital reservation")
+            _record_blocked(
+                connection,
+                request,
+                reason="REQUEST_EXPIRED_PRE_DISPATCH",
+                payload={
+                    "block_code": "REQUEST_EXPIRED",
+                    "pre_dispatch_expires_at": str(row["pre_dispatch_expires_at"]),
+                },
+            )
+            _release_pre_exchange_reservation(
+                connection,
+                request.capital_reservation_id,
+                reason="REQUEST_EXPIRED_PRE_DISPATCH",
+            )
+    return len(rows)
 
 
 def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
@@ -352,6 +407,7 @@ def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
 
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
+    _release_expired_reserved_requests(connection, now=current)
     if not _execution_gate_enabled(connection):
         return "EXECUTION_GATE_DISARMED"
     row = _next_request(connection)
@@ -393,6 +449,7 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
             _release_pre_exchange_reservation(
                 connection,
                 request.capital_reservation_id,
+                reason="EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
             )
         return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_CONFLICT"
     try:
@@ -406,6 +463,12 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason=f"{exc.code.value}:{exc.reason}",
                 payload={"block_code": exc.code.value, "reason": exc.reason},
             )
+            if request.capital_reservation_id is not None:
+                _release_pre_exchange_reservation(
+                    connection,
+                    request.capital_reservation_id,
+                    reason=f"PRE_EXCHANGE_BLOCK:{exc.code.value}",
+                )
         return f"BLOCKED:{exc.code.value}"
     except Exception as exc:
         with connection.transaction():
@@ -415,6 +478,12 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason=f"STRUCTURAL_ERROR:{type(exc).__name__}:{exc}",
                 payload={"error": f"{type(exc).__name__}: {exc}"},
             )
+            if request.capital_reservation_id is not None:
+                _release_pre_exchange_reservation(
+                    connection,
+                    request.capital_reservation_id,
+                    reason="PRE_EXCHANGE_BLOCK:STRUCTURAL_ERROR",
+                )
         return "BLOCKED:STRUCTURAL_ERROR"
     with connection.transaction():
         _publish_command(connection, prepared, now=current)

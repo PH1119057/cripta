@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -141,9 +141,10 @@ def _seed_request(
                strategy_config_fingerprint,entry_plan_fingerprint,signal_id,
                strategy_attempt_id,requested_amount,amount_currency,
                capacity_snapshot_id,capacity_observed_at,
-               capacity_available_at_reservation,state,created_at,updated_at
+               capacity_available_at_reservation,pre_dispatch_expires_at,
+               state,state_reason,created_at,updated_at
            ) VALUES(%s,'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,10,'USDT',
-                    %s,%s,10,%s,%s,%s)""",
+                    %s,%s,10,%s,%s,'TEST_SEED',%s,%s)""",
         (
             reservation_id,
             strategy_id,
@@ -154,6 +155,7 @@ def _seed_request(
             attempt_id,
             f"{prefix}-capacity",
             NOW,
+            NOW + timedelta(seconds=30),
             reservation_state,
             NOW,
             NOW,

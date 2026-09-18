@@ -35,6 +35,7 @@ class CapitalReservationRequest:
     capacity_observed_at: datetime
     capacity_available: Decimal
     requested_at: datetime
+    pre_dispatch_expires_at: datetime
 
     def __post_init__(self) -> None:
         for field in (
@@ -54,8 +55,14 @@ class CapitalReservationRequest:
             raise ValueError("requested_amount must be positive")
         if self.capacity_available < 0:
             raise ValueError("capacity_available cannot be negative")
-        if self.capacity_observed_at.tzinfo is None or self.requested_at.tzinfo is None:
+        if (
+            self.capacity_observed_at.tzinfo is None
+            or self.requested_at.tzinfo is None
+            or self.pre_dispatch_expires_at.tzinfo is None
+        ):
             raise ValueError("capital reservation timestamps must be timezone-aware")
+        if self.pre_dispatch_expires_at <= self.requested_at:
+            raise ValueError("pre_dispatch_expires_at must be after requested_at")
 
     @property
     def reservation_id(self) -> str:
@@ -66,6 +73,7 @@ class CapitalReservationRequest:
                 "requested_amount": self.requested_amount,
                 "amount_currency": self.amount_currency.upper(),
                 "capacity_snapshot_id": self.capacity_snapshot_id,
+                "pre_dispatch_expires_at": self.pre_dispatch_expires_at.astimezone(UTC),
             }
         )[:32]
 
@@ -81,6 +89,8 @@ class CapitalReservation:
     state: CapitalReservationState
     created_at: datetime
     updated_at: datetime
+    pre_dispatch_expires_at: datetime
+    state_reason: str | None = None
     exchange_commitment_ref: str | None = None
     exchange_commitment_at: datetime | None = None
 
@@ -136,6 +146,7 @@ class PostgresCapitalReservationPort:
                 """SELECT reservation_id,account_ref,strategy_attempt_id,requested_amount,
                           amount_currency,capacity_snapshot_id,state,created_at,updated_at,
                           exchange_commitment_ref,exchange_commitment_at,
+                          pre_dispatch_expires_at,state_reason,
                           strategy_id,strategy_version,strategy_config_fingerprint,
                           entry_plan_fingerprint,signal_id
                      FROM runtime.capital_reservations
@@ -178,8 +189,10 @@ class PostgresCapitalReservationPort:
                        strategy_config_fingerprint,entry_plan_fingerprint,signal_id,
                        strategy_attempt_id,requested_amount,amount_currency,
                        capacity_snapshot_id,capacity_observed_at,
-                       capacity_available_at_reservation,state,created_at,updated_at
-                   ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'RESERVED',%s,%s)""",
+                       capacity_available_at_reservation,pre_dispatch_expires_at,
+                       state,state_reason,created_at,updated_at
+                   ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                            'RESERVED','RESERVATION_CREATED',%s,%s)""",
                 (
                     request.reservation_id,
                     request.account_ref,
@@ -194,6 +207,7 @@ class PostgresCapitalReservationPort:
                     request.capacity_snapshot_id,
                     request.capacity_observed_at.astimezone(UTC),
                     request.capacity_available,
+                    request.pre_dispatch_expires_at.astimezone(UTC),
                     now,
                     now,
                 ),
@@ -208,6 +222,8 @@ class PostgresCapitalReservationPort:
                 state=CapitalReservationState.RESERVED,
                 created_at=now,
                 updated_at=now,
+                pre_dispatch_expires_at=request.pre_dispatch_expires_at.astimezone(UTC),
+                state_reason="RESERVATION_CREATED",
             )
 
     def transition(
@@ -217,12 +233,14 @@ class PostgresCapitalReservationPort:
         state: CapitalReservationState,
         exchange_commitment_ref: str | None = None,
         exchange_commitment_at: datetime | None = None,
+        state_reason: str | None = None,
     ) -> CapitalReservation:
         with self._connection.transaction():
             row = self._connection.execute(
                 """SELECT reservation_id,account_ref,strategy_attempt_id,requested_amount,
                           amount_currency,capacity_snapshot_id,state,created_at,updated_at,
-                          exchange_commitment_ref,exchange_commitment_at
+                          exchange_commitment_ref,exchange_commitment_at,
+                          pre_dispatch_expires_at,state_reason
                      FROM runtime.capital_reservations
                     WHERE reservation_id=%s
                     FOR UPDATE""",
@@ -246,6 +264,7 @@ class PostgresCapitalReservationPort:
                 },
                 CapitalReservationState.PENDING_EXCHANGE_REFLECTION: {
                     CapitalReservationState.CONSUMED,
+                    CapitalReservationState.RELEASED,
                     CapitalReservationState.RECONCILIATION_REQUIRED,
                 },
                 CapitalReservationState.CONSUMED: {
@@ -267,11 +286,14 @@ class PostgresCapitalReservationPort:
                 raise ValueError(f"{state.value} requires exchange_commitment_at")
             self._connection.execute(
                 """UPDATE runtime.capital_reservations
-                      SET state=%s,exchange_commitment_ref=coalesce(%s,exchange_commitment_ref),
+                      SET state=%s,
+                          state_reason=coalesce(%s,state_reason),
+                          exchange_commitment_ref=coalesce(%s,exchange_commitment_ref),
                           exchange_commitment_at=coalesce(%s,exchange_commitment_at)
                     WHERE reservation_id=%s""",
                 (
                     state.value,
+                    state_reason,
                     exchange_commitment_ref,
                     None
                     if exchange_commitment_at is None
@@ -282,7 +304,8 @@ class PostgresCapitalReservationPort:
             updated = self._connection.execute(
                 """SELECT reservation_id,account_ref,strategy_attempt_id,requested_amount,
                           amount_currency,capacity_snapshot_id,state,created_at,updated_at,
-                          exchange_commitment_ref,exchange_commitment_at
+                          exchange_commitment_ref,exchange_commitment_at,
+                          pre_dispatch_expires_at,state_reason
                      FROM runtime.capital_reservations
                     WHERE reservation_id=%s""",
                 (reservation_id,),
@@ -295,17 +318,21 @@ class PostgresCapitalReservationPort:
         row: Sequence[object],
         request: CapitalReservationRequest,
     ) -> None:
+        existing_expiry = row[11]
+        if not isinstance(existing_expiry, datetime):
+            raise ValueError("capital reservation pre_dispatch_expires_at is invalid")
         actual = (
             str(row[1]),
             str(row[2]),
             Decimal(str(row[3])),
             str(row[4]),
             str(row[5]),
-            str(row[11]),
-            str(row[12]),
+            existing_expiry.astimezone(UTC),
             str(row[13]),
             str(row[14]),
             str(row[15]),
+            str(row[16]),
+            str(row[17]),
         )
         expected = (
             request.account_ref,
@@ -313,6 +340,7 @@ class PostgresCapitalReservationPort:
             request.requested_amount,
             request.amount_currency.upper(),
             request.capacity_snapshot_id,
+            request.pre_dispatch_expires_at.astimezone(UTC),
             request.strategy_id,
             request.strategy_version,
             request.strategy_config_fingerprint,
@@ -334,6 +362,8 @@ class PostgresCapitalReservationPort:
             state=CapitalReservationState(str(row[6])),
             created_at=row[7],  # type: ignore[arg-type]
             updated_at=row[8],  # type: ignore[arg-type]
+            pre_dispatch_expires_at=row[11],  # type: ignore[arg-type]
+            state_reason=None if row[12] is None else str(row[12]),
             exchange_commitment_ref=None if row[9] is None else str(row[9]),
             exchange_commitment_at=row[10],  # type: ignore[arg-type]
         )

@@ -45,6 +45,12 @@ def test_capital_reservation_unknown_states_remain_reserved() -> None:
     assert "ix_capital_reservations_account_active" in SQL
 
 
+def test_capital_reservation_has_strategy_owned_pre_dispatch_lease() -> None:
+    assert "pre_dispatch_expires_at timestamptz NOT NULL" in SQL
+    assert "state_reason text" in SQL
+    assert "ix_capital_reservations_reserved_expiry" in SQL
+
+
 def test_exit_storage_is_separate_from_entry_execution_storage() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS strategy_exit" in SQL
     assert "CREATE TABLE IF NOT EXISTS strategy_exit.execution_requests" in SQL

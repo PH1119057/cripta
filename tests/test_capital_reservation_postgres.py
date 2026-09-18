@@ -140,6 +140,7 @@ def _request(prefix: str, index: int, identity: dict[str, str]) -> CapitalReserv
         capacity_observed_at=observed_at,
         capacity_available=Decimal("10"),
         requested_at=observed_at,
+        pre_dispatch_expires_at=observed_at.replace(second=30),
     )
 
 

@@ -838,6 +838,23 @@ class UniversalEntryEngine:
             created_at=now.astimezone(UTC),
         )
 
+    def _execution_request_max_age_seconds(self, plan: EntryPlan) -> int | None:
+        card = self._registry.card(
+            plan.strategy_id,
+            plan.strategy_version,
+            plan.strategy_config_fingerprint,
+        )
+        entry_policy = card.entry_policy.to_dict()
+        execution_policy = entry_policy.get("execution_policy")
+        if not isinstance(execution_policy, Mapping):
+            return None
+        raw = execution_policy.get("max_request_age_seconds")
+        try:
+            value = int(str(raw))
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
     @staticmethod
     def _capital_settings(plan: EntryPlan) -> tuple[Decimal | None, int | None, DataQuality | None]:
         payload = plan.capital_policy.to_dict()
@@ -872,6 +889,11 @@ class UniversalEntryEngine:
         reason = "strategy conditions matched"
         capacity_id: str | None = None
         reservation_id: str | None = None
+        request_max_age_seconds = (
+            self._execution_request_max_age_seconds(plan)
+            if require_capital_reservation
+            else None
+        )
         if policy_attempt_block is not None:
             code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
             reason = policy_attempt_block
@@ -911,7 +933,10 @@ class UniversalEntryEngine:
                 elif require_capital_reservation:
                     capital_policy = plan.capital_policy.to_dict()
                     amount_currency = str(capital_policy.get("amount_currency") or "").strip()
-                    if not account_ref:
+                    if request_max_age_seconds is None:
+                        code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                        reason = "real Entry requires explicit Strategy max_request_age_seconds"
+                    elif not account_ref:
                         code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
                         reason = "real Entry requires account_ref for atomic capital reservation"
                     elif capital_reservation_port is None:
@@ -939,6 +964,8 @@ class UniversalEntryEngine:
                                     capacity_observed_at=capacity.observed_at,
                                     capacity_available=capacity.available_for_new_trading,
                                     requested_at=now,
+                                    pre_dispatch_expires_at=now
+                                    + timedelta(seconds=request_max_age_seconds),
                                 )
                             )
                         except InsufficientCapital as exc:
