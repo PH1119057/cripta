@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.2  
+**Версия:** 8.3  
 **Дата:** 2026-09-18  
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -32,35 +32,27 @@ EXCHANGE
 
 # 3. Документационный контур
 
-После укрупнения 2026-09-18 активный Project Source состоит из восьми канонических файлов,
-перечисленных в `docs/DOCUMENTATION_INDEX_RU.md`.
+Активный Project Source состоит из восьми семейств из
+`docs/DOCUMENTATION_INDEX_RU*.md`.
 
-Первым для ChatGPT читается `CHATGPT_INTERACTION_RULES_RU.md`, который хранит
-правила взаимодействия с владельцем и устойчивые правила идентификации файлов.
+`CHATGPT_INTERACTION_RULES_RU*.md` — META-контракт: читается первым, но не
+задаёт торговую архитектуру.
 
-Специализированные документы укрупнены в два контракта:
+`TRADING_CONTOUR_RU*.md` объединяет Strategy + Entry + Exit + Execution.
 
-```text
-TRADING_CONTOUR_RU.md
-= STRATEGY + ENTRY + EXIT + EXECUTION
+`OBSERVATION_ANALYTICS_RU*.md` объединяет MAYAK + Dispatcher + Monitoring +
+Position Supervisor + Analyst/Research.
 
-OBSERVATION_ANALYTICS_RU.md
-= MAYAK + DISPATCHER + MONITORING + POSITION SUPERVISOR + ANALYTICS/RESEARCH
-```
+Старые самостоятельные корневые концептуальные/PASS/Workbench документы
+перенесены в `archive/documentation_pre_2026-09-18/root/`.
 
-`AGENTS.md` остаётся GitHub-only bootstrap и не требуется как отдельный файл
-ChatGPT Project Source.
-
-Прежняя markdown-документация до ревизии удалена из текущего дерева и сохранена
-в Git history/отдельном историческом архиве. Она не является текущей инструкцией.
+Исторические документы внутри старых patch/research payload остаются на месте
+для воспроизводимости, но исключаются из обычного pre-read/поиска канона.
 
 # 4. MAYAK
 
-Текущая архитектура MAYAK — strategy-agnostic объективное наблюдение.
-Он не имеет торговых mutation rights.
-
-Точные текущие services/schema/version перед изменением MAYAK проверяются по
-runtime/source, а не копируются из старого research report.
+MAYAK — strategy-agnostic объективное наблюдение внешнего рынка без trading
+mutation rights.
 
 # 5. Dispatcher
 
@@ -70,50 +62,43 @@ runtime/source, а не копируются из старого research report
 - trading capacity snapshot;
 - объективный rating только после отдельного утверждения формулы.
 
-Старый profile/suitability Dispatcher не является текущей архитектурой.
+Dispatcher не создаёт Strategy profile/suitability и не принимает торговое
+решение.
+
+CHECKED HERE 2026-09-18:
+- `cripta-dispatcher-v2.service` active/enabled;
+- legacy `cripta-strategy-dispatcher.service` inactive/disabled;
+- legacy source/config всё ещё содержит `M3_V1_*` identifiers и старый
+  profile-based contour.
+
+Последний пункт — `FINDING`, а не текущая архитектура. Перед разработкой
+старого profile-кода требуется отдельная migration/cleanup задача.
 
 # 6. Strategy / Universal Entry
 
 В source существует Universal Entry contour:
 - immutable StrategyCard;
 - StrategyActivation;
-- materialization EntryPlan/ExitPlan;
+- EntryPlan/ExitPlan materialization;
 - ActivePlanRegistry;
 - `UniversalEntryEngine`;
 - `ParameterizedCausalMarketWatch`;
 - StrategySignal/Attempt/Decision/ExecutionRequest;
-- PostgreSQL strategy_entry evidence/read-model;
-- Strategy dashboard/monitoring;
+- PostgreSQL evidence/read-model;
 - execution bridge.
 
-Фактический source-код подтверждает принцип:
-`ParameterizedCausalMarketWatch` не выбирает Strategy и получает торговые
-числа через EntryPlan.
+# 7. Текущий первый Strategy Candidate
 
-`UniversalEntryEngine` обрабатывает все `plans_for(symbol)` и создаёт
-strategy-specific StrategySignal при выполнении правил плана.
-
-Execution bridge валидирует immutable Strategy/Plan identity и не использует
-legacy global trading settings как fallback.
-
-# 7. Текущая исследуемая первая Strategy
-
-Текущая геометрическая Strategy, которую владелец продолжает прорабатывать,
-использует H9 как одинаковую временную глубину:
+Текущая геометрическая идея остаётся `Strategy Candidate / Draft`, пока
+владелец не утвердил immutable StrategyCard/version.
 
 ```text
 H9 = 9 часов = 540 минут
-
 5m component  = 108 закрытых 5m свечей
 15m component = 36 закрытых 15m свечей
 ```
 
-Совмещение 5m и 15m формирует геометрию этой Strategy.
-
 Это не универсальная константа Entry Engine.
-
-Исторический Entry V1 с 130 барами 5m и 130 барами 15m относится к старому
-исследовательскому/implementation этапу и не определяет H9.
 
 # 8. H3
 
@@ -121,92 +106,65 @@ H9 = 9 часов = 540 минут
 H3 = 3 часа = 180 минут
 ```
 
-H3 является совмещением 5m- и 15m-геометрий на одинаковой глубине 3 часа.
-
-H3 сейчас не является условием Entry текущей первой Strategy.
-Она относится к сопровождению/Exit research.
+H3 сейчас не является Entry condition текущего Strategy Candidate и относится к
+сопровождению/Exit research.
 
 # 9. Стабилизация
 
-Стабилизация используется для подавления вибрации геометрии:
-зона/геометрия должна не изменяться заданное Strategy время в минутах.
-
-Конкретные найденные значения являются параметрами конкретной Strategy и не
-фиксируются здесь как глобальный канон.
+Стабилизация задаётся Candidate/Strategy в минутах и не является global default.
 
 # 10. Post-fill geometry
 
-Фактическая Entry price фиксируется навсегда как факт сделки.
-
-Текущая H9 после Entry продолжает пересчитываться и может многократно двигаться.
-Для сопровождения требуется хранить текущие snapshots и сравнивать их с fixed
-Entry price и предыдущим состоянием.
-
-Старое правило о необходимости сопровождать только причинную «ту же исходную
-Entry-зону» больше не является каноном.
+Entry price фиксируется как факт сделки.
+Текущая geometry после Entry продолжает причинно пересчитываться.
 
 # 11. Execution / Exchange
 
-Execution получает только уже сформированный ExecutionRequest и использует
-Strategy-owned параметры.
+Execution исполняет уже принятое торговое решение.
+Bybit — текущий provider, но не архитектурная константа.
 
-Bybit — текущий подключённый provider, но не архитектурная константа.
+Точный универсальный контракт будущих Exit-мутаций в Execution пока не
+утверждён; это открытый архитектурный вопрос.
 
 # 12. Analytics
 
-Analyst/Research — поддерживающий контур без торговых прав.
+Analyst/Research — доказательный контур без trading rights.
 
-Никакое исследование, включая сегодняшнее, не является архитектурой или Strategy
-до отдельного решения владельца.
+# 13. ChatGPT Project Instructions
 
-# 13. Граница этой ревизии
+Каноническая схема Project Instructions — тонкий bootstrap по
+`CHATGPT_INTERACTION_RULES_RU*.md`, с семействами имён через `*`.
+
+Фактический текст Project Instructions в UI является отдельным ChatGPT-project
+state и не подтверждается одним только GitHub.
+
+# 14. Граница этой ревизии
 
 Документационная ревизия:
-- меняет документационный канон;
-- не меняет production source logic;
+- не меняет production trading logic;
 - не меняет Strategy records в PostgreSQL;
 - не активирует real Execution;
-- не меняет runtime services;
-- не переименовывает исторические IDs/DB rows задним числом.
+- не переименовывает historical IDs/DB rows;
+- не превращает обсуждаемый Exit Engine contract в канон до отдельного решения.
 
-Следующий шаг после замены Project Source — ревизия ChatGPT Project instructions
-под новый комплект.
-
-# 14. Проверенный runtime checkpoint 2026-09-18
-
-Этот раздел фиксирует только ключевые факты безопасности/активности на момент
-документационной ревизии. Он не превращает изменяемое runtime-состояние в
-архитектурную константу.
-
-Проверено на сервере:
+# 15. Проверенный runtime/source checkpoint 2026-09-18
 
 ```text
-cripta-mayak-v2.service                         active/running
-cripta-dispatcher-v2.service                    active/running
-cripta-dispatcher-v2-context-correlator.service active/running
-cripta-universal-entry-observer.service         active/running
-cripta-universal-entry-consumer.service         disabled/inactive
-cripta-private-runtime.service                  active/running
-cripta-exit-runtime.service                     active/running
+cripta-mayak-v2.service                         active/enabled
+cripta-dispatcher-v2.service                    active/enabled
+cripta-dispatcher-v2-context-correlator.service active/enabled
+cripta-universal-entry-observer.service         active/enabled
+cripta-universal-entry-consumer.service         inactive/disabled
+cripta-private-runtime.service                  active/enabled
+cripta-exit-runtime.service                     active/enabled
+cripta-strategy-dispatcher.service              inactive/disabled
 ```
-
-Торговые разрешения:
 
 ```text
 strategy_entry.execution_permissions: enabled = 0, total = 0
-control.execution_gates mainnet: enabled = 0
 ```
 
-Следовательно, работа observer/private-state/Exit runtime сама по себе не
-означает разрешение новой real Entry через Universal Entry.
+Mainnet gate в этом проходе повторно не подтверждён отдельным успешным запросом,
+поэтому прошлое значение не выдаётся как `CHECKED HERE`.
 
-На сервере также существует активный технический service identifier:
-
-```text
-cripta-m3-trade-analyst.service
-```
-
-Это legacy-имя, возникшее на историческом этапе. Оно не создаёт сущность
-`M3` и не отменяет словарь. Переименование systemd/service/code identifiers
-требует отдельной migration-задачи с проверкой ссылок, state и operational
-совместимости; документационная ревизия этого не делает.
+Legacy identifiers с `M3` — технический долг и не создают термин `M3`.

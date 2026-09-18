@@ -1,0 +1,6 @@
+CRIPTA historical documentation archive
+Created: 2026-09-18
+
+Files below this directory are historical/non-canonical.
+Do not use them as current architecture, trading policy or development instructions.
+Read only for explicitly requested historical audit, comparison or reproducibility.

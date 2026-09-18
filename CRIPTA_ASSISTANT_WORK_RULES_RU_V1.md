@@ -1,6 +1,6 @@
 # CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 2.1 · 2026-09-18
+**Версия:** 2.2 · 2026-09-18
 **Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
 **Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
@@ -55,11 +55,11 @@ GitHub PH1119057/cripta:main
 
 Затем прочитать активный стартовый комплект:
 
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`;
-3. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`;
-4. `docs/DOCUMENTATION_INDEX_RU.md`;
-5. `docs/CRIPTA_GLOSSARY_RU.md`;
-6. `docs/CURRENT_PROJECT_MAP_RU.md`.
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`;
+3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`;
+4. `docs/DOCUMENTATION_INDEX_RU*.md`;
+5. `docs/CRIPTA_GLOSSARY_RU*.md`;
+6. `docs/CURRENT_PROJECT_MAP_RU*.md`.
 
 В Project Instructions ссылки на документы должны использовать устойчивое
 семейство имени, а не жёсткий version/UI suffix.
@@ -75,11 +75,14 @@ pre-read. Они открываются только по явному запр�
 
 ## 4. Hard Stop
 
-Если предлагаемое действие противоречит действующим каноническим документам:
+Если предлагаемое действие или новое высказывание владельца противоречит
+действующим каноническим документам:
 
 ```text
-ARCHITECTURE_CONFLICT=YES
+CANON_CONFLICT=YES
 HARD_STOP=YES
+CANON_UPDATE_REQUIRED=YES
+OWNER_DECISION_REQUIRED=YES
 ```
 
 Действия:
@@ -88,7 +91,10 @@ HARD_STOP=YES
 STOP
 -> НИЧЕГО НЕ МЕНЯТЬ
 -> УКАЗАТЬ ТОЧНЫЙ КОНФЛИКТ
--> ЗАПРОСИТЬ РЕШЕНИЕ ВЛАДЕЛЬЦА
+-> УКАЗАТЬ, КАКОЙ КАНОН НУЖНО ИЗМЕНИТЬ
+-> ПОЛУЧИТЬ ПОДТВЕРЖДЕНИЕ ВЛАДЕЛЬЦА
+-> ОБНОВИТЬ КАНОН
+-> ТОЛЬКО ПОТОМ РЕАЛИЗОВЫВАТЬ
 ```
 
 Если код расходится с архитектурным документом — это finding, а не автоматическое разрешение переписать код.
@@ -130,6 +136,11 @@ Research/evidence, завершённый месяц назад, вчера ил
 
 Git history и отдельный legacy archive являются историей. Их содержимое не
 читать и не использовать как инструкцию без явного запроса владельца.
+
+Обычный поиск текущей архитектуры/правил обязан исключать `archive/**`,
+`patch_backups/**`, исторические `*/payload/docs/**`, старые Pxx/EO/SE/PASS,
+runbook и handoff. Физическое наличие такого файла в repository не делает его
+активным документом.
 
 После изменения активного комплекта GitHub обновляется первым, затем владелец
 полностью заменяет статические Project Source в ChatGPT.

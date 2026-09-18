@@ -1,120 +1,129 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.1  
+**Версия:** 2.2  
 **Дата:** 2026-09-18  
 **Статус:** канонический индекс документации
 
 # 1. Цель
 
 В проекте существует один небольшой активный комплект документов.
-Никакое исследование, старый протокол, runbook или историческая схема не
-считается текущим правилом только потому, что файл когда-то существовал.
+Физическое наличие старого файла в repository/history не даёт ему authority.
 
-# 2. Приоритет
+# 2. Роли и приоритет
 
 ```text
-LEVEL 0 — явное текущее решение владельца
+META — docs/CHATGPT_INTERACTION_RULES_RU*.md
+       регулирует чтение, проверку и взаимодействие ChatGPT;
+       не задаёт торговую архитектуру.
 
-LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md
-          CRIPTA_ARCHITECTURE_RULES_RU_V1.md
-          docs/CRIPTA_GLOSSARY_RU.md
+LEVEL 0 — подтверждённое текущее решение владельца.
+          Если оно меняет канон, сначала обязательна новая версия канона.
 
-LEVEL 2 — docs/TRADING_CONTOUR_RU.md
-          docs/OBSERVATION_ANALYTICS_RU.md
+LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
+          CRIPTA_ARCHITECTURE_RULES_RU_*.md
+          docs/CRIPTA_GLOSSARY_RU*.md
 
-LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU.md
+LEVEL 2 — docs/TRADING_CONTOUR_RU*.md
+          docs/OBSERVATION_ANALYTICS_RU*.md
 
-LEVEL H — Git history, архив, старые research/evidence
+LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU*.md
+
+LEVEL H — Git history, archive, patch payload docs,
+          старые research/evidence/runbook/handoff/Pxx/EO/SE/PASS.
 ```
 
-При конфликте активных документов:
+Если новое решение владельца конфликтует с каноном:
 
 ```text
+CANON_CONFLICT=YES
 HARD_STOP=YES
+CANON_UPDATE_REQUIRED=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
+После подтверждения владельца сначала обновляется канон, затем код.
+
 # 3. Восемь файлов ChatGPT Project Source
 
-Для ChatGPT Project Source используется этот основной комплект:
+1. `docs/CHATGPT_INTERACTION_RULES_RU*.md`
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
+3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`
+4. `docs/DOCUMENTATION_INDEX_RU*.md`
+5. `docs/CRIPTA_GLOSSARY_RU*.md`
+6. `docs/CURRENT_PROJECT_MAP_RU*.md`
+7. `docs/TRADING_CONTOUR_RU*.md`
+8. `docs/OBSERVATION_ANALYTICS_RU*.md`
 
-1. `docs/CHATGPT_INTERACTION_RULES_RU.md`
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-3. `CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-4. `docs/DOCUMENTATION_INDEX_RU.md`
-5. `docs/CRIPTA_GLOSSARY_RU.md`
-6. `docs/CURRENT_PROJECT_MAP_RU.md`
-7. `docs/TRADING_CONTOUR_RU.md`
-8. `docs/OBSERVATION_ANALYTICS_RU.md`
-
-`CHATGPT_INTERACTION_RULES_RU.md` читается ChatGPT первым.
-
-Смысловые ссылки в Project Instructions используют семейство имени документа,
-а не жёсткий номер версии или UI-суффикс.
-
-Это оставляет свободные места Project Source для дополнительных материалов.
+Используется семейство имени, а не номер версии/UI suffix.
+`CHATGPT_INTERACTION_RULES_RU*.md` читается первым.
 
 # 4. AGENTS.md
 
-`AGENTS.md` остаётся в GitHub как технический bootstrap для Codex/разработчика.
-
-Он не является восьмым обязательным файлом ChatGPT Project Source и не создаёт
-самостоятельный архитектурный контракт.
+`AGENTS*.md` — GitHub-only bootstrap для Codex/разработчика.
+Он не создаёт самостоятельный архитектурный контракт.
 
 # 5. Обязательный pre-read нового чата
 
-Сначала прочитать:
+Сначала:
+1. `CHATGPT_INTERACTION_RULES_RU*.md`.
 
-1. `CHATGPT_INTERACTION_RULES_RU.md`
+Затем:
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`;
+3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`;
+4. `DOCUMENTATION_INDEX_RU*.md`;
+5. `CRIPTA_GLOSSARY_RU*.md`;
+6. `CURRENT_PROJECT_MAP_RU*.md`.
 
-Затем минимальный проектный pre-read:
+Перед Strategy / Entry / Exit / Execution:
+- `TRADING_CONTOUR_RU*.md`.
 
-2. `../CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md`
-3. `../CRIPTA_ARCHITECTURE_RULES_RU_V1.md`
-4. `DOCUMENTATION_INDEX_RU.md`
-5. `CRIPTA_GLOSSARY_RU.md`
-6. `CURRENT_PROJECT_MAP_RU.md`
+Перед MAYAK / Dispatcher / monitoring / Position Supervisor /
+Analyst / research / replay / OOS / holdout:
+- `OBSERVATION_ANALYTICS_RU*.md`.
 
-Перед работой с торговым контуром дополнительно читать:
-- `TRADING_CONTOUR_RU.md`.
+Если затрагиваются оба контура — читать оба.
 
-Перед работой с MAYAK, Dispatcher, monitoring, Position Supervisor,
-Analyst/research дополнительно читать:
-- `OBSERVATION_ANALYTICS_RU.md`.
+# 6. Историческая изоляция
 
-Если задача затрагивает оба контура — читать оба.
+В активном каталоге `docs/` находятся только текущие канонические документы.
 
-# 6. Запрет неявного использования других документов
+Исторические материалы могут физически сохраняться в `archive/**`, Git
+history и внутри старых неизменяемых patch/research artifacts.
 
-Другие markdown-файлы в `docs/` не должны существовать в активном
-документационном контуре.
+По умолчанию исполнитель не читает и не использует:
+- `archive/**`;
+- `patch_backups/**`;
+- `*/payload/docs/**`;
+- старые Pxx / EO / SE / PASS / handoff / runbook.
 
-Историческая документация остаётся в Git history/legacy archive.
-
-Историю:
-- не читать в стандартном pre-read;
-- не использовать для генерации текущего ТЗ;
-- не использовать как источник текущих параметров;
-- не использовать для толкования терминов;
-- открывать только по явному запросу владельца на исторический аудит,
-  сравнение или воспроизводимость.
+Открывать их можно только по явной исторической задаче.
 
 # 7. Исследования и evidence
 
-Исследовательский файл никогда не получает статус канона автоматически.
+Исследование любой давности остаётся evidence.
 
-Даже исследование, завершённое сегодня, остаётся evidence.
+```text
+RESEARCH RESULT
+-> OWNER DECISION
+-> CANON / STRATEGY UPDATE
+-> TEST / SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
+```
 
-Если результат исследования принят владельцем, канон меняется отдельным явным
-решением и обновлением соответствующей Strategy/активного документа.
+# 8. Project Instructions
 
-# 8. Обновление Project Source в ChatGPT
+Project Instructions должны быть тонким bootstrap и ссылаться на семейства
+имён с `*`, а не дублировать полный содержательный канон.
 
-После изменения активного комплекта:
+Они обязаны найти source of truth, загрузить правильный pre-read, применить
+Hard Stop, не использовать память/history как канон и различать статусы.
 
-1. GitHub `main` обновляется;
-2. `/srv/cripta/source_checkout` синхронизируется и сверяется с `main`;
-3. создаётся пакет из восьми канонических файлов Project Source;
+# 9. Обновление Project Source
+
+1. обновляется GitHub `main`;
+2. синхронизируется `/srv/cripta/source_checkout`;
+3. формируется набор восьми текущих файлов;
 4. владелец полностью заменяет старые Project Source;
-5. дополнительные временные источники добавляются только в свободные места и
-   не получают статус канона автоматически.
+5. дополнительные материалы не получают authority автоматически.

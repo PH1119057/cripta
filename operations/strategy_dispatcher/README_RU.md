@@ -1,26 +1,16 @@
-# Диспетчер стратегий — эксплуатационный контур D3-D6
+# LEGACY — strategy_dispatcher profile runtime
 
-Этот каталог содержит **шаблон** systemd unit. Инсталлятор патча не копирует его в
-`/etc/systemd/system`, не делает `daemon-reload`, не включает и не запускает сервис.
+**Статус:** HISTORICAL / NON-CANONICAL
 
-До отдельной серверной команды Диспетчер существует только как установленный код.
+Этот каталог описывает старый profile-based `cripta-strategy-dispatcher.service`.
 
-Пассивный сервис:
+CHECKED HERE 2026-09-18:
+- legacy service inactive;
+- legacy service disabled;
+- current `cripta-dispatcher-v2.service` active/enabled.
 
-- читает только `/var/lib/cripta/mayak_v2/status.json`;
-- читает профили из `/srv/cripta/config/strategy_dispatcher/profiles`;
-- пишет только `/var/lib/cripta/strategy_dispatcher`;
-- через отдельный persistence-adapter сохраняет причинные запуски и оценки в
-  `strategy_dispatcher.runs` и `strategy_dispatcher.assessments` PostgreSQL;
-- не импортирует Entry/Exit/Risk/Execution/Position Supervisor;
-- не имеет сетевого клиента;
-- не имеет ключей Bybit;
-- не имеет торговых команд.
+Текущая архитектура Dispatcher определяется
+`docs/OBSERVATION_ANALYTICS_RU*.md`: Dispatcher strategy-agnostic и не создаёт
+Strategy profile/suitability.
 
-Все поставляемые reference profiles имеют `"enabled": false`. Поэтому даже после
-ручного запуска сервиса без отдельного включения профилей он будет только сохранять
-снимок адаптера и `profile_count = 0`.
-
-Запись в PostgreSQL относится только к журналу наблюдений Диспетчера. Ограничение
-`trading_effect='NONE'` закреплено в схеме таблицы; торговые таблицы и приватный API
-runtime не читает и не изменяет.
+Legacy source/config сохраняется до отдельной migration/cleanup задачи.

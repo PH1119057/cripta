@@ -1,68 +1,62 @@
 # CRIPTA
 
-CRIPTA — production-платформа для причинного наблюдения рынка, оценки среды,
-торговых стратегий, исполнения на подключённой бирже, сопровождения позиций и воспроизводимой
-аналитики.
+CRIPTA — production-платформа для причинного наблюдения рынка, торговых
+Strategy, исполнения, сопровождения позиций и воспроизводимой аналитики.
 
-Сначала прочитайте:
+## Канонический вход
 
-- [Правила работы](CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md)
-- [Архитектурные правила](CRIPTA_ARCHITECTURE_RULES_RU_V1.md)
-- [Текущая карта](docs/CURRENT_PROJECT_MAP_RU.md)
-- [Управление изменениями](docs/PROJECT_GOVERNANCE_RU.md)
-- [Авторитетность документов](docs/DOCUMENT_AUTHORITY_RU.md)
+Документы идентифицируются по семейству имени, а не по номеру версии:
 
-## Source of truth и checkpoint
+1. `CHATGPT_INTERACTION_RULES_RU*.md`
+2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
+3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`
+4. `DOCUMENTATION_INDEX_RU*.md`
+5. `CRIPTA_GLOSSARY_RU*.md`
+6. `CURRENT_PROJECT_MAP_RU*.md`
+7. `TRADING_CONTOUR_RU*.md`
+8. `OBSERVATION_ANALYTICS_RU*.md`
 
-GitHub `PH1119057/cripta:main` — общий канонический source checkpoint;
-`/srv/cripta/source_checkout` — канонический server checkout, который обязан
-быть с ним синхронизирован. Installed runtime, PostgreSQL и подключённая биржа проверяются
-отдельно. `C:\cripta`, старые ZIP и чаты не являются source of truth.
+Точный текущий состав и pre-read определяет
+[docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md).
 
-Baseline перед документационной ревизией 2026-09-05:
-`22f1ed07ec34a4713f23d4d196765ded545ec610`. Текущий source checkpoint — commit,
-содержащий этот README, при проверенном равенстве GitHub main и server checkout.
-Production version: V36.1.11.
-Последний runtime checkpoint и дата его evidence указаны в текущей карте; их
-нельзя выдавать за непрерывно наблюдаемое состояние «сейчас».
-
-## Основные слои
-
-Каноническая пятиуровневая модель:
+## Source of truth
 
 ```text
-MAYAK -> DISPATCHER -> STRATEGY(ENTRY/EXIT) -> EXECUTION -> EXCHANGE
+GitHub PH1119057/cripta:main
+==
+синхронизированный /srv/cripta/source_checkout
 ```
 
-Strategy владеет политикой использования капитала, размера, плеча, stop,
-drawdown и holding; Risk не является отдельным верхним слоем. Technical support
-contour, включая Position Supervisor и Analyst, наблюдает и обслуживает систему,
-но не образует дополнительного trading layer. PostgreSQL хранит операционную и
-аналитическую историю, подключённая биржа остаётся live exchange truth.
+Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
+Project Source, память ChatGPT, старые ZIP/чаты и `C:\cripta` не являются
+source of truth.
 
-## Установка patch
-
-Единственный канонический server ZIP rail:
+## Верхняя архитектура
 
 ```text
-sudo /usr/local/sbin/cripta-apply-incoming <zip>
+MAYAK
+  ↓
+DISPATCHER
+  ↓
+STRATEGY
+ ├─ ENTRY
+ └─ EXIT
+  ↓
+EXECUTION
+  ↓
+EXCHANGE
 ```
 
-ZIP содержит в корне `MANIFEST.json`, `install.sh`, `SHA256SUMS.txt`, без wrapper
-directory. Полный контракт описан в
-[CODEX_AUTOMATION_AND_PATCH_INSTALL_RU.md](docs/CODEX_AUTOMATION_AND_PATCH_INSTALL_RU.md).
+Подробности не дублируются в README.
 
-## Live safety
+## История
 
-Неизвестное обязательное exchange/private state, сбой часов или reconciliation,
-неизвестные qty/fill/protection и owner emergency kill остаются fail-closed.
-MAYAK и Dispatcher не торгуют. Общерыночное состояние является advisory
-indicator/context Dispatcher: разные Strategy могут интерпретировать его
-по-разному. Отдельного market-driven владельца `CLOSE ALL` в верхней архитектуре
-нет. Operational safety остаётся отдельным техническим fail-closed контуром.
+Старые самостоятельные концептуальные/Workbench/PASS документы находятся в
+`archive/**` либо Git history.
 
-## Исторический Windows Workbench
+Historical docs внутри старых patch/research artifacts могут оставаться на
+месте ради воспроизводимости, но не являются текущей инструкцией.
 
-Старые инструкции Windows Workbench и ранние задания сохранены для provenance в
-`docs/history/windows_workbench/` и `docs/history/tasks/`. Они не являются
-текущими production-инструкциями.
+## Security
+
+Базовые security-инварианты: [SECURITY.md](SECURITY.md).
