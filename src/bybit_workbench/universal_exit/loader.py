@@ -52,12 +52,14 @@ def load_exit_binding(
               AND ep.strategy_version=p.strategy_version
               AND ep.strategy_config_fingerprint=p.strategy_config_fingerprint
             WHERE p.position_id=%s
-              AND p.state='OPEN'
+              AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
               AND p.bot_instance_id='universal-entry'""",
         (strategy_position_id,),
     ).fetchone()
     if row is None:
-        raise KeyError(f"open Universal StrategyPosition not found: {strategy_position_id}")
+        raise KeyError(
+            f"logically open Universal StrategyPosition not found: {strategy_position_id}"
+        )
 
     fill_at = row.get("fill_at")
     if not isinstance(fill_at, datetime):

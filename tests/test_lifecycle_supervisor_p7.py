@@ -63,7 +63,8 @@ def test_position_without_exit_owner_is_critical_fault() -> None:
     start = SUPERVISOR.rindex('"POSITION_WITHOUT_EXIT_OWNER"')
     nearby = SUPERVISOR[start : start + 1800]
     assert "FaultSeverity.CRITICAL" in nearby
-    assert "open StrategyPosition lacks exact Exit Engine claim" in nearby
+    assert "open StrategyPosition lacks exact Exit Engine claim" in SUPERVISOR
+    assert "Exit Engine claim heartbeat is stale" in SUPERVISOR
 
 
 def test_supervisor_manages_every_v1_lifecycle_fault_code() -> None:

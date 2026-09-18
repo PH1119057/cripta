@@ -104,8 +104,8 @@ def claim_exit_position(
         ).fetchone()
         if row is None:
             raise KeyError(f"StrategyPosition not found: {strategy_position_id}")
-        if str(row["state"]) != "OPEN":
-            raise RuntimeError("Exit Engine can claim only OPEN StrategyPosition")
+        if str(row["state"]) not in {"OPEN", "RECONCILIATION_REQUIRED"}:
+            raise RuntimeError("Exit Engine can claim only logically open StrategyPosition")
         if str(row["bot_instance_id"]) != "universal-entry":
             raise RuntimeError("Exit Engine claim requires Universal StrategyPosition")
         exit_fp = str(row["exit_plan_fingerprint"] or "")
@@ -189,3 +189,39 @@ def claim_exit_position(
             payload={"strategy_position_id": strategy_position_id},
         )
     return claim_id
+
+
+def mark_exit_claims_stale(
+    connection: ConnectionLike,
+    *,
+    consumer_instance_id: str,
+    seen_at: datetime,
+    reason: str,
+) -> int:
+    when = seen_at.astimezone(UTC)
+    with connection.transaction():
+        cursor = connection.execute(
+            """UPDATE runtime.position_exit_claims
+                  SET last_seen_at=GREATEST(last_seen_at,%s),
+                      status='STALE',
+                      payload=jsonb_set(
+                          jsonb_set(
+                              COALESCE(payload,'{}'::jsonb),
+                              '{stale_reason}',
+                              to_jsonb(%s::text),
+                              true
+                          ),
+                          '{stale_at}',
+                          to_jsonb(%s::text),
+                          true
+                      )
+                WHERE consumer_instance_id=%s
+                  AND status='CLAIMED'""",
+            (
+                when,
+                reason,
+                when.isoformat(),
+                consumer_instance_id,
+            ),
+        )
+    return cursor.rowcount

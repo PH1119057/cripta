@@ -33,6 +33,7 @@ class FaultSeverity(StrEnum):
 @dataclass(frozen=True, slots=True)
 class LifecycleSupervisorPolicy:
     exchange_state_max_age_seconds: int | None = None
+    exit_owner_max_age_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -40,6 +41,8 @@ class LifecycleSupervisorPolicy:
             and self.exchange_state_max_age_seconds <= 0
         ):
             raise ValueError("exchange_state_max_age_seconds must be positive or None")
+        if self.exit_owner_max_age_seconds is not None and self.exit_owner_max_age_seconds <= 0:
+            raise ValueError("exit_owner_max_age_seconds must be positive or None")
 
 
 @dataclass(frozen=True, slots=True)
@@ -781,7 +784,7 @@ class LifecycleSupervisor:
                       p.strategy_config_fingerprint,p.state,
                       x.exit_plan_fingerprint AS exact_exit_plan,
                       c.claim_id,c.exit_plan_fingerprint AS claimed_exit_plan,
-                      c.status AS claim_status
+                      c.status AS claim_status,c.last_seen_at AS claim_last_seen_at
                  FROM runtime.position_ownership p
                  LEFT JOIN strategy_entry.exit_plans x
                    ON x.exit_plan_fingerprint=p.exit_plan_fingerprint
@@ -827,11 +830,26 @@ class LifecycleSupervisor:
                     )
                 )
                 continue
-            if (
-                row["claim_id"] is None
-                or str(row["claim_status"] or "") != "CLAIMED"
-                or str(row["claimed_exit_plan"] or "") != str(row["exit_plan_fingerprint"])
-            ):
+            claim_reason: str | None = None
+            if row["claim_id"] is None:
+                claim_reason = "open StrategyPosition lacks exact Exit Engine claim"
+            elif str(row["claim_status"] or "") != "CLAIMED":
+                claim_reason = "Exit Engine claim is not active: " + str(
+                    row["claim_status"] or "UNKNOWN"
+                )
+            elif str(row["claimed_exit_plan"] or "") != str(row["exit_plan_fingerprint"]):
+                claim_reason = "Exit Engine claim has wrong ExitPlan lineage"
+            elif self._policy.exit_owner_max_age_seconds is not None:
+                last_seen = _as_datetime(
+                    row["claim_last_seen_at"],
+                    "ExitEngineClaim.last_seen_at",
+                )
+                age = (now - last_seen).total_seconds()
+                if age < 0:
+                    claim_reason = "Exit Engine claim heartbeat is from the future"
+                elif age > self._policy.exit_owner_max_age_seconds:
+                    claim_reason = "Exit Engine claim heartbeat is stale"
+            if claim_reason is not None:
                 faults.append(
                     FaultCondition(
                         "POSITION_WITHOUT_EXIT_OWNER",
@@ -842,7 +860,7 @@ class LifecycleSupervisor:
                             "strategy_position_id": position_id,
                             "exit_plan_fingerprint": row["exit_plan_fingerprint"],
                         },
-                        {"reason": "open StrategyPosition lacks exact Exit Engine claim"},
+                        {"reason": claim_reason},
                     )
                 )
 

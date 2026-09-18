@@ -1,0 +1,33 @@
+[Unit]
+Description=Cripta non-trading lifecycle supervisor
+After=postgresql.service cripta-universal-exit-shadow.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/trade_lifecycle/current
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/trade_lifecycle/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
+Environment=CRIPTA_LIFECYCLE_SUPERVISOR=ENABLED
+Environment=CRIPTA_LIFECYCLE_SUPERVISOR_POLL_SECONDS=2
+Environment=CRIPTA_LIFECYCLE_EXIT_OWNER_MAX_AGE_SECONDS=10
+Environment=CRIPTA_LIFECYCLE_SUPERVISOR_STATUS_PATH=/var/lib/cripta/lifecycle_supervisor/status.json
+ExecStart=/usr/bin/python3 /srv/cripta/trade_lifecycle/current/operations/monitoring/lifecycle_supervisor_runtime.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/srv/cripta/trade_lifecycle/current
+ReadWritePaths=/var/lib/cripta/lifecycle_supervisor
+
+[Install]
+WantedBy=multi-user.target
