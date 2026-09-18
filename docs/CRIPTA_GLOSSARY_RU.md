@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.2  
-**Дата:** 2026-09-18  
+**Версия:** 1.3  
+**Дата:** 2026-09-19  
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -30,6 +30,23 @@ immutable StrategyCard/version.
 
 **StrategyActivation** — отдельное состояние включена/выключена. Не изменяет
 StrategyCard.
+
+**Strategy settings / настройки Strategy** — все decision/execution-affecting
+параметры конкретной Strategy, разложенные по явным policy-блокам StrategyCard
+(`entry_policy`, `touch_policy`, `capital_policy`, `protection_policy`,
+`exit_policy`, `lifecycle_policy` и context policies). Это не глобальные
+defaults и не отдельный скрытый runtime-конфиг.
+
+**Базовая защитная рамка / initial protection** — Strategy-owned защита,
+передаваемая в Execution при открытии позиции. Она может включать hard stop и
+верхнюю защитную границу/TP. Наличие такой рамки не означает, что динамический
+Exit уже исследован или утверждён.
+
+**Экспериментальная Strategy version** — owner-approved immutable снимок
+Strategy Candidate/Draft для конкретного воспроизводимого теста/shadow/
+MICRO_LIVE прохода. Неустойчивость исследуемых параметров не разрешает менять
+такую карточку на месте: следующий вариант получает новую Strategy version.
+Параметры экспериментальной версии не становятся глобальными defaults.
 
 **EntryPlan / ExitPlan** — материализованные неизменяемые планы exact Strategy
 version для универсальных Entry/Exit Engines.

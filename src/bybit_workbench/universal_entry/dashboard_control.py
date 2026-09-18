@@ -266,11 +266,29 @@ def strategy_authoring_template() -> dict[str, object]:
         },
         "exit_policy": {
             "exit_plan_version": "exit-owner-1",
+            "rules": [],
+            "hard_stop": {"enabled": False},
+            "take_profit": {"enabled": False},
+            "break_even": {
+                "enabled": False,
+                "economic_basis": "STRATEGY_BUFFER_OVER_ENTRY",
+            },
+            "trailing": {"enabled": False},
+            "geometry_exit": {"enabled": False},
+            "local_zone_exit": {"enabled": False},
+            "time_exit": {"enabled": False},
             "context_feature_policy": [],
             "context_ranking_policy": {"enabled": False},
         },
         "capital_policy": {"require_capacity": False},
-        "protection_policy": {"initial_protection": {}},
+        "protection_policy": {
+            "initial_protection": {
+                "stop_loss_enabled": False,
+                "take_profit_enabled": False,
+                "trigger_by": "LastPrice",
+                "tpsl_mode": "Full",
+            }
+        },
         "lifecycle_policy": {
             "post_signal_outcome_policy": {"enabled": False},
             "hedge_policy": {"enabled": False},
@@ -580,6 +598,22 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     )
 
     exit_policy = _mapping(raw.get("exit_policy"), "exit_policy")
+    required_exit_slots = (
+        "hard_stop",
+        "take_profit",
+        "break_even",
+        "trailing",
+        "geometry_exit",
+        "local_zone_exit",
+        "time_exit",
+    )
+    missing_exit_slots = tuple(field for field in required_exit_slots if field not in exit_policy)
+    if missing_exit_slots:
+        raise ValueError(
+            "Strategy settings require explicit exit slots: "
+            + ", ".join(missing_exit_slots)
+        )
+    _list(exit_policy.get("rules", []), "exit_policy.rules")
     for field in ("hard_stop", "take_profit"):
         value = exit_policy.get(field)
         if value is None:
@@ -588,6 +622,8 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         enabled = _bool(policy.get("enabled"), f"exit_policy.{field}.enabled")
         if enabled and _decimal(policy.get("percent"), f"exit_policy.{field}.percent") <= 0:
             raise ValueError(f"exit_policy.{field}.percent must be positive")
+        if not enabled and policy.get("percent") not in (None, ""):
+            raise ValueError(f"disabled exit_policy.{field} cannot carry hidden percent")
     for field in ("break_even", "trailing"):
         value = exit_policy.get(field)
         if value is None:
@@ -608,12 +644,35 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     raise ValueError("exit_policy.break_even.buffer_pct is required when enabled")
                 if _decimal(policy.get("buffer_pct"), "exit_policy.break_even.buffer_pct") < 0:
                     raise ValueError("exit_policy.break_even.buffer_pct cannot be negative")
+        elif field == "break_even":
+            if policy.get("activation_profit_pct") not in (None, "") or policy.get(
+                "buffer_pct"
+            ) not in (None, ""):
+                raise ValueError("disabled exit_policy.break_even cannot carry hidden values")
+        elif policy.get("activation_profit_pct") not in (None, "") or policy.get(
+            "distance_pct"
+        ) not in (None, ""):
+            raise ValueError("disabled exit_policy.trailing cannot carry hidden values")
         if (
             enabled
             and field == "trailing"
             and _decimal(policy.get("distance_pct"), "exit_policy.trailing.distance_pct") <= 0
         ):
             raise ValueError("exit_policy.trailing.distance_pct must be positive")
+    geometry_exit = _mapping(exit_policy.get("geometry_exit"), "exit_policy.geometry_exit")
+    geometry_exit_enabled = _bool(
+        geometry_exit.get("enabled"), "exit_policy.geometry_exit.enabled"
+    )
+    if geometry_exit_enabled:
+        raise ValueError(
+            "exit_policy.geometry_exit is reserved but not executable yet; "
+            "keep it disabled until an exact ExitPlan consumer contract exists"
+        )
+    local_zone_exit = _mapping(
+        exit_policy.get("local_zone_exit"), "exit_policy.local_zone_exit"
+    )
+    _bool(local_zone_exit.get("enabled"), "exit_policy.local_zone_exit.enabled")
+
     time_exit = exit_policy.get("time_exit")
     if time_exit is not None:
         policy = _mapping(time_exit, "exit_policy.time_exit")
@@ -633,6 +692,50 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         exit_policy.get("context_ranking_policy"),
         "exit_policy.context",
     )
+
+    protection_policy = _mapping(raw.get("protection_policy"), "protection_policy")
+    initial_protection = _mapping(
+        protection_policy.get("initial_protection"),
+        "protection_policy.initial_protection",
+    )
+    stop_enabled = _bool(
+        initial_protection.get("stop_loss_enabled"),
+        "protection_policy.initial_protection.stop_loss_enabled",
+    )
+    target_enabled = _bool(
+        initial_protection.get("take_profit_enabled"),
+        "protection_policy.initial_protection.take_profit_enabled",
+    )
+    if not str(initial_protection.get("trigger_by") or ""):
+        raise ValueError("initial_protection.trigger_by is required")
+    if not str(initial_protection.get("tpsl_mode") or ""):
+        raise ValueError("initial_protection.tpsl_mode is required")
+    hard_policy = _mapping(exit_policy.get("hard_stop"), "exit_policy.hard_stop")
+    target_policy = _mapping(exit_policy.get("take_profit"), "exit_policy.take_profit")
+    hard_enabled = _bool(hard_policy.get("enabled"), "exit_policy.hard_stop.enabled")
+    take_profit_enabled = _bool(
+        target_policy.get("enabled"), "exit_policy.take_profit.enabled"
+    )
+    if hard_enabled != stop_enabled:
+        raise ValueError("hard_stop and initial_protection stop enablement must match")
+    if take_profit_enabled != target_enabled:
+        raise ValueError("take_profit and initial_protection target enablement must match")
+    if stop_enabled:
+        if _decimal(
+            initial_protection.get("stop_loss_pct"),
+            "protection_policy.initial_protection.stop_loss_pct",
+        ) != _decimal(hard_policy.get("percent"), "exit_policy.hard_stop.percent"):
+            raise ValueError("hard_stop percent must match initial protection stop")
+    elif initial_protection.get("stop_loss_pct") not in (None, ""):
+        raise ValueError("disabled initial stop cannot carry hidden stop_loss_pct")
+    if target_enabled:
+        if _decimal(
+            initial_protection.get("take_profit_pct"),
+            "protection_policy.initial_protection.take_profit_pct",
+        ) != _decimal(target_policy.get("percent"), "exit_policy.take_profit.percent"):
+            raise ValueError("take_profit percent must match initial protection target")
+    elif initial_protection.get("take_profit_pct") not in (None, ""):
+        raise ValueError("disabled initial target cannot carry hidden take_profit_pct")
     if any(
         str(_mapping(item, "exit context feature").get("mode") or "OFF") != "OFF"
         for item in _list(exit_policy.get("context_feature_policy", []), "exit context features")

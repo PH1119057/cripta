@@ -1,0 +1,87 @@
+{
+  "status": "EXAMPLE_ONLY_RESEARCH_NOT_STRATEGYCARD",
+  "trading_rights": "NONE",
+  "strategy_activation": "NONE",
+  "purpose": "Классический пример размещения нестабильных Strategy-owned настроек без утверждения канонического Exit.",
+  "current_owner_context": {
+    "note": "Пока Entry и Exit исследуются, пример не является активной StrategyCard и не меняет production records.",
+    "provisional_safety_envelope": {
+      "hard_stop_signed_pct": "-2.00",
+      "upper_boundary_signed_pct": "+3.00"
+    }
+  },
+  "strategy_card_fragment_example": {
+    "exit_policy": {
+      "exit_plan_version": "exit-owner-example-1",
+      "rules": [],
+      "hard_stop": {
+        "enabled": true,
+        "percent": "2.00"
+      },
+      "take_profit": {
+        "enabled": true,
+        "percent": "3.00"
+      },
+      "break_even": {
+        "enabled": false,
+        "economic_basis": "STRATEGY_BUFFER_OVER_ENTRY"
+      },
+      "trailing": {
+        "enabled": false
+      },
+      "geometry_exit": {
+        "enabled": false
+      },
+      "local_zone_exit": {
+        "enabled": false
+      },
+      "time_exit": {
+        "enabled": false
+      },
+      "context_feature_policy": [],
+      "context_ranking_policy": {
+        "enabled": false
+      }
+    },
+    "protection_policy": {
+      "initial_protection": {
+        "stop_loss_enabled": true,
+        "stop_loss_pct": "2.00",
+        "take_profit_enabled": true,
+        "take_profit_pct": "3.00",
+        "trigger_by": "LastPrice",
+        "tpsl_mode": "Full"
+      }
+    }
+  },
+  "research_reference_only": {
+    "fee_aware_break_even_candidate": {
+      "enabled": false,
+      "fee_cover_pct": "0.12",
+      "activation_profit_pct": null,
+      "status": "OWNER_EXAMPLE_VALUE_NOT_APPROVED_EXIT_RULE",
+      "note": "0.12 обсуждается как покрытие комиссии; точка активации отдельно не утверждена."
+    },
+    "h3_trailing_candidate": {
+      "enabled": false,
+      "status": "RESEARCH_REFERENCE_ONLY_NOT_APPROVED",
+      "geometry": {
+        "name": "H3",
+        "depth_minutes": 180,
+        "timeframes_minutes": [
+          5,
+          15
+        ]
+      },
+      "touch_number": 2,
+      "post_touch_confirmation": {
+        "enabled": true,
+        "closed_candle_timeframe_minutes": 5,
+        "closed_candle_count": 1
+      },
+      "minimum_position_profit_pct": "0.20",
+      "trailing_distance_pct": "0.10",
+      "note": "Исторический исследовательский вариант; не default и не канон."
+    }
+  }
+}

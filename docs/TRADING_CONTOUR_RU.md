@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.1  
-**Дата:** 2026-09-18  
+**Версия:** 1.2  
+**Дата:** 2026-09-19  
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -118,6 +118,43 @@ service; это implementation detail внутри Strategy layer, а не но�
 
 Результат становится торговой policy только после отдельного решения владельца
 и создания новой Strategy version.
+
+## 1.8 Strategy settings и экспериментальные версии
+
+Настройки конкретной Strategy не хранятся в глобальных defaults и не
+дублируются в отдельном непрозрачном `strategy_settings`-мешке. Они
+раскладываются по owner-owned policy-блокам StrategyCard:
+
+- `entry_policy` — условия и параметры Entry;
+- `touch_policy` — касания/retest/cooldown;
+- `capital_policy` — капитал/leverage;
+- `protection_policy.initial_protection` — базовая биржевая защитная рамка,
+  известная уже при Entry;
+- `exit_policy` — динамические правила сопровождения/Exit;
+- `lifecycle_policy` — lifecycle/hedge и другие сквозные правила;
+- MAYAK/Dispatcher policies — только явно разрешённый Strategy-specific
+  consumption context.
+
+Значения, которые ещё исследуются, сначала живут в Strategy Candidate/Draft.
+Если нужно провести воспроизводимый shadow/MICRO_LIVE эксперимент, владелец
+утверждает точный снимок как новую immutable StrategyCard/version. Это
+утверждает только конкретный экспериментальный снимок и не превращает его
+числа в глобальные defaults или обязательный Exit для будущих Strategy.
+
+Базовая защитная рамка и динамический Exit — разные сущности. Например,
+временный hard stop/верхняя защитная граница могут быть переданы в
+`EntryExecutionRequest` как initial protection, даже если H3/касания/BE/
+trailing ещё исследуются и не утверждены как динамический ExitPlan.
+
+Даже если защитные границы известны в момент Entry, их owner остаётся Strategy
+через `protection_policy`, а не Entry Engine.
+
+Для нового Strategy authoring:
+- каждый поддерживаемый setting имеет явный `enabled`;
+- disabled setting не несёт скрытого торгового числа;
+- authoring template не содержит числовых trading defaults;
+- неподдержанный decision/execution-affecting setting нельзя silently сохранить
+  как исполняемый: authoring/materialization/readiness обязаны fail-closed.
 
 # 2. ENTRY — универсальный Entry Engine
 

@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.4  
-**Дата:** 2026-09-18  
+**Версия:** 8.5  
+**Дата:** 2026-09-19  
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -98,9 +98,14 @@ CANON после решения владельца 2026-09-18:
 - PostgreSQL evidence/read-model;
 - execution bridge.
 
-Полная runtime-реализация нового канона (универсальный Exit Engine,
-StrategyPosition/lifecycle handoff, typed Exit execution path) ещё не считается
-IMPLEMENTED до отдельного ТЗ, разработки и проверки.
+Текущий implementation contour P3-P9 уже реализует atomic reservation,
+StrategyPosition lineage, Universal Exit Engine, typed Exit execution bridge,
+Lifecycle Supervisor, Analyst/counterfactual и shadow recovery. P9 прошёл
+runtime verification в SHADOW.
+
+P10 controlled legacy Exit migration остаётся без LIVE-cutover: Universal Entry
+consumer disabled, mainnet gate закрыт. Cutover не разрешён без отдельного
+owner decision и exact executable ExitPlan evidence.
 
 # 7. Текущий первый Strategy Candidate
 
@@ -114,6 +119,24 @@ H9 = 9 часов = 540 минут
 ```
 
 Это не универсальная константа Entry Engine.
+
+## 7.1 Strategy settings authoring
+
+Owner decision 2026-09-19:
+
+- Strategy-specific settings остаются внутри явных StrategyCard policy-блоков;
+- базовая защитная рамка отделяется от динамического Exit;
+- новый authoring template содержит explicit disabled slots для hard stop, TP,
+  break-even, trailing, geometry Exit, local-zone Exit и time Exit;
+- numeric trading defaults в authoring template отсутствуют;
+- `geometry_exit` зарезервирован, но его включение fail-closed до появления
+  точного executable consumer contract;
+- нестабильные H3/touch/trailing параметры остаются Strategy Candidate/Draft
+  либо отдельной experimental Strategy version, а не global defaults;
+- текущие активные Strategy records в PostgreSQL этой ревизией не меняются.
+
+Классический исследовательский пример хранится только как non-canonical
+implementation example и не получает StrategyActivation/execution rights.
 
 # 8. H3
 
@@ -178,25 +201,30 @@ state и не подтверждается одним только GitHub.
 - не объявляет это IMPLEMENTED/DEPLOYED до отдельного ТЗ, разработки и
   runtime verification.
 
-# 15. Проверенный runtime/source checkpoint 2026-09-18
+# 15. Проверенный runtime/source checkpoint 2026-09-19
+
+На последнем P10/P10.1 runtime-check:
 
 ```text
-cripta-mayak-v2.service                         active/enabled
-cripta-dispatcher-v2.service                    active/enabled
-cripta-dispatcher-v2-context-correlator.service active/enabled
-cripta-universal-entry-observer.service         active/enabled
-cripta-universal-entry-consumer.service         inactive/disabled
-cripta-private-runtime.service                  active/enabled
-cripta-exit-runtime.service                     active/enabled
-cripta-strategy-dispatcher.service              inactive/disabled
+cripta-universal-entry-observer.service  active/enabled
+cripta-universal-exit-shadow.service      active/enabled
+cripta-lifecycle-supervisor.service       active/enabled
+cripta-universal-entry-consumer.service  inactive/disabled
+cripta-private-runtime.service           inactive/disabled
+cripta-exit-runtime.service              inactive/enabled
 ```
 
 ```text
-strategy_entry.execution_permissions: enabled = 0, total = 0
+mainnet execution gate = 0
+open Universal StrategyPosition = 0
+open lifecycle faults = 0
+ExitExecutionRequest = 0
+queued/running trade_commands = 0
 ```
 
-Mainnet gate в этом проходе повторно не подтверждён отдельным успешным запросом,
-поэтому прошлое значение не выдаётся как `CHECKED HERE`.
+Private runtime source/live divergence устранён staging-deploy текущего source,
+но сервис не запускался. Legacy Exit ownership filter deployed, legacy Exit
+service также не запускался.
 
 Legacy identifiers с `M3` — технический долг и не создают термин `M3`.
 
