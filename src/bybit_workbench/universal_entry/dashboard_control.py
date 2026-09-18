@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
@@ -610,8 +611,7 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     missing_exit_slots = tuple(field for field in required_exit_slots if field not in exit_policy)
     if missing_exit_slots:
         raise ValueError(
-            "Strategy settings require explicit exit slots: "
-            + ", ".join(missing_exit_slots)
+            "Strategy settings require explicit exit slots: " + ", ".join(missing_exit_slots)
         )
     _list(exit_policy.get("rules", []), "exit_policy.rules")
     for field in ("hard_stop", "take_profit"):
@@ -660,17 +660,13 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         ):
             raise ValueError("exit_policy.trailing.distance_pct must be positive")
     geometry_exit = _mapping(exit_policy.get("geometry_exit"), "exit_policy.geometry_exit")
-    geometry_exit_enabled = _bool(
-        geometry_exit.get("enabled"), "exit_policy.geometry_exit.enabled"
-    )
+    geometry_exit_enabled = _bool(geometry_exit.get("enabled"), "exit_policy.geometry_exit.enabled")
     if geometry_exit_enabled:
         raise ValueError(
             "exit_policy.geometry_exit is reserved but not executable yet; "
             "keep it disabled until an exact ExitPlan consumer contract exists"
         )
-    local_zone_exit = _mapping(
-        exit_policy.get("local_zone_exit"), "exit_policy.local_zone_exit"
-    )
+    local_zone_exit = _mapping(exit_policy.get("local_zone_exit"), "exit_policy.local_zone_exit")
     _bool(local_zone_exit.get("enabled"), "exit_policy.local_zone_exit.enabled")
 
     time_exit = exit_policy.get("time_exit")
@@ -706,16 +702,15 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         initial_protection.get("take_profit_enabled"),
         "protection_policy.initial_protection.take_profit_enabled",
     )
-    if not str(initial_protection.get("trigger_by") or ""):
-        raise ValueError("initial_protection.trigger_by is required")
-    if not str(initial_protection.get("tpsl_mode") or ""):
-        raise ValueError("initial_protection.tpsl_mode is required")
+    if stop_enabled or target_enabled:
+        if not str(initial_protection.get("trigger_by") or ""):
+            raise ValueError("initial_protection.trigger_by is required when protection is enabled")
+        if not str(initial_protection.get("tpsl_mode") or ""):
+            raise ValueError("initial_protection.tpsl_mode is required when protection is enabled")
     hard_policy = _mapping(exit_policy.get("hard_stop"), "exit_policy.hard_stop")
     target_policy = _mapping(exit_policy.get("take_profit"), "exit_policy.take_profit")
     hard_enabled = _bool(hard_policy.get("enabled"), "exit_policy.hard_stop.enabled")
-    take_profit_enabled = _bool(
-        target_policy.get("enabled"), "exit_policy.take_profit.enabled"
-    )
+    take_profit_enabled = _bool(target_policy.get("enabled"), "exit_policy.take_profit.enabled")
     if hard_enabled != stop_enabled:
         raise ValueError("hard_stop and initial_protection stop enablement must match")
     if take_profit_enabled != target_enabled:
@@ -1023,6 +1018,57 @@ def _context_from_mapping(value: object, label: str) -> ContextRequirement:
     )
 
 
+def _normalize_strategy_setting_slots(
+    payload: Mapping[str, object],
+) -> dict[str, object]:
+    """Prepare an authoring copy without rewriting the immutable source card.
+
+    Compatibility may add only inert structural slots. It must never invent a
+    decision/execution numeric value for a Strategy.
+    """
+
+    raw = deepcopy(dict(payload))
+    exit_policy = _mapping(raw.get("exit_policy"), "exit_policy")
+    inert_exit_slots: dict[str, dict[str, object]] = {
+        "hard_stop": {"enabled": False},
+        "take_profit": {"enabled": False},
+        "break_even": {
+            "enabled": False,
+            "economic_basis": "STRATEGY_BUFFER_OVER_ENTRY",
+        },
+        "trailing": {"enabled": False},
+        "geometry_exit": {"enabled": False},
+        "local_zone_exit": {"enabled": False},
+        "time_exit": {"enabled": False},
+    }
+    if "rules" not in exit_policy:
+        exit_policy["rules"] = []
+    for field, inert in inert_exit_slots.items():
+        if field not in exit_policy:
+            exit_policy[field] = deepcopy(inert)
+    raw["exit_policy"] = exit_policy
+
+    protection_policy = _mapping(
+        raw.get("protection_policy"),
+        "protection_policy",
+    )
+    initial_value = protection_policy.get("initial_protection")
+    initial = (
+        {}
+        if initial_value is None
+        else _mapping(initial_value, "protection_policy.initial_protection")
+    )
+    hard = _mapping(exit_policy["hard_stop"], "exit_policy.hard_stop")
+    target = _mapping(exit_policy["take_profit"], "exit_policy.take_profit")
+    if "stop_loss_enabled" not in initial:
+        initial["stop_loss_enabled"] = hard.get("enabled") is True
+    if "take_profit_enabled" not in initial:
+        initial["take_profit_enabled"] = target.get("enabled") is True
+    protection_policy["initial_protection"] = initial
+    raw["protection_policy"] = protection_policy
+    return raw
+
+
 def card_to_editable(card: StrategyCard) -> dict[str, object]:
     """Return a complete UI-editable policy without inventing defaults."""
 
@@ -1174,7 +1220,7 @@ def build_new_strategy_version(
     approved_at: datetime,
     approved_source: str,
 ) -> StrategyCard:
-    raw = _mapping(payload, "new StrategyCard")
+    raw = _normalize_strategy_setting_slots(_mapping(payload, "new StrategyCard"))
     if str(raw.get("strategy_id") or "") != base.strategy_id:
         raise ValueError("new Strategy version cannot change strategy_id")
     new_version = str(raw.get("strategy_version") or "")
@@ -1254,6 +1300,7 @@ def assemble_strategy_catalog(
         readiness = assess_strategy_runtime_readiness(
             reproduced, observer_ready=observer_ready
         ).as_dict()
+        authoring_editable = _normalize_strategy_setting_slots(editable)
         card_activations = [dict(row) for row in activations if _identity(row) == key]
         card_entry = [dict(row) for row in entry_plans if _identity(row) == key]
         card_exit = [dict(row) for row in exit_plans if _identity(row) == key]
@@ -1280,9 +1327,9 @@ def assemble_strategy_catalog(
                 "strategy_config_fingerprint": key[2],
                 "name": card.get("name"),
                 "description": card.get("description"),
-                "direction_policy": editable.get("direction_policy"),
-                "scope": editable.get("scope"),
-                "symbols": editable.get("symbols"),
+                "direction_policy": authoring_editable.get("direction_policy"),
+                "scope": authoring_editable.get("scope"),
+                "symbols": authoring_editable.get("symbols"),
                 "activation_state": activation_state,
                 "runtime_readiness": readiness,
                 "activations": card_activations,
@@ -1303,8 +1350,8 @@ def assemble_strategy_catalog(
                 "activation_history": history,
                 "approved_at": card.get("approved_at"),
                 "approved_source": card.get("approved_source"),
-                "editable_card": editable,
-                "sections": _sections(editable),
+                "editable_card": authoring_editable,
+                "sections": _sections(authoring_editable),
                 "read_only": True,
             }
         )

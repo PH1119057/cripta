@@ -7,11 +7,19 @@ from pathlib import Path
 
 import pytest
 
+from bybit_workbench.universal_entry.contracts import (
+    CandidateCooldown,
+    FrozenPolicy,
+    StrategyCard,
+    TouchPolicy,
+    TradeDirection,
+)
 from bybit_workbench.universal_entry.dashboard_control import (
+    build_new_strategy_version,
     card_from_editable,
+    card_to_editable,
     strategy_authoring_template,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "operations/implementation/examples/STRATEGY_SETTINGS_CLASSIC_EXPERIMENT_V1.json"
@@ -27,6 +35,42 @@ def _minimal_payload() -> dict[str, object]:
     raw["scope"] = {"kind": "symbols", "symbols": ["UNIUSDT"]}
     raw["direction_policy"] = ["LONG"]
     return raw
+
+
+def _legacy_card(
+    *,
+    exit_policy: dict[str, object] | None = None,
+    protection_policy: dict[str, object] | None = None,
+) -> StrategyCard:
+    return StrategyCard.build(
+        strategy_id="legacy-settings",
+        strategy_version="1",
+        name="Legacy settings",
+        description="Compatibility authoring source",
+        scope=FrozenPolicy.from_mapping({"kind": "symbols", "symbols": ["UNIUSDT"]}),
+        symbols=("UNIUSDT",),
+        direction_policy=(TradeDirection.LONG,),
+        entry_policy=FrozenPolicy.from_mapping(
+            {
+                "entry_plan_version": "entry-1",
+                "predicate": {"op": "TOUCH"},
+                "watch_policy": {"enabled": False},
+                "context_feature_policy": [],
+                "context_ranking_policy": {"enabled": False},
+            }
+        ),
+        exit_policy=FrozenPolicy.from_mapping(
+            exit_policy or {"exit_plan_version": "legacy-exit-1"}
+        ),
+        capital_policy=FrozenPolicy.from_mapping({"require_capacity": False}),
+        protection_policy=FrozenPolicy.from_mapping(protection_policy or {"enabled": False}),
+        lifecycle_policy=FrozenPolicy.from_mapping(
+            {"post_signal_outcome_policy": {"enabled": False}}
+        ),
+        touch_policy=TouchPolicy(candidate_cooldown=CandidateCooldown(enabled=False)),
+        approved_at=datetime(2026, 9, 18, tzinfo=UTC),
+        approved_source="legacy-test",
+    )
 
 
 def test_authoring_template_has_explicit_strategy_setting_slots_without_numbers() -> None:
@@ -116,3 +160,77 @@ def test_classic_experiment_example_is_non_executable_and_preserves_research_lab
     assert research["h3_trailing_candidate"]["geometry"]["depth_minutes"] == 180
     assert research["h3_trailing_candidate"]["touch_number"] == 2
     assert research["h3_trailing_candidate"]["enabled"] is False
+
+
+def test_new_version_from_legacy_card_adds_only_inert_missing_setting_slots() -> None:
+    legacy = _legacy_card()
+    legacy_fingerprint = legacy.strategy_config_fingerprint
+    editable = card_to_editable(legacy)
+    assert "hard_stop" not in editable["exit_policy"]
+
+    editable["strategy_version"] = "2"
+    created = build_new_strategy_version(
+        legacy,
+        editable,
+        approved_at=datetime(2026, 9, 19, tzinfo=UTC),
+        approved_source="test",
+    )
+
+    assert legacy.strategy_config_fingerprint == legacy_fingerprint
+    exit_policy = created.exit_policy.to_dict()
+    for field in (
+        "hard_stop",
+        "take_profit",
+        "trailing",
+        "geometry_exit",
+        "local_zone_exit",
+        "time_exit",
+    ):
+        assert exit_policy[field] == {"enabled": False}
+    assert exit_policy["break_even"] == {
+        "enabled": False,
+        "economic_basis": "STRATEGY_BUFFER_OVER_ENTRY",
+    }
+    assert exit_policy["rules"] == []
+    assert "percent" not in exit_policy["hard_stop"]
+    assert "percent" not in exit_policy["take_profit"]
+    initial = created.protection_policy.to_dict()["initial_protection"]
+    assert initial == {
+        "stop_loss_enabled": False,
+        "take_profit_enabled": False,
+    }
+
+
+def test_new_version_preserves_explicit_legacy_safety_envelope_without_inventing_values() -> None:
+    legacy = _legacy_card(
+        exit_policy={
+            "exit_plan_version": "legacy-exit-1",
+            "hard_stop": {"enabled": True, "percent": "2.00"},
+            "take_profit": {"enabled": True, "percent": "3.00"},
+        },
+        protection_policy={
+            "initial_protection": {
+                "stop_loss_pct": "2.00",
+                "take_profit_pct": "3.00",
+                "trigger_by": "LastPrice",
+                "tpsl_mode": "Full",
+            }
+        },
+    )
+    editable = card_to_editable(legacy)
+    editable["strategy_version"] = "2"
+    created = build_new_strategy_version(
+        legacy,
+        editable,
+        approved_at=datetime(2026, 9, 19, tzinfo=UTC),
+        approved_source="test",
+    )
+
+    exit_policy = created.exit_policy.to_dict()
+    assert exit_policy["hard_stop"] == {"enabled": True, "percent": "2.00"}
+    assert exit_policy["take_profit"] == {"enabled": True, "percent": "3.00"}
+    initial = created.protection_policy.to_dict()["initial_protection"]
+    assert initial["stop_loss_enabled"] is True
+    assert initial["take_profit_enabled"] is True
+    assert initial["stop_loss_pct"] == "2.00"
+    assert initial["take_profit_pct"] == "3.00"
