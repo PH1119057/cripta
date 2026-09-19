@@ -1,19 +1,15 @@
-# CRIPTA — правила работы для ChatGPT / Codex / разработчика
+# CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.4 · 2026-09-19
-**Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
-**Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
-**Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout` — синхронизированное operational mirror. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
+**Версия:** 2.5 · 2026-09-19
+**Статус:** обязательный core process contract
+**Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
+— synchronized operational mirror, not a second authority.
 
-> Эта версия включает обязательные выводы из инцидента установки P1 LIVE STABILIZATION 2026-09-05/06, когда небольшой по коду patch потребовал большого числа подготовительных сборок и почти полного рабочего дня из-за ошибок среды, installer contract, PostgreSQL schema/permissions, Git metadata и Git transport/auth. Повторение этих классов ошибок считается нарушением процесса подготовки.
+Этот файл намеренно сокращён. Detailed release/PostgreSQL/toolchain rules и
+research/compute rules вынесены в routed canonical docs, чтобы не читать
+installer/research детали в каждой задаче.
 
-> Историческая редакция 1.4 дополнительно закрепила обязательные уроки research/compute-разработки сентября 2026: доказуемые статусы запуска, повторную runtime-проверку через 5–10 секунд, малый сквозной тест, проверку семантики исходных данных, bounded-memory/streaming обработку, безопасный parallelism по CPU+RAM+I/O, причинность point-in-time данных, явный `NO_DATA`, lifecycle-first datasets и запрет делать выводы по пилоту без full-universe/economic validation.
-
-> Историческая редакция 1.5 закрепила изоляцию файловых пространств: ChatGPT runtime, server filesystem, GitHub/connectors, Project Source и локальная машина пользователя не считаются взаимно доступными без явного проверенного механизма передачи.
-
----
-
-## 1. Не выходить за рамки задачи
+## 1. Scope discipline
 
 Сначала определить scope:
 
@@ -23,63 +19,53 @@ INFRASTRUCTURE
 TRADING LOGIC
 RESEARCH
 DOCUMENTATION
+RELEASE / DEPLOY
 ```
 
-При стабилизации нельзя самовольно переходить к изменению прикладной торговой архитектуры, Strategy, Entry, Exit, Execution, MAYAK, Dispatcher или исследовательской логики.
-
-Найденное несоответствие `FINDING` не является разрешением немедленно менять архитектуру или торговую policy.
+Finding не является разрешением автоматически менять architecture/policy.
 
 ## 2. Source of truth
 
-Авторитетный source of truth:
+AUTHORITATIVE:
 
 ```text
 GitHub PH1119057/cripta:main
 ```
 
-`/srv/cripta/source_checkout` — синхронизированное operational mirror. Оно
-обязано совпадать с GitHub `main` в стабильном checkpoint, но не является
-вторым независимым authority.
+OPERATIONAL MIRROR:
 
-Перед deployment/runtime forensic GitHub HEAD и source checkout HEAD должны быть
-фактически сверены.
+```text
+/srv/cripta/source_checkout
+```
 
-Не являются source of truth: старый `C:\cripta`, старые ZIP, старые чаты, локальные заметки, transport manifests, устаревшие handoff и статическая Project Source, если она расходится с GitHub.
+Mirror обязан быть синхронизирован с verified GitHub ref перед source-based
+forensic/deploy. Project Source, memory, old chats, ZIP, transport manifests,
+local C:\cripta and history are auxiliary only.
 
-Нельзя выдавать исторический baseline за текущий HEAD.
+## 3. Mandatory pre-read and routing
 
-## 3. Обязательный pre-read
+New chat:
+1. docs/CHATGPT_INTERACTION_RULES_RU*.md
+2. this WORK file
+3. CRIPTA_ARCHITECTURE_RULES_RU_*.md
+4. docs/DOCUMENTATION_INDEX_RU*.md
+5. docs/CRIPTA_GLOSSARY_RU*.md
+6. docs/CURRENT_PROJECT_MAP_RU*.md
 
-### 3.1 В начале нового чата проекта
+Then routed pre-read:
+- Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md
+- MAYAK / Dispatcher / Monitoring / Lifecycle Supervisor / Position Supervisor /
+  Analyst -> docs/OBSERVATION_ANALYTICS_RU*.md
+- patch / Git / PostgreSQL / package / release / deploy / rollback ->
+  docs/DEVELOPMENT_RELEASE_RULES_RU*.md
+- research / replay / OOS / holdout / large data / long compute ->
+  docs/RESEARCH_COMPUTE_RULES_RU*.md
 
-Для ChatGPT сначала прочитать:
-
-1. `docs/CHATGPT_INTERACTION_RULES_RU.md`.
-
-Затем прочитать активный стартовый комплект:
-
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`;
-3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`;
-4. `docs/DOCUMENTATION_INDEX_RU*.md`;
-5. `docs/CRIPTA_GLOSSARY_RU*.md`;
-6. `docs/CURRENT_PROJECT_MAP_RU*.md`.
-
-В Project Instructions ссылки на документы должны использовать устойчивое
-семейство имени, а не жёсткий version/UI suffix.
-
-### 3.2 Перед архитектурно чувствительной работой
-
-Повторно прочитать верхние документы выше и активные документы реально
-затрагиваемых слоёв из `docs/DOCUMENTATION_INDEX_RU.md`.
-
-Архив, Git history, старые research/runbook/handoff/Pxx/EO/SE не входят в
-pre-read. Они открываются только по явному запросу владельца на исторический
-аудит.
+If a task crosses routes, read all relevant routed contracts.
 
 ## 4. Hard Stop
 
-Если предлагаемое действие или новое высказывание владельца противоречит
-действующим каноническим документам:
+If requested work conflicts with active canon:
 
 ```text
 CANON_CONFLICT=YES
@@ -88,105 +74,43 @@ CANON_UPDATE_REQUIRED=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-Действия:
+STOP -> do not change implementation -> identify exact conflict -> obtain owner
+decision -> update canon -> only then implementation.
+
+If code differs from canon, that is FINDING, not permission to rewrite either
+side silently.
+
+## 4.1 Terminology Hard Stop
+
+docs/CRIPTA_GLOSSARY_RU*.md is the single token/term authority.
+
+If a term is missing or physically ambiguous:
 
 ```text
-STOP
--> НИЧЕГО НЕ МЕНЯТЬ
--> УКАЗАТЬ ТОЧНЫЙ КОНФЛИКТ
--> УКАЗАТЬ, КАКОЙ КАНОН НУЖНО ИЗМЕНИТЬ
--> ПОЛУЧИТЬ ПОДТВЕРЖДЕНИЕ ВЛАДЕЛЬЦА
--> ОБНОВИТЬ КАНОН
--> ТОЛЬКО ПОТОМ РЕАЛИЗОВЫВАТЬ
+TERM_AMBIGUOUS=YES
+HARD_STOP=YES
+OWNER_DECISION_REQUIRED=YES
 ```
 
-Если код расходится с архитектурным документом — это finding, а не автоматическое разрешение переписать код.
+Do not infer geometry, H3/H9, Entry/Exit, slot/fault semantics or voice artifacts.
 
-## 4.1 Терминологический Hard Stop
+## 4.2 Research never becomes canon automatically
 
-`docs/CRIPTA_GLOSSARY_RU.md` является обязательным словарём.
+Research of any age is evidence only.
 
-Если владелец использовал термин, которого в словаре нет, либо формулировка
-допускает несколько физически разных трактовок, исполнитель не имеет права
-выбрать смысл самостоятельно. До кода, исследования, расчёта или изменения
-документа требуется уточнение владельца.
+```text
+RESEARCH / EVIDENCE
+-> OWNER DECISION
+-> CANON / NEW STRATEGY VERSION
+-> TEST / SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
+```
 
-Особенно запрещены догадки по геометрии, границам зон, H3/H9, Entry/Exit,
-сигналам и историческим голосовым артефактам.
+Dataset reuse does not imply logic/policy reuse.
 
-## 4.2 Исследование любой давности не является каноном
-
-Research/evidence, завершённый месяц назад, вчера или сегодня, не задаёт
-архитектуру и не становится значением по умолчанию для следующего исследования.
-
-Новое исследование строится от текущего активного канона, словаря, доступных
-данных и буквального нового вопроса владельца.
-
-Запрещено автоматически наследовать старую Strategy, Entry V1, пороги,
-горизонты, названия, фильтры и методику только потому, что они применялись в
-предыдущем исследовании.
-
-Старые данные/выводы допускается использовать только когда:
-- владелец прямо просит сравнение;
-- требуется воспроизводимость;
-- доказана физическая совместимость dataset и новый вопрос допускает reuse.
-
-Переиспользование dataset не означает переиспользование старой торговой логики.
-
-## 4.2.1 Strategy settings authoring и экспериментальные значения
-
-При работе со StrategyCard нельзя превращать исследовательский пример,
-историческое число или временную protective boundary в runtime default.
-
-Обязательные правила authoring:
-
-- Strategy-specific decision/execution settings живут только в явных policy-
-  блоках StrategyCard, а не в отдельном скрытом global/runtime config;
-- каждый optional setting имеет явный `enabled`;
-- `enabled=false` не может сохранять скрытое торговое число, которое downstream
-  способен применить;
-- шаблон новой Strategy не содержит числовых trading defaults;
-- новое decision/execution-affecting поле требует consumer matrix из §5.1;
-- `enabled=true` при отсутствующем/неподдержанном exact consumer означает
-  fail-closed для activation/execution;
-- research/example/history разрешено хранить как evidence, но не как
-  автоматически исполняемую Strategy policy;
-- `protection_policy.initial_protection` разрешено утверждать отдельно от
-  динамического `exit_policy`; это не означает автоматическое утверждение H3,
-  touch, break-even, trailing или другой Exit logic;
-- legacy immutable StrategyCard не переписывается при появлении новых slots;
-  новая версия может получить только инертные structural slots, если владелец
-  не утвердил соответствующие значения.
-
-Эксперимент с нестабильными параметрами проводится через
-`Strategy Candidate / Strategy Draft`. Если нужен воспроизводимый
-shadow/MICRO_LIVE проход, владелец утверждает exact snapshot как новую immutable
-experimental Strategy version. Следующий вариант получает новую version.
-
-## 4.3 Один активный документационный контур
-
-Активными являются только документы из `docs/DOCUMENTATION_INDEX_RU.md`.
-
-Git history и отдельный legacy archive являются историей. Их содержимое не
-читать и не использовать как инструкцию без явного запроса владельца.
-
-Обычный поиск текущей архитектуры/правил обязан исключать `archive/**`,
-`patch_backups/**`, исторические `*/payload/docs/**`, старые Pxx/EO/SE/PASS,
-runbook и handoff. Физическое наличие такого файла в repository не делает его
-активным документом.
-
-После изменения активного комплекта GitHub обновляется первым, затем владелец
-полностью заменяет статические Project Source в ChatGPT.
-
-## 4.4 Язык общения с владельцем
-
-Пользовательские объяснения и отчёты вести преимущественно на русском.
-Английские слова сохранять для точных code identifiers/API/token names или
-когда русский перевод ухудшает однозначность. Не смешивать языки без причины.
-
-## 5. Верхняя архитектура
-
-Каноническая прикладная цепочка:
+## 5. Upper architecture
 
 ```text
 MAYAK
@@ -202,463 +126,76 @@ EXECUTION
 EXCHANGE
 ```
 
-Это пять верхнеуровневых слоёв. `Risk` не является самостоятельным верхним архитектурным слоем. Технический поддерживающий контур обеспечивает данные, связь, хранение, исполнение, восстановление, наблюдаемость и аудит, но не становится дополнительным торговым уровнем.
+Exactly five top-level layers. Risk is not another top layer.
 
-## 5.1 Обязательный end-to-end contract любого поля Strategy
+Strategy is the only owner of trading meaning/settings. Materializer creates
+exact immutable EntryPlan/ExitPlan. Entry/Exit universally execute plans.
+Execution performs already-approved mutation and invents no trading policy.
 
-Любое новое поле, параметр, policy, переключатель или сущность внутри `StrategyCard` /
-`StrategyActivation` / `EntryPlan` / `ExitPlan` до merge обязано иметь явную классификацию и
-матрицу потребителей. Простого хранения в JSON/UI недостаточно.
+Missing/unsupported mandatory Strategy-owned state = fail-closed.
 
-Для каждого поля фиксируется минимум:
+## 5.1 End-to-end contract for decision/execution fields
 
-```text
-FIELD / POLICY
-SEMANTIC_CLASS = DECISION_AFFECTING | EXECUTION_AFFECTING | METADATA
-STRATEGY MATERIALIZER
-MONITORING / CAUSAL EVIDENCE CONSUMER
-ENTRY OR EXIT CONSUMER
-EXECUTION CONSUMER / PROPAGATION
-COMPATIBILITY CHECK
-ACCEPTANCE TEST
-MISSING / UNSUPPORTED = FAIL_CLOSED
-```
-
-Если поле влияет на торговый смысл, оно обязано фактически влиять на соответствующие
-`Entry/Exit`, наблюдение и downstream `Execution`; downstream contract расширяется одновременно.
-Запрещено добавлять decision/execution-affecting поле, которое только сохраняется, отображается или
-теряется между слоями.
-
-Если поле является только metadata (`name`, `description` и подобное), это должно быть явно
-классифицировано как `METADATA / NON_DECISION_AFFECTING`; оно всё равно сохраняется в lineage/read-model
-и не может неявно использоваться как торговая policy.
-
-Новый параметр без совместимого consumer является `HARD STOP` для активации соответствующей Strategy,
-а не разрешением игнорировать параметр.
-
-Ревизия, обнаружившая silent-ignore/несовместимость, всегда имеет право
-немедленно сделать fail-closed containment: запретить activation/dispatch/
-mutation, сохранить evidence и поднять finding. Добавление нового consumer,
-нового действия или нового торгового смысла выполняется только в разрешённом
-scope; если канон/Strategy data не задают этот смысл, требуется отдельное
-решение владельца. Finding сам по себе не является разрешением переписывать
-архитектуру.
-
-## 6. Каждый patch имеет точный baseline
-
-ZIP обязан указывать:
+Any field affecting decision or execution must have explicit ownership and a
+proved end-to-end path:
 
 ```text
-patch_id
-patch_version
-build/revision
-created_at
-expected_baseline
-baseline_policy
-prerequisites
-changed_files
-deleted_files
-EXISTING_MODIFY / NEW_FILE
-does_change
-does_not_change
-required_services
-restart_services
-prechecks
-targeted_tests
-payload_sha256
+OWNER
+-> AUTHORING / CANON
+-> MATERIALIZATION
+-> DURABLE STORAGE
+-> ACTIVE REGISTRY / READ MODEL
+-> CONSUMER
+-> DECISION / REQUEST
+-> EXECUTION OR SHADOW EVIDENCE
+-> TEST
 ```
 
-Классификация путей выполняется только относительно фактического baseline.
+No consumer path -> field cannot be enabled for real execution.
 
-## 7. Один логический patch — одна пользовательская версия
+## 6. Status vocabulary
 
-Запрещено превращать каждую ошибку подготовки в новую «production-версию» вида `V1.1 … V1.14`, если торговый/production payload по смыслу остаётся тем же.
-
-Использовать два уровня:
+Always distinguish:
 
 ```text
-LOGICAL PATCH VERSION = V1
-PREPARATION BUILD      = RC1 / RC2 / BUILD_01 / BUILD_02
+CHECKED HERE
+NOT CHECKED HERE
+FINDING
+RESEARCH RESULT
+OWNER DECISION
+CANON
+IMPLEMENTED
+DEPLOYED
+RUNTIME VERIFIED
 ```
 
-Новая production semantic version нужна только если изменился утверждённый resulting contract или production payload.
+For runtime verification, use the dimensions defined in GLOSSARY:
+- RUNTIME LIVENESS VERIFIED
+- RUNTIME BEHAVIOR VERIFIED
 
-Ошибка toolchain, installer, quoting, permissions, packaging, test harness, transport или diagnostics — это `PREPARATION_BUILD_FAILURE`, а не новая функциональная версия продукта.
+Bare service-active status is not behavior verification.
 
-## 8. Перед упаковкой обязательна единая Installation Readiness Matrix
+Commit != deploy. Deploy != loaded runtime. Zero faults != tested fault behavior.
 
-До создания пользовательского ZIP разработчик обязан один раз собрать полную матрицу среды.
+## 7. Git-first release invariant
 
-Минимум:
+Detailed rules: docs/DEVELOPMENT_RELEASE_RULES_RU*.md.
 
-```text
-SOURCE_HEAD
-REMOTE_HEAD
-WORKTREE_STATE
-repo_owner
-git_metadata_owner
-
-test_python
-production_python
-uv
-pytest
-ruff
-mypy
-required_python_modules
-
-postgres_socket
-database
-table_owner
-migration_role
-runtime_role
-required_privileges
-schema_constraints
-
-systemd_services
-live_paths
-source_live_mapping
-
-git_fetch_url
-git_push_url
-git_push_principal
-ssh_alias_resolution
-credential/deploy-key path
-non-mutating auth check
-
-temp_root
-backup_root
-disk_space
-filesystem_permissions
-```
-
-Нельзя узнавать эти параметры по одному только после очередного падения installer.
-
-## 9. Для каждого шага фиксировать Execution Context
-
-До выполнения сложного installer workflow должна быть таблица:
-
-```text
-STEP
-ACTOR / UNIX USER
-INTERPRETER
-DEPENDENCIES
-READ TARGETS
-WRITE TARGETS
-REQUIRED PRIVILEGES
-ROLLBACK OWNER
-```
-
-Пример классов:
-
-```text
-overlay tests        -> test Python / locked env
-DB schema check      -> postgres + system Python
-DB migration         -> postgres
-runtime DB smoke     -> runtime role cripta
-Git add/commit       -> repository owner cripta
-Git push             -> фактический credential owner
-service restart      -> root/systemd
-```
-
-Нельзя предполагать, что один Unix-user подходит для всех стадий.
-
-## 10. Toolchain определяется до patch, а не во время падений
-
-Перед упаковкой проверить Python compatibility, uv exact version, locked dependency install, pytest, pytest-asyncio, Ruff, mypy, Hypothesis, project imports и system-only modules, которые используют installer helpers.
-
-Если инструмент недоступен — fail до live mutation.
-
-Нельзя последовательно выпускать новые архивы только потому, что каждый следующий обнаружил `Ruff missing`, `Python missing`, `uv parser wrong` или `venv missing dependency`. После первого toolchain failure выполняется полный toolchain audit всего класса.
-
-## 11. Self-test обязан работать в том interpreter, где он реально запускается
-
-Если installer запускает helper как `$TEST_PYTHON helper.py --self-test`, self-test обязан быть проверен именно в `$TEST_PYTHON`.
-
-Если self-test не использует production dependency, helper не должен импортировать её eagerly.
-
-Принцип:
-
-```text
-pure self-test
--> stdlib-only / locked test env
-
-real DB mode
--> lazy import DB driver
--> system production Python
-```
-
-Нельзя проверять helper только через `py_compile` и считать import/runtime contract доказанным.
-
-## 12. Git-first release order и temp overlay
-
-Единственный допустимый общий порядок для production changeset:
+Core invariant:
 
 ```text
 BASELINE / FORENSIC
--> ISOLATED WORKTREE / TEMP OVERLAY
+-> ISOLATED WORKTREE / OVERLAY
 -> FULL CHECKS
 -> EXACT COMMIT
 -> PUSH
 -> INDEPENDENT REMOTE SHA VERIFICATION
--> BACKUP / ROLLBACK CHECKPOINT
+-> BACKUP
 -> DEPLOY EXACT VERIFIED COMMIT
 -> POST-DEPLOY / RUNTIME VERIFICATION
 ```
 
-До зелёного overlay запрещено менять live/PostgreSQL/user data. До независимой
-проверки remote SHA запрещён production deploy этого changeset.
-
-Deployment выполняется только из exact Git commit, уже существующего в GitHub
-`main` или в отдельно owner-approved release ref. Uncommitted worktree,
-локальный ZIP или соседний SHA256-файл не являются authority для production
-deploy. SHA256 подтверждает целостность bytes, но не заменяет identity
-проверенного Git changeset.
-
-Source checkout может использоваться для построения overlay/release только после
-синхронизации с проверенным GitHub ref.
-
-## 13. Strongest practical gate
-
-По возможности:
-
-```text
-syntax
-py_compile
-Ruff
-mypy
-new tests
-affected tests
-full pytest
-component tests
-headless smoke
-DB source-schema precheck
-service-specific smoke
-```
-
-Gate должен быть scoped правильно. Нельзя заставлять новый patch «чинить» старый unrelated Ruff debt. Для legacy debt используется regression rule `NEW_DIAGNOSTICS=0`, если полная очистка не является scope задачи.
-
-## 14. Expected non-zero не является аварией shell
-
-Команды, где ненулевой exit code ожидаем и анализируется, нельзя оставлять под общим `set -e` / `ERR trap` без явной обработки.
-
-Использовать локальный контроль `rc` или эквивалент. Нельзя получать installer failure из-за ожидаемого `Ruff rc=1`, если логика специально сравнивает baseline и patched diagnostics.
-
-## 15. PostgreSQL schema — runtime truth, её нельзя угадывать по коду
-
-Перед schema-sensitive patch read-only forensic обязан определить:
-
-```text
-table owner
-columns
-constraints
-constraint definitions
-existing enum/token values
-indexes
-foreign keys
-runtime grants
-migration grants
-actual historical rows
-```
-
-Использовать `pg_get_constraintdef`, `has_table_privilege`, `to_regclass`, `information_schema` / `pg_catalog`.
-
-Нельзя предполагать, что Python mapping автоматически совместим с существующим CHECK constraint.
-
-## 16. Canonical token обязан проходить storage contract
-
-Если код вводит/использует канонический token, проверить весь путь:
-
-```text
-PRODUCTION CODE
--> DB CHECK / ENUM
--> HISTORICAL ROWS
--> ANALYST / READ MODEL
--> UI
--> TESTS
-```
-
-Один canonical state — один canonical token.
-
-Например, `OWNER_MODIFIED_STOP` не должен быть правильным в protection truth, но запрещён storage CHECK. Нельзя обходить несовместимость подменой на `UNKNOWN` или `OWNER_MANUAL_STOP`, если бизнес-смысл другой.
-
-## 17. DB migration actor и runtime actor разделять
-
-DDL и historical backfill выполняются только ролью, имеющей на это право. Runtime-role получает только минимально нужные права.
-
-```text
-postgres / migration role
--> DDL
--> historical UPDATE/backfill
-
-cripta runtime role
--> operational SELECT/INSERT only where required
--> no historical UPDATE unless explicitly approved
-```
-
-Перед migration проверить реальные права, а не узнавать о `permission denied` после backup/apply.
-
-## 18. Backup должен быть доступен тому actor, который его пишет
-
-Root-only temp directory нельзя использовать как destination для команды, выполняемой от `postgres`, если `postgres` не может туда писать.
-
-До backup проверить directory owner, mode, effective writer, output file creation и free space.
-
-Предпочтительно root shell открывает output, а `postgres` пишет через inherited fd/stdout, либо заранее используется каталог с узкими корректными правами.
-
-## 19. Migration + backfill должны быть атомарны
-
-Если технически возможно:
-
-```text
-BEGIN
--> validate source schema
--> DDL
--> backfill
--> post-DB assertions
--> COMMIT
-```
-
-Ошибка должна вернуть исходные schema/data автоматически.
-
-## 20. Rollback обязан проверять не только bytes, но и metadata/state
-
-После rollback проверить source hashes, live hashes, source/live equality, file owner, file mode, `.git` ownership, worktree state, DB schema, DB rows, services active, gate state, open positions и pending commands.
-
-`ROLLBACK=COMPLETE` можно печатать только после этих проверок.
-
-## 21. Source/live copy сохраняет metadata
-
-При apply и rollback source/live файлов сохранять owner, group и mode. Нельзя временным root-copy превращать рабочий source в root-owned. Для atomic replace metadata временной копии выставляется до rename.
-
-## 22. `.git` — отдельный защищённый объект
-
-Нормальное состояние server checkout:
-
-```text
-.git owner/group = repository owner
-index owner/group = repository owner
-```
-
-Ни installer, ни diagnostics не имеют права оставлять root-owned Git metadata. После любой root-level операции рядом с repository проверять ownership `.git`.
-
-## 23. Read-only означает семантически read-only
-
-Надпись `READ_ONLY=YES` недостаточна. Некоторые команды чтения меняют служебное состояние.
-
-Критический пример: `git status` может обновить `.git/index` stat-cache.
-
-Поэтому все read-only Git-команды на server checkout выполняются только через эквивалент:
-
-```bash
-sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...
-```
-
-Запрещено запускать обычный `git status` из root diagnostic script.
-
-Read-only forensic должен отдельно проверять, что bytes и metadata не изменены, а DB-доступ действительно только SELECT.
-
-## 24. Git sync — только exact changeset
-
-Запрещено `git add -A` и `git add .`.
-
-Обязательный порядок:
-
-```text
-status
--> classify
--> exact expected paths
--> exact hashes where meaningful
--> git add -- <explicit paths>
--> staged name/status check
--> staged diff --check
--> commit
--> push
--> verify remote SHA
-```
-
-Неизвестный untracked path = hard stop.
-
-## 25. Git add/commit и Git push могут иметь разных actors
-
-Repository mutation (`add`, `commit`, `checkout`, `reset`, index write)
-выполняется от фактического repository owner.
-
-Push может использовать отдельный credential principal, если это уже принятый
-инфраструктурный контракт. Конкретные Unix-users, SSH aliases, key paths,
-Deploy Key names/permissions и текущие transport details не являются
-канонической архитектурой и не хранятся в обязательном pre-read.
-
-Перед каждым push их получают read-only forensic из фактической server/GitHub
-конфигурации. Нельзя использовать старый путь/ключ/actor только потому, что он
-когда-то работал.
-
-## 26. Push transport проверяется ДО commit
-
-До создания нового локального checkpoint обязательно проверить:
-
-```text
-remote.origin.url
-remote.origin.pushurl
-actual push Unix-user
-SSH alias resolution
-credential availability
-non-interactive auth
-remote main SHA
-```
-
-Не разрешается сначала делать commit, а только потом впервые выяснять, что push transport сломан.
-
-Минимальный push preflight выполняется тем же Unix-user и тем же SSH/HTTPS transport, который будет использовать реальный push.
-
-Если credentials принадлежат другому credential principal, проверка только от repository owner/operator не доказывает отсутствие credentials.
-
-## 27. Нельзя создавать новый credential, пока не исчерпан поиск существующего
-
-Перед предложением нового deploy key, SSH key, token или credential обязательно проверить:
-
-```text
-remote pushurl
-SSH/config contexts всех релевантных principals
-repository-owner transport config
-operator transport config
-actual credential principal
-existing GitHub Deploy Keys / tokens / approved transports
-existing successful historical transport contract
-```
-
-Отсутствие `.ssh` у одного пользователя не означает отсутствия GitHub deploy key на сервере.
-
-## 28. Privileged Git разрешён только для транспортной операции при доказанной необходимости
-
-Если approved credential доступен только privileged transport principal, такой push допустим только при соблюдении:
-
-```text
-GIT_OPTIONAL_LOCKS=0
-exact refspec
-no add
-no commit
-no checkout
-no reset
-no worktree mutation
-```
-
-После push проверить `.git` ownership unchanged, worktree clean и `remote SHA == source SHA`.
-
-Все repository-state mutations остаются за repository owner.
-
-## 29. Source checkpoint не считается завершённым без remote verification
-
-После push необходимо независимо прочитать GitHub `REMOTE_HEAD` и сравнить:
-
-```text
-REMOTE_HEAD == SOURCE_HEAD
-```
-
-Локальное сообщение `push succeeded` не заменяет отдельную remote verification.
-
-## 30. Production checkpoint различает четыре версии
-
-Нормальное состояние обязано различать:
+Normal checkpoint distinguishes:
 
 ```text
 REMOTE_HEAD
@@ -667,443 +204,57 @@ INSTALLED_COMMIT
 LOADED_COMMIT
 ```
 
-Нельзя писать просто «версия установлена», если не доказано, что реально загруженные сервисы соответствуют опубликованному source checkpoint.
+A ZIP is transport, never source authority. DEPLOY EXACT VERIFIED COMMIT is the
+release identity rule.
 
-## 31. Installer rail
+## 8. Re-arm / LIVE is never a patch side effect
 
-Канонический ZIP root:
+Patch/deploy must not silently arm real trading.
 
-```text
-MANIFEST.json
-install.sh
-SHA256SUMS.txt
-README_RU.md optional
-payload/...
-```
+LIVE rights require the current owner-approved LIVE-arm checklist in
+docs/TRADING_CONTOUR_RU*.md and explicit owner approval.
 
-Wrapper directory запрещён.
+## 9. Tests follow canon, not implementation convenience
 
-Sidecar:
+Do not change expectation merely to get green and do not restore old architecture
+for a stale test.
 
-```text
-<sha256><two spaces><basename.zip>
-```
+When canon changes, governance/architecture tests must be consciously updated to
+the new contract in the later implementation/test changeset.
 
-Установка:
+## 10. File-space isolation
 
-```bash
-sudo /usr/local/sbin/cripta-apply-incoming <zip>
-```
+ChatGPT runtime, server filesystem, GitHub, Project Source and local user machine
+are distinct spaces unless an explicit verified transfer exists.
 
-Patch не должен пытаться тихо self-update persistent runner, если это запрещено текущим runner contract.
+Never invent sandbox/download paths from a file name or connector reference.
 
-## 32. Final ZIP проверяется после последнего изменения
+## 11. Security
 
-После последней упаковки проверить SHA256, ZIP CRC, internal SHA256SUMS, root structure, manifest version, отсутствие wrapper/garbage, executable bits и payload identity.
+SECURITY.md applies to all work.
 
-После вычисления final SHA архив больше не менять.
+Credentials, secret values, private key paths/material and auth headers are not
+canonical documentation content. Public-repo/history secret scanning and
+visibility decisions follow docs/DEVELOPMENT_RELEASE_RULES_RU*.md.
 
-## 33. После первого preparation failure проверять весь класс
+## 12. Language and reporting
 
-Пример: `Ruff missing` означает проверить весь toolchain, а не только Ruff. `DB permission denied` означает проверить owner/grants всех реально изменяемых DB objects. `Git ownership drift` означает проверить весь `.git`, root Git calls, copy semantics и diagnostics.
+Owner communication is primarily Russian. English is retained for exact code/API/
+DB identifiers where translation hurts precision.
 
-## 34. После двух последовательных preparation failures — Preparation Freeze
+Trading reports use «после комиссий».
 
-Если один и тот же logical patch дважды подряд не дошёл до green apply из-за ошибок подготовки:
+## 13. Main process principle
 
 ```text
-PREPARATION_FREEZE=YES
+UNDERSTAND THE ENVIRONMENT ONCE
+-> BUILD ONCE
+-> RUN THE STRONGEST PRACTICAL GATE
+-> PUBLISH EXACTLY
+-> DEPLOY EXACTLY
+-> VERIFY EXACTLY
+-> STOP AT STABLE CHECKPOINT
 ```
 
-Запрещено немедленно выпускать следующий build.
-
-Сначала обязательны full environment matrix, full toolchain audit, full DB schema/permission audit, full Git transport/auth audit, full backup/rollback permission audit и все installer helper self-tests в exact interpreters.
-
-Только потом собирается следующий release candidate.
-
-## 35. Один forensic -> один repair
-
-Нельзя делать серию `repair V1 -> repair V2 -> repair V3 -> repair V4`, если нет нового независимого факта.
-
-Правильный порядок:
-
-```text
-READ-ONLY FORENSIC
--> exact root cause
--> class-wide evidence
--> ONE fail-closed repair
--> postcheck
-```
-
-## 36. Диагностика не должна сама создавать новый инцидент
-
-Перед выдачей diagnostic script разработчик обязан проверить:
-
-```text
-does git read mutate index?
-does command create cache?
-does command alter atime/mtime?
-does psql really run SELECT only?
-does systemctl command mutate?
-does temporary output affect source?
-does sudo change effective HOME / credentials?
-```
-
-Если read-only script способен изменить repository metadata, он не имеет права называться read-only.
-
-## 37. Дорогие проверки не отменяются, но инфраструктура должна кэшироваться
-
-Финальный ZIP всё равно проходит strongest practical gate.
-
-Но запрещено бесконечно заново скачивать одинаковый toolchain из-за каждой подготовительной опечатки.
-
-Разрешено и рекомендуется использовать content-addressed uv cache, stable tool bootstrap cache, download cache и immutable lockfile-based environment reuse при сохранении воспроизводимости final overlay.
-
-## 38. Долгие jobs наблюдаемы
-
-Каждый долгий stage обязан показывать stage, processed/total, %, elapsed, ETA, heartbeat ~20–30 sec и cache hit/miss, где это применимо.
-
-Особенно это относится к dependency download, full pytest, large DB backfill, archive, research и soak.
-
-## 39. Console contract
-
-Простая операция — одна физическая строка.
-
-Сложная операция с `if/for/heredoc/Python/SQL/complex quoting/multiple fail-closed checks` оформляется готовым `.sh/.py/.ps1` + одна строка запуска.
-
-Не перекладывать ручное редактирование production на пользователя.
-
-## 40. CHECKED и NOT CHECKED HERE разделять
-
-Каждый отчёт обязан явно различать `CHECKED HERE` и `NOT CHECKED HERE`.
-
-Нельзя выдавать предположение за проверку, особенно для GitHub remote state, actual loaded runtime, DB privileges, exchange truth и service state.
-
-## 41. Не делать категорический вывод из неполного forensic
-
-Запрещён шаблон:
-
-```text
-у пользователя A нет ~/.ssh
--> значит на сервере нет GitHub credentials
-```
-
-Если проверен только один user/context, формулировка должна быть `НЕ НАЙДЕНО В ЭТОМ КОНТЕКСТЕ`, а не `ЭТОГО НЕТ В СИСТЕМЕ`.
-
-## 42. Пост-deploy completion chain фиксирован
-
-Commit/push/remote verification происходят ДО production deploy по §12. После
-deploy нельзя «догонять GitHub» тем же changeset.
-
-Стандартный post-deploy путь:
-
-```text
-loaded release identity
--> source/live mapping + exact hashes
--> DB/schema/grants evidence
--> service/runtime evidence
--> gate/permission state
--> repeated runtime check
--> RUNTIME VERIFIED или BLOCKED/FAILED
--> STOP
-```
-
-Если после deploy требуется изменить source, это новый changeset и он снова
-проходит §12 от isolated worktree до GitHub до следующего deploy.
-
-Нельзя после стабильного checkpoint начинать новый произвольный аудит без
-отдельной причины.
-
-## 43. Re-arm никогда не является побочным эффектом patch
-
-Patch/install/commit/push не имеют права автоматически enable LIVE, re-arm gate, open position или enable symbols.
-
-После stabilization checkpoint `GATE=DISARMED` сохраняется до отдельного явного решения владельца.
-
-## 44. Тесты не подгонять под implementation
-
-Если test падает, определить: production wrong или test contract stale.
-
-Нельзя менять expectation только ради green и нельзя возвращать старую архитектуру ради старого теста. Если canonical docs изменились, architecture/governance tests должны быть осознанно приведены к текущему contract.
-
-## 45. Запрещённая production-логика не прячется под `if False`
-
-Если функция `NOT_PROVEN / DISABLED_BY_CONTRACT`, запрещённый исполняемый production path не должен просто лежать в коде «на будущее», если владелец отдельно это не утвердил.
-
-## 46. LF/CRLF не путать с code drift
-
-На сервере:
-
-```text
-core.autocrlf=false
-core.eol=lf
-```
-
-Различать `byte-identical`, `newline-only` и `real content drift`. Нельзя молча нормализовать source.
-
-## 47. Source/live mapping не угадывать
-
-Live paths берутся только из installer/deployment contract. Verifier использует тот же mapping. Нельзя сравнивать случайно похожие файлы и объявлять `SOURCE_LIVE=EQUAL`.
-
-## 48. После stable checkpoint остановиться
-
-Если доказано deploy PASS, post-deploy verify PASS, services в ожидаемом state, source/live match, DB contract PASS, GitHub synchronized, worktree clean и gate в requested state — этап завершён.
-
-Не начинать новый аудит, research или re-arm без отдельной команды владельца.
-
----
-
-
-## 49. Статусы работы нельзя смешивать
-
-Для разработки, research, patch, миграции, длительного расчёта и установки использовать явные состояния:
-
-```text
-PREPARED
-RUNNING
-COMPLETE
-FAILED
-BLOCKED
-```
-
-`PREPARED` = код/задача подготовлены, выполнение не доказано. `RUNNING` =
-реальный worker подтверждён runtime evidence. `COMPLETE` = конкретная
-операция/расчёт успешно закончены и результат проверен. `FAILED` = процесс
-упал/убит/результат неполон или некорректен. `BLOCKED` = действие запрещено
-gate/архитектурой/отсутствием обязательных данных.
-
-Это process-state словарь и он не заменяет evidence/status vocabulary META:
-`CHECKED HERE / NOT CHECKED HERE / FINDING / RESEARCH RESULT / OWNER DECISION /
-CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`. Например `COMPLETE`
-для test run не означает `DEPLOYED`, а установленный файл не означает
-`RUNTIME VERIFIED`.
-
-Запрещено считать PID оболочки доказательством вычисления, `exit_code=0` доказательством корректности данных, наличие output-файла доказательством полноты, а установленный файл — доказательством `LOADED/RUNNING`.
-
-## 50. Runtime-проверка после запуска
-
-Длительный процесс проверяется минимум дважды: сразу после старта и повторно примерно через 5–10 секунд. Проверять, где применимо: реальные worker PID, runner/parent PID, process state, CPU, RAM/RSS, stderr, рост output/progress и ожидаемое число workers.
-
-Если процесс завершился раньше, нужно доказать успешное завершение и проверить результат. На `?`, «проверь», «состояние» статус всегда получать заново с сервера, а не из памяти предыдущего ответа.
-
-## 51. Малый сквозной тест до массового запуска
-
-До полного тяжёлого расчёта выполнить минимальный end-to-end проход на реальных данных и проверить source path, schema/headers, timestamp semantics, units, side/direction semantics, границы дат, output schema и несколько значений вручную.
-
-Технически успешный скрипт с пустыми, неверно прочитанными или семантически неверными данными = `FAILED`.
-
-## 52. Dependency и interpreter preflight
-
-До запуска проверить exact runtime: Python executable/version, required modules/binaries, permissions, source mounts/paths, free disk и available RAM. Нельзя впервые обнаруживать отсутствующую зависимость в полном расчёте. Для автономного research предпочитать stdlib Python, если внешняя зависимость заранее не проверена и не даёт существенной выгоды.
-
-## 53. Большие данные обрабатывать потоково
-
-Raw trades, orderbook tapes и большие market archives по умолчанию обрабатывать streaming/chunk/bucket способом с bounded cache. Полный период нельзя складывать в RAM, если это не доказано безопасным и необходимым.
-
-```text
-stream source -> causal aggregation -> bounded cache -> intermediate output -> release memory
-```
-
-Перед масштабированием измерить peak/RSS одного worker.
-
-## 54. Parallelism определяется CPU + RAM + I/O
-
-Число workers выбирается по CPU, RAM per worker, disk/decompression I/O, source contention и независимости частей задачи. Запрещено механически делать `workers = symbols`.
-
-Если сервер имеет 4 CPU и независимый research безопасно делится, доступные CPU следует использовать. Но сначала доказать безопасность по RAM/I/O. Для неравномерных задач использовать ограниченное число workers с очередью символов/chunks.
-
-## 55. Причинность research-данных
-
-Любой point-in-time dataset обязан соблюдать `feature_time <= decision_time`. На `T` используются только данные, реально известные к `T`. Future MFE/MAE, stop, recovery, final outcome, будущие zone shifts и будущие MAYAK/Dispatcher states допустимы только как последующие labels/targets, но не входные признаки.
-
-Отсутствие данных хранится как `NO_DATA` и не превращается молча в `0`, `NONE` или `NORMAL`. Для liquidation exact history при отсутствии исходных событий = `NO_DATA`; proxy допустим только как отдельно названный и версионированный `LIQUIDATION_PROXY`.
-
-## 56. Сначала универсальный dataset, потом гипотезы
-
-Если тяжёлые raw-источники нужны многим анализам, сначала строится нейтральный причинный dataset общего назначения:
-
-```text
-ALL ENTRY -> minute-by-minute causal state -> reusable research dataset -> analytical passes
-```
-
-Нельзя заставлять каждый Exit-кандидат повторно читать многомесячный raw archive, если первичные состояния можно один раз сохранить без future leakage. Существующий Exit/stop не должен заранее определять классы, если исследуется новый способ оценки сделки.
-
-## 57. Пилот не является доказательством
-
-Пилот нужен для проверки механики, данных, наличия явления и стоимости расчёта. Общий вывод требует full-universe проверки и, где применимо, разрезов symbol/direction/time regime, coverage, false positives/negatives и economics after commissions.
-
-Для кандидата считать минимум: пойманные/пропущенные проблемные случаи, испорченные хорошие сделки, saved losses, lost good trades, destroyed recoveries, extra fees/slippage и итог после комиссий.
-
-## 58. Не смешивать наблюдение, причину и интерпретацию
-
-H3/H9 shift, orderbook, OI, flow, liquidation и Dispatcher context — наблюдаемые события/состояния. Нельзя автоматически считать structural shift причиной движения, алгоритмическую заявку spoofing, а очищенный стакан «реальными людьми».
-
-Research должен по возможности проверять цепочку `market facts/state -> MAYAK/objective context -> structural change -> subsequent trade path`. Семантика полей подтверждается источником/каноническим parser contract до экономической интерпретации.
-
-## 59. Файловые пространства разных сред не взаимозаменяемы
-
-ChatGPT runtime/container, удалённый сервер, GitHub/connector storage, Project Source/File Library и локальный компьютер пользователя являются разными файловыми пространствами. Одинаковый путь или имя файла не означает, что объект существует или доступен в другой среде.
-
-Перед любой операцией чтения, записи, копирования, упаковки, скачивания или передачи файла обязательно определить:
-
-```text
-SOURCE_ENVIRONMENT
-SOURCE_PATH_OR_RESOURCE
-DESTINATION_ENVIRONMENT
-DESTINATION_PATH_OR_RESOURCE
-TRANSFER_MECHANISM
-SOURCE_EXISTS=YES
-DESTINATION_PARENT_EXISTS=YES
-ACCESS_ALLOWED=YES
-```
-
-Запрещено:
-
-- использовать `/mnt/data/...` как путь удалённого сервера только потому, что он существует в ChatGPT runtime;
-- использовать `/srv/...`, `C:\...` или другой server/local path внутри ChatGPT runtime без фактического mount/transfer;
-- считать GitHub/connector file reference обычным локальным файлом;
-- придумывать `sandbox:/mnt/data/...` ссылку, если файл не создан и не проверен именно в активном ChatGPT runtime;
-- сообщать пользователю, что файл «выгружен», «скачан» или «готов», пока destination object не проверен в той среде, откуда пользователь реально сможет его получить.
-
-Перед cross-environment transfer используется только поддерживаемый механизм передачи: connector/file action, явная загрузка/скачивание, staged attachment или другой проверенный transport. После передачи сравнить размер и, когда возможно, SHA256 либо иной устойчивый идентификатор содержимого.
-
-Если прямого transport между двумя средами нет, статус = `BLOCKED`; нельзя имитировать передачу путём обращения к пути другой среды.
-
-## 60. Обязательный launch/complete checklist
-
-До `RUNNING` тяжёлого compute/research:
-
-```text
-SOURCE_SAMPLE_CHECK=PASS
-SCHEMA_SEMANTICS_CHECK=PASS
-INTERPRETER_DEPENDENCIES=PASS
-SMALL_E2E=PASS
-ONE_WORKER_MEMORY_MEASURED=YES
-PARALLELISM_SAFE=YES
-WORKERS_EXPECTED=<N>
-WORKERS_ACTUAL=<N>
-CHECK_AFTER_5_10_SECONDS=PASS
-STDERR_EMPTY_OR_EXPLAINED=YES
-OUTPUT_GROWING_OR_COMPLETE=YES
-```
-
-До `COMPLETE`:
-
-```text
-RUNNER_EXIT=PASS
-ALL_WORKERS_ACCOUNTED=YES
-EXPECTED_UNIVERSE=ACTUAL_UNIVERSE
-EXPECTED_ROWS/RANGE=VERIFIED
-ERROR_LOGS=CHECKED
-NO_OOM_KILL=VERIFIED_IF_RELEVANT
-OUTPUT_SCHEMA=VERIFIED
-DATA_NOT_EMPTY=YES
-QUALITY/NO_DATA_EXPLICIT=YES
-RESULT_MANIFEST=WRITTEN
-```
-
-Без обязательного evidence статус остаётся `RUNNING`, `FAILED` или `BLOCKED`, но не `COMPLETE`.
-
-
-# Приложение A. Инцидент 2026-09-05/06 — обязательные уроки
-
-| № | Класс ошибки | Что произошло | Постоянное правило |
-|---:|---|---|---|
-| 1 | Baseline mismatch | ранний patch ожидал неверные file hashes | baseline/hash contract проверять до упаковки |
-| 2 | Transform fragility | patch-transform сломался на JS literal | transform self-test на exact baseline до ZIP |
-| 3 | Missing Ruff | installer впервые узнал, что Ruff недоступен | полный toolchain matrix до packaging |
-| 4 | Missing canonical test Python | окружение тестов определялось по ходу | interpreter contract фиксировать заранее |
-| 5 | uv parser | bootstrap/version parsing был подготовлен неверно | helper tests до ZIP |
-| 6 | Over-scoped Ruff | новый patch споткнулся о legacy dashboard debt | regression rule `NEW_DIAGNOSTICS=0` для unrelated debt |
-| 7 | ERR trap | ожидаемый Ruff non-zero превратился в аварийный installer failure | expected non-zero обрабатывать явно |
-| 8 | Stale tests | full pytest выявил stale re-arm/governance assumptions | сравнивать tests с текущими canonical docs |
-| 9 | Backup permissions | `pg_dump`/postgres не мог писать в root-only temp path | проверять effective writer до backup |
-| 10 | DB mutation role | migration запускалась ролью `cripta` без UPDATE | migration actor/privileges проверять заранее |
-| 11 | Git/source metadata | rollback/repair проходы оставляли ownership/index проблемы | metadata является частью postcondition |
-| 12 | Constraint incompatibility | `OWNER_MODIFIED_STOP` был правильным в code/protection truth, но запрещён DB CHECK | проверять canonical token по всей storage chain |
-| 13 | False read-only diagnostic | root `git status` переписал `.git/index` как `root:root` | read-only Git только repo owner + `GIT_OPTIONAL_LOCKS=0` |
-| 14 | Self-test dependency leak | pure DB helper self-test импортировал `psycopg` в overlay venv | self-test запускать в exact interpreter; dependency import lazy |
-| 15 | Git push actor confusion | commit был создан, а push впервые проверил неправильный auth context | push transport/auth preflight до commit |
-| 16 | Forgotten existing credential | отсутствие credential у одного principal ошибочно трактовалось как отсутствие рабочего transport вообще | сначала искать actual push principal и существующий approved transport |
-| 17 | Unneeded new credential proposal | был предложен новый credential, хотя рабочий transport уже существовал | не создавать credentials до полной инвентаризации существующих |
-| 18 | Too many package versions | preparation defects превратились в длинную V1.x цепочку | logical version отделять от RC/build revision |
-| 19 | Too many sequential repairs | состояние Git исправлялось серией repair-итераций | один forensic -> один доказанный repair |
-| 20 | Excessive wall-clock | малый production patch занял почти рабочий день | после двух prep failures — Preparation Freeze и full class audit |
-
----
-
-# Приложение B. Обязательный pre-package checklist
-
-```text
-ARCHITECTURE_PRE_READ=PASS
-CURRENT_GITHUB_HEAD=<sha>
-SERVER_SOURCE_HEAD=<sha>
-REMOTE_SOURCE_EQUAL=YES
-WORKTREE_EXPECTED=YES
-
-ENVIRONMENT_MATRIX=PASS
-TOOLCHAIN_MATRIX=PASS
-DB_SCHEMA_MATRIX=PASS
-DB_PRIVILEGE_MATRIX=PASS
-GIT_TRANSPORT_MATRIX=PASS
-BACKUP_PERMISSION_MATRIX=PASS
-
-OVERLAY_TRANSFORM=PASS
-HELPER_SELFTESTS=PASS
-FINAL_OVERLAY_GATE=PASS
-
-FINAL_ZIP_SHA256=PASS
-FINAL_ZIP_CRC=PASS
-INTERNAL_SHA256SUMS=PASS
-```
-
-Если хотя бы один пункт не проверен:
-
-```text
-NOT_READY_FOR_USER_INSTALL
-```
-
----
-
-# Приложение C. Обязательный release/deploy checklist
-
-```text
-WORKTREE_CHANGESET=EXACT
-GIT_METADATA_OWNER=EXPECTED
-TESTS=PASS
-COMMIT=CREATED
-PUSH=PASS
-REMOTE_HEAD==SOURCE_HEAD
-
-BACKUP=PASS
-DEPLOY_EXACT_COMMIT=PASS
-SOURCE_LIVE=EQUAL
-SERVICES=<explicit expected state>
-DB_CONTRACT=PASS
-RUNTIME_SMOKE=PASS
-GATE=<explicit expected state>
-WORKTREE=CLEAN
-
-CHECKPOINT=STABLE
-STOP=YES
-```
-
----
-
-# 61. Главный процессный принцип
-
-Цель не в том, чтобы «в конце концов установить patch».
-
-Цель:
-
-```text
-ОДИН РАЗ ПРАВИЛЬНО ПОНЯТЬ СРЕДУ
--> ОДИН РАЗ ПРАВИЛЬНО СОБРАТЬ
--> ОДИН РАЗ ПРОГНАТЬ СИЛЬНЫЙ GATE
--> ОДИН РАЗ УСТАНОВИТЬ
--> ОДИН РАЗ ЗАФИКСИРОВАТЬ CHECKPOINT
-```
-
-Если небольшой patch требует длинной цепочки подготовительных версий, это признак дефекта процесса подготовки, а не нормальная стоимость разработки.
-
-ChatGPT / Codex / разработчик обязан остановить такой цикл и исправить сам процесс.
+Long chains of repair/build versions indicate a process defect and require
+forensic/class-wide correction, not more blind iterations.

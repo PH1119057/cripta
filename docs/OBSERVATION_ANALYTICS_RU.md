@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 2026-09-19
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -175,75 +175,42 @@ UI/read-model:
 
 ## 3.5 Lifecycle Supervisor
 
-Lifecycle Supervisor — технический сквозной контролёр прохождения торгового
-lifecycle. Он не является новым торговым слоем и не владеет trading policy.
+Lifecycle Supervisor — технический сквозной контролёр lifecycle. Он не является
+торговым слоем и не владеет trading policy.
 
-Его область наблюдения начинается с activation/materialization Strategy и
-заканчивается подтверждённым завершением позиции и финальным audit/economics:
+Единственная каноническая lifecycle-chain находится в
+CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
 
-```text
-StrategyActivation
--> EntryPlan + ExitPlan materialized/published
--> Entry Engine consumption acknowledgement
--> StrategySignal
--> strategy_attempt
--> atomic capital reservation outcome
--> EntryDecision
--> EntryExecutionRequest                  [только ACCEPTED]
--> Execution acknowledgement / dispatch
--> opening order lifecycle / fill truth / reconciliation
--> StrategyPosition exact binding
--> initial protection confirmation / reconciliation
--> ExitPlan exact binding
--> Exit Engine claim / heartbeat
--> ExitDecision(s)
--> ExitExecutionRequest(s)
--> Execution acknowledgement
--> Exchange protection/reduce/close result + reconciliation
--> final flat confirmation
--> capital reservation finalization/release
--> final economics/audit
-```
+Supervisor обязан видеть exact lineage/IDs и выявлять нарушение обязательных
+handoff/invariants, включая:
+- CAPITAL_RESERVATION_STUCK;
+- EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN;
+- EXCHANGE_POSITION_MODE_MISMATCH;
+- POSITION_WITHOUT_EXIT_OWNER;
+- POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION;
+- потерянный/неподтверждённый required handoff/reconciliation.
 
-Lifecycle Supervisor обязан видеть exact IDs/fingerprints и выявлять:
-- plan не опубликован/не подхвачен;
-- request не acknowledgement;
-- order/fill потерял causal binding;
-- открытая StrategyPosition не получила exact ExitPlan;
-- позиция не claim-нута Exit Engine;
-- lifecycle завис/разорвался;
-- reservation зависла без reconciliation (`CAPITAL_RESERVATION_STUCK`);
-- физический Exchange slot уже имеет другого owner
-  (`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`);
-- real StrategyPosition не имеет подтверждённой обязательной initial protection;
-- фактическое Exchange state не соответствует ожидаемому lifecycle state.
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT не является critical lifecycle fault:
+это штатный fail-closed EntryDecision outcome до real request.
 
-Примеры критических состояний:
+Точные определения tokens принадлежат docs/CRIPTA_GLOSSARY_RU*.md.
 
-```text
-POSITION_WITHOUT_EXIT_OWNER
-CAPITAL_RESERVATION_STUCK
-EXCHANGE_POSITION_OWNERSHIP_CONFLICT
-POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION
-```
+Lifecycle Supervisor не имеет права лечить faults торговой догадкой.
+Automatic protection reassert/reduce-only close допустим только если exact
+Strategy version заранее содержит соответствующую owner-approved emergency/
+protection-failure policy.
 
-Lifecycle Supervisor не имеет права «лечить» эти faults торговой догадкой.
-Автоматическое protection reassert/reduce-only emergency close возможно только
-если exact Strategy version заранее содержит разрешённую emergency/protection
-failure policy; иначе Supervisor фиксирует critical fault и fail-closed state.
+Critical fault обязан доходить до владельца через durable alert delivery:
+событие/очередь, retry, acknowledgement либо explicit escalation state.
+Отображение только в UI не считается доставкой. Потеря critical alert delivery
+сама фиксируется как operational fault.
 
 Lifecycle Supervisor:
 - не создаёт StrategySignal;
 - не создаёт EntryDecision/ExitDecision;
 - не меняет stop/TP/trailing;
 - не закрывает позицию по собственной оценке;
-- не выбирает Strategy;
-- не является транспортом сообщений.
-
-Durable registry/queue/storage, idempotency и acknowledgement обеспечивают
-доставку и восстановление. Lifecycle Supervisor проверяет, что handoff
-фактически состоялся, и может поднять operational-safety fault/fail-closed
-state без изобретения торговой policy.
+- не выбирает Strategy.
 
 ## 3.6 Position Supervisor
 
@@ -357,17 +324,28 @@ Strategy, старого Entry, старых названий или стары�
 
 ## 4.9 Counterfactual / псевдосделки
 
-Если Entry condition выполнился, но real Entry не состоялся из-за
-`INSUFFICIENT_AVAILABLE_FUNDS`, Analyst может вести отдельную
-counterfactual/псевдосделку.
+Если Entry condition выполнился, но real Entry не состоялся по одной из явно
+разрешённых admission-причин, Analyst может вести отдельную counterfactual
+псевдосделку.
 
-Она:
-- сохраняет exact Strategy/EntryPlan/ExitPlan lineage;
+Разрешённые причины минимум:
+- INSUFFICIENT_AVAILABLE_FUNDS;
+- EXCHANGE_POSITION_OWNERSHIP_CONFLICT.
+
+Counterfactual обязан сохранять exact Strategy/EntryPlan/ExitPlan lineage,
+strategy_attempt_id, EntryDecision и counterfactual_block_reason.
+
+Причины не смешиваются: capital shortage и slot conflict остаются разными
+аналитическими классами.
+
+Counterfactual:
 - не резервирует капитал;
+- не получает physical slot claim;
 - не создаёт ExecutionRequest;
-- не имеет exchange mutation rights;
-- существует только для последующего сравнения распределения капитала и
-  качества Strategy.
+- не имеет Exchange mutation rights.
+
+STALE_OR_UNKNOWN_REQUIRED_STATE и operational faults автоматически не
+превращаются в полноценную псевдосделку, если causal replay нельзя доказать.
 
 Counterfactual outcome всегда отделяется от фактического PnL.
 
@@ -393,6 +371,10 @@ Counterfactual outcome всегда отделяется от фактическ
 -> MICRO_LIVE
 -> LIVE
 ```
+
+Точные обязательные условия real arm определены в
+docs/TRADING_CONTOUR_RU*.md §4.7. Ни liveness сервиса, ни DEPLOY, ни зелёные
+unit tests сами по себе не дают LIVE rights.
 
 # 5. Общая граница наблюдательного контура
 

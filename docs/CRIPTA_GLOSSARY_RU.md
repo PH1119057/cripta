@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.4
+**Версия:** 1.5
 **Дата:** 2026-09-19
 **Статус:** обязательный канонический терминологический контракт
 
@@ -51,6 +51,10 @@ MICRO_LIVE прохода. Неустойчивость исследуемых �
 **EntryPlan / ExitPlan** — материализованные неизменяемые планы exact Strategy
 version для универсальных Entry/Exit Engines.
 
+**ActivePlanRegistry** — durable/read-model registry опубликованных exact
+EntryPlan/ExitPlan, доступных универсальным Engines. Registry не владеет
+торговой policy и не изменяет планы.
+
 **StrategyPosition** — логическая позиция exact Strategy version после
 confirmed open fill, связанная с Strategy/EntryPlan/ExitPlan lineage и
 фактическими exchange/order/fill refs.
@@ -93,11 +97,36 @@ StrategySignal: она связывает проверку условий, capit
 EntryDecision и optional EntryExecutionRequest. Attempt не является fill и не
 означает ACCEPTED.
 
-**EntryDecision** — формализованный итог attempt. Минимальные состояния:
-`ACCEPTED`, `STRATEGY_CONDITION_REJECTED`,
-`INSUFFICIENT_AVAILABLE_FUNDS`, `OPERATIONAL_SAFETY_BLOCKED`,
-`STALE_OR_UNKNOWN_REQUIRED_STATE`, `EXPIRED`, `CANCELLED`.
-`ACCEPTED` возникает только после успешной обязательной reservation.
+**EntryDecision** — формализованный итог допуска одного strategy_attempt к
+real Entry.
+
+Каноническая таблица token -> entity:
+
+| Token | Entity | Смысл |
+| --- | --- | --- |
+| ACCEPTED | EntryDecision | admission полностью успешен; разрешён EntryExecutionRequest |
+| STRATEGY_CONDITION_REJECTED | EntryDecision | attempt отклонён Strategy condition |
+| INSUFFICIENT_AVAILABLE_FUNDS | EntryDecision | capital reservation не получена |
+| EXCHANGE_POSITION_OWNERSHIP_CONFLICT | EntryDecision | physical slot занят/pending/ownership не доказан |
+| OPERATIONAL_SAFETY_BLOCKED | EntryDecision | required state известна, но несовместима с operational contract |
+| STALE_OR_UNKNOWN_REQUIRED_STATE | EntryDecision | обязательная state missing/stale/unknown |
+| EXPIRED | EntryDecision | attempt истёк до принятого request |
+| CANCELLED | EntryDecision | attempt отменён до принятого request |
+| REQUEST_PENDING | EntryExecutionRequest state | request создан, dispatch ещё не завершён |
+| REQUEST_DISPATCHED | EntryExecutionRequest state | request передан execution path |
+| REQUEST_ACKNOWLEDGED | EntryExecutionRequest state | request подтверждён downstream |
+| REQUEST_EXPIRED | EntryExecutionRequest state | уже созданный request истёк |
+| REQUEST_CANCELLED | EntryExecutionRequest state | уже созданный request отменён |
+| REQUEST_RECONCILIATION_REQUIRED | EntryExecutionRequest state | outcome mutation нельзя доказать |
+| REQUEST_TERMINAL | EntryExecutionRequest state | request завершён terminal outcome |
+| EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN | lifecycle fault | фактическая state нарушила правило одного physical owner |
+| EXCHANGE_POSITION_MODE_MISMATCH | operational/lifecycle fault | mode/positionIdx несовместим с approved contract |
+
+ACCEPTED возникает только после successful required-state validation,
+physical slot claim и capital reservation.
+
+EntryDecision.EXPIRED/CANCELLED и request-state
+REQUEST_EXPIRED/REQUEST_CANCELLED — разные сущности.
 
 # 4. Геометрия
 
@@ -214,36 +243,52 @@ LONG/SHORT не переименовывают физические объект
 
 # 11. Execution
 
-**ExecutionRequest** — неизменяемый запрос на исполнение уже принятого Entry
-или Exit decision с точной Strategy/Plan/decision lineage.
+**ExecutionRequest** — immutable запрос на исполнение уже принятого Entry или
+Exit decision с exact Strategy/Plan/decision lineage.
 
-**EntryExecutionRequest** — ExecutionRequest для принятого EntryDecision.
+**EntryExecutionRequest** — ExecutionRequest для EntryDecision=ACCEPTED.
 
 **ExitExecutionRequest** — ExecutionRequest для принятого ExitDecision и exact
 StrategyPosition.
 
-**Execution** — технический слой биржевой мутации и reconciliation.
+**Execution** — технический слой Exchange mutation и reconciliation.
 
-**Exchange** — внешняя торговая площадка и источник фактической истины о
+**Exchange** — внешняя торговая площадка и источник фактической истины об
 orders/fills/positions/account state.
 
 **Exchange position slot** — физически отдельный position inventory,
-определяемый exchange/account/instrument/position-mode identity. Логические
-StrategyPosition не могут считаться физически независимыми, если они попадают в
-один slot.
+определяемый exchange/account/product/instrument/position-mode identity.
 
-`exchange_position_key` — стабильная техническая identity такого slot в нашем
-lifecycle. Для текущего Bybit Unified linear one-way она включает account,
-linear/settle context, symbol и `positionIdx=0`.
+exchange_position_key — стабильная technical identity physical slot.
 
-**One-way mode** — режим биржи, где один symbol использует один directional
-slot (`positionIdx=0`). Противоположный order может уменьшить/закрыть
-существующую позицию, поэтому независимые Strategy не получают право
-одновременно владеть этим slot.
+**Physical slot claim** — durable exclusive claim одного real lifecycle на
+exchange_position_key. Claim создаётся до EntryDecision=ACCEPTED, после
+confirmed fill связывается с exact StrategyPosition и освобождается только
+после доказанного отсутствия mutation либо final flat/reconciliation.
 
-`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` — fail-closed outcome/fault:
-физический slot занят, имеет pending mutation либо его ownership нельзя
-однозначно доказать. Новый независимый Entry не отправляется на Exchange.
+exchange_position_slot_claim_id — immutable identity physical slot claim.
+
+**Position mode state** — причинный snapshot фактического Exchange position mode
+для exact exchange/account/product/instrument scope с positionIdx, freshness и
+provenance.
+
+**One-way mode** — режим, где один symbol использует один directional slot.
+Для текущего утверждённого Bybit Unified linear contract ожидается
+positionIdx=0.
+
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT — штатный fail-closed EntryDecision:
+требуемый physical slot уже имеет другого active/pending owner либо ownership
+нельзя доказать. Новый real EntryExecutionRequest не создаётся. Сам outcome не
+является аварией системы.
+
+EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN — lifecycle fault: durable,
+runtime или Exchange state показывает более одного owner, потерянный ownership
+binding либо иное нарушение single-owner invariant.
+
+EXCHANGE_POSITION_MODE_MISMATCH — operational/lifecycle fault: фактический
+position mode или positionIdx не соответствует owner-approved execution/slot
+contract. Новые mutation блокируются до reconciliation либо отдельного
+owner-approved изменения канона.
 
 # 12. Аналитика и исследование
 
@@ -254,6 +299,10 @@ handoff/acknowledgement/IDs, но не создаёт торговых реше�
 
 **Position Supervisor** — наблюдение фактического состояния конкретной
 StrategyPosition; не владелец Strategy/Exit.
+
+**Strategy Monitor** — read-model/monitoring представление состояния exact
+Strategy version × symbol × direction. Он не определяет universe и не создаёт
+trading policy.
 
 **MFE (Maximum Favorable Excursion)** — максимальное благоприятное для
 направления Strategy отклонение цены/результата от Entry за выбранный lifecycle
@@ -274,9 +323,10 @@ StrategyPosition; не владелец Strategy/Exit.
 Она не говорит, выгодна ли конкретная Strategy.
 
 **Counterfactual trade / псевдосделка** — аналитическая моделируемая сделка,
-которая могла бы быть открыта по Strategy, но не стала real Execution
-(например, из-за недостатка доступного капитала). Не резервирует средства и не
-имеет exchange mutation rights.
+которая могла бы быть открыта по Strategy, но не стала real Execution по явно
+сохранённой причине, например INSUFFICIENT_AVAILABLE_FUNDS или
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT. Не резервирует капитал, не получает
+physical slot claim и не имеет Exchange mutation rights.
 
 **Исследование / research** — получение доказательств. Не канон и не Strategy.
 
@@ -288,10 +338,10 @@ owner-approved Strategy version.
 # 13. Капитал и lifecycle
 
 **Atomic capital reservation** — техническая атомарная фиксация части
-проверенного доступного капитала ВНУТРИ формирования real EntryDecision до
-`ACCEPTED` и до биржевой отправки. Успех reservation позволяет создать
-`ACCEPTED`; нехватка средств создаёт `INSUFFICIENT_AVAILABLE_FUNDS`.
-Не является отдельным торговым слоем и не ранжирует Strategy.
+проверенного доступного капитала внутри real Entry admission до ACCEPTED и до
+Exchange mutation. Она выполняется в одном all-or-nothing admission contract с
+physical slot claim: отсутствие capital reservation не может оставить durable
+slot claim. Не является отдельным торговым слоем и не ранжирует Strategy.
 
 **First-come-first-served capital V1** — если несколько независимых Entry
 конкурируют за ограниченный капитал, право получает первый успешно завершивший
@@ -326,6 +376,10 @@ protection-failure contract, задающая, какое техническое
 заданном contract. Сам по себе не означает автоматический close уже открытой
 позиции.
 
+**Critical fault delivery** — durable механизм доставки critical operational/
+lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
+escalation state. Наличие записи только в UI/read-model не считается доставкой.
+
 `mainnet gate` — технический execution gate, разрешающий или запрещающий
 реальную Exchange mutation. Не является Entry/Exit policy и не заменяет
 StrategyActivation/execution permission.
@@ -345,9 +399,10 @@ reconciliation нельзя освобождать ownership/capital или по
 издержки. Не существует как глобальное число по умолчанию.
 
 **hedge** — Strategy-owned lifecycle policy противоположной экспозиции.
-Сам термин не означает Bybit hedge-mode. Реальное исполнение требует exact
-request/reservation/lineage, capital accounting и совместимый Exchange position
-mode contract.
+Сам термин не означает Exchange hedge-mode. Реальное исполнение требует exact
+request/reservation/slot lineage, capital accounting и совместимый Exchange
+position-mode contract. В текущем one-way contract same-symbol hedge unsupported
+и обязан fail-closed; встречный order не может молча считаться hedge.
 
 # 14. Качество данных
 
@@ -356,25 +411,37 @@ mode contract.
 
 # 15. Runtime / release / validation terms
 
-`SHADOW` — режим, в котором decision/lifecycle логика работает на реальных
-или replay facts без права создавать реальную Exchange mutation.
+SHADOW — режим decision/lifecycle логики без права создавать real Exchange
+mutation.
 
-`LIVE EQUIVALENCE` — доказанное соответствие production live path
-проверенному SHADOW/replay/test path по semantics, inputs, policy lineage,
-consumer behavior и execution contract в пределах заявленного scope. Не равно
-«тесты прошли».
+LIVE EQUIVALENCE — доказанное соответствие production live path проверенному
+SHADOW/replay/test path по semantics, inputs, policy lineage, consumer behavior
+и execution contract. Не равно «тесты прошли».
 
-`MICRO_LIVE` — owner-approved ограниченный real execution этап после
-LIVE EQUIVALENCE, с отдельными gates/limits/evidence. Не является автоматическим
-следствием DEPLOY.
+MICRO_LIVE — owner-approved ограниченный real execution этап после LIVE
+EQUIVALENCE с отдельными limits/gates/evidence.
 
-`runtime_build_ref` — audit identity реально загруженного runtime artifact/
-source commit/build. Не является торговым параметром Strategy, но нужен для
-воспроизводимости, LIVE EQUIVALENCE и доказательства того, какой код исполнялся.
+LIVE — owner-approved режим реальной Exchange mutation после выполнения
+обязательного LIVE-arm readiness contract. DEPLOY, service liveness или
+mainnet-capable code сами по себе не означают LIVE.
 
-**Implementation pass Pn** (P3/P9/P10 и т.п.) — временная нумерация проходов
-разработки/стабилизации. Это не слой архитектуры и не торговый термин; детали
-pass читаются только в текущем implementation plan при соответствующей задаче.
+**Runtime liveness verified** — доказано, что expected service/process запущен,
+не падает и публикует ожидаемый heartbeat/read-model. Это не доказывает
+правильность behavior на требуемом lifecycle scenario.
+
+**Runtime behavior verified** — на фактическом runtime path доказано заявленное
+поведение конкретного contract/scenario с causal evidence. Нулевая выборка,
+отсутствие позиции или просто faults=0 не является behavior verification.
+
+**RUNTIME VERIFIED** — umbrella-статус, который нельзя писать как одиночное YES
+без указания dimensions. В status matrix отдельно указываются LIVENESS и
+BEHAVIOR.
+
+runtime_build_ref — audit identity реально загруженного runtime artifact/source
+commit/build.
+
+**Implementation pass Pn** — временная нумерация проходов разработки/
+стабилизации; не слой архитектуры и не торговый термин.
 
 # 16. Запрещённые/исторические обозначения
 

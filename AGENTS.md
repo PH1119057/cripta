@@ -10,8 +10,14 @@
 4. `docs/CRIPTA_GLOSSARY_RU*.md`
 5. `docs/CURRENT_PROJECT_MAP_RU*.md`
 
-При работе с конкретным слоем дополнительно читать его активный документ из
-`docs/DOCUMENTATION_INDEX_RU*.md`.
+При работе с конкретным слоем дополнительно читать его active routed document
+из `docs/DOCUMENTATION_INDEX_RU*.md`.
+
+Перед patch/Git/PostgreSQL/package/release/deploy читать
+`docs/DEVELOPMENT_RELEASE_RULES_RU*.md`.
+
+Перед research/replay/OOS/holdout/large-data/long-compute читать
+`docs/RESEARCH_COMPUTE_RULES_RU*.md`.
 
 ## Source of truth
 

@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.3
+**Версия:** 2.4
 **Дата:** 2026-09-19
 **Статус:** верхний канонический архитектурный контракт
 
@@ -108,116 +108,213 @@ StrategyCard содержит все торговые параметры кон�
 Ни Materializer, ни Entry, ни Exit, ни Execution не имеют права подменять
 отсутствующие Strategy-owned значения скрытыми defaults.
 
+Hedge policy также не отменяет физические ограничения Exchange position mode.
+Для одного и того же symbol/account в текущем one-way contract противоположная
+real экспозиция не считается независимым hedge: она может неттировать/закрывать
+существующую позицию. Такой same-symbol hedge unsupported и обязан fail-closed
+до отдельного owner-approved hedge-mode/subaccount/internal-netting contract.
+
 ## 4.4 Strategy settings и экспериментальные версии
 
 Decision/execution-affecting настройки конкретной Strategy принадлежат только
-её immutable `StrategyCard` и раскладываются по явным owner-owned policy-блокам:
+её immutable StrategyCard и раскладываются по явным owner-owned policy-блокам:
 
-- `entry_policy` — условия и параметры Entry;
-- `touch_policy` — касания/retest/cooldown/reset;
-- `capital_policy` — капитал/leverage;
-- `protection_policy.initial_protection` — базовая защитная рамка, известная уже
+- entry_policy — условия и параметры Entry;
+- touch_policy — касания/retest/cooldown/reset;
+- capital_policy — капитал/leverage;
+- protection_policy.initial_protection — базовая защитная рамка, известная уже
   при открытии;
-- `exit_policy` — динамические правила сопровождения/Exit;
-- `lifecycle_policy` — hedge и другие сквозные правила;
+- exit_policy — динамические правила сопровождения/Exit;
+- lifecycle_policy — hedge и другие сквозные правила;
 - MAYAK/Dispatcher context policies — только явно разрешённое конкретной
   Strategy потребление контекста.
 
-Не создаётся отдельный скрытый runtime-мешок `strategy_settings`, который мог бы
+Не создаётся отдельный скрытый runtime-мешок strategy_settings, который мог бы
 иметь торговый смысл независимо от StrategyCard.
 
-`initial_protection` и динамический Exit — разные сущности. Strategy может
+initial_protection и динамический Exit — разные сущности. Strategy может
 утвердить базовую защитную рамку для Entry, пока H3/касания/break-even/trailing
-или другие правила сопровождения остаются исследовательскими. Наличие такой
-рамки не означает, что динамический Exit уже утверждён.
+или другие правила сопровождения остаются исследовательскими.
 
 Для optional decision/execution setting обязательно:
-- явное `enabled`;
-- при `enabled=false` отсутствуют скрытые торговые числа;
+- явное enabled;
+- при enabled=false отсутствуют скрытые торговые числа;
 - authoring template не содержит числовых trading defaults;
-- при `enabled=true` должен существовать exact consumer contract;
+- при enabled=true должен существовать exact consumer contract;
 - unsupported/missing consumer означает fail-closed, а не silent-ignore.
 
-Неустойчивые параметры сначала принадлежат `Strategy Candidate / Strategy
-Draft`. Для воспроизводимого shadow/MICRO_LIVE эксперимента владелец может
-утвердить exact snapshot как новую experimental immutable Strategy version.
-Следующий вариант получает новую version и не переписывает предыдущую карточку.
+Для lifecycle_policy.hedge дополнительно обязателен совместимый Exchange
+position-mode contract. В текущем one-way same-symbol hedge не поддержан:
+authoring/materialization/readiness real Strategy обязаны fail-closed, а не
+интерпретировать встречный order как hedge.
 
-Research/example/history, включая временные protective boundaries, H3/touch,
-fee-aware break-even или trailing values, не становятся глобальными defaults и
-не получают торговых прав без отдельного owner-approved Strategy snapshot.
+Неустойчивые параметры сначала принадлежат Strategy Candidate / Strategy Draft.
+Для воспроизводимого shadow/MICRO_LIVE эксперимента владелец может утвердить
+exact snapshot как новую experimental immutable Strategy version.
+
+Research/example/history не становятся global defaults и не получают торговых
+прав без отдельного owner-approved Strategy snapshot.
 
 Legacy immutable StrategyCard не изменяется при появлении новых structural
-slots. При создании новой версии compatibility может добавить только
-инертные `enabled=false` slots и не имеет права изобретать числовые значения.
+slots. Compatibility может добавить только инертные enabled=false slots и не
+имеет права изобретать числовые значения.
 
 # 5. ENTRY
 
-`Entry Engine` — универсальный активный исполнитель `EntryPlan`.
+Entry Engine — универсальный активный исполнитель EntryPlan.
 
 Количество Strategy ему не важно. Он получает активные планы, независимо
 проверяет каждый план на причинных данных и при выполнении условий создаёт
-strategy-specific `StrategySignal`, attempt и `EntryDecision`.
+strategy-specific StrategySignal, strategy_attempt и EntryDecision.
 
-Entry не выбирает winner/priority между Strategy и не устраняет конфликт
-LONG/SHORT между независимыми Strategy.
+Entry не арбитрирует торговый смысл независимых Strategy: не выбирает, какая
+Strategy «лучше», и не отменяет противоположный StrategySignal только из-за
+направления LONG/SHORT. Отдельно, перед real Exchange mutation, physical-slot
+admission обязан fail-closed блокировать attempt, который не может получить
+exclusive ownership требуемого Exchange position slot.
 
-## 5.1 Капитал
+## 5.1 Real Entry admission: required state, slot claim и capital reservation
 
-Запрошенный размер капитала принадлежит Strategy/EntryPlan.
+EntryDecision=ACCEPTED разрешён только после успешного real Entry admission.
 
-Atomic reservation является частью формирования real EntryDecision.
-`EntryDecision=ACCEPTED` может возникнуть только ПОСЛЕ успешной reservation
-разрешённой Strategy суммы. При неуспешной reservation ACCEPTED не создаётся.
-
-Доступность считается не из одного advisory snapshot Dispatcher, а из
-проверенной account-capacity истины с freshness/account identity и durable
-ledger уже занятых/зарезервированных средств. Unknown/stale обязательное
-состояние означает fail-closed.
-
-Правило V1:
+Обязательный порядок:
 
 ```text
-первый Entry, успешно получивший atomic reservation,
-получает разрешённую Strategy сумму
+strategy_attempt
+-> required account / position-mode state validation
+-> atomic physical Exchange slot claim
+-> atomic capital reservation
+-> EntryDecision
 ```
 
-Нет дополнительного ранжирования Strategy.
+Physical slot claim и capital reservation должны завершаться как единый
+all-or-nothing durable admission contract. Implementation lock order должен быть
+стабилен и воспроизводим:
 
-Если доступного капитала недостаточно:
-- real Entry не создаёт биржевую мутацию;
-- `EntryDecision = INSUFFICIENT_AVAILABLE_FUNDS`;
-- событие может продолжить жизнь как counterfactual/псевдосделка в Analyst,
-  без Execution и без reservation.
+```text
+1. exact account / instrument / position-mode state validation
+2. exact exchange_position_key / slot row
+3. capital reservation ledger
+4. commit admission outcome
+```
 
-Reservation не освобождается при неизвестном результате ордера до
-reconciliation истины. Зависшая reservation является lifecycle fault и должна
-быть reconciled, а не освобождаться по догадке.
+Успех:
 
-## 5.2 Логическая Strategy и физический Exchange position slot
+```text
+slot claim success + capital reservation success
+-> COMMIT
+-> EntryDecision=ACCEPTED
+-> EntryExecutionRequest
+```
 
-Независимость Strategy/EntryPlan относится к сигналам, attempts, decisions и
-аналитике. Она не означает право нескольким Strategy одновременно владеть одним
-и тем же физическим position slot биржи.
+Отказ slot claim:
 
-Физический slot определяется exchange/account/instrument/position-mode identity
-и должен иметь один active owner lifecycle. Для текущего Bybit Unified linear
-one-way режима используется `positionIdx=0`; один symbol в одном account
-имеет один физический directional slot.
+```text
+-> EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+-> no capital reservation
+-> no EntryExecutionRequest
+```
 
-Если другой Strategy lifecycle уже владеет slot, существует непустая Exchange
-position, pending non-reduce Entry command/order или ownership нельзя доказать,
-новый real Entry блокируется fail-closed как
-`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`. Противоположный сигнал не имеет права
-неявно неттировать/закрывать чужую StrategyPosition. Pre-exchange reservation
-освобождается только после доказанного отсутствия биржевой мутации.
+Отказ reservation:
 
-Blocked Strategy может продолжить жизнь только как Analyst counterfactual.
+```text
+-> slot claim rollback/release in the same admission transaction
+-> INSUFFICIENT_AVAILABLE_FUNDS
+-> no EntryExecutionRequest
+```
 
-Переход к hedge-mode, внутреннему netting нескольких Strategy поверх одной
-физической позиции или изоляции по subaccount является отдельным owner decision
-и требует нового canonical/execution contract. Execution не переключает
-position mode автоматически.
+Недопустимы durable partial states вида «slot claimed, но admission outcome
+неизвестен» или «capital reserved без доказанного slot ownership».
+
+Unknown order/fill state после dispatch не освобождает slot claim или
+reservation до reconciliation.
+
+Dispatcher capacity snapshot остаётся advisory fact и не является lock/ledger.
+
+## 5.2 Physical Exchange position slot и position mode
+
+Логическая независимость Strategy не означает право нескольким Strategy
+одновременно владеть одним physical position slot.
+
+Physical slot определяется exact exchange/account/product/instrument/
+position-mode identity и имеет один active owner lifecycle.
+
+Для текущего Bybit Unified linear one-way contract допустимо:
+
+```text
+position_mode = ONE_WAY
+positionIdx = 0
+```
+
+Но position mode не считается вечным свойством аккаунта из-за одной исторической
+проверки. Fresh Position mode state — обязательная account state для real
+activation/re-arm и Entry admission.
+
+Она должна включать, где применимо:
+
+```text
+exchange
+account identity
+product/category
+symbol/instrument scope
+position mode
+positionIdx
+observed_at
+received_at
+freshness
+provenance
+```
+
+Если mode state unknown/stale:
+
+```text
+EntryDecision=STALE_OR_UNKNOWN_REQUIRED_STATE
+-> no real mutation
+```
+
+Если state свежая, но режим/positionIdx несовместим с утверждённым execution
+contract:
+
+```text
+EntryDecision=OPERATIONAL_SAFETY_BLOCKED
+block_reason=EXCHANGE_POSITION_MODE_MISMATCH
+-> no real mutation
+```
+
+В текущем one-way contract фактический positionIdx != 0 является lifecycle/
+operational fault EXCHANGE_POSITION_MODE_MISMATCH и требует fail-closed +
+reconciliation. Execution не переключает position mode автоматически.
+
+Fresh mode verification обязательна минимум при:
+- real activation/re-arm;
+- добавлении нового symbol в real Strategy universe;
+- Entry admission после истечения freshness;
+- private-state reconnect/recovery, если continuity не доказана;
+- обнаруженном Exchange/account configuration change;
+- снятии position-mode-related fail-closed state.
+
+## 5.3 Decision outcome, request state и lifecycle fault
+
+Каноническая таблица «token -> entity» находится в
+docs/CRIPTA_GLOSSARY_RU*.md и является единственным терминологическим
+определением этих tokens.
+
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT — штатный fail-closed EntryDecision
+outcome при admission conflict. Сам по себе он не является аварией системы.
+
+EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN — lifecycle fault: уже
+существующая durable/runtime/Exchange истина нарушила правило единственного
+physical owner.
+
+EntryDecision.EXPIRED/CANCELLED относятся к attempt до принятого request.
+После ACCEPTED request использует собственные request-state tokens и не
+переиспользует decision-state names.
+
+Blocked Strategy может продолжить жизнь как Analyst counterfactual только по
+явно разрешённым причинам и с сохранением exact block reason.
+
+Переход к hedge-mode, internal netting или subaccount isolation является
+отдельным owner decision и требует нового canonical/execution contract.
 
 # 6. EXIT
 
@@ -259,6 +356,10 @@ Dynamic Exit может оставаться экспериментальным/
 может намеренно оставаться без утверждённого loss-containment. Уже открытая
 позиция сохраняет exact ExitPlan/protection policy той Strategy version,
 которая её открыла, даже если StrategyActivation позже выключена.
+
+Hedge lifecycle исполним только при совместимом Exchange position-mode
+contract. В текущем one-way same-symbol hedge unsupported и обязан fail-closed;
+встречный order не может молча трактоваться как hedge.
 
 # 7. EXECUTION
 
@@ -330,10 +431,12 @@ Exchange — внешний источник фактической истины
 
 ## 9.1 Lifecycle Supervisor
 
-`Lifecycle Supervisor` контролирует сквозную корректность жизненного цикла,
-но не является торговым владельцем.
+Lifecycle Supervisor контролирует сквозную корректность lifecycle, но не
+является торговым владельцем.
 
-Его область наблюдения:
+Единственное каноническое определение обязательной lifecycle-chain хранится
+здесь. Другие активные документы обязаны ссылаться на этот раздел, а не
+дублировать цепочку.
 
 ```text
 StrategyActivation
@@ -341,12 +444,15 @@ StrategyActivation
 -> Entry Engine consumption acknowledgement
 -> StrategySignal
 -> strategy_attempt
+-> required account / position-mode state validation
+-> atomic physical Exchange slot claim
 -> atomic capital reservation outcome
 -> EntryDecision
--> EntryExecutionRequest                  [только ACCEPTED]
+-> EntryExecutionRequest                  [only ACCEPTED]
 -> Execution acknowledgement / dispatch
 -> opening order lifecycle / fill truth / reconciliation
 -> StrategyPosition exact binding
+-> physical slot ownership binding to StrategyPosition
 -> initial protection confirmation / reconciliation
 -> ExitPlan exact binding
 -> Exit Engine claim / heartbeat
@@ -355,28 +461,45 @@ StrategyActivation
 -> Execution acknowledgement
 -> Exchange protection/reduce/close result + reconciliation
 -> final flat confirmation
+-> physical Exchange slot claim finalization/release
 -> capital reservation finalization/release
 -> final economics/audit
 ```
 
-Он проверяет exact IDs/fingerprints, обязательные handoff/acknowledgement и
-отсутствие потерянных/осиротевших lifecycle-состояний, включая минимум:
-`CAPITAL_RESERVATION_STUCK`, `EXCHANGE_POSITION_OWNERSHIP_CONFLICT`,
-`POSITION_WITHOUT_EXIT_OWNER` и
-`POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION`.
+Durable lineage включает, где применимо:
+strategy_activation_id, Strategy/EntryPlan/ExitPlan fingerprints, signal_id,
+strategy_attempt_id, exchange_position_slot_claim_id, exchange_position_key,
+position_mode_state_ref, position_mode_observed_at, positionIdx,
+capital_reservation_id, Entry/Exit decision IDs, Entry/Exit request IDs,
+client/exchange order IDs, fill/execution IDs, strategy_position_id,
+Exit claim/heartbeat и final close/economics refs.
+
+Терминологические определения outcome/request-state/fault tokens находятся
+только в docs/CRIPTA_GLOSSARY_RU*.md.
+
+Supervisor обязан выявлять нарушение обязательных handoff/invariants, включая:
+- CAPITAL_RESERVATION_STUCK;
+- EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN;
+- EXCHANGE_POSITION_MODE_MISMATCH;
+- POSITION_WITHOUT_EXIT_OWNER;
+- POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION;
+- потерянный/неподтверждённый required handoff/reconciliation.
+
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT не является lifecycle fault: это штатный
+fail-closed EntryDecision outcome до создания real request.
 
 Lifecycle Supervisor:
-- не доставляет торговый смысл;
 - не выбирает Strategy;
 - не создаёт Entry/Exit decision;
 - не двигает stop/TP;
 - не закрывает позицию по собственной торговой оценке;
-- может зафиксировать lifecycle fault и инициировать предусмотренный
-  operational-safety/fail-closed путь, не изобретая торговую policy.
+- может зафиксировать lifecycle fault и инициировать только заранее
+  предусмотренный operational-safety/fail-closed workflow.
 
-Надёжная доставка обеспечивается durable storage/registry/queue,
-idempotency и acknowledgement. Supervisor проверяет, что этот механизм
-сработал.
+Critical fault обязан иметь durable owner-notification delivery contract:
+создание alert/event, повторяемую доставку, acknowledgement владельца либо
+явный escalation state. UI alone не считается доставкой. Потеря delivery сама
+является operational fault и не разрешает торговую mutation.
 
 ## 9.2 Position Supervisor
 

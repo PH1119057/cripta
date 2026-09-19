@@ -22,14 +22,24 @@ Strategy, исполнения, сопровождения позиций и в�
 ## Source of truth
 
 ```text
-GitHub PH1119057/cripta:main
-==
-синхронизированный /srv/cripta/source_checkout
+AUTHORITATIVE: GitHub PH1119057/cripta:main
+OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
+
+Operational mirror должен быть синхронизирован с verified GitHub ref, но не
+является вторым authority.
 
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
 Project Source, память ChatGPT, старые ZIP/чаты и `C:\cripta` не являются
 source of truth.
+
+## Routed process canon
+
+Базовый Project Source остаётся восьмифайловым. Дополнительные active docs
+читаются только по task route:
+
+- `docs/DEVELOPMENT_RELEASE_RULES_RU.md` — patch/Git/PostgreSQL/release/deploy;
+- `docs/RESEARCH_COMPUTE_RULES_RU.md` — research/compute/data.
 
 ## Верхняя архитектура
 

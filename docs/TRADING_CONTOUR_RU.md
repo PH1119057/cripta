@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.3
+**Версия:** 1.4
 **Дата:** 2026-09-19
 **Статус:** активный канонический контракт торгового контура
 
@@ -55,6 +55,9 @@ Strategy может определять минимум:
 - Exit geometry/context rules;
 - hedge, если он включён.
 
+Любой real hedge additionally requires a compatible Exchange position-mode
+contract. В current one-way same-symbol hedge unsupported и fail-closed.
+
 Если параметр отсутствует, Entry/Exit/Execution не имеют права подставить
 историческое торговое значение по умолчанию.
 
@@ -86,25 +89,23 @@ H3 сейчас не является Entry condition текущей перво�
 
 ## 1.5 Несколько Strategy
 
-Одновременно могут быть активны несколько Strategy, включая противоположные:
-- Strategy A может дать LONG;
-- Strategy B в тот же момент может дать SHORT.
+Несколько Strategy могут одновременно создать независимые и даже
+противоположные StrategySignal. Entry Engine не выбирает между ними по качеству
+или направлению.
 
-Они независимы на уровне StrategySignal/attempt/EntryDecision. Entry Engine
-не выбирает между ними.
+Для real mutation действует отдельный physical-slot admission contract.
+Текущий Bybit Unified linear one-way contract допускает один active owner
+lifecycle на account + symbol + positionIdx=0.
 
-Эта логическая независимость не даёт права одновременно занять один физический
-Exchange position slot. Текущий Bybit account работает в one-way
-(`positionIdx=0`), поэтому для одного account + linear symbol одновременно
-допустим только один active physical owner lifecycle. Вторая Strategy при
-занятом/pending/неизвестном slot получает fail-closed
-`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` до Exchange mutation.
+Если exclusive slot claim получить нельзя, attempt получает
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT и real EntryExecutionRequest не создаётся.
 
-Встречный Strategy signal не закрывает и не неттирует чужую StrategyPosition.
-Он может остаться counterfactual evidence.
+Встречный StrategySignal не закрывает и не неттирует чужую StrategyPosition.
+Analyst может сохранить его только как counterfactual с exact block reason.
 
-Hedge-mode/subaccount/internal netting требуют отдельного owner-approved
-архитектурного решения.
+Same-symbol hedge в one-way режиме unsupported и fail-closed. Hedge-mode,
+subaccount isolation или внутренний netting требуют отдельного owner-approved
+contract.
 
 ## 1.6 Материализация
 
@@ -172,6 +173,10 @@ trailing ещё исследуются и не утверждены как ди�
 
 Даже если защитные границы известны в момент Entry, их owner остаётся Strategy
 через `protection_policy`, а не Entry Engine.
+
+Если lifecycle_policy.hedge включён, authoring/materialization/readiness обязаны
+проверить совместимый Exchange position mode. В current one-way same-symbol
+hedge не может быть сохранён как silently executable.
 
 Для нового Strategy authoring:
 - каждый поддерживаемый setting имеет явный `enabled`;
@@ -260,73 +265,79 @@ H9 5m + H9 15m. Другая Strategy может использовать ино
 
 LONG/SHORT задаёт роль этих объектов только на уровне Strategy.
 
-## 2.6 Entry decision
+## 2.6 EntryDecision и границы сущностей
 
-StrategySignal сам по себе ещё не равен биржевому fill.
+Канонический перечень token -> entity определяется только
+docs/CRIPTA_GLOSSARY_RU*.md.
 
-После signal создаётся exact attempt и EntryDecision.
-
-Минимально различаются:
+Минимальные EntryDecision outcomes:
 - ACCEPTED;
 - STRATEGY_CONDITION_REJECTED;
 - INSUFFICIENT_AVAILABLE_FUNDS;
+- EXCHANGE_POSITION_OWNERSHIP_CONFLICT;
 - OPERATIONAL_SAFETY_BLOCKED;
 - STALE_OR_UNKNOWN_REQUIRED_STATE;
 - EXPIRED;
 - CANCELLED.
 
-Atomic reservation входит в формирование EntryDecision:
+ACCEPTED разрешён только после successful real Entry admission.
+
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT — штатный admission outcome, а не
+lifecycle fault.
+
+EntryDecision.EXPIRED/CANCELLED относятся к strategy_attempt до принятого request.
+После ACCEPTED EntryExecutionRequest использует собственные request-state
+tokens, например REQUEST_PENDING / REQUEST_DISPATCHED /
+REQUEST_ACKNOWLEDGED / REQUEST_EXPIRED / REQUEST_CANCELLED /
+REQUEST_RECONCILIATION_REQUIRED / REQUEST_TERMINAL.
+
+## 2.7 Real Entry admission: slot claim + capital reservation
+
+Обязательный порядок и атомарность определены ARCH §5.1.
+
+Смысл:
 
 ```text
-reservation success -> EntryDecision=ACCEPTED -> EntryExecutionRequest
-reservation failure -> EntryDecision=INSUFFICIENT_AVAILABLE_FUNDS -> no request
+required account / position-mode validation
+-> atomic physical slot claim
+-> atomic capital reservation
+-> EntryDecision
 ```
 
-ACCEPTED не создаётся заранее и не «отменяется потом» из-за нехватки капитала.
+Успешные slot claim и reservation должны быть зафиксированы all-or-nothing.
+Если reservation не получена, slot claim откатывается/освобождается в том же
+admission transaction. Unknown post-dispatch state не освобождает claim или
+reservation до reconciliation.
 
-## 2.7 Капитал и atomic reservation
+Physical claim обязан иметь durable identity минимум:
+exchange_position_slot_claim_id, exchange_position_key, strategy_attempt_id,
+strategy_id/version, direction, claim_state, claimed_at, released_at,
+release_reason.
 
-Размер/лимит капитала задаёт Strategy/EntryPlan.
+Для replay фактический winner определяется только durable claim/reservation
+ordering. Если exact ordering отсутствует, результат помечается UNKNOWN, а не
+восстанавливается по ближайшим timestamps.
 
-Dispatcher публикует account-capacity facts, но не распределяет капитал между
-Strategy.
+Position-mode state является required account state. Fresh verification
+обязательна при real activation/re-arm, добавлении symbol, Entry admission
+после freshness expiry, recovery/reconnect без доказанной continuity и после
+обнаруженного Exchange configuration change.
 
-Перед `EntryDecision=ACCEPTED` требуется атомарная reservation разрешённой
-Strategy суммы.
-
-Reservation работает по exact account identity и verified account-capacity с
-freshness плюс durable ledger уже занятых и зарезервированных средств.
-Dispatcher может публиковать capacity facts, но его snapshot сам по себе не
-является lock/ledger. Stale/unknown обязательная account state блокирует real
-Entry.
-
-Правило V1:
-- кто первым успешно зарезервировал доступную сумму, тот её использует;
-- Entry Engine не ранжирует Strategy и не выбирает «лучшую»;
-- если средств недостаточно, `EntryDecision = INSUFFICIENT_AVAILABLE_FUNDS`;
-- real ExecutionRequest не создаётся;
-- Analyst может продолжить событие как counterfactual/псевдосделку.
-
-Unknown order/fill state не освобождает reservation до reconciliation истины.
-Зависшая reservation поднимается как lifecycle fault, а не освобождается по
-таймеру вслепую. Pre-dispatch reservation может иметь технический TTL; после
-доказанного отсутствия Exchange mutation она освобождается и request становится
-EXPIRED/CANCELLED по exact lifecycle contract.
-
-First-come-first-served V1 является operational ordering, а не оценкой качества
-Strategy. Для replay/research фактический winner воспроизводится только по
-durable reservation events/order; если exact ordering отсутствует, Analyst не
-имеет права выводить winner из близких timestamps и помечает allocation outcome
-как unknown/counterfactual.
+Текущий утверждённый contract:
+ONE_WAY + positionIdx=0. Unknown/stale -> STALE_OR_UNKNOWN_REQUIRED_STATE.
+Свежий, но несовместимый mode/positionIdx -> OPERATIONAL_SAFETY_BLOCKED с
+block_reason=EXCHANGE_POSITION_MODE_MISMATCH.
 
 ## 2.8 После fill
 
-После confirmed open fill создаётся logical `StrategyPosition` с exact
+После confirmed open fill создаётся logical StrategyPosition с exact
 Strategy/EntryPlan/ExitPlan lineage и фактическими exchange/order/fill refs.
 
-Entry больше не сопровождает позицию.
+Durable physical slot claim переходит от strategy_attempt к exact
+StrategyPosition и остаётся активным до final flat/reconciliation.
 
-Фактическая Entry price и causal snapshot сохраняются в истории.
+Entry больше не сопровождает позицию. Entry price и causal snapshot сохраняются
+как исторические факты.
 
 # 3. EXIT — универсальный Exit Engine
 
@@ -428,6 +439,9 @@ ExitPlan может разрешать:
 - MAYAK/Dispatcher context-based exit;
 - protection/holding;
 - hedge lifecycle.
+
+Hedge lifecycle исполним только при совместимом Exchange position-mode contract.
+В текущем one-way same-symbol hedge unsupported и fail-closed.
 
 Exit Engine не может выполнить action, отсутствующий в ExitPlan.
 
@@ -531,46 +545,57 @@ fill/qty/protection или owner kill имеют право технически
 
 Это operational safety, а не новая оценка рынка.
 
+## 4.7 LIVE-arm readiness
+
+Переход SHADOW -> LIVE EQUIVALENCE -> MICRO_LIVE -> LIVE не происходит
+автоматически после deploy.
+
+До owner-approved real arm должны быть доказаны минимум:
+
+```text
+CANON_CURRENT=PASS
+REMOTE_COMMIT_VERIFIED=PASS
+SOURCE_LIVE_IDENTITY=PASS
+TESTS=PASS
+LIVE_EQUIVALENCE=PASS
+
+EXCHANGE_ACCOUNT_IDENTITY=PASS
+POSITION_MODE_FRESH=PASS
+POSITION_IDX_EXPECTED=PASS
+PHYSICAL_SLOT_CLAIM_CONTRACT=PASS
+CAPITAL_RESERVATION_CONTRACT=PASS
+
+EXACT_STRATEGY_ACTIVATION=PASS
+ENTRY_PLAN_EXECUTABLE=PASS
+EXIT_PLAN_EXECUTABLE=PASS
+INITIAL_PROTECTION_EXECUTABLE=PASS
+TERMINAL_LOSS_CONTAINMENT_PATH=PASS
+EMERGENCY_POLICY_SUPPORTED=PASS
+
+LIFECYCLE_SUPERVISOR_BEHAVIOR=PASS
+CRITICAL_FAULT_DELIVERY=PASS
+RECONCILIATION_PATH=PASS
+
+MAINNET_GATE_EXPLICIT_OWNER_APPROVAL=PASS
+MICRO_LIVE_LIMITS=PASS
+ROLLBACK_OR_KILL_PATH=PASS
+```
+
+UNKNOWN/STALE/NOT CHECKED HERE по обязательному пункту означает NOT_READY_FOR_LIVE.
+MICRO_LIVE имеет отдельный лимит риска/капитала/символов и не является
+синонимом полного LIVE.
 
 # 5. Сквозной handoff
 
-Торговый contour обязан оставлять доказуемый lifecycle:
+Единственное каноническое определение обязательной lifecycle-chain находится в
+CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
 
-```text
-StrategyActivation
--> EntryPlan + ExitPlan materialized/published
--> Entry Engine consumption acknowledgement
--> StrategySignal
--> strategy_attempt
--> atomic capital reservation outcome
--> EntryDecision
--> EntryExecutionRequest                  [только ACCEPTED]
--> Execution acknowledgement / dispatch
--> opening order lifecycle / fill truth / reconciliation
--> StrategyPosition exact binding
--> initial protection confirmation / reconciliation
--> ExitPlan exact binding
--> Exit Engine claim / heartbeat
--> ExitDecision(s)
--> ExitExecutionRequest(s)
--> Execution acknowledgement
--> Exchange protection/reduce/close result + reconciliation
--> final flat confirmation
--> capital reservation finalization/release
--> final economics/audit
-```
-
-Контроль того, что каждый обязательный handoff состоялся, принадлежит
-`Lifecycle Supervisor` из technical support contour.
-
-Минимальный durable audit lineage включает, где применимо:
-`strategy_activation_id`, Strategy/EntryPlan/ExitPlan fingerprints, `signal_id`,
-`strategy_attempt_id`, `capital_reservation_id`, Entry/Exit decision IDs,
-Entry/Exit execution request IDs, exchange/client order IDs, fill/execution IDs,
-`strategy_position_id`, `exchange_position_key`, Exit claim/heartbeat и final
-close/economics refs. Runtime evidence отдельно хранит source commit/build ref;
-он не является торговым параметром Strategy, но нужен для LIVE EQUIVALENCE и
-reproducibility.
+Trading contour обязан сохранять exact durable lineage, включая, где применимо:
+strategy_activation_id, Strategy/EntryPlan/ExitPlan fingerprints, signal_id,
+strategy_attempt_id, position_mode_state_ref, exchange_position_slot_claim_id,
+exchange_position_key, capital_reservation_id, decision/request IDs,
+client/exchange order IDs, fill/execution IDs, strategy_position_id,
+Exit claim/heartbeat и final close/economics refs.
 
 Entry/Exit/Execution не должны молча подменять потерянный handoff новой
 торговой логикой.

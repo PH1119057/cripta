@@ -1,6 +1,6 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 2026-09-19
 **Статус:** обязательный канонический META-контракт взаимодействия
 
@@ -23,6 +23,8 @@
 - `CURRENT_PROJECT_MAP_RU*.md`
 - `TRADING_CONTOUR_RU*.md`
 - `OBSERVATION_ANALYTICS_RU*.md`
+- `DEVELOPMENT_RELEASE_RULES_RU*.md` — routed process canon;
+- `RESEARCH_COMPUTE_RULES_RU*.md` — routed process canon;
 - `AGENTS*.md` — резервный bootstrap.
 
 Суффиксы `(2)`, `(7)`, `(8)`, `V1`, `V2` и подобные части отображаемого
@@ -189,6 +191,11 @@ Project Instructions должны быть устойчивым загрузчи
 Полное описание MAYAK / Dispatcher / Strategy / Entry / Exit / Execution,
 конкретные торговые параметры, research conclusions и runtime snapshot должны
 читаться из активных документов.
+
+Тяжёлые process contracts читаются по task route: DEVELOPMENT_RELEASE перед
+patch/Git/PostgreSQL/release/deploy; RESEARCH_COMPUTE перед research/replay/OOS/
+holdout/large-data/long-compute. Они не входят в обязательный every-chat
+Project Source bundle.
 
 Небольшое дублирование фундаментальных safety-инвариантов допустимо, если оно
 осознанно. При изменении такого инварианта Project Instructions и канон должны

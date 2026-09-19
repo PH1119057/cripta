@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.6
+**Версия:** 2.7
 **Дата:** 2026-09-19
 **Статус:** канонический индекс документации
 
@@ -13,11 +13,8 @@
 
 ```text
 META — docs/CHATGPT_INTERACTION_RULES_RU*.md
-       регулирует чтение, проверку и взаимодействие ChatGPT;
-       не задаёт торговую архитектуру.
 
-LEVEL 0 — подтверждённое текущее решение владельца.
-          Если оно меняет канон, сначала обязательна новая версия канона.
+LEVEL 0 — confirmed current owner decision.
 
 LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
           CRIPTA_ARCHITECTURE_RULES_RU_*.md
@@ -26,13 +23,20 @@ LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
 LEVEL 2 — docs/TRADING_CONTOUR_RU*.md
           docs/OBSERVATION_ANALYTICS_RU*.md
 
+ROUTED PROCESS CANON —
+          docs/DEVELOPMENT_RELEASE_RULES_RU*.md
+          docs/RESEARCH_COMPUTE_RULES_RU*.md
+
 LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU*.md
 
 LEVEL H — Git history, archive, patch payload docs,
-          старые research/evidence/runbook/handoff/Pxx/EO/SE/PASS.
+          old research/evidence/runbook/handoff/Pxx/EO/SE/PASS.
 ```
 
-Если новое решение владельца конфликтует с каноном:
+Routed process canon is active authority only for its task route and is not part
+of the mandatory every-chat Project Source bundle.
+
+If owner decision conflicts with canon:
 
 ```text
 CANON_CONFLICT=YES
@@ -40,8 +44,6 @@ HARD_STOP=YES
 CANON_UPDATE_REQUIRED=YES
 OWNER_DECISION_REQUIRED=YES
 ```
-
-После подтверждения владельца сначала обновляется канон, затем код.
 
 # 3. Восемь файлов ChatGPT Project Source
 
@@ -62,26 +64,26 @@ OWNER_DECISION_REQUIRED=YES
 `AGENTS*.md` — GitHub-only bootstrap для Codex/разработчика.
 Он не создаёт самостоятельный архитектурный контракт.
 
-# 5. Обязательный pre-read нового чата
+# 5. Mandatory pre-read and routed pre-read
 
-Сначала:
-1. `CHATGPT_INTERACTION_RULES_RU*.md`.
+Base new-chat pre-read:
+1. CHATGPT_INTERACTION_RULES_RU*.md
+2. CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
+3. CRIPTA_ARCHITECTURE_RULES_RU_*.md
+4. DOCUMENTATION_INDEX_RU*.md
+5. CRIPTA_GLOSSARY_RU*.md
+6. CURRENT_PROJECT_MAP_RU*.md
 
-Затем:
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`;
-3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`;
-4. `DOCUMENTATION_INDEX_RU*.md`;
-5. `CRIPTA_GLOSSARY_RU*.md`;
-6. `CURRENT_PROJECT_MAP_RU*.md`.
+Then route:
+- Strategy / Entry / Exit / Execution -> TRADING_CONTOUR_RU*.md
+- MAYAK / Dispatcher / Monitoring / Lifecycle Supervisor / Position Supervisor /
+  Analyst -> OBSERVATION_ANALYTICS_RU*.md
+- patch / Git / PostgreSQL / packaging / release / deploy / rollback ->
+  DEVELOPMENT_RELEASE_RULES_RU*.md
+- research / replay / OOS / holdout / large data / long compute ->
+  RESEARCH_COMPUTE_RULES_RU*.md
 
-Перед Strategy / Entry / Exit / Execution:
-- `TRADING_CONTOUR_RU*.md`.
-
-Перед MAYAK / Dispatcher / monitoring / Lifecycle Supervisor /
-Position Supervisor / Analyst / research / replay / OOS / holdout:
-- `OBSERVATION_ANALYTICS_RU*.md`.
-
-Если затрагиваются оба контура — читать оба.
+Cross-route task -> read all relevant routed docs.
 
 # 6. Историческая изоляция
 
@@ -128,6 +130,10 @@ Hard Stop, не использовать память/history как канон 
 4. владелец полностью заменяет старые Project Source;
 5. дополнительные материалы не получают authority автоматически.
 
+Routed process docs остаются GitHub-active canon и не входят в восьмифайловый
+Project Source bundle; они читаются из verified GitHub/source mirror только по
+соответствующему route.
+
 # 10. Согласованная ревизия Strategy settings — 2026-09-19
 
 Текущее решение владельца о Strategy-specific настройках отражено согласованно
@@ -168,11 +174,36 @@ Owner-approved revision синхронизирует активный пакет
 - emergency execution capability не является policy; автоматическое аварийное
   действие требует exact Strategy emergency/protection-failure contract;
 - Strategy deactivation не меняет ExitPlan уже открытой StrategyPosition;
-- ARCH / TRADING_CONTOUR / OBS используют одну lifecycle chain;
-- MAP использует явную status matrix вместо смешения CANON/IMPLEMENTED/DEPLOYED/
-  RUNTIME VERIFIED;
+- lifecycle chain определяется в ARCH §9.1; TRADING_CONTOUR/OBS ссылаются на неё
+  вместо дублирования;
+- MAP использует явную status matrix и разносит runtime LIVENESS / BEHAVIOR
+  вместо одного неоднозначного RUNTIME VERIFIED;
 - GLOSSARY определяет previously ambiguous runtime/lifecycle terms и
   implementation-pass numbering.
 
 Эта ревизия не включает real execution, не меняет Strategy records/Exchange
 state и не утверждает конкретные stop/TP/H3/trailing числа.
+
+# 12. Revision: slot admission / runtime evidence / routed process canon — 2026-09-19
+
+Owner decision adds:
+- single token->entity authority in GLOSSARY;
+- EXCHANGE_POSITION_OWNERSHIP_CONFLICT as EntryDecision outcome, not critical fault;
+- EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN as separate lifecycle fault;
+- durable physical slot claim before ACCEPTED;
+- slot claim + capital reservation as one all-or-nothing admission contract;
+- fresh position-mode/positionIdx required state;
+- EXCHANGE_POSITION_MODE_MISMATCH fail-closed contract;
+- same-symbol hedge unsupported in current one-way contract;
+- critical fault durable owner-notification delivery;
+- single lifecycle definition in ARCH §9.1; TC/OBS reference it;
+- runtime evidence split into LIVENESS and BEHAVIOR;
+- explicit LIVE-arm checklist;
+- Git-first package MANIFEST bound to release_commit;
+- deploy-host GitHub write credential not required by default;
+- WORK split into small core + routed DEVELOPMENT_RELEASE / RESEARCH_COMPUTE docs;
+- public-repository full-history secret scan becomes security gate.
+
+This revision is DOCUMENTATION/CANON only. New slot/mode/fault-delivery requirements
+are not declared IMPLEMENTED/DEPLOYED/RUNTIME BEHAVIOR VERIFIED until code/DB/
+runtime are separately audited and changed.
