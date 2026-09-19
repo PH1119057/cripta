@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.1  
-**Дата:** 2026-09-18  
+**Версия:** 1.2
+**Дата:** 2026-09-19
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -183,22 +183,26 @@ lifecycle. Он не является новым торговым слоем и 
 
 ```text
 StrategyActivation
--> EntryPlan/ExitPlan materialized
--> plans published
+-> EntryPlan + ExitPlan materialized/published
 -> Entry Engine consumption acknowledgement
--> StrategySignal / EntryDecision
--> EntryExecutionRequest
+-> StrategySignal
+-> strategy_attempt
+-> atomic capital reservation outcome
+-> EntryDecision
+-> EntryExecutionRequest                  [только ACCEPTED]
+-> Execution acknowledgement / dispatch
+-> opening order lifecycle / fill truth / reconciliation
+-> StrategyPosition exact binding
+-> initial protection confirmation / reconciliation
+-> ExitPlan exact binding
+-> Exit Engine claim / heartbeat
+-> ExitDecision(s)
+-> ExitExecutionRequest(s)
 -> Execution acknowledgement
--> exchange order / fill
--> StrategyPosition
--> ExitPlan binding
--> Exit Engine claim
--> ExitDecision
--> ExitExecutionRequest
--> Execution acknowledgement
--> close/reduce/protection result
--> final close
--> final audit/economics
+-> Exchange protection/reduce/close result + reconciliation
+-> final flat confirmation
+-> capital reservation finalization/release
+-> final economics/audit
 ```
 
 Lifecycle Supervisor обязан видеть exact IDs/fingerprints и выявлять:
@@ -208,13 +212,25 @@ Lifecycle Supervisor обязан видеть exact IDs/fingerprints и выя�
 - открытая StrategyPosition не получила exact ExitPlan;
 - позиция не claim-нута Exit Engine;
 - lifecycle завис/разорвался;
+- reservation зависла без reconciliation (`CAPITAL_RESERVATION_STUCK`);
+- физический Exchange slot уже имеет другого owner
+  (`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`);
+- real StrategyPosition не имеет подтверждённой обязательной initial protection;
 - фактическое Exchange state не соответствует ожидаемому lifecycle state.
 
-Пример критического состояния:
+Примеры критических состояний:
 
 ```text
 POSITION_WITHOUT_EXIT_OWNER
+CAPITAL_RESERVATION_STUCK
+EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION
 ```
+
+Lifecycle Supervisor не имеет права «лечить» эти faults торговой догадкой.
+Автоматическое protection reassert/reduce-only emergency close возможно только
+если exact Strategy version заранее содержит разрешённую emergency/protection
+failure policy; иначе Supervisor фиксирует critical fault и fail-closed state.
 
 Lifecycle Supervisor:
 - не создаёт StrategySignal;

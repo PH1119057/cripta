@@ -1,7 +1,7 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.1  
-**Дата:** 2026-09-18  
+**Версия:** 1.2
+**Дата:** 2026-09-19
 **Статус:** обязательный канонический META-контракт взаимодействия
 
 Этот документ регулирует способ совместной работы владельца проекта и ChatGPT.
@@ -46,15 +46,19 @@ OWNER_DECISION_REQUIRED=YES
 
 # 2. Source of truth и память ChatGPT
 
-Source of truth:
-- GitHub `PH1119057/cripta:main`;
-- синхронизированный `/srv/cripta/source_checkout`.
+Авторитетный source of truth:
+- GitHub `PH1119057/cripta:main`.
+
+`/srv/cripta/source_checkout` — синхронизированное operational mirror GitHub
+`main`. В нормальном checkpoint его HEAD обязан совпадать с GitHub `main`,
+но он не становится вторым независимым источником истины.
 
 Project Source, File Library, память модели, старые чаты, старые ZIP, локальный
 `C:\cripta`, Git history и исторические документы — только вспомогательный
 контекст.
 
-Если они расходятся с GitHub `main`, приоритет имеет GitHub.
+При любом расхождении authority имеет GitHub `main`; source checkout сначала
+синхронизируется и только затем используется для deployment/runtime forensic.
 
 # 3. META и приоритет канона
 

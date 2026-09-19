@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.2  
-**Дата:** 2026-09-19  
+**Версия:** 1.3
+**Дата:** 2026-09-19
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -90,7 +90,21 @@ H3 сейчас не является Entry condition текущей перво�
 - Strategy A может дать LONG;
 - Strategy B в тот же момент может дать SHORT.
 
-Они независимы. Entry Engine не выбирает между ними.
+Они независимы на уровне StrategySignal/attempt/EntryDecision. Entry Engine
+не выбирает между ними.
+
+Эта логическая независимость не даёт права одновременно занять один физический
+Exchange position slot. Текущий Bybit account работает в one-way
+(`positionIdx=0`), поэтому для одного account + linear symbol одновременно
+допустим только один active physical owner lifecycle. Вторая Strategy при
+занятом/pending/неизвестном slot получает fail-closed
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` до Exchange mutation.
+
+Встречный Strategy signal не закрывает и не неттирует чужую StrategyPosition.
+Он может остаться counterfactual evidence.
+
+Hedge-mode/subaccount/internal netting требуют отдельного owner-approved
+архитектурного решения.
 
 ## 1.6 Материализация
 
@@ -111,6 +125,16 @@ service; это implementation detail внутри Strategy layer, а не но�
 Любое поле, влияющее на решение или исполнение, должно иметь доказанный
 сквозной consumer path. Неподдержанный параметр означает fail-closed для
 активации, а не silent ignore.
+
+## 1.6.1 Деактивация Strategy и открытая позиция
+
+Выключение StrategyActivation запрещает новые Entry по этой activation, но не
+переписывает и не осиротевляет уже открытую StrategyPosition.
+
+Открытая позиция до final close продолжает использовать exact Strategy version,
+ExitPlan, protection/emergency policy и lineage, которые были привязаны при её
+открытии. Новая версия Strategy не может подменить ExitPlan существующей
+позиции.
 
 ## 1.7 Исследование
 
@@ -251,8 +275,14 @@ StrategySignal сам по себе ещё не равен биржевому fi
 - EXPIRED;
 - CANCELLED.
 
-Только ACCEPTED после успешной обязательной technical/capital reservation
-создаёт `EntryExecutionRequest`.
+Atomic reservation входит в формирование EntryDecision:
+
+```text
+reservation success -> EntryDecision=ACCEPTED -> EntryExecutionRequest
+reservation failure -> EntryDecision=INSUFFICIENT_AVAILABLE_FUNDS -> no request
+```
+
+ACCEPTED не создаётся заранее и не «отменяется потом» из-за нехватки капитала.
 
 ## 2.7 Капитал и atomic reservation
 
@@ -261,7 +291,14 @@ StrategySignal сам по себе ещё не равен биржевому fi
 Dispatcher публикует account-capacity facts, но не распределяет капитал между
 Strategy.
 
-Перед real Entry требуется атомарная reservation разрешённой Strategy суммы.
+Перед `EntryDecision=ACCEPTED` требуется атомарная reservation разрешённой
+Strategy суммы.
+
+Reservation работает по exact account identity и verified account-capacity с
+freshness плюс durable ledger уже занятых и зарезервированных средств.
+Dispatcher может публиковать capacity facts, но его snapshot сам по себе не
+является lock/ledger. Stale/unknown обязательная account state блокирует real
+Entry.
 
 Правило V1:
 - кто первым успешно зарезервировал доступную сумму, тот её использует;
@@ -271,6 +308,16 @@ Strategy.
 - Analyst может продолжить событие как counterfactual/псевдосделку.
 
 Unknown order/fill state не освобождает reservation до reconciliation истины.
+Зависшая reservation поднимается как lifecycle fault, а не освобождается по
+таймеру вслепую. Pre-dispatch reservation может иметь технический TTL; после
+доказанного отсутствия Exchange mutation она освобождается и request становится
+EXPIRED/CANCELLED по exact lifecycle contract.
+
+First-come-first-served V1 является operational ordering, а не оценкой качества
+Strategy. Для replay/research фактический winner воспроизводится только по
+durable reservation events/order; если exact ordering отсутствует, Analyst не
+имеет права выводить winner из близких timestamps и помечает allocation outcome
+как unknown/counterfactual.
 
 ## 2.8 После fill
 
@@ -325,6 +372,12 @@ Exit Engine обязан claim/acknowledge StrategyPosition. Entry больше 
 
 Исторический Entry snapshot и текущая геометрия — разные объекты.
 
+Если одну и ту же Strategy geometry потребляют Entry, Exit, Position Supervisor
+и Analyst/replay, они обязаны использовать один versioned geometry contract:
+одинаковую formula/inputs/time semantics и fingerprint либо доказанно
+эквивалентную реализацию. Независимые «похожие» расчёты разных компонентов не
+считаются одной геометрией.
+
 Не требуется искусственно считать актуальную геометрию «той же неизменной
 исходной зоной».
 
@@ -343,9 +396,25 @@ Strategy version.
 
 ## 3.5 Initial protection и возможные Exit actions
 
-Initial protection принадлежит Strategy и передаётся в Execution при открытии,
-чтобы позиция не оставалась без базовой биржевой защиты, даже если динамическое
-Exit-сопровождение временно недоступно.
+Для SHADOW Strategy initial protection может быть disabled как inert authoring
+slot. Для Strategy, которой разрешена real Exchange mutation, owner-approved
+loss-containment обязателен.
+
+`protection_policy.initial_protection` принадлежит Strategy и передаётся в
+Execution при открытии. Execution обязана подтвердить фактическое состояние
+защиты на Exchange (в составе opening contract либо сразу после fill — согласно
+возможностям адаптера). Missing/unsupported/unconfirmed protection блокирует
+real activation/dispatch или поднимает
+`POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION`; система не подставляет global
+stop.
+
+Dynamic Exit может быть disabled/экспериментальным, но это не разрешает
+намеренно держать real position без loss-containment.
+
+Readiness real Strategy требует как минимум одного доказуемого terminal
+loss-containment/close path и exact protection-failure/emergency contract.
+Отсутствие такого пути блокирует real activation/dispatch; SHADOW authoring от
+этого требования не получает Exchange rights автоматически.
 
 ExitPlan может разрешать:
 - SET/REPLACE stop;
@@ -450,7 +519,17 @@ Strategy/Entry semantics.
 Неизвестная позиция, stale private state, потеря reconciliation, неизвестный
 fill/qty/protection или owner kill имеют право технически остановить mutation.
 
-Это safety, а не новая оценка рынка.
+`EMERGENCY_CLOSE` является execution capability, а не самостоятельной policy.
+Автоматическое emergency action допустимо только по exact owner-approved
+`lifecycle_policy.emergency_policy`/protection-failure contract. Он задаёт
+разрешённый action, fault/trigger, time/freshness condition и reconciliation.
+Без такого contract Lifecycle Supervisor только поднимает fault/fail-closed и
+не изобретает close.
+
+`owner kill` не равен автоматическому close: он действует только в объёме
+своего owner-approved control contract.
+
+Это operational safety, а не новая оценка рынка.
 
 
 # 5. Сквозной handoff
@@ -459,24 +538,39 @@ fill/qty/protection или owner kill имеют право технически
 
 ```text
 StrategyActivation
--> EntryPlan/ExitPlan materialized + published
--> Entry Engine consumed
+-> EntryPlan + ExitPlan materialized/published
+-> Entry Engine consumption acknowledgement
 -> StrategySignal
+-> strategy_attempt
+-> atomic capital reservation outcome
 -> EntryDecision
--> EntryExecutionRequest
--> Execution ack
--> order/fill
--> StrategyPosition
--> ExitPlan binding
--> Exit Engine claim
--> ExitDecision
--> ExitExecutionRequest
--> Execution ack
--> final exchange result
+-> EntryExecutionRequest                  [только ACCEPTED]
+-> Execution acknowledgement / dispatch
+-> opening order lifecycle / fill truth / reconciliation
+-> StrategyPosition exact binding
+-> initial protection confirmation / reconciliation
+-> ExitPlan exact binding
+-> Exit Engine claim / heartbeat
+-> ExitDecision(s)
+-> ExitExecutionRequest(s)
+-> Execution acknowledgement
+-> Exchange protection/reduce/close result + reconciliation
+-> final flat confirmation
+-> capital reservation finalization/release
+-> final economics/audit
 ```
 
 Контроль того, что каждый обязательный handoff состоялся, принадлежит
 `Lifecycle Supervisor` из technical support contour.
+
+Минимальный durable audit lineage включает, где применимо:
+`strategy_activation_id`, Strategy/EntryPlan/ExitPlan fingerprints, `signal_id`,
+`strategy_attempt_id`, `capital_reservation_id`, Entry/Exit decision IDs,
+Entry/Exit execution request IDs, exchange/client order IDs, fill/execution IDs,
+`strategy_position_id`, `exchange_position_key`, Exit claim/heartbeat и final
+close/economics refs. Runtime evidence отдельно хранит source commit/build ref;
+он не является торговым параметром Strategy, но нужен для LIVE EQUIVALENCE и
+reproducibility.
 
 Entry/Exit/Execution не должны молча подменять потерянный handoff новой
 торговой логикой.

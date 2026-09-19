@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.3  
-**Дата:** 2026-09-19  
+**Версия:** 1.4
+**Дата:** 2026-09-19
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -87,6 +87,17 @@ StrategyPosition + exact ExitPlan, наблюдает разрешённые п�
 **signal_id** — идентификатор одного StrategySignal одной exact Strategy.
 Разные Strategy получают разные `signal_id`, даже если возникли на одном symbol
 и в один момент.
+
+`strategy_attempt` / attempt — exact lifecycle-попытка одной Strategy после
+StrategySignal: она связывает проверку условий, capital reservation outcome,
+EntryDecision и optional EntryExecutionRequest. Attempt не является fill и не
+означает ACCEPTED.
+
+**EntryDecision** — формализованный итог attempt. Минимальные состояния:
+`ACCEPTED`, `STRATEGY_CONDITION_REJECTED`,
+`INSUFFICIENT_AVAILABLE_FUNDS`, `OPERATIONAL_SAFETY_BLOCKED`,
+`STALE_OR_UNKNOWN_REQUIRED_STATE`, `EXPIRED`, `CANCELLED`.
+`ACCEPTED` возникает только после успешной обязательной reservation.
 
 # 4. Геометрия
 
@@ -216,6 +227,24 @@ StrategyPosition.
 **Exchange** — внешняя торговая площадка и источник фактической истины о
 orders/fills/positions/account state.
 
+**Exchange position slot** — физически отдельный position inventory,
+определяемый exchange/account/instrument/position-mode identity. Логические
+StrategyPosition не могут считаться физически независимыми, если они попадают в
+один slot.
+
+`exchange_position_key` — стабильная техническая identity такого slot в нашем
+lifecycle. Для текущего Bybit Unified linear one-way она включает account,
+linear/settle context, symbol и `positionIdx=0`.
+
+**One-way mode** — режим биржи, где один symbol использует один directional
+slot (`positionIdx=0`). Противоположный order может уменьшить/закрыть
+существующую позицию, поэтому независимые Strategy не получают право
+одновременно владеть этим slot.
+
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` — fail-closed outcome/fault:
+физический slot занят, имеет pending mutation либо его ownership нельзя
+однозначно доказать. Новый независимый Entry не отправляется на Exchange.
+
 # 12. Аналитика и исследование
 
 **Lifecycle Supervisor** — технический наблюдатель сквозного lifecycle от
@@ -226,7 +255,23 @@ handoff/acknowledgement/IDs, но не создаёт торговых реше�
 **Position Supervisor** — наблюдение фактического состояния конкретной
 StrategyPosition; не владелец Strategy/Exit.
 
+**MFE (Maximum Favorable Excursion)** — максимальное благоприятное для
+направления Strategy отклонение цены/результата от Entry за выбранный lifecycle
+интервал. Единицы и учёт комиссий должны указываться явно.
+
+**MAE (Maximum Adverse Excursion)** — максимальное неблагоприятное для
+направления Strategy отклонение от Entry за выбранный lifecycle интервал.
+Единицы и учёт комиссий должны указываться явно.
+
 **Analyst** — постфактум-аналитика и research без торговых прав.
+
+**StrategyCoinFit** — strategy-specific историческая/исследовательская оценка
+пригодности symbol для exact Strategy version. Принадлежит Analyst/research и
+не является Dispatcher market rating.
+
+**CoinMarketRating** — strategy-agnostic оценка объективного состояния symbol,
+которую может публиковать Dispatcher только по отдельно утверждённой формуле.
+Она не говорит, выгодна ли конкретная Strategy.
 
 **Counterfactual trade / псевдосделка** — аналитическая моделируемая сделка,
 которая могла бы быть открыта по Strategy, но не стала real Execution
@@ -243,8 +288,10 @@ owner-approved Strategy version.
 # 13. Капитал и lifecycle
 
 **Atomic capital reservation** — техническая атомарная фиксация части
-доступного капитала за принятым real Entry до биржевой отправки. Не является
-отдельным торговым слоем и не ранжирует Strategy.
+проверенного доступного капитала ВНУТРИ формирования real EntryDecision до
+`ACCEPTED` и до биржевой отправки. Успех reservation позволяет создать
+`ACCEPTED`; нехватка средств создаёт `INSUFFICIENT_AVAILABLE_FUNDS`.
+Не является отдельным торговым слоем и не ранжирует Strategy.
 
 **First-come-first-served capital V1** — если несколько независимых Entry
 конкурируют за ограниченный капитал, право получает первый успешно завершивший
@@ -254,12 +301,82 @@ atomic reservation. При нехватке средств real Execution не �
 StrategyPosition не имеет подтверждённого exact ExitPlan binding/Exit Engine
 claim.
 
+`CAPITAL_RESERVATION_STUCK` — lifecycle fault: reservation не может быть
+безопасно финализирована/освобождена из-за неизвестного или несогласованного
+order/fill state и требует reconciliation.
+
+`POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION` — critical lifecycle fault:
+real StrategyPosition существует, но обязательная owner-approved initial
+protection не подтверждена на Exchange.
+
+**Initial protection / loss-containment contract** — owner-approved Strategy
+policy, ограничивающая риск real position независимо от экспериментального
+dynamic Exit. Exact stop/граница не является global default.
+
+**Terminal loss-containment/close path** — заранее доказуемый путь, который
+может привести real position к ограниченному риску/flat state без изобретения
+новой trading policy. Для real Strategy хотя бы один такой путь обязателен.
+
+**Emergency policy** — заранее утверждённая часть `lifecycle_policy`/
+protection-failure contract, задающая, какое техническое действие разрешено при
+конкретном operational fault. Наличие execution command `EMERGENCY_CLOSE` само
+по себе policy не создаёт.
+
+`owner kill` — явный owner control, запрещающий/останавливающий mutation в
+заданном contract. Сам по себе не означает автоматический close уже открытой
+позиции.
+
+`mainnet gate` — технический execution gate, разрешающий или запрещающий
+реальную Exchange mutation. Не является Entry/Exit policy и не заменяет
+StrategyActivation/execution permission.
+
+`fail-closed` — обязательное поведение при missing/unknown/stale/unsupported
+required state: не придумывать default и не продолжать опасную activation/
+decision/dispatch/mutation; блокировать действие, сохранить evidence и требовать
+reconciliation/исправление.
+
+**reconciliation** — восстановление exact фактической истины между durable
+lifecycle state и Exchange после unknown/ambiguous/stale результата. До
+reconciliation нельзя освобождать ownership/capital или повторять mutation по
+догадке.
+
+**fee-aware break-even** — Strategy-owned protection rule, где уровень
+безубытка учитывает явно заданные комиссии и, если утверждено, slippage/другие
+издержки. Не существует как глобальное число по умолчанию.
+
+**hedge** — Strategy-owned lifecycle policy противоположной экспозиции.
+Сам термин не означает Bybit hedge-mode. Реальное исполнение требует exact
+request/reservation/lineage, capital accounting и совместимый Exchange position
+mode contract.
+
 # 14. Качество данных
 
 `NO_DATA`, `UNKNOWN`, `STALE`, `PARTIAL` — реальные состояния качества.
 Их нельзя превращать в ноль, `NONE`, neutral или safe.
 
-# 15. Запрещённые/исторические обозначения
+# 15. Runtime / release / validation terms
+
+`SHADOW` — режим, в котором decision/lifecycle логика работает на реальных
+или replay facts без права создавать реальную Exchange mutation.
+
+`LIVE EQUIVALENCE` — доказанное соответствие production live path
+проверенному SHADOW/replay/test path по semantics, inputs, policy lineage,
+consumer behavior и execution contract в пределах заявленного scope. Не равно
+«тесты прошли».
+
+`MICRO_LIVE` — owner-approved ограниченный real execution этап после
+LIVE EQUIVALENCE, с отдельными gates/limits/evidence. Не является автоматическим
+следствием DEPLOY.
+
+`runtime_build_ref` — audit identity реально загруженного runtime artifact/
+source commit/build. Не является торговым параметром Strategy, но нужен для
+воспроизводимости, LIVE EQUIVALENCE и доказательства того, какой код исполнялся.
+
+**Implementation pass Pn** (P3/P9/P10 и т.п.) — временная нумерация проходов
+разработки/стабилизации. Это не слой архитектуры и не торговый термин; детали
+pass читаются только в текущем implementation plan при соответствующей задаче.
+
+# 16. Запрещённые/исторические обозначения
 
 **M3** — ошибочный исторический артефакт голосового распознавания слова
 `Entry`. Самостоятельного смысла, таймфрейма, Strategy или математической

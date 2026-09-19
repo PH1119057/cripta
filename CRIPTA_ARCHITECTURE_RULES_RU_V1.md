@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.2
+**Версия:** 2.3
 **Дата:** 2026-09-19
 **Статус:** верхний канонический архитектурный контракт
 
@@ -166,8 +166,14 @@ LONG/SHORT между независимыми Strategy.
 
 Запрошенный размер капитала принадлежит Strategy/EntryPlan.
 
-Перед принятым real Entry выполняется атомарная техническая reservation
-доступного капитала.
+Atomic reservation является частью формирования real EntryDecision.
+`EntryDecision=ACCEPTED` может возникнуть только ПОСЛЕ успешной reservation
+разрешённой Strategy суммы. При неуспешной reservation ACCEPTED не создаётся.
+
+Доступность считается не из одного advisory snapshot Dispatcher, а из
+проверенной account-capacity истины с freshness/account identity и durable
+ledger уже занятых/зарезервированных средств. Unknown/stale обязательное
+состояние означает fail-closed.
 
 Правило V1:
 
@@ -185,7 +191,33 @@ LONG/SHORT между независимыми Strategy.
   без Execution и без reservation.
 
 Reservation не освобождается при неизвестном результате ордера до
-reconciliation истины.
+reconciliation истины. Зависшая reservation является lifecycle fault и должна
+быть reconciled, а не освобождаться по догадке.
+
+## 5.2 Логическая Strategy и физический Exchange position slot
+
+Независимость Strategy/EntryPlan относится к сигналам, attempts, decisions и
+аналитике. Она не означает право нескольким Strategy одновременно владеть одним
+и тем же физическим position slot биржи.
+
+Физический slot определяется exchange/account/instrument/position-mode identity
+и должен иметь один active owner lifecycle. Для текущего Bybit Unified linear
+one-way режима используется `positionIdx=0`; один symbol в одном account
+имеет один физический directional slot.
+
+Если другой Strategy lifecycle уже владеет slot, существует непустая Exchange
+position, pending non-reduce Entry command/order или ownership нельзя доказать,
+новый real Entry блокируется fail-closed как
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`. Противоположный сигнал не имеет права
+неявно неттировать/закрывать чужую StrategyPosition. Pre-exchange reservation
+освобождается только после доказанного отсутствия биржевой мутации.
+
+Blocked Strategy может продолжить жизнь только как Analyst counterfactual.
+
+Переход к hedge-mode, внутреннему netting нескольких Strategy поверх одной
+физической позиции или изоляции по subaccount является отдельным owner decision
+и требует нового canonical/execution contract. Execution не переключает
+position mode автоматически.
 
 # 6. EXIT
 
@@ -214,9 +246,19 @@ Exit Engine может сформировать `ExitDecision` для:
 Exit Engine не изобретает торговое правило и не заменяет отсутствующее правило
 старым default.
 
-Initial protection, требуемая Strategy, должна устанавливаться через Execution
-при открытии позиции и оставаться защитным каркасом, пока Exit Engine не
-потребовал разрешённую ExitPlan мутацию.
+Для Strategy, которой разрешена real Exchange mutation, owner-approved
+loss-containment contract обязателен. Exact значение принадлежит Strategy и не
+является global default.
+
+`protection_policy.initial_protection` должна быть поддержана Execution и
+подтверждена на Exchange при открытии/сразу после fill в соответствии с
+возможностями адаптера. Real activation/dispatch fail-closed, если обязательная
+защита отсутствует, unsupported или её состояние нельзя доказать.
+
+Dynamic Exit может оставаться экспериментальным/disabled, но real position не
+может намеренно оставаться без утверждённого loss-containment. Уже открытая
+позиция сохраняет exact ExitPlan/protection policy той Strategy version,
+которая её открыла, даже если StrategyActivation позже выключена.
 
 # 7. EXECUTION
 
@@ -248,6 +290,20 @@ Execution отвечает за:
 
 Execution не вычисляет H9/H3 как собственную policy и не придумывает
 stop/TP/leverage/TTL.
+
+Техническая возможность `EMERGENCY_CLOSE` сама по себе не даёт права её
+применять автоматически. Для real Strategy заранее утверждается exact
+`lifecycle_policy.emergency_policy` / protection-failure contract:
+разрешённое действие, trigger/fault class, timeout/freshness и required
+reconciliation. Допустимые действия могут включать повторное подтверждение
+initial protection или reduce-only close, но только если они явно разрешены
+Strategy policy/owner command.
+
+Lifecycle Supervisor может обнаружить fault и инициировать предусмотренный
+operational-safety workflow, но не выбирает emergency action самостоятельно.
+`owner kill` останавливает разрешённые новые mutation по своему contract и
+не означает автоматическое закрытие уже открытой позиции без отдельного
+разрешённого действия.
 
 # 8. EXCHANGE
 
@@ -281,24 +337,33 @@ Exchange — внешний источник фактической истины
 
 ```text
 StrategyActivation
--> plan materialization/publication
--> Entry Engine consumption
--> StrategySignal / EntryDecision
--> EntryExecutionRequest
+-> EntryPlan + ExitPlan materialized/published
+-> Entry Engine consumption acknowledgement
+-> StrategySignal
+-> strategy_attempt
+-> atomic capital reservation outcome
+-> EntryDecision
+-> EntryExecutionRequest                  [только ACCEPTED]
+-> Execution acknowledgement / dispatch
+-> opening order lifecycle / fill truth / reconciliation
+-> StrategyPosition exact binding
+-> initial protection confirmation / reconciliation
+-> ExitPlan exact binding
+-> Exit Engine claim / heartbeat
+-> ExitDecision(s)
+-> ExitExecutionRequest(s)
 -> Execution acknowledgement
--> order / fill
--> StrategyPosition
--> ExitPlan binding
--> Exit Engine claim
--> ExitDecision
--> ExitExecutionRequest
--> close/reduce/protection execution
--> final close
+-> Exchange protection/reduce/close result + reconciliation
+-> final flat confirmation
+-> capital reservation finalization/release
 -> final economics/audit
 ```
 
 Он проверяет exact IDs/fingerprints, обязательные handoff/acknowledgement и
-отсутствие потерянных/осиротевших lifecycle-состояний.
+отсутствие потерянных/осиротевших lifecycle-состояний, включая минимум:
+`CAPITAL_RESERVATION_STUCK`, `EXCHANGE_POSITION_OWNERSHIP_CONFLICT`,
+`POSITION_WITHOUT_EXIT_OWNER` и
+`POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION`.
 
 Lifecycle Supervisor:
 - не доставляет торговый смысл;

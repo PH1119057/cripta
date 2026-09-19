@@ -1,15 +1,15 @@
 # CRIPTA — правила работы для ChatGPT / Codex / разработчика
 
-**Версия:** 2.3 · 2026-09-19
+**Версия:** 2.4 · 2026-09-19
 **Назначение:** обязательный процесс разработки, диагностики, research-расчётов, длительных вычислительных запусков, patch/install, Git, PostgreSQL, проверок, консоли и архитектурной дисциплины.
 **Приоритет:** вместе с `CRIPTA_ARCHITECTURE_RULES_RU_V1.md` является верхним рабочим контрактом для ChatGPT / Codex / разработчика.
-**Source of truth:** GitHub `PH1119057/cripta:main` + синхронизированный `/srv/cripta/source_checkout`. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
+**Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout` — синхронизированное operational mirror. Статическая копия в ChatGPT Project Source обязана соответствовать GitHub.
 
 > Эта версия включает обязательные выводы из инцидента установки P1 LIVE STABILIZATION 2026-09-05/06, когда небольшой по коду patch потребовал большого числа подготовительных сборок и почти полного рабочего дня из-за ошибок среды, installer contract, PostgreSQL schema/permissions, Git metadata и Git transport/auth. Повторение этих классов ошибок считается нарушением процесса подготовки.
 
-> Версия 1.4 дополнительно закрепляет обязательные уроки research/compute-разработки сентября 2026: доказуемые статусы запуска, повторную runtime-проверку через 5–10 секунд, малый сквозной тест, проверку семантики исходных данных, bounded-memory/streaming обработку, безопасный parallelism по CPU+RAM+I/O, причинность point-in-time данных, явный `NO_DATA`, lifecycle-first datasets и запрет делать выводы по пилоту без full-universe/economic validation.
+> Историческая редакция 1.4 дополнительно закрепила обязательные уроки research/compute-разработки сентября 2026: доказуемые статусы запуска, повторную runtime-проверку через 5–10 секунд, малый сквозной тест, проверку семантики исходных данных, bounded-memory/streaming обработку, безопасный parallelism по CPU+RAM+I/O, причинность point-in-time данных, явный `NO_DATA`, lifecycle-first datasets и запрет делать выводы по пилоту без full-universe/economic validation.
 
-> Версия 1.5 закрепляет изоляцию файловых пространств: ChatGPT runtime, server filesystem, GitHub/connectors, Project Source и локальная машина пользователя не считаются взаимно доступными без явного проверенного механизма передачи.
+> Историческая редакция 1.5 закрепила изоляцию файловых пространств: ChatGPT runtime, server filesystem, GitHub/connectors, Project Source и локальная машина пользователя не считаются взаимно доступными без явного проверенного механизма передачи.
 
 ---
 
@@ -31,15 +31,18 @@ DOCUMENTATION
 
 ## 2. Source of truth
 
-Текущий source of truth:
+Авторитетный source of truth:
 
 ```text
 GitHub PH1119057/cripta:main
-+
-/srv/cripta/source_checkout
 ```
 
-Они должны быть фактически сверены.
+`/srv/cripta/source_checkout` — синхронизированное operational mirror. Оно
+обязано совпадать с GitHub `main` в стабильном checkpoint, но не является
+вторым независимым authority.
+
+Перед deployment/runtime forensic GitHub HEAD и source checkout HEAD должны быть
+фактически сверены.
 
 Не являются source of truth: старый `C:\cripta`, старые ZIP, старые чаты, локальные заметки, transport manifests, устаревшие handoff и статическая Project Source, если она расходится с GitHub.
 
@@ -231,9 +234,15 @@ MISSING / UNSUPPORTED = FAIL_CLOSED
 и не может неявно использоваться как торговая policy.
 
 Новый параметр без совместимого consumer является `HARD STOP` для активации соответствующей Strategy,
-а не разрешением игнорировать параметр. Ревизия, обнаружившая silent-ignore или несовместимость, должна
-сразу исправить её в рамках разрешённого scope; отдельное решение владельца требуется только если для
-исправления необходимо выбрать новый торговый смысл, которого нет в каноне/Strategy data.
+а не разрешением игнорировать параметр.
+
+Ревизия, обнаружившая silent-ignore/несовместимость, всегда имеет право
+немедленно сделать fail-closed containment: запретить activation/dispatch/
+mutation, сохранить evidence и поднять finding. Добавление нового consumer,
+нового действия или нового торгового смысла выполняется только в разрешённом
+scope; если канон/Strategy data не задают этот смысл, требуется отдельное
+решение владельца. Finding сам по себе не является разрешением переписывать
+архитектуру.
 
 ## 6. Каждый patch имеет точный baseline
 
@@ -380,20 +389,33 @@ real DB mode
 
 Нельзя проверять helper только через `py_compile` и считать import/runtime contract доказанным.
 
-## 12. Temp overlay — единственный объект pre-install проверки
+## 12. Git-first release order и temp overlay
 
-Правильная последовательность:
+Единственный допустимый общий порядок для production changeset:
 
 ```text
-BASELINE
--> TEMP OVERLAY
--> APPLY REAL RELATIVE PATHS
+BASELINE / FORENSIC
+-> ISOLATED WORKTREE / TEMP OVERLAY
 -> FULL CHECKS
--> BACKUP
--> REAL MUTATION
+-> EXACT COMMIT
+-> PUSH
+-> INDEPENDENT REMOTE SHA VERIFICATION
+-> BACKUP / ROLLBACK CHECKPOINT
+-> DEPLOY EXACT VERIFIED COMMIT
+-> POST-DEPLOY / RUNTIME VERIFICATION
 ```
 
-Проверять только payload отдельно недостаточно. До зелёного overlay запрещено менять source/live/PostgreSQL/user data.
+До зелёного overlay запрещено менять live/PostgreSQL/user data. До независимой
+проверки remote SHA запрещён production deploy этого changeset.
+
+Deployment выполняется только из exact Git commit, уже существующего в GitHub
+`main` или в отдельно owner-approved release ref. Uncommitted worktree,
+локальный ZIP или соседний SHA256-файл не являются authority для production
+deploy. SHA256 подтверждает целостность bytes, но не заменяет identity
+проверенного Git changeset.
+
+Source checkout может использоваться для построения overlay/release только после
+синхронизации с проверенным GitHub ref.
 
 ## 13. Strongest practical gate
 
@@ -558,32 +580,17 @@ status
 
 ## 25. Git add/commit и Git push могут иметь разных actors
 
-Repository mutation (`add`, `commit`, `checkout`, `reset`, index write) выполняется от repository owner (`cripta`), если canonical server checkout принадлежит `cripta`.
+Repository mutation (`add`, `commit`, `checkout`, `reset`, index write)
+выполняется от фактического repository owner.
 
-Push может использовать отдельный credential owner, если это уже принятый инфраструктурный контракт.
+Push может использовать отдельный credential principal, если это уже принятый
+инфраструктурный контракт. Конкретные Unix-users, SSH aliases, key paths,
+Deploy Key names/permissions и текущие transport details не являются
+канонической архитектурой и не хранятся в обязательном pre-read.
 
-На текущем сервере известная рабочая схема, которую перед использованием всё равно надо перечитать с сервера:
-
-```text
-fetch URL:
-https://github.com/PH1119057/cripta.git
-
-push URL:
-git@github-cripta:PH1119057/cripta.git
-
-existing GitHub Deploy Key:
-robot
-permission:
-Read/write
-
-working credential principal:
-root
-
-known private-key path:
-/root/.ssh/cripta_github_deploy_ed25519
-```
-
-Если фактическая текущая конфигурация изменилась, приоритет имеет серверная реальность, а не этот исторический снимок.
+Перед каждым push их получают read-only forensic из фактической server/GitHub
+конфигурации. Нельзя использовать старый путь/ключ/actor только потому, что он
+когда-то работал.
 
 ## 26. Push transport проверяется ДО commit
 
@@ -603,7 +610,7 @@ remote main SHA
 
 Минимальный push preflight выполняется тем же Unix-user и тем же SSH/HTTPS transport, который будет использовать реальный push.
 
-Если credentials принадлежат `root`, проверка от `alex` или `cripta` не доказывает отсутствие credentials.
+Если credentials принадлежат другому credential principal, проверка только от repository owner/operator не доказывает отсутствие credentials.
 
 ## 27. Нельзя создавать новый credential, пока не исчерпан поиск существующего
 
@@ -611,19 +618,19 @@ remote main SHA
 
 ```text
 remote pushurl
-root SSH config
-repository-owner SSH config
-operator SSH config
+SSH/config contexts всех релевантных principals
+repository-owner transport config
+operator transport config
 actual credential principal
-existing GitHub Deploy Keys
+existing GitHub Deploy Keys / tokens / approved transports
 existing successful historical transport contract
 ```
 
 Отсутствие `.ssh` у одного пользователя не означает отсутствия GitHub deploy key на сервере.
 
-## 28. Root Git разрешён только для транспортной операции при доказанной необходимости
+## 28. Privileged Git разрешён только для транспортной операции при доказанной необходимости
 
-Если existing deploy key принадлежит `root`, допустим root-level push только при соблюдении:
+Если approved credential доступен только privileged transport principal, такой push допустим только при соблюдении:
 
 ```text
 GIT_OPTIONAL_LOCKS=0
@@ -783,25 +790,29 @@ does sudo change effective HOME / credentials?
 
 Если проверен только один user/context, формулировка должна быть `НЕ НАЙДЕНО В ЭТОМ КОНТЕКСТЕ`, а не `ЭТОГО НЕТ В СИСТЕМЕ`.
 
-## 42. Пост-install completion chain фиксирован
+## 42. Пост-deploy completion chain фиксирован
 
-Если installer дал `INSTALL=PASS` и `PATCH_APPLIED_TO_WORKTREE`, дальше используется один стандартный путь:
+Commit/push/remote verification происходят ДО production deploy по §12. После
+deploy нельзя «догонять GitHub» тем же changeset.
+
+Стандартный post-deploy путь:
 
 ```text
-post-install read-only verification
--> exact worktree review
--> exact hashes
--> source/live equality
--> DB/runtime evidence
--> exact stage
--> commit
--> push
--> remote verification
--> loaded/runtime checkpoint
+loaded release identity
+-> source/live mapping + exact hashes
+-> DB/schema/grants evidence
+-> service/runtime evidence
+-> gate/permission state
+-> repeated runtime check
+-> RUNTIME VERIFIED или BLOCKED/FAILED
 -> STOP
 ```
 
-Нельзя после PASS начинать новый произвольный аудит без отдельной причины.
+Если после deploy требуется изменить source, это новый changeset и он снова
+проходит §12 от isolated worktree до GitHub до следующего deploy.
+
+Нельзя после стабильного checkpoint начинать новый произвольный аудит без
+отдельной причины.
 
 ## 43. Re-arm никогда не является побочным эффектом patch
 
@@ -836,7 +847,7 @@ Live paths берутся только из installer/deployment contract. Verif
 
 ## 48. После stable checkpoint остановиться
 
-Если доказано installer PASS, post-install verify PASS, services active, source/live match, DB contract PASS, GitHub synchronized, worktree clean и gate в requested state — этап завершён.
+Если доказано deploy PASS, post-deploy verify PASS, services в ожидаемом state, source/live match, DB contract PASS, GitHub synchronized, worktree clean и gate в requested state — этап завершён.
 
 Не начинать новый аудит, research или re-arm без отдельной команды владельца.
 
@@ -855,7 +866,17 @@ FAILED
 BLOCKED
 ```
 
-`PREPARED` = код подготовлен, выполнение не доказано. `RUNNING` = реальный worker подтверждён runtime evidence. `COMPLETE` = выполнение успешно закончено и результат проверен. `FAILED` = процесс упал/убит/результат неполон или некорректен. `BLOCKED` = действие запрещено gate/архитектурой/отсутствием обязательных данных.
+`PREPARED` = код/задача подготовлены, выполнение не доказано. `RUNNING` =
+реальный worker подтверждён runtime evidence. `COMPLETE` = конкретная
+операция/расчёт успешно закончены и результат проверен. `FAILED` = процесс
+упал/убит/результат неполон или некорректен. `BLOCKED` = действие запрещено
+gate/архитектурой/отсутствием обязательных данных.
+
+Это process-state словарь и он не заменяет evidence/status vocabulary META:
+`CHECKED HERE / NOT CHECKED HERE / FINDING / RESEARCH RESULT / OWNER DECISION /
+CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`. Например `COMPLETE`
+для test run не означает `DEPLOYED`, а установленный файл не означает
+`RUNTIME VERIFIED`.
 
 Запрещено считать PID оболочки доказательством вычисления, `exit_code=0` доказательством корректности данных, наличие output-файла доказательством полноты, а установленный файл — доказательством `LOADED/RUNNING`.
 
@@ -1003,8 +1024,8 @@ RESULT_MANIFEST=WRITTEN
 | 13 | False read-only diagnostic | root `git status` переписал `.git/index` как `root:root` | read-only Git только repo owner + `GIT_OPTIONAL_LOCKS=0` |
 | 14 | Self-test dependency leak | pure DB helper self-test импортировал `psycopg` в overlay venv | self-test запускать в exact interpreter; dependency import lazy |
 | 15 | Git push actor confusion | commit был создан, а push впервые проверил неправильный auth context | push transport/auth preflight до commit |
-| 16 | Forgotten existing deploy key | отсутствие `.ssh` у `cripta`/`alex` ошибочно трактовалось как отсутствие deploy key вообще | сначала искать actual push principal/root/existing GitHub Deploy Key |
-| 17 | Unneeded new credential proposal | был предложен новый deploy key, хотя `robot` уже существовал и имел Read/write | не создавать credentials до полной инвентаризации существующих |
+| 16 | Forgotten existing credential | отсутствие credential у одного principal ошибочно трактовалось как отсутствие рабочего transport вообще | сначала искать actual push principal и существующий approved transport |
+| 17 | Unneeded new credential proposal | был предложен новый credential, хотя рабочий transport уже существовал | не создавать credentials до полной инвентаризации существующих |
 | 18 | Too many package versions | preparation defects превратились в длинную V1.x цепочку | logical version отделять от RC/build revision |
 | 19 | Too many sequential repairs | состояние Git исправлялось серией repair-итераций | один forensic -> один доказанный repair |
 | 20 | Excessive wall-clock | малый production patch занял почти рабочий день | после двух prep failures — Preparation Freeze и full class audit |
@@ -1044,21 +1065,23 @@ NOT_READY_FOR_USER_INSTALL
 
 ---
 
-# Приложение C. Обязательный post-install checklist
+# Приложение C. Обязательный release/deploy checklist
 
 ```text
-INSTALL=PASS
-SOURCE_LIVE=EQUAL
-SERVICES=ACTIVE
-DB_CONTRACT=PASS
-RUNTIME_SMOKE=PASS
-GATE=<explicit expected state>
-
 WORKTREE_CHANGESET=EXACT
 GIT_METADATA_OWNER=EXPECTED
+TESTS=PASS
 COMMIT=CREATED
 PUSH=PASS
 REMOTE_HEAD==SOURCE_HEAD
+
+BACKUP=PASS
+DEPLOY_EXACT_COMMIT=PASS
+SOURCE_LIVE=EQUAL
+SERVICES=<explicit expected state>
+DB_CONTRACT=PASS
+RUNTIME_SMOKE=PASS
+GATE=<explicit expected state>
 WORKTREE=CLEAN
 
 CHECKPOINT=STABLE

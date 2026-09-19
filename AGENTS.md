@@ -16,13 +16,13 @@
 ## Source of truth
 
 ```text
-GitHub PH1119057/cripta:main
-+
-синхронизированный /srv/cripta/source_checkout
+AUTHORITATIVE: GitHub PH1119057/cripta:main
+OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
-Project Source, старые ZIP/чаты, локальные копии, Git history,
-historical research/patch docs и archive не являются source of truth.
+Operational mirror обязан быть синхронизирован с GitHub `main`; при конфликте
+authority имеет GitHub. Project Source, старые ZIP/чаты, локальные копии, Git
+history, historical research/patch docs и archive не являются source of truth.
 
 ## Hard Stop
 

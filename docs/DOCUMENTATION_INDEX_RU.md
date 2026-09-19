@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.5
+**Версия:** 2.6
 **Дата:** 2026-09-19
 **Статус:** канонический индекс документации
 
@@ -148,6 +148,31 @@ Hard Stop, не использовать память/history как канон 
 временные protective boundaries становятся торговой policy только внутри exact
 owner-approved Strategy version.
 
-`CHATGPT_INTERACTION_RULES_RU*.md` и `OBSERVATION_ANALYTICS_RU*.md` не требуют
-содержательного изменения: META routing и наблюдательно-аналитические границы
-этим решением не меняются.
+В рамках именно ревизии Strategy settings META routing и наблюдательный контур
+не менялись. Последующая ревизия §11 обновляет META source-authority wording и
+Lifecycle Supervisor contract, не передавая наблюдательному контуру торговые права.
+
+# 11. Ревизия lifecycle / one-way / release contract — 2026-09-19
+
+Owner-approved revision синхронизирует активный пакет по следующим инвариантам:
+
+- GitHub `main` — единственный authority; `source_checkout` — synchronized
+  operational mirror;
+- release order един: test/overlay -> exact commit -> GitHub/remote verify ->
+  backup -> deploy exact commit -> runtime evidence;
+- независимые Strategy могут иметь противоположные signals, но текущий Bybit
+  one-way physical position slot имеет только одного real lifecycle owner;
+- reservation входит в формирование EntryDecision; `ACCEPTED` существует
+  только после successful reservation;
+- для real Strategy обязателен owner-approved initial loss-containment;
+- emergency execution capability не является policy; автоматическое аварийное
+  действие требует exact Strategy emergency/protection-failure contract;
+- Strategy deactivation не меняет ExitPlan уже открытой StrategyPosition;
+- ARCH / TRADING_CONTOUR / OBS используют одну lifecycle chain;
+- MAP использует явную status matrix вместо смешения CANON/IMPLEMENTED/DEPLOYED/
+  RUNTIME VERIFIED;
+- GLOSSARY определяет previously ambiguous runtime/lifecycle terms и
+  implementation-pass numbering.
+
+Эта ревизия не включает real execution, не меняет Strategy records/Exchange
+state и не утверждает конкретные stop/TP/H3/trailing числа.

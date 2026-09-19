@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.5  
-**Дата:** 2026-09-19  
+**Версия:** 8.6
+**Дата:** 2026-09-19
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -161,11 +161,20 @@ Entry price фиксируется как факт сделки.
 Execution исполняет уже принятое торговое решение.
 Bybit — текущий provider, но не архитектурная константа.
 
-Канонически Execution должен принимать решения как Entry, так и Exit через
-различимые EntryExecutionRequest/ExitExecutionRequest с exact lineage.
+Typed `EntryExecutionRequest` / `ExitExecutionRequest`, exact lineage,
+physical-slot ownership checks и Universal Exit execution bridge реализованы в
+current source. Real Universal consumers/gates на текущем checkpoint disarmed.
 
-Физическая реализация этого нового interface contract ещё не проверена и не
-считается IMPLEMENTED.
+Read-only проверка Bybit 2026-09-19 по всем 10 symbols активного Strategy
+universe показала только `positionIdx=0`: фактический режим текущего Unified
+linear account — one-way. Universal Entry consumer source блокирует второй real
+Entry в занятый/pending physical slot через
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`.
+
+Это `IMPLEMENTED` и покрыто tests/disposable PostgreSQL. Simultaneous
+same-symbol multi-Strategy execution не объявляется `RUNTIME VERIFIED LIVE`,
+поскольку real Universal consumer disabled и такая биржевая мутация не
+выполнялась.
 
 # 12. Lifecycle / Position / Analytics
 
@@ -173,13 +182,27 @@ Bybit — текущий provider, но не архитектурная конс
 - Lifecycle Supervisor контролирует handoff от Strategy activation/materialized
   plans до final close/economics;
 - Position Supervisor наблюдает фактическое состояние StrategyPosition;
-- Analyst/Research занимается постфактум-аналитикой и counterfactual
-  псевдосделками;
+- Analyst/Research занимается постфактум-аналитикой и counterfactual;
 - Monitoring/UI показывает состояния, но не владеет trading policy.
 
-Новый Lifecycle Supervisor contract пока является CANON, но его соответствие
-текущему production source/runtime должно быть проверено в отдельной
-implementation-задаче.
+Status matrix на checkpoint 2026-09-19:
+
+| Компонент / contract | CANON | IMPLEMENTED | DEPLOYED | RUNTIME VERIFIED | Evidence / режим |
+| --- | --- | --- | --- | --- | --- |
+| StrategyCard settings authoring/materializer | YES | YES | YES | NO | tests + active legacy-card immutability; new slots без live execution |
+| Universal Entry observer / plan ACK | YES | YES | YES | YES | SHADOW service active/enabled; ACK пишет runtime |
+| Atomic capital reservation / pre-dispatch TTL | YES | YES | YES | NO | PostgreSQL/tests; real Universal consumer disabled |
+| StrategyPosition exact binding / physical slot conflict | YES | YES | YES | NO | PostgreSQL/tests; one-way checked, open Universal positions=0 |
+| Universal Exit Engine decision-only | YES | YES | YES | YES | SHADOW service/restart verified; open position sample=0 |
+| Typed Exit execution bridge/consumer | YES | YES | YES | NO | source/live staged; consumer arm disabled |
+| Lifecycle Supervisor | YES | YES | YES | YES | non-trading service active/enabled, faults=0 |
+| Analyst counterfactual path | YES | YES | YES | NO | source/DB/tests; no Exchange rights |
+| Legacy Exit ownership exclusion | YES | YES | YES | NO | source/live exact; legacy service inactive |
+| Current private runtime source | YES | YES | YES | NO | source/live exact + import/unit verified; service inactive/disabled |
+
+`RUNTIME VERIFIED=NO` не означает «не протестировано»: tests/disposable DB/source-live
+checks приводятся в Evidence, но не подменяют проверку реально загруженного
+runtime path.
 
 # 13. ChatGPT Project Instructions
 
@@ -189,17 +212,17 @@ implementation-задаче.
 Фактический текст Project Instructions в UI является отдельным ChatGPT-project
 state и не подтверждается одним только GitHub.
 
-# 14. Граница этой ревизии
+# 14. Граница текущей документационной ревизии
 
-Документационная ревизия:
+Эта ревизия:
 - не меняет production trading logic;
 - не меняет Strategy records в PostgreSQL;
 - не активирует real Execution;
 - не переименовывает historical IDs/DB rows;
-- фиксирует новое owner-approved устройство Strategy Materializer / Entry
-  Engine / Exit Engine / Lifecycle Supervisor как CANON;
-- не объявляет это IMPLEMENTED/DEPLOYED до отдельного ТЗ, разработки и
-  runtime verification.
+- синхронизирует CANON с уже проверенными implementation/runtime фактами из §12/§15;
+- вводит новые canonical требования one-way ownership, обязательной real
+  protection и emergency policy, но не выдаёт их будущую runtime enforcement за
+  уже RUNTIME VERIFIED там, где это отдельно не доказано.
 
 # 15. Проверенный runtime/source checkpoint 2026-09-19
 
@@ -216,10 +239,14 @@ cripta-exit-runtime.service              inactive/enabled
 
 ```text
 mainnet execution gate = 0
+shadow gate = 1
 open Universal StrategyPosition = 0
 open lifecycle faults = 0
 ExitExecutionRequest = 0
 queued/running trade_commands = 0
+ENTRY_ENGINE loaded acknowledgements = 4
+active ExitPlans = 2
+active ExitPlans with executable rules = 0
 ```
 
 Private runtime source/live divergence устранён staging-deploy текущего source,
@@ -232,6 +259,10 @@ Legacy identifiers с `M3` — технический долг и не созд�
 # 16. Capital allocation V1
 
 CANON:
+
+Reservation является частью EntryDecision: `ACCEPTED` появляется только после
+успешной atomic reservation. Availability опирается на verified account capacity
++ durable commitments/reservations; stale/unknown required state блокирует Entry.
 
 ```text
 Strategy задаёт требуемую сумму
@@ -247,5 +278,25 @@ Entry не ранжирует Strategy.
 - Execution не создаётся;
 - Analyst может вести counterfactual/псевдосделку.
 
-Это owner-approved архитектурное правило. Текущая production реализация
-reservation/counterfactual path должна проверяться отдельно.
+Это owner-approved архитектурное правило. Source/tests/DB contract уже
+реализованы; real Universal execution path остаётся disarmed и не объявляется
+RUNTIME VERIFIED LIVE.
+
+# 17. One-way physical ownership / real protection readiness
+
+CANON:
+- логические Strategy могут одновременно давать независимые/opposite signals;
+- текущий Bybit one-way physical slot имеет одного active owner lifecycle;
+- второй Strategy Entry в тот же slot блокируется до Exchange mutation;
+- real Strategy обязана иметь owner-approved initial loss-containment;
+- открытая StrategyPosition сохраняет exact ExitPlan/protection/emergency policy
+  своей opening Strategy version после деактивации Strategy;
+- automatic emergency action разрешён только exact emergency_policy/owner
+  command, а не самим фактом наличия `EMERGENCY_CLOSE` capability.
+
+IMPLEMENTATION STATUS:
+- physical-slot block реализован и PostgreSQL-tested;
+- обязательность real protection/emergency policy в этой ревизии является
+  CANON; полная activation/runtime enforcement должна проверяться отдельной
+  implementation-задачей до re-arm;
+- никакой stop/TP/H3/trailing value этой ревизией не утверждается.
