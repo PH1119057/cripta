@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import base64
-import crypt
 import csv
+import ctypes
+import ctypes.util
 import hashlib
 import hmac
 import io
@@ -82,6 +83,44 @@ _ticker_cache: tuple[float, dict[str, dict[str, object]]] | None = None
 _liquidity_cache: tuple[float, dict[str, dict[str, object]]] | None = None
 _package_lock = threading.Lock()
 _signal_export_job_lock = threading.Lock()
+_system_crypt_lock = threading.Lock()
+
+
+def _load_system_crypt():
+    library_name = ctypes.util.find_library("crypt")
+    if not library_name:
+        return None, None
+    try:
+        library = ctypes.CDLL(library_name, use_errno=True)
+        function = library.crypt
+    except (OSError, AttributeError):
+        return None, None
+    function.argtypes = (ctypes.c_char_p, ctypes.c_char_p)
+    function.restype = ctypes.c_char_p
+    return library, function
+
+
+_system_crypt_library, _system_crypt = _load_system_crypt()
+
+
+def _verify_system_password_hash(password: str, stored_hash: str) -> bool:
+    if _system_crypt is None or "\x00" in password or "\x00" in stored_hash:
+        return False
+    try:
+        password_bytes = password.encode("utf-8")
+        hash_bytes = stored_hash.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    with _system_crypt_lock:
+        candidate = _system_crypt(password_bytes, hash_bytes)
+    if not candidate:
+        return False
+    try:
+        candidate_hash = candidate.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return hmac.compare_digest(candidate_hash, stored_hash)
+
 SIGNAL_EXPORT_JOB_ROOT = Path(
     os.environ.get("CRIPTA_SIGNAL_EXPORT_JOB_ROOT", "/var/lib/cripta/archive_jobs")
 )
@@ -2942,7 +2981,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             for line in AUTH_FILE.read_text().splitlines():
                 stored_user, stored_hash = line.split(":", 1)
                 if hmac.compare_digest(username, stored_user):
-                    return hmac.compare_digest(crypt.crypt(password, stored_hash), stored_hash)
+                    return _verify_system_password_hash(password, stored_hash)
         except (OSError, ValueError):
             pass
         return False
