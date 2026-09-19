@@ -125,13 +125,22 @@ def test_dashboard_server_rechecks_rearm_readiness() -> None:
     assert "current real position has no exchange-confirmed protection" in source
 
 
-def test_operations_file_exchange_contract_is_persisted() -> None:
-    doc = (ROOT / "docs" / "OPERATIONS_FILE_EXCHANGE_RU.md").read_text(encoding="utf-8")
-    assert "/srv/cripta-share/incoming" in doc
-    assert "/srv/cripta-share/operations" in doc
-    assert "/srv/cripta-share/reports" in doc
-    assert "НЕ source of truth" in doc
+def test_operations_file_exchange_paths_are_persisted_in_current_source() -> None:
+    devtools = (ROOT / "operations/devtools/cli.py").read_text(encoding="utf-8")
+    dashboard = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
+    installer = (ROOT / "scripts/patch/INSTALL_CRIPTA_PATCH.ps1").read_text(
+        encoding="utf-8"
+    )
+    work_rules = (ROOT / "CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md").read_text(
+        encoding="utf-8"
+    )
 
+    assert "/srv/cripta-share/operations" in devtools
+    assert "/srv/cripta-share/reports" in dashboard
+    assert "/srv/cripta-share/incoming/patches" in installer
+    assert "GitHub PH1119057/cripta:main" in work_rules
+    assert "не являются source of truth" in work_rules.lower()
+    assert "Файловые пространства разных сред не взаимозаменяемы" in work_rules
 
 def test_entry_gate_disarm_honors_smallint_schema_contract() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")

@@ -35,15 +35,20 @@ def _fact(index: int = 1) -> MarketFactEnvelope:
     )
 
 
-def test_u5_contract_is_frozen_before_runtime_source() -> None:
-    text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "## 20. U5 parallel shadow runtime contract" in text
-    assert "49670cb0631a8742b2bf8dace9ab33d6b29a107d" in text
-    assert "cripta-universal-entry-shadow.service" in text
-    assert "один и тот же `MarketFactEnvelope`" in text
-    assert "WARMUP / NOT_COMPARABLE" in text
-    assert "420 минут" in text
+def test_u5_shadow_contract_is_held_by_current_source_and_service_unit() -> None:
+    shadow_runtime = (
+        ROOT / "src/bybit_workbench/universal_entry/shadow_runtime.py"
+    ).read_text(encoding="utf-8")
+    runtime = RUNTIME.read_text(encoding="utf-8")
+    unit = UNIT.read_text(encoding="utf-8")
 
+    assert "def derive_unknown_prestart_horizon_seconds(" in shadow_runtime
+    assert 'WARMUP = "WARMUP"' in shadow_runtime
+    assert 'NOT_COMPARABLE = "NOT_COMPARABLE"' in shadow_runtime
+    assert "CausalFactFanout" in shadow_runtime
+    assert "derive_unknown_prestart_horizon_seconds(plan)" in runtime
+    assert "cripta-universal-entry-shadow.service" in runtime
+    assert "Description=Cripta Universal Entry U5 parity shadow" in unit
 
 def test_unknown_prestart_horizon_is_derived_from_entry_plan_not_runtime_constant() -> None:
     bundle = load_v1_compatibility_bundle(ROOT)

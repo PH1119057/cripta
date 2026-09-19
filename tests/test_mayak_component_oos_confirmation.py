@@ -307,12 +307,17 @@ def test_input_adapter_maps_first_tick_target_to_plus010_at_same_tick(tmp_path: 
     assert audit[0]["activation_at"] == "2026-05-18T00:00:00.250000+00:00"
 
 
-def test_oos_contract_is_observation_only_and_registered() -> None:
-    body = (ROOT / "docs/MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md").read_text(encoding="utf-8")
-    authority = (ROOT / "docs/DOCUMENT_AUTHORITY_RU.md").read_text(encoding="utf-8")
-    current_map = (ROOT / "docs/CURRENT_PROJECT_MAP_RU.md").read_text(encoding="utf-8")
-    assert "MAYAK_TRADING_EFFECT       = NONE" in body
-    assert "COIN_MARKET_RATING_FITTED  = NO" in body
-    assert "RETUNING_ON_OOS            = NO" in body
-    assert "MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md" in authority
-    assert "OOS protocol V1" in current_map
+def test_oos_research_remains_evidence_only_under_current_canon() -> None:
+    observation = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(encoding="utf-8")
+    index = (ROOT / "docs/DOCUMENTATION_INDEX_RU.md").read_text(encoding="utf-8")
+    source = (
+        ROOT / "src/bybit_workbench/mayak/research/component_oos_confirmation.py"
+    ).read_text(encoding="utf-8")
+
+    assert "# 4. ANALYTICS / RESEARCH — доказательный контур" in observation
+    assert "Исследование никогда не канон" in observation
+    assert "Он не торгует и не меняет Strategy автоматически." in observation
+    assert "MAYAK_COMPONENT_OOS_CONFIRMATION_V1_RU.md" not in index
+    assert '"retuned": False' in source
+    assert '"retuning": False' in source
+    assert '"trading_effect": "NONE"' in source

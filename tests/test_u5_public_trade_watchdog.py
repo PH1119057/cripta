@@ -36,16 +36,21 @@ def _row(
     }
 
 
-def test_contract_freezes_public_trade_watchdog_before_source() -> None:
-    text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "### 20.11 U5 PUBLIC_TRADE silent-stall watchdog / exact replay repair" in text
-    assert "## 26. Owner decision 2026-09-12" in text
-    assert "### 20.12 U5 mirror recovery race/order repair" in text
-    assert "### 20.11 U5 PUBLIC_TRADE silent-stall watchdog / exact replay repair" in text
-    assert "ping interval = 10 seconds" in text
-    assert "pong deadline = 5 seconds" in text
-    assert "Strategy/V1/EntryPlan/comparator semantics change" in text
+def test_public_trade_watchdog_contract_is_held_by_current_source() -> None:
+    runtime = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    continuity = (
+        ROOT / "src/bybit_workbench/universal_entry/transport_continuity.py"
+    ).read_text(encoding="utf-8")
 
+    assert "PING_INTERVAL_SECONDS = 10.0" in runtime
+    assert "PONG_TIMEOUT_SECONDS = 5.0" in runtime
+    assert "PublicWsHeartbeat(" in runtime
+    assert "class PublicWsHeartbeat:" in continuity
+    assert "Socket openness and successful send() are not liveness evidence." in continuity
+    assert "a sent ping starts" in continuity
+    assert "a bounded proof deadline" in continuity
 
 def test_heartbeat_detects_half_open_even_if_send_ping_succeeded() -> None:
     heartbeat = PublicWsHeartbeat(

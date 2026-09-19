@@ -279,14 +279,16 @@ def test_universal_symbol_universe_has_no_legacy_enabled_symbols_gate() -> None:
     )
     dashboard = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
     html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
-    architecture = (ROOT / "CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(
+        encoding="utf-8"
+    )
+    observation = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "enabled_symbols" not in consumer
-    rearm = dashboard[
-        dashboard.index("def live_rearm_readiness(") : dashboard.index(
-            "\ndef live_trading_state", dashboard.index("def live_rearm_readiness(")
-        )
-    ]
+    rearm_start = dashboard.index("def live_rearm_readiness(")
+    rearm = dashboard[rearm_start : dashboard.index("\ndef live_trading_state", rearm_start)]
     assert "enabled_symbols" not in rearm
     assert "select at least one trading symbol before re-arm" not in dashboard
     assert "нельзя открыть шлюз: не выбрана ни одна торговая монета" not in dashboard
@@ -296,9 +298,11 @@ def test_universal_symbol_universe_has_no_legacy_enabled_symbols_gate() -> None:
     assert "auto-check" not in monitor
     assert "setAuto(" not in monitor
     assert "Список монет задаётся только StrategyCard" in monitor
-    assert "StrategyCard.symbols" in architecture
-    assert "единственным прикладным источником истины" in architecture
-
+    assert "- universe/symbols;" in architecture
+    assert (
+        "Trading universe конкретной Strategy определяется только её StrategyCard."
+        in observation
+    )
 
 def test_observer_status_publishes_strategy_specific_monitor_rows() -> None:
     source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(encoding="utf-8")

@@ -23,14 +23,21 @@ CONTRACT = ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md"
 NOW = datetime(2026, 9, 9, 6, 0, tzinfo=UTC)
 
 
-def test_transport_repair_contract_is_frozen_before_source() -> None:
-    text = CONTRACT.read_text(encoding="utf-8")
-    assert "### 20.9 U5 public transport continuity repair" in text
-    assert "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S" in text
-    assert "5m OI is NOT semantically substitutable" in text
-    assert "same process/service_instance_id/parity_run_id/started_at" in text
-    assert "reconnect alone is never proof of continuity" in text
+def test_transport_continuity_contract_is_held_by_current_source() -> None:
+    continuity = (
+        ROOT / "src/bybit_workbench/universal_entry/transport_continuity.py"
+    ).read_text(encoding="utf-8")
+    runtime = RUNTIME.read_text(encoding="utf-8")
 
+    assert 'NOT_COMPARABLE = "NOT_COMPARABLE"' in continuity
+    assert "OI30S continuity not provable" in continuity
+    assert "5m historical OI cannot substitute for this source" in continuity
+    assert (
+        "RESUME_SAME_RUN if verdict.proven else ContinuityAction.NOT_COMPARABLE"
+        in continuity
+    )
+    assert '"same_service_instance_id": identity.service_instance_id' in runtime
+    assert '"same_parity_run_id": identity.parity_run_id' in runtime
 
 def test_short_reconnect_before_all_oi30s_deadlines_is_proven() -> None:
     cursors = {

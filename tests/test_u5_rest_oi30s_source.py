@@ -56,14 +56,21 @@ def _config() -> Oi30sConfig:
     )
 
 
-def test_contract_declares_new_identity_without_rewriting_old_source() -> None:
-    text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "### 20.10 U5/U7 доказуемый REST current-OI30S source" in text
-    assert SOURCE_ID in text
-    assert "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S" in text
-    assert "historical evidence" in text
-    assert "480 минут" in text
+def test_current_runtime_declares_exact_rest_oi30s_identity_separately_from_legacy_source() -> None:
+    runtime = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    unit = (
+        ROOT / "operations/systemd/cripta-universal-entry-observer.service"
+    ).read_text(encoding="utf-8")
 
+    assert 'REST_OI30S_SOURCE_ID = "BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1"' in runtime
+    assert (
+        'LEGACY_WS_OI30S_SOURCE_ID = "BYBIT_PUBLIC_NORMALIZED_U5_V1_OI30S"'
+        in runtime
+    )
+    assert "FACT_SOURCE_ID != REST_OI30S_SOURCE_ID or OI_SAMPLE_SECONDS != 30" in runtime
+    assert "BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1" in unit
 
 def test_slot_floor_and_progression_are_exactly_30_seconds() -> None:
     assert slot_at(NOW + timedelta(seconds=29, microseconds=999999), 30) == NOW

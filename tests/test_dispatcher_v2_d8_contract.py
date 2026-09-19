@@ -3,23 +3,32 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 
 
-def test_d8_contract_is_observed_only_and_clean_v2() -> None:
-    body = (ROOT / "docs/DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md").read_text(encoding="utf-8")
-    assert "DISPATCHER_V2_OBSERVED_CONTEXT = YES" in body
-    assert "DISPATCHER_V2_CONSUMED_CONTEXT = NO" in body
-    assert "TRADING_EFFECT = NONE" in body
-    assert "research_context.dispatcher_v2_event_links" in body
-    assert "symbol + ближайшее время" in body
-    assert "CoinMarketRating" in body
+def test_dispatcher_observed_context_contract_is_current() -> None:
+    observation = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(encoding="utf-8")
+    sql = (ROOT / "operations/sql/20260906_dispatcher_v2_event_links.sql").read_text(
+        encoding="utf-8"
+    )
 
+    assert "`OBSERVED_CONTEXT` — существовавший причинный контекст;" in observation
+    assert (
+        "`CONSUMED_CONTEXT` — контекст, реально использованный EntryPlan/ExitPlan."
+        in observation
+    )
+    assert "research_context.dispatcher_v2_event_links" in sql
+    assert "observed_context_mode TEXT NOT NULL DEFAULT 'OBSERVED_CONTEXT'" in sql
+    assert "consumed_context_mode TEXT NOT NULL DEFAULT 'NOT_CONSUMED'" in sql
+    assert "trading_effect TEXT NOT NULL DEFAULT 'NONE'" in sql
 
-def test_d8_is_registered_and_closed_with_runtime_evidence() -> None:
-    authority = (ROOT / "docs/DOCUMENT_AUTHORITY_RU.md").read_text(encoding="utf-8")
+def test_dispatcher_v2_runtime_evidence_uses_current_contract() -> None:
+    index = (ROOT / "docs/DOCUMENTATION_INDEX_RU.md").read_text(encoding="utf-8")
     current_map = (ROOT / "docs/CURRENT_PROJECT_MAP_RU.md").read_text(encoding="utf-8")
-    results = (ROOT / "docs/DISPATCHER_V2_D8_STAGE_RESULTS_RU.md").read_text(encoding="utf-8")
-    assert "DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md" in authority
-    assert "DISPATCHER_V2_D8_STAGE_RESULTS_RU.md" in authority
-    assert "D8 завершён" in current_map
-    assert "D8_RUNTIME_EVIDENCE       = PASS" in results
-    assert "D8_TRADING_EFFECT         = NONE" in results
-    assert "D8_CONSUMED_CONTEXT       = NO" in results
+    correlator = (
+        ROOT / "operations/monitoring/dispatcher_v2_context_correlator.py"
+    ).read_text(encoding="utf-8")
+
+    assert "DISPATCHER_V2_D8_OBSERVED_CONTEXT_RU.md" not in index
+    assert "DISPATCHER_V2_D8_STAGE_RESULTS_RU.md" not in index
+    assert "`cripta-dispatcher-v2.service` active/enabled;" in current_map
+    assert "legacy `cripta-strategy-dispatcher.service` inactive/disabled;" in current_map
+    assert "research_context.dispatcher_v2_event_links" in correlator
+    assert "'OBSERVED_CONTEXT','NOT_CONSUMED'" in correlator

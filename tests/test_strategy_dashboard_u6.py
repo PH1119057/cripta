@@ -135,14 +135,19 @@ def test_lazy_universal_entry_public_engine_exports_remain_available() -> None:
     assert ActivePlanRegistry.__name__ == "ActivePlanRegistry"
 
 
-def test_u6_contract_is_frozen_before_dashboard_source() -> None:
-    text = (ROOT / "docs/UNIVERSAL_STRATEGY_ENTRY_IMPLEMENTATION_RU.md").read_text(encoding="utf-8")
-    assert "**Source baseline U6:** 78e5e90753a3dffb2b61177174a94dc8ea4eea54" in text
-    assert "## 21. U6 Strategy dashboard control/read-model contract" in text
-    assert "Activation = NOT SET" in text
-    assert "STALE_ACTIVATION_STATE" in text
-    assert "НЕ создаёт StrategyActivation" in text
+def test_u6_dashboard_contract_matches_current_canon_and_source() -> None:
+    observation = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(encoding="utf-8")
+    control = (
+        ROOT / "src/bybit_workbench/universal_entry/dashboard_control.py"
+    ).read_text(encoding="utf-8")
+    app = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
 
+    assert "UI/read-model:" in observation
+    assert "- не содержит скрытую торговую policy;" in observation
+    assert "- не пересчитывает Entry независимо от канонического runtime;" in observation
+    assert 'activation_state = "NOT SET"' in control
+    assert 'raise StaleActivationState("STALE_ACTIVATION_STATE")' in control
+    assert '"StrategyActivation NOT SET"' in app
 
 def test_one_strategy_catalog_renders_exact_identity_and_missing_states() -> None:
     card = make_card()
