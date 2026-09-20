@@ -131,30 +131,13 @@ def test_p9_shadow_restart_does_not_create_mutation_or_lose_reservation() -> Non
     with psycopg.connect(DSN, row_factory=dict_row) as connection:
         ids = _seed(connection, prefix)
         reservation_id = f"{prefix}-reservation"
-        connection.execute(
-            """INSERT INTO runtime.capital_reservations(
-                   reservation_id,account_ref,strategy_id,strategy_version,
-                   strategy_config_fingerprint,entry_plan_fingerprint,
-                   signal_id,strategy_attempt_id,requested_amount,amount_currency,
-                   capacity_snapshot_id,capacity_observed_at,
-                   capacity_available_at_reservation,pre_dispatch_expires_at,
-                   state,state_reason
-               ) VALUES(
-                   %s,'BYBIT:UNIFIED',%s,'1',%s,%s,%s,%s,10,'USDT',
-                   %s,%s,10,%s,'RESERVED','p9 shadow preservation test'
-               )""",
-            (
-                reservation_id,
-                f"{prefix}-strategy",
-                f"{prefix}-strategy-fp",
-                f"{prefix}-entry-fp",
-                f"{prefix}-signal",
-                f"{prefix}-attempt",
-                f"{prefix}-capacity",
-                NOW,
-                NOW + timedelta(minutes=5),
-            ),
-        )
+        before_reservation = connection.execute(
+            """SELECT state,state_reason,strategy_position_id
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (reservation_id,),
+        ).fetchone()
+        assert before_reservation is not None
         connection.commit()
 
         before_commands = connection.execute(
@@ -181,7 +164,7 @@ def test_p9_shadow_restart_does_not_create_mutation_or_lose_reservation() -> Non
         connection.commit()
 
         reservation = connection.execute(
-            """SELECT state,state_reason
+            """SELECT state,state_reason,strategy_position_id
                  FROM runtime.capital_reservations
                 WHERE reservation_id=%s""",
             (reservation_id,),
@@ -195,10 +178,7 @@ def test_p9_shadow_restart_does_not_create_mutation_or_lose_reservation() -> Non
                 WHERE strategy_position_id=%s""",
             (ids["position_id"],),
         ).fetchone()
-        assert reservation == {
-            "state": "RESERVED",
-            "state_reason": "p9 shadow preservation test",
-        }
+        assert reservation == before_reservation
         assert after_commands == before_commands
         assert exit_requests == {"count": 0}
 

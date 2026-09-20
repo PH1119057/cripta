@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+INCOMING="${CRIPTA_INCOMING_ROOT:-/srv/cripta-share/incoming}"
+OPS="${CRIPTA_INCOMING_OPS_ROOT:-/srv/cripta-share/operations/incoming-runner}"
+SOURCE="${CRIPTA_SOURCE_CHECKOUT:-/srv/cripta/source_checkout}"
+STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
+INSTALLED_COMMIT_FILE="$STATE_ROOT/INSTALLED_COMMIT"
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+as_repo_owner() {
+  runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"
+}
+
+[[ "$(id -u)" -eq 0 ]] || die "runner must run as root"
+[[ $# -eq 1 ]] || die "usage: cripta-apply-incoming <package.zip>"
+
+arg="$1"
+if [[ "$arg" == */* ]]; then
+  zip="$arg"
+else
+  zip="$INCOMING/$arg"
+fi
+[[ -f "$zip" ]] || die "ZIP not found: $zip"
+
+base="$(basename "$zip")"
+[[ "$base" == *.zip ]] || die "package must be a .zip"
+companion="${zip}.sha256"
+[[ -f "$companion" ]] || die "SHA256 companion missing: $companion"
+
+companion_line="$(tr -d '\r' < "$companion" | sed -n '1p')"
+expected_hash="$(printf '%s\n' "$companion_line" | awk '{print $1}')"
+expected_name="$(printf '%s\n' "$companion_line" | awk '{print $2}')"
+[[ "$expected_hash" =~ ^[0-9a-fA-F]{64}$ ]] || die "invalid SHA256 companion hash"
+[[ "$expected_name" == "$base" || "$expected_name" == "*$base" ]]   || die "SHA256 companion filename mismatch"
+actual_hash="$(sha256sum "$zip" | awk '{print $1}')"
+[[ "${actual_hash,,}" == "${expected_hash,,}" ]] || die "archive SHA256 mismatch"
+
+unzip -tq "$zip" >/dev/null || die "ZIP integrity test failed"
+
+mkdir -p "$OPS"
+stamp="$(date -u +%Y%m%d_%H%M%S)"
+name="${base%.zip}"
+run_root="$OPS/${stamp}_${name}"
+stage="$run_root/stage"
+report="$run_root/runner_report.txt"
+mkdir -p "$stage"
+
+{
+  echo "RUNNER=cripta-apply-incoming"
+  echo "ZIP=$zip"
+  echo "STAGE=$stage"
+  sha256sum "$zip"
+  echo "ARCHIVE_SHA256_COMPANION=PASS"
+  echo "ARCHIVE_ZIP_INTEGRITY=PASS"
+
+  unzip -q "$zip" -d "$stage"
+
+  [[ -f "$stage/MANIFEST.json" ]] || die "MANIFEST.json missing from ZIP root"
+  [[ -f "$stage/SHA256SUMS.txt" ]] || die "SHA256SUMS.txt missing from ZIP root"
+  [[ -f "$stage/install.sh" ]] || die "install.sh missing from ZIP root"
+  [[ -d "$stage/payload" ]] || die "payload directory missing from ZIP root"
+
+  while IFS= read -r entry; do
+    case "$entry" in
+      MANIFEST.json|install.sh|SHA256SUMS.txt|README_RU.md|payload) ;;
+      *) die "unexpected ZIP root entry: $entry" ;;
+    esac
+  done < <(find "$stage" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+
+  (
+    cd "$stage"
+    sha256sum -c SHA256SUMS.txt
+  )
+  echo "INTERNAL_SHA256SUMS=PASS"
+
+  mapfile -t manifest_fields < <(
+    python3 - "$stage/MANIFEST.json" <<'PY'
+import json
+import re
+import sys
+from pathlib import PurePosixPath
+
+path = sys.argv[1]
+manifest = json.load(open(path, encoding="utf-8"))
+required = (
+    "patch_id",
+    "patch_version",
+    "build",
+    "created_at",
+    "source_repository",
+    "release_ref",
+    "release_commit",
+    "release_tree_sha",
+    "expected_baseline_commit",
+    "baseline_policy",
+    "prerequisites",
+    "changed_files",
+    "deleted_files",
+    "does_change",
+    "does_not_change",
+    "required_services",
+    "restart_services",
+    "prechecks",
+    "targeted_tests",
+    "payload_sha256",
+    "installer_source_path",
+)
+missing = [key for key in required if key not in manifest]
+if missing:
+    raise SystemExit("missing manifest fields: " + ",".join(missing))
+sha = re.compile(r"^[0-9a-f]{40}$")
+sha256 = re.compile(r"^[0-9a-f]{64}$")
+for key in ("release_commit", "release_tree_sha", "expected_baseline_commit"):
+    value = str(manifest[key]).lower()
+    if not sha.fullmatch(value):
+        raise SystemExit(f"{key} must be a full lowercase Git SHA")
+if not sha256.fullmatch(str(manifest["payload_sha256"]).lower()):
+    raise SystemExit("payload_sha256 must be lowercase SHA256")
+if manifest["source_repository"] != "PH1119057/cripta":
+    raise SystemExit("unsupported source_repository")
+if manifest["release_ref"] != "refs/heads/main":
+    raise SystemExit("unsupported release_ref")
+if manifest["baseline_policy"] != "EXACT_COMMIT":
+    raise SystemExit("baseline_policy must be EXACT_COMMIT")
+for collection in ("prerequisites", "changed_files", "deleted_files", "does_change",
+                   "does_not_change", "required_services", "restart_services",
+                   "prechecks", "targeted_tests"):
+    if not isinstance(manifest[collection], list):
+        raise SystemExit(f"{collection} must be a list")
+installer = str(manifest["installer_source_path"])
+p = PurePosixPath(installer)
+if p.is_absolute() or ".." in p.parts or not installer:
+    raise SystemExit("unsafe installer_source_path")
+print(manifest["release_commit"])
+print(manifest["release_tree_sha"])
+print(manifest["expected_baseline_commit"])
+print(manifest["release_ref"])
+print(manifest["payload_sha256"])
+print(installer)
+PY
+  )
+  [[ "${#manifest_fields[@]}" -eq 6 ]] || die "manifest validation failed"
+  release_commit="${manifest_fields[0]}"
+  release_tree_sha="${manifest_fields[1]}"
+  expected_baseline_commit="${manifest_fields[2]}"
+  release_ref="${manifest_fields[3]}"
+  expected_payload_sha="${manifest_fields[4]}"
+  installer_source_path="${manifest_fields[5]}"
+
+  [[ -f "$INSTALLED_COMMIT_FILE" ]] || die "INSTALLED_COMMIT baseline marker missing"
+  installed_baseline="$(tr -d '[:space:]' < "$INSTALLED_COMMIT_FILE")"
+  [[ "$installed_baseline" == "$expected_baseline_commit" ]]     || die "baseline mismatch: installed=$installed_baseline expected=$expected_baseline_commit"
+  echo "EXPECTED_BASELINE_COMMIT=PASS"
+
+  remote_commit="$(
+    as_repo_owner git -C "$SOURCE" ls-remote origin "$release_ref" | awk 'NR==1{print $1}'
+  )"
+  [[ "$remote_commit" == "$release_commit" ]]     || die "remote release ref mismatch: remote=$remote_commit expected=$release_commit"
+  echo "REMOTE_RELEASE_COMMIT_VERIFIED=PASS"
+
+  as_repo_owner git -C "$SOURCE" fetch --no-tags origin "$release_commit" >/dev/null
+  actual_tree="$(
+    as_repo_owner git -C "$SOURCE" rev-parse "${release_commit}^{tree}"
+  )"
+  [[ "$actual_tree" == "$release_tree_sha" ]]     || die "release tree mismatch: actual=$actual_tree expected=$release_tree_sha"
+  echo "RELEASE_TREE_SHA=PASS"
+
+  actual_payload_sha="$(
+    python3 - "$stage/payload" <<'PY'
+from hashlib import sha256
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+lines = []
+for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    rel = path.relative_to(root).as_posix()
+    digest = sha256(path.read_bytes()).hexdigest()
+    lines.append(f"{digest}  {rel}\n")
+print(sha256("".join(lines).encode()).hexdigest())
+PY
+  )"
+  [[ "$actual_payload_sha" == "$expected_payload_sha" ]]     || die "payload_sha256 mismatch"
+  echo "PAYLOAD_SHA256=PASS"
+
+  python3 - "$stage/MANIFEST.json" "$stage/payload" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path, PurePosixPath
+
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+root = Path(sys.argv[2])
+expected = {}
+for item in manifest["changed_files"]:
+    if not isinstance(item, dict):
+        raise SystemExit("changed_files item must be object")
+    path = str(item.get("path") or "")
+    kind = str(item.get("kind") or "")
+    digest = str(item.get("sha256") or "")
+    p = PurePosixPath(path)
+    if p.is_absolute() or ".." in p.parts or not path:
+        raise SystemExit(f"unsafe changed path: {path!r}")
+    if kind not in {"EXISTING_MODIFY", "NEW_FILE"}:
+        raise SystemExit(f"invalid changed kind for {path}")
+    if len(digest) != 64:
+        raise SystemExit(f"invalid sha256 for {path}")
+    expected[path] = (kind, digest)
+actual = {
+    path.relative_to(root).as_posix()
+    for path in root.rglob("*")
+    if path.is_file()
+}
+if actual != set(expected):
+    raise SystemExit("payload file list differs from manifest changed_files")
+for path, (_kind, digest) in expected.items():
+    actual_digest = hashlib.sha256((root / path).read_bytes()).hexdigest()
+    if actual_digest != digest:
+        raise SystemExit(f"payload file hash mismatch: {path}")
+for path in manifest["deleted_files"]:
+    p = PurePosixPath(str(path))
+    if p.is_absolute() or ".." in p.parts or not str(path):
+        raise SystemExit(f"unsafe deleted path: {path!r}")
+PY
+
+  while IFS=$'\t' read -r path kind digest; do
+    [[ -n "$path" ]] || continue
+    commit_digest="$(
+      as_repo_owner git -C "$SOURCE" show "${release_commit}:${path}" | sha256sum | awk '{print $1}'
+    )"
+    [[ "$commit_digest" == "$digest" ]] || die "payload differs from release commit: $path"
+    if as_repo_owner git -C "$SOURCE" cat-file -e "${expected_baseline_commit}:${path}" 2>/dev/null; then
+      [[ "$kind" == "EXISTING_MODIFY" ]] || die "wrong baseline classification for $path"
+    else
+      [[ "$kind" == "NEW_FILE" ]] || die "wrong baseline classification for $path"
+    fi
+  done < <(
+    python3 - "$stage/MANIFEST.json" <<'PY'
+import json, sys
+for item in json.load(open(sys.argv[1], encoding="utf-8"))["changed_files"]:
+    print(f"{item['path']}\t{item['kind']}\t{item['sha256']}")
+PY
+  )
+
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    as_repo_owner git -C "$SOURCE" cat-file -e "${expected_baseline_commit}:${path}"       || die "deleted path absent from baseline: $path"
+    if as_repo_owner git -C "$SOURCE" cat-file -e "${release_commit}:${path}" 2>/dev/null; then
+      die "deleted path still exists in release commit: $path"
+    fi
+  done < <(
+    python3 - "$stage/MANIFEST.json" <<'PY'
+import json, sys
+for path in json.load(open(sys.argv[1], encoding="utf-8"))["deleted_files"]:
+    print(path)
+PY
+  )
+  echo "PAYLOAD_MATCHES_RELEASE_COMMIT=PASS"
+
+  installer_commit_sha="$(
+    as_repo_owner git -C "$SOURCE" show "${release_commit}:${installer_source_path}"       | sha256sum | awk '{print $1}'
+  )"
+  installer_stage_sha="$(sha256sum "$stage/install.sh" | awk '{print $1}')"
+  [[ "$installer_commit_sha" == "$installer_stage_sha" ]]     || die "install.sh does not match verified release commit"
+  echo "INSTALLER_MATCHES_RELEASE_COMMIT=PASS"
+
+  [[ ! -e "$stage/server/cripta-apply-incoming" ]]     || die "package attempts persistent runner self-update; blocked"
+
+  echo "=== PACKAGE INSTALLER START ==="
+  CRIPTA_RELEASE_COMMIT="$release_commit"   CRIPTA_EXPECTED_BASELINE_COMMIT="$expected_baseline_commit"   CRIPTA_RELEASE_TREE_SHA="$release_tree_sha"   CRIPTA_PACKAGE_STAGE="$stage"     bash "$stage/install.sh"
+  echo "=== PACKAGE INSTALLER PASS ==="
+
+  [[ -f "$INSTALLED_COMMIT_FILE" ]] || die "installer did not write INSTALLED_COMMIT"
+  installed_after="$(tr -d '[:space:]' < "$INSTALLED_COMMIT_FILE")"
+  [[ "$installed_after" == "$release_commit" ]]     || die "INSTALLED_COMMIT differs from release_commit"
+  echo "INSTALLED_COMMIT=PASS"
+  echo "PERSISTENT_RUNNER_SELF_UPDATE=BLOCKED_BY_CONTRACT"
+  echo "RUNNER_STATUS=PASS"
+} 2>&1 | tee "$report"

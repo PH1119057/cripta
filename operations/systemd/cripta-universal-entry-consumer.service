@@ -9,6 +9,7 @@ User=cripta
 Group=cripta
 WorkingDirectory=/srv/cripta/universal_entry_consumer/current
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
 Environment=CRIPTA_ENTRY_COMMAND_SOURCE=LEGACY_V1
 Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
 EnvironmentFile=-/etc/cripta/universal_entry_consumer.env

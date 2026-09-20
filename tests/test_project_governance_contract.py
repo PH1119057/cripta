@@ -65,13 +65,13 @@ def test_upper_architecture_and_supporting_contour_preserve_layer_ownership() ->
     observation = _read("docs/OBSERVATION_ANALYTICS_RU.md")
 
     assert "Strategy layer — единственный владелец торгового смысла" in architecture
-    assert "`Entry Engine` — универсальный активный исполнитель `EntryPlan`." in architecture
-    assert "`Exit Engine` — универсальный активный исполнитель `ExitPlan`." in architecture
+    assert "Entry Engine — универсальный активный исполнитель EntryPlan." in architecture
+    assert "Exit Engine получает/claim-ит эту StrategyPosition" in architecture
     assert "Execution — техническая граница биржевой мутации." in architecture
     assert "`Risk` не является самостоятельным верхнеуровневым слоем." in architecture
 
     assert "Entry не вводит winner/priority/arbitration между Strategy." in trading
-    assert "`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` до Exchange mutation." in trading
+    assert "EXCHANGE_POSITION_OWNERSHIP_CONFLICT — штатный admission outcome" in trading
 
     assert "- не читает PnL Strategy как рыночный признак;" in observation
     assert "- не создаёт StrategySignal;" in observation

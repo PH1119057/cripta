@@ -61,6 +61,9 @@ def _seed(
     attempt_id = f"{prefix}-attempt"
     entry_decision_id = f"{prefix}-entry-decision"
     entry_request_id = f"{prefix}-entry-request"
+    reservation_id = f"{prefix}-reservation"
+    slot_claim_id = f"{prefix}-slot"
+    position_mode_state_ref = f"{prefix}-pmode"
     position_id = f"{prefix}-position"
     entry_command_id = f"{prefix}-entry-command"
     observation_id = f"{prefix}-exit-observation"
@@ -78,7 +81,19 @@ def _seed(
             "execution_policy": {"max_request_age_seconds": max_age},
             "rules": [],
         },
-        "protection_policy": {},
+        "protection_policy": {
+            "initial_protection": {
+                "stop_loss_pct": "1.00",
+                "trigger_by": "LastPrice",
+                "tpsl_mode": "Full",
+            }
+        },
+        "emergency_policy": {
+            "enabled": True,
+            "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+            "action": "FAIL_CLOSED_ONLY",
+            "reconciliation_required": True,
+        },
     }
 
     connection.execute(
@@ -95,6 +110,9 @@ def _seed(
                     "strategy_id": strategy_id,
                     "strategy_version": version,
                     "strategy_config_fingerprint": strategy_fp,
+                    "lifecycle_policy": {
+                        "emergency_policy": exit_plan_json["emergency_policy"]
+                    },
                 }
             ),
             NOW,
@@ -177,19 +195,94 @@ def _seed(
         ),
     )
     connection.execute(
+        """INSERT INTO runtime.position_mode_states(
+               position_mode_state_ref,exchange,account_ref,product_category,
+               instrument,position_mode,position_idx,observed_at,received_at,
+               fresh_until,provenance
+           ) VALUES(%s,'BYBIT','BYBIT:UNIFIED','LINEAR',%s,'ONE_WAY',0,
+                    %s,%s,%s,'{}'::jsonb)""",
+        (
+            position_mode_state_ref,
+            symbol,
+            NOW - timedelta(seconds=2),
+            NOW - timedelta(seconds=2),
+            NOW + timedelta(minutes=10),
+        ),
+    )
+    connection.execute(
+        """INSERT INTO runtime.capital_reservations(
+               reservation_id,account_ref,strategy_id,strategy_version,
+               strategy_config_fingerprint,entry_plan_fingerprint,signal_id,
+               strategy_attempt_id,requested_amount,amount_currency,
+               capacity_snapshot_id,capacity_observed_at,
+               capacity_available_at_reservation,pre_dispatch_expires_at,
+               state,state_reason,created_at,updated_at
+           ) VALUES(%s,'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,20,'USDT',
+                    %s,%s,100,%s,'RESERVED','P6_CANONICAL_FIXTURE',%s,%s)""",
+        (
+            reservation_id,
+            strategy_id,
+            version,
+            strategy_fp,
+            entry_fp,
+            signal_id,
+            attempt_id,
+            f"{prefix}-capacity",
+            NOW - timedelta(seconds=2),
+            NOW + timedelta(seconds=30),
+            NOW - timedelta(seconds=1),
+            NOW - timedelta(seconds=1),
+        ),
+    )
+    connection.execute(
+        """INSERT INTO runtime.exchange_position_slot_claims(
+               exchange_position_slot_claim_id,exchange_position_key,account_ref,
+               symbol,position_idx,strategy_attempt_id,strategy_id,strategy_version,
+               strategy_config_fingerprint,entry_plan_fingerprint,direction,
+               position_mode_state_ref,capital_reservation_id,claim_state,
+               claimed_at,updated_at
+           ) VALUES(%s,%s,'BYBIT:UNIFIED',%s,0,%s,%s,%s,%s,%s,'LONG',
+                    %s,%s,'CLAIMED',%s,%s)""",
+        (
+            slot_claim_id,
+            f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0",
+            symbol,
+            attempt_id,
+            strategy_id,
+            version,
+            strategy_fp,
+            entry_fp,
+            position_mode_state_ref,
+            reservation_id,
+            NOW - timedelta(seconds=1),
+            NOW - timedelta(seconds=1),
+        ),
+    )
+    connection.execute(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
-               reason,decided_at,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,'{}'::jsonb)""",
-        (entry_decision_id, attempt_id, signal_id, NOW),
+               reason,decided_at,capacity_snapshot_id,capital_reservation_id,
+               exchange_position_slot_claim_id,position_mode_state_ref,payload
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
+        (
+            entry_decision_id,
+            attempt_id,
+            signal_id,
+            NOW,
+            f"{prefix}-capacity",
+            reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
+        ),
     )
     connection.execute(
         """INSERT INTO strategy_entry.execution_requests(
                execution_request_id,strategy_attempt_id,entry_decision_id,signal_id,
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
-               exit_plan_fingerprint
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s)""",
+               exit_plan_fingerprint,capital_reservation_id,
+               exchange_position_slot_claim_id,position_mode_state_ref
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
         (
             entry_request_id,
             attempt_id,
@@ -202,6 +295,9 @@ def _seed(
             symbol,
             NOW,
             exit_fp,
+            reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
         ),
     )
     connection.execute(
@@ -212,10 +308,13 @@ def _seed(
                exchange_position_key,position_idx,account_ref,
                strategy_config_fingerprint,strategy_activation_id,
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
-               entry_plan_fingerprint,exit_plan_fingerprint
+               entry_plan_fingerprint,exit_plan_fingerprint,
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               initial_protection_confirmed_at,initial_protection_evidence,
+               emergency_policy
            ) VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,%s,'Buy',10,2,%s,
                     '[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'OPEN',%s,0,
-                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s)""",
+                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)""",
         (
             position_id,
             f"{prefix}-trade",
@@ -233,6 +332,43 @@ def _seed(
             entry_request_id,
             entry_fp,
             exit_fp,
+            slot_claim_id,
+            position_mode_state_ref,
+            NOW,
+            json.dumps(
+                {
+                    "source": "P6_CANONICAL_FIXTURE",
+                    "stopLoss": "9.90",
+                    "observed_at": NOW.isoformat(),
+                }
+            ),
+            json.dumps(exit_plan_json["emergency_policy"]),
+        ),
+    )
+    connection.execute(
+        """UPDATE runtime.exchange_position_slot_claims
+              SET claim_state='BOUND',strategy_position_id=%s,bound_at=%s,updated_at=%s
+            WHERE exchange_position_slot_claim_id=%s""",
+        (position_id, NOW, NOW, slot_claim_id),
+    )
+    connection.execute(
+        """UPDATE runtime.capital_reservations
+              SET state='CONSUMED',state_reason='P6_CONFIRMED_FILL',
+                  exchange_commitment_ref=%s,exchange_commitment_at=%s,
+                  strategy_position_id=%s,updated_at=%s
+            WHERE reservation_id=%s""",
+        (position_id, NOW, position_id, NOW, reservation_id),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.execution_request_state_events(
+               request_state_event_id,execution_request_id,state,occurred_at,reason,payload
+           ) VALUES(%s,%s,'REQUEST_TERMINAL',%s,'P6_CONFIRMED_FILL',
+                    %s::jsonb)""",
+        (
+            f"{prefix}-entry-request-terminal",
+            entry_request_id,
+            NOW,
+            json.dumps({"strategy_position_id": position_id}),
         ),
     )
     connection.execute(
@@ -366,7 +502,10 @@ def test_materialize_request_is_exact_and_gate_independent() -> None:
         assert row["expires_at"] == NOW + timedelta(seconds=30)
         assert dispatch_once(connection, now=NOW) == "EXECUTION_GATE_DISARMED"
         count = connection.execute(
-            "SELECT count(*) FROM runtime.trade_commands WHERE command_type='strategy_exit'"
+            """SELECT count(*) FROM runtime.trade_commands
+                WHERE command_type='strategy_exit'
+                  AND payload_json::jsonb->>'strategy_position_id'=%s""",
+            (ids["position_id"],),
         ).fetchone()
         assert count == {"count": 0}
 

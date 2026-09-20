@@ -75,6 +75,7 @@ class CounterfactualCandidate:
     amount_currency: str | None
     capacity_snapshot_id: str | None
     reported_available_amount: Decimal | None
+    decision_code: EntryDecisionCode
     decision_reason: str
     evidence: FrozenPolicy
 
@@ -209,7 +210,7 @@ def _positive_decimal(value: object, label: str) -> Decimal:
     return result
 
 
-def build_insufficient_funds_candidate(
+def build_admission_counterfactual_candidate(
     evaluation: EntryEvaluation,
     *,
     entry_plan: EntryPlan,
@@ -217,12 +218,23 @@ def build_insufficient_funds_candidate(
     captured_at: datetime,
 ) -> CounterfactualCandidate | None:
     decision = evaluation.decision
-    if decision.code is not EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS:
+    if decision is None:
+        return None
+    allowed = {
+        EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS:
+            NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS,
+        EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT:
+            NotificationKind.EXCHANGE_POSITION_OWNERSHIP_CONFLICT,
+    }
+    expected_notice_kind = allowed.get(decision.code)
+    if expected_notice_kind is None:
         return None
     if evaluation.execution_request is not None:
-        raise RuntimeError("insufficient-capital counterfactual cannot have ExecutionRequest")
+        raise RuntimeError("blocked admission counterfactual cannot have ExecutionRequest")
     if decision.capital_reservation_id is not None:
-        raise RuntimeError("insufficient-capital counterfactual cannot have capital reservation")
+        raise RuntimeError("blocked admission counterfactual cannot keep capital reservation")
+    if decision.exchange_position_slot_claim_id is not None:
+        raise RuntimeError("blocked admission counterfactual cannot keep physical slot claim")
 
     signal = evaluation.signal
     attempt = evaluation.attempt
@@ -276,10 +288,10 @@ def build_insufficient_funds_candidate(
     notices = tuple(
         notice
         for notice in evaluation.notifications
-        if notice.kind is NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS
+        if notice.kind is expected_notice_kind
     )
     if len(notices) != 1:
-        raise RuntimeError("insufficient-capital counterfactual requires exact notification")
+        raise RuntimeError("admission counterfactual requires exact block notification")
     notice = notices[0]
     if notice.requested_amount is not None and notice.requested_amount != requested_amount:
         raise RuntimeError("counterfactual requested amount differs from EntryPlan")
@@ -292,6 +304,7 @@ def build_insufficient_funds_candidate(
                 "entry_decision_id": decision.entry_decision_id,
                 "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
                 "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
+                "decision_code": decision.code.value,
             }
         )[:32]
     )
@@ -314,6 +327,7 @@ def build_insufficient_funds_candidate(
         amount_currency=amount_currency,
         capacity_snapshot_id=decision.capacity_snapshot_id,
         reported_available_amount=notice.available_amount,
+        decision_code=decision.code,
         decision_reason=decision.reason,
         evidence=FrozenPolicy.from_mapping(
             {
@@ -325,9 +339,26 @@ def build_insufficient_funds_candidate(
                 "reported_available_amount": (
                     None if notice.available_amount is None else str(notice.available_amount)
                 ),
-                "source": "universal_entry_insufficient_capital",
+                "counterfactual_block_reason": decision.code.value,
+                "source": "universal_entry_admission_counterfactual",
             }
         ),
+    )
+
+
+def build_insufficient_funds_candidate(
+    evaluation: EntryEvaluation,
+    *,
+    entry_plan: EntryPlan,
+    exit_plan: ExitPlan,
+    captured_at: datetime,
+) -> CounterfactualCandidate | None:
+    """Backward-compatible name; now supports both canonical admission block causes."""
+    return build_admission_counterfactual_candidate(
+        evaluation,
+        entry_plan=entry_plan,
+        exit_plan=exit_plan,
+        captured_at=captured_at,
     )
 
 
@@ -350,7 +381,7 @@ class AnalystCounterfactualStore:
                        decision_reason,evidence
                    ) VALUES(
                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                       'INSUFFICIENT_AVAILABLE_FUNDS',%s,%s,%s,%s,%s,%s::jsonb
+                       %s,%s,%s,%s,%s,%s,%s::jsonb
                    )
                    ON CONFLICT(counterfactual_id) DO NOTHING""",
                 (
@@ -368,6 +399,7 @@ class AnalystCounterfactualStore:
                     candidate.direction.value,
                     candidate.decided_at,
                     candidate.captured_at,
+                    candidate.decision_code.value,
                     candidate.requested_amount,
                     candidate.amount_currency,
                     candidate.capacity_snapshot_id,
@@ -404,7 +436,7 @@ class AnalystCounterfactualStore:
                 candidate.direction.value,
                 candidate.decided_at,
                 candidate.captured_at,
-                EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS.value,
+                candidate.decision_code.value,
                 candidate.requested_amount,
                 candidate.amount_currency,
                 candidate.capacity_snapshot_id,

@@ -20,6 +20,12 @@ import zipfile
 
 import psycopg
 
+from bybit_workbench.fault_delivery import acknowledge_delivery
+from bybit_workbench.live_arm_readiness import (
+    LiveArmContext,
+    evaluate_live_arm,
+    strategy_symbol_scope_key,
+)
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
@@ -45,6 +51,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 DATA_ROOT = Path(os.environ.get("CRIPTA_DATA_ROOT", "/data/cripta"))
 APP_ROOT = Path(os.environ.get("CRIPTA_APP_ROOT", "/srv/cripta"))
+LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 PERIOD = "20260518_20260816"
 STATE = DATA_ROOT / "datasets" / "raw" / PERIOD / "download_state.json"
 EXPANSION_STATE = DATA_ROOT / "datasets" / "raw" / PERIOD / "download_state_expansion_20260823.json"
@@ -692,6 +699,21 @@ def execution_liquidity_risks() -> dict[str, dict[str, object]]:
         return {}
     _liquidity_cache = (now, risks)
     return risks
+
+
+def _live_arm_context_from_request(request: dict[str, object]) -> LiveArmContext:
+    if not LOADED_RELEASE_COMMIT:
+        raise ValueError("CRIPTA_RELEASE_COMMIT is required for real arm")
+    return LiveArmContext(
+        strategy_id=str(request.get("strategy_id") or "").strip(),
+        strategy_version=str(request.get("strategy_version") or "").strip(),
+        strategy_config_fingerprint=str(
+            request.get("strategy_config_fingerprint") or ""
+        ).strip(),
+        strategy_activation_id=str(request.get("strategy_activation_id") or "").strip(),
+        symbol=str(request.get("symbol") or "").strip().upper(),
+        release_commit=LOADED_RELEASE_COMMIT,
+    )
 
 
 def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
@@ -3124,6 +3146,48 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         if path in U6_STRATEGY_POST_PATHS:
             _u6_handle_post(self, path)
             return
+        if path == "/api/lifecycle/fault-delivery/ack":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                delivery_id = str(request.get("delivery_id") or "").strip()
+                if not delivery_id:
+                    raise ValueError("delivery_id обязателен")
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    acknowledged = acknowledge_delivery(
+                        connection,
+                        delivery_id=delivery_id,
+                        acknowledged_at=datetime.now(UTC),
+                    )
+                if not acknowledged:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "delivery не ожидает acknowledgement"},
+                            ensure_ascii=False,
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                self.send_body(
+                    200,
+                    json.dumps(
+                        {"delivery_id": delivery_id, "state": "ACKNOWLEDGED"},
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
         if path in {"/api/project/package", "/api/project/archive-jobs"}:
             try:
                 if path == "/api/project/package":
@@ -3261,13 +3325,29 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         )
                     elif path == "/api/live/gate":
                         enabled = bool(request.get("enabled"))
+                        gate_request_id = str(
+                            request.get("request_id") or secrets.token_hex(8)
+                        )
                         if enabled and request.get("confirmed") is not True:
                             raise ValueError("включение новых входов не подтверждено")
+                        live_context: LiveArmContext | None = None
                         if enabled:
+                            live_context = _live_arm_context_from_request(request)
                             readiness = live_rearm_readiness(connection)
                             if not bool(readiness.get("rearm_ready")):
                                 raise ValueError(
                                     "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
+                                )
+                            canonical = evaluate_live_arm(
+                                connection,
+                                context=live_context,
+                                now=datetime.now(UTC),
+                                require_owner_approval=False,
+                            )
+                            if not canonical.ready:
+                                raise ValueError(
+                                    "canonical LIVE-arm blocked: "
+                                    + ", ".join(canonical.failed_codes)
                                 )
                         previous_gate = connection.execute(
                             "SELECT enabled FROM control.execution_gates "
@@ -3275,11 +3355,103 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         ).fetchone()
                         previous_enabled = bool(previous_gate[0]) if previous_gate else False
                         gate_changed_at_ms = int(time.time() * 1000)
+                        gate_changed_at = datetime.fromtimestamp(
+                            gate_changed_at_ms / 1000, tz=UTC
+                        )
                         gate_reason = (
                             "явно включено владельцем через портал"
                             if enabled
                             else "выключено владельцем через портал"
                         )
+                        if enabled:
+                            assert live_context is not None
+                            owner_evidence_id = (
+                                "live-owner-"
+                                + hashlib.sha256(
+                                    (
+                                        gate_request_id
+                                        + "|"
+                                        + strategy_symbol_scope_key(live_context)
+                                        + "|"
+                                        + str(gate_changed_at_ms)
+                                    ).encode()
+                                ).hexdigest()[:32]
+                            )
+                            live_arm_session_id = (
+                                "live-session-"
+                                + hashlib.sha256(
+                                    (
+                                        gate_request_id
+                                        + "|"
+                                        + strategy_symbol_scope_key(live_context)
+                                        + "|"
+                                        + live_context.release_commit
+                                    ).encode()
+                                ).hexdigest()[:32]
+                            )
+                            connection.execute(
+                                """INSERT INTO control.live_arm_evidence(
+                                       evidence_id,check_code,scope_type,scope_key,status,
+                                       checked_at,valid_until,release_commit,source,evidence
+                                   ) VALUES(
+                                       %s,'MAINNET_GATE_EXPLICIT_OWNER_APPROVAL',
+                                       'STRATEGY_SYMBOL',%s,'PASS',%s,NULL,%s,
+                                       'dashboard:owner',%s::jsonb
+                                   )""",
+                                (
+                                    owner_evidence_id,
+                                    strategy_symbol_scope_key(live_context),
+                                    gate_changed_at,
+                                    live_context.release_commit,
+                                    json.dumps(
+                                        {
+                                            "request_id": gate_request_id,
+                                            "live_arm_session_id": live_arm_session_id,
+                                        }
+                                    ),
+                                ),
+                            )
+                            full_readiness = evaluate_live_arm(
+                                connection,
+                                context=live_context,
+                                now=gate_changed_at,
+                                require_owner_approval=True,
+                            )
+                            if not full_readiness.ready:
+                                raise ValueError(
+                                    "canonical LIVE-arm owner approval incomplete: "
+                                    + ", ".join(full_readiness.failed_codes)
+                                )
+                            connection.execute(
+                                """INSERT INTO control.live_arm_sessions(
+                                       live_arm_session_id,strategy_id,strategy_version,
+                                       strategy_config_fingerprint,strategy_activation_id,
+                                       symbol,release_commit,state,owner_approved_at,
+                                       activated_at,deactivated_at,source
+                                   ) VALUES(
+                                       %s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s,%s,NULL,
+                                       'dashboard:owner'
+                                   )""",
+                                (
+                                    live_arm_session_id,
+                                    live_context.strategy_id,
+                                    live_context.strategy_version,
+                                    live_context.strategy_config_fingerprint,
+                                    live_context.strategy_activation_id,
+                                    live_context.symbol,
+                                    live_context.release_commit,
+                                    gate_changed_at,
+                                    gate_changed_at,
+                                ),
+                            )
+                        else:
+                            connection.execute(
+                                """UPDATE control.live_arm_sessions
+                                      SET state='CLOSED',deactivated_at=%s,
+                                          updated_at=clock_timestamp()
+                                    WHERE state='ACTIVE'""",
+                                (gate_changed_at,),
+                            )
                         connection.execute(
                             "UPDATE control.execution_gates SET enabled=%s,reason=%s,"
                             "updated_at_epoch_ms=%s WHERE mode='mainnet'",
@@ -3297,7 +3469,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 enabled,
                                 enabled,
                                 gate_reason,
-                                str(request.get("request_id") or secrets.token_hex(8)),
+                                gate_request_id,
                                 str(request.get("settings_version") or ""),
                             ),
                         )

@@ -81,6 +81,7 @@ def _exit_plan_json(plan: ExitPlan) -> str:
             "exit_plan_fingerprint": plan.exit_plan_fingerprint,
             "exit_policy": plan.exit_policy,
             "protection_policy": plan.protection_policy,
+            "emergency_policy": plan.emergency_policy,
         }
     )
 
@@ -213,7 +214,8 @@ class StrategyEntryStore:
         with self._connection.transaction():
             self._insert_signal(evaluation)
             self._insert_attempt(evaluation)
-            self._insert_decision(evaluation)
+            if evaluation.decision is not None:
+                self._insert_decision(evaluation)
             for context_link in evaluation.context_links:
                 self._insert_context_evidence(evaluation, context_link, evidence)
             for sensor_link in evaluation.sensor_links:
@@ -226,8 +228,9 @@ class StrategyEntryStore:
                            signal_id,strategy_id,strategy_version,
                            strategy_config_fingerprint,entry_plan_fingerprint,
                            symbol,direction,requested_at,payload,
-                           exit_plan_fingerprint,capital_reservation_id
-                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)""",
+                           exit_plan_fingerprint,capital_reservation_id,
+                           exchange_position_slot_claim_id,position_mode_state_ref
+                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s)""",
                     (
                         request.execution_request_id,
                         request.strategy_attempt_id,
@@ -243,6 +246,23 @@ class StrategyEntryStore:
                         request.payload.payload_json,
                         request.exit_plan_fingerprint,
                         request.capital_reservation_id,
+                        request.exchange_position_slot_claim_id,
+                        request.position_mode_state_ref,
+                    ),
+                )
+                state_event_id = "reqstate-" + request.execution_request_id.removeprefix("request-")
+                self._connection.execute(
+                    """INSERT INTO strategy_entry.execution_request_state_events(
+                           request_state_event_id,execution_request_id,state,occurred_at,
+                           reason,payload
+                       ) VALUES(%s,%s,'REQUEST_PENDING',%s,%s,%s::jsonb)
+                       ON CONFLICT(request_state_event_id) DO NOTHING""",
+                    (
+                        state_event_id,
+                        request.execution_request_id,
+                        request.requested_at,
+                        "ACCEPTED EntryDecision created request",
+                        "{}",
                     ),
                 )
             for notice in evaluation.notifications:
@@ -360,11 +380,14 @@ class StrategyEntryStore:
 
     def _insert_decision(self, evaluation: EntryEvaluation) -> None:
         decision = evaluation.decision
+        if decision is None:
+            raise ValueError("_insert_decision requires EntryDecision")
         self._connection.execute(
             """INSERT INTO strategy_entry.entry_decisions(
                    entry_decision_id,strategy_attempt_id,signal_id,decision_code,
-                   reason,decided_at,capacity_snapshot_id,capital_reservation_id,payload
-               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                   reason,decided_at,capacity_snapshot_id,capital_reservation_id,
+                   exchange_position_slot_claim_id,position_mode_state_ref,payload
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
             (
                 decision.entry_decision_id,
                 decision.strategy_attempt_id,
@@ -374,6 +397,8 @@ class StrategyEntryStore:
                 decision.decided_at,
                 decision.capacity_snapshot_id,
                 decision.capital_reservation_id,
+                decision.exchange_position_slot_claim_id,
+                decision.position_mode_state_ref,
                 _json(decision),
             ),
         )
@@ -407,7 +432,11 @@ class StrategyEntryStore:
                 link.context_id,
                 None if link.mode is ContextMode.OFF else link.mode.value,
                 link.context_observed_at,
-                evaluation.decision.decided_at,
+                (
+                    evaluation.decision.decided_at
+                    if evaluation.decision is not None
+                    else evaluation.attempt.created_at
+                ),
                 link.age_seconds,
                 _quality(link.quality),
                 link.status,
@@ -441,7 +470,11 @@ class StrategyEntryStore:
                 link.context_id,
                 link.mode.value,
                 link.context_observed_at,
-                evaluation.decision.decided_at,
+                (
+                    evaluation.decision.decided_at
+                    if evaluation.decision is not None
+                    else evaluation.attempt.created_at
+                ),
                 link.age_seconds,
                 _quality(link.quality),
                 link.status,
@@ -474,7 +507,11 @@ class StrategyEntryStore:
                 evaluation.signal.signal_id,
                 link.sensor_id,
                 link.observation_observed_at,
-                evaluation.decision.decided_at,
+                (
+                    evaluation.decision.decided_at
+                    if evaluation.decision is not None
+                    else evaluation.attempt.created_at
+                ),
                 link.age_seconds,
                 _quality(link.quality),
                 link.status,
@@ -503,7 +540,11 @@ class StrategyEntryStore:
                 evaluation.attempt.strategy_attempt_id,
                 link.sensor_id,
                 link.observation_observed_at,
-                evaluation.decision.decided_at,
+                (
+                    evaluation.decision.decided_at
+                    if evaluation.decision is not None
+                    else evaluation.attempt.created_at
+                ),
                 link.age_seconds,
                 _quality(link.quality),
                 link.status,

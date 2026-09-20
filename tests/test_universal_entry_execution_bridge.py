@@ -31,6 +31,8 @@ def _request(*, direction: TradeDirection = TradeDirection.LONG) -> ExecutionReq
         entry_plan_fingerprint="entry-fp",
         exit_plan_fingerprint="exit-fp",
         capital_reservation_id="cap-test-1",
+        exchange_position_slot_claim_id="slot-test-1",
+        position_mode_state_ref="pmode-test-1",
         symbol="UNIUSDT",
         direction=direction,
         requested_at=NOW,
@@ -87,6 +89,14 @@ def _bundle(*, enabled: bool = True, limit: bool = False) -> BridgePolicyBundle:
             **identity,
             "entry_policy": {"execution_policy": execution_policy},
             "capital_policy": capital,
+            "lifecycle_policy": {
+                "emergency_policy": {
+                    "enabled": True,
+                    "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+                    "action": "FAIL_CLOSED_ONLY",
+                    "reconciliation_required": True,
+                }
+            },
         },
         entry_plan={**identity, "entry_plan_fingerprint": "entry-fp"},
         exit_plan={
@@ -99,6 +109,12 @@ def _bundle(*, enabled: bool = True, limit: bool = False) -> BridgePolicyBundle:
                     "trigger_by": "LastPrice",
                     "tpsl_mode": "Full",
                 }
+            },
+            "emergency_policy": {
+                "enabled": True,
+                "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+                "action": "FAIL_CLOSED_ONLY",
+                "reconciliation_required": True,
             },
         },
         activation={
@@ -200,7 +216,7 @@ def test_missing_reference_path_is_not_zero_or_neutral() -> None:
     assert caught.value.code is ExecutionBridgeBlockCode.REFERENCE_PRICE_MISSING
 
 
-def test_current_v1_card_cannot_use_legacy_trade_settings_as_hidden_defaults() -> None:
+def test_historical_v1_card_without_explicit_live_contracts_cannot_real_arm() -> None:
     compatibility = load_v1_compatibility_bundle(ROOT)
     entry_plan, exit_plan = materialize_plans(compatibility.card, compatibility.activation)
     request = ExecutionRequest(
@@ -214,6 +230,8 @@ def test_current_v1_card_cannot_use_legacy_trade_settings_as_hidden_defaults() -
         entry_plan_fingerprint=entry_plan.entry_plan_fingerprint,
         exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
         capital_reservation_id="cap-v1-test",
+        exchange_position_slot_claim_id="slot-v1-test",
+        position_mode_state_ref="pmode-v1-test",
         symbol="UNIUSDT",
         direction=TradeDirection.LONG,
         requested_at=NOW,
@@ -397,6 +415,12 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
             "time_exit": {"enabled": False},
         }
     )
+    raw["lifecycle_policy"]["emergency_policy"] = {
+        "enabled": True,
+        "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+        "action": "FAIL_CLOSED_ONLY",
+        "reconciliation_required": True,
+    }
     raw["protection_policy"] = {
         "initial_protection": {
             "stop_loss_enabled": True,
@@ -429,6 +453,8 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
         entry_plan_fingerprint=entry_plan.entry_plan_fingerprint,
         exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
         capital_reservation_id="cap-owner-test",
+        exchange_position_slot_claim_id="slot-owner-test",
+        position_mode_state_ref="pmode-owner-test",
         symbol="UNIUSDT",
         direction=TradeDirection.LONG,
         requested_at=NOW,
@@ -463,6 +489,7 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
                 "strategy_config_fingerprint": card.strategy_config_fingerprint,
                 "entry_policy": card.entry_policy.to_dict(),
                 "capital_policy": card.capital_policy.to_dict(),
+                "lifecycle_policy": card.lifecycle_policy.to_dict(),
             },
             entry_plan={
                 "strategy_id": entry_plan.strategy_id,
@@ -480,6 +507,7 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
                 "strategy_config_fingerprint": exit_plan.strategy_config_fingerprint,
                 "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
                 "protection_policy": exit_plan.protection_policy.to_dict(),
+                "emergency_policy": exit_plan.emergency_policy.to_dict(),
             },
             activation={
                 "activation_id": activation.activation_id,

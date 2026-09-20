@@ -3,8 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
+from bybit_workbench.capital_reservation import CapitalReservation, CapitalReservationState
+from bybit_workbench.entry_admission import EntryAdmissionReceipt, EntryAdmissionRequest
 from bybit_workbench.universal_entry import (
     ActivePlanRegistry,
     ContextFailureAction,
@@ -21,6 +24,7 @@ from bybit_workbench.universal_entry import (
     TechnicalReadiness,
     TouchPolicy,
     TradeDirection,
+    TradingCapacitySnapshot,
     UniversalEntryEngine,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
@@ -53,6 +57,30 @@ class FakeConnection:
     def transaction(self) -> Iterator[object]:
         self.transactions += 1
         yield object()
+
+
+class AcceptingAdmissionPort:
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        reservation = CapitalReservation(
+            reservation_id="cap-storage",
+            account_ref=request.account_ref,
+            strategy_attempt_id=request.strategy_attempt_id,
+            requested_amount=request.requested_amount,
+            amount_currency=request.amount_currency,
+            capacity_snapshot_id=request.capacity_snapshot_id,
+            state=CapitalReservationState.RESERVED,
+            created_at=request.requested_at,
+            updated_at=request.requested_at,
+            pre_dispatch_expires_at=request.pre_dispatch_expires_at,
+            state_reason="TEST",
+        )
+        return EntryAdmissionReceipt(
+            exchange_position_slot_claim_id="slot-storage",
+            exchange_position_key=request.exchange_position_key,
+            position_mode_state_ref="pmode-storage",
+            position_idx=0,
+            capital_reservation=reservation,
+        )
 
 
 def policy(payload: dict[str, object] | None = None) -> FrozenPolicy:
@@ -112,10 +140,24 @@ def strategy_card() -> StrategyCard:
                     ],
                 },
                 "watch_policy": {"enabled": False},
+                "execution_policy": {
+                    "order_type": "MARKET",
+                    "reference_value_path": "fact.entry_price",
+                    "max_request_age_seconds": 30,
+                },
             }
         ),
         exit_policy=policy({"exit_plan_version": "1"}),
-        capital_policy=policy({}),
+        capital_policy=policy(
+            {
+                "require_capacity": True,
+                "requested_amount": "10",
+                "amount_currency": "USDT",
+                "leverage": 1,
+                "capacity_max_age_seconds": 30,
+                "capacity_min_quality": "MEDIUM",
+            }
+        ),
         protection_policy=policy({}),
         lifecycle_policy=policy({"post_signal_outcome_policy": {"enabled": False}}),
         touch_policy=TouchPolicy(accepted_touch_numbers=(1,)),
@@ -125,7 +167,7 @@ def strategy_card() -> StrategyCard:
     )
 
 
-def build_evaluation():
+def build_evaluation(*, real: bool = False):
     card = strategy_card()
     activation = StrategyActivation(
         activation_id="act-storage",
@@ -165,12 +207,30 @@ def build_evaluation():
         source_refs=("dispatcher-row:exact:1",),
     )
     engine = UniversalEntryEngine(registry)
-    result = engine.process(
-        fact,
-        sensors={"flow.delta": sensor},
-        contexts={"dispatcher.coin": context},
-        technical_readiness=TechnicalReadiness(True, NOW),
-    )
+    kwargs: dict[str, object] = {
+        "sensors": {"flow.delta": sensor},
+        "contexts": {"dispatcher.coin": context},
+        "technical_readiness": TechnicalReadiness(True, NOW),
+    }
+    if real:
+        kwargs.update(
+            {
+                "capacity": TradingCapacitySnapshot(
+                    "cap-storage-snapshot",
+                    NOW,
+                    Decimal("100"),
+                    DataQuality.HIGH,
+                    "exchange:test",
+                ),
+                "account_ref": "BYBIT:UNIFIED",
+                "entry_admission_port": AcceptingAdmissionPort(),
+                "real_admission_required_for": frozenset({"act-storage"}),
+                "exchange_position_keys": {
+                    "XRPUSDT": "BYBIT:UNIFIED:LINEAR:USDT:XRPUSDT:0"
+                },
+            }
+        )
+    result = engine.process(fact, **kwargs)
     assert len(result) == 1
     return card, activation, entry_plan, result[0]
 
@@ -268,14 +328,15 @@ def test_plan_storage_json_is_policy_only_and_excludes_activation_identity() -> 
     assert activation.activation_id not in payload
 
 
-def test_store_persists_exact_signal_attempt_decision_and_dual_context_links() -> None:
+def test_store_persists_shadow_signal_attempt_and_dual_context_links_without_real_decision(
+) -> None:
     card, activation, entry_plan, evaluation = build_evaluation()
     connection = FakeConnection()
     store = StrategyEntryStore(connection)
     store.insert_strategy_card(card)
     store.insert_activation(activation)
     store.insert_entry_plan(entry_plan)
-    store.record_evaluation(evaluation, provenance=policy({"test": "u3"}))
+    store.record_evaluation(evaluation, provenance=policy({"test": "u3-shadow"}))
 
     statements = "\n".join(statement for statement, _ in connection.statements)
     assert "strategy_entry.strategy_cards" in statements
@@ -283,12 +344,15 @@ def test_store_persists_exact_signal_attempt_decision_and_dual_context_links() -
     assert "strategy_entry.entry_plans" in statements
     assert "strategy_entry.strategy_signals" in statements
     assert "strategy_entry.strategy_attempts" in statements
-    assert "strategy_entry.entry_decisions" in statements
+    assert "strategy_entry.entry_decisions" not in statements
+    assert "strategy_entry.execution_requests" not in statements
     assert statements.count("strategy_entry.context_links") == 2
     assert statements.count("strategy_entry.sensor_links") == 2
     assert "CONSUMED_CONTEXT" in statements
     assert "OBSERVED_CONTEXT" in statements
     assert connection.transactions == 1
+    assert evaluation.decision is None
+    assert evaluation.execution_request is None
 
     signal_insert = next(
         params
@@ -306,6 +370,41 @@ def test_store_persists_exact_signal_attempt_decision_and_dual_context_links() -
     )
     assert attempt_insert[0] == evaluation.attempt.strategy_attempt_id
     assert attempt_insert[1] == evaluation.signal.signal_id
+
+
+def test_store_persists_real_decision_request_and_admission_lineage() -> None:
+    card, activation, entry_plan, evaluation = build_evaluation(real=True)
+    assert evaluation.decision is not None
+    assert evaluation.execution_request is not None
+    connection = FakeConnection()
+    store = StrategyEntryStore(connection)
+    store.insert_strategy_card(card)
+    store.insert_activation(activation)
+    store.insert_entry_plan(entry_plan)
+    store.record_evaluation(evaluation, provenance=policy({"test": "u3-real"}))
+
+    statements = "\n".join(statement for statement, _ in connection.statements)
+    assert "strategy_entry.entry_decisions" in statements
+    assert "strategy_entry.execution_requests" in statements
+    assert "strategy_entry.execution_request_state_events" in statements
+
+    decision_insert = next(
+        params
+        for statement, params in connection.statements
+        if "INSERT INTO strategy_entry.entry_decisions" in statement
+    )
+    assert "cap-storage" in decision_insert
+    assert "slot-storage" in decision_insert
+    assert "pmode-storage" in decision_insert
+
+    request_insert = next(
+        params
+        for statement, params in connection.statements
+        if "INSERT INTO strategy_entry.execution_requests" in statement
+    )
+    assert "cap-storage" in request_insert
+    assert "slot-storage" in request_insert
+    assert "pmode-storage" in request_insert
 
 
 def test_store_keeps_context_requirement_key_separate_from_snapshot_id() -> None:

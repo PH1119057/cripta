@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
+from bybit_workbench.entry_admission import (
+    SlotClaimState,
+    bind_slot_claim_to_position,
+    transition_slot_claim,
+)
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import TradeDirection
+from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +32,9 @@ class UniversalEntryLineage:
     capital_reservation_id: str
     account_ref: str
     capital_reservation_state: str
+    exchange_position_slot_claim_id: str
+    position_mode_state_ref: str
+    emergency_policy_json: str
 
     def __post_init__(self) -> None:
         for field in (
@@ -42,6 +51,9 @@ class UniversalEntryLineage:
             "capital_reservation_id",
             "account_ref",
             "capital_reservation_state",
+            "exchange_position_slot_claim_id",
+            "position_mode_state_ref",
+            "emergency_policy_json",
         ):
             if not str(getattr(self, field)).strip():
                 raise ValueError(f"Universal Entry lineage requires {field}")
@@ -70,6 +82,8 @@ class UniversalEntryLineage:
             "entry_decision_id": self.entry_decision_id,
             "strategy_activation_id": self.strategy_activation_id,
             "capital_reservation_id": self.capital_reservation_id,
+            "exchange_position_slot_claim_id": self.exchange_position_slot_claim_id,
+            "position_mode_state_ref": self.position_mode_state_ref,
             "bot_instance_id": "universal-entry",
         }
         for field, value in expected.items():
@@ -106,7 +120,8 @@ def load_universal_entry_lineage(
         """SELECT d.execution_request_id,r.signal_id,r.strategy_id,r.strategy_version,
                   r.strategy_config_fingerprint,r.entry_plan_fingerprint,
                   r.exit_plan_fingerprint,r.strategy_attempt_id,r.entry_decision_id,
-                  t.strategy_activation_id,r.capital_reservation_id,c.account_ref,c.state
+                  t.strategy_activation_id,r.capital_reservation_id,c.account_ref,c.state,
+                  r.exchange_position_slot_claim_id,r.position_mode_state_ref
              FROM strategy_entry.execution_dispatches d
              JOIN strategy_entry.execution_requests r
                ON r.execution_request_id=d.execution_request_id
@@ -123,6 +138,9 @@ def load_universal_entry_lineage(
     ).fetchone()
     if row is None:
         return None
+    emergency_policy = command_payload.get("emergency_policy")
+    if not isinstance(emergency_policy, Mapping) or not emergency_policy:
+        raise RuntimeError("Universal Entry command lost exact emergency_policy")
     lineage = UniversalEntryLineage(
         execution_request_id=str(row[0]),
         signal_id=str(row[1]),
@@ -137,6 +155,9 @@ def load_universal_entry_lineage(
         capital_reservation_id=str(row[10]),
         account_ref=str(row[11]),
         capital_reservation_state=str(row[12]),
+        exchange_position_slot_claim_id=str(row[13]),
+        position_mode_state_ref=str(row[14]),
+        emergency_policy_json=canonical_json(dict(emergency_policy)),
     )
     lineage.validate_command_payload(command_payload)
     return lineage
@@ -172,9 +193,12 @@ def persist_universal_strategy_position(
                client_order_ids,execution_ids,exchange_position_key,position_idx,
                account_ref,strategy_config_fingerprint,strategy_activation_id,
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
-               entry_plan_fingerprint,exit_plan_fingerprint)
+               entry_plan_fingerprint,exit_plan_fingerprint,
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               emergency_policy)
            VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,NULL,%s,%s,%s,%s,%s,
-                  %s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                  %s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                  %s,%s,%s::jsonb)
            ON CONFLICT(entry_command_id) DO UPDATE SET
                actual_avg_fill=excluded.actual_avg_fill,
                actual_qty=excluded.actual_qty,
@@ -215,6 +239,9 @@ def persist_universal_strategy_position(
             lineage.execution_request_id,
             lineage.entry_plan_fingerprint,
             lineage.exit_plan_fingerprint,
+            lineage.exchange_position_slot_claim_id,
+            lineage.position_mode_state_ref,
+            lineage.emergency_policy_json,
         ),
     )
     stored = connection.execute(
@@ -224,7 +251,7 @@ def persist_universal_strategy_position(
                   entry_execution_request_id,entry_plan_fingerprint,
                   exit_plan_fingerprint,account_ref,exchange_position_key,
                   position_idx,symbol,side,actual_avg_fill,actual_qty,fill_at,
-                  entry_command_id
+                  entry_command_id,exchange_position_slot_claim_id,position_mode_state_ref
              FROM runtime.position_ownership
             WHERE entry_command_id=%s""",
         (entry_command_id,),
@@ -250,6 +277,38 @@ def persist_universal_strategy_position(
     stored_position_id = str(stored[0])
     if stored_position_id != position_id:
         raise RuntimeError("entry command is already bound to another StrategyPosition")
+    if (
+        str(stored[20]) != lineage.exchange_position_slot_claim_id
+        or str(stored[21]) != lineage.position_mode_state_ref
+    ):
+        raise RuntimeError("persisted StrategyPosition admission lineage mismatch")
+
+    bind_slot_claim_to_position(
+        connection,
+        exchange_position_slot_claim_id=lineage.exchange_position_slot_claim_id,
+        strategy_position_id=position_id,
+        bound_at=fill_at,
+    )
+    request_terminal_id = "reqstate-" + fingerprint(
+        {
+            "execution_request_id": lineage.execution_request_id,
+            "state": "REQUEST_TERMINAL",
+            "strategy_position_id": position_id,
+        }
+    )[:32]
+    connection.execute(
+        """INSERT INTO strategy_entry.execution_request_state_events(
+               request_state_event_id,execution_request_id,state,occurred_at,reason,payload
+           ) VALUES(%s,%s,'REQUEST_TERMINAL',%s,'CONFIRMED_ENTRY_FILL',
+                    %s::jsonb)
+           ON CONFLICT(request_state_event_id) DO NOTHING""",
+        (
+            request_terminal_id,
+            lineage.execution_request_id,
+            fill_at,
+            canonical_json({"strategy_position_id": position_id}),
+        ),
+    )
 
     reservation = connection.execute(
         """SELECT state,strategy_position_id,exchange_commitment_ref
@@ -319,6 +378,8 @@ def persist_universal_strategy_position(
         actual_avg_fill=actual_avg_fill,
         actual_qty=actual_qty,
         fill_at=fill_at,
+        exchange_position_slot_claim_id=lineage.exchange_position_slot_claim_id,
+        position_mode_state_ref=lineage.position_mode_state_ref,
     )
 
 
@@ -331,7 +392,8 @@ def release_position_capital_reservation(
     if not entry_execution_request_id:
         return
     row = connection.execute(
-        """SELECT c.reservation_id,c.state,c.strategy_position_id
+        """SELECT c.reservation_id,c.state,c.strategy_position_id,
+                  r.exchange_position_slot_claim_id
              FROM strategy_entry.execution_requests r
              JOIN runtime.capital_reservations c
                ON c.reservation_id=r.capital_reservation_id
@@ -341,10 +403,11 @@ def release_position_capital_reservation(
     ).fetchone()
     if row is None:
         return
-    reservation_id, state, bound_position = (
+    reservation_id, state, bound_position, slot_claim_id = (
         str(row[0]),
         str(row[1]),
         None if row[2] is None else str(row[2]),
+        None if row[3] is None else str(row[3]),
     )
     if bound_position != position_id:
         raise RuntimeError("capital reservation/StrategyPosition close binding mismatch")
@@ -362,3 +425,11 @@ def release_position_capital_reservation(
     )
     if updated.rowcount != 1:
         raise RuntimeError("capital reservation release race")
+    if slot_claim_id:
+        transition_slot_claim(
+            connection,
+            exchange_position_slot_claim_id=slot_claim_id,
+            state=SlotClaimState.RELEASED,
+            at=datetime.now(UTC),
+            reason="CONFIRMED_POSITION_CLOSE",
+        )

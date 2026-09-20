@@ -7,10 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from bybit_workbench.capital_reservation import (
-    CapitalReservationRequest,
-    InsufficientCapital,
-)
 from bybit_workbench.counterfactual import (
     CounterfactualEconomicsStatus,
     CounterfactualOutcome,
@@ -25,10 +21,12 @@ from bybit_workbench.universal_entry.contracts import (
 )
 from tests.test_universal_entry_architecture import (
     NOW,
+    AcceptingAdmissionPort,
+    RejectingCapitalAdmissionPort,
     capacity_policy,
-    evaluate,
     fact,
     make_card,
+    real_evaluate,
     setup_engine,
 )
 
@@ -51,12 +49,11 @@ def _insufficient_evaluation():
         DataQuality.HIGH,
         "exchange:test",
     )
-    evaluation = evaluate(
+    evaluation = real_evaluate(
         engine,
         fact(1),
         capacity=capacity,
-        account_ref="BYBIT:UNIFIED",
-        capital_reservation_required_for=frozenset({"act-0"}),
+        admission_port=RejectingCapitalAdmissionPort(),
     )[0]
     entry_plan, exit_plan = registry.exact_plan_pair("act-0")
     return evaluation, entry_plan, exit_plan
@@ -90,10 +87,6 @@ def test_insufficient_capital_creates_exact_counterfactual_candidate() -> None:
 
 
 def test_atomic_reservation_race_also_creates_counterfactual_candidate() -> None:
-    class RejectingReservationPort:
-        def reserve(self, request: CapitalReservationRequest):
-            raise InsufficientCapital(request.requested_amount, Decimal("0"))
-
     card = make_card(
         "p8-race",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
@@ -107,13 +100,11 @@ def test_atomic_reservation_race_also_creates_counterfactual_candidate() -> None
         DataQuality.HIGH,
         "exchange:test",
     )
-    evaluation = evaluate(
+    evaluation = real_evaluate(
         engine,
         fact(2),
         capacity=capacity,
-        account_ref="BYBIT:UNIFIED",
-        capital_reservation_port=RejectingReservationPort(),
-        capital_reservation_required_for=frozenset({"act-0"}),
+        admission_port=RejectingCapitalAdmissionPort(),
     )[0]
     entry_plan, exit_plan = registry.exact_plan_pair("act-0")
     candidate = build_insufficient_funds_candidate(
@@ -127,11 +118,27 @@ def test_atomic_reservation_race_also_creates_counterfactual_candidate() -> None
     assert "atomic capital reservation failed" in candidate.decision_reason
 
 
-def test_non_insufficient_decision_never_becomes_counterfactual() -> None:
-    card = make_card("p8-accepted")
+def test_non_counterfactual_accepted_decision_never_becomes_counterfactual() -> None:
+    card = make_card(
+        "p8-accepted",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     registry, engine = setup_engine(card)
-    evaluation = evaluate(engine, fact(3))[0]
+    evaluation = real_evaluate(
+        engine,
+        fact(3),
+        capacity=TradingCapacitySnapshot(
+            "p8-accepted-capacity",
+            NOW,
+            Decimal("20"),
+            DataQuality.HIGH,
+            "exchange:test",
+        ),
+        admission_port=AcceptingAdmissionPort(),
+    )[0]
     entry_plan, exit_plan = registry.exact_plan_pair("act-0")
+    assert evaluation.decision is not None
     assert evaluation.decision.code is EntryDecisionCode.ACCEPTED
     assert (
         build_insufficient_funds_candidate(
@@ -147,9 +154,24 @@ def test_non_insufficient_decision_never_becomes_counterfactual() -> None:
 def test_counterfactual_fails_closed_if_illegal_execution_or_reservation_exists() -> None:
     evaluation, entry_plan, exit_plan = _insufficient_evaluation()
 
-    accepted_card = make_card("p8-request-source")
+    accepted_card = make_card(
+        "p8-request-source",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, accepted_engine = setup_engine(accepted_card)
-    accepted = evaluate(accepted_engine, fact(4))[0]
+    accepted = real_evaluate(
+        accepted_engine,
+        fact(4),
+        capacity=TradingCapacitySnapshot(
+            "p8-request-source-capacity",
+            NOW,
+            Decimal("20"),
+            DataQuality.HIGH,
+            "exchange:test",
+        ),
+        admission_port=AcceptingAdmissionPort(),
+    )[0]
     assert accepted.execution_request is not None
     illegal_request = replace(
         evaluation,
@@ -173,16 +195,14 @@ def test_counterfactual_fails_closed_if_illegal_execution_or_reservation_exists(
             capital_reservation_id="forbidden-reservation",
         ),
     )
-    with pytest.raises(
-        RuntimeError,
-        match="cannot have capital reservation",
-    ):
+    with pytest.raises(RuntimeError) as caught:
         build_insufficient_funds_candidate(
             illegal_reservation,
             entry_plan=entry_plan,
             exit_plan=exit_plan,
             captured_at=NOW,
         )
+    assert "cannot keep capital reservation" in str(caught.value)
 
 
 def test_counterfactual_cross_exit_plan_lineage_is_fail_closed() -> None:
@@ -245,13 +265,13 @@ def test_analyst_counterfactual_source_has_no_trading_path() -> None:
 
 def test_observer_captures_counterfactual_only_for_real_execution_activation() -> None:
     start = OBSERVER.index("for evaluation in evaluations:")
-    block = OBSERVER[start : start + 2200]
+    block = OBSERVER[start : start + 2600]
     assert "build_insufficient_funds_candidate(" in block
     assert "counterfactual_store.record_candidate(candidate)" in block
     assert "evaluation.signal.strategy_activation_id" in block
-    assert "reservation_required_for" in block
-    assert block.index("reservation_required_for") < block.index(
+    assert "real_admission_required_for" in block
+    assert block.index("real_admission_required_for") < block.index(
         "build_insufficient_funds_candidate("
     )
     assert "paper.create_order(" in block
-    assert "if evaluation.execution_request is not None:" in block
+    assert "if evaluation.execution_request is not None:" not in block

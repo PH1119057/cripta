@@ -10,9 +10,15 @@ import pytest
 
 from bybit_workbench.capital_reservation import (
     CapitalReservation,
-    CapitalReservationRequest,
     CapitalReservationState,
     InsufficientCapital,
+)
+from bybit_workbench.entry_admission import (
+    EntryAdmissionReceipt,
+    EntryAdmissionRequest,
+    PositionModeMismatch,
+    PositionModeStateUnavailable,
+    SlotOwnershipConflict,
 )
 from bybit_workbench.universal_entry import (
     ActivePlanRegistry,
@@ -139,6 +145,78 @@ def evaluate(
     return engine.process(event, **kwargs)
 
 
+class AcceptingAdmissionPort:
+    def __init__(self, *, reservation_id: str = "cap-reserved-test") -> None:
+        self.reservation_id = reservation_id
+        self.captured: list[EntryAdmissionRequest] = []
+
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        self.captured.append(request)
+        reservation = CapitalReservation(
+            reservation_id=self.reservation_id,
+            account_ref=request.account_ref,
+            strategy_attempt_id=request.strategy_attempt_id,
+            requested_amount=request.requested_amount,
+            amount_currency=request.amount_currency,
+            capacity_snapshot_id=request.capacity_snapshot_id,
+            state=CapitalReservationState.RESERVED,
+            created_at=request.requested_at,
+            updated_at=request.requested_at,
+            pre_dispatch_expires_at=request.pre_dispatch_expires_at,
+            state_reason="TEST",
+        )
+        return EntryAdmissionReceipt(
+            exchange_position_slot_claim_id="slot-" + request.strategy_attempt_id,
+            exchange_position_key=request.exchange_position_key,
+            position_mode_state_ref="pmode-test",
+            position_idx=0,
+            capital_reservation=reservation,
+        )
+
+
+class RejectingCapitalAdmissionPort:
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        raise InsufficientCapital(request.requested_amount, Decimal("0"))
+
+
+class RejectingSlotAdmissionPort:
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        raise SlotOwnershipConflict(request.exchange_position_key)
+
+
+class StaleModeAdmissionPort:
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        raise PositionModeStateUnavailable("position mode state is stale")
+
+
+class MismatchedModeAdmissionPort:
+    def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        raise PositionModeMismatch(
+            state_ref="pmode-bad",
+            position_mode="HEDGE",
+            position_idx=None,
+        )
+
+
+def real_evaluate(
+    engine: UniversalEntryEngine,
+    event: MarketFactEnvelope,
+    *,
+    real_ids: frozenset[str] = frozenset({"act-0"}),
+    admission_port: object | None = None,
+    **kwargs: Any,
+):
+    kwargs.setdefault("technical_readiness", READY)
+    kwargs.setdefault("account_ref", "BYBIT:UNIFIED")
+    kwargs.setdefault(
+        "exchange_position_keys",
+        {event.symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{event.symbol}:0"},
+    )
+    kwargs["real_admission_required_for"] = real_ids
+    kwargs["entry_admission_port"] = admission_port
+    return engine.process(event, **kwargs)
+
+
 def capacity_policy(
     amount: str,
     *,
@@ -177,7 +255,7 @@ def sensor_requirement(sensor_id: str, mode: ContextMode) -> SensorRequirement:
     )
 
 
-def test_one_strategy_creates_exact_signal_attempt_decision_and_request() -> None:
+def test_shadow_strategy_creates_signal_attempt_and_paper_intent_without_real_decision() -> None:
     card = make_card("s1")
     _, engine = setup_engine(card)
     result = evaluate(engine, fact(1))
@@ -186,10 +264,10 @@ def test_one_strategy_creates_exact_signal_attempt_decision_and_request() -> Non
     assert item.signal.strategy_id == card.strategy_id
     assert item.signal.strategy_config_fingerprint == card.strategy_config_fingerprint
     assert item.attempt.signal_id == item.signal.signal_id
-    assert item.decision.strategy_attempt_id == item.attempt.strategy_attempt_id
-    assert item.decision.code is EntryDecisionCode.ACCEPTED
-    assert item.execution_request is not None
-    assert item.execution_request.entry_plan_fingerprint == item.signal.entry_plan_fingerprint
+    assert item.decision is None
+    assert item.execution_request is None
+    assert item.paper_intent.strategy_attempt_id == item.attempt.strategy_attempt_id
+    assert item.paper_intent.entry_plan_fingerprint == item.signal.entry_plan_fingerprint
 
 
 def test_five_simultaneous_strategies_are_independent() -> None:
@@ -695,7 +773,11 @@ def test_stale_sensor_never_becomes_zero_or_neutral() -> None:
 
 
 def test_capacity_insufficient_is_attempt_reason_not_strategy_selection() -> None:
-    card = make_card("money", capital=capacity_policy("50"))
+    card = make_card(
+        "money",
+        capital={**capacity_policy("50"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, engine = setup_engine(card)
     capacity = TradingCapacitySnapshot(
         "cap-1",
@@ -704,13 +786,19 @@ def test_capacity_insufficient_is_attempt_reason_not_strategy_selection() -> Non
         DataQuality.HIGH,
         "exchange:test",
     )
-    result = evaluate(engine, fact(1), capacity=capacity)
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=RejectingCapitalAdmissionPort(),
+    )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
     assert result[0].execution_request is None
     assert result[0].notifications[0].available_amount == Decimal("20")
 
 
-def test_real_entry_without_reservation_port_is_operationally_blocked() -> None:
+def test_real_entry_without_atomic_admission_port_is_operationally_blocked() -> None:
     card = make_card(
         "live-no-port",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
@@ -724,23 +812,20 @@ def test_real_entry_without_reservation_port_is_operationally_blocked() -> None:
         DataQuality.HIGH,
         "exchange:test",
     )
-    result = evaluate(
+    result = real_evaluate(
         engine,
         fact(1),
         capacity=capacity,
-        account_ref="BYBIT:UNIFIED",
-        capital_reservation_required_for=frozenset({"act-0"}),
+        admission_port=None,
     )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
     assert result[0].decision.capital_reservation_id is None
+    assert result[0].decision.exchange_position_slot_claim_id is None
     assert result[0].execution_request is None
 
 
-def test_failed_atomic_reservation_becomes_insufficient_available_funds() -> None:
-    class RejectingReservationPort:
-        def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
-            raise InsufficientCapital(request.requested_amount, Decimal("0"))
-
+def test_failed_atomic_admission_reservation_becomes_insufficient_available_funds() -> None:
     card = make_card(
         "live-loser",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
@@ -754,39 +839,20 @@ def test_failed_atomic_reservation_becomes_insufficient_available_funds() -> Non
         DataQuality.HIGH,
         "exchange:test",
     )
-    result = evaluate(
+    result = real_evaluate(
         engine,
         fact(1),
         capacity=capacity,
-        account_ref="BYBIT:UNIFIED",
-        capital_reservation_port=RejectingReservationPort(),
-        capital_reservation_required_for=frozenset({"act-0"}),
+        admission_port=RejectingCapitalAdmissionPort(),
     )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
     assert result[0].decision.capital_reservation_id is None
+    assert result[0].decision.exchange_position_slot_claim_id is None
     assert result[0].execution_request is None
 
 
-def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
-    captured: list[CapitalReservationRequest] = []
-
-    class AcceptingReservationPort:
-        def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
-            captured.append(request)
-            return CapitalReservation(
-                reservation_id="cap-reserved-test",
-                account_ref=request.account_ref,
-                strategy_attempt_id=request.strategy_attempt_id,
-                requested_amount=request.requested_amount,
-                amount_currency=request.amount_currency,
-                capacity_snapshot_id=request.capacity_snapshot_id,
-                state=CapitalReservationState.RESERVED,
-                created_at=request.requested_at,
-                updated_at=request.requested_at,
-                pre_dispatch_expires_at=request.pre_dispatch_expires_at,
-                state_reason="TEST",
-            )
-
+def test_successful_atomic_admission_is_carried_to_entry_request() -> None:
     card = make_card(
         "live-winner",
         capital={**capacity_policy("10"), "amount_currency": "USDT"},
@@ -800,21 +866,30 @@ def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
         DataQuality.HIGH,
         "exchange:test",
     )
-    result = evaluate(
+    port = AcceptingAdmissionPort()
+    result = real_evaluate(
         engine,
         fact(1),
         capacity=capacity,
-        account_ref="BYBIT:UNIFIED",
-        capital_reservation_port=AcceptingReservationPort(),
-        capital_reservation_required_for=frozenset({"act-0"}),
+        admission_port=port,
     )
     item = result[0]
+    assert item.decision is not None
     assert item.decision.code is EntryDecisionCode.ACCEPTED
-    assert captured
-    assert captured[0].pre_dispatch_expires_at == NOW + timedelta(seconds=30)
+    assert port.captured
+    assert port.captured[0].pre_dispatch_expires_at == NOW + timedelta(seconds=30)
     assert item.decision.capital_reservation_id == "cap-reserved-test"
+    assert item.decision.exchange_position_slot_claim_id == (
+        "slot-" + item.attempt.strategy_attempt_id
+    )
+    assert item.decision.position_mode_state_ref == "pmode-test"
     assert item.execution_request is not None
     assert item.execution_request.capital_reservation_id == "cap-reserved-test"
+    assert (
+        item.execution_request.exchange_position_slot_claim_id
+        == item.decision.exchange_position_slot_claim_id
+    )
+    assert item.execution_request.position_mode_state_ref == "pmode-test"
     exact_exit = registry.exact_plan_pair("act-0")[1]
     assert item.execution_request.exit_plan_fingerprint == exact_exit.exit_plan_fingerprint
 
@@ -822,11 +897,16 @@ def test_successful_atomic_reservation_is_carried_to_entry_request() -> None:
 def test_capacity_quality_threshold_is_plan_data_not_engine_default() -> None:
     low_ok = make_card(
         "low-ok",
-        capital=capacity_policy("10", min_quality=DataQuality.LOW),
+        capital={**capacity_policy("10", min_quality=DataQuality.LOW), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
     )
     medium_required = make_card(
         "medium-required",
-        capital=capacity_policy("10", min_quality=DataQuality.MEDIUM),
+        capital={
+            **capacity_policy("10", min_quality=DataQuality.MEDIUM),
+            "amount_currency": "USDT",
+        },
+        execution={"max_request_age_seconds": 30},
     )
     _, engine = setup_engine(low_ok, medium_required)
     capacity = TradingCapacitySnapshot(
@@ -836,9 +916,17 @@ def test_capacity_quality_threshold_is_plan_data_not_engine_default() -> None:
         DataQuality.LOW,
         "exchange:test",
     )
-    result = evaluate(engine, fact(1), capacity=capacity)
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=AcceptingAdmissionPort(),
+        real_ids=frozenset({"act-0", "act-1"}),
+    )
     by_strategy = {item.signal.strategy_id: item for item in result}
+    assert by_strategy["low-ok"].decision is not None
     assert by_strategy["low-ok"].decision.code is EntryDecisionCode.ACCEPTED
+    assert by_strategy["medium-required"].decision is not None
     assert (
         by_strategy["medium-required"].decision.code
         is EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
@@ -846,8 +934,16 @@ def test_capacity_quality_threshold_is_plan_data_not_engine_default() -> None:
 
 
 def test_capacity_freshness_threshold_is_plan_data() -> None:
-    strict = make_card("strict-age", capital=capacity_policy("10", max_age_seconds=5))
-    relaxed = make_card("relaxed-age", capital=capacity_policy("10", max_age_seconds=30))
+    strict = make_card(
+        "strict-age",
+        capital={**capacity_policy("10", max_age_seconds=5), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
+    relaxed = make_card(
+        "relaxed-age",
+        capital={**capacity_policy("10", max_age_seconds=30), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, engine = setup_engine(strict, relaxed)
     capacity = TradingCapacitySnapshot(
         "cap-age",
@@ -856,11 +952,20 @@ def test_capacity_freshness_threshold_is_plan_data() -> None:
         DataQuality.HIGH,
         "exchange:test",
     )
-    result = evaluate(engine, fact(1), capacity=capacity)
-    by_strategy = {item.signal.strategy_id: item for item in result}
-    assert (
-        by_strategy["strict-age"].decision.code is EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=AcceptingAdmissionPort(),
+        real_ids=frozenset({"act-0", "act-1"}),
     )
+    by_strategy = {item.signal.strategy_id: item for item in result}
+    assert by_strategy["strict-age"].decision is not None
+    assert (
+        by_strategy["strict-age"].decision.code
+        is EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
+    )
+    assert by_strategy["relaxed-age"].decision is not None
     assert by_strategy["relaxed-age"].decision.code is EntryDecisionCode.ACCEPTED
 
 
@@ -873,26 +978,63 @@ def test_capacity_policy_requires_explicit_freshness_and_quality() -> None:
 
 
 def test_operational_safety_block_is_separate_from_strategy_condition() -> None:
-    card = make_card("safety")
+    card = make_card(
+        "safety",
+        capital={**capacity_policy("1"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, engine = setup_engine(card)
     readiness = TechnicalReadiness(False, NOW, "private account state stale")
-    result = engine.process(fact(1), technical_readiness=readiness)
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=TradingCapacitySnapshot(
+            "cap-safety", NOW, Decimal("10"), DataQuality.HIGH, "exchange:test"
+        ),
+        technical_readiness=readiness,
+        admission_port=AcceptingAdmissionPort(),
+    )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
     assert result[0].execution_request is None
 
 
 def test_missing_mandatory_technical_readiness_is_unknown_not_accepted() -> None:
-    card = make_card("missing-readiness")
+    card = make_card(
+        "missing-readiness",
+        capital={**capacity_policy("1"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, engine = setup_engine(card)
-    result = engine.process(fact(1))
+    result = engine.process(
+        fact(1),
+        capacity=TradingCapacitySnapshot(
+            "cap-missing-ready", NOW, Decimal("10"), DataQuality.HIGH, "exchange:test"
+        ),
+        account_ref="BYBIT:UNIFIED",
+        entry_admission_port=AcceptingAdmissionPort(),
+        real_admission_required_for=frozenset({"act-0"}),
+        exchange_position_keys={"XRPUSDT": "BYBIT:UNIFIED:LINEAR:USDT:XRPUSDT:0"},
+    )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
     assert result[0].execution_request is None
 
 
 def test_unknown_capacity_is_not_zero() -> None:
-    card = make_card("unknown-cap", capital=capacity_policy("1"))
+    card = make_card(
+        "unknown-cap",
+        capital={**capacity_policy("1"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
     _, engine = setup_engine(card)
-    result = evaluate(engine, fact(1), capacity=None)
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=None,
+        admission_port=AcceptingAdmissionPort(),
+    )
+    assert result[0].decision is not None
     assert result[0].decision.code is EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
 
 

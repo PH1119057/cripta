@@ -35,6 +35,9 @@ class StrategyPosition:
     actual_avg_fill: Decimal
     actual_qty: Decimal
     fill_at: datetime
+    exchange_position_slot_claim_id: str | None = None
+    position_mode_state_ref: str | None = None
+    initial_protection_confirmed_at: datetime | None = None
 
     def __post_init__(self) -> None:
         required_text = (

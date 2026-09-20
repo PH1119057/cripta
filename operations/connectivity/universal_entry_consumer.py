@@ -11,6 +11,11 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.live_arm_readiness import (
+    LiveArmContext,
+    active_live_arm_session,
+    evaluate_live_arm,
+)
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
@@ -31,6 +36,7 @@ DB_DSN = os.environ.get(
 ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1").strip().upper()
 CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
+LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 
 running = True
 
@@ -70,6 +76,14 @@ def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
         capital_reservation_id=(
             None if row.get("capital_reservation_id") is None
             else str(row["capital_reservation_id"])
+        ),
+        exchange_position_slot_claim_id=(
+            None if row.get("exchange_position_slot_claim_id") is None
+            else str(row["exchange_position_slot_claim_id"])
+        ),
+        position_mode_state_ref=(
+            None if row.get("position_mode_state_ref") is None
+            else str(row["position_mode_state_ref"])
         ),
     )
 
@@ -168,6 +182,41 @@ def _dispatch_id(execution_request_id: str, state: str) -> str:
     )
 
 
+def _record_request_state(
+    connection: psycopg.Connection[Any],
+    request: ExecutionRequest,
+    *,
+    state: str,
+    occurred_at: datetime,
+    reason: str,
+    payload: Mapping[str, object] | None = None,
+) -> None:
+    event_id = (
+        "reqstate-"
+        + fingerprint(
+            {
+                "execution_request_id": request.execution_request_id,
+                "state": state,
+                "reason": reason,
+            }
+        )[:32]
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.execution_request_state_events(
+               request_state_event_id,execution_request_id,state,occurred_at,reason,payload
+           ) VALUES(%s,%s,%s,%s,%s,%s::jsonb)
+           ON CONFLICT(request_state_event_id) DO NOTHING""",
+        (
+            event_id,
+            request.execution_request_id,
+            state,
+            occurred_at.astimezone(UTC),
+            reason,
+            canonical_json(dict(payload or {})),
+        ),
+    )
+
+
 def _record_blocked(
     connection: psycopg.Connection[Any],
     request: ExecutionRequest,
@@ -238,9 +287,10 @@ def _publish_command(
                strategy_attempt_id,entry_decision_id,signal_id,
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,exit_plan_fingerprint,payload,
-               capital_reservation_id
+               capital_reservation_id,exchange_position_slot_claim_id,
+               position_mode_state_ref
            ) VALUES(%s,%s,%s,'DISPATCHED','prepared exact Universal EntryExecutionRequest',
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s)
            ON CONFLICT(execution_request_id) DO NOTHING""",
         (
             _dispatch_id(prepared.execution_request_id, "DISPATCHED"),
@@ -256,6 +306,8 @@ def _publish_command(
             prepared.exit_plan_fingerprint,
             canonical_json(prepared.payload),
             prepared.capital_reservation_id,
+            prepared.exchange_position_slot_claim_id,
+            prepared.position_mode_state_ref,
         ),
     )
     updated = connection.execute(
@@ -266,53 +318,180 @@ def _publish_command(
     )
     if updated.rowcount != 1:
         raise RuntimeError("atomic capital reservation is not RESERVED at dispatch")
+    request = ExecutionRequest(
+        execution_request_id=prepared.execution_request_id,
+        strategy_attempt_id=prepared.strategy_attempt_id,
+        entry_decision_id=prepared.entry_decision_id,
+        signal_id=prepared.signal_id,
+        strategy_id=prepared.strategy_id,
+        strategy_version=prepared.strategy_version,
+        strategy_config_fingerprint=prepared.strategy_config_fingerprint,
+        entry_plan_fingerprint=prepared.entry_plan_fingerprint,
+        symbol=prepared.symbol,
+        direction=prepared.direction,
+        requested_at=prepared.requested_at,
+        payload=FrozenPolicy.from_mapping(prepared.payload),
+        exit_plan_fingerprint=prepared.exit_plan_fingerprint,
+        capital_reservation_id=prepared.capital_reservation_id,
+        exchange_position_slot_claim_id=prepared.exchange_position_slot_claim_id,
+        position_mode_state_ref=prepared.position_mode_state_ref,
+    )
+    _record_request_state(
+        connection,
+        request,
+        state="REQUEST_DISPATCHED",
+        occurred_at=now,
+        reason="DISPATCHED_TO_EXECUTION",
+        payload={"command_id": prepared.command_id},
+    )
 
 
-def _exchange_position_slot_conflict(
+def _admission_pre_dispatch_status(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
     request: ExecutionRequest,
-) -> str | None:
+    *,
+    now: datetime,
+) -> tuple[str, str]:
     account_ref = str(row.get("capital_reservation_account_ref") or "")
     if account_ref != CURRENT_ACCOUNT_REF:
-        return f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
+        return "INVARIANT_BROKEN", f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
+    if (
+        request.capital_reservation_id is None
+        or request.exchange_position_slot_claim_id is None
+        or request.position_mode_state_ref is None
+    ):
+        return "INVARIANT_BROKEN", "ACCEPTED_REQUEST_MISSING_ADMISSION_LINEAGE"
 
-    key = exchange_position_key(request.symbol, CURRENT_POSITION_IDX)
+    claim = connection.execute(
+        """SELECT exchange_position_key,account_ref,symbol,position_idx,
+                  strategy_attempt_id,position_mode_state_ref,capital_reservation_id,
+                  claim_state
+             FROM runtime.exchange_position_slot_claims
+            WHERE exchange_position_slot_claim_id=%s""",
+        (request.exchange_position_slot_claim_id,),
+    ).fetchone()
+    if claim is None:
+        return "INVARIANT_BROKEN", "SLOT_CLAIM_MISSING"
+    expected_key = exchange_position_key(request.symbol, CURRENT_POSITION_IDX)
+    actual = (
+        str(claim["exchange_position_key"]),
+        str(claim["account_ref"]),
+        str(claim["symbol"]),
+        int(claim["position_idx"]),
+        str(claim["strategy_attempt_id"]),
+        str(claim["position_mode_state_ref"]),
+        str(claim["capital_reservation_id"]),
+        str(claim["claim_state"]),
+    )
+    expected = (
+        expected_key,
+        CURRENT_ACCOUNT_REF,
+        request.symbol,
+        CURRENT_POSITION_IDX,
+        request.strategy_attempt_id,
+        request.position_mode_state_ref,
+        request.capital_reservation_id,
+        "CLAIMED",
+    )
+    if actual != expected:
+        return "INVARIANT_BROKEN", f"SLOT_CLAIM_IDENTITY_MISMATCH:{actual!r}"
+
+    mode = connection.execute(
+        """SELECT position_mode,position_idx,observed_at,received_at,fresh_until
+             FROM runtime.position_mode_states
+            WHERE position_mode_state_ref=%s""",
+        (request.position_mode_state_ref,),
+    ).fetchone()
+    if mode is None:
+        return "STALE_MODE", "POSITION_MODE_STATE_MISSING"
+    fresh_until = mode["fresh_until"]
+    observed_at = mode["observed_at"]
+    received_at = mode["received_at"]
+    if not all(isinstance(value, datetime) for value in (fresh_until, observed_at, received_at)):
+        return "STALE_MODE", "POSITION_MODE_STATE_INVALID_TIMESTAMPS"
+    if (
+        observed_at.astimezone(UTC) > now
+        or received_at.astimezone(UTC) > now
+        or fresh_until.astimezone(UTC) < now
+    ):
+        return "STALE_MODE", "POSITION_MODE_STATE_STALE"
+    mode_position_idx = (
+        -1 if mode["position_idx"] is None else int(mode["position_idx"])
+    )
+    if str(mode["position_mode"]) != "ONE_WAY" or mode_position_idx != 0:
+        return (
+            "MODE_MISMATCH",
+            f"EXCHANGE_POSITION_MODE_MISMATCH:{mode['position_mode']}:{mode['position_idx']}",
+        )
+
+    newer = connection.execute(
+        """SELECT position_mode_state_ref,position_mode,position_idx,fresh_until
+             FROM runtime.position_mode_states
+            WHERE account_ref=%s AND product_category='LINEAR' AND instrument=%s
+            ORDER BY observed_at DESC,created_at DESC LIMIT 1""",
+        (CURRENT_ACCOUNT_REF, request.symbol),
+    ).fetchone()
+    if (
+        newer is not None
+        and str(newer["position_mode_state_ref"])
+        != request.position_mode_state_ref
+        and (
+            str(newer["position_mode"]) != "ONE_WAY"
+            or (
+                -1 if newer["position_idx"] is None else int(newer["position_idx"])
+            )
+            != 0
+        )
+    ):
+        return (
+            "MODE_MISMATCH",
+            "EXCHANGE_POSITION_MODE_MISMATCH:NEWER_STATE:"
+            + str(newer["position_mode_state_ref"]),
+        )
+
     owned = connection.execute(
-        """SELECT position_id,state
+        """SELECT position_id,state,exchange_position_slot_claim_id
              FROM runtime.position_ownership
             WHERE exchange_position_key=%s
               AND state IN ('OPEN','RECONCILIATION_REQUIRED')
-            ORDER BY fill_at DESC
-            LIMIT 1""",
-        (key,),
+            ORDER BY fill_at DESC LIMIT 1""",
+        (expected_key,),
     ).fetchone()
     if owned is not None:
-        return f"OWNED_POSITION:{owned['position_id']}:{owned['state']}"
+        return (
+            "INVARIANT_BROKEN",
+            f"OWNED_POSITION:{owned['position_id']}:{owned['state']}:"
+            f"{owned['exchange_position_slot_claim_id']}",
+        )
 
     hot_position = connection.execute(
         """SELECT side,size
              FROM runtime.hot_positions
-            WHERE symbol=%s AND position_idx=%s
+            WHERE symbol=%s AND position_idx=0
               AND NULLIF(size,'')::numeric > 0
             LIMIT 1""",
-        (request.symbol, CURRENT_POSITION_IDX),
+        (request.symbol,),
     ).fetchone()
     if hot_position is not None:
-        return f"EXCHANGE_POSITION:{hot_position['side']}:{hot_position['size']}"
+        return (
+            "INVARIANT_BROKEN",
+            f"EXCHANGE_POSITION:{hot_position['side']}:{hot_position['size']}",
+        )
 
     pending_command = connection.execute(
         """SELECT command_id,state
              FROM runtime.trade_commands
-            WHERE command_type='entry'
-              AND symbol=%s
+            WHERE command_type='entry' AND symbol=%s
               AND state IN ('queued','running')
-            ORDER BY requested_at_epoch_ms
-            LIMIT 1""",
+            ORDER BY requested_at_epoch_ms LIMIT 1""",
         (request.symbol,),
     ).fetchone()
     if pending_command is not None:
-        return f"PENDING_ENTRY_COMMAND:{pending_command['command_id']}:{pending_command['state']}"
+        return (
+            "INVARIANT_BROKEN",
+            f"PENDING_ENTRY_COMMAND:{pending_command['command_id']}:{pending_command['state']}",
+        )
 
     pending_order = connection.execute(
         """SELECT order_id,order_status
@@ -320,36 +499,88 @@ def _exchange_position_slot_conflict(
             WHERE symbol=%s
               AND order_status IN ('New','PartiallyFilled','Untriggered')
               AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
-            ORDER BY order_id
-            LIMIT 1""",
+            ORDER BY order_id LIMIT 1""",
         (request.symbol,),
     ).fetchone()
     if pending_order is not None:
-        return f"PENDING_ENTRY_ORDER:{pending_order['order_id']}:{pending_order['order_status']}"
-    return None
+        return (
+            "INVARIANT_BROKEN",
+            f"PENDING_ENTRY_ORDER:{pending_order['order_id']}:{pending_order['order_status']}",
+        )
+    return "OK", ""
 
 
-def _release_pre_exchange_reservation(
+def _release_pre_exchange_admission(
     connection: psycopg.Connection[Any],
-    reservation_id: str,
+    request: ExecutionRequest,
     *,
     reason: str,
+    now: datetime,
 ) -> None:
+    if request.capital_reservation_id is None or request.exchange_position_slot_claim_id is None:
+        raise RuntimeError("pre-exchange admission release requires reservation and slot claim")
     updated = connection.execute(
         """UPDATE runtime.capital_reservations
               SET state='RELEASED',state_reason=%s
             WHERE reservation_id=%s AND state='RESERVED'""",
-        (reason, reservation_id),
+        (reason, request.capital_reservation_id),
     )
-    if updated.rowcount == 1:
-        return
-    existing = connection.execute(
-        "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
-        (reservation_id,),
-    ).fetchone()
-    if existing is not None and str(existing["state"]) == "RELEASED":
-        return
-    raise RuntimeError("pre-exchange capital reservation release race")
+    if updated.rowcount != 1:
+        existing = connection.execute(
+            "SELECT state FROM runtime.capital_reservations WHERE reservation_id=%s",
+            (request.capital_reservation_id,),
+        ).fetchone()
+        if existing is None or str(existing["state"]) != "RELEASED":
+            raise RuntimeError("pre-exchange capital reservation release race")
+    claim_updated = connection.execute(
+        """UPDATE runtime.exchange_position_slot_claims
+              SET claim_state='RELEASED',released_at=%s,release_reason=%s,updated_at=%s
+            WHERE exchange_position_slot_claim_id=%s
+              AND claim_state='CLAIMED'""",
+        (
+            now.astimezone(UTC),
+            reason,
+            now.astimezone(UTC),
+            request.exchange_position_slot_claim_id,
+        ),
+    )
+    if claim_updated.rowcount != 1:
+        existing = connection.execute(
+            """SELECT claim_state FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (request.exchange_position_slot_claim_id,),
+        ).fetchone()
+        if existing is None or str(existing["claim_state"]) != "RELEASED":
+            raise RuntimeError("pre-exchange slot claim release race")
+
+
+def _mark_admission_reconciliation_required(
+    connection: psycopg.Connection[Any],
+    request: ExecutionRequest,
+    *,
+    reason: str,
+    now: datetime,
+) -> None:
+    if request.capital_reservation_id is None or request.exchange_position_slot_claim_id is None:
+        raise RuntimeError("reconciliation marking requires complete admission lineage")
+    connection.execute(
+        """UPDATE runtime.capital_reservations
+              SET state='RECONCILIATION_REQUIRED',state_reason=%s
+            WHERE reservation_id=%s
+              AND state IN ('RESERVED','DISPATCHED','PENDING_EXCHANGE_REFLECTION')""",
+        (reason, request.capital_reservation_id),
+    )
+    connection.execute(
+        """UPDATE runtime.exchange_position_slot_claims
+              SET claim_state='RECONCILIATION_REQUIRED',release_reason=%s,updated_at=%s
+            WHERE exchange_position_slot_claim_id=%s
+              AND claim_state IN ('CLAIMED','BOUND','RECONCILIATION_REQUIRED')""",
+        (
+            reason,
+            now.astimezone(UTC),
+            request.exchange_position_slot_claim_id,
+        ),
+    )
 
 
 def _release_expired_reserved_requests(
@@ -390,9 +621,17 @@ def _release_expired_reserved_requests(
                     "pre_dispatch_expires_at": str(row["pre_dispatch_expires_at"]),
                 },
             )
-            _release_pre_exchange_reservation(
+            _release_pre_exchange_admission(
                 connection,
-                request.capital_reservation_id,
+                request,
+                reason="REQUEST_EXPIRED_PRE_DISPATCH",
+                now=now,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_EXPIRED",
+                occurred_at=now,
                 reason="REQUEST_EXPIRED_PRE_DISPATCH",
             )
     return len(rows)
@@ -405,6 +644,37 @@ def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
     return bool(row and row["enabled"])
 
 
+def _live_arm_ready(
+    connection: psycopg.Connection[Any],
+    row: Mapping[str, object],
+    *,
+    now: datetime,
+) -> tuple[bool, tuple[str, ...]]:
+    if not LOADED_RELEASE_COMMIT:
+        return False, ("LOADED_RELEASE_COMMIT_MISSING",)
+    try:
+        context = LiveArmContext(
+            strategy_id=str(row["strategy_id"]),
+            strategy_version=str(row["strategy_version"]),
+            strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+            strategy_activation_id=str(row["activation_id"]),
+            symbol=str(row["symbol"]),
+            release_commit=LOADED_RELEASE_COMMIT,
+        )
+    except ValueError as exc:
+        return False, (f"LIVE_ARM_CONTEXT_INVALID:{exc}",)
+    decision = evaluate_live_arm(
+        connection,
+        context=context,
+        now=now,
+        require_owner_approval=True,
+    )
+    failed = list(decision.failed_codes)
+    if active_live_arm_session(connection, context=context) is None:
+        failed.append("ACTIVE_LIVE_ARM_SESSION")
+    return not failed, tuple(failed)
+
+
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
     current = (now or datetime.now(UTC)).astimezone(UTC)
     _release_expired_reserved_requests(connection, now=current)
@@ -415,43 +685,141 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
         return "NO_REQUEST"
     request = _request_from_row(row)
     reservation_state = row.get("capital_reservation_state")
-    if request.capital_reservation_id is None or reservation_state != "RESERVED":
+    if (
+        request.capital_reservation_id is None
+        or request.exchange_position_slot_claim_id is None
+        or request.position_mode_state_ref is None
+        or reservation_state != "RESERVED"
+    ):
         with connection.transaction():
+            reason = (
+                "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN:ADMISSION_LINEAGE_INVALID:"
+                f"{request.capital_reservation_id}:"
+                f"{request.exchange_position_slot_claim_id}:"
+                f"{request.position_mode_state_ref}:{reservation_state}"
+            )
             _record_blocked(
                 connection,
                 request,
-                reason=(
-                    "CAPITAL_RESERVATION_INVALID:"
-                    f"{request.capital_reservation_id}:{reservation_state}"
-                ),
+                reason=reason,
                 payload={
                     "capital_reservation_id": request.capital_reservation_id,
+                    "exchange_position_slot_claim_id": request.exchange_position_slot_claim_id,
+                    "position_mode_state_ref": request.position_mode_state_ref,
                     "capital_reservation_state": reservation_state,
                 },
             )
-        return "BLOCKED:CAPITAL_RESERVATION_INVALID"
-    conflict = _exchange_position_slot_conflict(connection, row, request)
-    if conflict is not None:
-        assert request.capital_reservation_id is not None
+            if (
+                request.capital_reservation_id is not None
+                and request.exchange_position_slot_claim_id is not None
+            ):
+                _mark_admission_reconciliation_required(
+                    connection,
+                    request,
+                    reason=reason,
+                    now=current,
+                )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_RECONCILIATION_REQUIRED",
+                occurred_at=current,
+                reason=reason,
+            )
+        return "BLOCKED:ADMISSION_LINEAGE_INVALID"
+
+    admission_status, admission_detail = _admission_pre_dispatch_status(
+        connection, row, request, now=current
+    )
+    if admission_status in {"STALE_MODE", "MODE_MISMATCH"}:
+        reason = (
+            "STALE_OR_UNKNOWN_REQUIRED_STATE"
+            if admission_status == "STALE_MODE"
+            else "EXCHANGE_POSITION_MODE_MISMATCH"
+        )
         with connection.transaction():
             _record_blocked(
                 connection,
                 request,
-                reason=f"EXCHANGE_POSITION_OWNERSHIP_CONFLICT:{conflict}",
+                reason=f"{reason}:{admission_detail}",
                 payload={
-                    "fault_code": "EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
-                    "conflict": conflict,
-                    "exchange_position_key": exchange_position_key(
-                        request.symbol, CURRENT_POSITION_IDX
-                    ),
+                    "block_code": reason,
+                    "detail": admission_detail,
+                    "position_mode_state_ref": request.position_mode_state_ref,
                 },
             )
-            _release_pre_exchange_reservation(
+            _release_pre_exchange_admission(
                 connection,
-                request.capital_reservation_id,
-                reason="EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
+                request,
+                reason=reason,
+                now=current,
             )
-        return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_CONFLICT"
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason=f"{reason}:{admission_detail}",
+            )
+        return f"BLOCKED:{reason}"
+
+    if admission_status == "INVARIANT_BROKEN":
+        reason = f"EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN:{admission_detail}"
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason=reason,
+                payload={
+                    "fault_code": "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+                    "detail": admission_detail,
+                    "exchange_position_slot_claim_id": request.exchange_position_slot_claim_id,
+                },
+            )
+            _mark_admission_reconciliation_required(
+                connection,
+                request,
+                reason=reason,
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_RECONCILIATION_REQUIRED",
+                occurred_at=current,
+                reason=reason,
+            )
+        return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
+
+    live_ready, failed_live_checks = _live_arm_ready(connection, row, now=current)
+    if not live_ready:
+        reason = "LIVE_ARM_NOT_READY:" + ",".join(failed_live_checks)
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason=reason,
+                payload={
+                    "block_code": "LIVE_ARM_NOT_READY",
+                    "failed_checks": list(failed_live_checks),
+                    "release_commit": LOADED_RELEASE_COMMIT or None,
+                },
+            )
+            _release_pre_exchange_admission(
+                connection,
+                request,
+                reason="PRE_EXCHANGE_BLOCK:LIVE_ARM_NOT_READY",
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason=reason,
+            )
+        return "BLOCKED:LIVE_ARM_NOT_READY"
+
     try:
         bundle = _policy_bundle(connection, row)
         prepared = prepare_runtime_entry_command(request, bundle, now=current)
@@ -463,12 +831,23 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason=f"{exc.code.value}:{exc.reason}",
                 payload={"block_code": exc.code.value, "reason": exc.reason},
             )
-            if request.capital_reservation_id is not None:
-                _release_pre_exchange_reservation(
+            if (
+                request.capital_reservation_id is not None
+                and request.exchange_position_slot_claim_id is not None
+            ):
+                _release_pre_exchange_admission(
                     connection,
-                    request.capital_reservation_id,
+                    request,
                     reason=f"PRE_EXCHANGE_BLOCK:{exc.code.value}",
+                    now=current,
                 )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason=f"PRE_EXCHANGE_BLOCK:{exc.code.value}",
+            )
         return f"BLOCKED:{exc.code.value}"
     except Exception as exc:
         with connection.transaction():
@@ -478,12 +857,23 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason=f"STRUCTURAL_ERROR:{type(exc).__name__}:{exc}",
                 payload={"error": f"{type(exc).__name__}: {exc}"},
             )
-            if request.capital_reservation_id is not None:
-                _release_pre_exchange_reservation(
+            if (
+                request.capital_reservation_id is not None
+                and request.exchange_position_slot_claim_id is not None
+            ):
+                _release_pre_exchange_admission(
                     connection,
-                    request.capital_reservation_id,
+                    request,
                     reason="PRE_EXCHANGE_BLOCK:STRUCTURAL_ERROR",
+                    now=current,
                 )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason="PRE_EXCHANGE_BLOCK:STRUCTURAL_ERROR",
+            )
         return "BLOCKED:STRUCTURAL_ERROR"
     with connection.transaction():
         _publish_command(connection, prepared, now=current)

@@ -5,12 +5,14 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-09-02-v1"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-09-20-slot-v1"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
 REQUIRED_RELATIONS: tuple[str, ...] = (
     "control.execution_gates",
+    "control.live_arm_evidence",
+    "control.live_arm_sessions",
     "monitoring.entry_geometry_handoffs",
     "monitoring.opportunities",
     "runtime.connection_events",
@@ -19,6 +21,10 @@ REQUIRED_RELATIONS: tuple[str, ...] = (
     "runtime.entry_geometry_bindings",
     "runtime.exchange_order_history",
     "runtime.executions",
+    "runtime.exchange_position_slot_claims",
+    "runtime.position_mode_states",
+    "runtime.lifecycle_fault_deliveries",
+    "strategy_entry.execution_request_state_events",
     "runtime.hot_orders",
     "runtime.hot_positions",
     "runtime.m3_consumed_context",
@@ -36,6 +42,14 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "position_ownership", "entry_command_id"),
     ("runtime", "position_ownership", "position_idx"),
     ("runtime", "position_ownership", "close_link_status"),
+    ("runtime", "position_ownership", "exchange_position_slot_claim_id"),
+    ("runtime", "position_ownership", "position_mode_state_ref"),
+    ("runtime", "position_ownership", "initial_protection_confirmed_at"),
+    ("runtime", "position_ownership", "emergency_policy"),
+    ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
+    ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
+    ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),
+    ("strategy_entry", "execution_requests", "position_mode_state_ref"),
     ("runtime", "trade_settings", "entry_offset_pct"),
     ("runtime", "trade_settings", "entry_limit_ttl_seconds"),
     ("runtime", "trade_settings", "auto_profit_protection"),

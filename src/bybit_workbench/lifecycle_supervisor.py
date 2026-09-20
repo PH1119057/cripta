@@ -80,9 +80,11 @@ _MANAGED_FAULT_CODES = frozenset(
         "POSITION_LINEAGE_INCOMPLETE",
         "POSITION_WITHOUT_EXIT_PLAN",
         "POSITION_WITHOUT_EXIT_OWNER",
+        "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
         "EXIT_REQUEST_NOT_DISPATCHED",
         "EXIT_EXECUTION_AMBIGUOUS",
-        "EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
+        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+        "EXCHANGE_POSITION_MODE_MISMATCH",
         "EXCHANGE_STATE_DIVERGED",
         "CAPITAL_RESERVATION_STUCK",
     }
@@ -136,6 +138,9 @@ class LifecycleSupervisor:
         exit_plan_fingerprint: str | None = None,
         exit_decision_id: str | None = None,
         exit_execution_request_id: str | None = None,
+        exchange_position_slot_claim_id: str | None = None,
+        position_mode_state_ref: str | None = None,
+        capital_reservation_id: str | None = None,
     ) -> int:
         event_id = (
             "lifecycle-"
@@ -148,10 +153,12 @@ class LifecycleSupervisor:
                    strategy_activation_id,signal_id,strategy_attempt_id,
                    entry_decision_id,entry_execution_request_id,
                    strategy_position_id,exit_plan_fingerprint,exit_decision_id,
-                   exit_execution_request_id,exact_ids,payload,provenance
+                   exit_execution_request_id,exchange_position_slot_claim_id,
+                   position_mode_state_ref,capital_reservation_id,
+                   exact_ids,payload,provenance
                ) VALUES(
                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                   %s::jsonb,%s::jsonb,%s::jsonb
+                   %s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb
                )
                ON CONFLICT(lifecycle_event_id) DO NOTHING""",
             (
@@ -170,6 +177,9 @@ class LifecycleSupervisor:
                 exit_plan_fingerprint,
                 exit_decision_id,
                 exit_execution_request_id,
+                exchange_position_slot_claim_id,
+                position_mode_state_ref,
+                capital_reservation_id,
                 canonical_json(dict(exact_ids)),
                 canonical_json(dict(payload or {})),
                 canonical_json({"source": "lifecycle_supervisor_projection_v1"}),
@@ -298,9 +308,83 @@ class LifecycleSupervisor:
                 strategy_attempt_id=str(row["strategy_attempt_id"]),
             )
 
+        slot_claims = self._connection.execute(
+            """SELECT exchange_position_slot_claim_id,exchange_position_key,
+                      strategy_attempt_id,strategy_id,strategy_version,
+                      strategy_config_fingerprint,direction,position_mode_state_ref,
+                      capital_reservation_id,strategy_position_id,claim_state,
+                      claimed_at,bound_at,released_at,release_reason
+                 FROM runtime.exchange_position_slot_claims"""
+        ).fetchall()
+        for row in slot_claims:
+            claim_id = str(row["exchange_position_slot_claim_id"])
+            exact = {
+                "exchange_position_slot_claim_id": claim_id,
+                "exchange_position_key": row["exchange_position_key"],
+                "direction": row["direction"],
+            }
+            total += self._insert_event(
+                "EXCHANGE_SLOT_CLAIMED",
+                _as_datetime(row["claimed_at"], "SlotClaim.claimed_at"),
+                exact,
+                strategy_id=str(row["strategy_id"]),
+                strategy_version=str(row["strategy_version"]),
+                strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                strategy_attempt_id=str(row["strategy_attempt_id"]),
+                strategy_position_id=(
+                    None if row["strategy_position_id"] is None
+                    else str(row["strategy_position_id"])
+                ),
+                exchange_position_slot_claim_id=claim_id,
+                position_mode_state_ref=str(row["position_mode_state_ref"]),
+                capital_reservation_id=(
+                    None if row["capital_reservation_id"] is None
+                    else str(row["capital_reservation_id"])
+                ),
+            )
+            if row["bound_at"] is not None and row["strategy_position_id"] is not None:
+                total += self._insert_event(
+                    "EXCHANGE_SLOT_BOUND",
+                    _as_datetime(row["bound_at"], "SlotClaim.bound_at"),
+                    exact,
+                    strategy_id=str(row["strategy_id"]),
+                    strategy_version=str(row["strategy_version"]),
+                    strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                    strategy_attempt_id=str(row["strategy_attempt_id"]),
+                    strategy_position_id=str(row["strategy_position_id"]),
+                    exchange_position_slot_claim_id=claim_id,
+                    position_mode_state_ref=str(row["position_mode_state_ref"]),
+                    capital_reservation_id=(
+                        None if row["capital_reservation_id"] is None
+                        else str(row["capital_reservation_id"])
+                    ),
+                )
+            if row["released_at"] is not None:
+                total += self._insert_event(
+                    "EXCHANGE_SLOT_RELEASED",
+                    _as_datetime(row["released_at"], "SlotClaim.released_at"),
+                    exact,
+                    payload={"release_reason": row["release_reason"]},
+                    strategy_id=str(row["strategy_id"]),
+                    strategy_version=str(row["strategy_version"]),
+                    strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                    strategy_attempt_id=str(row["strategy_attempt_id"]),
+                    strategy_position_id=(
+                        None if row["strategy_position_id"] is None
+                        else str(row["strategy_position_id"])
+                    ),
+                    exchange_position_slot_claim_id=claim_id,
+                    position_mode_state_ref=str(row["position_mode_state_ref"]),
+                    capital_reservation_id=(
+                        None if row["capital_reservation_id"] is None
+                        else str(row["capital_reservation_id"])
+                    ),
+                )
+
         reservations = self._connection.execute(
             """SELECT reservation_id,strategy_attempt_id,signal_id,strategy_id,
-                      strategy_version,strategy_config_fingerprint,created_at
+                      strategy_version,strategy_config_fingerprint,created_at,
+                      updated_at,state,strategy_position_id
                  FROM runtime.capital_reservations"""
         ).fetchall()
         for row in reservations:
@@ -313,12 +397,34 @@ class LifecycleSupervisor:
                 strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
                 signal_id=str(row["signal_id"]),
                 strategy_attempt_id=str(row["strategy_attempt_id"]),
+                strategy_position_id=(
+                    None if row["strategy_position_id"] is None
+                    else str(row["strategy_position_id"])
+                ),
+                capital_reservation_id=str(row["reservation_id"]),
             )
+            if str(row["state"]) == "RELEASED":
+                total += self._insert_event(
+                    "CAPITAL_RESERVATION_RELEASED",
+                    _as_datetime(row["updated_at"], "CapitalReservation.updated_at"),
+                    {"reservation_id": row["reservation_id"]},
+                    strategy_id=str(row["strategy_id"]),
+                    strategy_version=str(row["strategy_version"]),
+                    strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                    signal_id=str(row["signal_id"]),
+                    strategy_attempt_id=str(row["strategy_attempt_id"]),
+                    strategy_position_id=(
+                        None if row["strategy_position_id"] is None
+                        else str(row["strategy_position_id"])
+                    ),
+                    capital_reservation_id=str(row["reservation_id"]),
+                )
 
         decisions = self._connection.execute(
             """SELECT d.entry_decision_id,d.strategy_attempt_id,d.signal_id,
-                      d.decided_at,a.strategy_id,a.strategy_version,
-                      a.strategy_config_fingerprint
+                      d.decided_at,d.decision_code,d.capital_reservation_id,
+                      d.exchange_position_slot_claim_id,d.position_mode_state_ref,
+                      a.strategy_id,a.strategy_version,a.strategy_config_fingerprint
                  FROM strategy_entry.entry_decisions d
                  JOIN strategy_entry.strategy_attempts a
                    ON a.strategy_attempt_id=d.strategy_attempt_id"""
@@ -334,12 +440,53 @@ class LifecycleSupervisor:
                 signal_id=str(row["signal_id"]),
                 strategy_attempt_id=str(row["strategy_attempt_id"]),
                 entry_decision_id=str(row["entry_decision_id"]),
+                exchange_position_slot_claim_id=(
+                    None if row["exchange_position_slot_claim_id"] is None
+                    else str(row["exchange_position_slot_claim_id"])
+                ),
+                position_mode_state_ref=(
+                    None if row["position_mode_state_ref"] is None
+                    else str(row["position_mode_state_ref"])
+                ),
+                capital_reservation_id=(
+                    None if row["capital_reservation_id"] is None
+                    else str(row["capital_reservation_id"])
+                ),
             )
+            if (
+                str(row["decision_code"]) == "ACCEPTED"
+                and row["position_mode_state_ref"] is not None
+            ):
+                total += self._insert_event(
+                    "POSITION_MODE_VALIDATED",
+                    _as_datetime(row["decided_at"], "decision.decided_at"),
+                    {
+                        "entry_decision_id": row["entry_decision_id"],
+                        "position_mode_state_ref": row["position_mode_state_ref"],
+                    },
+                    strategy_id=str(row["strategy_id"]),
+                    strategy_version=str(row["strategy_version"]),
+                    strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                    signal_id=str(row["signal_id"]),
+                    strategy_attempt_id=str(row["strategy_attempt_id"]),
+                    entry_decision_id=str(row["entry_decision_id"]),
+                    exchange_position_slot_claim_id=(
+                        None if row["exchange_position_slot_claim_id"] is None
+                        else str(row["exchange_position_slot_claim_id"])
+                    ),
+                    position_mode_state_ref=str(row["position_mode_state_ref"]),
+                    capital_reservation_id=(
+                        None if row["capital_reservation_id"] is None
+                        else str(row["capital_reservation_id"])
+                    ),
+                )
 
         requests = self._connection.execute(
             """SELECT execution_request_id,strategy_attempt_id,entry_decision_id,
                       signal_id,strategy_id,strategy_version,
-                      strategy_config_fingerprint,exit_plan_fingerprint,requested_at
+                      strategy_config_fingerprint,exit_plan_fingerprint,requested_at,
+                      capital_reservation_id,exchange_position_slot_claim_id,
+                      position_mode_state_ref
                  FROM strategy_entry.execution_requests"""
         ).fetchall()
         for row in requests:
@@ -359,13 +506,73 @@ class LifecycleSupervisor:
                     if row["exit_plan_fingerprint"] is None
                     else str(row["exit_plan_fingerprint"])
                 ),
+                exchange_position_slot_claim_id=(
+                    None if row["exchange_position_slot_claim_id"] is None
+                    else str(row["exchange_position_slot_claim_id"])
+                ),
+                position_mode_state_ref=(
+                    None if row["position_mode_state_ref"] is None
+                    else str(row["position_mode_state_ref"])
+                ),
+                capital_reservation_id=(
+                    None if row["capital_reservation_id"] is None
+                    else str(row["capital_reservation_id"])
+                ),
+            )
+
+        request_states = self._connection.execute(
+            """SELECT e.request_state_event_id,e.execution_request_id,e.state,
+                      e.occurred_at,e.reason,r.strategy_attempt_id,
+                      r.entry_decision_id,r.signal_id,r.strategy_id,
+                      r.strategy_version,r.strategy_config_fingerprint,
+                      r.exit_plan_fingerprint,r.capital_reservation_id,
+                      r.exchange_position_slot_claim_id,r.position_mode_state_ref
+                 FROM strategy_entry.execution_request_state_events e
+                 JOIN strategy_entry.execution_requests r
+                   ON r.execution_request_id=e.execution_request_id"""
+        ).fetchall()
+        for row in request_states:
+            total += self._insert_event(
+                "ENTRY_REQUEST_STATE_CHANGED",
+                _as_datetime(row["occurred_at"], "EntryRequestState.occurred_at"),
+                {
+                    "request_state_event_id": row["request_state_event_id"],
+                    "entry_execution_request_id": row["execution_request_id"],
+                    "request_state": row["state"],
+                },
+                payload={"reason": row["reason"], "request_state": row["state"]},
+                strategy_id=str(row["strategy_id"]),
+                strategy_version=str(row["strategy_version"]),
+                strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
+                signal_id=str(row["signal_id"]),
+                strategy_attempt_id=str(row["strategy_attempt_id"]),
+                entry_decision_id=str(row["entry_decision_id"]),
+                entry_execution_request_id=str(row["execution_request_id"]),
+                exit_plan_fingerprint=(
+                    None if row["exit_plan_fingerprint"] is None
+                    else str(row["exit_plan_fingerprint"])
+                ),
+                exchange_position_slot_claim_id=(
+                    None if row["exchange_position_slot_claim_id"] is None
+                    else str(row["exchange_position_slot_claim_id"])
+                ),
+                position_mode_state_ref=(
+                    None if row["position_mode_state_ref"] is None
+                    else str(row["position_mode_state_ref"])
+                ),
+                capital_reservation_id=(
+                    None if row["capital_reservation_id"] is None
+                    else str(row["capital_reservation_id"])
+                ),
             )
 
         dispatches = self._connection.execute(
             """SELECT d.execution_request_id,d.command_id,d.created_at,
                       d.strategy_attempt_id,d.entry_decision_id,d.signal_id,
                       d.strategy_id,d.strategy_version,
-                      d.strategy_config_fingerprint,d.exit_plan_fingerprint
+                      d.strategy_config_fingerprint,d.exit_plan_fingerprint,
+                      d.capital_reservation_id,d.exchange_position_slot_claim_id,
+                      d.position_mode_state_ref
                  FROM strategy_entry.execution_dispatches d
                 WHERE d.state='DISPATCHED'"""
         ).fetchall()
@@ -385,15 +592,31 @@ class LifecycleSupervisor:
                 entry_decision_id=str(row["entry_decision_id"]),
                 entry_execution_request_id=str(row["execution_request_id"]),
                 exit_plan_fingerprint=str(row["exit_plan_fingerprint"]),
+                exchange_position_slot_claim_id=(
+                    None if row["exchange_position_slot_claim_id"] is None
+                    else str(row["exchange_position_slot_claim_id"])
+                ),
+                position_mode_state_ref=(
+                    None if row["position_mode_state_ref"] is None
+                    else str(row["position_mode_state_ref"])
+                ),
+                capital_reservation_id=(
+                    None if row["capital_reservation_id"] is None
+                    else str(row["capital_reservation_id"])
+                ),
             )
 
         acknowledgements = self._connection.execute(
-            """SELECT reservation_id,strategy_attempt_id,signal_id,strategy_id,
-                      strategy_version,strategy_config_fingerprint,
-                      exchange_commitment_ref,exchange_commitment_at
-                 FROM runtime.capital_reservations
-                WHERE exchange_commitment_ref IS NOT NULL
-                  AND exchange_commitment_at IS NOT NULL"""
+            """SELECT c.reservation_id,c.strategy_attempt_id,c.signal_id,
+                      c.strategy_id,c.strategy_version,c.strategy_config_fingerprint,
+                      c.exchange_commitment_ref,c.exchange_commitment_at,
+                      r.execution_request_id,r.exchange_position_slot_claim_id,
+                      r.position_mode_state_ref
+                 FROM runtime.capital_reservations c
+                 LEFT JOIN strategy_entry.execution_requests r
+                   ON r.capital_reservation_id=c.reservation_id
+                WHERE c.exchange_commitment_ref IS NOT NULL
+                  AND c.exchange_commitment_at IS NOT NULL"""
         ).fetchall()
         for row in acknowledgements:
             total += self._insert_event(
@@ -411,16 +634,33 @@ class LifecycleSupervisor:
                 strategy_config_fingerprint=str(row["strategy_config_fingerprint"]),
                 signal_id=str(row["signal_id"]),
                 strategy_attempt_id=str(row["strategy_attempt_id"]),
+                entry_execution_request_id=(
+                    None if row["execution_request_id"] is None
+                    else str(row["execution_request_id"])
+                ),
+                exchange_position_slot_claim_id=(
+                    None if row["exchange_position_slot_claim_id"] is None
+                    else str(row["exchange_position_slot_claim_id"])
+                ),
+                position_mode_state_ref=(
+                    None if row["position_mode_state_ref"] is None
+                    else str(row["position_mode_state_ref"])
+                ),
+                capital_reservation_id=str(row["reservation_id"]),
             )
 
         positions = self._connection.execute(
-            """SELECT position_id,strategy_id,strategy_version,
-                      strategy_config_fingerprint,strategy_activation_id,
-                      signal_id,strategy_attempt_id,entry_decision_id,
-                      entry_execution_request_id,entry_plan_fingerprint,
-                      exit_plan_fingerprint,entry_command_id,fill_at,closed_at,state
-                 FROM runtime.position_ownership
-                WHERE bot_instance_id='universal-entry'"""
+            """SELECT p.position_id,p.strategy_id,p.strategy_version,
+                      p.strategy_config_fingerprint,p.strategy_activation_id,
+                      p.signal_id,p.strategy_attempt_id,p.entry_decision_id,
+                      p.entry_execution_request_id,p.entry_plan_fingerprint,
+                      p.exit_plan_fingerprint,p.entry_command_id,p.fill_at,p.closed_at,p.state,
+                      p.exchange_position_slot_claim_id,p.position_mode_state_ref,
+                      p.initial_protection_confirmed_at,r.capital_reservation_id
+                 FROM runtime.position_ownership p
+                 LEFT JOIN strategy_entry.execution_requests r
+                   ON r.execution_request_id=p.entry_execution_request_id
+                WHERE p.bot_instance_id='universal-entry'"""
         ).fetchall()
         for row in positions:
             exact = {
@@ -428,6 +668,9 @@ class LifecycleSupervisor:
                 "entry_command_id": row["entry_command_id"],
                 "entry_plan_fingerprint": row["entry_plan_fingerprint"],
                 "exit_plan_fingerprint": row["exit_plan_fingerprint"],
+                "exchange_position_slot_claim_id": row["exchange_position_slot_claim_id"],
+                "position_mode_state_ref": row["position_mode_state_ref"],
+                "capital_reservation_id": row["capital_reservation_id"],
             }
             fill_at = _as_datetime(row["fill_at"], "StrategyPosition.fill_at")
             strategy_id = str(row["strategy_id"])
@@ -445,6 +688,16 @@ class LifecycleSupervisor:
                 ("STRATEGY_POSITION_CREATED", fill_at),
                 ("EXIT_PLAN_BOUND", fill_at),
             ]
+            if row["initial_protection_confirmed_at"] is not None:
+                position_events.append(
+                    (
+                        "INITIAL_PROTECTION_CONFIRMED",
+                        _as_datetime(
+                            row["initial_protection_confirmed_at"],
+                            "StrategyPosition.initial_protection_confirmed_at",
+                        ),
+                    )
+                )
             if str(row["state"]) == "CLOSED" and row["closed_at"] is not None:
                 position_events.append(
                     (
@@ -467,6 +720,18 @@ class LifecycleSupervisor:
                     entry_execution_request_id=entry_request_id,
                     strategy_position_id=position_id,
                     exit_plan_fingerprint=exit_plan_fingerprint,
+                    exchange_position_slot_claim_id=(
+                        None if row["exchange_position_slot_claim_id"] is None
+                        else str(row["exchange_position_slot_claim_id"])
+                    ),
+                    position_mode_state_ref=(
+                        None if row["position_mode_state_ref"] is None
+                        else str(row["position_mode_state_ref"])
+                    ),
+                    capital_reservation_id=(
+                        None if row["capital_reservation_id"] is None
+                        else str(row["capital_reservation_id"])
+                    ),
                 )
 
         claims = self._connection.execute(
@@ -782,6 +1047,9 @@ class LifecycleSupervisor:
             """SELECT p.position_id,p.exit_plan_fingerprint,p.strategy_activation_id,
                       p.strategy_id,p.strategy_version,
                       p.strategy_config_fingerprint,p.state,
+                      p.account_ref,p.symbol,p.exchange_position_key,p.position_idx,
+                      p.exchange_position_slot_claim_id,p.position_mode_state_ref,
+                      p.initial_protection_confirmed_at,p.emergency_policy,
                       x.exit_plan_fingerprint AS exact_exit_plan,
                       c.claim_id,c.exit_plan_fingerprint AS claimed_exit_plan,
                       c.status AS claim_status,c.last_seen_at AS claim_last_seen_at
@@ -802,6 +1070,9 @@ class LifecycleSupervisor:
                 row["exit_plan_fingerprint"],
                 row["strategy_activation_id"],
                 row["strategy_config_fingerprint"],
+                row["exchange_position_slot_claim_id"],
+                row["position_mode_state_ref"],
+                row["emergency_policy"],
             )
             if any(value is None or str(value) == "" for value in required):
                 faults.append(
@@ -830,6 +1101,115 @@ class LifecycleSupervisor:
                     )
                 )
                 continue
+            emergency = row["emergency_policy"]
+            if not isinstance(emergency, Mapping) or not emergency:
+                faults.append(
+                    FaultCondition(
+                        "POSITION_LINEAGE_INCOMPLETE",
+                        FaultSeverity.CRITICAL,
+                        position_id,
+                        position_id,
+                        {"strategy_position_id": position_id},
+                        {"reason": "exact emergency_policy is missing from StrategyPosition"},
+                    )
+                )
+
+            slot = self._connection.execute(
+                """SELECT exchange_position_key,strategy_position_id,claim_state,
+                          strategy_attempt_id,position_mode_state_ref
+                     FROM runtime.exchange_position_slot_claims
+                    WHERE exchange_position_slot_claim_id=%s""",
+                (row["exchange_position_slot_claim_id"],),
+            ).fetchone()
+            slot_reason: str | None = None
+            if slot is None:
+                slot_reason = "bound physical slot claim is missing"
+            elif str(slot["exchange_position_key"]) != str(row["exchange_position_key"]):
+                slot_reason = "slot claim exchange_position_key differs from StrategyPosition"
+            elif str(slot["strategy_position_id"] or "") != position_id:
+                slot_reason = "slot claim is not bound to exact StrategyPosition"
+            elif str(slot["position_mode_state_ref"]) != str(row["position_mode_state_ref"]):
+                slot_reason = "slot claim position-mode lineage differs from StrategyPosition"
+            elif str(slot["claim_state"]) not in {"BOUND", "RECONCILIATION_REQUIRED"}:
+                slot_reason = "open StrategyPosition has non-owning slot claim state"
+            elif str(slot["claim_state"]) == "RECONCILIATION_REQUIRED":
+                slot_reason = "physical slot claim requires reconciliation"
+            if slot_reason is not None:
+                faults.append(
+                    FaultCondition(
+                        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+                        FaultSeverity.CRITICAL,
+                        position_id,
+                        position_id,
+                        {
+                            "strategy_position_id": position_id,
+                            "exchange_position_slot_claim_id": row[
+                                "exchange_position_slot_claim_id"
+                            ],
+                            "exchange_position_key": row["exchange_position_key"],
+                        },
+                        {"reason": slot_reason},
+                    )
+                )
+
+            mode_reason: str | None = None
+            if int(str(row["position_idx"])) != 0:
+                mode_reason = "StrategyPosition position_idx is not 0"
+            else:
+                latest_mode = self._connection.execute(
+                    """SELECT position_mode_state_ref,position_mode,position_idx,observed_at
+                         FROM runtime.position_mode_states
+                        WHERE account_ref=%s
+                          AND product_category='LINEAR'
+                          AND instrument=%s
+                        ORDER BY observed_at DESC,created_at DESC
+                        LIMIT 1""",
+                    (row["account_ref"], row["symbol"]),
+                ).fetchone()
+                if latest_mode is not None and (
+                    str(latest_mode["position_mode"]) != "ONE_WAY"
+                    or int(
+                        latest_mode["position_idx"]
+                        if latest_mode["position_idx"] is not None
+                        else -1
+                    )
+                    != 0
+                ):
+                    mode_reason = (
+                        "latest Exchange position mode is incompatible: "
+                        f"{latest_mode['position_mode']}:{latest_mode['position_idx']}"
+                    )
+            if mode_reason is not None:
+                faults.append(
+                    FaultCondition(
+                        "EXCHANGE_POSITION_MODE_MISMATCH",
+                        FaultSeverity.CRITICAL,
+                        position_id,
+                        position_id,
+                        {
+                            "strategy_position_id": position_id,
+                            "position_mode_state_ref": row["position_mode_state_ref"],
+                            "position_idx": row["position_idx"],
+                        },
+                        {"reason": mode_reason},
+                    )
+                )
+
+            if row["initial_protection_confirmed_at"] is None:
+                faults.append(
+                    FaultCondition(
+                        "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+                        FaultSeverity.CRITICAL,
+                        position_id,
+                        position_id,
+                        {
+                            "strategy_position_id": position_id,
+                            "exit_plan_fingerprint": row["exit_plan_fingerprint"],
+                        },
+                        {"reason": "Exchange-confirmed initial protection is absent"},
+                    )
+                )
+
             claim_reason: str | None = None
             if row["claim_id"] is None:
                 claim_reason = "open StrategyPosition lacks exact Exit Engine claim"
@@ -921,16 +1301,25 @@ class LifecycleSupervisor:
                 )
             )
 
-        conflicts = self._connection.execute(
+        entry_safety_blocks = self._connection.execute(
             """SELECT dispatch_id,execution_request_id,reason
                  FROM strategy_entry.execution_dispatches
                 WHERE state='BLOCKED'
-                  AND reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_CONFLICT%'"""
+                  AND (
+                    reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%'
+                    OR reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%'
+                  )"""
         ).fetchall()
-        for row in conflicts:
+        for row in entry_safety_blocks:
+            reason = str(row["reason"] or "")
+            code = (
+                "EXCHANGE_POSITION_MODE_MISMATCH"
+                if reason.startswith("EXCHANGE_POSITION_MODE_MISMATCH")
+                else "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
+            )
             faults.append(
                 FaultCondition(
-                    "EXCHANGE_POSITION_OWNERSHIP_CONFLICT",
+                    code,
                     FaultSeverity.CRITICAL,
                     str(row["dispatch_id"]),
                     None,
@@ -938,7 +1327,7 @@ class LifecycleSupervisor:
                         "dispatch_id": row["dispatch_id"],
                         "entry_execution_request_id": row["execution_request_id"],
                     },
-                    {"reason": row["reason"]},
+                    {"reason": reason},
                 )
             )
 
@@ -1012,6 +1401,81 @@ class LifecycleSupervisor:
             + fingerprint({"fault_code": condition.code, "scope_key": condition.scope_key})[:32]
         )
 
+    def _ensure_critical_delivery(
+        self,
+        *,
+        fault_id: str,
+        condition: FaultCondition,
+        now: datetime,
+        reset: bool,
+    ) -> None:
+        if condition.severity is not FaultSeverity.CRITICAL:
+            return
+        delivery_id = "fault-delivery-" + fingerprint({"fault_id": fault_id})[:32]
+        payload = canonical_json(
+            {
+                "delivery_id": delivery_id,
+                "fault_id": fault_id,
+                "fault_code": condition.code,
+                "severity": condition.severity.value,
+                "strategy_position_id": condition.strategy_position_id,
+                "exact_ids": dict(condition.exact_ids),
+                "fault_payload": dict(condition.payload),
+            }
+        )
+        self._connection.execute(
+            """INSERT INTO runtime.lifecycle_fault_deliveries(
+                   delivery_id,fault_id,channel,state,attempts,next_attempt_at,
+                   last_attempt_at,delivered_at,acknowledged_at,escalation_at,
+                   last_error,payload
+               ) VALUES(%s,%s,'OWNER_WEBHOOK','PENDING',0,%s,
+                        NULL,NULL,NULL,NULL,NULL,%s::jsonb)
+               ON CONFLICT(fault_id) DO UPDATE SET
+                   state=CASE WHEN %s THEN 'PENDING'
+                              ELSE runtime.lifecycle_fault_deliveries.state END,
+                   attempts=CASE WHEN %s THEN 0
+                                 ELSE runtime.lifecycle_fault_deliveries.attempts END,
+                   next_attempt_at=CASE WHEN %s THEN EXCLUDED.next_attempt_at
+                                        ELSE runtime.lifecycle_fault_deliveries.next_attempt_at END,
+                   last_attempt_at=CASE WHEN %s THEN NULL
+                                        ELSE runtime.lifecycle_fault_deliveries.last_attempt_at END,
+                   delivered_at=CASE WHEN %s THEN NULL
+                                     ELSE runtime.lifecycle_fault_deliveries.delivered_at END,
+                   acknowledged_at=CASE WHEN %s THEN NULL
+                                        ELSE runtime.lifecycle_fault_deliveries.acknowledged_at END,
+                   escalation_at=CASE WHEN %s THEN NULL
+                                      ELSE runtime.lifecycle_fault_deliveries.escalation_at END,
+                   last_error=CASE WHEN %s THEN NULL
+                                   ELSE runtime.lifecycle_fault_deliveries.last_error END,
+                   payload=EXCLUDED.payload,
+                   updated_at=clock_timestamp()""",
+            (
+                delivery_id,
+                fault_id,
+                now,
+                payload,
+                reset,
+                reset,
+                reset,
+                reset,
+                reset,
+                reset,
+                reset,
+                reset,
+            ),
+        )
+        self._insert_event(
+            "CRITICAL_FAULT_DELIVERY",
+            now,
+            {"fault_id": fault_id, "delivery_id": delivery_id},
+            payload={
+                "state": "PENDING",
+                "fault_code": condition.code,
+                "channel": "OWNER_WEBHOOK",
+            },
+            strategy_position_id=condition.strategy_position_id,
+        )
+
     def _upsert_fault(self, condition: FaultCondition, now: datetime) -> int:
         fault_id = self._fault_id(condition)
         existing = self._connection.execute(
@@ -1045,6 +1509,12 @@ class LifecycleSupervisor:
                 },
                 strategy_position_id=condition.strategy_position_id,
             )
+            self._ensure_critical_delivery(
+                fault_id=fault_id,
+                condition=condition,
+                now=now,
+                reset=True,
+            )
             return 1
         if str(existing["state"]) == "RESOLVED":
             self._connection.execute(
@@ -1052,6 +1522,12 @@ class LifecycleSupervisor:
                       SET state='OPEN',resolved_at=NULL,payload=%s::jsonb
                     WHERE fault_id=%s""",
                 (canonical_json(dict(condition.payload)), fault_id),
+            )
+            self._ensure_critical_delivery(
+                fault_id=fault_id,
+                condition=condition,
+                now=now,
+                reset=True,
             )
             return 1
         return 0

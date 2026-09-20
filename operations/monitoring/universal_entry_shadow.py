@@ -23,14 +23,19 @@ from typing import Any, cast
 import psycopg
 import websocket
 
-from bybit_workbench.capital_reservation import PostgresCapitalReservationPort
 from bybit_workbench.counterfactual import (
     AnalystCounterfactualStore,
     build_insufficient_funds_candidate,
 )
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.entry_admission import PostgresEntryAdmissionPort
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
 from bybit_workbench.lifecycle_ack import record_plan_consumption
+from bybit_workbench.live_arm_readiness import (
+    LiveArmContext,
+    active_live_arm_session,
+    evaluate_live_arm,
+)
 from bybit_workbench.universal_entry import (
     DataQuality,
     FrozenPolicy,
@@ -1144,7 +1149,7 @@ def _real_execution_activation_ids(
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
-    if not gate or not bool(gate[0]):
+    if not gate or not bool(gate[0]) or not LOADED_COMMIT:
         return frozenset()
     rows = connection.execute(
         """SELECT strategy_id,strategy_version,strategy_config_fingerprint
@@ -1152,15 +1157,113 @@ def _real_execution_activation_ids(
             WHERE enabled=true AND enabled_at IS NOT NULL"""
     ).fetchall()
     allowed = {tuple(str(value) for value in row) for row in rows}
-    return frozenset(
-        cast(Any, bundle).activation.activation_id
-        for bundle in bundles
-        if (
-            cast(Any, bundle).card.strategy_id,
-            cast(Any, bundle).card.strategy_version,
-            cast(Any, bundle).card.strategy_config_fingerprint,
+    current = datetime.now(UTC)
+    ready: set[str] = set()
+    for raw_bundle in bundles:
+        bundle = cast(Any, raw_bundle)
+        identity = (
+            bundle.card.strategy_id,
+            bundle.card.strategy_version,
+            bundle.card.strategy_config_fingerprint,
         )
-        in allowed
+        if identity not in allowed:
+            continue
+        symbols = tuple(str(symbol) for symbol in bundle.card.symbols)
+        if not symbols:
+            continue
+        activation_ready = True
+        for symbol in symbols:
+            try:
+                context = LiveArmContext(
+                    strategy_id=bundle.card.strategy_id,
+                    strategy_version=bundle.card.strategy_version,
+                    strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                    strategy_activation_id=bundle.activation.activation_id,
+                    symbol=symbol,
+                    release_commit=LOADED_COMMIT,
+                )
+            except ValueError:
+                activation_ready = False
+                break
+            if not evaluate_live_arm(
+                connection,
+                context=context,
+                now=current,
+                require_owner_approval=True,
+            ).ready:
+                activation_ready = False
+                break
+            if active_live_arm_session(connection, context=context) is None:
+                activation_ready = False
+                break
+        if activation_ready:
+            ready.add(bundle.activation.activation_id)
+    return frozenset(ready)
+
+
+def _real_entry_technical_readiness(
+    connection: Any,
+    *,
+    observed_at: datetime,
+) -> TechnicalReadiness:
+    raw_max_age = os.environ.get("CRIPTA_REAL_ENTRY_ACCOUNT_STATE_MAX_AGE_SECONDS", "").strip()
+    if not raw_max_age:
+        return TechnicalReadiness(
+            False,
+            observed_at,
+            "real Entry account-state freshness policy is not configured",
+        )
+    try:
+        max_age = int(raw_max_age)
+    except ValueError:
+        return TechnicalReadiness(False, observed_at, "invalid real Entry account-state max age")
+    if max_age <= 0:
+        return TechnicalReadiness(
+            False,
+            observed_at,
+            "real Entry account-state max age must be positive",
+        )
+
+    now_ms = int(observed_at.astimezone(UTC).timestamp() * 1000)
+    reconciliation = connection.execute(
+        """SELECT finished_at_epoch_ms,ok
+             FROM runtime.reconciliation_runs
+            ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    if (
+        reconciliation is None
+        or not bool(reconciliation[1])
+        or now_ms - int(reconciliation[0]) < 0
+        or now_ms - int(reconciliation[0]) > max_age * 1000
+    ):
+        return TechnicalReadiness(False, observed_at, "fresh Exchange reconciliation is required")
+
+    wallet = connection.execute(
+        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
+    ).fetchone()
+    if (
+        wallet is None
+        or now_ms - int(wallet[0]) < 0
+        or now_ms - int(wallet[0]) > max_age * 1000
+    ):
+        return TechnicalReadiness(False, observed_at, "fresh account wallet state is required")
+
+    critical_fault = connection.execute(
+        """SELECT fault_code
+             FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+            ORDER BY detected_at LIMIT 1"""
+    ).fetchone()
+    if critical_fault is not None:
+        return TechnicalReadiness(
+            False,
+            observed_at,
+            f"open critical lifecycle fault: {critical_fault[0]}",
+        )
+    return TechnicalReadiness(
+        True,
+        observed_at,
+        "required account state and reconciliation are fresh",
     )
 
 
@@ -1324,10 +1427,10 @@ def _run_observer_epoch(
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
     paper = PaperTradeRuntime(connection)
-    reservation_required_for = _real_execution_activation_ids(connection, bundles)
-    capital_reservation_port = (
-        PostgresCapitalReservationPort(connection)
-        if reservation_required_for
+    real_admission_required_for = _real_execution_activation_ids(connection, bundles)
+    entry_admission_port = (
+        PostgresEntryAdmissionPort(connection)
+        if real_admission_required_for
         else None
     )
     bundle_by_entry_plan = {
@@ -1645,13 +1748,20 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
-        readiness = TechnicalReadiness(
-            True,
-            fact.observed_at,
-            "multi-Strategy observer causal transport is continuous",
+        readiness = (
+            _real_entry_technical_readiness(
+                connection,
+                observed_at=fact.observed_at,
+            )
+            if real_admission_required_for
+            else TechnicalReadiness(
+                True,
+                fact.observed_at,
+                "SHADOW observer causal transport is continuous",
+            )
         )
         evaluation_transaction = (
-            connection.transaction() if reservation_required_for else nullcontext()
+            connection.transaction() if real_admission_required_for else nullcontext()
         )
         with evaluation_transaction:
             evaluations = engine.process(
@@ -1660,8 +1770,12 @@ def _run_observer_epoch(
                 capacity=capacity,
                 technical_readiness=readiness,
                 account_ref="BYBIT:UNIFIED",
-                capital_reservation_port=capital_reservation_port,
-                capital_reservation_required_for=reservation_required_for,
+                entry_admission_port=entry_admission_port,
+                real_admission_required_for=real_admission_required_for,
+                exchange_position_keys={
+                    symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+                    for symbol in symbols
+                },
                 allow_new_signals=sensor_ready(fact.observed_at),
             )
             facts_received += 1
@@ -1676,7 +1790,7 @@ def _run_observer_epoch(
                     )
                 if (
                     evaluation.signal.strategy_activation_id
-                    in reservation_required_for
+                    in real_admission_required_for
                 ):
                     candidate = build_insufficient_funds_candidate(
                         evaluation,
@@ -1686,8 +1800,7 @@ def _run_observer_epoch(
                     )
                     if candidate is not None:
                         counterfactual_store.record_candidate(candidate)
-                if evaluation.execution_request is not None:
-                    paper.create_order(evaluation, bundle, now=fact.observed_at)
+                paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -32,9 +33,10 @@ def _mapping(value: object) -> Mapping[str, object] | None:
 def _reservation_for_command(
     connection: ConnectionLike,
     command_id: str,
-) -> tuple[str, str] | None:
+) -> tuple[str, str, str, str] | None:
     row = connection.execute(
-        """SELECT c.reservation_id,c.state
+        """SELECT c.reservation_id,c.state,
+                  r.exchange_position_slot_claim_id,r.execution_request_id
              FROM runtime.trade_commands tc
              JOIN strategy_entry.execution_dispatches d
                ON d.command_id=tc.command_id
@@ -60,9 +62,32 @@ def _reservation_for_command(
     if payload is None or str(payload.get("source") or "") != "universal_entry":
         return None
     reservation_id = str(payload.get("capital_reservation_id") or "")
+    slot_claim_id = str(payload.get("exchange_position_slot_claim_id") or "")
     if not reservation_id or reservation_id != str(row[0]):
         raise RuntimeError("Universal Entry command/reservation lineage mismatch")
-    return reservation_id, str(row[1])
+    if not slot_claim_id or slot_claim_id != str(row[2] or ""):
+        raise RuntimeError("Universal Entry command/slot-claim lineage mismatch")
+    return reservation_id, str(row[1]), slot_claim_id, str(row[3])
+
+
+def _record_request_state(
+    connection: ConnectionLike,
+    *,
+    execution_request_id: str,
+    state: str,
+    occurred_at: datetime,
+    reason: str,
+) -> None:
+    event_id = "reqstate-" + hashlib.sha256(
+        f"{execution_request_id}|{state}|{reason}".encode()
+    ).hexdigest()[:32]
+    connection.execute(
+        """INSERT INTO strategy_entry.execution_request_state_events(
+               request_state_event_id,execution_request_id,state,occurred_at,reason,payload
+           ) VALUES(%s,%s,%s,%s,%s,'{}'::jsonb)
+           ON CONFLICT(request_state_event_id) DO NOTHING""",
+        (event_id, execution_request_id, state, occurred_at.astimezone(UTC), reason),
+    )
 
 
 def mark_entry_order_acknowledged(
@@ -77,7 +102,7 @@ def mark_entry_order_acknowledged(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state = binding
+    reservation_id, state, slot_claim_id, execution_request_id = binding
     if state == "PENDING_EXCHANGE_REFLECTION":
         return state
     if state in {"CONSUMED", "RELEASED", "RECONCILIATION_REQUIRED"}:
@@ -95,6 +120,22 @@ def mark_entry_order_acknowledged(
     )
     if updated.rowcount != 1:
         raise RuntimeError("entry order acknowledgement reservation race")
+    claim = connection.execute(
+        """UPDATE runtime.exchange_position_slot_claims
+              SET updated_at=%s
+            WHERE exchange_position_slot_claim_id=%s
+              AND claim_state='CLAIMED'""",
+        (acknowledged_at.astimezone(UTC), slot_claim_id),
+    )
+    if claim.rowcount != 1:
+        raise RuntimeError("entry order acknowledgement slot-claim race")
+    _record_request_state(
+        connection,
+        execution_request_id=execution_request_id,
+        state="REQUEST_ACKNOWLEDGED",
+        occurred_at=acknowledged_at,
+        reason=f"EXCHANGE_ORDER_ACKNOWLEDGED:{exchange_order_id}",
+    )
     return "PENDING_EXCHANGE_REFLECTION"
 
 
@@ -108,7 +149,7 @@ def finalize_failed_entry_command_reservation(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state = binding
+    reservation_id, state, slot_claim_id, execution_request_id = binding
     if state in {"CONSUMED", "RELEASED"}:
         return state
 
@@ -126,6 +167,24 @@ def finalize_failed_entry_command_reservation(
             )
             if updated.rowcount != 1:
                 raise RuntimeError("entry reconciliation reservation race")
+        claim = connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                  SET claim_state='RECONCILIATION_REQUIRED',
+                      release_reason=%s,
+                      updated_at=clock_timestamp()
+                WHERE exchange_position_slot_claim_id=%s
+                  AND claim_state IN ('CLAIMED','BOUND','RECONCILIATION_REQUIRED')""",
+            (f"AMBIGUOUS_ENTRY_OUTCOME:{reason}"[:500], slot_claim_id),
+        )
+        if claim.rowcount != 1:
+            raise RuntimeError("entry reconciliation slot-claim race")
+        _record_request_state(
+            connection,
+            execution_request_id=execution_request_id,
+            state="REQUEST_RECONCILIATION_REQUIRED",
+            occurred_at=datetime.now(UTC),
+            reason=f"AMBIGUOUS_ENTRY_OUTCOME:{reason}"[:500],
+        )
         return "RECONCILIATION_REQUIRED"
 
     if state == "DISPATCHED":
@@ -137,6 +196,25 @@ def finalize_failed_entry_command_reservation(
         )
         if updated.rowcount != 1:
             raise RuntimeError("deterministic entry rejection reservation race")
+        claim = connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                  SET claim_state='RELEASED',
+                      released_at=clock_timestamp(),
+                      release_reason=%s,
+                      updated_at=clock_timestamp()
+                WHERE exchange_position_slot_claim_id=%s
+                  AND claim_state='CLAIMED'""",
+            (f"ENTRY_NO_MUTATION:{reason}"[:500], slot_claim_id),
+        )
+        if claim.rowcount != 1:
+            raise RuntimeError("deterministic entry rejection slot-claim race")
+        _record_request_state(
+            connection,
+            execution_request_id=execution_request_id,
+            state="REQUEST_TERMINAL",
+            occurred_at=datetime.now(UTC),
+            reason=f"ENTRY_NO_MUTATION:{reason}"[:500],
+        )
         return "RELEASED"
 
     raise RuntimeError(f"failed Entry command has unexpected reservation state {state}")
@@ -151,7 +229,7 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state = binding
+    reservation_id, state, slot_claim_id, execution_request_id = binding
     if state in {"CONSUMED", "RELEASED"}:
         return state
 
@@ -229,6 +307,25 @@ def resolve_cancelled_entry_reservation_after_reconcile(
         )
         if updated.rowcount != 1:
             raise RuntimeError("zero-fill cancel reservation release race")
+        claim = connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                  SET claim_state='RELEASED',
+                      released_at=clock_timestamp(),
+                      release_reason='LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL',
+                      updated_at=clock_timestamp()
+                WHERE exchange_position_slot_claim_id=%s
+                  AND claim_state='CLAIMED'""",
+            (slot_claim_id,),
+        )
+        if claim.rowcount != 1:
+            raise RuntimeError("zero-fill cancel slot-claim release race")
+        _record_request_state(
+            connection,
+            execution_request_id=execution_request_id,
+            state="REQUEST_CANCELLED",
+            occurred_at=datetime.now(UTC),
+            reason="LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL",
+        )
         return "RELEASED"
 
     return finalize_failed_entry_command_reservation(

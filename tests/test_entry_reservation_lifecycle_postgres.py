@@ -14,6 +14,11 @@ from bybit_workbench.entry_reservation_lifecycle import (
     mark_entry_order_acknowledged,
     resolve_cancelled_entry_reservation_after_reconcile,
 )
+from bybit_workbench.live_arm_readiness import (
+    REQUIRED_LIVE_ARM_CHECKS,
+    LiveArmContext,
+    scope_for_check,
+)
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -45,6 +50,9 @@ def _seed(
     attempt_id = f"{prefix}-attempt"
     decision_id = f"{prefix}-decision"
     reservation_id = f"{prefix}-reservation"
+    slot_claim_id = f"{prefix}-slot"
+    position_mode_state_ref = f"{prefix}-pmode"
+    exchange_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
 
@@ -137,6 +145,21 @@ def _seed(
         ),
     )
     connection.execute(
+        """INSERT INTO runtime.position_mode_states(
+               position_mode_state_ref,exchange,account_ref,product_category,
+               instrument,position_mode,position_idx,observed_at,received_at,
+               fresh_until,provenance
+           ) VALUES(%s,'BYBIT','BYBIT:UNIFIED','LINEAR',%s,'ONE_WAY',0,
+                    %s,%s,%s,'{}'::jsonb)""",
+        (
+            position_mode_state_ref,
+            symbol,
+            NOW,
+            NOW,
+            NOW + timedelta(minutes=10),
+        ),
+    )
+    connection.execute(
         """INSERT INTO runtime.capital_reservations(
                reservation_id,account_ref,strategy_id,strategy_version,
                strategy_config_fingerprint,entry_plan_fingerprint,signal_id,
@@ -163,10 +186,35 @@ def _seed(
         ),
     )
     connection.execute(
+        """INSERT INTO runtime.exchange_position_slot_claims(
+               exchange_position_slot_claim_id,exchange_position_key,account_ref,
+               symbol,position_idx,strategy_attempt_id,strategy_id,strategy_version,
+               strategy_config_fingerprint,entry_plan_fingerprint,direction,
+               position_mode_state_ref,capital_reservation_id,claim_state,
+               claimed_at,updated_at
+           ) VALUES(%s,%s,'BYBIT:UNIFIED',%s,0,%s,%s,%s,%s,%s,'LONG',
+                    %s,%s,'CLAIMED',%s,%s)""",
+        (
+            slot_claim_id,
+            exchange_key,
+            symbol,
+            attempt_id,
+            strategy_id,
+            version,
+            strategy_fp,
+            entry_fp,
+            position_mode_state_ref,
+            reservation_id,
+            NOW,
+            NOW,
+        ),
+    )
+    connection.execute(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
-               reason,decided_at,capacity_snapshot_id,capital_reservation_id,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,'{}'::jsonb)""",
+               reason,decided_at,capacity_snapshot_id,capital_reservation_id,
+               exchange_position_slot_claim_id,position_mode_state_ref,payload
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
         (
             decision_id,
             attempt_id,
@@ -174,6 +222,8 @@ def _seed(
             NOW,
             f"{prefix}-capacity",
             reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
         ),
     )
     connection.execute(
@@ -181,8 +231,9 @@ def _seed(
                execution_request_id,strategy_attempt_id,entry_decision_id,signal_id,
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
-               exit_plan_fingerprint,capital_reservation_id
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s)""",
+               exit_plan_fingerprint,capital_reservation_id,
+               exchange_position_slot_claim_id,position_mode_state_ref
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
         (
             request_id,
             attempt_id,
@@ -196,6 +247,8 @@ def _seed(
             NOW,
             exit_fp,
             reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
         ),
     )
     if permission:
@@ -214,9 +267,10 @@ def _seed(
                    strategy_attempt_id,entry_decision_id,signal_id,strategy_id,
                    strategy_version,strategy_config_fingerprint,
                    entry_plan_fingerprint,exit_plan_fingerprint,payload,
-                   capital_reservation_id
+                   capital_reservation_id,exchange_position_slot_claim_id,
+                   position_mode_state_ref
                ) VALUES(%s,%s,%s,'DISPATCHED','test',%s,%s,%s,%s,%s,%s,%s,%s,
-                        '{}'::jsonb,%s)""",
+                        '{}'::jsonb,%s,%s,%s)""",
             (
                 f"{prefix}-dispatch",
                 request_id,
@@ -230,6 +284,8 @@ def _seed(
                 entry_fp,
                 exit_fp,
                 reservation_id,
+                slot_claim_id,
+                position_mode_state_ref,
             ),
         )
     if command:
@@ -245,6 +301,8 @@ def _seed(
             "entry_plan_fingerprint": entry_fp,
             "exit_plan_fingerprint": exit_fp,
             "capital_reservation_id": reservation_id,
+            "exchange_position_slot_claim_id": slot_claim_id,
+            "position_mode_state_ref": position_mode_state_ref,
             "strategy_activation_id": activation_id,
             "bot_instance_id": "universal-entry",
         }
@@ -255,11 +313,73 @@ def _seed(
             (command_id, symbol, json.dumps(payload), int(NOW.timestamp() * 1000)),
         )
     return {
+        "strategy_id": strategy_id,
+        "strategy_version": version,
+        "strategy_config_fingerprint": strategy_fp,
+        "strategy_activation_id": activation_id,
         "reservation_id": reservation_id,
+        "slot_claim_id": slot_claim_id,
+        "position_mode_state_ref": position_mode_state_ref,
         "request_id": request_id,
         "command_id": command_id,
         "symbol": symbol,
     }
+
+
+TEST_RELEASE_COMMIT = os.environ.get(
+    "CRIPTA_RELEASE_COMMIT",
+    "fc8f6b494b270aa855a9a03ee7932562c163db99",
+).strip().lower()
+
+
+def _seed_live_arm_ready(
+    connection: psycopg.Connection,
+    ids: dict[str, str],
+) -> None:
+    context = LiveArmContext(
+        strategy_id=ids["strategy_id"],
+        strategy_version=ids["strategy_version"],
+        strategy_config_fingerprint=ids["strategy_config_fingerprint"],
+        strategy_activation_id=ids["strategy_activation_id"],
+        symbol=ids["symbol"],
+        release_commit=TEST_RELEASE_COMMIT,
+    )
+    for index, code in enumerate(REQUIRED_LIVE_ARM_CHECKS):
+        scope_type, scope_key = scope_for_check(code, context)
+        connection.execute(
+            """INSERT INTO control.live_arm_evidence(
+                   evidence_id,check_code,scope_type,scope_key,status,checked_at,
+                   valid_until,release_commit,source,evidence
+               ) VALUES(%s,%s,%s,%s,'PASS',%s,%s,%s,'test','{}'::jsonb)""",
+            (
+                f"{ids['strategy_id']}-evidence-{index}",
+                code,
+                scope_type,
+                scope_key,
+                NOW,
+                NOW + timedelta(minutes=10),
+                TEST_RELEASE_COMMIT,
+            ),
+        )
+    connection.execute(
+        """INSERT INTO control.live_arm_sessions(
+               live_arm_session_id,strategy_id,strategy_version,
+               strategy_config_fingerprint,strategy_activation_id,symbol,
+               release_commit,state,owner_approved_at,activated_at,
+               deactivated_at,source
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s,%s,NULL,'test')""",
+        (
+            f"{ids['strategy_id']}-live-session",
+            ids["strategy_id"],
+            ids["strategy_version"],
+            ids["strategy_config_fingerprint"],
+            ids["strategy_activation_id"],
+            ids["symbol"],
+            TEST_RELEASE_COMMIT,
+            NOW,
+            NOW,
+        ),
+    )
 
 
 def _gate(connection: psycopg.Connection, enabled: bool) -> None:
@@ -310,6 +430,51 @@ def test_expired_reserved_request_is_released_even_when_gate_is_disarmed() -> No
         assert dispatch["command_id"] is None
 
 
+def test_missing_live_arm_evidence_blocks_before_exchange_and_releases_admission() -> None:
+    assert DSN is not None
+    prefix = "live-arm-block-" + uuid4().hex[:12]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="SOLUSDT",
+            reservation_state="RESERVED",
+            expires_at=NOW + timedelta(seconds=30),
+            permission=True,
+        )
+        _gate(connection, True)
+        connection.commit()
+
+        result = run_once(connection, now=NOW)
+        assert result == "BLOCKED:LIVE_ARM_NOT_READY"
+
+        reservation = connection.execute(
+            """SELECT state,state_reason
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        assert reservation is not None
+        assert reservation["state"] == "RELEASED"
+        assert reservation["state_reason"] == "PRE_EXCHANGE_BLOCK:LIVE_ARM_NOT_READY"
+
+        claim = connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone()
+        assert claim is not None
+        assert claim["claim_state"] == "RELEASED"
+        assert claim["release_reason"] == "PRE_EXCHANGE_BLOCK:LIVE_ARM_NOT_READY"
+
+        command_count = connection.execute(
+            "SELECT count(*) AS count FROM runtime.trade_commands WHERE symbol=%s",
+            (ids["symbol"],),
+        ).fetchone()
+        assert command_count == {"count": 0}
+
+
 def test_structural_pre_exchange_block_releases_reserved_capital() -> None:
     assert DSN is not None
     prefix = "structural-" + uuid4().hex[:12]
@@ -322,6 +487,7 @@ def test_structural_pre_exchange_block_releases_reserved_capital() -> None:
             expires_at=NOW + timedelta(seconds=30),
             permission=True,
         )
+        _seed_live_arm_ready(connection, ids)
         _gate(connection, True)
         connection.commit()
 

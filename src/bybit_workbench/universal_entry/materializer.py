@@ -188,12 +188,24 @@ def materialize_plans(
     )
     exit_raw = card.exit_policy.to_dict()
     exit_version = str(exit_raw.get("exit_plan_version") or card.strategy_version)
+    lifecycle_raw = card.lifecycle_policy.to_dict()
+    emergency_raw = lifecycle_raw.get("emergency_policy")
+    if emergency_raw is None:
+        emergency_policy = FrozenPolicy.from_mapping({})
+    elif not isinstance(emergency_raw, Mapping):
+        raise ValueError("lifecycle_policy.emergency_policy must be an object")
+    else:
+        emergency_policy = FrozenPolicy.from_mapping(emergency_raw)
     exit_payload = {
         "strategy_fingerprint": card.strategy_config_fingerprint,
         "exit_plan_version": exit_version,
         "exit_policy": card.exit_policy,
         "protection_policy": card.protection_policy,
     }
+    # Historical SHADOW cards may predate emergency_policy. Preserve their
+    # immutable ExitPlan fingerprint while keeping them ineligible for real arm.
+    if "emergency_policy" in lifecycle_raw:
+        exit_payload["emergency_policy"] = emergency_policy
     exit_plan = ExitPlan(
         strategy_id=card.strategy_id,
         strategy_version=card.strategy_version,
@@ -203,5 +215,6 @@ def materialize_plans(
         exit_plan_fingerprint=fingerprint(exit_payload),
         exit_policy=card.exit_policy,
         protection_policy=card.protection_policy,
+        emergency_policy=emergency_policy,
     )
     return entry_plan, exit_plan

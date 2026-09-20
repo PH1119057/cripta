@@ -9,6 +9,7 @@ User=cripta
 Group=cripta
 WorkingDirectory=/srv/cripta/trade_lifecycle/current
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
 Environment=PYTHONPATH=/srv/cripta/trade_lifecycle/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
 Environment=CRIPTA_LIFECYCLE_SUPERVISOR=ENABLED
 Environment=CRIPTA_LIFECYCLE_SUPERVISOR_POLL_SECONDS=2

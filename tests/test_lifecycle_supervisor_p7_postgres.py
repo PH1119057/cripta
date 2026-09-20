@@ -65,44 +65,19 @@ def _seed_entry_execution_evidence(
 ) -> None:
     ids = _identity(prefix)
     reservation_id = f"{prefix}-reservation"
-    connection.execute(
-        """INSERT INTO runtime.capital_reservations(
-               reservation_id,account_ref,strategy_id,strategy_version,
-               strategy_config_fingerprint,entry_plan_fingerprint,signal_id,
-               strategy_attempt_id,requested_amount,amount_currency,
-               capacity_snapshot_id,capacity_observed_at,
-               capacity_available_at_reservation,pre_dispatch_expires_at,
-               state,state_reason,exchange_commitment_ref,
-               exchange_commitment_at,strategy_position_id
-           ) VALUES(
-               %s,'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,20,'USDT',
-               %s,%s,100,%s,'CONSUMED','p7 test consumed',%s,%s,%s
-           )""",
-        (
-            reservation_id,
-            ids["strategy_id"],
-            ids["version"],
-            ids["strategy_fp"],
-            ids["entry_fp"],
-            ids["signal_id"],
-            ids["attempt_id"],
-            f"{prefix}-capacity",
-            NOW - timedelta(seconds=1),
-            NOW + timedelta(seconds=30),
-            f"{prefix}-exchange-order",
-            NOW + timedelta(seconds=1),
-            ids["position_id"],
-        ),
-    )
+    slot_claim_id = f"{prefix}-slot"
+    position_mode_state_ref = f"{prefix}-pmode"
     connection.execute(
         """INSERT INTO strategy_entry.execution_dispatches(
                dispatch_id,execution_request_id,command_id,state,reason,
                strategy_attempt_id,entry_decision_id,signal_id,strategy_id,
                strategy_version,strategy_config_fingerprint,
-               entry_plan_fingerprint,exit_plan_fingerprint,payload
+               entry_plan_fingerprint,exit_plan_fingerprint,payload,
+               capital_reservation_id,exchange_position_slot_claim_id,
+               position_mode_state_ref
            ) VALUES(
                %s,%s,%s,'DISPATCHED','p7 exact dispatch',%s,%s,%s,%s,%s,%s,%s,%s,
-               '{}'::jsonb
+               '{}'::jsonb,%s,%s,%s
            )""",
         (
             f"{prefix}-entry-dispatch",
@@ -116,6 +91,9 @@ def _seed_entry_execution_evidence(
             ids["strategy_fp"],
             ids["entry_fp"],
             ids["exit_fp"],
+            reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
         ),
     )
 

@@ -292,6 +292,15 @@ def assess_strategy_runtime_readiness(
             )
         )
     lifecycle = card.lifecycle_policy.to_dict()
+    emergency = _mapping(lifecycle.get("emergency_policy"))
+    if not emergency:
+        execution_reasons.append(
+            RuntimeReadinessReason(
+                "LIVE_EMERGENCY_POLICY_REQUIRED",
+                "EXECUTION",
+                "Real Strategy требует exact lifecycle_policy.emergency_policy.",
+            )
+        )
     if _enabled(lifecycle.get("hedge_policy")):
         execution_reasons.append(
             RuntimeReadinessReason(

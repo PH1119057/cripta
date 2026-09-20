@@ -8,6 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
 Environment=PYTHONPATH=/srv/cripta/universal_entry_observer/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
 WorkingDirectory=/srv/cripta/universal_entry_observer/current
 Environment=CRIPTA_U5_RUNTIME_MODE=MULTI_STRATEGY_OBSERVER

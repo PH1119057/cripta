@@ -19,6 +19,9 @@ class ExecutionBridgeBlockCode(StrEnum):
     REQUEST_EXPIRED = "REQUEST_EXPIRED"
     REFERENCE_PRICE_MISSING = "REFERENCE_PRICE_MISSING"
     CAPITAL_RESERVATION_MISSING = "CAPITAL_RESERVATION_MISSING"
+    ADMISSION_LINEAGE_MISSING = "ADMISSION_LINEAGE_MISSING"
+    EMERGENCY_POLICY_MISSING = "EMERGENCY_POLICY_MISSING"
+    HEDGE_MODE_UNSUPPORTED = "HEDGE_MODE_UNSUPPORTED"
 
 
 class ExecutionBridgeBlocked(ValueError):
@@ -41,6 +44,8 @@ class PreparedRuntimeEntryCommand:
     entry_plan_fingerprint: str
     exit_plan_fingerprint: str
     capital_reservation_id: str
+    exchange_position_slot_claim_id: str
+    position_mode_state_ref: str
     strategy_activation_id: str
     symbol: str
     direction: TradeDirection
@@ -199,6 +204,11 @@ def _validate_policy_identity(
             ExecutionBridgeBlockCode.CAPITAL_RESERVATION_MISSING,
             "real EntryExecutionRequest requires atomic capital reservation",
         )
+    if not request.exchange_position_slot_claim_id or not request.position_mode_state_ref:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.ADMISSION_LINEAGE_MISSING,
+            "real EntryExecutionRequest requires slot claim and position-mode lineage",
+        )
     return activation_id, card, entry, exit_plan, activation
 
 
@@ -234,6 +244,23 @@ def prepare_runtime_entry_command(
     protection_policy = _unwrap_policy(
         exit_plan.get("protection_policy"), "ExitPlan.protection_policy"
     )
+    emergency_policy = _unwrap_policy(
+        exit_plan.get("emergency_policy"), "ExitPlan.emergency_policy"
+    )
+    if not emergency_policy:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.EMERGENCY_POLICY_MISSING,
+            "real Strategy requires exact lifecycle emergency_policy",
+        )
+    lifecycle_policy = _unwrap_policy(
+        card.get("lifecycle_policy"), "StrategyCard.lifecycle_policy"
+    )
+    hedge_policy = lifecycle_policy.get("hedge_policy")
+    if isinstance(hedge_policy, Mapping) and bool(hedge_policy.get("enabled", False)):
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.HEDGE_MODE_UNSUPPORTED,
+            "same-symbol hedge is unsupported in current ONE_WAY execution contract",
+        )
 
     request_payload = request.payload.to_dict()
     request_capital = _mapping(
@@ -373,6 +400,8 @@ def prepare_runtime_entry_command(
         "entry_plan_fingerprint": request.entry_plan_fingerprint,
         "exit_plan_fingerprint": exit_fp,
         "capital_reservation_id": capital_reservation_id,
+        "exchange_position_slot_claim_id": request.exchange_position_slot_claim_id,
+        "position_mode_state_ref": request.position_mode_state_ref,
         "strategy_activation_id": activation_id,
         "calculated_entry_price": signal_attributes.get("calculated_entry_price"),
         "entry_reference_source": signal_attributes.get("entry_reference_source"),
@@ -388,6 +417,7 @@ def prepare_runtime_entry_command(
         "policy_version": request.strategy_version,
         "bot_instance_id": "universal-entry",
         "initial_protection": protection,
+        "emergency_policy": dict(emergency_policy),
     }
     snapshot_payload_keys = {
         "entry_reference_policy": "strategy_entry_reference_policy",
@@ -412,6 +442,8 @@ def prepare_runtime_entry_command(
         entry_plan_fingerprint=request.entry_plan_fingerprint,
         exit_plan_fingerprint=exit_fp,
         capital_reservation_id=capital_reservation_id,
+        exchange_position_slot_claim_id=str(request.exchange_position_slot_claim_id),
+        position_mode_state_ref=str(request.position_mode_state_ref),
         strategy_activation_id=activation_id,
         symbol=request.symbol,
         direction=request.direction,

@@ -919,6 +919,12 @@ def _runtime_ready_owner_card() -> StrategyCard:
             "time_exit": {"enabled": False},
         }
     )
+    raw["lifecycle_policy"]["emergency_policy"] = {
+        "enabled": True,
+        "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+        "action": "FAIL_CLOSED_ONLY",
+        "reconciliation_required": True,
+    }
     raw["protection_policy"] = {
         "initial_protection": {
             "stop_loss_enabled": True,

@@ -9,7 +9,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from pathlib import Path
 
@@ -1914,11 +1914,42 @@ def reconcile_position_ownership(
             and str(current.get("side") or "") == side
         )
         if current_matches:
+            current_stop = Decimal(str(current.get("stopLoss") or 0))
+            protection_confirmed = current_stop > 0
             connection.execute(
                 """UPDATE runtime.position_ownership
-                   SET state='OPEN',close_link_status='OPEN'
-                   WHERE position_id=%s AND state='RECONCILIATION_REQUIRED'""",
-                (position_id,),
+                   SET state='OPEN',
+                       close_link_status='OPEN',
+                       initial_protection_confirmed_at=
+                           CASE
+                             WHEN %s AND initial_protection_confirmed_at IS NULL
+                             THEN to_timestamp(%s/1000.0)
+                             ELSE initial_protection_confirmed_at
+                           END,
+                       initial_protection_evidence=
+                           CASE
+                             WHEN %s
+                             THEN %s::jsonb
+                             ELSE initial_protection_evidence
+                           END
+                   WHERE position_id=%s""",
+                (
+                    protection_confirmed,
+                    now,
+                    protection_confirmed,
+                    json.dumps(
+                        {
+                            "source": "BYBIT_POSITION_RECONCILIATION",
+                            "symbol": symbol,
+                            "position_idx": position_idx,
+                            "stopLoss": current.get("stopLoss"),
+                            "takeProfit": current.get("takeProfit"),
+                            "observed_at_epoch_ms": now,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    position_id,
+                ),
             )
             continue
         fill_ms = int(row[6])
@@ -2099,6 +2130,123 @@ def reconcile_position_ownership(
         )
 
 
+def collect_position_mode_states(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+    now_ms: int,
+) -> list[dict[str, object]]:
+    """GET-only per-symbol mode observations for active Strategy universes."""
+    with connection.transaction():
+        rows = connection.execute(
+            """SELECT DISTINCT jsonb_array_elements_text(ep.plan_json->'symbols') AS symbol
+                 FROM strategy_entry.strategy_activations a
+                 JOIN strategy_entry.entry_plans ep
+                   ON ep.strategy_id=a.strategy_id
+                  AND ep.strategy_version=a.strategy_version
+                  AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
+                WHERE a.enabled=true
+                ORDER BY symbol"""
+        ).fetchall()
+    symbols = [str(row[0]) for row in rows if str(row[0]).strip()]
+    if not symbols:
+        return []
+    refresh_seconds = int(os.environ.get("CRIPTA_POSITION_MODE_REFRESH_SECONDS", "30") or 30)
+    observed_at = datetime.fromtimestamp(now_ms / 1000, tz=UTC)
+    if refresh_seconds > 0:
+        cutoff = observed_at - timedelta(seconds=refresh_seconds)
+        with connection.transaction():
+            recent = {
+                str(row[0])
+                for row in connection.execute(
+                    """SELECT instrument
+                         FROM runtime.position_mode_states
+                        WHERE account_ref='BYBIT:UNIFIED'
+                          AND product_category='LINEAR'
+                          AND observed_at >= %s
+                          AND instrument = ANY(%s)
+                        GROUP BY instrument""",
+                    (cutoff, symbols),
+                ).fetchall()
+            }
+        if recent == set(symbols):
+            return []
+    freshness_seconds = int(os.environ.get("CRIPTA_POSITION_MODE_FRESHNESS_SECONDS", "0") or 0)
+    result: list[dict[str, object]] = []
+    for symbol in symbols:
+        body, _ = api_get(
+            "/v5/position/list",
+            {"category": "linear", "symbol": symbol},
+            key,
+            secret,
+        )
+        if body.get("retCode") != 0:
+            raise RuntimeError(f"position-mode probe rejected for {symbol}")
+        items = (body.get("result") or {}).get("list") or []
+        indexes = sorted({int(item.get("positionIdx", -1)) for item in items})
+        if indexes and set(indexes).issubset({0}):
+            mode = "ONE_WAY"
+            position_idx: int | None = 0
+        elif set(indexes).intersection({1, 2}):
+            mode = "HEDGE"
+            position_idx = None
+        else:
+            mode = "UNKNOWN"
+            position_idx = None
+        state_ref = "pmode-" + hashlib.sha256(
+            f"BYBIT|BYBIT:UNIFIED|LINEAR|{symbol}|{mode}|{indexes}|{now_ms}".encode()
+        ).hexdigest()[:32]
+        result.append(
+            {
+                "position_mode_state_ref": state_ref,
+                "exchange": "BYBIT",
+                "account_ref": "BYBIT:UNIFIED",
+                "product_category": "LINEAR",
+                "instrument": symbol,
+                "position_mode": mode,
+                "position_idx": position_idx,
+                "observed_at": observed_at,
+                "received_at": datetime.now(UTC),
+                "fresh_until": observed_at
+                + timedelta(seconds=max(0, freshness_seconds)),
+                "provenance": {
+                    "source": "BYBIT_PRIVATE_REST_POSITION_LIST",
+                    "position_indexes": indexes,
+                    "freshness_seconds": freshness_seconds,
+                },
+            }
+        )
+    return result
+
+
+def persist_position_mode_states(
+    connection: psycopg.Connection,
+    states: list[dict[str, object]],
+) -> None:
+    for item in states:
+        connection.execute(
+            """INSERT INTO runtime.position_mode_states(
+                   position_mode_state_ref,exchange,account_ref,product_category,
+                   instrument,position_mode,position_idx,observed_at,received_at,
+                   fresh_until,provenance
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+               ON CONFLICT(position_mode_state_ref) DO NOTHING""",
+            (
+                item["position_mode_state_ref"],
+                item["exchange"],
+                item["account_ref"],
+                item["product_category"],
+                item["instrument"],
+                item["position_mode"],
+                item["position_idx"],
+                item["observed_at"],
+                item["received_at"],
+                item["fresh_until"],
+                json.dumps(item["provenance"], ensure_ascii=False),
+            ),
+        )
+
+
 def reconcile(
     connection: psycopg.Connection, key: str, secret: str, reason: str
 ) -> tuple[int, int]:
@@ -2125,6 +2273,9 @@ def reconcile(
             if float(p.get("size") or 0) != 0
         ]
         order_list = (orders.get("result") or {}).get("list") or []
+        position_mode_states = collect_position_mode_states(
+            connection, key, secret, now
+        )
         fetch_history = reason != "periodic"
         if not fetch_history:
             current_keys = {
@@ -2164,6 +2315,7 @@ def reconcile(
                 upsert_position(connection, p, now)
             for o in order_list:
                 upsert_order(connection, o, now)
+            persist_position_mode_states(connection, position_mode_states)
             for item in order_history:
                 upsert_exchange_order_history(connection, item, now)
             upsert_wallet(connection, account, now)

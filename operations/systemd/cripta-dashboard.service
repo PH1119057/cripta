@@ -10,6 +10,7 @@ Group=cripta
 SupplementaryGroups=systemd-journal
 WorkingDirectory=/srv/cripta/dashboard
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
 Environment=CRIPTA_DATA_ROOT=/data/cripta
 Environment=CRIPTA_APP_ROOT=/srv/cripta
 Environment=CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/dashboard/universal_entry_source/src

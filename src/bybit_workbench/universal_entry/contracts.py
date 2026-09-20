@@ -39,14 +39,26 @@ class EntryDecisionCode(StrEnum):
     ACCEPTED = "ACCEPTED"
     STRATEGY_CONDITION_REJECTED = "STRATEGY_CONDITION_REJECTED"
     INSUFFICIENT_AVAILABLE_FUNDS = "INSUFFICIENT_AVAILABLE_FUNDS"
+    EXCHANGE_POSITION_OWNERSHIP_CONFLICT = "EXCHANGE_POSITION_OWNERSHIP_CONFLICT"
     OPERATIONAL_SAFETY_BLOCKED = "OPERATIONAL_SAFETY_BLOCKED"
     STALE_OR_UNKNOWN_REQUIRED_STATE = "STALE_OR_UNKNOWN_REQUIRED_STATE"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
 
 
+class EntryRequestState(StrEnum):
+    REQUEST_PENDING = "REQUEST_PENDING"
+    REQUEST_DISPATCHED = "REQUEST_DISPATCHED"
+    REQUEST_ACKNOWLEDGED = "REQUEST_ACKNOWLEDGED"
+    REQUEST_EXPIRED = "REQUEST_EXPIRED"
+    REQUEST_CANCELLED = "REQUEST_CANCELLED"
+    REQUEST_RECONCILIATION_REQUIRED = "REQUEST_RECONCILIATION_REQUIRED"
+    REQUEST_TERMINAL = "REQUEST_TERMINAL"
+
+
 class NotificationKind(StrEnum):
     INSUFFICIENT_AVAILABLE_FUNDS = "INSUFFICIENT_AVAILABLE_FUNDS"
+    EXCHANGE_POSITION_OWNERSHIP_CONFLICT = "EXCHANGE_POSITION_OWNERSHIP_CONFLICT"
     OPERATIONAL_SAFETY_BLOCKED = "OPERATIONAL_SAFETY_BLOCKED"
     STALE_OR_UNKNOWN_REQUIRED_STATE = "STALE_OR_UNKNOWN_REQUIRED_STATE"
     EXCHANGE_REJECTED = "EXCHANGE_REJECTED"
@@ -441,6 +453,7 @@ class ExitPlan:
     exit_plan_fingerprint: str
     exit_policy: FrozenPolicy
     protection_policy: FrozenPolicy
+    emergency_policy: FrozenPolicy = FrozenPolicy("{}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -557,6 +570,23 @@ class EntryDecision:
     decided_at: datetime
     capacity_snapshot_id: str | None = None
     capital_reservation_id: str | None = None
+    exchange_position_slot_claim_id: str | None = None
+    position_mode_state_ref: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PaperEntryIntent:
+    strategy_attempt_id: str
+    signal_id: str
+    strategy_id: str
+    strategy_version: str
+    strategy_config_fingerprint: str
+    entry_plan_fingerprint: str
+    exit_plan_fingerprint: str
+    symbol: str
+    direction: TradeDirection
+    observed_at: datetime
+    payload: FrozenPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -575,6 +605,8 @@ class EntryExecutionRequest:
     payload: FrozenPolicy
     exit_plan_fingerprint: str | None = None
     capital_reservation_id: str | None = None
+    exchange_position_slot_claim_id: str | None = None
+    position_mode_state_ref: str | None = None
 
 
 # Backward-compatible import name for code written before Entry/Exit requests
@@ -602,8 +634,9 @@ class NotificationEvent:
 class EntryEvaluation:
     signal: StrategySignal
     attempt: StrategyAttempt
-    decision: EntryDecision
+    decision: EntryDecision | None
     execution_request: ExecutionRequest | None
+    paper_intent: PaperEntryIntent
     sensor_links: tuple[SensorLink, ...]
     context_links: tuple[ContextLink, ...]
     notifications: tuple[NotificationEvent, ...]

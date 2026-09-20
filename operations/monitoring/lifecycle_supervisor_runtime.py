@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import time
+import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.fault_delivery import process_due_deliveries
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
@@ -23,6 +25,15 @@ DB_DSN = os.environ.get(
 )
 MODE = os.environ.get("CRIPTA_LIFECYCLE_SUPERVISOR", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_LIFECYCLE_SUPERVISOR_POLL_SECONDS", "2.0"))
+OWNER_ALERT_WEBHOOK_URL = os.environ.get("CRIPTA_OWNER_ALERT_WEBHOOK_URL", "").strip()
+OWNER_ALERT_MAX_ATTEMPTS = int(os.environ.get("CRIPTA_OWNER_ALERT_MAX_ATTEMPTS", "3"))
+OWNER_ALERT_RETRY_SECONDS = int(os.environ.get("CRIPTA_OWNER_ALERT_RETRY_SECONDS", "30"))
+OWNER_ALERT_ACK_TIMEOUT_SECONDS = int(
+    os.environ.get("CRIPTA_OWNER_ALERT_ACK_TIMEOUT_SECONDS", "300")
+)
+OWNER_ALERT_HTTP_TIMEOUT_SECONDS = float(
+    os.environ.get("CRIPTA_OWNER_ALERT_HTTP_TIMEOUT_SECONDS", "5")
+)
 STATUS_PATH = Path(
     os.environ.get(
         "CRIPTA_LIFECYCLE_SUPERVISOR_STATUS_PATH",
@@ -58,6 +69,24 @@ def _status(payload: dict[str, object]) -> None:
     temporary.replace(STATUS_PATH)
 
 
+def _owner_alert_sender(payload: dict[str, object]) -> None:
+    if not OWNER_ALERT_WEBHOOK_URL:
+        raise RuntimeError("owner alert webhook is not configured")
+    request = urllib.request.Request(
+        OWNER_ALERT_WEBHOOK_URL,
+        data=json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "cripta-lifecycle-supervisor/1",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=OWNER_ALERT_HTTP_TIMEOUT_SECONDS) as response:
+        status = int(getattr(response, "status", 0) or 0)
+        if status < 200 or status >= 300:
+            raise RuntimeError(f"owner alert webhook returned HTTP {status}")
+
+
 def build_policy() -> LifecycleSupervisorPolicy:
     return LifecycleSupervisorPolicy(
         exchange_state_max_age_seconds=_optional_positive_int(
@@ -84,6 +113,13 @@ def main() -> int:
         raise SystemExit("Lifecycle Supervisor runtime is explicitly disabled")
     if POLL_SECONDS <= 0:
         raise SystemExit("Lifecycle Supervisor poll seconds must be positive")
+    if (
+        OWNER_ALERT_MAX_ATTEMPTS <= 0
+        or OWNER_ALERT_RETRY_SECONDS <= 0
+        or OWNER_ALERT_ACK_TIMEOUT_SECONDS <= 0
+        or OWNER_ALERT_HTTP_TIMEOUT_SECONDS <= 0
+    ):
+        raise SystemExit("Lifecycle Supervisor owner-alert policy must be positive")
     policy = build_policy()
 
     signal.signal(signal.SIGTERM, _stop)
@@ -93,6 +129,15 @@ def main() -> int:
         while running:
             now = datetime.now(UTC)
             result = scan_once(connection, now=now, policy=policy)
+            with connection.transaction():
+                delivery = process_due_deliveries(
+                    connection,
+                    now=now,
+                    sender=_owner_alert_sender if OWNER_ALERT_WEBHOOK_URL else None,
+                    max_attempts=OWNER_ALERT_MAX_ATTEMPTS,
+                    retry_seconds=OWNER_ALERT_RETRY_SECONDS,
+                    acknowledgement_timeout_seconds=OWNER_ALERT_ACK_TIMEOUT_SECONDS,
+                )
             _status(
                 {
                     "state": "RUNNING",
@@ -103,6 +148,13 @@ def main() -> int:
                     "active_fault_codes": list(result.active_fault_codes),
                     "exit_owner_max_age_seconds": (policy.exit_owner_max_age_seconds),
                     "exchange_state_max_age_seconds": (policy.exchange_state_max_age_seconds),
+                    "critical_delivery": {
+                        "configured": bool(OWNER_ALERT_WEBHOOK_URL),
+                        "attempted": delivery.attempted,
+                        "delivered": delivery.delivered,
+                        "escalated": delivery.escalated,
+                        "pending_or_unacknowledged": delivery.pending,
+                    },
                     "trading_rights": "NONE",
                 }
             )

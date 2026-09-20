@@ -17,7 +17,11 @@ from bybit_workbench.counterfactual import (
     CounterfactualOutcome,
     CounterfactualOutcomeStatus,
 )
-from bybit_workbench.universal_entry.contracts import FrozenPolicy, TradeDirection
+from bybit_workbench.universal_entry.contracts import (
+    EntryDecisionCode,
+    FrozenPolicy,
+    TradeDirection,
+)
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(
@@ -188,6 +192,7 @@ def _seed_candidate_lineage(
         amount_currency="USDT",
         capacity_snapshot_id=f"{prefix}-capacity",
         reported_available_amount=Decimal("5"),
+        decision_code=EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS,
         decision_reason="p8 disposable insufficient capital",
         evidence=FrozenPolicy.from_mapping({"source": "p8-disposable"}),
     )

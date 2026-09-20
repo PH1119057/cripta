@@ -5,10 +5,13 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
-from bybit_workbench.capital_reservation import (
-    CapitalReservationPort,
-    CapitalReservationRequest,
-    InsufficientCapital,
+from bybit_workbench.capital_reservation import InsufficientCapital
+from bybit_workbench.entry_admission import (
+    EntryAdmissionPort,
+    EntryAdmissionRequest,
+    PositionModeMismatch,
+    PositionModeStateUnavailable,
+    SlotOwnershipConflict,
 )
 
 from .context_features import compare_context_value, extract_context_feature
@@ -29,6 +32,7 @@ from .contracts import (
     NotificationEvent,
     NotificationKind,
     ObjectiveContext,
+    PaperEntryIntent,
     SensorLink,
     SensorObservation,
     SensorRequirement,
@@ -78,8 +82,9 @@ class UniversalEntryEngine:
         capacity: TradingCapacitySnapshot | None = None,
         technical_readiness: TechnicalReadiness | None = None,
         account_ref: str | None = None,
-        capital_reservation_port: CapitalReservationPort | None = None,
-        capital_reservation_required_for: frozenset[str] = frozenset(),
+        entry_admission_port: EntryAdmissionPort | None = None,
+        real_admission_required_for: frozenset[str] = frozenset(),
+        exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
     ) -> tuple[EntryEvaluation, ...]:
         available_sensors = dict(sensors or {})
@@ -235,32 +240,56 @@ class UniversalEntryEngine:
                     ),
                     None,
                 )
-                decision = self._decision(
+                paper_intent = self._paper_intent(
                     plan,
                     signal,
                     attempt,
-                    fact_for_predicate.observed_at,
-                    capacity=capacity,
-                    technical_readiness=technical_readiness,
-                    account_ref=account_ref,
-                    capital_reservation_port=capital_reservation_port,
-                    require_capital_reservation=(
-                        plan.strategy_activation_id in capital_reservation_required_for
-                    ),
-                    policy_attempt_block=policy_attempt_block,
+                    fact_for_predicate,
                 )
-                request = self._execution_request(
-                    plan, signal, attempt, decision, fact_for_predicate
+                real_admission = (
+                    plan.strategy_activation_id in real_admission_required_for
                 )
-                notifications = self._notifications(
-                    signal, attempt, decision, plan, capacity=capacity
-                )
+                decision: EntryDecision | None
+                request: ExecutionRequest | None
+                notifications: tuple[NotificationEvent, ...]
+                if real_admission:
+                    exchange_position_key = (
+                        None
+                        if exchange_position_keys is None
+                        else exchange_position_keys.get(signal.symbol)
+                    )
+                    decision = self._decision(
+                        plan,
+                        signal,
+                        attempt,
+                        fact_for_predicate.observed_at,
+                        capacity=capacity,
+                        technical_readiness=technical_readiness,
+                        account_ref=account_ref,
+                        entry_admission_port=entry_admission_port,
+                        exchange_position_key=exchange_position_key,
+                        policy_attempt_block=policy_attempt_block,
+                    )
+                    request = self._execution_request(
+                        paper_intent,
+                        decision,
+                    )
+                    notifications = self._notifications(
+                        signal, attempt, decision, plan, capacity=capacity
+                    )
+                else:
+                    # SHADOW/PAPER stops at signal + attempt. It does not create
+                    # a real EntryDecision or EntryExecutionRequest.
+                    decision = None
+                    request = None
+                    notifications = ()
                 output.append(
                     EntryEvaluation(
                         signal,
                         attempt,
                         decision,
                         request,
+                        paper_intent,
                         sensor_links,
                         context_links,
                         notifications,
@@ -881,19 +910,18 @@ class UniversalEntryEngine:
         capacity: TradingCapacitySnapshot | None,
         technical_readiness: TechnicalReadiness | None,
         account_ref: str | None,
-        capital_reservation_port: CapitalReservationPort | None,
-        require_capital_reservation: bool,
+        entry_admission_port: EntryAdmissionPort | None,
+        exchange_position_key: str | None,
         policy_attempt_block: str | None = None,
     ) -> EntryDecision:
         code = EntryDecisionCode.ACCEPTED
         reason = "strategy conditions matched"
         capacity_id: str | None = None
         reservation_id: str | None = None
-        request_max_age_seconds = (
-            self._execution_request_max_age_seconds(plan)
-            if require_capital_reservation
-            else None
-        )
+        slot_claim_id: str | None = None
+        position_mode_state_ref: str | None = None
+        request_max_age_seconds = self._execution_request_max_age_seconds(plan)
+
         if policy_attempt_block is not None:
             code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
             reason = policy_attempt_block
@@ -905,13 +933,10 @@ class UniversalEntryEngine:
             reason = technical_readiness.reason
 
         requested, max_age, min_quality = self._capital_settings(plan)
-        if (
-            code is EntryDecisionCode.ACCEPTED
-            and require_capital_reservation
-            and requested is None
-        ):
+        if code is EntryDecisionCode.ACCEPTED and requested is None:
             code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
             reason = "real Entry requires explicit Strategy capital reservation policy"
+
         if code is EntryDecisionCode.ACCEPTED and requested is not None:
             if capacity is None or capacity.available_for_new_trading is None:
                 code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
@@ -927,10 +952,7 @@ class UniversalEntryEngine:
                 ):
                     code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
                     reason = "required trading capacity quality is insufficient"
-                elif capacity.available_for_new_trading < requested:
-                    code = EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
-                    reason = "available trading capacity is below Strategy request"
-                elif require_capital_reservation:
+                else:
                     capital_policy = plan.capital_policy.to_dict()
                     amount_currency = str(capital_policy.get("amount_currency") or "").strip()
                     if request_max_age_seconds is None:
@@ -938,23 +960,27 @@ class UniversalEntryEngine:
                         reason = "real Entry requires explicit Strategy max_request_age_seconds"
                     elif not account_ref:
                         code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
-                        reason = "real Entry requires account_ref for atomic capital reservation"
-                    elif capital_reservation_port is None:
+                        reason = "real Entry requires account_ref for admission"
+                    elif entry_admission_port is None:
                         code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
-                        reason = "real Entry requires atomic capital reservation port"
+                        reason = "real Entry requires atomic Entry admission port"
+                    elif not exchange_position_key:
+                        code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                        reason = "real Entry requires exact exchange_position_key"
                     elif not amount_currency:
                         code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
                         reason = "Strategy capital_policy.amount_currency is missing"
                     else:
                         try:
-                            reservation = capital_reservation_port.reserve(
-                                CapitalReservationRequest(
+                            receipt = entry_admission_port.admit(
+                                EntryAdmissionRequest(
                                     account_ref=account_ref,
+                                    exchange_position_key=exchange_position_key,
+                                    symbol=signal.symbol,
+                                    direction=signal.direction.value,
                                     strategy_id=plan.strategy_id,
                                     strategy_version=plan.strategy_version,
-                                    strategy_config_fingerprint=(
-                                        plan.strategy_config_fingerprint
-                                    ),
+                                    strategy_config_fingerprint=plan.strategy_config_fingerprint,
                                     entry_plan_fingerprint=plan.entry_plan_fingerprint,
                                     signal_id=signal.signal_id,
                                     strategy_attempt_id=attempt.strategy_attempt_id,
@@ -968,6 +994,16 @@ class UniversalEntryEngine:
                                     + timedelta(seconds=request_max_age_seconds),
                                 )
                             )
+                        except PositionModeStateUnavailable as exc:
+                            code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
+                            reason = str(exc)
+                        except PositionModeMismatch as exc:
+                            code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                            position_mode_state_ref = exc.state_ref
+                            reason = "EXCHANGE_POSITION_MODE_MISMATCH: " + str(exc)
+                        except SlotOwnershipConflict as exc:
+                            code = EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+                            reason = str(exc)
                         except InsufficientCapital as exc:
                             code = EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
                             reason = (
@@ -975,8 +1011,14 @@ class UniversalEntryEngine:
                                 f"{exc.effective_available} below Strategy request {exc.requested}"
                             )
                         else:
-                            reservation_id = reservation.reservation_id
-                            reason = "strategy conditions matched and capital reserved atomically"
+                            reservation_id = receipt.capital_reservation.reservation_id
+                            slot_claim_id = receipt.exchange_position_slot_claim_id
+                            position_mode_state_ref = receipt.position_mode_state_ref
+                            reason = (
+                                "required state validated; physical slot claimed and "
+                                "capital reserved atomically"
+                            )
+
         decision_id = (
             "decision-"
             + fingerprint(
@@ -985,6 +1027,8 @@ class UniversalEntryEngine:
                     "code": code,
                     "reason": reason,
                     "capital_reservation_id": reservation_id,
+                    "exchange_position_slot_claim_id": slot_claim_id,
+                    "position_mode_state_ref": position_mode_state_ref,
                 }
             )[:32]
         )
@@ -997,19 +1041,17 @@ class UniversalEntryEngine:
             now.astimezone(UTC),
             capacity_id,
             reservation_id,
+            slot_claim_id,
+            position_mode_state_ref,
         )
 
-    def _execution_request(
+    def _paper_intent(
         self,
         plan: EntryPlan,
         signal: StrategySignal,
         attempt: StrategyAttempt,
-        decision: EntryDecision,
         signal_fact: MarketFactEnvelope,
-    ) -> ExecutionRequest | None:
-        if decision.code is not EntryDecisionCode.ACCEPTED:
-            return None
-        now = signal_fact.observed_at
+    ) -> PaperEntryIntent:
         payload = FrozenPolicy.from_mapping(
             {
                 "capital_policy": plan.capital_policy.to_dict(),
@@ -1033,26 +1075,55 @@ class UniversalEntryEngine:
                 },
             }
         )
-        request_id = (
-            "request-"
-            + fingerprint({"decision": decision.entry_decision_id, "signal": signal.signal_id})[:32]
-        )
         exit_plan = self._registry.exact_plan_pair(plan.strategy_activation_id)[1]
-        return ExecutionRequest(
-            execution_request_id=request_id,
+        return PaperEntryIntent(
             strategy_attempt_id=attempt.strategy_attempt_id,
-            entry_decision_id=decision.entry_decision_id,
             signal_id=signal.signal_id,
             strategy_id=signal.strategy_id,
             strategy_version=signal.strategy_version,
             strategy_config_fingerprint=signal.strategy_config_fingerprint,
             entry_plan_fingerprint=signal.entry_plan_fingerprint,
+            exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
             symbol=signal.symbol,
             direction=signal.direction,
-            requested_at=now.astimezone(UTC),
+            observed_at=signal_fact.observed_at.astimezone(UTC),
             payload=payload,
-            exit_plan_fingerprint=exit_plan.exit_plan_fingerprint,
+        )
+
+    def _execution_request(
+        self,
+        intent: PaperEntryIntent,
+        decision: EntryDecision,
+    ) -> ExecutionRequest | None:
+        if decision.code is not EntryDecisionCode.ACCEPTED:
+            return None
+        if (
+            decision.capital_reservation_id is None
+            or decision.exchange_position_slot_claim_id is None
+            or decision.position_mode_state_ref is None
+        ):
+            raise RuntimeError("ACCEPTED EntryDecision lacks complete admission lineage")
+        request_id = (
+            "request-"
+            + fingerprint({"decision": decision.entry_decision_id, "signal": intent.signal_id})[:32]
+        )
+        return ExecutionRequest(
+            execution_request_id=request_id,
+            strategy_attempt_id=intent.strategy_attempt_id,
+            entry_decision_id=decision.entry_decision_id,
+            signal_id=intent.signal_id,
+            strategy_id=intent.strategy_id,
+            strategy_version=intent.strategy_version,
+            strategy_config_fingerprint=intent.strategy_config_fingerprint,
+            entry_plan_fingerprint=intent.entry_plan_fingerprint,
+            symbol=intent.symbol,
+            direction=intent.direction,
+            requested_at=intent.observed_at,
+            payload=intent.payload,
+            exit_plan_fingerprint=intent.exit_plan_fingerprint,
             capital_reservation_id=decision.capital_reservation_id,
+            exchange_position_slot_claim_id=decision.exchange_position_slot_claim_id,
+            position_mode_state_ref=decision.position_mode_state_ref,
         )
 
     def _notifications(
@@ -1067,6 +1138,9 @@ class UniversalEntryEngine:
         kind_map = {
             EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS: (
                 NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS
+            ),
+            EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT: (
+                NotificationKind.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
             ),
             EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED: (
                 NotificationKind.OPERATIONAL_SAFETY_BLOCKED

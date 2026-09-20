@@ -139,8 +139,9 @@ def test_operations_file_exchange_paths_are_persisted_in_current_source() -> Non
     assert "/srv/cripta-share/reports" in dashboard
     assert "/srv/cripta-share/incoming/patches" in installer
     assert "GitHub PH1119057/cripta:main" in work_rules
-    assert "не являются source of truth" in work_rules.lower()
-    assert "Файловые пространства разных сред не взаимозаменяемы" in work_rules
+    assert "Project Source, memory, old chats, ZIP" in work_rules
+    assert "are auxiliary only" in work_rules
+    assert "File-space isolation" in work_rules
 
 def test_entry_gate_disarm_honors_smallint_schema_contract() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")

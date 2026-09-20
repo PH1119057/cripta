@@ -21,12 +21,16 @@ def test_private_runtime_releases_bound_capital_only_from_position_close_path() 
     assert "close_link_status='EXACT'" in PRIVATE
 
 
-def test_universal_consumer_blocks_physical_slot_before_command_publish() -> None:
-    conflict_pos = CONSUMER.index("conflict = _exchange_position_slot_conflict")
+def test_universal_consumer_revalidates_claim_before_command_publish() -> None:
+    validation_pos = CONSUMER.index(
+        "admission_status, admission_detail = _admission_pre_dispatch_status"
+    )
     publish_pos = CONSUMER.index("_publish_command(connection, prepared")
-    assert conflict_pos < publish_pos
-    assert "EXCHANGE_POSITION_OWNERSHIP_CONFLICT" in CONSUMER
-    assert "_release_pre_exchange_reservation(" in CONSUMER
+    assert validation_pos < publish_pos
+    assert "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN" in CONSUMER
+    assert "EXCHANGE_POSITION_MODE_MISMATCH" in CONSUMER
+    assert "_release_pre_exchange_admission(" in CONSUMER
+    assert "_mark_admission_reconciliation_required(" in CONSUMER
     assert "PENDING_ENTRY_COMMAND" in CONSUMER
     assert "PENDING_ENTRY_ORDER" in CONSUMER
     assert "EXCHANGE_POSITION:" in CONSUMER

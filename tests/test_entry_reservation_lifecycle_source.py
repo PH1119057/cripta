@@ -16,11 +16,14 @@ def test_expired_reservations_are_swept_before_mainnet_gate_check() -> None:
     assert "REQUEST_EXPIRED_PRE_DISPATCH" in CONSUMER
 
 
-def test_all_pre_exchange_blocks_release_reserved_capital() -> None:
+def test_pre_exchange_blocks_finalize_atomic_admission_not_capital_alone() -> None:
     assert "PRE_EXCHANGE_BLOCK:{exc.code.value}" in CONSUMER
     assert "PRE_EXCHANGE_BLOCK:STRUCTURAL_ERROR" in CONSUMER
-    assert "EXCHANGE_POSITION_OWNERSHIP_CONFLICT" in CONSUMER
-    assert CONSUMER.count("_release_pre_exchange_reservation(") >= 4
+    assert "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN" in CONSUMER
+    assert "EXCHANGE_POSITION_MODE_MISMATCH" in CONSUMER
+    assert "_release_pre_exchange_admission(" in CONSUMER
+    assert "_mark_admission_reconciliation_required(" in CONSUMER
+    assert "_release_pre_exchange_reservation(" not in CONSUMER
 
 
 def test_private_runtime_marks_order_ack_before_post_ack_processing() -> None:

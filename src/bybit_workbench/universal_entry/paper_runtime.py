@@ -8,7 +8,6 @@ from typing import Any
 
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import EntryEvaluation, ObjectiveContext, TradeDirection
-from .execution_bridge import BridgePolicyBundle, prepare_runtime_entry_command
 from .fingerprint import canonical_json, fingerprint
 from .runtime_loader import ActiveStrategyBundle
 
@@ -148,21 +147,97 @@ class PaperTradeRuntime:
         *,
         now: datetime,
     ) -> str | None:
-        request = evaluation.execution_request
-        if request is None:
-            return None
+        intent = evaluation.paper_intent
         card = bundle.card
         activation = bundle.activation
-        entry_plan = bundle.entry_plan
         exit_plan = bundle.exit_plan
-        policy_bundle = BridgePolicyBundle(
-            strategy_card=_policy_dict(card),
-            entry_plan=_policy_dict(entry_plan),
-            exit_plan=_policy_dict(exit_plan),
-            activation=_policy_dict(activation),
+
+        entry_policy = card.entry_policy.to_dict()
+        execution_policy = _mapping(
+            entry_policy.get("execution_policy"), "paper execution_policy"
         )
-        prepared = prepare_runtime_entry_command(request, policy_bundle, now=now)
-        payload = dict(prepared.payload)
+        capital_policy = card.capital_policy.to_dict()
+        protection_policy = card.protection_policy.to_dict()
+        signal_payload = intent.payload.to_dict()
+        signal_fact = _mapping(signal_payload.get("signal_fact"), "paper signal_fact")
+        attrs = _mapping(signal_fact.get("attributes"), "paper signal attributes")
+
+        reference_path = str(execution_policy.get("reference_value_path") or "")
+        if not reference_path.startswith("fact."):
+            raise ValueError("paper execution reference_value_path must start with fact.")
+        reference_value: object = attrs
+        for part in reference_path.removeprefix("fact.").split("."):
+            if not isinstance(reference_value, Mapping) or part not in reference_value:
+                raise ValueError(f"paper execution reference path missing: {reference_path}")
+            reference_value = reference_value[part]
+        reference = _decimal(reference_value, "paper reference", positive=True)
+
+        requested_amount = _decimal(
+            capital_policy.get("requested_amount"), "paper requested_amount", positive=True
+        )
+        leverage = int(str(capital_policy.get("leverage") or 0))
+        if leverage <= 0:
+            raise ValueError("paper leverage must be positive")
+
+        order_type = str(execution_policy.get("order_type") or "").upper()
+        if order_type == "MARKET":
+            offset = Decimal("0")
+            ttl: int | None = None
+        elif order_type == "LIMIT_OFFSET":
+            offset = _decimal(
+                execution_policy.get("entry_offset_pct"),
+                "paper execution offset",
+                positive=True,
+            )
+            ttl = int(str(execution_policy.get("entry_limit_ttl_seconds") or 0))
+            if ttl <= 0:
+                raise ValueError("paper LIMIT_OFFSET requires positive TTL")
+        else:
+            raise ValueError(f"unsupported paper order type: {order_type}")
+
+        initial = _mapping(
+            protection_policy.get("initial_protection"),
+            "paper initial_protection",
+        )
+        stop_loss_pct = _decimal(
+            initial.get("stop_loss_pct"), "paper initial stop", positive=True
+        )
+        take_profit_pct = _decimal(
+            initial.get("take_profit_pct"), "paper initial target", positive=True
+        )
+        payload: dict[str, object] = {
+            "source": "universal_entry_paper",
+            "strategy_attempt_id": intent.strategy_attempt_id,
+            "signal_id": intent.signal_id,
+            "strategy_id": intent.strategy_id,
+            "strategy_version": intent.strategy_version,
+            "strategy_config_fingerprint": intent.strategy_config_fingerprint,
+            "entry_plan_fingerprint": intent.entry_plan_fingerprint,
+            "exit_plan_fingerprint": intent.exit_plan_fingerprint,
+            "strategy_activation_id": activation.activation_id,
+            "calculated_entry_price": attrs.get("calculated_entry_price"),
+            "entry_reference_source": attrs.get("entry_reference_source"),
+            "strategy_entry_offset_pct_signed": attrs.get("entry_offset_pct_signed"),
+            "strategy_context_features": attrs.get("strategy_context_features"),
+            "stake_usdt": str(requested_amount),
+            "leverage": leverage,
+            "side": "Buy" if intent.direction is TradeDirection.LONG else "Sell",
+            "price": str(reference),
+            "entry_offset_pct": str(offset),
+            "entry_limit_ttl_seconds": ttl,
+            "entry_policy": "universal_entry_paper",
+            "policy_version": intent.strategy_version,
+            "initial_protection": {
+                "stop_loss_pct": str(stop_loss_pct),
+                "take_profit_pct": str(take_profit_pct),
+                "trigger_by": str(initial.get("trigger_by") or ""),
+                "tpsl_mode": str(initial.get("tpsl_mode") or ""),
+                "strategy_id": intent.strategy_id,
+                "strategy_version": intent.strategy_version,
+                "strategy_config_fingerprint": intent.strategy_config_fingerprint,
+                "exit_plan_fingerprint": intent.exit_plan_fingerprint,
+            },
+        }
         payload["exit_policy"] = card.exit_policy.to_dict()
         payload["lifecycle_policy"] = card.lifecycle_policy.to_dict()
         payload["paper_model"] = {
@@ -170,23 +245,20 @@ class PaperTradeRuntime:
             "limit_fill": "FIRST_PUBLIC_TRADE_CROSS_AT_LIMIT_PRICE",
             "fees": "NOT_INCLUDED_IN_GROSS_PNL",
         }
-        reference = _decimal(payload["price"], "paper reference", positive=True)
-        offset = _decimal(payload.get("entry_offset_pct", 0), "paper execution offset")
-        order_type = "MARKET" if offset == 0 else "LIMIT_OFFSET"
+
         limit_price: Decimal | None = None
         expires_at: datetime | None = None
         if order_type == "LIMIT_OFFSET":
-            if prepared.direction is TradeDirection.LONG:
+            if intent.direction is TradeDirection.LONG:
                 limit_price = reference * (Decimal("1") - offset / Decimal("100"))
             else:
                 limit_price = reference * (Decimal("1") + offset / Decimal("100"))
-            ttl = int(str(payload.get("entry_limit_ttl_seconds") or 0))
-            if ttl <= 0:
-                raise ValueError("paper LIMIT_OFFSET requires positive TTL")
-            expires_at = request.requested_at + timedelta(seconds=ttl)
+            assert ttl is not None
+            expires_at = intent.observed_at + timedelta(seconds=ttl)
+
         paper_order_id = (
             "paper-order-"
-            + fingerprint({"execution_request_id": request.execution_request_id})[:32]
+            + fingerprint({"strategy_attempt_id": intent.strategy_attempt_id})[:32]
         )
         self._connection.execute(
             """INSERT INTO strategy_entry.paper_orders(
@@ -195,25 +267,23 @@ class PaperTradeRuntime:
                    entry_plan_fingerprint,exit_plan_fingerprint,signal_id,
                    strategy_attempt_id,entry_decision_id,symbol,direction,state,
                    order_type,requested_at,reference_price,limit_price,expires_at,payload)
-               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PENDING',
+               VALUES(%s,NULL,%s,%s,%s,%s,%s,%s,%s,%s,NULL,%s,%s,'PENDING',
                       %s,%s,%s,%s,%s,%s::jsonb)
-               ON CONFLICT(execution_request_id) DO NOTHING""",
+               ON CONFLICT(strategy_attempt_id) DO NOTHING""",
             (
                 paper_order_id,
-                request.execution_request_id,
                 activation.activation_id,
-                request.strategy_id,
-                request.strategy_version,
-                request.strategy_config_fingerprint,
-                request.entry_plan_fingerprint,
+                intent.strategy_id,
+                intent.strategy_version,
+                intent.strategy_config_fingerprint,
+                intent.entry_plan_fingerprint,
                 exit_plan.exit_plan_fingerprint,
-                request.signal_id,
-                request.strategy_attempt_id,
-                request.entry_decision_id,
-                request.symbol,
-                request.direction.value,
+                intent.signal_id,
+                intent.strategy_attempt_id,
+                intent.symbol,
+                intent.direction.value,
                 order_type,
-                request.requested_at,
+                intent.observed_at,
                 reference,
                 limit_price,
                 expires_at,

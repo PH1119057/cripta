@@ -26,8 +26,8 @@ def test_trading_contour_is_canonical_and_registered() -> None:
 
     assert "**Статус:** активный канонический контракт торгового контура" in trading
     assert "docs/TRADING_CONTOUR_RU*.md" in index
-    assert "Перед Strategy / Entry / Exit / Execution:" in index
-    assert "При работе с конкретным слоем дополнительно читать его активный документ" in agents
+    assert "Strategy / Entry / Exit / Execution -> TRADING_CONTOUR_RU*.md" in index
+    assert "При работе с конкретным слоем дополнительно читать его active routed document" in agents
     assert "`docs/DOCUMENTATION_INDEX_RU*.md`" in agents
 
 
@@ -40,37 +40,38 @@ def test_strategy_owns_policy_and_entry_does_not_arbitrate_between_strategies() 
     assert "Entry не вводит winner/priority/arbitration между Strategy." in trading
     assert "Неподдержанный параметр означает fail-closed" in trading
 
-    assert "reservation success -> EntryDecision=ACCEPTED -> EntryExecutionRequest" in trading
+    assert "slot claim и reservation должны быть зафиксированы all-or-nothing" in trading
+    assert "Если reservation не получена, slot claim откатывается/освобождается" in trading
+    assert "EXCHANGE_POSITION_OWNERSHIP_CONFLICT — штатный admission outcome" in trading
+    assert "Hedge-mode," in trading
     assert (
-        "reservation failure -> EntryDecision=INSUFFICIENT_AVAILABLE_FUNDS -> no request"
+        "subaccount isolation или внутренний netting требуют отдельного owner-approved"
         in trading
     )
-    assert "`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` до Exchange mutation." in trading
-    assert "Hedge-mode/subaccount/internal netting требуют отдельного owner-approved" in trading
 
 
-def test_lifecycle_is_unified_and_dispatcher_remains_strategy_agnostic() -> None:
+def test_lifecycle_has_one_canonical_source_and_dispatcher_remains_strategy_agnostic() -> None:
     architecture = _read("CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
     trading = _read("docs/TRADING_CONTOUR_RU.md")
     observation = _read("docs/OBSERVATION_ANALYTICS_RU.md")
 
-    lifecycle_blocks = {
-        _canonical_lifecycle_block(architecture),
-        _canonical_lifecycle_block(trading),
-        _canonical_lifecycle_block(observation),
-    }
-    assert len(lifecycle_blocks) == 1
-
-    lifecycle = lifecycle_blocks.pop()
+    lifecycle = _canonical_lifecycle_block(architecture)
     for token in (
         "strategy_attempt",
+        "atomic physical Exchange slot claim",
         "atomic capital reservation outcome",
         "initial protection confirmation / reconciliation",
         "Exit Engine claim / heartbeat",
         "final flat confirmation",
+        "physical Exchange slot claim finalization/release",
         "capital reservation finalization/release",
     ):
         assert token in lifecycle
+
+    assert "CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in trading
+    assert "CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in observation
+    assert "final economics/audit" not in trading
+    assert "final economics/audit" not in observation
 
     assert "Dispatcher находится между MAYAK и Strategy" in observation
     assert "- не включает и не выключает Strategy;" in observation
@@ -78,26 +79,30 @@ def test_lifecycle_is_unified_and_dispatcher_remains_strategy_agnostic() -> None
     assert "- не отправляет ордер;" in observation
 
 
-def test_current_map_uses_explicit_status_matrix_and_disarmed_real_execution() -> None:
+def test_current_map_uses_split_runtime_evidence_and_disarmed_real_execution() -> None:
     current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
 
-    assert "Status matrix на checkpoint 2026-09-19:" in current_map
+    assert "Status matrix на checkpoint документационной ревизии 2026-09-19:" in current_map
     assert (
         "| Компонент / contract | CANON | IMPLEMENTED | DEPLOYED | "
-        "RUNTIME VERIFIED | Evidence / режим |"
+        "LIVENESS | BEHAVIOR | Evidence / режим |"
     ) in current_map
     for component in (
         "Universal Entry observer / plan ACK",
-        "Atomic capital reservation / pre-dispatch TTL",
-        "StrategyPosition exact binding / physical slot conflict",
+        "Capital reservation existing contract",
+        "Durable physical slot claim + fresh mode state",
         "Universal Exit Engine decision-only",
         "Typed Exit execution bridge/consumer",
-        "Lifecycle Supervisor",
+        "Lifecycle Supervisor current full contract",
+        "Critical fault delivery to owner",
     ):
         assert component in current_map
 
-    assert "`RUNTIME VERIFIED=NO` не означает «не протестировано»" in current_map
+    assert "Bare RUNTIME VERIFIED=YES больше не используется." in current_map
+    assert "LIVENESS=YES не означает behavior correctness." in current_map
     assert "cripta-universal-entry-consumer.service  inactive/disabled" in current_map
     assert "mainnet execution gate = 0" in current_map
-    assert "physical-slot block реализован и PostgreSQL-tested;" in current_map
-    assert "никакой stop/TP/H3/trailing value этой ревизией не утверждается." in current_map
+    assert (
+        "physical-slot block не считается доказательством нового durable slot-claim"
+        in current_map
+    )
