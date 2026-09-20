@@ -376,6 +376,18 @@ CREATE TABLE IF NOT EXISTS control.live_arm_evidence (
 CREATE INDEX IF NOT EXISTS ix_live_arm_evidence_latest
     ON control.live_arm_evidence(check_code,scope_type,scope_key,checked_at DESC,created_at DESC);
 
+GRANT SELECT,INSERT ON runtime.position_mode_states TO cripta;
+REVOKE UPDATE,DELETE ON runtime.position_mode_states FROM cripta;
+
+GRANT SELECT,INSERT,UPDATE ON runtime.exchange_position_slot_claims TO cripta;
+REVOKE DELETE ON runtime.exchange_position_slot_claims FROM cripta;
+
+GRANT SELECT,INSERT ON strategy_entry.execution_request_state_events TO cripta;
+REVOKE UPDATE,DELETE ON strategy_entry.execution_request_state_events FROM cripta;
+
+GRANT SELECT,INSERT,UPDATE ON runtime.lifecycle_fault_deliveries TO cripta;
+REVOKE DELETE ON runtime.lifecycle_fault_deliveries FROM cripta;
+
 GRANT SELECT,INSERT ON control.live_arm_evidence TO cripta;
 REVOKE UPDATE,DELETE ON control.live_arm_evidence FROM cripta;
 

@@ -322,3 +322,53 @@ def test_same_attempt_is_idempotent_with_same_claim_and_reservation() -> None:
         second = port.admit(request)
     assert first.exchange_position_slot_claim_id == second.exchange_position_slot_claim_id
     assert first.capital_reservation.reservation_id == second.capital_reservation.reservation_id
+
+
+def test_runtime_role_has_minimal_new_schema_privileges() -> None:
+    assert DSN is not None
+    expected = {
+        "runtime.position_mode_states": (True, True, False, False),
+        "runtime.exchange_position_slot_claims": (True, True, True, False),
+        "runtime.lifecycle_fault_deliveries": (True, True, True, False),
+        "strategy_entry.execution_request_state_events": (True, True, False, False),
+        "control.live_arm_evidence": (True, True, False, False),
+        "control.live_arm_sessions": (True, True, True, False),
+    }
+    with psycopg.connect(DSN) as connection:
+        rows = connection.execute(
+            """SELECT table_schema||'.'||table_name,
+                      has_table_privilege(
+                          'cripta',
+                          quote_ident(table_schema)||'.'||quote_ident(table_name),
+                          'SELECT'
+                      ),
+                      has_table_privilege(
+                          'cripta',
+                          quote_ident(table_schema)||'.'||quote_ident(table_name),
+                          'INSERT'
+                      ),
+                      has_table_privilege(
+                          'cripta',
+                          quote_ident(table_schema)||'.'||quote_ident(table_name),
+                          'UPDATE'
+                      ),
+                      has_table_privilege(
+                          'cripta',
+                          quote_ident(table_schema)||'.'||quote_ident(table_name),
+                          'DELETE'
+                      )
+                 FROM information_schema.tables
+                WHERE (table_schema,table_name) IN (
+                    ('runtime','position_mode_states'),
+                    ('runtime','exchange_position_slot_claims'),
+                    ('runtime','lifecycle_fault_deliveries'),
+                    ('strategy_entry','execution_request_state_events'),
+                    ('control','live_arm_evidence'),
+                    ('control','live_arm_sessions')
+                )"""
+        ).fetchall()
+    actual = {
+        str(row[0]): (bool(row[1]), bool(row[2]), bool(row[3]), bool(row[4]))
+        for row in rows
+    }
+    assert actual == expected
