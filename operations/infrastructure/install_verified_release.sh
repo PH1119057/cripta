@@ -22,6 +22,8 @@ sql_scalar() {
 }
 
 [[ "$(id -u)" -eq 0 ]] || die "installer must run as root"
+exec 9>/run/lock/cripta-install-verified-release.lock
+flock -n 9 || die "another release installer is already running"
 [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_RELEASE_COMMIT is invalid"
 [[ "$EXPECTED_BASELINE" =~ ^[0-9a-f]{40}$ ]]   || die "CRIPTA_EXPECTED_BASELINE_COMMIT is invalid"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
@@ -69,7 +71,7 @@ install -d -o root -g root -m 0700 "$backup"
 
 runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
 
-for path in   /etc/systemd/system/cripta-universal-entry-observer.service   /etc/systemd/system/cripta-universal-entry-consumer.service   /etc/systemd/system/cripta-lifecycle-supervisor.service   /etc/systemd/system/cripta-universal-exit-shadow.service   /etc/systemd/system/cripta-dashboard.service   /usr/local/sbin/cripta-apply-incoming   /srv/cripta/dashboard/app.py   /srv/cripta/connectivity/private_runtime.py   /srv/cripta/connectivity/runtime_schema.py   /etc/cripta/release.env
+for path in   /etc/systemd/system/cripta-universal-entry-observer.service   /etc/systemd/system/cripta-universal-entry-consumer.service   /etc/systemd/system/cripta-lifecycle-supervisor.service   /etc/systemd/system/cripta-universal-exit-shadow.service   /etc/systemd/system/cripta-dashboard.service   /usr/local/sbin/cripta-apply-incoming   /srv/cripta/dashboard/app.py   /srv/cripta/dashboard/universal_entry_source   /srv/cripta/connectivity/private_runtime.py   /srv/cripta/connectivity/runtime_schema.py   /etc/cripta/release.env
 do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
@@ -147,7 +149,7 @@ chown root:cripta /etc/cripta/release.env
 chmod 0640 /etc/cripta/release.env
 
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta \
-  -f /srv/cripta/trade_lifecycle/current/operations/sql/20260920_slot_admission_v1.sql
+  < /srv/cripta/trade_lifecycle/current/operations/sql/20260920_slot_admission_v1.sql
 
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'
 UPDATE control.live_arm_sessions
