@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.8
+**Версия:** 8.9
 **Дата:** 2026-09-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -41,7 +41,9 @@ docs/DOCUMENTATION_INDEX_RU*.md.
 Для уменьшения обязательного pre-read тяжёлые process rules вынесены в
 GitHub-only routed canon:
 - docs/DEVELOPMENT_RELEASE_RULES_RU*.md — patch/Git/PostgreSQL/release/deploy;
-- docs/RESEARCH_COMPUTE_RULES_RU*.md — research/large jobs/compute/data.
+- docs/RESEARCH_COMPUTE_RULES_RU*.md — research/large jobs/compute discipline;
+- docs/RESEARCH_DATA_CONTOUR_RU*.md — current research universe, field-level
+  coverage, raw segments, gaps and historically recoverable sources.
 
 Эти документы читаются только для соответствующей работы и не увеличивают
 базовый Project Source bundle.
@@ -483,3 +485,60 @@ PASS
 6. owner-approved MICRO_LIVE limits;
 7. отдельное explicit owner approval на real arm;
 8. только после этого MICRO_LIVE; full LIVE не следует из MICRO_LIVE автоматически.
+
+# 22. Research data contour checkpoint — 2026-09-21
+
+CHECKED HERE:
+
+Основной current research universe:
+
+```text
+AAVEUSDT ADAUSDT APTUSDT ARBUSDT AVAXUSDT BCHUSDT BNBUSDT BTCUSDT
+DOTUSDT ETHUSDT HBARUSDT INJUSDT LINKUSDT LTCUSDT OPUSDT SOLUSDT
+SUIUSDT TRXUSDT UNIUSDT XRPUSDT
+```
+
+То есть 20 symbols.
+
+Основной historical raw:
+
+```text
+/data/cripta/datasets/raw/20260518_20260816
+```
+
+Фактически содержит 24 symbols; текущие 20 + historical extras:
+1000PEPEUSDT, DOGEUSDT, NEARUSDT, XLMUSDT.
+
+Для текущих 20:
+
+```text
+public trades exact:
+  2026-05-17 .. 2026-08-15
+  2026-08-26 .. 2026-09-06
+
+local public-trade gap:
+  2026-08-16 .. 2026-08-25
+
+orderbook depth 200 exact:
+  2026-05-18 .. 2026-08-15
+```
+
+Размер current-20 baseline:
+- public trades: 21.792 GiB;
+- orderbook depth 200: 70.654 GiB.
+
+Exact exchange-wide liquidation historical archive у Bybit в current
+`public.bybit.com` / market REST не подтверждён. Exact liquidations поэтому
+используются только на доказанных intervals нашего realtime capture; вне них
+`NO_DATA`.
+
+Historical OI, funding и premium/mark/index могут backfill через native Bybit
+historical market APIs, но до materialization + manifest они не считаются
+существующими внутри research dataset.
+
+Подробный authority: `docs/RESEARCH_DATA_CONTOUR_RU*.md`.
+
+Operational storage finding на момент проверки: system filesystem сообщает
+около 4.5 GiB free. Поэтому постоянное расширение depth-200 orderbook требует
+отдельного storage decision; public trades и positioning layers можно
+materialize streaming без второго полного raw-дубля.
