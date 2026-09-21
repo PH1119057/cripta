@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.0 · 2026-09-19
+**Версия:** 1.1 · 2026-09-21
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -8,6 +8,11 @@
 
 Общие source-of-truth / Hard Stop правила задаёт
 `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
+
+Текущий universe, физические источники, интервалы покрытия, gaps и правила
+`NO_DATA` определяет `docs/RESEARCH_DATA_CONTOUR_RU*.md`. Перед любым
+full-universe research/replay этот data contract читается вместе с данным
+документом.
 
 # 1. Scope
 
@@ -168,3 +173,31 @@ RESULT_MANIFEST=WRITTEN
 ```
 
 Без обязательного evidence статус остаётся `RUNNING`, `FAILED` или `BLOCKED`, но не `COMPLETE`.
+
+## 61. Universe и data coverage не выводятся из памяти
+
+Перед любым основным исследованием дополнительно применяется
+`docs/RESEARCH_DATA_CONTOUR_RU*.md`.
+
+Если владелец явно не задал другой universe, основной current full-universe
+research считается на 20 symbols из RESEARCH_DATA_CONTOUR.
+
+Старый 7/9/10/13-symbol dataset или Strategy universe не имеет права
+автоматически уменьшать новый research universe.
+
+Каждый запуск обязан иметь field-level coverage map. Общий временной диапазон
+не означает одинаковое покрытие public trades / orderbook / OI / funding /
+premium / liquidation.
+
+Отчёт на неполном universe обязан иметь:
+
+```text
+UNIVERSE_STATUS=SUBSET|PARTIAL
+FULL_RESULT=NO
+```
+
+и не может становиться основанием формулировки «результат по всем текущим
+монетам».
+
+Для exact liquidations отсутствие historical source = `NO_DATA`; наличие
+public trades за тот же период не меняет этот статус.
