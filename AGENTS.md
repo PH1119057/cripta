@@ -17,7 +17,7 @@
 `docs/DEVELOPMENT_RELEASE_RULES_RU*.md`.
 
 Перед research/replay/OOS/holdout/large-data/long-compute читать
-`docs/RESEARCH_COMPUTE_RULES_RU*.md`.
+`docs/RESEARCH_COMPUTE_RULES_RU*.md` и `docs/RESEARCH_DATA_CONTOUR_RU*.md`.
 
 ## Source of truth
 
