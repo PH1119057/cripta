@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.7
-**Дата:** 2026-09-19
+**Версия:** 2.8
+**Дата:** 2026-09-21
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -207,3 +207,25 @@ Owner decision adds:
 This revision is DOCUMENTATION/CANON only. New slot/mode/fault-delivery requirements
 are not declared IMPLEMENTED/DEPLOYED/RUNTIME BEHAVIOR VERIFIED until code/DB/
 runtime are separately audited and changed.
+
+# 13. Implementation / runtime sync — 2026-09-21
+
+После documentation-first канона 2026-09-19 выполнены implementation passes и
+runtime verification. Текущий authoritative implementation checkpoint отражён в
+`docs/CURRENT_PROJECT_MAP_RU*.md`.
+
+CHECKED HERE:
+- durable physical slot claim + atomic capital reservation implemented/deployed;
+- fresh position-mode state contract implemented/deployed and fail-closed;
+- canonical request-state lifecycle implemented/deployed;
+- exact StrategyPosition slot/reservation binding implemented/deployed;
+- Lifecycle Supervisor new invariant faults implemented/deployed;
+- critical fault durable delivery/retry/ack/escalation implemented/deployed;
+- LIVE-arm evidence/session gate implemented/deployed;
+- Git-first release identity and exact installed/loaded commit contract implemented;
+- controlled PostgreSQL behavior verification completed;
+- current mainnet remains disarmed.
+
+This sync does not authorize MICRO_LIVE or LIVE. Current real-arm blockers and
+the exact runtime checkpoint are owned by CURRENT_PROJECT_MAP and
+TRADING_CONTOUR §4.7.

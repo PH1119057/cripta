@@ -82,27 +82,26 @@ def test_lifecycle_has_one_canonical_source_and_dispatcher_remains_strategy_agno
 def test_current_map_uses_split_runtime_evidence_and_disarmed_real_execution() -> None:
     current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
 
-    assert "Status matrix на checkpoint документационной ревизии 2026-09-19:" in current_map
+    assert "## 12.1 Status matrix — checkpoint 2026-09-21" in current_map
     assert (
         "| Компонент / contract | CANON | IMPLEMENTED | DEPLOYED | "
         "LIVENESS | BEHAVIOR | Evidence / режим |"
     ) in current_map
     for component in (
         "Universal Entry observer / plan ACK",
-        "Capital reservation existing contract",
-        "Durable physical slot claim + fresh mode state",
+        "Capital reservation admission",
+        "Durable physical slot claim + fresh mode contract",
         "Universal Exit Engine decision-only",
         "Typed Exit execution bridge/consumer",
-        "Lifecycle Supervisor current full contract",
-        "Critical fault delivery to owner",
+        "Lifecycle Supervisor full current contract",
+        "Critical fault durable delivery contract",
+        "LIVE-arm evidence/session gate",
     ):
         assert component in current_map
 
-    assert "Bare RUNTIME VERIFIED=YES больше не используется." in current_map
-    assert "LIVENESS=YES не означает behavior correctness." in current_map
-    assert "cripta-universal-entry-consumer.service  inactive/disabled" in current_map
+    assert "RUNTIME LIVENESS VERIFIED=YES" in current_map
+    assert "READY_FOR_LIVE = NO" in current_map
+    assert "READY_FOR_MICRO_LIVE = NO" in current_map
+    assert "cripta-universal-entry-consumer.service = inactive" in current_map
     assert "mainnet execution gate = 0" in current_map
-    assert (
-        "physical-slot block не считается доказательством нового durable slot-claim"
-        in current_map
-    )
+    assert "production fresh mode state сейчас отсутствует" in current_map

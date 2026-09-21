@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 8.7
-**Дата:** 2026-09-19
+**Версия:** 8.8
+**Дата:** 2026-09-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -91,25 +91,26 @@ CANON после решения владельца 2026-09-18:
   Strategy-specific policy;
 - Execution исполняет typed Entry/Exit requests.
 
-Текущий source частично реализует старую сторону этой модели:
+Текущий source реализует основной универсальный contour этой модели:
 - StrategyActivation;
 - EntryPlan/ExitPlan materialization;
 - ActivePlanRegistry;
 - UniversalEntryEngine;
 - ParameterizedCausalMarketWatch;
-- StrategySignal/Attempt/Decision;
+- StrategySignal -> strategy_attempt -> EntryDecision;
+- atomic slot + capital admission;
+- typed EntryExecutionRequest / request-state lifecycle;
+- StrategyPosition exact lineage;
+- Universal Exit Engine и typed Exit execution bridge;
+- Lifecycle Supervisor;
+- Analyst/counterfactual;
 - PostgreSQL evidence/read-model;
-- execution bridge.
+- shadow recovery/restart contracts.
 
-Текущий implementation contour P3-P9 уже реализует atomic reservation,
-StrategyPosition lineage, Universal Exit Engine, typed Exit execution bridge,
-Lifecycle Supervisor, Analyst/counterfactual и shadow recovery. Исторический
-P9 checkpoint имел SHADOW runtime evidence; эта формулировка не заменяет
-нынешнее раздельное доказательство LIVENESS и BEHAVIOR.
-
-P10 controlled legacy Exit migration остаётся без LIVE-cutover: Universal Entry
-consumer disabled, mainnet gate закрыт. Cutover не разрешён без отдельного
-owner decision и exact executable ExitPlan evidence.
+Real cutover при этом не выполнен: Universal Entry consumer и private runtime
+остаются inactive, mainnet gate закрыт. Текущие enabled Strategy являются
+monitoring Strategy, а их ExitPlan пока не содержит executable rules. Поэтому
+наличие реализованного contour не даёт real execution rights.
 
 # 7. Текущий первый Strategy Candidate
 
@@ -165,53 +166,85 @@ Entry price фиксируется как факт сделки.
 Execution исполняет уже принятое торговое решение. Bybit — текущий provider, но
 не архитектурная константа.
 
-Историческая read-only проверка 2026-09-19 по 10 symbols показала
-positionIdx=0 и one-way для тогдашнего account state. Эта проверка не считается
-вечной: новый канон требует fresh Position mode state при real activation/re-arm
-и Entry admission.
+Текущий approved real account contract остаётся:
 
-CANON 2026-09-19:
-- one-way same-symbol physical slot имеет одного owner lifecycle;
-- до ACCEPTED требуется durable physical slot claim;
-- slot claim и capital reservation составляют один all-or-nothing admission;
-- expected current contract: ONE_WAY + positionIdx=0;
-- mode unknown/stale -> fail-closed;
-- fresh incompatible mode/positionIdx -> EXCHANGE_POSITION_MODE_MISMATCH /
-  OPERATIONAL_SAFETY_BLOCKED;
-- same-symbol hedge в one-way unsupported.
+```text
+Bybit Unified linear
+position_mode = ONE_WAY
+positionIdx = 0
+```
 
-IMPLEMENTATION / DEPLOY STATUS НОВЫХ ТРЕБОВАНИЙ:
-NOT CHECKED HERE в этой документационной ревизии. Предыдущая реализация coarse
-physical-slot block не считается доказательством нового durable slot-claim /
-fresh position-mode contract.
+Это не считается вечным account state. Перед real arm и далее по freshness
+contract требуется новое подтверждённое `position_mode_state`.
+
+IMPLEMENTED / DEPLOYED 2026-09-21:
+- durable `runtime.position_mode_states`;
+- exclusive `runtime.exchange_position_slot_claims`;
+- slot claim до `EntryDecision=ACCEPTED`;
+- slot claim + capital reservation как один admission contract;
+- `EXCHANGE_POSITION_OWNERSHIP_CONFLICT` как штатный EntryDecision outcome;
+- `EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN` как отдельный lifecycle fault;
+- `EXCHANGE_POSITION_MODE_MISMATCH` как fail-closed lifecycle/operational fault;
+- separate request-state lifecycle;
+- StrategyPosition binding/release exact slot + reservation lineage.
+
+Controlled PostgreSQL scenarios проверили:
+- два concurrent attempt не могут владеть одним physical slot;
+- capital failure не оставляет durable slot claim;
+- stale/incompatible position mode не создаёт claim/reservation;
+- unknown/post-ack state не приводит к blind release;
+- confirmed fill связывает exact StrategyPosition;
+- final confirmed close освобождает reservation/slot;
+- reconciliation state удерживает ownership до доказанного разрешения.
+
+Production runtime сейчас не содержит fresh `position_mode_state`, потому что
+private runtime выключен. Поэтому этот реализованный contract не является
+доказательством текущей real account freshness.
 
 # 12. Lifecycle / Position / Analytics
 
-Каноническая lifecycle-chain определяется только ARCH §9.1. TC/OBS её больше
-не дублируют.
+Каноническая lifecycle-chain определяется только ARCH §9.1. TC/OBS её не
+дублируют.
 
-Bare RUNTIME VERIFIED=YES больше не используется. Runtime evidence разделяется
-на:
+Runtime evidence разделяется на:
 - RUNTIME LIVENESS VERIFIED;
 - RUNTIME BEHAVIOR VERIFIED.
 
-Status matrix на checkpoint документационной ревизии 2026-09-19:
+## 12.1 Status matrix — checkpoint 2026-09-21
 
 | Компонент / contract | CANON | IMPLEMENTED | DEPLOYED | LIVENESS | BEHAVIOR | Evidence / режим |
 | --- | --- | --- | --- | --- | --- | --- |
-| StrategyCard authoring/materializer | YES | YES | YES | N/A | N/A | tests + authoring evidence; runtime behavior dimension not applicable |
-| Universal Entry observer / plan ACK | YES | YES | YES | YES | YES | SHADOW service alive; ACK path observed |
-| Capital reservation existing contract | YES | YES | YES | N/A | NO | tests/PostgreSQL evidence only; real consumer disabled |
-| Durable physical slot claim + fresh mode state | YES | NOT CHECKED HERE | NOT CHECKED HERE | NO | NO | new canon; implementation audit deferred |
-| Universal Exit Engine decision-only | YES | YES | YES | YES | NO | service alive; open position sample=0, executable ExitPlans=0 |
-| Typed Exit execution bridge/consumer | YES | YES | YES | NO | NO | staged; consumer arm disabled |
-| Lifecycle Supervisor current full contract | YES | PARTIAL | PARTIAL | YES | NO | service alive; new slot/mode/fault-delivery behavior NOT CHECKED HERE |
-| Critical fault delivery to owner | YES | NOT CHECKED HERE | NOT CHECKED HERE | NO | NO | new safety contract |
-| Analyst counterfactual path | YES | YES | YES | N/A | NO | capital case source/tests; slot-conflict runtime behavior deferred |
-| Current private runtime source | YES | YES | YES | NO | NO | service inactive/disabled |
+| StrategyCard authoring/materializer | YES | YES | YES | N/A | N/A | source/tests; runtime behavior dimension не применяется |
+| Universal Entry observer / plan ACK | YES | YES | YES | YES | PARTIAL | service running, exact release loaded, facts advance; текущий observer после restart в WARMUP, post-restart evaluation ещё не наблюдался |
+| Capital reservation admission | YES | YES | YES | N/A | YES (CONTROLLED) | concurrent/rollback/reconciliation PostgreSQL scenarios PASS; real consumer inactive |
+| Durable physical slot claim + fresh mode contract | YES | YES | YES | N/A | YES (CONTROLLED) | atomic claim/reservation, conflict, stale/mismatch scenarios PASS; production fresh mode state сейчас отсутствует |
+| Universal Exit Engine decision-only | YES | YES | YES | YES | YES (CONTROLLED) | service running; controlled ownership/restart/decision scenarios PASS; production open position sample=0 |
+| Typed Exit execution bridge/consumer | YES | YES | YES | NO | YES (CONTROLLED) | execution path tested; real execution arm disabled |
+| Lifecycle Supervisor full current contract | YES | YES | YES | YES | YES (CONTROLLED) | heartbeat advances; ownership/reconciliation/protection fault scenarios PASS |
+| Critical fault durable delivery contract | YES | YES | YES | N/A | YES (CONTROLLED) | retry/ack/escalation and protection-fault delivery PASS; production owner channel currently not configured |
+| Analyst counterfactual path | YES | YES | YES | N/A | YES (CONTROLLED) | capital + slot-conflict isolation/tests PASS |
+| LIVE-arm evidence/session gate | YES | YES | YES | N/A | YES (CONTROLLED) | missing/stale/wrong-release fail-closed; active exact-release session required |
+| Current private runtime source | YES | YES | YES | NO | NO | source/live exact; service inactive/disabled |
 
-LIVENESS=YES не означает behavior correctness. faults=0 без специально
-проведённого fault scenario также не является behavior verification.
+`YES (CONTROLLED)` означает специально проведённый воспроизводимый scenario на
+disposable PostgreSQL/source exact текущего release. Это не означает, что такой
+сценарий уже возникал на real Exchange.
+
+## 12.2 Current exact release identity
+
+Последний полностью проверенный implementation/runtime checkpoint перед этой
+documentation-only ревизией:
+
+```text
+REMOTE_HEAD      = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+SOURCE_HEAD      = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+INSTALLED_COMMIT = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+LOADED_COMMIT    = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+```
+
+Ключевые live/source hashes совпали. После документационной ревизии Git SHA
+может измениться только из-за документации; implementation evidence относится
+к тем же исполняемым bytes до следующего implementation changeset.
 
 # 13. ChatGPT Project Instructions
 
@@ -224,151 +257,229 @@ state и не подтверждается одним только GitHub.
 # 14. Граница текущей документационной ревизии
 
 Эта ревизия:
+- синхронизирует карту с фактически проверенным code/DB/runtime checkpoint;
 - не меняет production trading logic;
-- не меняет Strategy records в PostgreSQL;
+- не меняет Strategy records;
 - не активирует real Execution;
-- не переименовывает historical IDs/DB rows;
-- синхронизирует CANON с уже проверенными implementation/runtime фактами из §12/§15;
-- вводит новые canonical требования durable slot claim, fresh position-mode state,
-  обязательной real protection, emergency policy и critical fault delivery;
-- не выдаёт liveness сервиса за behavior verification и не объявляет новые
-  requirements IMPLEMENTED/DEPLOYED без отдельной проверки кода/runtime.
+- не включает mainnet;
+- не создаёт fresh position-mode state;
+- не создаёт LIVE-arm evidence/session;
+- не назначает новые Strategy trading parameters;
+- не переводит SHADOW в MICRO_LIVE/LIVE.
 
-# 15. Проверенный runtime/source checkpoint 2026-09-19
+Research/исторические H3/H9/TP/SL/trailing результаты не становятся каноном из-за
+этого обновления.
 
-На последнем P10/P10.1 runtime-check:
+# 15. Проверенный runtime checkpoint 2026-09-21
+
+Проверенные service states:
 
 ```text
-cripta-universal-entry-observer.service  active/enabled
-cripta-universal-exit-shadow.service      active/enabled
-cripta-lifecycle-supervisor.service       active/enabled
-cripta-universal-entry-consumer.service  inactive/disabled
-cripta-private-runtime.service           inactive/disabled
-cripta-exit-runtime.service              inactive/enabled
+cripta-universal-entry-observer.service = active/running
+cripta-lifecycle-supervisor.service      = active/running
+cripta-universal-exit-shadow.service     = active/running
+
+cripta-universal-entry-consumer.service = inactive
+cripta-private-runtime.service           = inactive
+cripta-dashboard.service                 = inactive
 ```
+
+Safety snapshot:
 
 ```text
 mainnet execution gate = 0
 shadow gate = 1
-open Universal StrategyPosition = 0
-open lifecycle faults = 0
-ExitExecutionRequest = 0
+real Strategy execution permissions = 0
+open/reconciliation StrategyPosition = 0
+active physical slot claims = 0
+active capital reservations = 0
 queued/running trade_commands = 0
-ENTRY_ENGINE loaded acknowledgements = 4
-active ExitPlans = 2
-active ExitPlans with executable rules = 0
+pending Exchange orders = 0
+open lifecycle faults = 0
 ```
 
-Private runtime source/live divergence устранён staging-deploy текущего source,
-но сервис не запускался. Legacy Exit ownership filter deployed, legacy Exit
-service также не запускался.
+Двухсрезная runtime-проверка показала:
+- heartbeat Entry observer / Lifecycle Supervisor / Universal Exit движется;
+- PID трёх активных сервисов стабилен;
+- Entry observer продолжает принимать market facts;
+- за 4 секунды `facts_received` вырос с 105284 до 105649;
+- `trading_effect=NONE`;
+- faults/claims отсутствуют.
 
-Legacy identifiers с `M3` — технический долг и не создают термин `M3`.
+Entry observer после restart находится в штатном `WARMUP`:
+- `observer_ready=true`;
+- `state=WARMUP`;
+- `evaluations=0`;
+- `signals=0`;
+- причина — ожидание plan-owned pre-start influence/sensor completeness.
 
+Следовательно RUNTIME LIVENESS VERIFIED=YES, но фактический post-restart Entry
+evaluation ещё не наблюдался.
 
-# 16. Capital allocation V1
+# 16. Capital allocation / physical-slot admission
 
-CANON:
-
-Capital reservation является частью единого real Entry admission вместе с
-physical slot claim:
+CANON и implementation теперь совпадают:
 
 ```text
 Strategy attempt
--> required account / position-mode state
+-> required account / position-mode validation
 -> physical slot claim
 -> atomic capital reservation
 -> EntryDecision
+-> EntryExecutionRequest only for ACCEPTED
 ```
 
-Первый успешно завершивший весь admission получает право на ACCEPTED. Entry не
-ранжирует Strategy.
+Фактически реализованы durable:
+- `exchange_position_slot_claim_id`;
+- `position_mode_state_ref`;
+- `capital_reservation_id`;
+- request-state events;
+- StrategyPosition binding;
+- reconciliation-aware release.
 
-Если capital недостаточно:
-- EntryDecision=INSUFFICIENT_AVAILABLE_FUNDS;
-- durable slot claim не остаётся;
-- ExecutionRequest не создаётся;
-- Analyst может вести counterfactual с exact block reason.
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` не является lifecycle fault.
+Post-admission divergence классифицируется отдельно как
+`EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN`.
 
-Если physical slot недоступен:
-- EntryDecision=EXCHANGE_POSITION_OWNERSHIP_CONFLICT;
-- capital reservation не создаётся;
-- Analyst может вести отдельный slot-conflict counterfactual.
+# 17. Real protection / Lifecycle Supervisor / owner notification
 
-Новый atomic slot+capital contract — CANON. Его current implementation в этой
-документационной ревизии NOT CHECKED HERE.
+IMPLEMENTED / DEPLOYED:
+- StrategyPosition хранит exact ExitPlan/protection/emergency lineage;
+- Supervisor выявляет `POSITION_WITHOUT_EXIT_OWNER`;
+- Supervisor выявляет
+  `POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION`;
+- Supervisor выявляет `EXCHANGE_POSITION_MODE_MISMATCH`;
+- Supervisor выявляет
+  `EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN`;
+- critical fault создаёт durable delivery;
+- delivery поддерживает retry, separate owner acknowledgement и escalation;
+- fault/recovery lifecycle restart-idempotent.
 
-# 17. One-way physical ownership / real protection readiness
+Отдельный controlled scenario 2026-09-21 подтвердил:
 
-CANON:
-- независимые Strategy могут одновременно давать opposite signals;
-- current approved real contract — ONE_WAY + positionIdx=0;
-- position mode является fresh required account state, а не вечным свойством;
-- до ACCEPTED нужен exclusive durable physical slot claim;
-- claim после fill связывается с StrategyPosition и живёт до final flat;
-- same-symbol hedge в one-way unsupported и fail-closed;
-- real Strategy обязана иметь owner-approved initial loss-containment;
-- открытая StrategyPosition сохраняет exact ExitPlan/protection/emergency policy;
-- automatic emergency action разрешён только exact emergency_policy/owner command;
-- critical lifecycle fault должен иметь durable owner-notification delivery.
+```text
+POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION
+-> severity=CRITICAL
+-> state=OPEN
+-> durable delivery state=PENDING
+-> channel=OWNER_WEBHOOK
+```
 
-IMPLEMENTATION STATUS:
-- предыдущий coarse slot block существует по старым evidence;
-- новый durable slot claim, fresh position-mode enforcement,
-  EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN,
-  EXCHANGE_POSITION_MODE_MISMATCH и critical fault delivery — NOT CHECKED HERE;
-- их нельзя считать готовыми к re-arm до отдельного source/DB/runtime audit.
+При этом production owner delivery channel сейчас не настроен
+(`critical_delivery.configured=false`). Поэтому
+`CRITICAL_FAULT_DELIVERY=PASS` для real arm пока ставить нельзя, хотя сам
+delivery contract реализован и controlled behavior verified.
 
-# 18. LIVE-arm readiness
+# 18. LIVE / MICRO_LIVE readiness
 
 Канонический checklist находится в TRADING_CONTOUR §4.7.
 
-Текущий checkpoint НЕ READY FOR LIVE, пока минимум новые slot/mode/fault-delivery
-requirements не будут IMPLEMENTED и runtime-behavior verified.
+Текущий checkpoint:
 
-Этот раздел не изменяет mainnet gate и не активирует real Execution.
+```text
+CANON_CURRENT                         = PASS
+REMOTE_COMMIT_VERIFIED                = PASS
+SOURCE_LIVE_IDENTITY                  = PASS
+TESTS                                 = PASS
 
-# 19. Repository / security findings
+PHYSICAL_SLOT_CLAIM_CONTRACT          = PASS (CONTROLLED)
+CAPITAL_RESERVATION_CONTRACT          = PASS (CONTROLLED)
+LIFECYCLE_SUPERVISOR_BEHAVIOR         = PASS (CONTROLLED)
+RECONCILIATION_PATH                   = PASS (CONTROLLED)
 
-CHECKED HERE 2026-09-19:
-- GitHub repository PH1119057/cripta имеет visibility=public;
-- в корне source_checkout сохраняется большое число historical Pxx/EO/SE/
-  ENTRY_BOT/PATCH artifacts вне archive;
-- gitleaks и trufflehog на server не установлены.
+LIVE_EQUIVALENCE                      = NOT YET DECLARED PASS
+EXCHANGE_ACCOUNT_IDENTITY             = NOT CURRENTLY PROVED FOR ARM
+POSITION_MODE_FRESH                   = NOT READY
+POSITION_IDX_EXPECTED                 = NOT READY
+EXIT_PLAN_EXECUTABLE                  = NOT READY
+CRITICAL_FAULT_DELIVERY               = NOT READY
+MAINNET_GATE_EXPLICIT_OWNER_APPROVAL  = NOT GIVEN
+MICRO_LIVE_LIMITS                     = NOT APPROVED
+```
 
-NOT CHECKED HERE:
-- full-history secret scan;
-- отсутствие исторически закоммиченных credential paths/names/secrets;
-- необходимость сохранять repository public.
+Текущие enabled Strategy:
 
-До security checkpoint требуется full-history secret scan approved tool'ом и
-отдельное owner decision о public/private visibility. Отсутствие scan tool не
-считается PASS.
+```text
+entry_v1_monitor_long  1.0
+entry_v1_monitor_short 1.0
+```
 
-Root historical artifacts должны быть перемещены в archive отдельным exact
-repository-cleanup changeset. Эта документационная ревизия их не перемещает.
+Обе являются monitoring Strategy. У обеих текущий active ExitPlan имеет
+`rules=0`, поэтому они не являются real-arm executable Strategy.
 
-# 20. Known test debt after documentation-first revision
+В `runtime.position_mode_states` сейчас 0 rows.
+В `control.live_arm_evidence` сейчас 0 rows.
+В `control.live_arm_sessions` сейчас 0 rows.
 
-CHECKED HERE на isolated documentation worktree:
+Следовательно:
+
+```text
+READY_FOR_LIVE = NO
+READY_FOR_MICRO_LIVE = NO
+MAINNET = DISARMED
+```
+
+Это fail-closed состояние является ожидаемым и не считается дефектом.
+
+# 19. Repository / security checkpoint
+
+CHECKED HERE 2026-09-21:
+- GitHub repository `PH1119057/cripta` имеет visibility=public;
+- full Git-history scan выполнен `gitleaks 8.30.1`;
+- найдено 2 `generic-api-key` findings;
+- оба вручную классифицированы как старые synthetic test fixtures:
+  - `tests/test_dashboard_password_hash.py`;
+  - `tests/test_mayak_component_resource_smoke.py`;
+- findings принадлежат историческим commits `770a380...` и `7b366ea...`;
+- actionable secret findings текущей implementation revision = 0.
+
+Большое количество historical Pxx/EO/SE/ENTRY_BOT/PATCH artifacts в корне
+repository остаётся отдельным cleanup finding. Их перенос в `archive/**`
+должен быть отдельным exact repository-cleanup changeset после dependency
+classification; текущая документационная синхронизация их не перемещает.
+
+# 20. Verification results текущего implementation checkpoint
+
+CHECKED HERE 2026-09-21:
 
 ```text
 full pytest:
-1415 passed
-47 skipped
-6 failed
+1430 passed
+62 skipped
+0 failed
+
+controlled PostgreSQL lifecycle/admission/fault suite:
+54 passed
+0 failed
+
+Ruff targeted current-release changes:
+PASS
 ```
 
-Шесть failures относятся к stale documentation-contract expectations:
-- old WORK wording/location after routed-doc split;
-- old literal Entry Engine wording;
-- old INDEX route phrase;
-- old reservation-only ACCEPTED assertion;
-- old requirement to duplicate lifecycle chain in ARCH/TC/OBS;
-- old MAP status-matrix wording.
+Дополнительно доказаны:
+- exact remote/source/installed/loaded release identity;
+- source/live equality ключевых исполняемых модулей;
+- runtime-role ACL новых lifecycle tables;
+- Git-first release identity/installer rail;
+- exclusive installer lock;
+- runtime heartbeat progression;
+- no real Exchange mutation during verification;
+- mainnet remained disarmed.
 
-Это FINDING следующего implementation/test changeset. Тесты в этой
-documentation-only ревизии намеренно не меняются по owner scope.
+Старый documentation-first test debt из checkpoint 2026-09-19 закрыт и больше
+не является текущим finding.
 
-Этот результат НЕ является проверкой реализации новых slot claim /
-position-mode / critical-fault-delivery требований.
+# 21. Current unresolved operational items
+
+До real arm остаются именно operational/readiness задачи, а не недоказанная
+реализация slot/lifecycle foundation:
+
+1. дождаться/проверить реальный post-restart Entry evaluation после WARMUP;
+2. иметь exact owner-approved Strategy с executable ExitPlan;
+3. поднять private account state только в разрешённом режиме и получить fresh
+   `position_mode_state` / `positionIdx=0`;
+4. настроить реальный durable owner-notification channel для critical faults;
+5. сформировать canonical LIVE-arm evidence для exact Strategy/symbol/release;
+6. owner-approved MICRO_LIVE limits;
+7. отдельное explicit owner approval на real arm;
+8. только после этого MICRO_LIVE; full LIVE не следует из MICRO_LIVE автоматически.
