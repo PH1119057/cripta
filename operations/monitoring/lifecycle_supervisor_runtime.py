@@ -104,7 +104,10 @@ def scan_once(
     now: datetime,
     policy: LifecycleSupervisorPolicy,
 ) -> LifecycleScanResult:
-    return LifecycleSupervisor(connection, policy=policy).scan(now=now.astimezone(UTC))
+    with connection.transaction():
+        return LifecycleSupervisor(connection, policy=policy).scan(
+            now=now.astimezone(UTC)
+        )
 
 
 def main() -> int:

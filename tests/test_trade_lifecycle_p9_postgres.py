@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg.pq import TransactionStatus
 from psycopg.rows import dict_row
 
 from bybit_workbench.lifecycle_ack import mark_exit_claims_stale
@@ -13,6 +14,7 @@ from bybit_workbench.lifecycle_supervisor import (
     LifecycleSupervisor,
     LifecycleSupervisorPolicy,
 )
+from operations.monitoring.lifecycle_supervisor_runtime import scan_once
 from operations.monitoring.universal_exit_shadow_runtime import claim_cycle
 from tests.test_universal_exit_p6_postgres import NOW, _seed
 
@@ -214,3 +216,29 @@ def test_p9_graceful_stop_stale_claim_opens_fault_until_restart() -> None:
             policy=LifecycleSupervisorPolicy(exit_owner_max_age_seconds=10),
         ).scan(now=NOW + timedelta(seconds=3))
         assert _fault_state(connection, ids["position_id"]) == "RESOLVED"
+
+
+def test_p9_long_running_cycles_return_connection_to_idle_transaction_state() -> None:
+    assert DSN is not None
+    prefix = "p9-tx-scope-" + uuid4().hex[:8]
+    consumer_id = "universal-exit-shadow-v1"
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(connection, prefix)
+        connection.commit()
+
+        with connection.transaction():
+            claim_cycle(
+                connection,
+                now=NOW,
+                consumer_instance_id=consumer_id,
+            )
+        assert connection.info.transaction_status is TransactionStatus.IDLE
+
+        result = scan_once(
+            connection,
+            now=NOW + timedelta(seconds=1),
+            policy=LifecycleSupervisorPolicy(exit_owner_max_age_seconds=10),
+        )
+        assert result.projected_events >= 0
+        assert connection.info.transaction_status is TransactionStatus.IDLE
+        assert ids["position_id"]

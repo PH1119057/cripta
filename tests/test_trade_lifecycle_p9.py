@@ -64,3 +64,21 @@ def test_exit_shadow_runtime_marks_claims_stale_on_shutdown() -> None:
     assert "mark_exit_claims_stale(" in EXIT_RUNTIME
     assert "finally:" in EXIT_RUNTIME
     assert "Universal Exit shadow runtime stopped" in EXIT_RUNTIME
+
+
+def test_long_running_shadow_cycles_close_each_database_transaction() -> None:
+    assert (
+        "with connection.transaction():\n"
+        "                cycle = claim_cycle("
+        in EXIT_RUNTIME
+    )
+    assert (
+        "with connection.transaction():\n"
+        "                mark_exit_claims_stale("
+        in EXIT_RUNTIME
+    )
+    assert (
+        "with connection.transaction():\n"
+        "        return LifecycleSupervisor(connection, policy=policy).scan("
+        in LIFECYCLE_RUNTIME
+    )

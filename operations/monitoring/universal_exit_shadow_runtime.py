@@ -127,11 +127,12 @@ def main() -> int:
     try:
         while running:
             now = datetime.now(UTC)
-            cycle = claim_cycle(
-                connection,
-                now=now,
-                consumer_instance_id=CONSUMER_ID,
-            )
+            with connection.transaction():
+                cycle = claim_cycle(
+                    connection,
+                    now=now,
+                    consumer_instance_id=CONSUMER_ID,
+                )
             _status(
                 {
                     "state": "RUNNING",
@@ -160,12 +161,13 @@ def main() -> int:
         raise
     finally:
         try:
-            mark_exit_claims_stale(
-                connection,
-                consumer_instance_id=CONSUMER_ID,
-                seen_at=datetime.now(UTC),
-                reason="Universal Exit shadow runtime stopped",
-            )
+            with connection.transaction():
+                mark_exit_claims_stale(
+                    connection,
+                    consumer_instance_id=CONSUMER_ID,
+                    seen_at=datetime.now(UTC),
+                    reason="Universal Exit shadow runtime stopped",
+                )
         finally:
             connection.close()
     _status(
