@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.8
+**Версия:** 2.9
 **Дата:** 2026-09-21
 **Статус:** канонический индекс документации
 
@@ -23,9 +23,10 @@ LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
 LEVEL 2 — docs/TRADING_CONTOUR_RU*.md
           docs/OBSERVATION_ANALYTICS_RU*.md
 
-ROUTED PROCESS CANON —
+ROUTED PROCESS / DATA CANON —
           docs/DEVELOPMENT_RELEASE_RULES_RU*.md
           docs/RESEARCH_COMPUTE_RULES_RU*.md
+          docs/RESEARCH_DATA_CONTOUR_RU*.md
 
 LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU*.md
 
@@ -33,7 +34,7 @@ LEVEL H — Git history, archive, patch payload docs,
           old research/evidence/runbook/handoff/Pxx/EO/SE/PASS.
 ```
 
-Routed process canon is active authority only for its task route and is not part
+Routed process/data canon is active authority only for its task route and is not part
 of the mandatory every-chat Project Source bundle.
 
 If owner decision conflicts with canon:
@@ -81,7 +82,7 @@ Then route:
 - patch / Git / PostgreSQL / packaging / release / deploy / rollback ->
   DEVELOPMENT_RELEASE_RULES_RU*.md
 - research / replay / OOS / holdout / large data / long compute ->
-  RESEARCH_COMPUTE_RULES_RU*.md
+  RESEARCH_COMPUTE_RULES_RU*.md + RESEARCH_DATA_CONTOUR_RU*.md
 
 Cross-route task -> read all relevant routed docs.
 
@@ -130,7 +131,7 @@ Hard Stop, не использовать память/history как канон 
 4. владелец полностью заменяет старые Project Source;
 5. дополнительные материалы не получают authority автоматически.
 
-Routed process docs остаются GitHub-active canon и не входят в восьмифайловый
+Routed process/data docs остаются GitHub-active canon и не входят в восьмифайловый
 Project Source bundle; они читаются из verified GitHub/source mirror только по
 соответствующему route.
 
@@ -229,3 +230,20 @@ CHECKED HERE:
 This sync does not authorize MICRO_LIVE or LIVE. Current real-arm blockers and
 the exact runtime checkpoint are owned by CURRENT_PROJECT_MAP and
 TRADING_CONTOUR §4.7.
+
+# 12. Research data contour revision — 2026-09-21
+
+Добавлен `docs/RESEARCH_DATA_CONTOUR_RU*.md` как routed canonical data map.
+
+Он обязателен вместе с `RESEARCH_COMPUTE_RULES_RU*.md` для research/replay/
+OOS/holdout/large-data задач и владеет:
+- current 20-symbol research universe;
+- physical raw/source inventory;
+- contiguous coverage intervals и gaps;
+- правилами historically recoverable / realtime-only data;
+- exact liquidation `NO_DATA` contract;
+- distinction full-universe vs subset;
+- обязательной шапкой research result.
+
+Документ не задаёт Strategy policy и не является частью восьмифайлового
+every-chat Project Source bundle.
