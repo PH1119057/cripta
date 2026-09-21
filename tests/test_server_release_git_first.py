@@ -153,6 +153,14 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
     )
 
 
+def test_observer_uses_common_exact_release_identity() -> None:
+    source = (
+        ROOT / "operations" / "monitoring" / "universal_entry_shadow.py"
+    ).read_text(encoding="utf-8")
+    assert 'os.environ.get("CRIPTA_RELEASE_COMMIT"' in source
+    assert "CRIPTA_U5_LOADED_COMMIT" not in source
+
+
 def test_runtime_units_load_common_exact_release_identity() -> None:
     units = (
         "cripta-universal-entry-observer.service",

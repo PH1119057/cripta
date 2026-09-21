@@ -96,7 +96,7 @@ PUBLIC_WS = os.environ.get("CRIPTA_U5_PUBLIC_WS", "wss://stream.bybit.kz/v5/publ
 DATABASE_DSN = os.environ.get(
     "CRIPTA_U5_DATABASE_DSN", "dbname=cripta user=cripta host=/var/run/postgresql"
 )
-LOADED_COMMIT = os.environ.get("CRIPTA_U5_LOADED_COMMIT", "").strip()
+LOADED_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 BASELINE_COMMIT = os.environ.get(
     "CRIPTA_U5_BASELINE_COMMIT", "49670cb0631a8742b2bf8dace9ab33d6b29a107d"
 ).strip()
@@ -1975,7 +1975,7 @@ def _run_observer_epoch(
 
 def _run_multi_strategy_observer() -> None:
     if not LOADED_COMMIT:
-        raise RuntimeError("CRIPTA_U5_LOADED_COMMIT is required")
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
     if FACT_SOURCE_ID != REST_OI30S_SOURCE_ID or OI_SAMPLE_SECONDS != 30:
         raise RuntimeError(
             "multi-Strategy observer requires BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1 at 30s"
@@ -2034,7 +2034,7 @@ def _run_multi_strategy_observer() -> None:
 
 def _run_parity_main() -> None:
     if not LOADED_COMMIT:
-        raise RuntimeError("CRIPTA_U5_LOADED_COMMIT is required")
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
     if OI_SAMPLE_SECONDS <= 0:
         raise RuntimeError("CRIPTA_U5_OI_SAMPLE_SECONDS must be positive")
     use_rest_oi30s = FACT_SOURCE_ID == REST_OI30S_SOURCE_ID
