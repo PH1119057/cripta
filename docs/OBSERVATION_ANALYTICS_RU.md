@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.3
-**Дата:** 2026-09-19
+**Версия:** 1.4
+**Дата:** 2026-09-21
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -383,3 +383,19 @@ Analyst могут расширять видимость системы, но н
 
 Наблюдение, классификация, рейтинг, корреляция и статистическая полезность сами
 по себе не создают право открыть, закрыть или изменить позицию.
+
+## 4.12 Research data contour
+
+Физические источники, основной 20-symbol universe, интервалы raw coverage,
+локальные gaps и distinction между historically recoverable и realtime-only
+данными определяет `docs/RESEARCH_DATA_CONTOUR_RU*.md`.
+
+Особенно для liquidation:
+
+- exact `allLiquidation` является отдельным market source;
+- обычный public trade не доказывает, что он является liquidation;
+- отсутствие historical liquidation source = `NO_DATA`;
+- money flow, восстановленный из public trades, не означает наличие OI,
+  funding или liquidation за тот же момент;
+- full-universe research без явного field-level coverage не объявляется
+  завершённым.
