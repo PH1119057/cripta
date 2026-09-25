@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.8
-**Дата:** 2026-09-21
+**Версия:** 2.9
+**Дата:** 2026-09-25
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -125,7 +125,8 @@ Hard Stop, не использовать память/history как канон 
 # 9. Обновление Project Source
 
 1. обновляется GitHub `main`;
-2. синхронизируется `/srv/cripta/source_checkout`;
+2. существующим механизмом синхронизируется `/srv/cripta/source_checkout`;
+   локальное зеркало владельца также получает GitHub `main` своим штатным sync-механизмом;
 3. формируется набор восьми текущих файлов;
 4. владелец полностью заменяет старые Project Source;
 5. дополнительные материалы не получают authority автоматически.
@@ -229,3 +230,7 @@ CHECKED HERE:
 This sync does not authorize MICRO_LIVE or LIVE. Current real-arm blockers and
 the exact runtime checkpoint are owned by CURRENT_PROJECT_MAP and
 TRADING_CONTOUR §4.7.
+
+# 14. Geometry / sync / SentinelX revision — 2026-09-25
+
+Owner-confirmed: H9/H3 baseline формализован; Strategy-owned GeometrySpec может иметь shared causal Geometry timeline; research различает repeated touches и unique H9 episodes. GitHub main остаётся publication authority, server mirror и локальное зеркало владельца получают изменения штатными sync-механизмами. SentinelX является текущим ChatGPT server-management rail; потеря tool connection не равна server/job failure, требуется reconnect + host-state verification. PostgreSQL actor/interpreter/role smoke обязателен до DB-sensitive work. Geometry-timeline implementation этой документационной ревизией не объявляется DEPLOYED.
