@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.4
-**Дата:** 2026-09-19
+**Версия:** 1.5
+**Дата:** 2026-09-25
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -79,6 +79,10 @@ H3:
 - их совмещение.
 
 H3 сейчас не является Entry condition текущей первой Strategy.
+
+Owner-confirmed baseline 2026-09-25: H9=540m (108x5m+36x15m), H3=180m (36x5m+12x15m); одинаковая формула extrema/zones; Wilder ATR200 отдельно на каждом timeframe; zone half-width=ATR*0.5. `gap/confluence` Strategy-owned, baseline gap=0. Legacy shock/reset/cooldown не входит в baseline. Сначала проверяется exact baseline equivalence, затем отдельно исследуются ATR period/multiplier и иные варианты.
+
+Strategy владеет GeometrySpec. Один exact `symbol + GeometrySpec fingerprint` может причинно рассчитываться/храниться наблюдательным контуром как versioned Geometry timeline и переиспользоваться Entry/Exit/Position Supervisor/Analyst. Изменение result-affecting параметра создаёт другой fingerprint. Наблюдательный контур не выбирает торговые параметры и не получает trading policy.
 
 ## 1.4 Стабилизация
 
