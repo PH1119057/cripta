@@ -27,7 +27,7 @@ OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
 Operational mirror обязан быть синхронизирован с GitHub `main`; при конфликте
-authority имеет GitHub. Project Source, старые ZIP/чаты, локальные копии, Git
+authority имеет GitHub. После publish server mirror и локальное зеркало владельца получают main существующими штатными sync-механизмами; не мутировать read-only server checkout вручную только ради доставки changeset. Project Source, старые ZIP/чаты, локальные копии, Git
 history, historical research/patch docs и archive не являются source of truth.
 
 ## Hard Stop
@@ -48,6 +48,10 @@ OWNER_DECISION_REQUIRED=YES
 
 Если термин отсутствует в `docs/CRIPTA_GLOSSARY_RU*.md` либо допускает
 несколько трактовок, не выбирать смысл самостоятельно.
+
+## Server access / PostgreSQL
+
+Текущий approved ChatGPT server rail — SentinelX. Потеря tool connection/orphaned result не доказывает падение server job: переподключиться и проверить host process/output/result перед restart. SentinelX actor не равен runtime actor. До PostgreSQL работы проверить effective Unix user/interpreter/DB role; для read/research использовать доказанный `cripta` actor/role path. Wrong-user failure не исправлять изменением grants.
 
 ## Исследования
 
