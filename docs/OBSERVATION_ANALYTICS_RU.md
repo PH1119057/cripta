@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.3
-**Дата:** 2026-09-19
+**Версия:** 1.4
+**Дата:** 2026-09-25
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -76,6 +76,10 @@ Live и historical replay должны использовать одинаков
 - version/fingerprint.
 
 Интерпретация этих фактов за конкретную Strategy происходит downstream.
+
+## 1.7 Strategy-parameterized geometry facts
+
+MAYAK/наблюдательный контур может причинно материализовать Geometry state/timeline по exact GeometrySpec, полученному из Strategy layer. MAYAK не выбирает depth/ATR/width/gap/stabilization. Один exact fingerprint рассчитывается один раз на symbol и может переиспользоваться consumers; иной result-affecting parameter => иной fingerprint. Timeline хранит достаточные current/previous boundaries, component extrema, ATR, structural-change/stability timestamps и provenance для причинного replay. Торговая интерпретация остаётся только в EntryPlan/ExitPlan.
 
 # 2. DISPATCHER — объективный прикладной контекст
 
@@ -321,6 +325,8 @@ Strategy, старого Entry, старых названий или стары�
 - entry_relative_opposite_edge;
 - working_range_width;
 - exact depth/timeframe.
+
+При повторных H9-touch research различает raw attempt/touch, exact candidate_id и причинный H9 episode; повторные касания одной устойчивой геометрии не выдаются автоматически за независимые рыночные возможности. Для текущего H3 research сохраняется H3/H9 timeline, directional distance от фиксированного H9 Entry до противоположной combined inner H3 boundary, переходы исследуемых порогов, возврат/невозврат к H9 Entry и последующие MFE/MAE/outcomes. H3<1%/H3>=1% — research classes, не канонический threshold.
 
 ## 4.9 Counterfactual / псевдосделки
 
