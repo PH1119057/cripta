@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.0 · 2026-09-19
+**Версия:** 1.1 · 2026-09-25
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -60,6 +60,10 @@ Strategy policy.
 ## 52. Dependency и interpreter preflight
 
 До запуска проверить exact runtime: Python executable/version, required modules/binaries, permissions, source mounts/paths, free disk и available RAM. Нельзя впервые обнаруживать отсутствующую зависимость в полном расчёте. Для автономного research предпочитать stdlib Python, если внешняя зависимость заранее не проверена и не даёт существенной выгоды.
+
+Текущий approved ChatGPT server-management rail — SentinelX. Перед выводом «сервер недоступен» проверить host/capabilities и переподключиться/повторно проверить server state. Потеря канала ответа SentinelX или orphaned tool job сама по себе не означает падение server process: сначала проверить PID/process/output/result manifest на host, затем решать о restart.
+
+SentinelX agent actor не равен автоматически runtime Unix-user. До PostgreSQL/research job фиксировать `effective Unix user -> interpreter -> psycopg -> socket -> dbname -> DB current_user -> SELECT smoke`. Для CRIPTA read/research использовать доказанный runtime actor/role `cripta` либо иной заранее доказанный эквивалентный path. Wrong-user connection failure — preflight defect, не повод менять grants.
 
 ## 53. Большие данные обрабатывать потоково
 
