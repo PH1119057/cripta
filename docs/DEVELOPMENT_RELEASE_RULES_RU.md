@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.0 · 2026-09-19
+**Версия:** 1.1 · 2026-09-25
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -281,6 +281,8 @@ cripta runtime role
 
 Перед migration проверить реальные права, а не узнавать о `permission denied` после backup/apply.
 
+Для ChatGPT текущий approved server-management rail — SentinelX. Его service principal не считается автоматически repository owner, runtime actor или migration actor. Перед PostgreSQL operation фиксировать `SentinelX actor -> effective Unix actor -> interpreter -> DB role`; runtime/read/research smoke выполняется доказанным `cripta` actor/role path, DDL/backfill — только migration actor. Wrong-user failure не является основанием менять grants.
+
 ## 18. Backup должен быть доступен тому actor, который его пишет
 
 Root-only temp directory нельзя использовать как destination для команды, выполняемой от `postgres`, если `postgres` не может туда писать.
@@ -366,6 +368,8 @@ status
 
 Repository mutation (add/commit/index/worktree) выполняется от repository owner.
 Push выполняется из отдельно разрешённого publisher context.
+
+Deploy-host НЕ обязан иметь GitHub write credential. GitHub `main` является publication authority; после публикации server operational mirror и локальное зеркало владельца синхронизируются существующими approved механизмами GitHub/server/local sync. Исполнитель не должен пытаться вручную мутировать read-only server checkout только ради доставки уже опубликованного changeset; он проверяет, что mirror дошёл до exact GitHub commit, а при задержке диагностирует штатный sync mechanism.
 
 Deploy-host НЕ обязан иметь GitHub write credential. Нормальная роль
 production/deploy host:
