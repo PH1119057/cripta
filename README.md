@@ -3,21 +3,29 @@
 CRIPTA — production-платформа для причинного наблюдения рынка, торговых
 Strategy, исполнения, сопровождения позиций и воспроизводимой аналитики.
 
-## Канонический вход
+## Документация
 
-Документы идентифицируются по семейству имени, а не по номеру версии:
+Вся текущая содержательная документация проекта хранится в `docs/`.
+Единственный authority по составу, ролям и pre-read:
 
-1. `CHATGPT_INTERACTION_RULES_RU*.md`
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
-3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`
-4. `DOCUMENTATION_INDEX_RU*.md`
-5. `CRIPTA_GLOSSARY_RU*.md`
-6. `CURRENT_PROJECT_MAP_RU*.md`
-7. `TRADING_CONTOUR_RU*.md`
-8. `OBSERVATION_ANALYTICS_RU*.md`
+- [docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md)
 
-Точный текущий состав и pre-read определяет
-[docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md).
+Базовый pre-read нового чата / исполнителя:
+
+1. [docs/CHATGPT_INTERACTION_RULES_RU.md](docs/CHATGPT_INTERACTION_RULES_RU.md)
+2. [docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md](docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md)
+3. [docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md](docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md)
+4. [docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md)
+5. [docs/CRIPTA_GLOSSARY_RU.md](docs/CRIPTA_GLOSSARY_RU.md)
+6. [docs/CURRENT_PROJECT_MAP_RU.md](docs/CURRENT_PROJECT_MAP_RU.md)
+
+Routed documents:
+
+- [docs/TRADING_CONTOUR_RU.md](docs/TRADING_CONTOUR_RU.md) — Strategy / Entry / Exit / Execution;
+- [docs/OBSERVATION_ANALYTICS_RU.md](docs/OBSERVATION_ANALYTICS_RU.md) — MAYAK / Dispatcher / Monitoring / Supervisor / Analyst;
+- [docs/DEVELOPMENT_RELEASE_RULES_RU.md](docs/DEVELOPMENT_RELEASE_RULES_RU.md) — patch / Git / PostgreSQL / release / deploy;
+- [docs/RESEARCH_COMPUTE_RULES_RU.md](docs/RESEARCH_COMPUTE_RULES_RU.md) — research / replay / OOS / data / compute;
+- [docs/SECURITY.md](docs/SECURITY.md) — technical security baseline.
 
 ## Source of truth
 
@@ -26,47 +34,13 @@ AUTHORITATIVE: GitHub PH1119057/cripta:main
 OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
-Operational mirror должен быть синхронизирован с verified GitHub ref, но не
-является вторым authority.
-
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
-Project Source, память ChatGPT, старые ZIP/чаты и `C:\cripta` не являются
-source of truth.
 
-## Routed process canon
+## Root bootstrap invariant
 
-Базовый Project Source остаётся восьмифайловым. Дополнительные active docs
-читаются только по task route:
+`README.md` и `AGENTS.md` — единственные текущие Markdown-entrypoints в
+корне repository. Они не являются отдельным каноном.
 
-- `docs/DEVELOPMENT_RELEASE_RULES_RU.md` — patch/Git/PostgreSQL/release/deploy;
-- `docs/RESEARCH_COMPUTE_RULES_RU.md` — research/compute/data.
-
-## Верхняя архитектура
-
-```text
-MAYAK
-  ↓
-DISPATCHER
-  ↓
-STRATEGY
- ├─ ENTRY
- └─ EXIT
-  ↓
-EXECUTION
-  ↓
-EXCHANGE
-```
-
-Подробности не дублируются в README.
-
-## История
-
-Старые самостоятельные концептуальные/Workbench/PASS документы находятся в
-`archive/**` либо Git history.
-
-Historical docs внутри старых patch/research artifacts могут оставаться на
-месте ради воспроизводимости, но не являются текущей инструкцией.
-
-## Security
-
-Базовые security-инварианты: [SECURITY.md](SECURITY.md).
+Если меняются состав current docs, их пути, mandatory pre-read или routed
+reading, этот README и `AGENTS.md` обязаны обновляться в том же changeset, что
+и `docs/DOCUMENTATION_INDEX_RU.md`.

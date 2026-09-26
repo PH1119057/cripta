@@ -1,13 +1,18 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 2.9
-**Дата:** 2026-09-25
+**Версия:** 3.0
+**Дата:** 2026-09-26
 **Статус:** канонический индекс документации
 
 # 1. Цель
 
 В проекте существует один небольшой активный комплект документов.
 Физическое наличие старого файла в repository/history не даёт ему authority.
+
+Вся текущая содержательная документация проекта хранится только в `docs/`.
+Корневые `README.md` и `AGENTS.md` являются техническими entrypoints/bootstrap,
+а не самостоятельным каноном. Расположение файла не задаёт authority: роли и
+приоритет определяет только этот INDEX.
 
 # 2. Роли и приоритет
 
@@ -16,8 +21,8 @@ META — docs/CHATGPT_INTERACTION_RULES_RU*.md
 
 LEVEL 0 — confirmed current owner decision.
 
-LEVEL 1 — CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
-          CRIPTA_ARCHITECTURE_RULES_RU_*.md
+LEVEL 1 — docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
+          docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md
           docs/CRIPTA_GLOSSARY_RU*.md
 
 LEVEL 2 — docs/TRADING_CONTOUR_RU*.md
@@ -26,6 +31,9 @@ LEVEL 2 — docs/TRADING_CONTOUR_RU*.md
 ROUTED PROCESS CANON —
           docs/DEVELOPMENT_RELEASE_RULES_RU*.md
           docs/RESEARCH_COMPUTE_RULES_RU*.md
+
+TECHNICAL SECURITY BASELINE — docs/SECURITY.md
+          применяется ко всей работе, но не задаёт trading policy.
 
 LEVEL 3 — docs/CURRENT_PROJECT_MAP_RU*.md
 
@@ -48,8 +56,8 @@ OWNER_DECISION_REQUIRED=YES
 # 3. Восемь файлов ChatGPT Project Source
 
 1. `docs/CHATGPT_INTERACTION_RULES_RU*.md`
-2. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
-3. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`
+2. `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
+3. `docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md`
 4. `docs/DOCUMENTATION_INDEX_RU*.md`
 5. `docs/CRIPTA_GLOSSARY_RU*.md`
 6. `docs/CURRENT_PROJECT_MAP_RU*.md`
@@ -59,35 +67,43 @@ OWNER_DECISION_REQUIRED=YES
 Используется семейство имени, а не номер версии/UI suffix.
 `CHATGPT_INTERACTION_RULES_RU*.md` читается первым.
 
-# 4. AGENTS.md
+# 4. Корневые entrypoints
 
-`AGENTS*.md` — GitHub-only bootstrap для Codex/разработчика.
-Он не создаёт самостоятельный архитектурный контракт.
+`README.md` и `AGENTS.md` — единственные текущие Markdown-документы, которые
+остаются в корне repository.
+
+- `README.md` — короткий человекочитаемый вход в проект и ссылки на current docs;
+- `AGENTS.md` — GitHub-only bootstrap для Codex/разработчика/робота.
+
+Они не создают самостоятельный архитектурный или торговый контракт. Если
+меняются состав current docs, их пути, mandatory pre-read или routed reading,
+`README.md` и `AGENTS.md` обязаны быть обновлены в том же changeset, что и
+этот INDEX. Устаревшая ссылка в root bootstrap является documentation defect.
 
 # 5. Mandatory pre-read and routed pre-read
 
 Base new-chat pre-read:
-1. CHATGPT_INTERACTION_RULES_RU*.md
-2. CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
-3. CRIPTA_ARCHITECTURE_RULES_RU_*.md
-4. DOCUMENTATION_INDEX_RU*.md
-5. CRIPTA_GLOSSARY_RU*.md
-6. CURRENT_PROJECT_MAP_RU*.md
+1. docs/CHATGPT_INTERACTION_RULES_RU*.md
+2. docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md
+3. docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md
+4. docs/DOCUMENTATION_INDEX_RU*.md
+5. docs/CRIPTA_GLOSSARY_RU*.md
+6. docs/CURRENT_PROJECT_MAP_RU*.md
 
 Then route:
-- Strategy / Entry / Exit / Execution -> TRADING_CONTOUR_RU*.md
+- Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md
 - MAYAK / Dispatcher / Monitoring / Lifecycle Supervisor / Position Supervisor /
-  Analyst -> OBSERVATION_ANALYTICS_RU*.md
+  Analyst -> docs/OBSERVATION_ANALYTICS_RU*.md
 - patch / Git / PostgreSQL / packaging / release / deploy / rollback ->
-  DEVELOPMENT_RELEASE_RULES_RU*.md
+  docs/DEVELOPMENT_RELEASE_RULES_RU*.md
 - research / replay / OOS / holdout / large data / long compute ->
-  RESEARCH_COMPUTE_RULES_RU*.md
+  docs/RESEARCH_COMPUTE_RULES_RU*.md
 
 Cross-route task -> read all relevant routed docs.
 
 # 6. Историческая изоляция
 
-В активном каталоге `docs/` находятся только текущие канонические документы.
+В активном каталоге `docs/` находится только текущая содержательная документация и technical baseline; historical docs туда не возвращаются.
 
 Исторические материалы могут физически сохраняться в `archive/**`, Git
 history и внутри старых неизменяемых patch/research artifacts.
@@ -127,9 +143,10 @@ Hard Stop, не использовать память/history как канон 
 1. обновляется GitHub `main`;
 2. существующим механизмом синхронизируется `/srv/cripta/source_checkout`;
    локальное зеркало владельца также получает GitHub `main` своим штатным sync-механизмом;
-3. формируется набор восьми текущих файлов;
-4. владелец полностью заменяет старые Project Source;
-5. дополнительные материалы не получают authority автоматически.
+3. формируется набор восьми текущих Project Source файлов из `docs/`;
+4. root `README.md` и `AGENTS.md` сверяются с current paths/pre-read/routing;
+5. владелец полностью заменяет старые Project Source;
+6. дополнительные материалы не получают authority автоматически.
 
 Routed process docs остаются GitHub-active canon и не входят в восьмифайловый
 Project Source bundle; они читаются из verified GitHub/source mirror только по
@@ -140,9 +157,9 @@ Project Source bundle; они читаются из verified GitHub/source mirro
 Текущее решение владельца о Strategy-specific настройках отражено согласованно
 в активном пакете:
 
-- `CRIPTA_ARCHITECTURE_RULES_RU_*.md` — ownership policy-блоков StrategyCard,
+- `docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md` — ownership policy-блоков StrategyCard,
   разделение initial protection и dynamic Exit, правила experimental version;
-- `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md` — authoring/fail-closed дисциплина и
+- `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md` — authoring/fail-closed дисциплина и
   запрет research/history как trading default;
 - `docs/CRIPTA_GLOSSARY_RU*.md` — термины Strategy settings, initial protection,
   Strategy Candidate/Draft и experimental Strategy version;
@@ -234,3 +251,19 @@ TRADING_CONTOUR §4.7.
 # 14. Geometry / sync / SentinelX revision — 2026-09-25
 
 Owner-confirmed: H9/H3 baseline формализован; Strategy-owned GeometrySpec может иметь shared causal Geometry timeline; research различает repeated touches и unique H9 episodes. GitHub main остаётся publication authority, server mirror и локальное зеркало владельца получают изменения штатными sync-механизмами. SentinelX является текущим ChatGPT server-management rail; потеря tool connection не равна server/job failure, требуется reconnect + host-state verification. PostgreSQL actor/interpreter/role smoke обязателен до DB-sensitive work. Geometry-timeline implementation этой документационной ревизией не объявляется DEPLOYED.
+
+# 15. Documentation topology / root bootstrap revision — 2026-09-26
+
+OWNER DECISION:
+- вся текущая содержательная документация CRIPTA хранится в `docs/`;
+- корневые `README.md` и `AGENTS.md` остаются только стабильными entrypoints;
+- WORK, ARCH и SECURITY перенесены из root в `docs/` без изменения их authority;
+- изменение состава документов, путей, mandatory pre-read или routed reading
+  требует синхронного обновления INDEX + root README + root AGENTS;
+- routed DEVELOPMENT_RELEASE и RESEARCH_COMPUTE имеют локальную непрерывную
+  нумерацию разделов; старая разделённая сквозная нумерация удалена;
+- MAP §18 зеркалит все обязательные имена LIVE-arm gates из TRADING_CONTOUR §4.7.
+
+Эта ревизия не меняет trading behavior, Strategy ownership или runtime rights.
+Неоднозначности Strategy Candidate/monitoring Strategy и физического owner
+Geometry timeline этой ревизией не фиксируются и остаются без изменения.

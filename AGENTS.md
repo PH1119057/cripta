@@ -1,23 +1,30 @@
 # CRIPTA — bootstrap для исполнителя
 
-Для ChatGPT первым читать `docs/CHATGPT_INTERACTION_RULES_RU*.md`.
+Вся текущая содержательная документация CRIPTA хранится в `docs/`.
+Этот `AGENTS.md` — только корневой bootstrap и не является отдельным каноном.
 
-Перед любой работой по проекту читать актуальный активный канон по семействам:
+## Mandatory pre-read
 
-1. `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
-2. `CRIPTA_ARCHITECTURE_RULES_RU_*.md`
-3. `docs/DOCUMENTATION_INDEX_RU*.md`
-4. `docs/CRIPTA_GLOSSARY_RU*.md`
-5. `docs/CURRENT_PROJECT_MAP_RU*.md`
+Для ChatGPT первым читать:
+
+1. `docs/CHATGPT_INTERACTION_RULES_RU*.md`
+2. `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
+3. `docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md`
+4. `docs/DOCUMENTATION_INDEX_RU*.md`
+5. `docs/CRIPTA_GLOSSARY_RU*.md`
+6. `docs/CURRENT_PROJECT_MAP_RU*.md`
 
 При работе с конкретным слоем дополнительно читать его active routed document
 из `docs/DOCUMENTATION_INDEX_RU*.md`.
 
-Перед patch/Git/PostgreSQL/package/release/deploy читать
-`docs/DEVELOPMENT_RELEASE_RULES_RU*.md`.
+Затем по task route:
 
-Перед research/replay/OOS/holdout/large-data/long-compute читать
-`docs/RESEARCH_COMPUTE_RULES_RU*.md`.
+- Strategy / Entry / Exit / Execution -> `docs/TRADING_CONTOUR_RU*.md`
+- MAYAK / Dispatcher / Monitoring / Lifecycle Supervisor / Position Supervisor / Analyst -> `docs/OBSERVATION_ANALYTICS_RU*.md`
+- patch / Git / PostgreSQL / package / release / deploy / rollback -> `docs/DEVELOPMENT_RELEASE_RULES_RU*.md`
+- research / replay / OOS / holdout / large-data / long-compute -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`
+
+Technical security baseline для всей работы: `docs/SECURITY.md`.
 
 ## Source of truth
 
@@ -26,9 +33,9 @@ AUTHORITATIVE: GitHub PH1119057/cripta:main
 OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
-Operational mirror обязан быть синхронизирован с GitHub `main`; при конфликте
-authority имеет GitHub. После publish server mirror и локальное зеркало владельца получают main существующими штатными sync-механизмами; не мутировать read-only server checkout вручную только ради доставки changeset. Project Source, старые ZIP/чаты, локальные копии, Git
-history, historical research/patch docs и archive не являются source of truth.
+Project Source, память, старые чаты/ZIP, локальные копии, Git history,
+`archive/**`, `patch_backups/**` и historical payload docs не являются
+current authority.
 
 ## Hard Stop
 
@@ -41,29 +48,13 @@ CANON_UPDATE_REQUIRED=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-Не менять архитектуру и торговый смысл по собственной инициативе.
-После подтверждения владельца сначала обновить канон, затем реализацию.
+Если термин отсутствует в `docs/CRIPTA_GLOSSARY_RU*.md` или физически
+неоднозначен — не додумывать, запросить owner decision.
 
-## Терминологический Hard Stop
+## Bootstrap synchronization invariant
 
-Если термин отсутствует в `docs/CRIPTA_GLOSSARY_RU*.md` либо допускает
-несколько трактовок, не выбирать смысл самостоятельно.
-
-## Server access / PostgreSQL
-
-Текущий approved ChatGPT server rail — SentinelX. Потеря tool connection/orphaned result не доказывает падение server job: переподключиться и проверить host process/output/result перед restart. SentinelX actor не равен runtime actor. До PostgreSQL работы проверить effective Unix user/interpreter/DB role; для read/research использовать доказанный `cripta` actor/role path. Wrong-user failure не исправлять изменением grants.
-
-## Исследования
-
-Исследование любой давности является evidence, а не каноном.
-
-## Историческая изоляция
-
-По умолчанию не читать и не включать в широкий поиск текущего канона:
-- `archive/**`
-- `patch_backups/**`
-- historical `*/payload/docs/**`
-- старые Pxx / EO / SE / PASS / runbook / handoff
-- Git history
-
-Открывать их только по явной исторической задаче.
+Точный current document set и routing определяет
+`docs/DOCUMENTATION_INDEX_RU*.md`. Если меняются состав документов, пути,
+mandatory pre-read или routed reading, корневые `README.md` и `AGENTS.md`
+обязаны изменяться в том же documentation changeset. Устаревшая ссылка в этом
+bootstrap является documentation defect.

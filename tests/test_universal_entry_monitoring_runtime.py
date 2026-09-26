@@ -279,7 +279,7 @@ def test_universal_symbol_universe_has_no_legacy_enabled_symbols_gate() -> None:
     )
     dashboard = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
     html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
-    architecture = (ROOT / "CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(
+    architecture = (ROOT / "docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(
         encoding="utf-8"
     )
     observation = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(

@@ -131,7 +131,7 @@ def test_operations_file_exchange_paths_are_persisted_in_current_source() -> Non
     installer = (ROOT / "scripts/patch/INSTALL_CRIPTA_PATCH.ps1").read_text(
         encoding="utf-8"
     )
-    work_rules = (ROOT / "CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md").read_text(
+    work_rules = (ROOT / "docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md").read_text(
         encoding="utf-8"
     )
 

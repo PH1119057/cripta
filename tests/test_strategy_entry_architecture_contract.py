@@ -26,14 +26,14 @@ def test_trading_contour_is_canonical_and_registered() -> None:
 
     assert "**Статус:** активный канонический контракт торгового контура" in trading
     assert "docs/TRADING_CONTOUR_RU*.md" in index
-    assert "Strategy / Entry / Exit / Execution -> TRADING_CONTOUR_RU*.md" in index
+    assert "Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md" in index
     assert "При работе с конкретным слоем дополнительно читать его active routed document" in agents
     assert "`docs/DOCUMENTATION_INDEX_RU*.md`" in agents
 
 
 def test_strategy_owns_policy_and_entry_does_not_arbitrate_between_strategies() -> None:
     trading = _read("docs/TRADING_CONTOUR_RU.md")
-    architecture = _read("CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
+    architecture = _read("docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
 
     assert "Strategy layer — единственный владелец торгового смысла" in architecture
     assert "Изменение любого торгового параметра означает новую версию Strategy." in trading
@@ -51,7 +51,7 @@ def test_strategy_owns_policy_and_entry_does_not_arbitrate_between_strategies() 
 
 
 def test_lifecycle_has_one_canonical_source_and_dispatcher_remains_strategy_agnostic() -> None:
-    architecture = _read("CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
+    architecture = _read("docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
     trading = _read("docs/TRADING_CONTOUR_RU.md")
     observation = _read("docs/OBSERVATION_ANALYTICS_RU.md")
 
@@ -68,8 +68,8 @@ def test_lifecycle_has_one_canonical_source_and_dispatcher_remains_strategy_agno
     ):
         assert token in lifecycle
 
-    assert "CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in trading
-    assert "CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in observation
+    assert "docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in trading
+    assert "docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1" in observation
     assert "final economics/audit" not in trading
     assert "final economics/audit" not in observation
 
@@ -105,3 +105,35 @@ def test_current_map_uses_split_runtime_evidence_and_disarmed_real_execution() -
     assert "cripta-universal-entry-consumer.service = inactive" in current_map
     assert "mainnet execution gate = 0" in current_map
     assert "production fresh mode state сейчас отсутствует" in current_map
+
+
+def test_current_map_mirrors_every_live_arm_gate_name() -> None:
+    trading = _read("docs/TRADING_CONTOUR_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    gates = (
+        "CANON_CURRENT",
+        "REMOTE_COMMIT_VERIFIED",
+        "SOURCE_LIVE_IDENTITY",
+        "TESTS",
+        "LIVE_EQUIVALENCE",
+        "EXCHANGE_ACCOUNT_IDENTITY",
+        "POSITION_MODE_FRESH",
+        "POSITION_IDX_EXPECTED",
+        "PHYSICAL_SLOT_CLAIM_CONTRACT",
+        "CAPITAL_RESERVATION_CONTRACT",
+        "EXACT_STRATEGY_ACTIVATION",
+        "ENTRY_PLAN_EXECUTABLE",
+        "EXIT_PLAN_EXECUTABLE",
+        "INITIAL_PROTECTION_EXECUTABLE",
+        "TERMINAL_LOSS_CONTAINMENT_PATH",
+        "EMERGENCY_POLICY_SUPPORTED",
+        "LIFECYCLE_SUPERVISOR_BEHAVIOR",
+        "CRITICAL_FAULT_DELIVERY",
+        "RECONCILIATION_PATH",
+        "MAINNET_GATE_EXPLICIT_OWNER_APPROVAL",
+        "MICRO_LIVE_LIMITS",
+        "ROLLBACK_OR_KILL_PATH",
+    )
+    for gate in gates:
+        assert gate in trading
+        assert gate in current_map

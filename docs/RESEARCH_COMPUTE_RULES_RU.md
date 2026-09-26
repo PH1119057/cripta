@@ -1,26 +1,29 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.1 · 2026-09-25
+**Версия:** 1.2 · 2026-09-26
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
 длительными вычислениями и data-forensic.
 
 Общие source-of-truth / Hard Stop правила задаёт
-`CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
+`docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
 
 # 1. Scope
 
 Этот документ владеет detailed research/compute discipline и не задаёт
 Strategy policy.
 
-## 38. Долгие jobs наблюдаемы
+Нумерация разделов локальна для этого документа и непрерывна; она не делится
+с DEVELOPMENT_RELEASE или WORK.
+
+## 2. Долгие jobs наблюдаемы
 
 Каждый долгий stage обязан показывать stage, processed/total, %, elapsed, ETA, heartbeat ~20–30 sec и cache hit/miss, где это применимо.
 
 Особенно это относится к dependency download, full pytest, large DB backfill, archive, research и soak.
 
-## 39. Console contract
+## 3. Console contract
 
 Простая операция — одна физическая строка.
 
@@ -28,13 +31,13 @@ Strategy policy.
 
 Не перекладывать ручное редактирование production на пользователя.
 
-## 40. CHECKED и NOT CHECKED HERE разделять
+## 4. CHECKED и NOT CHECKED HERE разделять
 
 Каждый отчёт обязан явно различать `CHECKED HERE` и `NOT CHECKED HERE`.
 
 Нельзя выдавать предположение за проверку, особенно для GitHub remote state, actual loaded runtime, DB privileges, exchange truth и service state.
 
-## 41. Не делать категорический вывод из неполного forensic
+## 5. Не делать категорический вывод из неполного forensic
 
 Запрещён шаблон:
 
@@ -45,19 +48,19 @@ Strategy policy.
 
 Если проверен только один user/context, формулировка должна быть `НЕ НАЙДЕНО В ЭТОМ КОНТЕКСТЕ`, а не `ЭТОГО НЕТ В СИСТЕМЕ`.
 
-## 50. Runtime-проверка после запуска
+## 6. Runtime-проверка после запуска
 
 Длительный процесс проверяется минимум дважды: сразу после старта и повторно примерно через 5–10 секунд. Проверять, где применимо: реальные worker PID, runner/parent PID, process state, CPU, RAM/RSS, stderr, рост output/progress и ожидаемое число workers.
 
 Если процесс завершился раньше, нужно доказать успешное завершение и проверить результат. На `?`, «проверь», «состояние» статус всегда получать заново с сервера, а не из памяти предыдущего ответа.
 
-## 51. Малый сквозной тест до массового запуска
+## 7. Малый сквозной тест до массового запуска
 
 До полного тяжёлого расчёта выполнить минимальный end-to-end проход на реальных данных и проверить source path, schema/headers, timestamp semantics, units, side/direction semantics, границы дат, output schema и несколько значений вручную.
 
 Технически успешный скрипт с пустыми, неверно прочитанными или семантически неверными данными = `FAILED`.
 
-## 52. Dependency и interpreter preflight
+## 8. Dependency и interpreter preflight
 
 До запуска проверить exact runtime: Python executable/version, required modules/binaries, permissions, source mounts/paths, free disk и available RAM. Нельзя впервые обнаруживать отсутствующую зависимость в полном расчёте. Для автономного research предпочитать stdlib Python, если внешняя зависимость заранее не проверена и не даёт существенной выгоды.
 
@@ -65,7 +68,7 @@ Strategy policy.
 
 SentinelX agent actor не равен автоматически runtime Unix-user. До PostgreSQL/research job фиксировать `effective Unix user -> interpreter -> psycopg -> socket -> dbname -> DB current_user -> SELECT smoke`. Для CRIPTA read/research использовать доказанный runtime actor/role `cripta` либо иной заранее доказанный эквивалентный path. Wrong-user connection failure — preflight defect, не повод менять grants.
 
-## 53. Большие данные обрабатывать потоково
+## 9. Большие данные обрабатывать потоково
 
 Raw trades, orderbook tapes и большие market archives по умолчанию обрабатывать streaming/chunk/bucket способом с bounded cache. Полный период нельзя складывать в RAM, если это не доказано безопасным и необходимым.
 
@@ -75,19 +78,19 @@ stream source -> causal aggregation -> bounded cache -> intermediate output -> r
 
 Перед масштабированием измерить peak/RSS одного worker.
 
-## 54. Parallelism определяется CPU + RAM + I/O
+## 10. Parallelism определяется CPU + RAM + I/O
 
 Число workers выбирается по CPU, RAM per worker, disk/decompression I/O, source contention и независимости частей задачи. Запрещено механически делать `workers = symbols`.
 
 Если сервер имеет 4 CPU и независимый research безопасно делится, доступные CPU следует использовать. Но сначала доказать безопасность по RAM/I/O. Для неравномерных задач использовать ограниченное число workers с очередью символов/chunks.
 
-## 55. Причинность research-данных
+## 11. Причинность research-данных
 
 Любой point-in-time dataset обязан соблюдать `feature_time <= decision_time`. На `T` используются только данные, реально известные к `T`. Future MFE/MAE, stop, recovery, final outcome, будущие zone shifts и будущие MAYAK/Dispatcher states допустимы только как последующие labels/targets, но не входные признаки.
 
 Отсутствие данных хранится как `NO_DATA` и не превращается молча в `0`, `NONE` или `NORMAL`. Для liquidation exact history при отсутствии исходных событий = `NO_DATA`; proxy допустим только как отдельно названный и версионированный `LIQUIDATION_PROXY`.
 
-## 56. Сначала универсальный dataset, потом гипотезы
+## 12. Сначала универсальный dataset, потом гипотезы
 
 Если тяжёлые raw-источники нужны многим анализам, сначала строится нейтральный причинный dataset общего назначения:
 
@@ -97,19 +100,19 @@ ALL ENTRY -> minute-by-minute causal state -> reusable research dataset -> analy
 
 Нельзя заставлять каждый Exit-кандидат повторно читать многомесячный raw archive, если первичные состояния можно один раз сохранить без future leakage. Существующий Exit/stop не должен заранее определять классы, если исследуется новый способ оценки сделки.
 
-## 57. Пилот не является доказательством
+## 13. Пилот не является доказательством
 
 Пилот нужен для проверки механики, данных, наличия явления и стоимости расчёта. Общий вывод требует full-universe проверки и, где применимо, разрезов symbol/direction/time regime, coverage, false positives/negatives и economics after commissions.
 
 Для кандидата считать минимум: пойманные/пропущенные проблемные случаи, испорченные хорошие сделки, saved losses, lost good trades, destroyed recoveries, extra fees/slippage и итог после комиссий.
 
-## 58. Не смешивать наблюдение, причину и интерпретацию
+## 14. Не смешивать наблюдение, причину и интерпретацию
 
 H3/H9 shift, orderbook, OI, flow, liquidation и Dispatcher context — наблюдаемые события/состояния. Нельзя автоматически считать structural shift причиной движения, алгоритмическую заявку spoofing, а очищенный стакан «реальными людьми».
 
 Research должен по возможности проверять цепочку `market facts/state -> MAYAK/objective context -> structural change -> subsequent trade path`. Семантика полей подтверждается источником/каноническим parser contract до экономической интерпретации.
 
-## 59. Файловые пространства разных сред не взаимозаменяемы
+## 15. Файловые пространства разных сред не взаимозаменяемы
 
 ChatGPT runtime/container, удалённый сервер, GitHub/connector storage, Project Source/File Library и локальный компьютер пользователя являются разными файловыми пространствами. Одинаковый путь или имя файла не означает, что объект существует или доступен в другой среде.
 
@@ -138,7 +141,7 @@ ACCESS_ALLOWED=YES
 
 Если прямого transport между двумя средами нет, статус = `BLOCKED`; нельзя имитировать передачу путём обращения к пути другой среды.
 
-## 60. Обязательный launch/complete checklist
+## 16. Обязательный launch/complete checklist
 
 До `RUNNING` тяжёлого compute/research:
 

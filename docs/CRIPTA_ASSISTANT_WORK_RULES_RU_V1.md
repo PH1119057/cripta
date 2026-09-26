@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.5 · 2026-09-19
+**Версия:** 2.6 · 2026-09-26
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -47,7 +47,7 @@ local C:\cripta and history are auxiliary only.
 New chat:
 1. docs/CHATGPT_INTERACTION_RULES_RU*.md
 2. this WORK file
-3. CRIPTA_ARCHITECTURE_RULES_RU_*.md
+3. docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md
 4. docs/DOCUMENTATION_INDEX_RU*.md
 5. docs/CRIPTA_GLOSSARY_RU*.md
 6. docs/CURRENT_PROJECT_MAP_RU*.md
@@ -229,9 +229,15 @@ are distinct spaces unless an explicit verified transfer exists.
 
 Never invent sandbox/download paths from a file name or connector reference.
 
+Содержательная документация текущего проекта хранится только в `docs/`.
+Корневые `README.md` и `AGENTS.md` являются только техническими entrypoints и
+не создают отдельный authority. Изменение active document set, путей,
+mandatory pre-read или routed reading требует в том же documentation changeset
+обновить `docs/DOCUMENTATION_INDEX_RU.md`, корневые `README.md` и `AGENTS.md`.
+
 ## 11. Security
 
-SECURITY.md applies to all work.
+docs/SECURITY.md applies to all work.
 
 Credentials, secret values, private key paths/material and auth headers are not
 canonical documentation content. Public-repo/history secret scanning and

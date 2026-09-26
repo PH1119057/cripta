@@ -6,7 +6,7 @@
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
 Strategy, Entry, Exit и Execution. Верхняя архитектура определяется
-`CRIPTA_ARCHITECTURE_RULES_RU_V1.md`, терминология — `CRIPTA_GLOSSARY_RU.md`.
+`docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md`, терминология — `docs/CRIPTA_GLOSSARY_RU*.md`.
 
 # 1. STRATEGY — владелец торгового смысла и планов
 
@@ -592,7 +592,7 @@ MICRO_LIVE имеет отдельный лимит риска/капитала/
 # 5. Сквозной handoff
 
 Единственное каноническое определение обязательной lifecycle-chain находится в
-CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
+docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
 
 Trading contour обязан сохранять exact durable lineage, включая, где применимо:
 strategy_activation_id, Strategy/EntryPlan/ExitPlan fingerprints, signal_id,

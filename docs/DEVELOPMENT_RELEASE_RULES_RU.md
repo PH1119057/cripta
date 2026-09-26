@@ -1,20 +1,23 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.1 · 2026-09-25
+**Версия:** 1.2 · 2026-09-26
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
 release, deploy, service restart, rollback и production forensic.
 
 Общие source-of-truth / Hard Stop правила задаёт
-`CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
+`docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
 
 # 1. Scope
 
 Этот документ владеет подробной process-механикой разработки и релиза.
 Trading policy здесь не определяется.
 
-## 6. Каждый patch/package имеет exact Git identity
+Нумерация разделов локальна для этого документа и непрерывна; она не делится
+с RESEARCH_COMPUTE или WORK.
+
+## 2. Каждый patch/package имеет exact Git identity
 
 Production package обязан указывать минимум:
 
@@ -48,7 +51,7 @@ payload_sha256 подтверждает bytes, но не заменяет Git id
 
 Классификация путей выполняется только относительно фактического baseline.
 
-## 7. Один логический patch — одна пользовательская версия
+## 3. Один логический patch — одна пользовательская версия
 
 Запрещено превращать каждую ошибку подготовки в новую «production-версию» вида `V1.1 … V1.14`, если торговый/production payload по смыслу остаётся тем же.
 
@@ -63,7 +66,7 @@ PREPARATION BUILD      = RC1 / RC2 / BUILD_01 / BUILD_02
 
 Ошибка toolchain, installer, quoting, permissions, packaging, test harness, transport или diagnostics — это `PREPARATION_BUILD_FAILURE`, а не новая функциональная версия продукта.
 
-## 8. Перед упаковкой обязательна единая Installation Readiness Matrix
+## 4. Перед упаковкой обязательна единая Installation Readiness Matrix
 
 До создания пользовательского ZIP разработчик обязан один раз собрать полную матрицу среды.
 
@@ -111,7 +114,7 @@ filesystem_permissions
 
 Нельзя узнавать эти параметры по одному только после очередного падения installer.
 
-## 9. Для каждого шага фиксировать Execution Context
+## 5. Для каждого шага фиксировать Execution Context
 
 До выполнения сложного installer workflow должна быть таблица:
 
@@ -140,7 +143,7 @@ service restart      -> root/systemd
 
 Нельзя предполагать, что один Unix-user подходит для всех стадий.
 
-## 10. Toolchain определяется до patch, а не во время падений
+## 6. Toolchain определяется до patch, а не во время падений
 
 Перед упаковкой проверить Python compatibility, uv exact version, locked dependency install, pytest, pytest-asyncio, Ruff, mypy, Hypothesis, project imports и system-only modules, которые используют installer helpers.
 
@@ -148,7 +151,7 @@ service restart      -> root/systemd
 
 Нельзя последовательно выпускать новые архивы только потому, что каждый следующий обнаружил `Ruff missing`, `Python missing`, `uv parser wrong` или `venv missing dependency`. После первого toolchain failure выполняется полный toolchain audit всего класса.
 
-## 11. Self-test обязан работать в том interpreter, где он реально запускается
+## 7. Self-test обязан работать в том interpreter, где он реально запускается
 
 Если installer запускает helper как `$TEST_PYTHON helper.py --self-test`, self-test обязан быть проверен именно в `$TEST_PYTHON`.
 
@@ -167,7 +170,7 @@ real DB mode
 
 Нельзя проверять helper только через `py_compile` и считать import/runtime contract доказанным.
 
-## 12. Git-first release order и temp overlay
+## 8. Git-first release order и temp overlay
 
 Единственный допустимый общий порядок production changeset:
 
@@ -201,7 +204,7 @@ expected baseline = verified
 
 До independent remote SHA verification production deploy запрещён.
 
-## 13. Strongest practical gate
+## 9. Strongest practical gate
 
 По возможности:
 
@@ -221,13 +224,13 @@ service-specific smoke
 
 Gate должен быть scoped правильно. Нельзя заставлять новый patch «чинить» старый unrelated Ruff debt. Для legacy debt используется regression rule `NEW_DIAGNOSTICS=0`, если полная очистка не является scope задачи.
 
-## 14. Expected non-zero не является аварией shell
+## 10. Expected non-zero не является аварией shell
 
 Команды, где ненулевой exit code ожидаем и анализируется, нельзя оставлять под общим `set -e` / `ERR trap` без явной обработки.
 
 Использовать локальный контроль `rc` или эквивалент. Нельзя получать installer failure из-за ожидаемого `Ruff rc=1`, если логика специально сравнивает baseline и patched diagnostics.
 
-## 15. PostgreSQL schema — runtime truth, её нельзя угадывать по коду
+## 11. PostgreSQL schema — runtime truth, её нельзя угадывать по коду
 
 Перед schema-sensitive patch read-only forensic обязан определить:
 
@@ -248,7 +251,7 @@ actual historical rows
 
 Нельзя предполагать, что Python mapping автоматически совместим с существующим CHECK constraint.
 
-## 16. Canonical token обязан проходить storage contract
+## 12. Canonical token обязан проходить storage contract
 
 Если код вводит/использует канонический token, проверить весь путь:
 
@@ -265,7 +268,7 @@ PRODUCTION CODE
 
 Например, `OWNER_MODIFIED_STOP` не должен быть правильным в protection truth, но запрещён storage CHECK. Нельзя обходить несовместимость подменой на `UNKNOWN` или `OWNER_MANUAL_STOP`, если бизнес-смысл другой.
 
-## 17. DB migration actor и runtime actor разделять
+## 13. DB migration actor и runtime actor разделять
 
 DDL и historical backfill выполняются только ролью, имеющей на это право. Runtime-role получает только минимально нужные права.
 
@@ -283,7 +286,7 @@ cripta runtime role
 
 Для ChatGPT текущий approved server-management rail — SentinelX. Его service principal не считается автоматически repository owner, runtime actor или migration actor. Перед PostgreSQL operation фиксировать `SentinelX actor -> effective Unix actor -> interpreter -> DB role`; runtime/read/research smoke выполняется доказанным `cripta` actor/role path, DDL/backfill — только migration actor. Wrong-user failure не является основанием менять grants.
 
-## 18. Backup должен быть доступен тому actor, который его пишет
+## 14. Backup должен быть доступен тому actor, который его пишет
 
 Root-only temp directory нельзя использовать как destination для команды, выполняемой от `postgres`, если `postgres` не может туда писать.
 
@@ -291,7 +294,7 @@ Root-only temp directory нельзя использовать как destinatio
 
 Предпочтительно root shell открывает output, а `postgres` пишет через inherited fd/stdout, либо заранее используется каталог с узкими корректными правами.
 
-## 19. Migration + backfill должны быть атомарны
+## 15. Migration + backfill должны быть атомарны
 
 Если технически возможно:
 
@@ -306,17 +309,17 @@ BEGIN
 
 Ошибка должна вернуть исходные schema/data автоматически.
 
-## 20. Rollback обязан проверять не только bytes, но и metadata/state
+## 16. Rollback обязан проверять не только bytes, но и metadata/state
 
 После rollback проверить source hashes, live hashes, source/live equality, file owner, file mode, `.git` ownership, worktree state, DB schema, DB rows, services active, gate state, open positions и pending commands.
 
 `ROLLBACK=COMPLETE` можно печатать только после этих проверок.
 
-## 21. Source/live copy сохраняет metadata
+## 17. Source/live copy сохраняет metadata
 
 При apply и rollback source/live файлов сохранять owner, group и mode. Нельзя временным root-copy превращать рабочий source в root-owned. Для atomic replace metadata временной копии выставляется до rename.
 
-## 22. `.git` — отдельный защищённый объект
+## 18. `.git` — отдельный защищённый объект
 
 Нормальное состояние server checkout:
 
@@ -327,7 +330,7 @@ index owner/group = repository owner
 
 Ни installer, ни diagnostics не имеют права оставлять root-owned Git metadata. После любой root-level операции рядом с repository проверять ownership `.git`.
 
-## 23. Read-only означает семантически read-only
+## 19. Read-only означает семантически read-only
 
 Надпись `READ_ONLY=YES` недостаточна. Некоторые команды чтения меняют служебное состояние.
 
@@ -343,7 +346,7 @@ sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...
 
 Read-only forensic должен отдельно проверять, что bytes и metadata не изменены, а DB-доступ действительно только SELECT.
 
-## 24. Git sync — только exact changeset
+## 20. Git sync — только exact changeset
 
 Запрещено `git add -A` и `git add .`.
 
@@ -364,7 +367,7 @@ status
 
 Неизвестный untracked path = hard stop.
 
-## 25. Publisher context и deploy-host разделяются
+## 21. Publisher context и deploy-host разделяются
 
 Repository mutation (add/commit/index/worktree) выполняется от repository owner.
 Push выполняется из отдельно разрешённого publisher context.
@@ -387,7 +390,7 @@ DEPLOY / RESTART / VERIFY RUNTIME
 details не являются канонической архитектурой и не хранятся в обязательном
 pre-read.
 
-## 26. Push transport проверяется ДО commit/publish
+## 22. Push transport проверяется ДО commit/publish
 
 Publisher context до publish проверяет exact:
 remote/push ref, principal, non-interactive auth и remote SHA.
@@ -396,7 +399,7 @@ remote/push ref, principal, non-interactive auth и remote SHA.
 Проверка deploy-host read/fetch identity выполняется отдельно и не требует
 write credential.
 
-## 27. Нельзя создавать новый credential без доказанной необходимости
+## 23. Нельзя создавать новый credential без доказанной необходимости
 
 Сначала выполняется read-only forensic существующих approved transports и
 principals. Отсутствие credential у одного Unix-user не доказывает отсутствие
@@ -405,7 +408,7 @@ approved publisher context.
 Новый credential создаётся только по отдельному security decision с минимальными
 правами.
 
-## 28. Privileged Git не является нормальным release path
+## 24. Privileged Git не является нормальным release path
 
 Privileged transport допустим только как явно доказанный исключительный
 publisher context и не должен выполнять add/commit/checkout/reset/worktree
@@ -414,7 +417,7 @@ mutation.
 После такой операции обязательны ownership check, clean worktree и independent
 remote SHA verification.
 
-## 29. Source checkpoint не считается завершённым без remote verification
+## 25. Source checkpoint не считается завершённым без remote verification
 
 После push необходимо независимо прочитать GitHub `REMOTE_HEAD` и сравнить:
 
@@ -424,7 +427,7 @@ REMOTE_HEAD == SOURCE_HEAD
 
 Локальное сообщение `push succeeded` не заменяет отдельную remote verification.
 
-## 30. Production checkpoint различает четыре версии
+## 26. Production checkpoint различает четыре версии
 
 Нормальное состояние обязано различать:
 
@@ -437,7 +440,7 @@ LOADED_COMMIT
 
 Нельзя писать просто «версия установлена», если не доказано, что реально загруженные сервисы соответствуют опубликованному source checkpoint.
 
-## 31. Installer rail
+## 27. Installer rail
 
 Канонический ZIP root:
 
@@ -465,7 +468,7 @@ Production package запрещено применять, если release_commi
 commit не verified, baseline mismatch либо payload нельзя доказуемо связать с
 release_commit.
 
-## 32. Final ZIP проверяется после последнего изменения
+## 28. Final ZIP проверяется после последнего изменения
 
 После последней упаковки проверить:
 
@@ -486,7 +489,7 @@ executable bits
 
 После вычисления final SHA архив больше не менять.
 
-## 32.1 Public repository / secret-scan gate
+## 28.1 Public repository / secret-scan gate
 
 Если repository public либо changeset затрагивает credentials/security/release
 infrastructure, security checkpoint требует full-history secret scan approved
@@ -501,11 +504,11 @@ Public/private visibility является owner decision. Operational state,
 credential identifiers/paths и security-sensitive details не публикуются в
 каноне без необходимости.
 
-## 33. После первого preparation failure проверять весь класс
+## 29. После первого preparation failure проверять весь класс
 
 Пример: `Ruff missing` означает проверить весь toolchain, а не только Ruff. `DB permission denied` означает проверить owner/grants всех реально изменяемых DB objects. `Git ownership drift` означает проверить весь `.git`, root Git calls, copy semantics и diagnostics.
 
-## 34. После двух последовательных preparation failures — Preparation Freeze
+## 30. После двух последовательных preparation failures — Preparation Freeze
 
 Если один и тот же logical patch дважды подряд не дошёл до green apply из-за ошибок подготовки:
 
@@ -519,7 +522,7 @@ PREPARATION_FREEZE=YES
 
 Только потом собирается следующий release candidate.
 
-## 35. Один forensic -> один repair
+## 31. Один forensic -> один repair
 
 Нельзя делать серию `repair V1 -> repair V2 -> repair V3 -> repair V4`, если нет нового независимого факта.
 
@@ -533,7 +536,7 @@ READ-ONLY FORENSIC
 -> postcheck
 ```
 
-## 36. Диагностика не должна сама создавать новый инцидент
+## 32. Диагностика не должна сама создавать новый инцидент
 
 Перед выдачей diagnostic script разработчик обязан проверить:
 
@@ -549,7 +552,7 @@ does sudo change effective HOME / credentials?
 
 Если read-only script способен изменить repository metadata, он не имеет права называться read-only.
 
-## 37. Дорогие проверки не отменяются, но инфраструктура должна кэшироваться
+## 33. Дорогие проверки не отменяются, но инфраструктура должна кэшироваться
 
 Финальный ZIP всё равно проходит strongest practical gate.
 
@@ -557,9 +560,9 @@ does sudo change effective HOME / credentials?
 
 Разрешено и рекомендуется использовать content-addressed uv cache, stable tool bootstrap cache, download cache и immutable lockfile-based environment reuse при сохранении воспроизводимости final overlay.
 
-## 42. Пост-deploy completion chain фиксирован
+## 34. Пост-deploy completion chain фиксирован
 
-Commit/push/remote verification происходят ДО production deploy по §12. После
+Commit/push/remote verification происходят ДО production deploy по §8. После
 deploy нельзя «догонять GitHub» тем же changeset.
 
 Стандартный post-deploy путь:
@@ -577,28 +580,28 @@ loaded release identity
 ```
 
 Если после deploy требуется изменить source, это новый changeset и он снова
-проходит §12 от isolated worktree до GitHub до следующего deploy.
+проходит §8 от isolated worktree до GitHub до следующего deploy.
 
 Нельзя после стабильного checkpoint начинать новый произвольный аудит без
 отдельной причины.
 
-## 43. Re-arm никогда не является побочным эффектом patch
+## 35. Re-arm никогда не является побочным эффектом patch
 
 Patch/install/commit/push не имеют права автоматически enable LIVE, re-arm gate, open position или enable symbols.
 
 После stabilization checkpoint `GATE=DISARMED` сохраняется до отдельного явного решения владельца.
 
-## 44. Тесты не подгонять под implementation
+## 36. Тесты не подгонять под implementation
 
 Если test падает, определить: production wrong или test contract stale.
 
 Нельзя менять expectation только ради green и нельзя возвращать старую архитектуру ради старого теста. Если canonical docs изменились, architecture/governance tests должны быть осознанно приведены к текущему contract.
 
-## 45. Запрещённая production-логика не прячется под `if False`
+## 37. Запрещённая production-логика не прячется под `if False`
 
 Если функция `NOT_PROVEN / DISABLED_BY_CONTRACT`, запрещённый исполняемый production path не должен просто лежать в коде «на будущее», если владелец отдельно это не утвердил.
 
-## 46. LF/CRLF не путать с code drift
+## 38. LF/CRLF не путать с code drift
 
 На сервере:
 
@@ -609,11 +612,11 @@ core.eol=lf
 
 Различать `byte-identical`, `newline-only` и `real content drift`. Нельзя молча нормализовать source.
 
-## 47. Source/live mapping не угадывать
+## 39. Source/live mapping не угадывать
 
 Live paths берутся только из installer/deployment contract. Verifier использует тот же mapping. Нельзя сравнивать случайно похожие файлы и объявлять `SOURCE_LIVE=EQUAL`.
 
-## 48. После stable checkpoint остановиться
+## 40. После stable checkpoint остановиться
 
 Если доказано deploy PASS, post-deploy verify PASS, services в ожидаемом state, source/live match, DB contract PASS, GitHub synchronized, worktree clean и gate в requested state — этап завершён.
 
@@ -621,7 +624,7 @@ Live paths берутся только из installer/deployment contract. Verif
 
 ---
 
-## 49. Статусы работы нельзя смешивать
+## 41. Статусы работы нельзя смешивать
 
 Для разработки, research, patch, миграции, длительного расчёта и установки использовать явные состояния:
 

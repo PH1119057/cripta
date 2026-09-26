@@ -32,14 +32,14 @@ def test_documentation_index_is_the_active_authority_router() -> None:
     index = _read("docs/DOCUMENTATION_INDEX_RU.md")
     interaction = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
     agents = _read("AGENTS.md")
-    work_rules = _read("CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    work_rules = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
 
     assert "**Статус:** канонический индекс документации" in index
     assert "# 3. Восемь файлов ChatGPT Project Source" in index
     for family in ACTIVE_PROJECT_SOURCE_FAMILIES:
         assert family in index
 
-    assert "`AGENTS*.md` — GitHub-only bootstrap" in index
+    assert "`AGENTS.md` — GitHub-only bootstrap" in index
     assert "GitHub `PH1119057/cripta:main`" in interaction
     assert "синхронизированное operational mirror" in interaction
     assert "HARD_STOP=YES" in interaction
@@ -60,7 +60,7 @@ def test_documentation_index_is_the_active_authority_router() -> None:
 
 
 def test_upper_architecture_and_supporting_contour_preserve_layer_ownership() -> None:
-    architecture = _read("CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
+    architecture = _read("docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md")
     trading = _read("docs/TRADING_CONTOUR_RU.md")
     observation = _read("docs/OBSERVATION_ANALYTICS_RU.md")
 
@@ -76,3 +76,45 @@ def test_upper_architecture_and_supporting_contour_preserve_layer_ownership() ->
     assert "- не читает PnL Strategy как рыночный признак;" in observation
     assert "- не создаёт StrategySignal;" in observation
     assert "- не закрывает позицию по собственной оценке;" in observation
+
+
+def test_root_markdown_contains_only_stable_bootstrap_entrypoints() -> None:
+    assert {path.name for path in ROOT.glob("*.md")} == {"README.md", "AGENTS.md"}
+
+
+def test_root_bootstrap_links_every_current_document() -> None:
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+    current_docs = (
+        "docs/CHATGPT_INTERACTION_RULES_RU.md",
+        "docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md",
+        "docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md",
+        "docs/DOCUMENTATION_INDEX_RU.md",
+        "docs/CRIPTA_GLOSSARY_RU.md",
+        "docs/CURRENT_PROJECT_MAP_RU.md",
+        "docs/TRADING_CONTOUR_RU.md",
+        "docs/OBSERVATION_ANALYTICS_RU.md",
+        "docs/DEVELOPMENT_RELEASE_RULES_RU.md",
+        "docs/RESEARCH_COMPUTE_RULES_RU.md",
+        "docs/SECURITY.md",
+    )
+    for relative_path in current_docs:
+        assert (ROOT / relative_path).is_file()
+        assert relative_path in readme
+        stem = relative_path.removesuffix(".md").removesuffix("_V1")
+        assert stem in agents
+
+
+def test_routed_process_section_numbering_is_continuous() -> None:
+    import re
+
+    for relative_path in (
+        "docs/DEVELOPMENT_RELEASE_RULES_RU.md",
+        "docs/RESEARCH_COMPUTE_RULES_RU.md",
+    ):
+        content = _read(relative_path)
+        numbers = [
+            int(match.group(1))
+            for match in re.finditer(r"^#{1,2} (\d+)\.\s", content, flags=re.MULTILINE)
+        ]
+        assert numbers == list(range(1, max(numbers) + 1))

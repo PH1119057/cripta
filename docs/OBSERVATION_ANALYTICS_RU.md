@@ -183,7 +183,7 @@ Lifecycle Supervisor — технический сквозной контрол�
 торговым слоем и не владеет trading policy.
 
 Единственная каноническая lifecycle-chain находится в
-CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
+docs/CRIPTA_ARCHITECTURE_RULES_RU_*.md §9.1. Этот документ её не дублирует.
 
 Supervisor обязан видеть exact lineage/IDs и выявлять нарушение обязательных
 handoff/invariants, включая:
