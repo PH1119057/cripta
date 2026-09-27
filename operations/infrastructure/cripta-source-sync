@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SOURCE="${CRIPTA_SOURCE_CHECKOUT:-/srv/cripta/source_checkout}"
+REMOTE="${CRIPTA_SOURCE_REMOTE:-origin}"
+BRANCH="${CRIPTA_SOURCE_BRANCH:-main}"
+LOCK_FILE="${CRIPTA_SOURCE_SYNC_LOCK:-/run/lock/cripta-source-sync.lock}"
+
+log() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf 'SOURCE_SYNC=BLOCKED reason=%s\n' "$1" >&2
+  exit 20
+}
+
+[[ -d "$SOURCE/.git" ]] || die "source_checkout_missing"
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "SOURCE_SYNC=SKIPPED reason=lock_busy"
+  exit 0
+fi
+
+current_branch="$(git -C "$SOURCE" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+[[ "$current_branch" == "$BRANCH" ]] || die "unexpected_branch"
+
+dirty="$(
+  env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" status --porcelain=v1 --untracked-files=all
+)"
+[[ -z "$dirty" ]] || die "dirty_worktree"
+
+before="$(env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" rev-parse HEAD)"
+[[ "$before" =~ ^[0-9a-f]{40}$ ]] || die "invalid_local_head"
+
+if ! remote_line="$(
+  env GIT_TERMINAL_PROMPT=0 git -C "$SOURCE" ls-remote "$REMOTE" "refs/heads/$BRANCH"
+)"; then
+  die "remote_lookup_failed"
+fi
+remote_sha="$(printf '%s\n' "$remote_line" | awk 'NR==1{print $1}')"
+[[ "$remote_sha" =~ ^[0-9a-f]{40}$ ]] || die "invalid_remote_head"
+
+if [[ "$before" == "$remote_sha" ]]; then
+  log "SOURCE_SYNC=UP_TO_DATE head=$before"
+  exit 0
+fi
+
+if ! env GIT_TERMINAL_PROMPT=0 git -C "$SOURCE" fetch --no-tags "$REMOTE" "$BRANCH"; then
+  die "fetch_failed"
+fi
+fetched="$(env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" rev-parse FETCH_HEAD)"
+[[ "$fetched" == "$remote_sha" ]] || die "fetch_remote_mismatch"
+
+if ! env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" merge-base --is-ancestor "$before" "$fetched"; then
+  die "non_fast_forward"
+fi
+
+if ! git -C "$SOURCE" merge --ff-only --no-edit "$fetched"; then
+  die "fast_forward_failed"
+fi
+
+after="$(env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" rev-parse HEAD)"
+[[ "$after" == "$remote_sha" ]] || die "post_sync_head_mismatch"
+
+dirty_after="$(
+  env GIT_OPTIONAL_LOCKS=0 git -C "$SOURCE" status --porcelain=v1 --untracked-files=all
+)"
+[[ -z "$dirty_after" ]] || die "post_sync_dirty_worktree"
+
+log "SOURCE_SYNC=UPDATED from=$before to=$after"

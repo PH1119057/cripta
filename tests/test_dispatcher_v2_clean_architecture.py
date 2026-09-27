@@ -21,7 +21,7 @@ def test_legacy_dispatcher_docs_are_historical_only() -> None:
     index = (ROOT / "docs/DOCUMENTATION_INDEX_RU.md").read_text(encoding="utf-8")
 
     assert "LEVEL H — Git history, archive, patch payload docs" in index
-    assert "В активном каталоге `docs/` находятся только текущие канонические документы." in index
+    assert "В активном каталоге `docs/` находится только текущая содержательная документация" in index
     for name in (
         "STRATEGY_DISPATCHER_IMPLEMENTATION_D0_D6_RU.md",
         "STRATEGY_DISPATCHER_MARKET_VOCABULARY_RU.md",

@@ -1,0 +1,25 @@
+[Unit]
+Description=Cripta GitHub main -> source checkout safe fast-forward sync
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsDirectory=/srv/cripta/source_checkout/.git
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+Environment=GIT_TERMINAL_PROMPT=0
+ExecStart=/usr/local/sbin/cripta-source-sync
+TimeoutStartSec=90
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/cripta/source_checkout
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

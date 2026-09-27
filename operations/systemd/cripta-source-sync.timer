@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodic Cripta source checkout synchronization
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+AccuracySec=15s
+RandomizedDelaySec=20s
+Persistent=true
+Unit=cripta-source-sync.service
+
+[Install]
+WantedBy=timers.target
