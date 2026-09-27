@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.0
-**Дата:** 2026-09-26
+**Версия:** 9.1
+**Дата:** 2026-09-27
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -16,6 +16,27 @@ GitHub PH1119057/cripta:main
 main, а не второй независимый authority.
 
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно от source.
+
+## 1.1 Автоматическая синхронизация server source mirror
+
+IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED 2026-09-27:
+
+- `cripta-source-sync.timer` enabled/active;
+- периодическая проверка GitHub `main` выполняется примерно каждые 5 минут;
+- sync работает от repository owner `cripta`;
+- разрешён только clean `main` -> exact remote `main` fast-forward;
+- dirty worktree, unexpected branch, divergent/non-fast-forward history,
+  fetch/remote mismatch блокируют изменение checkout;
+- sync не выполняет deploy, не перезапускает trading services и не меняет
+  PostgreSQL/Exchange/mainnet gate;
+- clean fast-forward, dirty-worktree block и divergent-history block покрыты
+  автоматическими тестами;
+- первый production run завершён `SOURCE_SYNC=UP_TO_DATE`, а bootstrap
+  installation не перезапустила ни одного уже работающего CRIPTA service.
+
+GitHub `main` остаётся единственным authority. Автоматический mirror sync не
+означает deploy: `SOURCE_HEAD`, `INSTALLED_COMMIT` и `LOADED_COMMIT`
+по-прежнему проверяются раздельно.
 
 # 2. Верхняя архитектура
 
