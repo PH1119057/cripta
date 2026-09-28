@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.2
+**Версия:** 9.3
 **Дата:** 2026-09-28
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -38,38 +38,98 @@ GitHub `main` остаётся единственным authority. Автома�
 означает deploy: `SOURCE_HEAD`, `INSTALLED_COMMIT` и `LOADED_COMMIT`
 по-прежнему проверяются раздельно.
 
-## 1.2 Current operational delta — 2026-09-28
+## 1.2 Current operational identity / delta — CHECKED HERE 2026-09-28
 
-CHECKED HERE после отдельного runtime forensic и dependency-fix:
+Exact identity snapshot immediately before this documentation revision:
 
-- implementation commit `6cf5ae08917e3eb99124053a59766f155773a2ef`
-  удалил `cripta-private-runtime.service` из `Wants=` активного
-  `cripta-dispatcher-v2.service`; `After=` сохранён только как ordering при
-  независимой activation private runtime;
-- до исправления private runtime был disabled, но Dispatcher запускал его через
-  `Wants=`; из-за `Restart=always` и schema mismatch накопилось 68973
+```text
+REMOTE_HEAD      = 109dd2fd7f33c584d5f2d0ed107d9aede8b1481d
+SOURCE_HEAD      = 109dd2fd7f33c584d5f2d0ed107d9aede8b1481d
+INSTALLED_COMMIT = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+LOADED_COMMIT    = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
+                  [application runtime release]
+```
+
+Active operational deltas outside the last full package release:
+
+```text
+OPERATIONAL_DELTA_COMMITS =
+  6cf5ae08917e3eb99124053a59766f155773a2ef
+  109dd2fd7f33c584d5f2d0ed107d9aede8b1481d
+```
+
+- `6cf5ae0...` removed `cripta-private-runtime.service` from Dispatcher
+  `Wants=`; live affected path:
+  `/etc/systemd/system/cripta-dispatcher-v2.service`;
+- `109dd2f...` added effective-actor permission preflight and hardened passive
+  MAYAK report units; live affected paths:
+  `/usr/local/sbin/cripta-permission-preflight`,
+  `/etc/systemd/system/cripta-mayak-v2-report.service`,
+  `/etc/systemd/system/cripta-mayak-v2-weekly-report.service`;
+- live SHA256 этих четырёх files совпадает с current source bytes;
+- Universal Entry observer/consumer и trade-lifecycle current symlinks всё ещё
+  указывают на release `5a3ea5aba545d5fb97cef108562eac41d35bc47c`.
+
+Следовательно full `INSTALLED_COMMIT` и application `LOADED_COMMIT` остаются
+`5a3ea5a...`; точечные unit/helper changes не маскируются под новый full
+release. До сведения operational deltas в один exact verified release
+`SOURCE_LIVE_IDENTITY` для real-arm не может быть PASS.
+
+Private-runtime finding:
+- до `6cf5ae0...` private runtime был disabled, но Dispatcher запускал его
+  через `Wants=`; из-за `Restart=always` и schema mismatch накопилось 68973
   restart attempts;
-- причина fail-closed:
+- fail-closed mismatch:
   `expected=runtime-schema-2026-09-20-slot-v1`,
   `actual=runtime-schema-2026-09-02-v1`;
-- после deploy unit-contract private runtime остановлен и остаётся
-  `inactive/disabled`; Dispatcher и MAYAK не перезапускались;
+- после fix private runtime остаётся `inactive/disabled`; schema contract
+  намеренно не мигрировался.
+
+Current safety evidence:
 - Dispatcher, Universal Entry observer, Lifecycle Supervisor,
   Universal Exit shadow и dashboard — active;
 - Universal Entry consumer и private runtime — inactive;
-- installed/current runtime release остаётся
-  `5a3ea5aba545d5fb97cef108562eac41d35bc47c`;
-- schema contract намеренно не мигрировался: private-state activation сейчас не
-  требуется и остаётся fail-closed до отдельного разрешённого readiness step;
-- mainnet gate=0, real execution permissions=0, open/reconciliation positions=0,
-  active slot claims=0, active capital reservations=0, queued/running commands=0,
-  pending Exchange orders=0;
-- `runtime.position_mode_states=0`, `control.live_arm_evidence=0`,
-  `control.live_arm_sessions=0`.
+- mainnet gate=0;
+- real execution permissions=0;
+- open/reconciliation positions=0;
+- active slot claims=0;
+- active capital reservations=0;
+- queued/running commands=0;
+- pending Exchange orders=0;
+- `runtime.position_mode_states=0`;
+- `control.live_arm_evidence=0`;
+- `control.live_arm_sessions=0`.
 
-Последующие documentation-only commits могут сдвинуть GitHub/SOURCE_HEAD без
-изменения installed/loaded runtime bytes; release identities по-прежнему
-сверяются отдельно.
+## 1.3 Filesystem permission hardening — CHECKED HERE 2026-09-28
+
+FINDING был подтверждён реальными runtime failures, а не только static audit:
+
+- research worker получил `PermissionError` на
+  `/data/cripta/research_runs` 2026-09-26;
+- MAYAK daily report получил `PermissionError` на
+  `/srv/cripta-share/reports` 2026-09-26 и 2026-09-27;
+- у report unit уже был `ReadWritePaths=/srv/cripta-share/reports`, но Unix
+  owner/group/mode всё равно запрещали write actor'у `cripta`.
+
+DEPLOYED / VERIFIED:
+- `/data/cripta/research_runs = cripta:cripta 2770`; existing SentinelX ACL
+  `user:sentinelx:rwx` сохранён;
+- `/srv/cripta-share/reports = cripta:cripta-share 2750`;
+- active research job services имели latent create-path defect:
+  `/data/cripta/jobs` и `/data/cripta/jobs/intake` были `root:root 755`,
+  хотя service user `cripta` по source contract может создавать в них state
+  directories; оба exact parents приведены к `cripta:cripta 750`;
+- read-only `cripta-permission-preflight` проверяет exact actor/path до
+  mutation;
+- create/delete smoke от Unix actor `cripta` PASS на research/report roots
+  и на обоих job-state parents;
+- daily и weekly MAYAK report service прошли real service-context preflight и
+  завершились `Result=success / ExecMainStatus=0`;
+- static audit всех current non-disabled CRIPTA services показал: каждый
+  существующий `ReadWritePaths` доступен service `User` на write+traverse;
+  disabled legacy units с отсутствующими state paths в этот PASS не включались.
+
+Эта правка не меняет trading policy и не выдаёт real-execution rights.
 
 # 2. Верхняя архитектура
 
@@ -293,8 +353,8 @@ disposable PostgreSQL/source exact текущего release. Это не озн�
 
 ## 12.2 Exact release identity — checkpoint 2026-09-21
 
-Последний полностью проверенный implementation/runtime checkpoint перед этой
-documentation-only ревизией:
+Полностью проверенный historical implementation/runtime checkpoint
+2026-09-21:
 
 ```text
 REMOTE_HEAD      = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
@@ -432,16 +492,16 @@ POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION
 `CRITICAL_FAULT_DELIVERY=PASS` для real arm пока ставить нельзя, хотя сам
 delivery contract реализован и controlled behavior verified.
 
-# 18. LIVE / MICRO_LIVE readiness
+# 18. LIVE / MICRO_LIVE readiness — CHECKED HERE 2026-09-28
 
 Канонический checklist находится в TRADING_CONTOUR §4.7.
 
-Текущий checkpoint:
+Current readiness checkpoint:
 
 ```text
 CANON_CURRENT                         = PASS
 REMOTE_COMMIT_VERIFIED                = PASS
-SOURCE_LIVE_IDENTITY                  = PASS
+SOURCE_LIVE_IDENTITY                  = NOT READY FOR ARM (operational deltas outside full release)
 TESTS                                 = PASS
 LIVE_EQUIVALENCE                      = NOT YET DECLARED PASS
 
@@ -467,15 +527,26 @@ MICRO_LIVE_LIMITS                     = NOT APPROVED
 ROLLBACK_OR_KILL_PATH                 = NOT CHECKED HERE
 ```
 
-Текущие enabled Strategy:
+Current repository gate for this revision:
 
 ```text
-entry_v1_monitor_long  1.0
-entry_v1_monitor_short 1.0
+full pytest = 1448 passed / 64 skipped / 0 failed
 ```
 
-Обе являются monitoring Strategy. У обеих текущий active ExitPlan имеет
-`rules=0`, поэтому они не являются real-arm executable Strategy.
+Current Strategy activation DB check:
+
+```text
+enabled strategy_activations = 0
+entry_v1_monitor_long  1.0 = disabled since 2026-09-21
+entry_v1_monitor_short 1.0 = disabled since 2026-09-21
+```
+
+Experimental StrategyCard records существуют для research, но наличие
+StrategyCard не является StrategyActivation и не даёт Entry/Execution rights.
+Entry observer сейчас `state=IDLE`,
+`reason=no enabled StrategyActivation`, `active_strategies=0`.
+Поэтому `EXACT_STRATEGY_ACTIVATION` и `ENTRY_PLAN_EXECUTABLE` остаются
+`NOT READY FOR ARM`.
 
 В `runtime.position_mode_states` сейчас 0 rows.
 В `control.live_arm_evidence` сейчас 0 rows.
@@ -544,9 +615,11 @@ PASS
 До real arm остаются именно operational/readiness задачи, а не недоказанная
 реализация slot/lifecycle foundation:
 
-1. реальный post-restart Entry evaluation после WARMUP остаётся
-   `NOT CHECKED HERE` для checkpoint 2026-09-28;
-2. иметь exact owner-approved Strategy с executable ExitPlan;
+1. current Entry observer находится `IDLE` с
+   `reason=no enabled StrategyActivation`; до real arm требуется exact
+   owner-approved StrategyActivation и post-activation runtime behavior evidence;
+2. activated Strategy должна иметь executable EntryPlan + ExitPlan + required
+   protection/lifecycle policy;
 3. private account state поднимать только отдельным разрешённым readiness step:
    сначала совместить runtime schema contract, затем получить fresh
    `position_mode_state` / `positionIdx=0`; dependency crash-loop уже устранён;

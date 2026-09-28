@@ -47,3 +47,7 @@ Installed runtime, PostgreSQL и Exchange truth проверяются отде�
 Если меняются состав current docs, их пути, mandatory pre-read или routed
 reading, этот README и `AGENTS.md` обязаны обновляться в том же changeset, что
 и `docs/DOCUMENTATION_INDEX_RU.md`.
+
+Постоянные правила ведения документации (нумерация/ссылки, dated MAP
+checkpoints, release/runtime identity, mirrored canonical lists и open
+architecture decisions) находятся в `docs/DOCUMENTATION_INDEX_RU.md §17`.

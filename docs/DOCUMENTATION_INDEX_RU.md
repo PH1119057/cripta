@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.1
+**Версия:** 3.2
 **Дата:** 2026-09-28
 **Статус:** канонический индекс документации
 
@@ -292,3 +292,93 @@ OWNER DECISION:
 Operational finding private-runtime / Dispatcher закрывается отдельным
 implementation commit и отражается в CURRENT_PROJECT_MAP; это не меняет
 Strategy/Entry/Exit policy и не разрешает real execution.
+
+# 17. Documentation maintenance invariant — 2026-09-28
+
+Это постоянное правило для всех следующих документационных ревизий.
+
+## 17.1 Topology / bootstrap
+
+- current substantive docs живут только в `docs/`;
+- root Markdown entrypoints — только `README.md` и `AGENTS.md`;
+- все 11 current docs доступны в Project Source;
+- base pre-read и routed reading определяются только этим INDEX;
+- изменение active document set, пути, base pre-read или routing в том же
+  changeset обновляет INDEX + README + AGENTS + Project Instructions/bootstrap,
+  если их фактический текст затронут.
+
+## 17.2 Нумерация и ссылки
+
+Перед renumber section обязателен search по current tree на все ссылки на
+старые номера. Renumber разрешён только если все найденные references либо
+обновляются атомарно, либо доказано, что они исторические/non-authoritative.
+
+После changeset:
+- top-level numbering каждого routed document непрерывна;
+- internal/cross-doc references разрешаются в существующие sections;
+- governance test фиксирует это там, где проверка детерминирована.
+
+## 17.3 Один owner для повторяемых списков
+
+Для token sets, lifecycle chain, LIVE-arm gate list и других duplicated mirrors
+обязательно указан canonical owner document. Остальные документы либо
+ссылаются на owner, либо зеркалят список только при наличии exact consistency
+test. Нельзя независимо редактировать две «канонические» копии.
+
+## 17.4 MAP time semantics
+
+Любой section/table, названный `current`, `текущий`, `runtime checkpoint`
+или `readiness`, обязан иметь явную дату `CHECKED HERE`.
+
+Старый runtime evidence не удаляется только ради свежести, но помечается
+`historical checkpoint <date>` и не смешивается с current state.
+
+Если current state проверен частично, указываются exact проверенные dimensions,
+а непроверенное остаётся `NOT CHECKED HERE`; старые значения не переносятся
+молча как текущие.
+
+## 17.5 Release/runtime identity
+
+Каждый current production checkpoint, где обсуждается deploy/runtime, различает:
+
+```text
+REMOTE_HEAD
+SOURCE_HEAD
+INSTALLED_COMMIT
+LOADED_COMMIT
+OPERATIONAL_DELTA_COMMIT(S) [если есть]
+```
+
+Для operational delta обязательно указываются affected paths и evidence.
+Наличие delta запрещает `SOURCE_LIVE_IDENTITY=PASS` для real-arm, пока
+production state не сведён к одному exact verified release composition.
+
+## 17.6 Open architecture decisions не закрываются редакционной правкой
+
+Известная открытая ownership/architecture boundary (например physical owner
+Geometry timeline) остаётся открытой, пока владелец отдельно не принял решение.
+Documentation cleanup не имеет права молча превращать её в CANON.
+
+## 17.7 Обязательный documentation gate
+
+Перед публикацией документационной ревизии проверяются минимум:
+
+```text
+CURRENT_GITHUB_MAIN_VERIFIED
+ROOT_BOOTSTRAP_LINKS
+PROJECT_SOURCE_SET
+BASE_PRE_READ
+ROUTING
+SECTION_NUMBERING
+CROSS_REFERENCES
+CANONICAL_TOKEN/LIST CONSISTENCY
+MAP_CURRENT_VS_HISTORICAL_LABELS
+RELEASE/RUNTIME IDENTITY WORDING
+OPEN_DECISIONS_NOT_SILENTLY_CLOSED
+GOVERNANCE_TESTS
+FULL_PYTEST when repository tests are affected/available
+```
+
+Documentation-only commit не считается безопасным только потому, что он не
+меняет Python/code: неверный routing, stale MAP или ошибочная identity
+формулировка являются реальными project defects.

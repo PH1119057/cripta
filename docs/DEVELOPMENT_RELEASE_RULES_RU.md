@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.3 · 2026-09-28
+**Версия:** 1.4 · 2026-09-28
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -346,6 +346,104 @@ sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...
 
 Read-only forensic должен отдельно проверять, что bytes и metadata не изменены, а DB-доступ действительно только SELECT.
 
+## 19.1 Filesystem permission preflight выполняется ДО server-side mutation
+
+Перед любым script/install/research/service action, который будет создавать,
+писать, переименовывать или удалять filesystem object, обязательна exact
+permission matrix:
+
+```text
+STEP
+EFFECTIVE_ACTOR
+PATH
+OPERATION = READ | WRITE | CREATE_CHILD | EXECUTE | RENAME | DELETE
+PARENT_PATH
+OWNER / GROUP / MODE / ACL
+SYSTEMD_SANDBOX [если применимо]
+PREFLIGHT_RESULT
+EXPECTED_POST_OWNER / GROUP / MODE
+```
+
+Проверка выполняется именно от фактического Unix actor либо через доказанный
+`runuser -u <actor>` / equivalent. Проверка от root, SentinelX service
+principal или другого пользователя не доказывает права `cripta`, `postgres`
+или service user.
+
+Стандартный read-only helper:
+
+```bash
+operations/infrastructure/cripta-permission-preflight \
+  --actor <user> \
+  --check create-child:<exact_parent>
+```
+
+Installed equivalent: `/usr/local/sbin/cripta-permission-preflight`.
+Helper не исправляет права и не создаёт payload; он только fail-closed
+проверяет exact actor/path.
+
+Script не получает статус `PREPARED` до PASS этой матрицы.
+
+## 19.2 Проверяется право на операцию, а не только mode целевого файла
+
+Минимальная filesystem semantics:
+
+- READ требует traversal по всем parent components + read на target;
+- CREATE/MKDIR требует write + execute на фактическом parent directory;
+- WRITE existing target требует write на target и traversal parents;
+- RENAME/DELETE требует write + execute на соответствующих parent directories;
+- EXECUTE требует execute/traverse и доступ к interpreter/dependencies;
+- ACL и supplementary groups являются частью effective permission state;
+- `sudo`/shell redirection и child process могут иметь разных effective
+  writers — writer определяется по фактической операции, а не по строке команды.
+
+Root-created temp/backup/work directory нельзя передавать `cripta` или
+`postgres`, пока owner/group/mode/ACL не выставлены до первого write этого
+actor. Предпочтительно создавать рабочий каталог сразу final actor'ом.
+
+## 19.3 Systemd permission состоит из двух независимых gates
+
+`ReadWritePaths=` / `ReadOnlyPaths=` / `ProtectSystem=` определяют sandbox,
+но не выдают Unix DAC/ACL права.
+
+Для systemd service, который пишет на диск, до deploy обязательны одновременно:
+
+```text
+SERVICE User/Group/SupplementaryGroups = VERIFIED
+SYSTEMD SANDBOX WRITE PATH             = PASS
+UNIX OWNER/GROUP/MODE/ACL              = PASS
+EXACT CREATE/WRITE PARENT              = PASS AS SERVICE USER
+```
+
+Если service создаёт output directory, рекомендуется fail-fast `ExecStartPre`
+через canonical permission-preflight exact writer/path. Наличие
+`ReadWritePaths=/path` при `test -w /path = false` не является PASS.
+
+## 19.4 Permission failure — preparation defect, а не повод расширить права
+
+При `PermissionError`, `EACCES`, `EPERM`, `permission denied` или
+read-only filesystem error:
+
+```text
+STOP
+-> identify exact effective actor
+-> inspect full parent traversal + ACL + supplementary groups
+-> inspect systemd sandbox where applicable
+-> audit all write targets of the same script/service
+-> apply one least-privilege exact-path repair
+-> rerun preflight as actual actor
+-> only then rerun workload
+```
+
+Запрещено как автоматический repair:
+- `chmod 777`;
+- recursive `chown/chmod` без exact scope;
+- запуск всего workflow от root только потому, что service user получил DENIED;
+- выдача лишней group/DB/sudo privilege вместо исправления exact path contract.
+
+После permission repair обязательны metadata/ACL postcheck и реальный
+create/write smoke тем actor'ом, которому предназначена запись, если такой
+smoke безопасен для данного пути.
+
 ## 20. Git sync — только exact changeset
 
 Запрещено `git add -A` и `git add .`.
@@ -438,6 +536,35 @@ LOADED_COMMIT
 ```
 
 Нельзя писать просто «версия установлена», если не доказано, что реально загруженные сервисы соответствуют опубликованному source checkpoint.
+
+## 26.1 Operational delta не маскируется под full release
+
+Если отдельный verified file/unit/config был применён из Git commit без полного
+package/release deploy, `INSTALLED_COMMIT` не переписывается фиктивно на этот
+commit.
+
+Обязательно дополнительно фиксировать:
+
+```text
+OPERATIONAL_DELTA_COMMIT(S)
+AFFECTED_LIVE_PATHS
+SOURCE_HASH / LIVE_HASH или exact loaded unit content
+DEPLOYED_EVIDENCE
+LOADED_EVIDENCE [где применимо]
+```
+
+`LOADED_COMMIT` продолжает обозначать exact application/runtime build, если
+его bytes не менялись. Operational unit/config delta указывается отдельно.
+
+Состояние с operational delta допустимо как временный технический checkpoint,
+но для real-arm `SOURCE_LIVE_IDENTITY=PASS` запрещён, пока все
+decision/execution-affecting production artifacts не сведены обратно к одному
+exact verified release composition и не пройдены соответствующие tests/runtime
+checks.
+
+MAP/current runtime report обязан показывать четыре базовые identity и все
+активные operational deltas; фраза «installed/current release» без этого
+недостаточна.
 
 ## 27. Installer rail
 
@@ -665,6 +792,8 @@ CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`. Runtime verification при
 | 18 | Too many package versions | preparation defects превратились в длинную V1.x цепочку | logical version отделять от RC/build revision |
 | 19 | Too many sequential repairs | состояние Git исправлялось серией repair-итераций | один forensic -> один доказанный repair |
 | 20 | Excessive wall-clock | малый production patch занял почти рабочий день | после двух prep failures — Preparation Freeze и full class audit |
+| 21 | Systemd sandbox != Unix permission | `ReadWritePaths` был открыт, но MAYAK report два дня падал на root-owned output parent | проверять sandbox + exact Unix actor/path permission до start |
+| 22 | Wrong write-root owner | research script получил `PermissionError` на root-owned `research_runs` | output/work root создаётся final writer'ом или получает exact owner/group/mode/ACL до workload |
 
 ---
 
@@ -695,6 +824,9 @@ DB_SCHEMA_MATRIX=PASS
 DB_PRIVILEGE_MATRIX=PASS
 GIT_TRANSPORT_MATRIX=PASS
 BACKUP_PERMISSION_MATRIX=PASS
+EFFECTIVE_ACTOR_PERMISSION_MATRIX=PASS
+SYSTEMD_WRITE_PERMISSION_MATRIX=PASS
+SERVER_SCRIPT_PERMISSION_PREFLIGHT=PASS
 
 OVERLAY_TRANSFORM=PASS
 HELPER_SELFTESTS=PASS
@@ -728,6 +860,7 @@ MANIFEST_RELEASE_COMMIT_MATCH=PASS      [если package rail использу�
 PAYLOAD_MATCHES_RELEASE_COMMIT=PASS     [если package rail используется]
 
 BACKUP=PASS
+EFFECTIVE_ACTOR_PERMISSION_PREFLIGHT=PASS
 DEPLOY_EXACT_VERIFIED_COMMIT=PASS
 
 INSTALLED_COMMIT=<release_commit>
@@ -737,6 +870,7 @@ SERVICES=<explicit expected state>
 DB_CONTRACT=PASS
 RUNTIME_SMOKE=PASS
 LOADED_COMMIT=<exact runtime build/source commit>
+OPERATIONAL_DELTA_COMMITS=<NONE|explicit verified set>
 GATE=<explicit expected state>
 
 WORKTREE=CLEAN

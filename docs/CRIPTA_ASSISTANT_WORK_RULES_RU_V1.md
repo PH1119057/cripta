@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.7 · 2026-09-28
+**Версия:** 2.8 · 2026-09-28
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -235,6 +235,23 @@ Never invent sandbox/download paths from a file name or connector reference.
 не создают отдельный authority. Изменение active document set, путей,
 mandatory pre-read или routed reading требует в том же documentation changeset
 обновить `docs/DOCUMENTATION_INDEX_RU.md`, корневые `README.md` и `AGENTS.md`.
+
+## 10.1 Effective-actor permission preflight обязателен
+
+Перед написанием или запуском server-side script, который создаёт/изменяет/
+переименовывает/удаляет filesystem object либо переключает actor через
+`sudo`, `runuser`, systemd или PostgreSQL tooling, исполнитель обязан сначала
+прочитать permission contract в `docs/DEVELOPMENT_RELEASE_RULES_RU*.md §19.1–19.4`
+и доказать права exact effective actor на exact paths.
+
+Script не считается `PREPARED` и не запускается, пока permission preflight не
+PASS. `ReadWritePaths=` systemd, root-shell, наличие sudo или успешный доступ
+другого Unix-user не являются доказательством прав фактического writer.
+
+Для стандартной read-only проверки используется
+`operations/infrastructure/cripta-permission-preflight` либо доказанно
+эквивалентная проверка. Permission failure после запуска — preparation defect и
+требует class-wide audit, а не `chmod 777`, recursive chown или перехода на root.
 
 ## 11. Security
 

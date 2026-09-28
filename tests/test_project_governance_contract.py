@@ -163,3 +163,77 @@ def test_position_mode_mismatch_entity_and_map_fault_set_are_explicit() -> None:
         "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
     ):
         assert fault in current_map
+
+
+def test_documentation_maintenance_contract_is_explicit_and_bootstrapped() -> None:
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    interaction = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
+    readme = _read("README.md")
+
+    assert "# 17. Documentation maintenance invariant" in index
+    for token in (
+        "Topology / bootstrap",
+        "Нумерация и ссылки",
+        "Один owner для повторяемых списков",
+        "MAP time semantics",
+        "Release/runtime identity",
+        "Open architecture decisions",
+        "Обязательный documentation gate",
+    ):
+        assert token in index
+    assert "INDEX §17 documentation gate" in interaction
+    assert "DOCUMENTATION_INDEX_RU.md §17" in readme
+
+
+def test_server_side_scripts_require_effective_actor_permission_preflight() -> None:
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    development = _read("docs/DEVELOPMENT_RELEASE_RULES_RU.md")
+    security = _read("docs/SECURITY.md")
+    agents = _read("AGENTS.md")
+
+    assert "Effective-actor permission preflight обязателен" in work
+    for heading in (
+        "## 19.1 Filesystem permission preflight выполняется ДО server-side mutation",
+        "## 19.2 Проверяется право на операцию",
+        "## 19.3 Systemd permission состоит из двух независимых gates",
+        "## 19.4 Permission failure — preparation defect",
+    ):
+        assert heading in development
+    assert "ReadWritePaths=" in development
+    assert "operations/infrastructure/cripta-permission-preflight" in development
+    assert "`chmod 777`" in security
+    assert "Server-side write scripts" in agents
+
+
+def test_operational_delta_identity_cannot_claim_live_identity_pass() -> None:
+    glossary = _read("docs/CRIPTA_GLOSSARY_RU.md")
+    development = _read("docs/DEVELOPMENT_RELEASE_RULES_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+
+    assert "**OPERATIONAL_DELTA_COMMIT**" in glossary
+    assert "## 26.1 Operational delta не маскируется под full release" in development
+    for token in (
+        "REMOTE_HEAD",
+        "SOURCE_HEAD",
+        "INSTALLED_COMMIT",
+        "LOADED_COMMIT",
+        "OPERATIONAL_DELTA_COMMIT",
+    ):
+        assert token in development
+        assert token in current_map
+    assert (
+        "SOURCE_LIVE_IDENTITY                  = NOT READY FOR ARM "
+        "(operational deltas outside full release)"
+    ) in current_map
+    assert "# 18. LIVE / MICRO_LIVE readiness — CHECKED HERE 2026-09-28" in current_map
+
+
+def test_documentation_index_section_numbering_is_continuous() -> None:
+    import re
+
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    numbers = [
+        int(match.group(1))
+        for match in re.finditer(r"^# (\d+)\.\s", index, flags=re.MULTILINE)
+    ]
+    assert numbers == list(range(1, max(numbers) + 1))

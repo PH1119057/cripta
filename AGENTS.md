@@ -54,6 +54,14 @@ OWNER_DECISION_REQUIRED=YES
 Если термин отсутствует в `docs/CRIPTA_GLOSSARY_RU*.md` или физически
 неоднозначен — не додумывать, запросить owner decision.
 
+## Server-side write scripts
+
+Перед написанием/запуском script, который пишет на сервере или переключает
+effective actor, обязательно выполнить permission contract из
+`docs/DEVELOPMENT_RELEASE_RULES_RU*.md §19.1–19.4`: exact actor/path matrix +
+read-only preflight до mutation. Не лечить DENIED через `chmod 777`, recursive
+chown или запуск всего workflow от root.
+
 ## Bootstrap synchronization invariant
 
 Точный current document set и routing определяет

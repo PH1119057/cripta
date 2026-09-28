@@ -1,6 +1,6 @@
 # CRIPTA — security baseline
 
-**Версия:** 1.1
+**Версия:** 1.2
 **Дата:** 2026-09-28
 **Статус:** обязательный technical security baseline
 
@@ -25,6 +25,15 @@
   delivery с retry и acknowledgement/escalation; UI-only не считается доставкой.
 - Withdrawal/transfer privileges не выдаются trading runtime без отдельного
   owner-approved architecture decision.
+- Filesystem privilege выдаётся exact effective actor только на exact required
+  path/operation. Root, sudo и service sandbox не используются как замена
+  корректному owner/group/mode/ACL contract.
+- `ReadWritePaths=` systemd открывает sandbox path, но не выдаёт Unix write
+  permission. Оба gates проверяются независимо до запуска workload.
+- `chmod 777`, бесконтрольный recursive `chown/chmod` и запуск всего workflow
+  от root запрещены как автоматический способ лечить permission failure.
+- Рабочие/temp/backup/output каталоги создаются final writer'ом либо получают
+  exact least-privilege owner/group/mode/ACL до первого write другого actor.
 
 ## Public repository security gate
 

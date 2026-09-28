@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.7
+**Версия:** 1.8
 **Дата:** 2026-09-28
 **Статус:** обязательный канонический терминологический контракт
 
@@ -454,6 +454,12 @@ BEHAVIOR.
 
 runtime_build_ref — audit identity реально загруженного runtime artifact/source
 commit/build.
+
+**OPERATIONAL_DELTA_COMMIT** — verified Git commit, из которого точечно
+применён отдельный production file/unit/config без полного package/release
+deploy. Он не заменяет `INSTALLED_COMMIT` и не превращает mixed operational
+state в единый release identity. Для нескольких одновременных delta указывается
+полный набор `OPERATIONAL_DELTA_COMMITS` + exact affected paths.
 
 **Implementation pass Pn** — временная нумерация проходов разработки/
 стабилизации; не слой архитектуры и не торговый термин.

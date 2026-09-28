@@ -1,6 +1,6 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.5
+**Версия:** 1.6
 **Дата:** 2026-09-28
 **Статус:** обязательный канонический META-контракт взаимодействия
 
@@ -211,6 +211,11 @@ holdout/large-data/long-compute.
 осознанно. При изменении такого инварианта Project Instructions и канон должны
 обновляться в одной документационной ревизии.
 
+Любая documentation revision дополнительно соблюдает постоянный maintenance
+contract из `docs/DOCUMENTATION_INDEX_RU*.md §17`: topology/bootstrap,
+renumber/reference audit, dated MAP checkpoints, release/runtime identity и
+запрет молча закрывать open architecture decisions.
+
 # 13. Исторические файлы и поиск
 
 Активным каноном являются только документы из `DOCUMENTATION_INDEX_RU*.md`.
@@ -236,4 +241,5 @@ holdout/large-data/long-compute.
 4. не используется ли history/research как скрытый канон;
 5. не выдаётся ли непроверенное за проверенное;
 6. нужен ли специализированный pre-read;
-7. не требуется ли сначала обновить канон.
+7. не требуется ли сначала обновить канон;
+8. если меняется документация — выполнен ли INDEX §17 documentation gate.
