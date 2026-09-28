@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ACTOR=""
+declare -a CHECKS=()
+
+usage() {
+  cat <<'EOF'
+Usage:
+  cripta-permission-preflight --actor USER --check KIND:PATH [--check KIND:PATH ...]
+
+Kinds:
+  read:PATH          existing path must be readable by USER
+  write:PATH         existing path must be writable by USER
+  execute:PATH       existing path must be executable/traversable by USER
+  create-child:DIR   USER must be able to create a child inside existing DIR
+
+The command is read-only: it never creates, chmods, chowns, or deletes paths.
+EOF
+}
+
+fail() {
+  printf 'PERMISSION_PREFLIGHT=FAIL actor=%s reason=%s\n' "${ACTOR:-UNKNOWN}" "$1" >&2
+  exit 20
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --actor)
+      [[ $# -ge 2 ]] || fail "missing_actor_value"
+      ACTOR="$2"
+      shift 2
+      ;;
+    --check)
+      [[ $# -ge 2 ]] || fail "missing_check_value"
+      CHECKS+=("$2")
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown_argument:$1"
+      ;;
+  esac
+done
+
+[[ -n "$ACTOR" ]] || fail "actor_required"
+[[ ${#CHECKS[@]} -gt 0 ]] || fail "at_least_one_check_required"
+id "$ACTOR" >/dev/null 2>&1 || fail "unknown_actor:$ACTOR"
+
+CURRENT_USER="$(id -un)"
+CURRENT_UID="$(id -u)"
+
+as_actor() {
+  if [[ "$CURRENT_USER" == "$ACTOR" ]]; then
+    "$@"
+  elif [[ "$CURRENT_UID" -eq 0 ]]; then
+    runuser -u "$ACTOR" -- "$@"
+  else
+    fail "cannot_switch_actor:current=$CURRENT_USER requested=$ACTOR"
+  fi
+}
+
+for spec in "${CHECKS[@]}"; do
+  kind="${spec%%:*}"
+  path="${spec#*:}"
+  [[ "$path" != "$spec" && -n "$path" ]] || fail "invalid_check:$spec"
+
+  case "$kind" in
+    read)
+      [[ -e "$path" ]] || fail "missing_path:$path"
+      as_actor test -r "$path" || fail "read_denied:$path"
+      ;;
+    write)
+      [[ -e "$path" ]] || fail "missing_path:$path"
+      as_actor test -w "$path" || fail "write_denied:$path"
+      ;;
+    execute)
+      [[ -e "$path" ]] || fail "missing_path:$path"
+      as_actor test -x "$path" || fail "execute_denied:$path"
+      ;;
+    create-child)
+      [[ -d "$path" ]] || fail "missing_directory:$path"
+      as_actor test -x "$path" || fail "traverse_denied:$path"
+      as_actor test -w "$path" || fail "create_denied:$path"
+      ;;
+    *)
+      fail "unknown_check_kind:$kind"
+      ;;
+  esac
+done
+
+printf 'PERMISSION_PREFLIGHT=PASS actor=%s checks=%s\n' "$ACTOR" "${#CHECKS[@]}"
