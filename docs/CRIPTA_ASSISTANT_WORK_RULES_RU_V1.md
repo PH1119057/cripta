@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.6 · 2026-09-26
+**Версия:** 2.7 · 2026-09-28
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -51,6 +51,7 @@ New chat:
 4. docs/DOCUMENTATION_INDEX_RU*.md
 5. docs/CRIPTA_GLOSSARY_RU*.md
 6. docs/CURRENT_PROJECT_MAP_RU*.md
+7. docs/SECURITY.md
 
 Then routed pre-read:
 - Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md

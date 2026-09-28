@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.6
-**Дата:** 2026-09-25
+**Версия:** 1.7
+**Дата:** 2026-09-28
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -121,6 +121,11 @@ real Entry.
 | REQUEST_TERMINAL | EntryExecutionRequest state | request завершён terminal outcome |
 | EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN | lifecycle fault | фактическая state нарушила правило одного physical owner |
 | EXCHANGE_POSITION_MODE_MISMATCH | operational/lifecycle fault | mode/positionIdx несовместим с approved contract |
+
+`EXCHANGE_POSITION_MODE_MISMATCH` остаётся operational/lifecycle fault.
+Он может быть указан как causal `block_reason` у
+`EntryDecision=OPERATIONAL_SAFETY_BLOCKED`. Использование token в поле
+`block_reason` не меняет его entity и не превращает его в EntryDecision token.
 
 ACCEPTED возникает только после successful required-state validation,
 physical slot claim и capital reservation.
@@ -452,6 +457,18 @@ commit/build.
 
 **Implementation pass Pn** — временная нумерация проходов разработки/
 стабилизации; не слой архитектуры и не торговый термин.
+
+Process-state vocabulary для development/research/compute/install:
+
+- **PREPARED** — код/задача/запуск подготовлены, но фактическое выполнение ещё не доказано;
+- **RUNNING** — реальный worker/process подтверждён текущим runtime evidence;
+- **COMPLETE** — конкретная операция/расчёт завершены успешно и результат проверен;
+- **FAILED** — процесс упал/убит либо результат неполон/некорректен;
+- **BLOCKED** — выполнение запрещено gate/каноном либо отсутствуют обязательные данные/transport/условия.
+
+Эти process-state terms не заменяют META evidence/status vocabulary
+`CHECKED HERE / NOT CHECKED HERE / FINDING / RESEARCH RESULT / OWNER DECISION /
+CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`.
 
 # 16. Запрещённые/исторические обозначения
 

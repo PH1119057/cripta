@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.2 · 2026-09-26
+**Версия:** 1.3 · 2026-09-28
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -9,7 +9,7 @@ release, deploy, service restart, rollback и production forensic.
 Общие source-of-truth / Hard Stop правила задаёт
 `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
 
-# 1. Scope
+## 1. Scope
 
 Этот документ владеет подробной process-механикой разработки и релиза.
 Trading policy здесь не определяется.
@@ -374,8 +374,7 @@ Push выполняется из отдельно разрешённого publi
 
 Deploy-host НЕ обязан иметь GitHub write credential. GitHub `main` является publication authority; после публикации server operational mirror и локальное зеркало владельца синхронизируются существующими approved механизмами GitHub/server/local sync. Исполнитель не должен пытаться вручную мутировать read-only server checkout только ради доставки уже опубликованного changeset; он проверяет, что mirror дошёл до exact GitHub commit, а при задержке диагностирует штатный sync mechanism.
 
-Deploy-host НЕ обязан иметь GitHub write credential. Нормальная роль
-production/deploy host:
+Нормальная роль production/deploy host:
 
 ```text
 READ / FETCH / VERIFY RELEASE IDENTITY
@@ -626,23 +625,14 @@ Live paths берутся только из installer/deployment contract. Verif
 
 ## 41. Статусы работы нельзя смешивать
 
-Для разработки, research, patch, миграции, длительного расчёта и установки использовать явные состояния:
+Канонические определения process-state terms
+`PREPARED / RUNNING / COMPLETE / FAILED / BLOCKED` находятся только в
+`docs/CRIPTA_GLOSSARY_RU*.md §15`.
 
-```text
-PREPARED
-RUNNING
-COMPLETE
-FAILED
-BLOCKED
-```
+Для разработки, research, patch, миграции, длительного расчёта и установки
+использовать именно эти состояния без локального переопределения.
 
-`PREPARED` = код/задача подготовлены, выполнение не доказано. `RUNNING` =
-реальный worker подтверждён runtime evidence. `COMPLETE` = конкретная
-операция/расчёт успешно закончены и результат проверен. `FAILED` = процесс
-упал/убит/результат неполон или некорректен. `BLOCKED` = действие запрещено
-gate/архитектурой/отсутствием обязательных данных.
-
-Это process-state словарь и он не заменяет evidence/status vocabulary META:
+Они не заменяют evidence/status vocabulary META:
 `CHECKED HERE / NOT CHECKED HERE / FINDING / RESEARCH RESULT / OWNER DECISION /
 CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`. Runtime verification при
 этом всегда раскладывается на LIVENESS и BEHAVIOR по GLOSSARY. Например

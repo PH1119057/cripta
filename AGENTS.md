@@ -13,6 +13,10 @@
 4. `docs/DOCUMENTATION_INDEX_RU*.md`
 5. `docs/CRIPTA_GLOSSARY_RU*.md`
 6. `docs/CURRENT_PROJECT_MAP_RU*.md`
+7. `docs/SECURITY.md`
+
+Все 11 current docs должны быть доступны в Project Source. Наличие файла там
+не отменяет routed reading и не делает routed doc mandatory every-chat.
 
 При работе с конкретным слоем дополнительно читать его active routed document
 из `docs/DOCUMENTATION_INDEX_RU*.md`.
@@ -24,7 +28,6 @@
 - patch / Git / PostgreSQL / package / release / deploy / rollback -> `docs/DEVELOPMENT_RELEASE_RULES_RU*.md`
 - research / replay / OOS / holdout / large-data / long-compute -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`
 
-Technical security baseline для всей работы: `docs/SECURITY.md`.
 
 ## Source of truth
 

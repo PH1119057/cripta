@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.2 · 2026-09-26
+**Версия:** 1.3 · 2026-09-28
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -9,7 +9,7 @@
 Общие source-of-truth / Hard Stop правила задаёт
 `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
 
-# 1. Scope
+## 1. Scope
 
 Этот документ владеет detailed research/compute discipline и не задаёт
 Strategy policy.
@@ -142,6 +142,10 @@ ACCESS_ALLOWED=YES
 Если прямого transport между двумя средами нет, статус = `BLOCKED`; нельзя имитировать передачу путём обращения к пути другой среды.
 
 ## 16. Обязательный launch/complete checklist
+
+Канонические определения `PREPARED / RUNNING / COMPLETE / FAILED / BLOCKED`
+находятся в `docs/CRIPTA_GLOSSARY_RU*.md §15`. Этот раздел задаёт только
+research/compute evidence gates для переходов между этими состояниями.
 
 До `RUNNING` тяжёлого compute/research:
 

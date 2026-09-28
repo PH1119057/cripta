@@ -1,6 +1,11 @@
 # CRIPTA — security baseline
 
-Этот файл содержит technical security invariants и не задаёт trading policy.
+**Версия:** 1.1
+**Дата:** 2026-09-28
+**Статус:** обязательный technical security baseline
+
+Этот файл входит в base pre-read для любой содержательной работы.
+Он содержит technical security invariants и не задаёт trading policy.
 
 - Не добавлять API keys, secrets, private keys, cookies, authorization headers
   и иные credentials в repository, issue, screenshot, logs, docs или research output.

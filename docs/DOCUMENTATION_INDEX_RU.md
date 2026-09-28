@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.0
-**Дата:** 2026-09-26
+**Версия:** 3.1
+**Дата:** 2026-09-28
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -41,8 +41,9 @@ LEVEL H — Git history, archive, patch payload docs,
           old research/evidence/runbook/handoff/Pxx/EO/SE/PASS.
 ```
 
-Routed process canon is active authority only for its task route and is not part
-of the mandatory every-chat Project Source bundle.
+Все 11 current docs входят в ChatGPT Project Source. Это не означает, что все
+11 читаются перед каждым ответом: SECURITY входит в base pre-read, а routed
+documents читаются только по соответствующему task route.
 
 If owner decision conflicts with canon:
 
@@ -53,7 +54,9 @@ CANON_UPDATE_REQUIRED=YES
 OWNER_DECISION_REQUIRED=YES
 ```
 
-# 3. Восемь файлов ChatGPT Project Source
+# 3. 11 файлов ChatGPT Project Source
+
+Все current документы из `docs/` должны быть доступны в Project Source:
 
 1. `docs/CHATGPT_INTERACTION_RULES_RU*.md`
 2. `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`
@@ -61,9 +64,13 @@ OWNER_DECISION_REQUIRED=YES
 4. `docs/DOCUMENTATION_INDEX_RU*.md`
 5. `docs/CRIPTA_GLOSSARY_RU*.md`
 6. `docs/CURRENT_PROJECT_MAP_RU*.md`
-7. `docs/TRADING_CONTOUR_RU*.md`
-8. `docs/OBSERVATION_ANALYTICS_RU*.md`
+7. `docs/SECURITY.md`
+8. `docs/TRADING_CONTOUR_RU*.md`
+9. `docs/OBSERVATION_ANALYTICS_RU*.md`
+10. `docs/DEVELOPMENT_RELEASE_RULES_RU*.md`
+11. `docs/RESEARCH_COMPUTE_RULES_RU*.md`
 
+Project Source availability и mandatory reading — разные понятия.
 Используется семейство имени, а не номер версии/UI suffix.
 `CHATGPT_INTERACTION_RULES_RU*.md` читается первым.
 
@@ -89,6 +96,7 @@ Base new-chat pre-read:
 4. docs/DOCUMENTATION_INDEX_RU*.md
 5. docs/CRIPTA_GLOSSARY_RU*.md
 6. docs/CURRENT_PROJECT_MAP_RU*.md
+7. docs/SECURITY.md
 
 Then route:
 - Strategy / Entry / Exit / Execution -> docs/TRADING_CONTOUR_RU*.md
@@ -143,14 +151,14 @@ Hard Stop, не использовать память/history как канон 
 1. обновляется GitHub `main`;
 2. существующим механизмом синхронизируется `/srv/cripta/source_checkout`;
    локальное зеркало владельца также получает GitHub `main` своим штатным sync-механизмом;
-3. формируется набор восьми текущих Project Source файлов из `docs/`;
+3. формируется набор всех 11 current Project Source файлов из `docs/`;
 4. root `README.md` и `AGENTS.md` сверяются с current paths/pre-read/routing;
 5. владелец полностью заменяет старые Project Source;
 6. дополнительные материалы не получают authority автоматически.
 
-Routed process docs остаются GitHub-active canon и не входят в восьмифайловый
-Project Source bundle; они читаются из verified GitHub/source mirror только по
-соответствующему route.
+Все current routed docs находятся в Project Source, но читаются только по
+соответствующему route. Наличие в Project Source не расширяет их authority и
+не делает их частью mandatory every-chat pre-read.
 
 # 10. Согласованная ревизия Strategy settings — 2026-09-19
 
@@ -267,3 +275,20 @@ OWNER DECISION:
 Эта ревизия не меняет trading behavior, Strategy ownership или runtime rights.
 Неоднозначности Strategy Candidate/monitoring Strategy и физического owner
 Geometry timeline этой ревизией не фиксируются и остаются без изменения.
+
+# 16. Documentation consistency / operational sync — 2026-09-28
+
+OWNER DECISION:
+- Project Source содержит все 11 current docs из `docs/`;
+- base pre-read содержит семь документов, включая обязательный `docs/SECURITY.md`;
+- TRADING_CONTOUR, OBSERVATION_ANALYTICS, DEVELOPMENT_RELEASE и
+  RESEARCH_COMPUTE остаются routed reading;
+- process-state terms PREPARED/RUNNING/COMPLETE/FAILED/BLOCKED принадлежат
+  GLOSSARY, а routed docs используют их без собственного переопределения;
+- fault token может использоваться как causal `block_reason` без изменения
+  своей token->entity классификации;
+- физический owner Geometry timeline этой ревизией не фиксируется.
+
+Operational finding private-runtime / Dispatcher закрывается отдельным
+implementation commit и отражается в CURRENT_PROJECT_MAP; это не меняет
+Strategy/Entry/Exit policy и не разрешает real execution.

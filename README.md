@@ -18,6 +18,10 @@ Strategy, исполнения, сопровождения позиций и в�
 4. [docs/DOCUMENTATION_INDEX_RU.md](docs/DOCUMENTATION_INDEX_RU.md)
 5. [docs/CRIPTA_GLOSSARY_RU.md](docs/CRIPTA_GLOSSARY_RU.md)
 6. [docs/CURRENT_PROJECT_MAP_RU.md](docs/CURRENT_PROJECT_MAP_RU.md)
+7. [docs/SECURITY.md](docs/SECURITY.md)
+
+Все 11 current docs должны быть доступны в Project Source; mandatory reading
+определяется base pre-read + task route.
 
 Routed documents:
 
@@ -25,7 +29,6 @@ Routed documents:
 - [docs/OBSERVATION_ANALYTICS_RU.md](docs/OBSERVATION_ANALYTICS_RU.md) — MAYAK / Dispatcher / Monitoring / Supervisor / Analyst;
 - [docs/DEVELOPMENT_RELEASE_RULES_RU.md](docs/DEVELOPMENT_RELEASE_RULES_RU.md) — patch / Git / PostgreSQL / release / deploy;
 - [docs/RESEARCH_COMPUTE_RULES_RU.md](docs/RESEARCH_COMPUTE_RULES_RU.md) — research / replay / OOS / data / compute;
-- [docs/SECURITY.md](docs/SECURITY.md) — technical security baseline.
 
 ## Source of truth
 

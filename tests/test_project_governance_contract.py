@@ -16,6 +16,9 @@ ACTIVE_PROJECT_SOURCE_FAMILIES = (
     "CURRENT_PROJECT_MAP_RU*.md",
     "TRADING_CONTOUR_RU*.md",
     "OBSERVATION_ANALYTICS_RU*.md",
+    "DEVELOPMENT_RELEASE_RULES_RU*.md",
+    "RESEARCH_COMPUTE_RULES_RU*.md",
+    "SECURITY.md",
 )
 
 LEGACY_STANDALONE_DOCS = (
@@ -35,7 +38,7 @@ def test_documentation_index_is_the_active_authority_router() -> None:
     work_rules = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
 
     assert "**Статус:** канонический индекс документации" in index
-    assert "# 3. Восемь файлов ChatGPT Project Source" in index
+    assert "# 3. 11 файлов ChatGPT Project Source" in index
     for family in ACTIVE_PROJECT_SOURCE_FAMILIES:
         assert family in index
 
@@ -118,3 +121,45 @@ def test_routed_process_section_numbering_is_continuous() -> None:
             for match in re.finditer(r"^#{1,2} (\d+)\.\s", content, flags=re.MULTILINE)
         ]
         assert numbers == list(range(1, max(numbers) + 1))
+
+
+def test_security_is_mandatory_base_preread_and_all_current_docs_are_project_source() -> None:
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    interaction = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+
+    assert "`SECURITY*.md` — обязательный technical security baseline" in interaction
+    assert "7. docs/SECURITY.md" in work
+    assert "7. docs/SECURITY.md" in index
+    assert "7. [docs/SECURITY.md]" in readme
+    assert "7. `docs/SECURITY.md`" in agents
+    assert "Все 11 current docs входят в ChatGPT Project Source." in index
+
+
+def test_process_state_vocabulary_has_single_glossary_authority() -> None:
+    glossary = _read("docs/CRIPTA_GLOSSARY_RU.md")
+    development = _read("docs/DEVELOPMENT_RELEASE_RULES_RU.md")
+    research = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+
+    for token in ("PREPARED", "RUNNING", "COMPLETE", "FAILED", "BLOCKED"):
+        assert f"**{token}**" in glossary
+    assert "находятся только в\n`docs/CRIPTA_GLOSSARY_RU*.md §15`" in development
+    assert "находятся в `docs/CRIPTA_GLOSSARY_RU*.md §15`" in research
+
+
+def test_position_mode_mismatch_entity_and_map_fault_set_are_explicit() -> None:
+    glossary = _read("docs/CRIPTA_GLOSSARY_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+
+    assert "`EXCHANGE_POSITION_MODE_MISMATCH` остаётся operational/lifecycle fault." in glossary
+    assert "`block_reason` не меняет его entity" in glossary
+    for fault in (
+        "CAPITAL_RESERVATION_STUCK",
+        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+        "EXCHANGE_POSITION_MODE_MISMATCH",
+        "POSITION_WITHOUT_EXIT_OWNER",
+        "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+    ):
+        assert fault in current_map

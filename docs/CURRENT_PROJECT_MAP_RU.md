@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.1
-**Дата:** 2026-09-27
+**Версия:** 9.2
+**Дата:** 2026-09-28
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -38,6 +38,39 @@ GitHub `main` остаётся единственным authority. Автома�
 означает deploy: `SOURCE_HEAD`, `INSTALLED_COMMIT` и `LOADED_COMMIT`
 по-прежнему проверяются раздельно.
 
+## 1.2 Current operational delta — 2026-09-28
+
+CHECKED HERE после отдельного runtime forensic и dependency-fix:
+
+- implementation commit `6cf5ae08917e3eb99124053a59766f155773a2ef`
+  удалил `cripta-private-runtime.service` из `Wants=` активного
+  `cripta-dispatcher-v2.service`; `After=` сохранён только как ordering при
+  независимой activation private runtime;
+- до исправления private runtime был disabled, но Dispatcher запускал его через
+  `Wants=`; из-за `Restart=always` и schema mismatch накопилось 68973
+  restart attempts;
+- причина fail-closed:
+  `expected=runtime-schema-2026-09-20-slot-v1`,
+  `actual=runtime-schema-2026-09-02-v1`;
+- после deploy unit-contract private runtime остановлен и остаётся
+  `inactive/disabled`; Dispatcher и MAYAK не перезапускались;
+- Dispatcher, Universal Entry observer, Lifecycle Supervisor,
+  Universal Exit shadow и dashboard — active;
+- Universal Entry consumer и private runtime — inactive;
+- installed/current runtime release остаётся
+  `5a3ea5aba545d5fb97cef108562eac41d35bc47c`;
+- schema contract намеренно не мигрировался: private-state activation сейчас не
+  требуется и остаётся fail-closed до отдельного разрешённого readiness step;
+- mainnet gate=0, real execution permissions=0, open/reconciliation positions=0,
+  active slot claims=0, active capital reservations=0, queued/running commands=0,
+  pending Exchange orders=0;
+- `runtime.position_mode_states=0`, `control.live_arm_evidence=0`,
+  `control.live_arm_sessions=0`.
+
+Последующие documentation-only commits могут сдвинуть GitHub/SOURCE_HEAD без
+изменения installed/loaded runtime bytes; release identities по-прежнему
+сверяются отдельно.
+
 # 2. Верхняя архитектура
 
 ```text
@@ -56,16 +89,13 @@ EXCHANGE
 
 # 3. Документационный контур
 
-ChatGPT Project Source по-прежнему состоит из восьми семейств, перечисленных в
+ChatGPT Project Source содержит все 11 current docs, перечисленных в
 docs/DOCUMENTATION_INDEX_RU*.md.
 
-Для уменьшения обязательного pre-read тяжёлые process rules вынесены в
-GitHub-only routed canon:
-- docs/DEVELOPMENT_RELEASE_RULES_RU*.md — patch/Git/PostgreSQL/release/deploy;
-- docs/RESEARCH_COMPUTE_RULES_RU*.md — research/large jobs/compute/data.
-
-Эти документы читаются только для соответствующей работы и не увеличивают
-базовый Project Source bundle.
+Base pre-read состоит из META, WORK, ARCH, INDEX, GLOSSARY, MAP и SECURITY.
+TRADING_CONTOUR, OBSERVATION_ANALYTICS, DEVELOPMENT_RELEASE и
+RESEARCH_COMPUTE читаются по task route. Наличие routed doc в Project Source
+не делает его mandatory every-chat reading.
 
 TRADING_CONTOUR_RU*.md объединяет Strategy + Entry + Exit + Execution.
 OBSERVATION_ANALYTICS_RU*.md объединяет MAYAK + Dispatcher + Monitoring +
@@ -237,6 +267,10 @@ Runtime evidence разделяется на:
 - RUNTIME LIVENESS VERIFIED;
 - RUNTIME BEHAVIOR VERIFIED.
 
+Разделы §12.1, §12.2, §14, §15 и §20 ниже сохраняются как точное historical evidence
+checkpoint 2026-09-21 и не должны читаться как current service-state snapshot.
+Текущий проверенный operational delta находится в §1.2.
+
 ## 12.1 Status matrix — checkpoint 2026-09-21
 
 | Компонент / contract | CANON | IMPLEMENTED | DEPLOYED | LIVENESS | BEHAVIOR | Evidence / режим |
@@ -257,7 +291,7 @@ Runtime evidence разделяется на:
 disposable PostgreSQL/source exact текущего release. Это не означает, что такой
 сценарий уже возникал на real Exchange.
 
-## 12.2 Current exact release identity
+## 12.2 Exact release identity — checkpoint 2026-09-21
 
 Последний полностью проверенный implementation/runtime checkpoint перед этой
 documentation-only ревизией:
@@ -281,9 +315,9 @@ LOADED_COMMIT    = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
 Фактический текст Project Instructions в UI является отдельным ChatGPT-project
 state и не подтверждается одним только GitHub.
 
-# 14. Граница текущей документационной ревизии
+# 14. Граница documentation/runtime revision — checkpoint 2026-09-21
 
-Эта ревизия:
+Эта ревизия checkpoint 2026-09-21:
 - синхронизирует карту с фактически проверенным code/DB/runtime checkpoint;
 - не меняет production trading logic;
 - не меняет Strategy records;
@@ -373,6 +407,7 @@ Post-admission divergence классифицируется отдельно ка
 IMPLEMENTED / DEPLOYED:
 - StrategyPosition хранит exact ExitPlan/protection/emergency lineage;
 - Supervisor выявляет `POSITION_WITHOUT_EXIT_OWNER`;
+- Supervisor выявляет `CAPITAL_RESERVATION_STUCK`;
 - Supervisor выявляет
   `POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION`;
 - Supervisor выявляет `EXCHANGE_POSITION_MODE_MISMATCH`;
@@ -473,7 +508,7 @@ repository остаётся отдельным cleanup finding. Их перен�
 должен быть отдельным exact repository-cleanup changeset после dependency
 classification; текущая документационная синхронизация их не перемещает.
 
-# 20. Verification results текущего implementation checkpoint
+# 20. Verification results — checkpoint 2026-09-21
 
 CHECKED HERE 2026-09-21:
 
@@ -509,10 +544,12 @@ PASS
 До real arm остаются именно operational/readiness задачи, а не недоказанная
 реализация slot/lifecycle foundation:
 
-1. дождаться/проверить реальный post-restart Entry evaluation после WARMUP;
+1. реальный post-restart Entry evaluation после WARMUP остаётся
+   `NOT CHECKED HERE` для checkpoint 2026-09-28;
 2. иметь exact owner-approved Strategy с executable ExitPlan;
-3. поднять private account state только в разрешённом режиме и получить fresh
-   `position_mode_state` / `positionIdx=0`;
+3. private account state поднимать только отдельным разрешённым readiness step:
+   сначала совместить runtime schema contract, затем получить fresh
+   `position_mode_state` / `positionIdx=0`; dependency crash-loop уже устранён;
 4. настроить реальный durable owner-notification channel для critical faults;
 5. сформировать canonical LIVE-arm evidence для exact Strategy/symbol/release;
 6. owner-approved MICRO_LIVE limits;
