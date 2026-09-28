@@ -1,7 +1,7 @@
 [Unit]
 Description=Cripta Dispatcher V2 universal passive context runtime
 After=cripta-mayak-v2.service cripta-private-runtime.service postgresql.service
-Wants=cripta-mayak-v2.service cripta-private-runtime.service postgresql.service
+Wants=cripta-mayak-v2.service postgresql.service
 
 [Service]
 Type=simple
