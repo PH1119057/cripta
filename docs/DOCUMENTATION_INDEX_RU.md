@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.3
+**Версия:** 3.4
 **Дата:** 2026-09-28
 **Статус:** канонический индекс документации
 
@@ -73,6 +73,12 @@ OWNER_DECISION_REQUIRED=YES
 Project Source availability и mandatory reading — разные понятия.
 Используется семейство имени, а не номер версии/UI suffix.
 `CHATGPT_INTERACTION_RULES_RU*.md` читается первым.
+
+OWNER CHECKED HERE 2026-09-28: ChatGPT Project Source hard limit = 12 files.
+Current bundle = 11 files. Нельзя дробить current canonical document так, чтобы
+bundle превысил limit. Добавление 12-го current file требует owner decision;
+перед любым потенциальным 13-м file сначала консолидировать existing docs и
+обновить этот INDEX.
 
 # 4. Корневые entrypoints
 
@@ -302,6 +308,8 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 - current substantive docs живут только в `docs/`;
 - root Markdown entrypoints — только `README.md` и `AGENTS.md`;
 - все 11 current docs доступны в Project Source;
+- ChatGPT Project Source hard limit = 12 files; current bundle = 11;
+- current docs не дробятся ради удобства, если это расходует/превышает UI capacity;
 - base pre-read и routed reading определяются только этим INDEX;
 - изменение active document set, пути, base pre-read или routing в том же
   changeset обновляет INDEX + README + AGENTS + Project Instructions/bootstrap,
@@ -381,6 +389,9 @@ CANONICAL_TOKEN/LIST CONSISTENCY
 MAP_CURRENT_VS_HISTORICAL_LABELS
 RELEASE/RUNTIME IDENTITY WORDING
 OPEN_DECISIONS_NOT_SILENTLY_CLOSED
+CHATGPT_UI_CAPACITY
+PROJECT_INSTRUCTIONS_LENGTH
+PROJECT_SOURCE_FILE_COUNT
 GOVERNANCE_TESTS
 FULL_PYTEST when repository tests are affected/available
 ```
@@ -415,3 +426,31 @@ CHECK CURRENT HOST
 
 Sensitive credentials, private keys, SSH aliases/paths и secret-store details в
 MAP не публикуются.
+
+
+## 17.9 ChatGPT UI capacity limits
+
+OWNER CHECKED HERE 2026-09-28:
+
+```text
+PROJECT_INSTRUCTIONS_MAX_CHARS = 8000
+PROJECT_SOURCE_MAX_FILES       = 12
+CURRENT_PROJECT_SOURCE_FILES   = 11
+```
+
+Эти значения являются current ChatGPT product/UI constraints, а не вечной
+архитектурой. При изменении UI limits владелец повторно подтверждает факт, после
+чего META/INDEX/bootstrap обновляются одним documentation changeset.
+
+Правила:
+- Project Instructions всегда должны помещаться в 8000 символов;
+- Instructions остаются thin bootstrap и не дублируют большие canonical blocks;
+- current Project Source bundle не превышает 12 files;
+- split current document только ради размера/удобства запрещён, если он
+  увеличивает bundle и расходует лимит;
+- добавление 12-го current file требует отдельного OWNER DECISION;
+- потенциальный 13-й current file = HARD STOP до консолидации existing docs;
+- при необходимости расширить тему сначала добавить раздел в существующий
+  owner-document либо объединить близкие contracts без потери authority/routing;
+- после изменения состава Project Source обновляются INDEX + README + AGENTS +
+  Project Instructions/bootstrap в одном documentation cycle.

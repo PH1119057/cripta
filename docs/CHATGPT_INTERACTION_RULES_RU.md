@@ -1,6 +1,6 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.6
+**Версия:** 1.7
 **Дата:** 2026-09-28
 **Статус:** обязательный канонический META-контракт взаимодействия
 
@@ -186,6 +186,12 @@ mainnet gate, Strategy activation или фактических данных с�
 Project Instructions должны быть устойчивым загрузчиком канона, а не второй
 копией архитектурных документов.
 
+OWNER CHECKED HERE 2026-09-28: текущий ChatGPT UI принимает не более 8000
+символов в Project Instructions. Это operational product constraint, а не
+архитектурный лимит. Project Instructions обязаны оставаться <= 8000 символов;
+если bootstrap разрастается, детали переносятся в canonical docs, а не
+дублируются в Instructions.
+
 В них должны оставаться только:
 - source of truth;
 - семейства канонических файлов;
@@ -200,8 +206,14 @@ Project Instructions должны быть устойчивым загрузчи
 конкретные торговые параметры, research conclusions и runtime snapshot должны
 читаться из активных документов.
 
-Все 11 current docs могут и должны быть доступны в ChatGPT Project Source;
-само присутствие файла в Project Source не делает его mandatory every-chat
+Все 11 current docs могут и должны быть доступны в ChatGPT Project Source.
+OWNER CHECKED HERE 2026-09-28: текущий UI допускает максимум 12 Project Source
+files. Поэтому current bundle = 11, capacity = 1. Нельзя дробить current
+canonical document только ради удобства чтения, если это увеличивает bundle.
+Новый 12-й current file требует owner decision; 13-й запрещён до предварительной
+консолидации existing docs.
+
+Само присутствие файла в Project Source не делает его mandatory every-chat
 pre-read. SECURITY читается в base pre-read для любой содержательной работы.
 Тяжёлые process contracts читаются по task route: DEVELOPMENT_RELEASE перед
 patch/Git/PostgreSQL/release/deploy; RESEARCH_COMPUTE перед research/replay/OOS/
@@ -242,4 +254,6 @@ renumber/reference audit, dated MAP checkpoints, release/runtime identity и
 5. не выдаётся ли непроверенное за проверенное;
 6. нужен ли специализированный pre-read;
 7. не требуется ли сначала обновить канон;
-8. если меняется документация — выполнен ли INDEX §17 documentation gate.
+8. если меняется документация — выполнен ли INDEX §17 documentation gate;
+9. если меняются Project Instructions/Project Source — соблюдены ли UI limits
+   8000 chars / 12 files.

@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.4
+**Версия:** 9.5
 **Дата:** 2026-09-28
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -43,8 +43,8 @@ GitHub `main` остаётся единственным authority. Автома�
 Exact pre-publication identity snapshot for this documentation revision:
 
 ```text
-REMOTE_HEAD      = 08000a4a478180571b56a82c0574e45f3980697d
-SOURCE_HEAD      = 08000a4a478180571b56a82c0574e45f3980697d
+REMOTE_HEAD      = 2e506be1504bf42e4ae54cef7ea3a4a0e64f1ab9
+SOURCE_HEAD      = 2e506be1504bf42e4ae54cef7ea3a4a0e64f1ab9
 INSTALLED_COMMIT = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
 LOADED_COMMIT    = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
                   [application runtime release]
@@ -618,7 +618,7 @@ ROLLBACK_OR_KILL_PATH                 = NOT CHECKED HERE
 Current repository gate for this revision:
 
 ```text
-full pytest = 1450 passed / 64 skipped / 0 failed
+full pytest = 1452 passed / 64 skipped / 0 failed
 ```
 
 Current Strategy activation DB check:

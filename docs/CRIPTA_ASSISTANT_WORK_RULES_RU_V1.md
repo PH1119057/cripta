@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.9 · 2026-09-28
+**Версия:** 3.0 · 2026-09-28
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -263,6 +263,18 @@ MAP §1.4 даёт current non-secret actor/path profile; DEVELOPMENT_RELEASE
 определяет постоянные правила. Если фактический сервер расходится с MAP,
 использовать фактический CHECKED HERE state как FINDING, обновить MAP в том же
 changeset и только потом продолжать mutation.
+
+## 10.3 ChatGPT UI capacity — hard operational constraint
+
+OWNER CHECKED HERE 2026-09-28:
+- Project Instructions: максимум 8000 символов;
+- Project Source: максимум 12 файлов;
+- current canonical Project Source bundle: 11 файлов.
+
+Нельзя решать рост документации простым split current docs. Новый 12-й current
+file требует owner decision; до появления 13-го current file обязательна
+консолидация существующих документов. Project Instructions при росте
+сокращаются до bootstrap и ссылаются на канон, а не копируют его.
 
 ## 11. Security
 

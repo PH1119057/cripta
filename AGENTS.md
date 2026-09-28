@@ -18,6 +18,10 @@
 Все 11 current docs должны быть доступны в Project Source. Наличие файла там
 не отменяет routed reading и не делает routed doc mandatory every-chat.
 
+Current ChatGPT UI hard limits: Project Instructions <= 8000 chars,
+Project Source <= 12 files; current bundle = 11. Не дробить current docs ради
+удобства. 12-й current file требует owner decision; 13-й — consolidation first.
+
 При работе с конкретным слоем дополнительно читать его active routed document
 из `docs/DOCUMENTATION_INDEX_RU*.md`.
 

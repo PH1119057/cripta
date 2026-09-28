@@ -273,3 +273,35 @@ def test_server_profile_keeps_sensitive_transport_out() -> None:
 
     assert "Credential/key/SSH details в этот snapshot не входят." in current_map
     assert "credentials/key/SSH transport details" in security
+
+
+
+def test_chatgpt_ui_capacity_limits_are_canonical_and_within_budget() -> None:
+    interaction = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+
+    assert len(ACTIVE_PROJECT_SOURCE_FAMILIES) == 11
+    assert len(ACTIVE_PROJECT_SOURCE_FAMILIES) <= 12
+
+    for body in (interaction, work, index, readme, agents):
+        assert "8000" in body
+        assert "12" in body
+
+    assert "PROJECT_INSTRUCTIONS_MAX_CHARS = 8000" in index
+    assert "PROJECT_SOURCE_MAX_FILES       = 12" in index
+    assert "CURRENT_PROJECT_SOURCE_FILES   = 11" in index
+    assert "добавление 12-го current file требует отдельного OWNER DECISION" in index
+    assert "13-й current file = HARD STOP" in index
+
+
+def test_project_source_split_is_forbidden_when_it_consumes_ui_capacity() -> None:
+    interaction = _read("docs/CHATGPT_INTERACTION_RULES_RU.md")
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+
+    assert "Нельзя дробить current\ncanonical document" in interaction
+    assert "Нельзя решать рост документации простым split current docs." in work
+    assert "split current document только ради размера/удобства запрещён" in index

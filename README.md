@@ -23,6 +23,11 @@ Strategy, исполнения, сопровождения позиций и в�
 Все 11 current docs должны быть доступны в Project Source; mandatory reading
 определяется base pre-read + task route.
 
+Current ChatGPT UI constraints (owner-checked 2026-09-28):
+Project Instructions <= 8000 символов; Project Source <= 12 files.
+Текущий bundle = 11. Документы не дробятся так, чтобы расходовать/превышать
+этот лимит; 12-й current file требует owner decision.
+
 Routed documents:
 
 - [docs/TRADING_CONTOUR_RU.md](docs/TRADING_CONTOUR_RU.md) — Strategy / Entry / Exit / Execution;
