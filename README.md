@@ -33,7 +33,12 @@ Routed documents:
 - [docs/TRADING_CONTOUR_RU.md](docs/TRADING_CONTOUR_RU.md) — Strategy / Entry / Exit / Execution;
 - [docs/OBSERVATION_ANALYTICS_RU.md](docs/OBSERVATION_ANALYTICS_RU.md) — MAYAK / Dispatcher / Monitoring / Supervisor / Analyst;
 - [docs/DEVELOPMENT_RELEASE_RULES_RU.md](docs/DEVELOPMENT_RELEASE_RULES_RU.md) — patch / Git / PostgreSQL / release / deploy;
-- [docs/RESEARCH_COMPUTE_RULES_RU.md](docs/RESEARCH_COMPUTE_RULES_RU.md) — research / replay / OOS / data / compute;
+- [docs/RESEARCH_COMPUTE_RULES_RU.md](docs/RESEARCH_COMPUTE_RULES_RU.md) — research / replay / OOS / data forensic / compute;
+
+Любой server-side writer/effective-actor change дополнительно маршрутизируется
+через DEVELOPMENT_RELEASE §5.1 + §19.1–19.4 и MAP §1.4 независимо от primary route.
+Exact UI Project Instructions template хранится вне Project Source:
+`operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
 
 ## Source of truth
 

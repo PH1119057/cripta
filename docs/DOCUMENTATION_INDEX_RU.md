@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.4
+**Версия:** 3.5
 **Дата:** 2026-09-28
 **Статус:** канонический индекс документации
 
@@ -110,8 +110,12 @@ Then route:
   Analyst -> docs/OBSERVATION_ANALYTICS_RU*.md
 - patch / Git / PostgreSQL / packaging / release / deploy / rollback ->
   docs/DEVELOPMENT_RELEASE_RULES_RU*.md
-- research / replay / OOS / holdout / large data / long compute ->
+- research / replay / OOS / holdout / large data / long compute / data forensic ->
   docs/RESEARCH_COMPUTE_RULES_RU*.md
+- любой server-side script/service/job, который пишет на filesystem или меняет
+  effective actor -> дополнительно docs/DEVELOPMENT_RELEASE_RULES_RU*.md
+  (§5.1 и §19.1–19.4) + current server profile из
+  docs/CURRENT_PROJECT_MAP_RU*.md §1.4, независимо от primary route.
 
 Cross-route task -> read all relevant routed docs.
 
@@ -392,6 +396,8 @@ OPEN_DECISIONS_NOT_SILENTLY_CLOSED
 CHATGPT_UI_CAPACITY
 PROJECT_INSTRUCTIONS_LENGTH
 PROJECT_SOURCE_FILE_COUNT
+PROJECT_INSTRUCTIONS_TEMPLATE_SYNC
+SERVER_SIDE_CROSS_ROUTE
 GOVERNANCE_TESTS
 FULL_PYTEST when repository tests are affected/available
 ```
@@ -454,3 +460,37 @@ CURRENT_PROJECT_SOURCE_FILES   = 11
   owner-document либо объединить близкие contracts без потери authority/routing;
 - после изменения состава Project Source обновляются INDEX + README + AGENTS +
   Project Instructions/bootstrap в одном documentation cycle.
+
+## 17.10 Version-controlled Project Instructions template
+
+Exact UI text поддерживается в:
+
+`operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`
+
+Статус файла: derived UI bootstrap artifact, не canonical document, не
+Project Source и не дополнительный authority. Он не расходует
+`PROJECT_SOURCE_MAX_FILES`.
+
+Правило изменения:
+
+```text
+UPDATE CANON / INDEX FIRST
+-> UPDATE TEMPLATE IN SAME CHANGESET
+-> GOVERNANCE TEST <= 8000 CHARS
+-> OWNER PASTES EXACT TEMPLATE INTO CHATGPT UI
+-> UI COPY = CHECKED HERE only after owner confirms/save succeeds
+```
+
+Template не имеет права вводить независимую архитектуру, routing, token или
+runtime fact. Каждое его содержательное правило должно ссылаться на current
+canon либо быть явно owner-checked UI/product constraint, уже записанным в
+META/INDEX.
+
+Автоматический repository test проверяет:
+- template существует;
+- LF и CRLF representations обе помещаются в 8000 characters;
+- current Project Source count остаётся <= 12;
+- обязательные pre-read/routing/server-side safety markers присутствуют.
+
+Саму сохранённую UI-копию GitHub test проверить не может. Пока владелец не
+подтвердил вставку exact template, состояние UI copy = `NOT CHECKED HERE`.

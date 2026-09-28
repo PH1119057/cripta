@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.3 · 2026-09-28
+**Версия:** 1.4 · 2026-09-28
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -8,6 +8,15 @@
 
 Общие source-of-truth / Hard Stop правила задаёт
 `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
+
+Если research/replay/OOS/data-forensic script/service/job пишет на server
+filesystem, создаёт/удаляет/переименовывает объекты или меняет effective actor,
+обязателен cross-route pre-read:
+- `docs/DEVELOPMENT_RELEASE_RULES_RU*.md §5.1`;
+- `docs/DEVELOPMENT_RELEASE_RULES_RU*.md §19.1–19.4`;
+- `docs/CURRENT_PROJECT_MAP_RU*.md §1.4`.
+
+Research route не отменяет server-side permission/actor contract.
 
 ## 1. Scope
 

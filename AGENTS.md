@@ -30,7 +30,10 @@ Project Source <= 12 files; current bundle = 11. Не дробить current doc
 - Strategy / Entry / Exit / Execution -> `docs/TRADING_CONTOUR_RU*.md`
 - MAYAK / Dispatcher / Monitoring / Lifecycle Supervisor / Position Supervisor / Analyst -> `docs/OBSERVATION_ANALYTICS_RU*.md`
 - patch / Git / PostgreSQL / package / release / deploy / rollback -> `docs/DEVELOPMENT_RELEASE_RULES_RU*.md`
-- research / replay / OOS / holdout / large-data / long-compute -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`
+- research / replay / OOS / holdout / large-data / long-compute / data forensic -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`
+- server-side writer/effective-actor change -> дополнительно
+  `docs/DEVELOPMENT_RELEASE_RULES_RU*.md §5.1 + §19.1–19.4` и
+  `docs/CURRENT_PROJECT_MAP_RU*.md §1.4`
 
 
 ## Source of truth
@@ -74,3 +77,7 @@ profile в `docs/CURRENT_PROJECT_MAP_RU*.md §1.4`. Не лечить DENIED ч�
 mandatory pre-read или routed reading, корневые `README.md` и `AGENTS.md`
 обязаны изменяться в том же documentation changeset. Устаревшая ссылка в этом
 bootstrap является documentation defect.
+
+Exact ChatGPT UI Project Instructions template:
+`operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
+Это derived bootstrap artifact, не Project Source и не отдельный authority.

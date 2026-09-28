@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.0 · 2026-09-28
+**Версия:** 3.1 · 2026-09-28
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -59,8 +59,11 @@ Then routed pre-read:
   Analyst -> docs/OBSERVATION_ANALYTICS_RU*.md
 - patch / Git / PostgreSQL / package / release / deploy / rollback ->
   docs/DEVELOPMENT_RELEASE_RULES_RU*.md
-- research / replay / OOS / holdout / large data / long compute ->
+- research / replay / OOS / holdout / large data / long compute / data forensic ->
   docs/RESEARCH_COMPUTE_RULES_RU*.md
+- any server-side script/service/job that writes filesystem state or changes
+  effective actor -> additionally DEVELOPMENT_RELEASE §5.1 + §19.1–19.4 and
+  CURRENT_PROJECT_MAP §1.4 regardless of the primary route.
 
 If a task crosses routes, read all relevant routed contracts.
 

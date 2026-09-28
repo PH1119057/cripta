@@ -1,6 +1,6 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.7
+**Версия:** 1.8
 **Дата:** 2026-09-28
 **Статус:** обязательный канонический META-контракт взаимодействия
 
@@ -227,6 +227,10 @@ holdout/large-data/long-compute.
 contract из `docs/DOCUMENTATION_INDEX_RU*.md §17`: topology/bootstrap,
 renumber/reference audit, dated MAP checkpoints, release/runtime identity и
 запрет молча закрывать open architecture decisions.
+
+Exact UI Project Instructions text ведётся как derived artifact
+`operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt` по INDEX §17.10.
+Он не является новым каноническим документом и не входит в Project Source.
 
 # 13. Исторические файлы и поиск
 

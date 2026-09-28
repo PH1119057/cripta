@@ -305,3 +305,43 @@ def test_project_source_split_is_forbidden_when_it_consumes_ui_capacity() -> Non
     assert "Нельзя дробить current\ncanonical document" in interaction
     assert "Нельзя решать рост документации простым split current docs." in work
     assert "split current document только ради размера/удобства запрещён" in index
+
+
+def test_server_side_writer_routing_is_cross_route_and_data_forensic_is_explicit() -> None:
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    research = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+
+    assert "long compute / data forensic" in index
+    assert "независимо от primary route" in index
+    assert "DEVELOPMENT_RELEASE §5.1 + §19.1–19.4" in work
+    assert "Research route не отменяет server-side permission/actor contract." in research
+    assert "data forensic / compute" in readme
+    assert "server-side writer/effective-actor change" in agents
+
+
+def test_version_controlled_project_instructions_template_is_within_ui_limits() -> None:
+    template_path = ROOT / "operations" / "bootstrap" / "CHATGPT_PROJECT_INSTRUCTIONS_RU.txt"
+    assert template_path.is_file()
+    template = template_path.read_text(encoding="utf-8")
+
+    # Check both normal LF storage and a conservative CRLF representation.
+    assert len(template) <= 8000
+    assert len(template.replace("\n", "\r\n")) <= 8000
+
+    for marker in (
+        "Project Instructions: не более 8000 символов",
+        "Project Source: не более 12 файлов",
+        "current Project Source bundle: 11 файлов",
+        "data forensic -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`",
+        "DEVELOPMENT_RELEASE §5.1 + §19.1–19.4",
+        "CURRENT_PROJECT_MAP §1.4",
+    ):
+        assert marker in template
+
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    assert "operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt" in index
+    assert "derived UI bootstrap artifact" in index
+    assert len(ACTIVE_PROJECT_SOURCE_FAMILIES) == 11
