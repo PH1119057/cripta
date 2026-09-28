@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.2
+**Версия:** 3.3
 **Дата:** 2026-09-28
 **Статус:** канонический индекс документации
 
@@ -353,6 +353,12 @@ OPERATIONAL_DELTA_COMMIT(S) [если есть]
 Наличие delta запрещает `SOURCE_LIVE_IDENTITY=PASS` для real-arm, пока
 production state не сведён к одному exact verified release composition.
 
+Сам documentation commit неизбежно меняет `REMOTE_HEAD/SOURCE_HEAD` после
+публикации. Поэтому exact SHA внутри MAP разрешён только как явно подписанный
+`pre-publication snapshot` / dated CHECKED HERE evidence; его нельзя
+представлять как самоссылочный SHA содержащего его commit. После публикации
+current GitHub/source identity проверяется внешним runtime/Git evidence.
+
 ## 17.6 Open architecture decisions не закрываются редакционной правкой
 
 Известная открытая ownership/architecture boundary (например physical owner
@@ -382,3 +388,30 @@ FULL_PYTEST when repository tests are affected/available
 Documentation-only commit не считается безопасным только потому, что он не
 меняет Python/code: неверный routing, stale MAP или ошибочная identity
 формулировка являются реальными project defects.
+
+## 17.8 Current server operational profile
+
+Если production host используется для разработки, research, deploy или runtime
+forensic, MAP содержит датированный non-secret server execution profile:
+
+```text
+ACTORS / RESPONSIBILITIES
+SOURCE CHECKOUT OWNERSHIP / GIT READ RULES
+CURRENT WRITE ROOTS
+SYSTEMD WRITE SEMANTICS
+SERVER-SIDE PROHIBITED PATTERNS
+```
+
+Profile является operational snapshot, не новой архитектурой. Изменение actor,
+write-root, source-sync semantics или обязательного permission path требует:
+
+```text
+CHECK CURRENT HOST
+-> UPDATE IMPLEMENTATION/OS STATE IF APPROVED
+-> VERIFY EFFECTIVE ACTOR
+-> UPDATE MAP §1.4 IN SAME CHANGESET
+-> GOVERNANCE TEST
+```
+
+Sensitive credentials, private keys, SSH aliases/paths и secret-store details в
+MAP не публикуются.

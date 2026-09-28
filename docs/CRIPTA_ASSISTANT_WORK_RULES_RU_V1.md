@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 2.8 · 2026-09-28
+**Версия:** 2.9 · 2026-09-28
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -252,6 +252,17 @@ PASS. `ReadWritePaths=` systemd, root-shell, наличие sudo или успе
 `operations/infrastructure/cripta-permission-preflight` либо доказанно
 эквивалентная проверка. Permission failure после запуска — preparation defect и
 требует class-wide audit, а не `chmod 777`, recursive chown или перехода на root.
+
+## 10.2 Current server profile читается перед server-side authoring
+
+Если задача пишет/запускает server-side script/service/job, дополнительно к
+DEVELOPMENT_RELEASE §19.1–19.4 прочитать current operational snapshot
+`docs/CURRENT_PROJECT_MAP_RU*.md §1.4`.
+
+MAP §1.4 даёт current non-secret actor/path profile; DEVELOPMENT_RELEASE
+определяет постоянные правила. Если фактический сервер расходится с MAP,
+использовать фактический CHECKED HERE state как FINDING, обновить MAP в том же
+changeset и только потом продолжать mutation.
 
 ## 11. Security
 

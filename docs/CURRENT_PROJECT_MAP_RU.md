@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.3
+**Версия:** 9.4
 **Дата:** 2026-09-28
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -40,11 +40,11 @@ GitHub `main` остаётся единственным authority. Автома�
 
 ## 1.2 Current operational identity / delta — CHECKED HERE 2026-09-28
 
-Exact identity snapshot immediately before this documentation revision:
+Exact pre-publication identity snapshot for this documentation revision:
 
 ```text
-REMOTE_HEAD      = 109dd2fd7f33c584d5f2d0ed107d9aede8b1481d
-SOURCE_HEAD      = 109dd2fd7f33c584d5f2d0ed107d9aede8b1481d
+REMOTE_HEAD      = 08000a4a478180571b56a82c0574e45f3980697d
+SOURCE_HEAD      = 08000a4a478180571b56a82c0574e45f3980697d
 INSTALLED_COMMIT = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
 LOADED_COMMIT    = 5a3ea5aba545d5fb97cef108562eac41d35bc47c
                   [application runtime release]
@@ -130,6 +130,94 @@ DEPLOYED / VERIFIED:
   disabled legacy units с отсутствующими state paths в этот PASS не включались.
 
 Эта правка не меняет trading policy и не выдаёт real-execution rights.
+
+## 1.4 Current server execution profile — CHECKED HERE 2026-09-28
+
+Этот раздел — operational snapshot текущего production host, а не торговая
+архитектура. Перед mutation фактическое состояние всё равно перепроверяется по
+DEVELOPMENT_RELEASE §19.1–19.4.
+
+### Actors
+
+```text
+root
+  -> только OS-level mutation: systemd/unit install, daemon-reload,
+     exact chown/chmod, privileged backup/restore where required
+  -> НЕ normal runtime/research actor
+  -> НЕ repository mutation actor
+
+cripta
+  -> основной CRIPTA runtime/service actor
+  -> repository/source mirror owner
+  -> runtime/research/job filesystem writer на явно разрешённых paths
+  -> member of cripta-share
+
+postgres
+  -> отдельный PostgreSQL system/migration actor where required
+  -> НЕ заменяется cripta/root по удобству
+
+sentinelx
+  -> management/tool rail
+  -> его собственные filesystem capabilities НЕ доказывают права cripta,
+     postgres или systemd service User
+```
+
+Credential/key/SSH details в этот snapshot не входят.
+
+### Source checkout
+
+CHECKED HERE:
+
+```text
+/srv/cripta/source_checkout       owner=cripta:cripta
+/srv/cripta/source_checkout/.git  owner=cripta:cripta
+.git/index                        owner=cripta:cripta
+core.autocrlf=false
+core.eol=lf
+cripta-source-sync.timer          enabled/active
+```
+
+Правила:
+- нормальная доставка опубликованного GitHub `main` на server checkout идёт
+  через штатный source-sync, а не через ручной root checkout/reset;
+- read-only Git forensic выполняется repository owner'ом с
+  `GIT_OPTIONAL_LOCKS=0`;
+- обычный root `git status`/checkout/add/commit в server checkout запрещён;
+- source mirror не является live runtime и его обновление не является deploy;
+- tool-generated `.bak.*`, temp/overlay files не допускаются в staged
+  changeset и удаляются из isolated worktree до final status/staging.
+
+### Current writable roots relevant to CRIPTA jobs/reports
+
+```text
+/var/lib/cripta                 = cripta:cripta 750
+/data/cripta/research_runs      = cripta:cripta 2770
+/data/cripta/jobs               = cripta:cripta 750
+/data/cripta/jobs/intake        = cripta:cripta 750
+/srv/cripta-share/reports       = cripta:cripta-share 2750
+/srv/cripta-share/reports/jobs  = cripta:cripta-share 2750
+/srv/cripta-share/incoming/jobs = cripta-sftp:cripta-share 2770
+```
+
+Эти modes/owners являются current operational facts, а не вечными constants.
+Если service contract требует новый write path, сначала меняется/проверяется
+его explicit ownership/ACL/sandbox contract; новый script не должен
+самостоятельно «чинить весь сервер».
+
+### Server-side запреты
+
+На текущем host нельзя считать безопасным следующее:
+
+- `ReadWritePaths=` без проверки Unix owner/group/mode/ACL;
+- root-created work/output directory, который позже должен писать `cripta`
+  или `postgres`;
+- `chmod 777` или recursive `chown/chmod` как generic permission repair;
+- запуск workload от root только потому, что intended actor получил DENIED;
+- создание state/output child directory без проверки write+execute на parent;
+- вывод `systemctl is-active` как доказательство runtime behavior;
+- ручная mutation source checkout для «догоняния» уже опубликованного GitHub;
+- смешивание `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT` и
+  operational delta в одно слово «версия».
 
 # 2. Верхняя архитектура
 
@@ -530,7 +618,7 @@ ROLLBACK_OR_KILL_PATH                 = NOT CHECKED HERE
 Current repository gate for this revision:
 
 ```text
-full pytest = 1448 passed / 64 skipped / 0 failed
+full pytest = 1450 passed / 64 skipped / 0 failed
 ```
 
 Current Strategy activation DB check:

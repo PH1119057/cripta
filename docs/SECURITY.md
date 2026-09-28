@@ -1,6 +1,6 @@
 # CRIPTA — security baseline
 
-**Версия:** 1.2
+**Версия:** 1.3
 **Дата:** 2026-09-28
 **Статус:** обязательный technical security baseline
 
@@ -34,6 +34,9 @@
   от root запрещены как автоматический способ лечить permission failure.
 - Рабочие/temp/backup/output каталоги создаются final writer'ом либо получают
   exact least-privilege owner/group/mode/ACL до первого write другого actor.
+- Current non-secret server actor/path profile хранится в
+  `CURRENT_PROJECT_MAP §1.4`; credentials/key/SSH transport details туда не
+  переносятся. Любой профиль перепроверяется перед privileged mutation.
 
 ## Public repository security gate
 

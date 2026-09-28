@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.4 · 2026-09-28
+**Версия:** 1.5 · 2026-09-28
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -142,6 +142,46 @@ service restart      -> root/systemd
 ```
 
 Нельзя предполагать, что один Unix-user подходит для всех стадий.
+
+## 5.1 Server-side script authoring начинается с actor/path contract
+
+До написания executable server-side script разработчик обязан перечислить все
+его filesystem mutations и назначить exact actor для каждой операции.
+
+Минимальный authoring contract:
+
+```text
+SCRIPT / SERVICE
+EFFECTIVE_ACTOR
+READ_PATHS
+WRITE_PATHS
+CREATE_CHILD_PARENTS
+RENAME_DELETE_PARENTS
+SYSTEMD_SANDBOX [если есть]
+DB_ROLE [если есть]
+EXPECTED_OWNER/GROUP/MODE/ACL
+PREFLIGHT_COMMAND
+```
+
+Правила:
+- `mkdir(parents=True)` не считается безопасным только потому, что конечная
+  подпапка обычно уже существует: parent, который script способен создать,
+  должен быть writable exact actor'ом;
+- fixed output path нельзя выбирать по удобству разработчика; он должен
+  соответствовать current server profile или иметь отдельный approved path
+  contract;
+- root может подготовить OS-level path только с exact scope и обязан выставить
+  final metadata до первого write менее привилегированного actor;
+- script не должен зависеть от root HOME, root-only temp directory, случайной
+  supplementary group или текущего interactive shell;
+- если persistent systemd service пишет на filesystem, permission preflight
+  должен быть воспроизводим до start; для критичного create-parent path
+  рекомендуется fail-fast `ExecStartPre`;
+- новый server script без actor/path matrix = `PREPARED=NO`.
+
+Current production host actor/path snapshot хранится только в
+`docs/CURRENT_PROJECT_MAP_RU*.md §1.4`. Он перепроверяется перед mutation и не
+превращается в вечный архитектурный default.
 
 ## 6. Toolchain определяется до patch, а не во время падений
 
@@ -483,9 +523,14 @@ DEPLOY / RESTART / VERIFY RUNTIME
 Наличие GitHub write credential на deploy-host — отдельное security decision,
 а не installer prerequisite.
 
-Конкретные Unix users, SSH aliases, key paths, Deploy Key names и transport
-details не являются канонической архитектурой и не хранятся в обязательном
+Credential/key/SSH aliases, Deploy Key names и другие sensitive transport
+details не являются канонической архитектурой и не хранятся в mandatory
 pre-read.
+
+При этом non-secret current production actor/path profile разрешён и обязателен
+в `CURRENT_PROJECT_MAP §1.4`, потому что он нужен для безопасного server-side
+authoring. Такой snapshot всегда датирован, считается operational state, а не
+архитектурой, и перепроверяется перед mutation.
 
 ## 22. Push transport проверяется ДО commit/publish
 

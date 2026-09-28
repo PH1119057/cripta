@@ -237,3 +237,39 @@ def test_documentation_index_section_numbering_is_continuous() -> None:
         for match in re.finditer(r"^# (\d+)\.\s", index, flags=re.MULTILINE)
     ]
     assert numbers == list(range(1, max(numbers) + 1))
+
+
+
+def test_current_server_profile_is_explicit_and_routed() -> None:
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    development = _read("docs/DEVELOPMENT_RELEASE_RULES_RU.md")
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+
+    assert "## 1.4 Current server execution profile — CHECKED HERE 2026-09-28" in current_map
+    for actor in ("root", "cripta", "postgres", "sentinelx"):
+        assert actor in current_map
+    for path_token in (
+        "/srv/cripta/source_checkout",
+        "/data/cripta/research_runs",
+        "/data/cripta/jobs",
+        "/srv/cripta-share/reports",
+    ):
+        assert path_token in current_map
+
+    assert "## 5.1 Server-side script authoring начинается с actor/path contract" in development
+    assert "CURRENT_PROJECT_MAP_RU*.md §1.4" in development
+    assert "## 17.8 Current server operational profile" in index
+    assert "CURRENT_PROJECT_MAP_RU*.md §1.4" in work
+    assert "CURRENT_PROJECT_MAP_RU.md §1.4" in readme
+    assert "CURRENT_PROJECT_MAP_RU*.md §1.4" in agents
+
+
+def test_server_profile_keeps_sensitive_transport_out() -> None:
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    security = _read("docs/SECURITY.md")
+
+    assert "Credential/key/SSH details в этот snapshot не входят." in current_map
+    assert "credentials/key/SSH transport details" in security

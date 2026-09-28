@@ -49,5 +49,10 @@ reading, этот README и `AGENTS.md` обязаны обновляться в
 и `docs/DOCUMENTATION_INDEX_RU.md`.
 
 Постоянные правила ведения документации (нумерация/ссылки, dated MAP
-checkpoints, release/runtime identity, mirrored canonical lists и open
-architecture decisions) находятся в `docs/DOCUMENTATION_INDEX_RU.md §17`.
+checkpoints, release/runtime identity, mirrored canonical lists, current server
+operational profile и open architecture decisions) находятся в
+`docs/DOCUMENTATION_INDEX_RU.md §17`.
+
+Для server-side work текущие non-secret actors/write-roots/prohibitions
+зафиксированы в `docs/CURRENT_PROJECT_MAP_RU.md §1.4`; постоянный permission
+contract — в `docs/DEVELOPMENT_RELEASE_RULES_RU.md §5.1 и §19.1–19.4`.

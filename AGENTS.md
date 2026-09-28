@@ -59,8 +59,9 @@ OWNER_DECISION_REQUIRED=YES
 Перед написанием/запуском script, который пишет на сервере или переключает
 effective actor, обязательно выполнить permission contract из
 `docs/DEVELOPMENT_RELEASE_RULES_RU*.md §19.1–19.4`: exact actor/path matrix +
-read-only preflight до mutation. Не лечить DENIED через `chmod 777`, recursive
-chown или запуск всего workflow от root.
+read-only preflight до mutation. Перед authoring также читать current server
+profile в `docs/CURRENT_PROJECT_MAP_RU*.md §1.4`. Не лечить DENIED через
+`chmod 777`, recursive chown или запуск всего workflow от root.
 
 ## Bootstrap synchronization invariant
 
