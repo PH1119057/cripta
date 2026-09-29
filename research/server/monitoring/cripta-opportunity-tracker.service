@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/opportunity_tracker.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/monitoring/opportunity_tracker.py
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

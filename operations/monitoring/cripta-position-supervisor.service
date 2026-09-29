@@ -8,8 +8,8 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/srv/cripta/production/src
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/position_supervisor.py
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/position_supervisor.py
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

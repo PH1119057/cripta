@@ -8,8 +8,8 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/srv/cripta/production/src
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/strategy_dispatcher_passive.py --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher --poll-seconds 60
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/strategy_dispatcher_passive.py --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/runtime/current/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher --poll-seconds 60
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -21,7 +21,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadOnlyPaths=/var/lib/cripta/mayak_v2 /srv/cripta/config/strategy_dispatcher
+ReadOnlyPaths=/var/lib/cripta/mayak_v2 /srv/cripta/runtime/current/config/strategy_dispatcher
 ReadWritePaths=/var/lib/cripta/strategy_dispatcher
 
 [Install]

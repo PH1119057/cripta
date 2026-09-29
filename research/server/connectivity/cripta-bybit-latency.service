@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=CRIPTA_SYMBOLS=AAVEUSDT,ADAUSDT,APTUSDT,ARBUSDT,AVAXUSDT,BCHUSDT,BNBUSDT,DOTUSDT,HBARUSDT,INJUSDT,LINKUSDT,LTCUSDT,NEARUSDT,OPUSDT,SOLUSDT,SUIUSDT,TRXUSDT,UNIUSDT,XLMUSDT,XRPUSDT,BTCUSDT,ETHUSDT
-ExecStart=/usr/bin/python3 /srv/cripta/connectivity/latency_probe.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/connectivity/latency_probe.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

@@ -147,7 +147,7 @@ def inspect_readiness(connection: psycopg.Connection[Any]) -> ExitMigrationReadi
         Path(
             os.environ.get(
                 "CRIPTA_PRIVATE_RUNTIME_LIVE_PATH",
-                "/srv/cripta/connectivity/private_runtime.py",
+                "/srv/cripta/runtime/current/operations/connectivity/private_runtime.py",
             )
         ),
     )
@@ -156,7 +156,7 @@ def inspect_readiness(connection: psycopg.Connection[Any]) -> ExitMigrationReadi
         Path(
             os.environ.get(
                 "CRIPTA_LEGACY_EXIT_RUNTIME_LIVE_PATH",
-                "/srv/cripta/monitoring/exit_runtime.py",
+                "/srv/cripta/runtime/current/operations/monitoring/exit_runtime.py",
             )
         ),
     )

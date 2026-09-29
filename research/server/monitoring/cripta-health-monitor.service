@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/health_monitor.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/monitoring/health_monitor.py
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

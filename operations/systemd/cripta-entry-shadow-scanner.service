@@ -7,17 +7,17 @@ Wants=network-online.target
 Type=simple
 User=cripta
 Group=cripta
-WorkingDirectory=/srv/cripta/research_runs/universal_entry_v1/source_stage
+WorkingDirectory=/data/cripta/research/worktrees/universal_entry_v1/source_stage
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/srv/cripta/research_runs/universal_entry_v1/source_stage/src:/srv/cripta/research_runs/minute_entry_book_v1/.venv/lib/python3.12/site-packages
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/entry_shadow_scanner.py
+Environment=PYTHONPATH=/data/cripta/research/worktrees/universal_entry_v1/source_stage/src:/data/cripta/research/worktrees/minute_entry_book_v1/.venv/lib/python3.12/site-packages
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/entry_shadow_scanner.py
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadOnlyPaths=/srv/cripta/research_runs/universal_entry_v1/source_stage
+ReadOnlyPaths=/data/cripta/research/worktrees/universal_entry_v1/source_stage
 ReadWritePaths=/var/lib/cripta/entry_shadow
 
 [Install]

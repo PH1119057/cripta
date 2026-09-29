@@ -139,7 +139,7 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         "pg_dump -Fc",
         "flock -n 9",
         "/srv/cripta/dashboard/universal_entry_source",
-        "< /srv/cripta/trade_lifecycle/current/operations/sql/20260920_slot_admission_v1.sql",
+        "< \"$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql\"",
         "CRIPTA_RELEASE_COMMIT",
         "INSTALLED_COMMIT",
         "GATE=DISARMED",
@@ -147,7 +147,7 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         assert token in source
     assert "systemctl start cripta-universal-entry-consumer.service" not in source
     assert (
-        "-f /srv/cripta/trade_lifecycle/current/operations/sql/"
+        "-f /srv/cripta/runtime/current/operations/sql/"
         "20260920_slot_admission_v1.sql"
         not in source
     )

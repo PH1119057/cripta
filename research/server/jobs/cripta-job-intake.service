@@ -9,7 +9,7 @@ User=cripta
 Group=cripta
 SupplementaryGroups=cripta-share
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/jobs/intake.py
+ExecStart=/usr/bin/python3 /data/cripta/research/tooling/current/research/server/jobs/intake.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

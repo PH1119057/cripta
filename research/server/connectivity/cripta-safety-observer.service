@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/connectivity/safety_observer.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/connectivity/safety_observer.py
 LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
 Restart=always
 RestartSec=5

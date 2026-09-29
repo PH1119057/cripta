@@ -9,7 +9,7 @@ User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/var/lib/cripta/dispatcher_v2/correlator.env
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/dispatcher_v2_context_correlator.py --poll-seconds 10 --batch-limit 1000
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/dispatcher_v2_context_correlator.py --poll-seconds 10 --batch-limit 1000
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

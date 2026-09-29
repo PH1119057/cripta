@@ -317,11 +317,11 @@ def test_soak_contract_is_480_minutes_fail_closed_and_append_only() -> None:
     assert "SOAK_MINUTES < 480" in script
     assert "os.O_APPEND" in script
     assert "Restart=no" in unit
-    assert "WorkingDirectory=/srv/cripta/u5_oi30s_source/current" in unit
-    assert "PYTHONPATH=/srv/cripta/u5_oi30s_source/current/src:" in unit
+    assert "WorkingDirectory=/srv/cripta/runtime/current" in unit
+    assert "PYTHONPATH=/srv/cripta/runtime/current/src:" in unit
     expected_exec = (
-        "ExecStart=/usr/bin/python3 "
-        "/srv/cripta/u5_oi30s_source/current/operations/monitoring/"
+        "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+        "/srv/cripta/runtime/current/operations/monitoring/"
         "u5_oi30s_source_soak.py"
     )
     assert expected_exec in unit

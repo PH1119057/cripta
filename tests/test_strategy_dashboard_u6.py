@@ -490,8 +490,8 @@ def test_strategy_api_has_no_execution_mainnet_or_selector_path() -> None:
 
 def test_dashboard_unit_uses_installed_u6_source_not_mutable_checkout() -> None:
     unit = UNIT.read_text(encoding="utf-8")
-    assert "CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/dashboard/universal_entry_source/src" in unit
-    assert "PYTHONPATH=/srv/cripta/dashboard/universal_entry_source/src" in unit
+    assert "CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/runtime/current/src" in unit
+    assert "PYTHONPATH=/srv/cripta/runtime/current/src" in unit
     assert "/srv/cripta/source_checkout/src" not in unit
 
 

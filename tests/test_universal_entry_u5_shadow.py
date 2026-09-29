@@ -125,7 +125,7 @@ def test_systemd_shadow_service_is_isolated_and_public_only() -> None:
     unit = UNIT.read_text(encoding="utf-8")
     assert "Description=Cripta Universal Entry U5 parity shadow" in unit
     assert "User=cripta" in unit
-    assert "ExecStart=/usr/bin/python3 /srv/cripta/monitoring/universal_entry_shadow.py" in unit
+    assert "ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/universal_entry_shadow.py" in unit
     assert "ReadWritePaths=/var/lib/cripta/universal_entry_shadow" in unit
     assert "ProtectSystem=strict" in unit
     assert "PrivateTmp=true" in unit

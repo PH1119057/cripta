@@ -8,8 +8,8 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/srv/cripta/production/src:/srv/cripta/connectivity
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/exit_runtime.py
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/exit_runtime.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

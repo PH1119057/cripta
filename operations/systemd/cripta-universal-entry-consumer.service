@@ -7,14 +7,14 @@ Wants=network-online.target
 Type=simple
 User=cripta
 Group=cripta
-WorkingDirectory=/srv/cripta/universal_entry_consumer/current
+WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/etc/cripta/release.env
 Environment=CRIPTA_ENTRY_COMMAND_SOURCE=LEGACY_V1
 Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
 EnvironmentFile=-/etc/cripta/universal_entry_consumer.env
-Environment=PYTHONPATH=/srv/cripta/universal_entry_consumer/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
-ExecStart=/usr/bin/python3 /srv/cripta/universal_entry_consumer/current/operations/connectivity/universal_entry_consumer.py
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_entry_consumer.py
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

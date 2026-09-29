@@ -8,7 +8,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/monitoring/causal_context_correlator.py --poll-seconds 15 --lookback-seconds 600
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/causal_context_correlator.py --poll-seconds 15 --lookback-seconds 600
 Restart=always
 RestartSec=5
 NoNewPrivileges=true

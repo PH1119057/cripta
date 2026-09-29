@@ -84,6 +84,6 @@ def test_cutover_plan_forbids_mid_position_owner_transfer_and_requires_owner_dec
 
 def test_private_runtime_uses_tested_trade_lifecycle_release_tree() -> None:
     assert (
-        "Environment=PYTHONPATH=/srv/cripta/trade_lifecycle/current/src:/srv/cripta/connectivity"
+        "Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity"
     ) in PRIVATE_DROPIN
     assert "/srv/cripta/production/src" not in PRIVATE_DROPIN

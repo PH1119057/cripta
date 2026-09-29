@@ -7,15 +7,15 @@ Requires=postgresql.service
 Type=simple
 User=cripta
 Group=cripta
-WorkingDirectory=/srv/cripta/trade_lifecycle/current
+WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/etc/cripta/release.env
-Environment=PYTHONPATH=/srv/cripta/trade_lifecycle/current/src:/srv/cripta/test_gate_venv/lib/python3.12/site-packages
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 Environment=CRIPTA_UNIVERSAL_EXIT_SHADOW=ENABLED
 Environment=CRIPTA_UNIVERSAL_EXIT_SHADOW_CONSUMER_ID=universal-exit-shadow-v1
 Environment=CRIPTA_UNIVERSAL_EXIT_SHADOW_POLL_SECONDS=1
 Environment=CRIPTA_UNIVERSAL_EXIT_SHADOW_STATUS_PATH=/var/lib/cripta/universal_exit_shadow/status.json
-ExecStart=/usr/bin/python3 /srv/cripta/trade_lifecycle/current/operations/monitoring/universal_exit_shadow_runtime.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/universal_exit_shadow_runtime.py
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
@@ -27,7 +27,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadOnlyPaths=/srv/cripta/trade_lifecycle/current
+ReadOnlyPaths=/srv/cripta/runtime/current
 ReadWritePaths=/var/lib/cripta/universal_exit_shadow
 
 [Install]

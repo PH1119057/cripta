@@ -8,14 +8,14 @@ Type=simple
 User=cripta
 Group=cripta
 SupplementaryGroups=systemd-journal
-WorkingDirectory=/srv/cripta/dashboard
+WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/etc/cripta/release.env
 Environment=CRIPTA_DATA_ROOT=/data/cripta
 Environment=CRIPTA_APP_ROOT=/srv/cripta
-Environment=CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/dashboard/universal_entry_source/src
-Environment=PYTHONPATH=/srv/cripta/dashboard/universal_entry_source/src
-ExecStart=/usr/bin/python3 /srv/cripta/dashboard/app.py
+Environment=CRIPTA_UNIVERSAL_ENTRY_SOURCE=/srv/cripta/runtime/current/src
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/dashboard/app.py
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

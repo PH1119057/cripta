@@ -8,8 +8,8 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-WorkingDirectory=/srv/cripta/connectivity
-ExecStart=/usr/bin/python3 /srv/cripta/connectivity/private_runtime.py
+WorkingDirectory=/srv/cripta/runtime/current
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/private_runtime.py
 LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
 Restart=always
 RestartSec=5

@@ -7,7 +7,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/control/shadow_command_worker.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/control/shadow_command_worker.py
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

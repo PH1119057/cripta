@@ -55,7 +55,7 @@ def test_p9_units_are_shadow_only_and_explicitly_configured() -> None:
 
     for unit in (EXIT_UNIT, LIFECYCLE_UNIT):
         assert "User=cripta" in unit
-        assert "WorkingDirectory=/srv/cripta/trade_lifecycle/current" in unit
+        assert "WorkingDirectory=/srv/cripta/runtime/current" in unit
         assert "ProtectSystem=strict" in unit
         assert "NoNewPrivileges=true" in unit
 
