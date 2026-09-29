@@ -35,5 +35,11 @@ def test_passive_runtime_persists_only_none_trading_effect() -> None:
     assert "strategy_dispatcher.runs" in source
     assert "strategy_dispatcher.assessments" in source
     unit = UNIT.read_text(encoding="utf-8")
-    assert "strategy_dispatcher_passive.py" in unit
+    expected_exec = (
+        "ExecStart=/srv/cripta/runtime/current/.venv/bin/python "
+        "/srv/cripta/runtime/current/operations/strategy_dispatcher/passive_runtime.py"
+    )
+    assert RUNTIME.is_file()
+    assert expected_exec in unit
+    assert "strategy_dispatcher_passive.py" not in unit
     assert "--poll-seconds 60" in unit

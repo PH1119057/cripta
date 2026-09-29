@@ -9,7 +9,7 @@ User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src
-ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/strategy_dispatcher_passive.py --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/runtime/current/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher --poll-seconds 60
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/strategy_dispatcher/passive_runtime.py --mayak-status /var/lib/cripta/mayak_v2/status.json --profile-dir /srv/cripta/runtime/current/config/strategy_dispatcher/profiles --state-root /var/lib/cripta/strategy_dispatcher --poll-seconds 60
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
