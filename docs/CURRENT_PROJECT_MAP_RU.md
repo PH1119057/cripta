@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.7
+**Версия:** 9.8
 **Дата:** 2026-09-29
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -190,13 +190,18 @@ cripta-source-sync.timer          enabled/active
 ### Current writable roots relevant to CRIPTA jobs/reports
 
 ```text
-/var/lib/cripta                 = cripta:cripta 750
-/data/cripta/research_runs      = cripta:cripta 2770
-/data/cripta/jobs               = cripta:cripta 750
-/data/cripta/jobs/intake        = cripta:cripta 750
-/srv/cripta-share/reports       = cripta:cripta-share 2750
-/srv/cripta-share/reports/jobs  = cripta:cripta-share 2750
-/srv/cripta-share/incoming/jobs = cripta-sftp:cripta-share 2770
+/var/lib/cripta                  = cripta:cripta 750
+/data/cripta/research            = cripta:cripta 2770
+/data/cripta/research/worktrees  = cripta:cripta 2770
+/data/cripta/research/runs       = cripta:cripta 2770
+/data/cripta/research/cache      = cripta:cripta 2770
+/data/cripta/research/manifests  = cripta:cripta 2770
+/data/cripta/research/tmp        = cripta:cripta 2770
+/data/cripta/jobs                = cripta:cripta 750
+/data/cripta/jobs/intake         = cripta:cripta 750
+/srv/cripta-share/reports        = cripta:cripta-share 2750
+/srv/cripta-share/reports/jobs   = cripta:cripta-share 2750
+/srv/cripta-share/incoming/jobs  = cripta-sftp:cripta-share 2770
 ```
 
 Эти modes/owners являются current operational facts, а не вечными constants.
@@ -235,31 +240,68 @@ Current transition state, CHECKED HERE 2026-09-29:
 
 ```text
 SOURCE_ROOT                           = PRESENT / current
-/data/cripta/research                 = NOT YET PRESENT
-/data/cripta/research_runs            = PRESENT, legacy current write-root
-/srv/cripta/research_runs             = PRESENT, legacy research remnants
+/data/cripta/research                 = PRESENT / R1-R2 IMPLEMENTED
+/data/cripta/research_runs            = REMOVED
+/srv/cripta/research_runs             = compatibility symlinks only
+/srv/cripta/research                  = compatibility symlink -> /data research
+/srv/cripta/research_cache            = compatibility symlink -> /data research
+/srv/cripta/research_inputs           = compatibility symlink -> /data research
+/srv/cripta/test_gate_venv            = compatibility symlink -> /data research cache
+/srv/cripta/research_watchdog         = legacy active service code; T-scope
 /srv/cripta/runtime                   = NOT YET PRESENT
 legacy runtime code paths under /srv  = STILL ACTIVE
 /data/cripta/script_archive           = PRESENT
 ```
 
-На момент этого checkpoint новые target paths ещё не объявляются
-`IMPLEMENTED`. Current active runtime продолжает использовать legacy paths,
-включая `/srv/cripta/production`, release trees и service-specific roots.
-Их перенос требует отдельного coordinated release/deploy и runtime evidence.
+Research PHASE R1 и R2 выполнены: target root и subroots созданы с
+`cripta:cripta 2770`; зарегистрированные research worktrees перенесены в
+`/data/cripta/research/worktrees`; завершённые/неактивные research runs
+перенесены в `/data/cripta/research/runs`; legacy
+`/data/cripta/research_runs` удалён после завершения последнего активного
+расчёта.
 
-Migration order:
+Физические legacy research payloads из `/srv/cripta/research_runs`,
+`/srv/cripta/research`, `/srv/cripta/research_cache` и
+`/srv/cripta/research_inputs` перенесены на data-disk с byte/checksum
+verification. Старые `/srv` names временно существуют только как
+compatibility symlink; это migration bridge, а не разрешённый root для новых
+research writes.
+
+Current active runtime продолжает использовать legacy runtime paths, включая
+`/srv/cripta/production`, release trees и service-specific roots. Их перенос
+требует отдельного coordinated release/deploy и runtime evidence.
+
+Migration order / state:
 
 ```text
-PHASE R1  create /data/cripta/research contour + permissions
-PHASE R2  route all NEW research writes/worktrees/runs to target
-PHASE R3  finish/stop exact active legacy jobs, preserve source snapshots
-PHASE R4  migrate/archive legacy research objects and references
-PHASE T1  inventory active runtime consumers
-PHASE T2  build /srv/cripta/runtime release layout in Git/release contract
-PHASE T3  deploy exact verified release to new runtime root
-PHASE T4  prove liveness/behavior, then remove legacy runtime code roots
+PHASE R1  COMPLETE  create /data/cripta/research contour + permissions
+PHASE R2  COMPLETE  route all NEW research writes/worktrees/runs to target
+PHASE R3  COMPLETE  finish exact active legacy job and remove legacy data root
+PHASE R4  PARTIAL   physical payload migrated; compatibility bridges remain
+PHASE T1  COMPLETE  active runtime consumers inventoried
+PHASE T2  PENDING   build /srv/cripta/runtime release layout in Git/release contract
+PHASE T3  PENDING   deploy exact verified release to new runtime root
+PHASE T4  PENDING   prove liveness/behavior, then remove legacy runtime code roots
 ```
+
+T1 active-consumer inventory, CHECKED HERE 2026-09-29:
+
+- Dispatcher, MAYAK v2, M3 Analyst, Position Supervisor и Exit Runtime используют
+  legacy `/srv/cripta/monitoring` / `/srv/cripta/production/src`;
+- Dashboard использует `/srv/cripta/dashboard` + symlink на
+  `trade_lifecycle/current`;
+- Lifecycle Supervisor и Universal Exit shadow используют
+  `/srv/cripta/trade_lifecycle/current`;
+- Universal Entry observer использует
+  `/srv/cripta/universal_entry_observer/current`;
+- latency/safety paths используют `/srv/cripta/connectivity`;
+- job intake/runner используют `/srv/cripta/jobs`;
+- research watchdog всё ещё исполняется из `/srv/cripta/research_watchdog`;
+- `/srv/cripta/test_gate_venv` физически перенесён в
+  `/data/cripta/research/cache/test_gate_venv` и оставлен compatibility symlink,
+  потому что active observer/lifecycle services всё ещё имеют его в `PYTHONPATH`;
+- ни один active production service не импортирует и не исполняет код напрямую
+  из `/data/cripta/research`.
 
 Hard invariants during transition:
 - no new research output is allowed on `/srv`;
