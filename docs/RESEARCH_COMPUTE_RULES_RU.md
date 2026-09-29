@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.4 · 2026-09-28
+**Версия:** 1.5 · 2026-09-29
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -188,3 +188,79 @@ RESULT_MANIFEST=WRITTEN
 ```
 
 Без обязательного evidence статус остаётся `RUNNING`, `FAILED` или `BLOCKED`, но не `COMPLETE`.
+
+
+## 17. Research filesystem contour и обязательный source snapshot
+
+OWNER DECISION 2026-09-29: все новые server-side research writes живут на
+data-disk, в отдельном research contour.
+
+Target:
+
+```text
+RESEARCH_ROOT = /data/cripta/research
+
+/data/cripta/research/
+  worktrees/          # isolated Git worktrees / experimental source
+  runs/               # one directory per exact research run
+  cache/              # disposable/rebuildable research cache
+  manifests/          # cross-run inventories/evidence
+  tmp/                # bounded temporary research files
+```
+
+Большие immutable/raw datasets могут иметь отдельный approved root на `/data`
+(например `/data/cripta/datasets`) и не обязаны физически дублироваться внутрь
+`RESEARCH_ROOT`. Главное правило: research не создаёт persistent outputs на
+system disk `/srv`.
+
+После начала migration новые research worktrees/runs в
+`/srv/cripta/research_runs` и `/data/cripta/research_runs` запрещены.
+Legacy objects остаются transition-only до доказанного переноса/архивации.
+Точный transition state хранится в `CURRENT_PROJECT_MAP §1.5`.
+
+До `RUNNING` каждого research run обязателен воспроизводимый source capture.
+Минимальный run bundle:
+
+```text
+run_manifest.json
+source_commit.txt
+command.txt
+environment.txt
+input_provenance.json
+source_snapshot/
+source_sha256.txt
+logs/
+results/
+```
+
+`source_snapshot/` обязан содержать exact исполняемый исследовательский код,
+который не идентифицируется одним опубликованным Git commit. Если worktree
+dirty/untracked, в snapshot обязательно попадают все result-affecting modified
+и untracked files с hashes; допустим также binary patch + exact untracked
+payload, если этого достаточно для byte-exact восстановления.
+
+Правило fail-closed:
+
+```text
+SOURCE_REPRODUCIBILITY=PASS
+```
+
+обязательно до тяжёлого запуска. Если later run невозможно связать с exact
+source bytes, его результат остаётся evidence с недостаточной
+воспроизводимостью и не используется как equivalence baseline.
+
+Research может читать published source/canonical data и approved datasets.
+Production/runtime запрещено импортировать, исполнять или подхватывать policy/
+Python/config непосредственно из `RESEARCH_ROOT`.
+
+Promotion path:
+
+```text
+RESEARCH ARTIFACT
+-> OWNER DECISION
+-> CANON / IMPLEMENTATION
+-> GITHUB COMMIT
+-> TEST
+-> VERIFIED RELEASE
+-> RUNTIME
+```

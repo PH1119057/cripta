@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.6
-**Дата:** 2026-09-28
+**Версия:** 9.7
+**Дата:** 2026-09-29
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -218,6 +218,58 @@ cripta-source-sync.timer          enabled/active
 - ручная mutation source checkout для «догоняния» уже опубликованного GitHub;
 - смешивание `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT` и
   operational delta в одно слово «версия».
+
+
+## 1.5 Filesystem contour separation — OWNER DECISION / CHECKED HERE 2026-09-29
+
+Target contract:
+
+```text
+SOURCE_ROOT        = /srv/cripta/source_checkout
+RUNTIME_CODE_ROOT  = /srv/cripta/runtime
+RESEARCH_ROOT      = /data/cripta/research
+ARCHIVE_ROOT       = /data/cripta/script_archive
+```
+
+Current transition state, CHECKED HERE 2026-09-29:
+
+```text
+SOURCE_ROOT                           = PRESENT / current
+/data/cripta/research                 = NOT YET PRESENT
+/data/cripta/research_runs            = PRESENT, legacy current write-root
+/srv/cripta/research_runs             = PRESENT, legacy research remnants
+/srv/cripta/runtime                   = NOT YET PRESENT
+legacy runtime code paths under /srv  = STILL ACTIVE
+/data/cripta/script_archive           = PRESENT
+```
+
+На момент этого checkpoint новые target paths ещё не объявляются
+`IMPLEMENTED`. Current active runtime продолжает использовать legacy paths,
+включая `/srv/cripta/production`, release trees и service-specific roots.
+Их перенос требует отдельного coordinated release/deploy и runtime evidence.
+
+Migration order:
+
+```text
+PHASE R1  create /data/cripta/research contour + permissions
+PHASE R2  route all NEW research writes/worktrees/runs to target
+PHASE R3  finish/stop exact active legacy jobs, preserve source snapshots
+PHASE R4  migrate/archive legacy research objects and references
+PHASE T1  inventory active runtime consumers
+PHASE T2  build /srv/cripta/runtime release layout in Git/release contract
+PHASE T3  deploy exact verified release to new runtime root
+PHASE T4  prove liveness/behavior, then remove legacy runtime code roots
+```
+
+Hard invariants during transition:
+- no new research output is allowed on `/srv`;
+- after PHASE R2 no new research output is allowed in
+  `/data/cripta/research_runs`;
+- runtime never imports/executes from `/data/cripta/research`;
+- archive under `/data/cripta/script_archive` is restore/forensic-only;
+- legacy path removal requires zero active refs + verified archived/restored
+  copy where preservation is required.
+
 
 # 2. Верхняя архитектура
 

@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.5 · 2026-09-28
+**Версия:** 1.6 · 2026-09-29
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -812,6 +812,68 @@ CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`. Runtime verification при
 доказывает ни runtime liveness, ни runtime behavior.
 
 Запрещено считать PID оболочки доказательством вычисления, `exit_code=0` доказательством корректности данных, наличие output-файла доказательством полноты, а установленный файл — доказательством `LOADED/RUNNING`.
+
+
+## 42. SOURCE / RUNTIME / RESEARCH filesystem contours
+
+OWNER DECISION 2026-09-29 задаёт target physical layout:
+
+```text
+SOURCE_ROOT        = /srv/cripta/source_checkout
+RUNTIME_CODE_ROOT  = /srv/cripta/runtime
+RESEARCH_ROOT      = /data/cripta/research
+ARCHIVE_ROOT       = /data/cripta/script_archive
+```
+
+`SOURCE_ROOT` — synchronized operational mirror GitHub `main`: published source,
+docs и repository metadata. Он не является live runtime root и не является
+research output root.
+
+`RUNTIME_CODE_ROOT` — target root executable production release composition.
+До coordinated runtime migration legacy live paths остаются действительными
+только если перечислены в current MAP. Нельзя переносить active runtime
+каталоги простым `mv`; required path changes проходят обычный
+Git/test/release/deploy/runtime-evidence chain.
+
+`RESEARCH_ROOT` находится на `/data`. Новые research worktrees, run outputs,
+temporary outputs, source snapshots, manifests и research caches на системном
+диске запрещены. Raw/shared datasets могут находиться в другом exact approved
+root на `/data`.
+
+`ARCHIVE_ROOT` хранит historical/offloaded artifacts и не является executable
+source ни для runtime, ни для нового research run без явного restore/equivalence
+шага.
+
+Границы зависимостей:
+
+```text
+SOURCE -> RESEARCH     allowed read/copy with provenance
+SOURCE -> RUNTIME      only verified release/deploy
+RESEARCH -> SOURCE     only through reviewed Git changeset
+RESEARCH -> RUNTIME    direct dependency forbidden
+RUNTIME -> RESEARCH    import/load/execute forbidden
+ARCHIVE -> *           only explicit restore/forensic, never implicit
+```
+
+Filesystem migration обязана быть staged и reversible:
+
+```text
+CANON TARGET
+-> current-reference forensic
+-> actor/path preflight
+-> copy/rename with preservation
+-> byte/hash equivalence
+-> update consumers
+-> test
+-> deploy/reload where applicable
+-> runtime evidence
+-> only then remove legacy source path
+```
+
+Compatibility symlink разрешён только как explicitly dated migration bridge,
+с owner/path/expiry в MAP. Он не должен скрывать продолжающиеся новые writes в
+legacy contour.
+
 
 # Приложение A. Инцидент 2026-09-05/06 — обязательные уроки
 

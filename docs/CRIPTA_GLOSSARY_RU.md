@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 1.8
-**Дата:** 2026-09-28
+**Версия:** 1.9
+**Дата:** 2026-09-29
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -487,3 +487,28 @@ CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`.
 **«верх H3», «низ H9», «линия H3/H9», «h3_edge»** без уточнения физического
 объекта считаются неоднозначными. Нужно указывать конкретную граничную зону,
 внутреннюю/внешнюю границу, рабочий диапазон или точную метрику.
+
+
+# 17. Filesystem contours
+
+**SOURCE contour / SOURCE_ROOT** — опубликованный source-контур проекта.
+Current server target: `/srv/cripta/source_checkout`, synchronized mirror
+GitHub `main`. Не является live runtime и не принимает research outputs.
+
+**RUNTIME contour / RUNTIME_CODE_ROOT** — физический контур executable
+production release composition. Target root: `/srv/cripta/runtime`. Runtime
+может иметь отдельные approved state/report roots (`/var/lib`, shared reports),
+но executable code не должен зависеть от research contour.
+
+**RESEARCH contour / RESEARCH_ROOT** — физически изолированный контур
+исследований на data-disk. Target root: `/data/cripta/research`. В нём живут
+research worktrees, source snapshots, run outputs, temporary files, manifests и
+caches. Research не получает trading mutation rights из-за расположения здесь.
+
+**Research source snapshot** — сохранённый до запуска exact набор
+result-affecting source bytes/provenance, достаточный для воспроизведения
+исследовательского расчёта даже если исходный worktree позже удалён.
+
+**ARCHIVE contour / ARCHIVE_ROOT** — historical/offload storage
+`/data/cripta/script_archive`. Архив не является current source, runtime или
+research execution root.

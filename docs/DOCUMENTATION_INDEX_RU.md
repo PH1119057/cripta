@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.5
-**Дата:** 2026-09-28
+**Версия:** 3.6
+**Дата:** 2026-09-29
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -398,6 +398,7 @@ PROJECT_INSTRUCTIONS_LENGTH
 PROJECT_SOURCE_FILE_COUNT
 PROJECT_INSTRUCTIONS_TEMPLATE_SYNC
 SERVER_SIDE_CROSS_ROUTE
+FILESYSTEM_CONTOUR_SEPARATION
 GOVERNANCE_TESTS
 FULL_PYTEST when repository tests are affected/available
 ```
@@ -494,3 +495,29 @@ META/INDEX.
 
 Саму сохранённую UI-копию GitHub test проверить не может. Пока владелец не
 подтвердил вставку exact template, состояние UI copy = `NOT CHECKED HERE`.
+
+
+## 17.11 Filesystem contour separation
+
+OWNER DECISION 2026-09-29:
+
+```text
+SOURCE_ROOT        = /srv/cripta/source_checkout
+RUNTIME_CODE_ROOT  = /srv/cripta/runtime
+RESEARCH_ROOT      = /data/cripta/research
+ARCHIVE_ROOT       = /data/cripta/script_archive
+```
+
+Canonical ownership:
+- terminology -> GLOSSARY §17;
+- permanent release/migration boundary -> DEVELOPMENT_RELEASE §42;
+- research storage/source-snapshot discipline -> RESEARCH_COMPUTE §17;
+- current host/migration state -> CURRENT_PROJECT_MAP §1.5.
+
+Изменение любого из этих roots или dependency direction требует одного
+documentation cycle минимум для INDEX + MAP + соответствующего routed contract
++ governance tests. Если изменение затрагивает bootstrap-visible path/rule,
+README + AGENTS + Project Instructions template обновляются в том же cycle.
+
+Target rule не делает migration `IMPLEMENTED`: MAP обязан отдельно показывать
+legacy/current paths до завершённого deploy/runtime verification.

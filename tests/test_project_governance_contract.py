@@ -345,3 +345,57 @@ def test_version_controlled_project_instructions_template_is_within_ui_limits() 
     assert "operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt" in index
     assert "derived UI bootstrap artifact" in index
     assert len(ACTIVE_PROJECT_SOURCE_FAMILIES) == 11
+
+
+def test_source_runtime_research_filesystem_contours_are_canonical() -> None:
+    work = _read("docs/CRIPTA_ASSISTANT_WORK_RULES_RU_V1.md")
+    glossary = _read("docs/CRIPTA_GLOSSARY_RU.md")
+    development = _read("docs/DEVELOPMENT_RELEASE_RULES_RU.md")
+    research = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    index = _read("docs/DOCUMENTATION_INDEX_RU.md")
+    readme = _read("README.md")
+    agents = _read("AGENTS.md")
+    template = _read("operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt")
+
+    roots = (
+        "/srv/cripta/source_checkout",
+        "/srv/cripta/runtime",
+        "/data/cripta/research",
+        "/data/cripta/script_archive",
+    )
+    for token in roots:
+        assert token in work
+        assert token in development
+        assert token in current_map
+        assert token in index
+        assert token in readme
+        assert token in agents
+
+    assert "**SOURCE contour / SOURCE_ROOT**" in glossary
+    assert "**RUNTIME contour / RUNTIME_CODE_ROOT**" in glossary
+    assert "**RESEARCH contour / RESEARCH_ROOT**" in glossary
+    assert "**Research source snapshot**" in glossary
+    assert "## 42. SOURCE / RUNTIME / RESEARCH filesystem contours" in development
+    assert "## 17. Research filesystem contour" in research
+    assert "SOURCE_REPRODUCIBILITY=PASS" in research
+    assert "runtime не зависит напрямую от research artifacts" in template
+    assert "FILESYSTEM_CONTOUR_SEPARATION" in index
+
+
+def test_research_run_requires_source_capture_and_data_disk_output() -> None:
+    research = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+
+    for token in (
+        "run_manifest.json",
+        "source_commit.txt",
+        "source_snapshot/",
+        "source_sha256.txt",
+        "input_provenance.json",
+    ):
+        assert token in research
+
+    assert "все новые server-side research writes живут на" in research
+    assert "/data/cripta/research_runs" in research
+    assert "after PHASE R2 no new research output is allowed" in current_map

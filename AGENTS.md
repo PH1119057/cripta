@@ -70,6 +70,17 @@ read-only preflight до mutation. Перед authoring также читать 
 profile в `docs/CURRENT_PROJECT_MAP_RU*.md §1.4`. Не лечить DENIED через
 `chmod 777`, recursive chown или запуск всего workflow от root.
 
+
+## Filesystem contour invariant
+
+Target roots: source `/srv/cripta/source_checkout`, runtime code
+`/srv/cripta/runtime`, research `/data/cripta/research`, historical archive
+`/data/cripta/script_archive`. Новые research writes/worktrees/runs должны жить
+на data-disk; runtime не может импортировать/исполнять research artifacts
+напрямую. См. `DEVELOPMENT_RELEASE §42`, `RESEARCH_COMPUTE §17`,
+`CURRENT_PROJECT_MAP §1.5`.
+
+
 ## Bootstrap synchronization invariant
 
 Точный current document set и routing определяет

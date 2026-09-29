@@ -97,6 +97,8 @@ Dataset reuse != policy reuse.
 
 Перед архитектурно чувствительной работой повторно проверить GitHub `main`, base pre-read и соответствующий routed contract.
 
+Filesystem contours читать из MAP/DEVELOPMENT/RESEARCH: source=`/srv/cripta/source_checkout`, runtime target=`/srv/cripta/runtime`, research target=`/data/cripta/research`; новые research writes — только на data-disk, runtime не зависит напрямую от research artifacts.
+
 Patch/deploy не имеет права молча включать LIVE. Re-arm требует current LIVE-arm contract и explicit owner approval.
 
 ## 7. Server-side scripts

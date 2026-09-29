@@ -49,6 +49,23 @@ OPERATIONAL MIRROR: /srv/cripta/source_checkout
 
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
 
+
+## Filesystem contours
+
+Target physical separation is canonical:
+
+```text
+SOURCE   /srv/cripta/source_checkout
+RUNTIME  /srv/cripta/runtime
+RESEARCH /data/cripta/research
+ARCHIVE  /data/cripta/script_archive
+```
+
+Research writes live on the data disk. Runtime must not import/execute directly
+from research. Exact contract: `DEVELOPMENT_RELEASE §42`,
+`RESEARCH_COMPUTE §17`; current migration state: `CURRENT_PROJECT_MAP §1.5`.
+
+
 ## Root bootstrap invariant
 
 `README.md` и `AGENTS.md` — единственные текущие Markdown-entrypoints в

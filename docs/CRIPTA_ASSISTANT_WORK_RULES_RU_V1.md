@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.1 · 2026-09-28
+**Версия:** 3.2 · 2026-09-29
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -278,6 +278,39 @@ OWNER CHECKED HERE 2026-09-28:
 file требует owner decision; до появления 13-го current file обязательна
 консолидация существующих документов. Project Instructions при росте
 сокращаются до bootstrap и ссылаются на канон, а не копируют его.
+
+## 10.4 Filesystem contours разделены физически
+
+OWNER DECISION 2026-09-29:
+
+```text
+SOURCE_ROOT          = /srv/cripta/source_checkout
+RUNTIME_CODE_ROOT    = /srv/cripta/runtime
+RESEARCH_ROOT        = /data/cripta/research
+HISTORICAL_ARCHIVE   = /data/cripta/script_archive
+```
+
+Это target filesystem contract. До завершения migration фактические legacy
+runtime/research paths перечисляются в `CURRENT_PROJECT_MAP_RU*.md` и не
+считаются новым разрешением создавать там данные.
+
+Инварианты:
+- source mirror хранит опубликованный Git source/docs и repository metadata, а
+  не runtime outputs или research results;
+- runtime code/release artifacts не импортируют и не исполняют код напрямую из
+  `RESEARCH_ROOT`;
+- все новые server-side research worktrees, run outputs, temporary files,
+  source snapshots, logs, manifests и caches создаются на `/data`, внутри
+  approved research contour;
+- research -> production проходит только через GitHub/canon/tests/release, а не
+  прямым копированием исследовательского файла в live runtime;
+- legacy research path после начала migration = transition-only: новые runs
+  туда не направляются, а существующие объекты переносятся/архивируются только
+  после exact active-reference check.
+
+Detailed ownership: `DEVELOPMENT_RELEASE §42`,
+`RESEARCH_COMPUTE §17`, current migration status: `CURRENT_PROJECT_MAP §1.5`.
+
 
 ## 11. Security
 
