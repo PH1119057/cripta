@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.8
+**Версия:** 9.9
 **Дата:** 2026-09-29
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -248,7 +248,8 @@ SOURCE_ROOT                           = PRESENT / current
 /srv/cripta/research_inputs           = compatibility symlink -> /data research
 /srv/cripta/test_gate_venv            = compatibility symlink -> /data research cache
 /srv/cripta/research_watchdog         = legacy active service code; T-scope
-/srv/cripta/runtime                   = NOT YET PRESENT
+/srv/cripta/runtime                   = PRESENT / T2 IMPLEMENTED; staged release d4800b4...,
+                                        active services still on legacy paths
 legacy runtime code paths under /srv  = STILL ACTIVE
 /data/cripta/script_archive           = PRESENT
 ```
@@ -267,6 +268,18 @@ verification. Старые `/srv` names временно существуют т
 compatibility symlink; это migration bridge, а не разрешённый root для новых
 research writes.
 
+T2 staging evidence, CHECKED HERE 2026-09-29:
+- `/srv/cripta/runtime/releases/d4800b4ab132e37f896c71801621d245f6af12c5`
+  присутствует как `cripta:cripta 750`;
+- `/srv/cripta/runtime/current` указывает на этот exact release;
+- runtime `.venv` import preflight PASS (`pydantic=2.13.5`, `psycopg`,
+  `websocket`, Universal Entry/Exit/Lifecycle imports);
+- `/data/cripta/research/tooling/current` указывает на tooling release того же
+  source commit;
+- это только staged release layout: loaded systemd services на этом checkpoint
+  ещё используют legacy `/srv/cripta/...` paths, поэтому `DEPLOYED` и
+  `LOADED_COMMIT=d4800b4...` до T3 не объявляются.
+
 Current active runtime продолжает использовать legacy runtime paths, включая
 `/srv/cripta/production`, release trees и service-specific roots. Их перенос
 требует отдельного coordinated release/deploy и runtime evidence.
@@ -279,7 +292,7 @@ PHASE R2  COMPLETE  route all NEW research writes/worktrees/runs to target
 PHASE R3  COMPLETE  finish exact active legacy job and remove legacy data root
 PHASE R4  PARTIAL   physical payload migrated; compatibility bridges remain
 PHASE T1  COMPLETE  active runtime consumers inventoried
-PHASE T2  PENDING   build /srv/cripta/runtime release layout in Git/release contract
+PHASE T2  COMPLETE  build /srv/cripta/runtime release layout in Git/release contract
 PHASE T3  PENDING   deploy exact verified release to new runtime root
 PHASE T4  PENDING   prove liveness/behavior, then remove legacy runtime code roots
 ```
