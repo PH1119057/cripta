@@ -399,3 +399,65 @@ def test_p5_source_has_no_h3_h9_percent_default_or_exchange_bridge() -> None:
         "/v5/position",
     ):
         assert forbidden not in combined
+
+
+def test_dynamic_set_tp_resolves_current_exit_observation_fact() -> None:
+    plan = exit_plan(
+        [
+            rule(
+                "SET_TP",
+                required_fact_paths=["fact.geometry.l5_3.target_inner"],
+                predicate={"op": "COMPARE", "params": {"path": "fact.geometry.l5_3.target_inner", "comparator": "GT", "value": "0"}},
+                mutation={
+                    "take_profit_price": {
+                        "fact_path": "fact.geometry.l5_3.target_inner"
+                    },
+                    "trigger_by": "LastPrice",
+                    "tpsl_mode": "Full",
+                    "order_type": "Market",
+                },
+            )
+        ],
+        conflict=conflict(),
+    )
+    result = UniversalExitEngine().evaluate(
+        position(),
+        plan,
+        observation(
+            attributes={
+                "geometry": {"l5_3": {"target_inner": "10.875"}}
+            }
+        ),
+    )
+    assert result.status is ExitEvaluationStatus.DECISION_CREATED
+    assert result.decision is not None
+    assert result.decision.action_kind is ExitActionKind.SET_TP
+    assert result.decision.requested_mutation.to_dict()["take_profit_price"] == "10.875"
+
+
+def test_dynamic_set_tp_missing_current_fact_fails_closed() -> None:
+    plan = exit_plan(
+        [
+            rule(
+                "SET_TP",
+                required_fact_paths=["fact.pnl_pct"],
+                predicate={"op": "COMPARE", "params": {"path": "fact.pnl_pct", "comparator": "GTE", "value": "1"}},
+                mutation={
+                    "take_profit_price": {
+                        "fact_path": "fact.geometry.l5_3.target_inner"
+                    },
+                    "trigger_by": "LastPrice",
+                    "tpsl_mode": "Full",
+                    "order_type": "Market",
+                },
+            )
+        ],
+        conflict=conflict(),
+    )
+    result = UniversalExitEngine().evaluate(
+        position(),
+        plan,
+        observation(attributes={"pnl_pct": "2", "geometry": {"l5_3": {}}}),
+    )
+    assert result.status is ExitEvaluationStatus.BLOCKED
+    assert "dynamic mutation fact is missing" in result.reason
