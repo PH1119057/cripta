@@ -399,11 +399,11 @@ def test_research_run_requires_source_capture_and_data_disk_output() -> None:
     assert "все новые server-side research writes живут на" in research
     assert "/data/cripta/research_runs" in research
     assert "after PHASE R2 no new research output is allowed" in current_map
-    assert "/data/cripta/research                 = PRESENT / R1-R2 IMPLEMENTED" in current_map
+    assert "/data/cripta/research                 = PRESENT / R4 COMPLETE" in current_map
     assert "/data/cripta/research_runs            = REMOVED" in current_map
     assert "PHASE R1  COMPLETE" in current_map
     assert "PHASE R2  COMPLETE" in current_map
-    assert "PHASE R4  PARTIAL" in current_map
+    assert "PHASE R4  COMPLETE" in current_map
     assert "PHASE T1  COMPLETE" in current_map
 
 def test_current_operational_sources_do_not_use_legacy_research_bridges() -> None:

@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.1
+**Версия:** 10.2
 **Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -320,13 +320,13 @@ Current transition state, CHECKED HERE 2026-09-30:
 
 ```text
 SOURCE_ROOT                           = PRESENT / current
-/data/cripta/research                 = PRESENT / R1-R2 IMPLEMENTED
+/data/cripta/research                 = PRESENT / R4 COMPLETE
 /data/cripta/research_runs            = REMOVED
-/srv/cripta/research_runs             = compatibility symlinks only
-/srv/cripta/research                  = compatibility symlink -> /data research
-/srv/cripta/research_cache            = compatibility symlink -> /data research
-/srv/cripta/research_inputs           = compatibility symlink -> /data research
-/srv/cripta/test_gate_venv            = compatibility symlink -> /data research cache
+/srv/cripta/research_runs             = REMOVED
+/srv/cripta/research                  = REMOVED
+/srv/cripta/research_cache            = REMOVED
+/srv/cripta/research_inputs           = REMOVED
+/srv/cripta/test_gate_venv            = REMOVED
 /srv/cripta/research_watchdog         = ABSENT
 /srv/cripta/runtime                   = PRESENT / T4 COMPLETE;
                                         current -> release 72797f38...
@@ -344,9 +344,9 @@ Research PHASE R1 и R2 выполнены: target root и subroots создан
 Физические legacy research payloads из `/srv/cripta/research_runs`,
 `/srv/cripta/research`, `/srv/cripta/research_cache` и
 `/srv/cripta/research_inputs` перенесены на data-disk с byte/checksum
-verification. Старые `/srv` names временно существуют только как
-compatibility symlink; это migration bridge, а не разрешённый root для новых
-research writes.
+verification. R4 завершён: после Git-first path repair и zero-reference checks
+все transition-only `/srv` compatibility names удалены. Новые research
+worktrees/runs/cache/inputs используют только approved `/data` paths.
 
 T2 staging evidence, historical checkpoint 2026-09-29:
 - `/srv/cripta/runtime/releases/d4800b4ab132e37f896c71801621d245f6af12c5`
@@ -367,13 +367,48 @@ T4 CHECKED HERE 2026-09-30: broader runtime behavior подтверждено п
 срезами, затем legacy runtime directories удалены после zero-reference и
 archive/restore equivalence gate.
 
+
+R4 CHECKED HERE 2026-09-30:
+- GitHub/source path-repair commit:
+  `64cb90d747d4168a1c1cd91144f058344a5052e8`;
+- current operational source references to
+  `/srv/cripta/research_runs`, `/srv/cripta/research`,
+  `/srv/cripta/research_cache`, `/srv/cripta/research_inputs` and
+  `/srv/cripta/test_gate_venv` = 0;
+- governance regression test added; full gate:
+  1459 passed, 64 skipped; Ruff PASS; shell syntax PASS;
+- enabled `cripta-download-expansion.service` remains inactive but now executes
+  directly from
+  `/data/cripta/research/worktrees/legacy_srv_research/download_frozen_segment.py`;
+- disabled untracked `cripta-minute-entry-book-v1.service` was archived and
+  removed from systemd;
+- live process/system-config/source zero-reference gates passed before bridge
+  removal;
+- `/srv/cripta/research_runs` contained symlinks only at deletion time;
+- removed:
+  `/srv/cripta/research_runs`, `/srv/cripta/research`,
+  `/srv/cripta/research_cache`, `/srv/cripta/research_inputs`,
+  `/srv/cripta/test_gate_venv`;
+- target objects under `/data/cripta/research` remained present;
+- job intake/runner stayed active with stable PIDs/restart counters;
+- runtime safety remained unchanged: mainnet gate=0, real execution
+  permissions=0;
+- cleanup evidence archive:
+  `/data/cripta/script_archive/r4_bridge_cleanup_20260930_0905`;
+- bridge manifest SHA256:
+  `3eb773005eaf9b3648ca45c4d591f079299be5a45efef95da0592d22e7fd0940`;
+- stale unit backups are preserved in the same archive;
+- three temporary T3/T4 worktrees accidentally created under
+  `/srv/cripta/worktrees` were diff/status-archived and removed; new repair
+  worktrees are under `/data/cripta/research/worktrees`.
+
 Migration order / state:
 
 ```text
 PHASE R1  COMPLETE  create /data/cripta/research contour + permissions
 PHASE R2  COMPLETE  route all NEW research writes/worktrees/runs to target
 PHASE R3  COMPLETE  finish exact active legacy job and remove legacy data root
-PHASE R4  PARTIAL   physical payload migrated; compatibility bridges remain
+PHASE R4  COMPLETE  compatibility bridges removed; research paths are direct /data
 PHASE T1  COMPLETE  active runtime consumers inventoried
 PHASE T2  COMPLETE  build /srv/cripta/runtime release layout in Git/release contract
 PHASE T3  COMPLETE  exact verified release deployed; loaded-path/liveness cutover PASS
