@@ -856,7 +856,10 @@ def verify_bundle(path: Path, run_code_tests: bool = False) -> dict[str, Any]:
             fixtures = root / "test_data" / "fixtures"
             if fixtures.is_dir():
                 shutil.copytree(fixtures, root / "reports", dirs_exist_ok=True)
-            python = os.environ.get("CRIPTA_TEST_PYTHON", "/srv/cripta/test_gate_venv/bin/python")
+            python = os.environ.get(
+                "CRIPTA_TEST_PYTHON",
+                "/data/cripta/research/cache/test_gate_venv/bin/python",
+            )
             if not Path(python).is_file():
                 import sys
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly PYTHON_BIN="/srv/cripta/research_runs/minute_entry_book_v1/.venv/bin/python"
-readonly SOURCE_ROOT="/srv/cripta/research_runs/universal_entry_v1/source_stage"
+readonly PYTHON_BIN="/data/cripta/research/worktrees/minute_entry_book_v1/.venv/bin/python"
+readonly SOURCE_ROOT="/data/cripta/research/worktrees/universal_entry_v1/source_stage"
 readonly RAW_ROOT="/data/cripta/datasets/raw/20260518_20260816"
 readonly ENTRY_ROOT="/srv/cripta/reports/universal_entry_v1/NEW15_HOLDOUT_20260824"
 readonly OUTPUT_ROOT="${CRIPTA_OUTPUT_ROOT:-/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_HOLDOUT_20260824}"

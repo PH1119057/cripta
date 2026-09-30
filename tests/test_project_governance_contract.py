@@ -405,3 +405,26 @@ def test_research_run_requires_source_capture_and_data_disk_output() -> None:
     assert "PHASE R2  COMPLETE" in current_map
     assert "PHASE R4  PARTIAL" in current_map
     assert "PHASE T1  COMPLETE" in current_map
+
+def test_current_operational_sources_do_not_use_legacy_research_bridges() -> None:
+    roots = (ROOT / "operations", ROOT / "research" / "server", ROOT / "scripts")
+    forbidden = (
+        "/srv/cripta/research_runs",
+        "/srv/cripta/research/",
+        "/srv/cripta/research_cache",
+        "/srv/cripta/research_inputs",
+        "/srv/cripta/test_gate_venv",
+    )
+    findings: list[str] = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            try:
+                body = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for token in forbidden:
+                if token in body:
+                    findings.append(f"{path.relative_to(ROOT)}: {token}")
+    assert findings == []

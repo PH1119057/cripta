@@ -10,7 +10,7 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/research/download_frozen_segment.py --root /data/cripta/datasets/raw --state-name download_state_expansion_20260823.json --reserve-gb 8 --symbols NEARUSDT XLMUSDT APTUSDT BCHUSDT ARBUSDT HBARUSDT INJUSDT OPUSDT DOTUSDT TRXUSDT
+ExecStart=/usr/bin/python3 /data/cripta/research/worktrees/legacy_srv_research/download_frozen_segment.py --root /data/cripta/datasets/raw --state-name download_state_expansion_20260823.json --reserve-gb 8 --symbols NEARUSDT XLMUSDT APTUSDT BCHUSDT ARBUSDT HBARUSDT INJUSDT OPUSDT DOTUSDT TRXUSDT
 Restart=on-failure
 RestartSec=30
 NoNewPrivileges=true
