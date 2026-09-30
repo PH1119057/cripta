@@ -8,7 +8,7 @@ Type=oneshot
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /srv/cripta/dataset/build_manifest.py
+ExecStart=/usr/bin/python3 /data/cripta/research/tooling/current/research/server/dataset/build_manifest.py
 Nice=15
 IOSchedulingClass=idle
 NoNewPrivileges=true
