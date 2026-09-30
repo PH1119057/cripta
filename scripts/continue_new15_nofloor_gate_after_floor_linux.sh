@@ -2,8 +2,8 @@
 set -euo pipefail
 
 readonly PREVIOUS_UNIT="cripta-entry-path-new15-full-after-gate.service"
-readonly PREVIOUS_STATUS="/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_FULL_20260824/POOL_STATUS.json"
-readonly OUTPUT_ROOT="/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_NO_FLOOR_GATE_10P_20260824"
+readonly PREVIOUS_STATUS="/data/cripta/research/runs/_legacy_srv_reports_20260911/universal_entry_path_replay_v1/NEW15_FULL_20260824/POOL_STATUS.json"
+readonly OUTPUT_ROOT="/data/cripta/research/runs/_legacy_srv_reports_20260911/universal_entry_path_replay_v1/NEW15_NO_FLOOR_GATE_10P_20260824"
 readonly LAUNCHER="/data/cripta/research/worktrees/legacy_srv_research/research_universal_entry_paths_new15_linux.sh"
 
 while systemctl is-active --quiet "${PREVIOUS_UNIT}"; do sleep 15; done
