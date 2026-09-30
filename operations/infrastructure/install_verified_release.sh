@@ -50,7 +50,7 @@ tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
 
 if [[ ! -d "$runtime_release" ]]; then
   as_repo_owner install -d -m 0750 "$runtime_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src operations config research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
+  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src production/src/bybit_workbench/dispatcher_v2 operations config research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
 fi
 if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner install -d -m 0750 "$tooling_release"
@@ -67,12 +67,18 @@ fi
 PYTHONPATH="$runtime_release/src" "$runtime_release/.venv/bin/python" - <<'PY'
 import pydantic
 import psycopg
+import sqlalchemy
 import websocket
 import bybit_workbench.universal_entry.shadow_runtime
 import bybit_workbench.universal_exit.engine
 import bybit_workbench.lifecycle_supervisor
 assert pydantic.__version__ == "2.13.5"
 print("RUNTIME_IMPORT_PREFLIGHT=PASS")
+PY
+
+PYTHONPATH="$runtime_release/production/src" "$runtime_release/.venv/bin/python" - <<'PY'
+import bybit_workbench.dispatcher_v2
+print("DISPATCHER_IMPORT_PREFLIGHT=PASS")
 PY
 
 printf '%s\n' "$RELEASE_COMMIT" > "$runtime_release/INSTALLED_COMMIT"
