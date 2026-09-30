@@ -7,10 +7,10 @@ WORKERS="${EO4_WORKERS:-1}"
 SAMPLE="${EO4_SAMPLE_FRACTION:-0.10}"
 SYMBOLS="${EO4_SYMBOLS:-UNIUSDT}"
 
-exec /srv/cripta/research_runs/minute_entry_book_v1/.venv/bin/python /srv/cripta/research/exit_state_machine_eo4.py \
-  --eo2-events /srv/cripta/research_inputs/eo4/eo2_events.csv \
-  --zone-events /srv/cripta/research_inputs/eo4/independent_zone_touch_outcomes.csv \
-  --cache-root /srv/cripta/research_cache/eo3_full_path_1m_cache \
+exec /data/cripta/research/worktrees/minute_entry_book_v1/.venv/bin/python /data/cripta/research/worktrees/legacy_srv_research/exit_state_machine_eo4.py \
+  --eo2-events /data/cripta/research/runs/_legacy_srv_research_inputs_20260929/eo4/eo2_events.csv \
+  --zone-events /data/cripta/research/runs/_legacy_srv_research_inputs_20260929/eo4/independent_zone_touch_outcomes.csv \
+  --cache-root /data/cripta/research/cache/legacy_srv_research_cache/eo3_full_path_1m_cache \
   --output-dir "$REPORT_ROOT/$RUN_ID" \
   --symbols "$SYMBOLS" \
   --sample-fraction "$SAMPLE" \
