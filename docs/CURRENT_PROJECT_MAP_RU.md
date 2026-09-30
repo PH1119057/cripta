@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 9.9
-**Дата:** 2026-09-29
+**Версия:** 10.0
+**Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -38,7 +38,7 @@ GitHub `main` остаётся единственным authority. Автома�
 означает deploy: `SOURCE_HEAD`, `INSTALLED_COMMIT` и `LOADED_COMMIT`
 по-прежнему проверяются раздельно.
 
-## 1.2 Current operational identity / delta — CHECKED HERE 2026-09-28
+## 1.2 Historical operational identity / delta — CHECKED HERE 2026-09-28
 
 Exact pre-publication identity snapshot for this documentation revision:
 
@@ -85,7 +85,7 @@ Private-runtime finding:
 - после fix private runtime остаётся `inactive/disabled`; schema contract
   намеренно не мигрировался.
 
-Current safety evidence:
+Safety evidence at that historical checkpoint:
 - Dispatcher, Universal Entry observer, Lifecycle Supervisor,
   Universal Exit shadow и dashboard — active;
 - Universal Entry consumer и private runtime — inactive;
@@ -99,6 +99,37 @@ Current safety evidence:
 - `runtime.position_mode_states=0`;
 - `control.live_arm_evidence=0`;
 - `control.live_arm_sessions=0`.
+
+## 1.2.1 Current T3 operational identity — CHECKED HERE 2026-09-30
+
+Exact pre-publication identity snapshot:
+
+```text
+REMOTE_HEAD      = 72797f38b20f2051a40de4669be80089f7575bdc
+SOURCE_HEAD      = 72797f38b20f2051a40de4669be80089f7575bdc
+INSTALLED_COMMIT = 72797f38b20f2051a40de4669be80089f7575bdc
+LOADED_COMMIT    = 72797f38b20f2051a40de4669be80089f7575bdc
+RESEARCH_TOOLING = 72797f38b20f2051a40de4669be80089f7575bdc
+```
+
+T3 deployment/liveness evidence:
+- canonical installer завершился `DEPLOY_EXACT_VERIFIED_COMMIT=PASS`;
+- `/srv/cripta/runtime/current` указывает на exact release `72797f38...`;
+- `/data/cripta/research/tooling/current` указывает на tooling release того же commit;
+- core runtime и Dispatcher import preflight PASS; locked runtime содержит SQLAlchemy 2.0.52 и greenlet 3.5.5;
+- все 17 expected previously-active runtime/research-tooling services после deploy active;
+- фактические process cmdline/WorkingDirectory там, где применимо, разрешаются через `/srv/cripta/runtime/current` либо `/data/cripta/research/tooling/current`;
+- checked active unit definitions не содержат ссылок на legacy runtime code roots;
+- Universal Entry consumer, private runtime, Strategy Dispatcher, Entry shadow scanner, Universal Entry shadow и causal context correlator остались inactive/disabled;
+- mainnet gate=0; real execution permissions=0; open/reconciliation positions=0; active slot claims/reservations=0; pending commands/orders=0; active LIVE-arm sessions=0.
+
+Backup T3:
+`/data/cripta/script_archive/release_backups/20260930_080922_d4800b4ab132e37f896c71801621d245f6af12c5_to_72797f38b20f2051a40de4669be80089f7575bdc`.
+
+Historical-origin helper `/usr/local/sbin/cripta-permission-preflight` остаётся отдельно установленным operational artifact; CHECKED HERE его SHA256
+`38cc16c08ba396e485bb72d03ec5b8bd96f743e66ce7fbe8b9bf338e6fd778a1` совпадает с current source bytes.
+
+T3 liveness/loaded-path evidence не является T4 runtime-behavior verification и не даёт MICRO_LIVE/LIVE rights.
 
 ## 1.3 Filesystem permission hardening — CHECKED HERE 2026-09-28
 
@@ -236,7 +267,7 @@ RESEARCH_ROOT      = /data/cripta/research
 ARCHIVE_ROOT       = /data/cripta/script_archive
 ```
 
-Current transition state, CHECKED HERE 2026-09-29:
+Current transition state, CHECKED HERE 2026-09-30:
 
 ```text
 SOURCE_ROOT                           = PRESENT / current
@@ -247,10 +278,12 @@ SOURCE_ROOT                           = PRESENT / current
 /srv/cripta/research_cache            = compatibility symlink -> /data research
 /srv/cripta/research_inputs           = compatibility symlink -> /data research
 /srv/cripta/test_gate_venv            = compatibility symlink -> /data research cache
-/srv/cripta/research_watchdog         = legacy active service code; T-scope
-/srv/cripta/runtime                   = PRESENT / T2 IMPLEMENTED; staged release d4800b4...,
-                                        active services still on legacy paths
-legacy runtime code paths under /srv  = STILL ACTIVE
+/srv/cripta/research_watchdog         = no live systemd reference found in T3 forensic;
+                                        physical cleanup remains T4/cleanup scope
+/srv/cripta/runtime                   = PRESENT / T3 COMPLETE;
+                                        current -> release 72797f38...
+legacy runtime code paths under /srv  = physically retained for rollback/T4;
+                                        no active T3 unit definition references them
 /data/cripta/script_archive           = PRESENT
 ```
 
@@ -268,7 +301,7 @@ verification. Старые `/srv` names временно существуют т
 compatibility symlink; это migration bridge, а не разрешённый root для новых
 research writes.
 
-T2 staging evidence, CHECKED HERE 2026-09-29:
+T2 staging evidence, historical checkpoint 2026-09-29:
 - `/srv/cripta/runtime/releases/d4800b4ab132e37f896c71801621d245f6af12c5`
   присутствует как `cripta:cripta 750`;
 - `/srv/cripta/runtime/current` указывает на этот exact release;
@@ -280,9 +313,9 @@ T2 staging evidence, CHECKED HERE 2026-09-29:
   ещё используют legacy `/srv/cripta/...` paths, поэтому `DEPLOYED` и
   `LOADED_COMMIT=d4800b4...` до T3 не объявляются.
 
-Current active runtime продолжает использовать legacy runtime paths, включая
-`/srv/cripta/production`, release trees и service-specific roots. Их перенос
-требует отдельного coordinated release/deploy и runtime evidence.
+T3 CHECKED HERE 2026-09-30: active runtime consumers переключены на
+`/srv/cripta/runtime/current`; legacy runtime directories физически сохранены
+как rollback/T4 material и этой фазой не удалялись.
 
 Migration order / state:
 
@@ -293,11 +326,11 @@ PHASE R3  COMPLETE  finish exact active legacy job and remove legacy data root
 PHASE R4  PARTIAL   physical payload migrated; compatibility bridges remain
 PHASE T1  COMPLETE  active runtime consumers inventoried
 PHASE T2  COMPLETE  build /srv/cripta/runtime release layout in Git/release contract
-PHASE T3  PENDING   deploy exact verified release to new runtime root
-PHASE T4  PENDING   prove liveness/behavior, then remove legacy runtime code roots
+PHASE T3  COMPLETE  exact verified release deployed; loaded-path/liveness cutover PASS
+PHASE T4  PENDING   prove broader runtime behavior, then remove legacy runtime code roots
 ```
 
-T1 active-consumer inventory, CHECKED HERE 2026-09-29:
+T1 active-consumer inventory, historical checkpoint 2026-09-29:
 
 - Dispatcher, MAYAK v2, M3 Analyst, Position Supervisor и Exit Runtime используют
   legacy `/srv/cripta/monitoring` / `/srv/cripta/production/src`;
