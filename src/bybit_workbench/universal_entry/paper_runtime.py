@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict, deque
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from bybit_workbench.domain.models import Candle
+
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import EntryEvaluation, ObjectiveContext, TradeDirection
 from .fingerprint import canonical_json, fingerprint
+from .market_watch import compute_l53_zone
 from .runtime_loader import ActiveStrategyBundle
 
 
@@ -26,6 +30,17 @@ def _decimal(value: object, label: str, *, positive: bool = False) -> Decimal:
     if not result.is_finite() or (positive and result <= 0):
         raise ValueError(f"{label} is invalid")
     return result
+
+
+def _fact_reference(attributes: Mapping[str, object], path: str) -> Decimal:
+    if not path.startswith("fact."):
+        raise ValueError("paper fact reference must start with fact.")
+    value: object = attributes
+    for part in path.removeprefix("fact.").split("."):
+        if not isinstance(value, Mapping) or part not in value:
+            raise ValueError(f"paper fact reference missing: {path}")
+        value = value[part]
+    return _decimal(value, f"paper fact reference {path}", positive=True)
 
 
 def _directional_move(entry: Decimal, price: Decimal, direction: str) -> Decimal:
@@ -139,6 +154,63 @@ class PaperTradeRuntime:
 
     def __init__(self, connection: Any) -> None:
         self._connection = connection
+        self._l53_candles: dict[str, deque[Candle]] = defaultdict(
+            lambda: deque(maxlen=260)
+        )
+
+    def on_candle_closed(self, candle: Candle) -> None:
+        """Advance causal L5-3 Exit geometry from a closed 5m candle only."""
+        if candle.timeframe != "5" or not candle.is_closed:
+            return
+        history = self._l53_candles[candle.symbol]
+        if history and candle.closed_at <= history[-1].closed_at:
+            if candle.closed_at == history[-1].closed_at:
+                return
+            raise ValueError("paper L5-3 candle time regressed")
+        history.append(candle)
+        zone = compute_l53_zone(tuple(history))
+        if zone is None:
+            return
+        rows = self._connection.execute(
+            """SELECT paper_position_id,direction,payload
+                 FROM strategy_entry.paper_positions
+                WHERE state='OPEN' AND leg_type='PRIMARY' AND symbol=%s""",
+            (candle.symbol,),
+        ).fetchall()
+        for row in rows:
+            payload = dict(_mapping(row[2], "paper position payload"))
+            exit_policy = _mapping(payload.get("exit_policy"), "paper exit_policy")
+            local_zone = _mapping(exit_policy.get("local_zone_exit"), "paper local_zone_exit")
+            if not bool(local_zone.get("enabled", False)):
+                continue
+            if str(local_zone.get("geometry") or "") != "L5-3":
+                raise ValueError("paper local_zone_exit unsupported geometry")
+            direction = str(row[1])
+            target = (
+                zone.resistance_bottom
+                if direction == TradeDirection.LONG.value
+                else zone.support_top
+            )
+            previous = payload.get("dynamic_take_profit_price")
+            if previous is not None and Decimal(str(previous)) == target:
+                continue
+            payload["dynamic_take_profit_price"] = str(target)
+            payload["dynamic_take_profit_observed_at"] = zone.observed_at.isoformat()
+            self._connection.execute(
+                """UPDATE strategy_entry.paper_positions
+                      SET payload=%s::jsonb
+                    WHERE paper_position_id=%s AND state='OPEN'""",
+                (canonical_json(payload), str(row[0])),
+            )
+            self._event(
+                str(row[0]),
+                zone.observed_at,
+                "DYNAMIC_TP_MOVED",
+                target,
+                None,
+                None,
+                {"geometry": "L5-3", "target_inner": str(target)},
+            )
 
     def create_order(
         self,
@@ -202,8 +274,23 @@ class PaperTradeRuntime:
         stop_loss_pct = _decimal(
             initial.get("stop_loss_pct"), "paper initial stop", positive=True
         )
-        take_profit_pct = _decimal(
-            initial.get("take_profit_pct"), "paper initial target", positive=True
+        take_profit_pct_raw = initial.get("take_profit_pct")
+        take_profit_reference_path = str(
+            initial.get("take_profit_reference_path") or ""
+        ).strip()
+        if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
+            raise ValueError(
+                "paper initial target requires exactly one percent or fact reference"
+            )
+        take_profit_pct = (
+            _decimal(take_profit_pct_raw, "paper initial target", positive=True)
+            if not take_profit_reference_path
+            else None
+        )
+        take_profit_price = (
+            _fact_reference(attrs, take_profit_reference_path)
+            if take_profit_reference_path
+            else None
         )
         payload: dict[str, object] = {
             "source": "universal_entry_paper",
@@ -229,7 +316,11 @@ class PaperTradeRuntime:
             "policy_version": intent.strategy_version,
             "initial_protection": {
                 "stop_loss_pct": str(stop_loss_pct),
-                "take_profit_pct": str(take_profit_pct),
+                **(
+                    {"take_profit_price": str(take_profit_price), "take_profit_reference_path": take_profit_reference_path}
+                    if take_profit_price is not None
+                    else {"take_profit_pct": str(take_profit_pct)}
+                ),
                 "trigger_by": str(initial.get("trigger_by") or ""),
                 "tpsl_mode": str(initial.get("tpsl_mode") or ""),
                 "strategy_id": intent.strategy_id,
@@ -433,10 +524,24 @@ class PaperTradeRuntime:
 
         stop_pct: Decimal | None = None
         tp_pct: Decimal | None = None
+        tp_price: Decimal | None = None
         if leg_type == "PRIMARY":
             initial = _mapping(payload.get("initial_protection"), "paper initial protection")
             stop_pct = _decimal(initial.get("stop_loss_pct"), "paper stop", positive=True)
-            tp_pct = _decimal(initial.get("take_profit_pct"), "paper take profit", positive=True)
+            if initial.get("take_profit_price") not in (None, ""):
+                tp_price = _decimal(
+                    initial.get("take_profit_price"), "paper take profit price", positive=True
+                )
+            else:
+                tp_pct = _decimal(
+                    initial.get("take_profit_pct"), "paper take profit", positive=True
+                )
+            dynamic_target = payload.get("dynamic_take_profit_price")
+            if dynamic_target not in (None, ""):
+                tp_price = _decimal(
+                    dynamic_target, "paper dynamic take profit price", positive=True
+                )
+                tp_pct = None
         else:
             hedge_leg = _mapping(payload.get("hedge_leg_policy"), "paper hedge leg policy")
             hedge_stop = _mapping(hedge_leg.get("stop_loss"), "paper hedge stop")
@@ -450,6 +555,11 @@ class PaperTradeRuntime:
         if stop_pct is not None and move <= -stop_pct:
             reason = "HARD_STOP"
         elif tp_pct is not None and move >= tp_pct:
+            reason = "TAKE_PROFIT"
+        elif tp_price is not None and (
+            (direction == TradeDirection.LONG.value and price >= tp_price)
+            or (direction == TradeDirection.SHORT.value and price <= tp_price)
+        ):
             reason = "TAKE_PROFIT"
 
         be = _mapping(exit_policy.get("break_even"), "paper break_even")
