@@ -4,11 +4,11 @@ set -euo pipefail
 readonly GATE_UNIT="cripta-entry-path-new15-nofloor-gate.service"
 readonly GATE_STATUS="/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_NO_FLOOR_GATE_10P_20260824/POOL_STATUS.json"
 readonly OUTPUT_ROOT="/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_NO_FLOOR_FULL_20260824"
-readonly LAUNCHER="/srv/cripta/research/research_universal_entry_paths_new15_linux.sh"
+readonly LAUNCHER="/data/cripta/research/worktrees/legacy_srv_research/research_universal_entry_paths_new15_linux.sh"
 
 while systemctl is-active --quiet "${GATE_UNIT}"; do sleep 15; done
 
-/srv/cripta/research_runs/minute_entry_book_v1/.venv/bin/python - "${GATE_STATUS}" <<'PY'
+/data/cripta/research/worktrees/minute_entry_book_v1/.venv/bin/python - "${GATE_STATUS}" <<'PY'
 import json, sys
 from pathlib import Path
 rows = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
