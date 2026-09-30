@@ -21,4 +21,4 @@ case "$name" in
   cripta-field-proof) command=field-proof ;;
   *) echo "unknown tool: $name" >&2; exit 2 ;;
 esac
-exec /srv/cripta/test_gate_venv/bin/python -m operations.devtools.cli "$command" "$@"
+exec /data/cripta/research/cache/test_gate_venv/bin/python -m operations.devtools.cli "$command" "$@"
