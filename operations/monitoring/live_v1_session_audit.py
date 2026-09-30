@@ -180,7 +180,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 def main() -> None:
     cutoff_ms = int(datetime.now(UTC).timestamp() * 1000)
     stamp = datetime.fromtimestamp(cutoff_ms / 1000, UTC).strftime("%Y%m%d_%H%M%S")
-    root = Path("/srv/cripta/reports")
+    root = Path("/srv/cripta-share/reports")
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql", row_factory=dict_row
     ) as connection:
