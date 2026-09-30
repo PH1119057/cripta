@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "scripts" / "release" / "build_server_release.py"
 RUNNER = ROOT / "operations" / "infrastructure" / "cripta-apply-incoming"
 INSTALLER = ROOT / "operations" / "infrastructure" / "install_verified_release.sh"
+RUNTIME_REQUIREMENTS = ROOT / "operations" / "runtime" / "runtime_requirements.lock"
 
 
 def _run(cwd: Path, *args: str) -> str:
@@ -145,6 +146,11 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         "GATE=DISARMED",
     ):
         assert token in source
+    assert "production/src/bybit_workbench/dispatcher_v2" in source
+    assert 'PYTHONPATH="$runtime_release/src"' in source
+    assert 'PYTHONPATH="$runtime_release/production/src"' in source
+    assert "import sqlalchemy" in source
+    assert "import bybit_workbench.dispatcher_v2" in source
     assert "systemctl start cripta-universal-entry-consumer.service" not in source
     assert (
         "-f /srv/cripta/runtime/current/operations/sql/"
@@ -172,3 +178,16 @@ def test_runtime_units_load_common_exact_release_identity() -> None:
     for unit in units:
         source = (ROOT / "operations" / "systemd" / unit).read_text(encoding="utf-8")
         assert "EnvironmentFile=-/etc/cripta/release.env" in source
+
+
+def test_runtime_dependency_lock_covers_universal_entry_database_imports() -> None:
+    lock = RUNTIME_REQUIREMENTS.read_text(encoding="utf-8")
+    assert "greenlet==3.5.5" in lock
+    assert "sqlalchemy==2.0.52" in lock
+
+
+def test_dispatcher_unit_uses_packaged_dispatcher_source_root() -> None:
+    unit = (
+        ROOT / "operations" / "dispatcher_v2" / "cripta-dispatcher-v2.service"
+    ).read_text(encoding="utf-8")
+    assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/production/src" in unit
