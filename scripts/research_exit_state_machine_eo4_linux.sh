@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPORT_ROOT="${CRIPTA_REPORT_ROOT:-/srv/cripta/reports/exit_state_machine_eo4}"
+REPORT_ROOT="${CRIPTA_REPORT_ROOT:-/data/cripta/research/runs/_legacy_srv_reports_20260911/exit_state_machine_eo4}"
 RUN_ID="${EO4_RUN_ID:-EO4_$(date -u +%Y%m%d_%H%M%S)}"
 WORKERS="${EO4_WORKERS:-1}"
 SAMPLE="${EO4_SAMPLE_FRACTION:-0.10}"
