@@ -54,7 +54,7 @@ if [[ ! -d "$runtime_release" ]]; then
 fi
 if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner install -d -m 0750 "$tooling_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs     | runuser -u cripta -- tar -xf - -C "$tooling_release"
+  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
 
 runtime_requirements="$runtime_release/operations/runtime/runtime_requirements.lock"
@@ -117,6 +117,7 @@ unit_specs=(
   "research/server/monitoring/cripta-health-monitor.service|cripta-health-monitor.service|runtime"
   "research/server/jobs/cripta-job-intake.service|cripta-job-intake.service|tooling"
   "research/server/jobs/cripta-job-runner.service|cripta-job-runner.service|tooling"
+  "research/server/dataset/cripta-dataset-manifest.service|cripta-dataset-manifest.service|tooling"
   "operations/systemd/cripta-lifecycle-supervisor.service|cripta-lifecycle-supervisor.service|runtime"
   "operations/systemd/cripta-m3-trade-analyst.service|cripta-m3-trade-analyst.service|runtime"
   "operations/systemd/cripta-mayak-v2.service|cripta-mayak-v2.service|runtime"
