@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.3
+**Версия:** 10.4
 **Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -368,24 +368,99 @@ RESEARCH_ROOT      = /data/cripta/research
 ARCHIVE_ROOT       = /data/cripta/script_archive
 ```
 
-Current transition state, CHECKED HERE 2026-09-30:
+Final filesystem state, CHECKED HERE 2026-09-30:
 
 ```text
-SOURCE_ROOT                           = PRESENT / current
-/data/cripta/research                 = PRESENT / R4 COMPLETE
-/data/cripta/research_runs            = REMOVED
-/srv/cripta/research_runs             = REMOVED
-/srv/cripta/research                  = REMOVED
-/srv/cripta/research_cache            = REMOVED
-/srv/cripta/research_inputs           = REMOVED
-/srv/cripta/test_gate_venv            = REMOVED
-/srv/cripta/research_watchdog         = ABSENT
-/srv/cripta/runtime                   = PRESENT / post-T4 operational repair;
-                                        current -> release 23988f8...
-/srv/cripta/backup                    = REMOVED after verified backup-runtime repair
-legacy runtime code paths under /srv  = REMOVED after zero-reference + archive/restore verification
-/data/cripta/script_archive           = PRESENT
+SOURCE_ROOT        = /srv/cripta/source_checkout   PRESENT / current
+RUNTIME_CODE_ROOT  = /srv/cripta/runtime           PRESENT / current
+RESEARCH_ROOT      = /data/cripta/research         PRESENT / current
+ARCHIVE_ROOT       = /data/cripta/script_archive   PRESENT / current
+
+/srv/cripta top-level project roots:
+  source_checkout
+  runtime
+
+/data/cripta current operational/data roots:
+  backups
+  datasets
+  jobs
+  reports
+  research
+  script_archive
+  lost+found [filesystem-owned, not CRIPTA contour]
 ```
+
+Current shared report storage:
+- `/srv/cripta-share/reports` and `/data/cripta/reports` resolve to the same
+  backing directory on this host at this checkpoint;
+- this is current operational report storage, not a legacy research root.
+
+Final cleanup removed all transition-only roots, including:
+`/srv/cripta/reports`, `/srv/cripta/patches`, `/srv/cripta/current`,
+`/srv/cripta/releases`, `/srv/cripta/tests`, `/srv/cripta/u5_oi30s_source`,
+`/srv/cripta/universal_entry_shadow`, `/srv/cripta/docs`,
+`/srv/cripta/backups`, `/srv/cripta/operations`, `/srv/cripta/config`,
+`/srv/cripta/dataset`, `/data/cripta/research_cache`,
+`/data/cripta/research_stage`, `/data/cripta/system_offload_20260911`,
+`/data/cripta/archive`, `/data/cripta/legacy`, `/data/cripta/lifecycle_v1`,
+`/data/cripta/cache`, `/data/cripta/staging` and `/data/cripta/workspace`.
+
+Migrated historical research evidence remains discoverable under canonical
+Research rather than old absolute paths:
+- `/data/cripta/research/runs/_legacy_srv_reports_20260911`;
+- `/data/cripta/research/runs/_legacy_data_research_stage_20260909`;
+- `/data/cripta/research/runs/_legacy_system_offload_research_runs_20260911`;
+- `/data/cripta/research/cache/_legacy_data_research_cache_20260930`;
+- earlier R1-R4 migrated legacy bundles already present under
+  `/data/cripta/research/runs`, `/data/cripta/research/cache` and
+  `/data/cripta/research/worktrees`.
+
+Cold historical/offload material is consolidated under
+`/data/cripta/script_archive`; notable final-cleanup bundles include:
+- `legacy_patches_20260911`;
+- `legacy_data_archive_20260930`;
+- `legacy_data_legacy_20260930`;
+- `legacy_data_lifecycle_v1_20260930`;
+- `legacy_srv_residuals_20260930`;
+- `final_legacy_srv_roots_20260930`;
+- `legacy_srv_root_markers_20260930`.
+
+Final executable path repair/deploy:
+- implementation commit:
+  `44fac5628c741cbee8ba1f4d659d77560327fd77`;
+- `operations/server_resources` and Strategy Dispatcher profile consumers now
+  resolve through `/srv/cripta/runtime/current`;
+- `cripta-dataset-manifest.service` is canonical-installer managed and executes
+  `/data/cripta/research/tooling/current/research/server/dataset/build_manifest.py`;
+- the dataset unit remains `static/inactive` until invoked by its existing
+  workflow; `cripta-download-expansion.service` retains
+  `OnSuccess=cripta-dataset-manifest.service`.
+
+Exact pre-publication identity checkpoint:
+
+```text
+REMOTE_HEAD      = d3daa49892a57e45002d28866012f7847ce36611
+SOURCE_HEAD      = d3daa49892a57e45002d28866012f7847ce36611
+INSTALLED_COMMIT = d3daa49892a57e45002d28866012f7847ce36611
+LOADED_COMMIT    = d3daa49892a57e45002d28866012f7847ce36611
+RESEARCH_TOOLING = d3daa49892a57e45002d28866012f7847ce36611
+```
+
+Final zero-reference/runtime evidence:
+- forbidden legacy project roots physically absent;
+- current executable/config/system references to those roots = 0;
+- live process references to those roots = 0;
+- checked core services active;
+- mainnet gate=0; real execution permissions=0; hot positions=0;
+  queued/running trade commands=0; pending Exchange orders=0;
+- `FILESYSTEM_RESTRUCTURING=COMPLETE`.
+
+Historical Markdown/evidence may still quote an old absolute path as part of a
+dated past checkpoint. Such text is not a current executable dependency and
+must not be interpreted as a live path.
+
+The migration checkpoints below are retained only as historical evidence; they
+do not override the final state above.
 
 Research PHASE R1 и R2 выполнены: target root и subroots созданы с
 `cripta:cripta 2770`; зарегистрированные research worktrees перенесены в

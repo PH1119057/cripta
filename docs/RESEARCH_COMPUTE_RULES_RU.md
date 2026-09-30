@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.5 · 2026-09-29
+**Версия:** 1.6 · 2026-09-30
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -216,7 +216,48 @@ system disk `/srv`.
 После начала migration новые research worktrees/runs в
 `/srv/cripta/research_runs` и `/data/cripta/research_runs` запрещены.
 Legacy objects остаются transition-only до доказанного переноса/архивации.
-Точный transition state хранится в `CURRENT_PROJECT_MAP §1.5`.
+Точный transition/current state хранится в `CURRENT_PROJECT_MAP §1.5`.
+
+### 17.1 Поиск migrated legacy research / старой статистики
+
+Отсутствие старого absolute path само по себе **не доказывает отсутствие
+данных**. После filesystem migration `legacy path miss != data missing`.
+
+Перед повторным расчётом, заявлением `NOT FOUND` или выводом «старой статистики
+нет» выполняется read-only discovery в таком порядке:
+
+```text
+1. /data/cripta/research/runs
+2. /data/cripta/research/manifests
+3. /data/cripta/research/cache          [если искомое могло быть cache/intermediate]
+4. /srv/cripta-share/reports           [current shared operational reports]
+5. /data/cripta/script_archive         [forensic/cold archive only]
+```
+
+Exact current names/paths migrated legacy bundles принадлежат
+`CURRENT_PROJECT_MAP §1.5`, а не этому process contract. На current host
+`/srv/cripta-share/reports` и `/data/cripta/reports` являются одним backing
+report directory; operational fact перепроверяется по MAP/host, а не считается
+вечной архитектурой.
+
+Discovery выполняется не только по remembered absolute path. Использовать
+доступные ключи:
+- basename/file fragment;
+- `run_id` / experiment name;
+- Strategy/Entry/Exit identifier;
+- symbol/coin;
+- period/date;
+- известное число/metric token;
+- CSV/JSON/Parquet/SQLite/manifest/log/result filename.
+
+До нового replay/recompute обязателен отчёт, какие current roots реально
+проверены. Cold archive не становится executable Research source автоматически:
+для повторного использования payload из `ARCHIVE_ROOT` нужен явный
+restore/forensic + provenance/equivalence шаг.
+
+Migrated historical result остаётся research evidence и не наследует текущую
+Strategy policy только потому, что payload найден.
+
 
 До `RUNNING` каждого research run обязателен воспроизводимый source capture.
 Минимальный run bundle:

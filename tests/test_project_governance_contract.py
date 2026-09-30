@@ -399,8 +399,9 @@ def test_research_run_requires_source_capture_and_data_disk_output() -> None:
     assert "все новые server-side research writes живут на" in research
     assert "/data/cripta/research_runs" in research
     assert "after PHASE R2 no new research output is allowed" in current_map
-    assert "/data/cripta/research                 = PRESENT / R4 COMPLETE" in current_map
-    assert "/data/cripta/research_runs            = REMOVED" in current_map
+    assert "RESEARCH_ROOT      = /data/cripta/research         PRESENT / current" in current_map
+    assert "Final cleanup removed all transition-only roots" in current_map
+    assert "/data/cripta/research_runs" in current_map
     assert "PHASE R1  COMPLETE" in current_map
     assert "PHASE R2  COMPLETE" in current_map
     assert "PHASE R4  COMPLETE" in current_map
@@ -432,3 +433,26 @@ def test_current_operational_sources_do_not_use_legacy_research_bridges() -> Non
                 if token in body:
                     findings.append(f"{path.relative_to(ROOT)}: {token}")
     assert findings == []
+
+def test_legacy_research_discovery_and_final_filesystem_state_are_explicit() -> None:
+    research = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+
+    for token in (
+        "legacy path miss != data missing",
+        "/data/cripta/research/runs",
+        "/data/cripta/research/manifests",
+        "/srv/cripta-share/reports",
+        "/data/cripta/script_archive",
+    ):
+        assert token in research
+
+    for token in (
+        "Final filesystem state, CHECKED HERE 2026-09-30",
+        "_legacy_srv_reports_20260911",
+        "_legacy_data_research_stage_20260909",
+        "_legacy_system_offload_research_runs_20260911",
+        "_legacy_data_research_cache_20260930",
+        "FILESYSTEM_RESTRUCTURING=COMPLETE",
+    ):
+        assert token in current_map
