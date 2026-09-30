@@ -153,20 +153,65 @@ def _parse_rule(raw: object) -> ExitRule:
     )
 
 
-def _fact_path_present(path: str, observation: ExitObservation) -> bool:
-    if path in {"event_kind", "symbol", "direction"}:
-        return True
+def _fact_value(path: str, observation: ExitObservation) -> object:
+    if path == "event_kind":
+        return observation.event_kind
+    if path == "symbol":
+        return observation.symbol
     if not path.startswith("fact."):
         raise ExitPlanContractError(
-            f"P5 exit required fact path needs explicit future contract: {path}"
+            f"P5 exit fact path needs explicit future contract: {path}"
         )
     parts = path.removeprefix("fact.").split(".")
     value: object = observation.attributes.to_dict()
     for part in parts:
         if not part or not isinstance(value, Mapping) or part not in value:
-            return False
+            raise KeyError(path)
         value = value[part]
-    return value is not None
+    if value is None:
+        raise KeyError(path)
+    return value
+
+
+def _fact_path_present(path: str, observation: ExitObservation) -> bool:
+    if path == "direction":
+        return True
+    try:
+        _fact_value(path, observation)
+    except KeyError:
+        return False
+    return True
+
+
+def _resolve_dynamic_mutation(
+    mutation: FrozenPolicy,
+    observation: ExitObservation,
+) -> FrozenPolicy:
+    """Resolve explicit ExitPlan fact references at decision time.
+
+    A dynamic value is encoded as {"fact_path": "fact...."}.  Resolution is
+    causal because it can read only the current ExitObservation.  Missing facts
+    fail closed; no Strategy default or Entry snapshot is substituted.
+    """
+
+    def resolve(value: object) -> object:
+        if isinstance(value, Mapping):
+            if set(value) == {"fact_path"}:
+                path = str(value.get("fact_path") or "").strip()
+                if not path:
+                    raise ExitPlanContractError("dynamic mutation fact_path is empty")
+                try:
+                    return _fact_value(path, observation)
+                except KeyError as exc:
+                    raise ExitPlanContractError(
+                        f"dynamic mutation fact is missing: {path}"
+                    ) from exc
+            return {str(key): resolve(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [resolve(item) for item in value]
+        return value
+
+    return FrozenPolicy.from_mapping(resolve(mutation.to_dict()))
 
 
 class UniversalExitEngine:
@@ -308,6 +353,19 @@ class UniversalExitEngine:
                 matched_rule_ids=matched_ids,
             )
         selected = winners[0]
+        try:
+            resolved_mutation = _resolve_dynamic_mutation(
+                selected.requested_mutation,
+                observation,
+            )
+        except ExitPlanContractError as exc:
+            return _blocked(
+                position,
+                plan,
+                observation,
+                f"EXIT_PLAN_CONTRACT:{exc}",
+                matched_rule_ids=matched_ids,
+            )
         decision_id = (
             "exit-decision-"
             + fingerprint(
@@ -328,7 +386,7 @@ class UniversalExitEngine:
             exit_plan_fingerprint=position.exit_plan_fingerprint,
             rule_id=selected.rule_id,
             action_kind=selected.action_kind,
-            requested_mutation=selected.requested_mutation,
+            requested_mutation=resolved_mutation,
             source_refs=observation.source_refs,
             decided_at=observation.observed_at.astimezone(UTC),
         )
