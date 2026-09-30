@@ -360,9 +360,23 @@ def prepare_runtime_entry_command(
     stop_loss = _decimal(
         initial.get("stop_loss_pct"), "initial_protection.stop_loss_pct", positive=True
     )
-    take_profit = _decimal(
-        initial.get("take_profit_pct"), "initial_protection.take_profit_pct", positive=True
-    )
+    take_profit_pct_raw = initial.get("take_profit_pct")
+    take_profit_reference_path = str(
+        initial.get("take_profit_reference_path") or ""
+    ).strip()
+    if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+            "initial protection requires exactly one take_profit_pct or take_profit_reference_path",
+        )
+    take_profit: Decimal | None = None
+    take_profit_price: Decimal | None = None
+    if take_profit_reference_path:
+        take_profit_price = _resolve_fact_reference(request, take_profit_reference_path)
+    else:
+        take_profit = _decimal(
+            take_profit_pct_raw, "initial_protection.take_profit_pct", positive=True
+        )
     trigger_by = _require_text(initial, "trigger_by", "initial_protection")
     tpsl_mode = _require_text(initial, "tpsl_mode", "initial_protection")
     if trigger_by != "LastPrice" or tpsl_mode != "Full":
@@ -380,7 +394,6 @@ def prepare_runtime_entry_command(
     exit_fp = str(exit_plan["exit_plan_fingerprint"])
     protection = {
         "stop_loss_pct": str(stop_loss),
-        "take_profit_pct": str(take_profit),
         "trigger_by": trigger_by,
         "tpsl_mode": tpsl_mode,
         "strategy_id": request.strategy_id,
@@ -388,6 +401,11 @@ def prepare_runtime_entry_command(
         "strategy_config_fingerprint": request.strategy_config_fingerprint,
         "exit_plan_fingerprint": exit_fp,
     }
+    if take_profit_price is not None:
+        protection["take_profit_price"] = str(take_profit_price)
+        protection["take_profit_reference_path"] = take_profit_reference_path
+    elif take_profit is not None:
+        protection["take_profit_pct"] = str(take_profit)
     payload: dict[str, object] = {
         "source": "universal_entry",
         "execution_request_id": request.execution_request_id,
