@@ -310,6 +310,24 @@ def _compute_range_atr_zone(
     )
 
 
+def compute_l53_zone(candles: Sequence[Candle]) -> GenericZone | None:
+    """Canonical owner-approved L5-3 geometry over closed 5m candles."""
+    closed = tuple(
+        item for item in candles if item.is_closed and str(item.timeframe) == "5"
+    )
+    return _compute_range_atr_zone(
+        closed,
+        timeframe="5",
+        lookback=36,
+        atr_period=200,
+        width_atr=Decimal("0.5"),
+        shock_period=1,
+        shock_multiple=Decimal("1"),
+        maturity_minutes=0,
+        shock_mode="OFF",
+    )
+
+
 def _apply_entry_reference_policy(
     plan: EntryPlan, calculated_entry: Decimal
 ) -> tuple[Decimal, Decimal]:
@@ -344,7 +362,19 @@ def _local_entry_levels(
         raise ValueError("local entry window_minutes must be positive")
     lookbacks = _mapping(policy.get("lookback_by_timeframe"), "local lookback_by_timeframe")
     use_1m = bool(policy.get("use_1m", False))
-    timeframes = ["5", "15"] + (["1"] if use_1m else [])
+    configured_timeframes = policy.get("timeframes")
+    if configured_timeframes is None:
+        timeframes = ["5", "15"] + (["1"] if use_1m else [])
+    else:
+        if not isinstance(configured_timeframes, list) or not configured_timeframes:
+            raise ValueError("local entry timeframes must be a non-empty list")
+        timeframes = [str(item) for item in configured_timeframes]
+        if len(set(timeframes)) != len(timeframes) or any(
+            item not in {"1", "5", "15"} for item in timeframes
+        ):
+            raise ValueError("local entry timeframes contain unsupported/duplicate values")
+        if use_1m != ("1" in timeframes):
+            raise ValueError("local entry use_1m must match explicit timeframes")
     atr_period = _integer(policy.get("atr_period"), "local atr_period")
     width_atr = _decimal(policy.get("zone_half_width_atr"), "local zone_half_width_atr")
     zones: dict[str, GenericZone] = {}
@@ -407,6 +437,24 @@ def _local_entry_levels(
 
     long_entry = field_value("LONG") if allowed_long else None
     short_entry = field_value("SHORT") if allowed_short else None
+    width_filter = policy.get("working_width_filter")
+    if isinstance(width_filter, Mapping) and bool(width_filter.get("enabled", False)):
+        zone = zones[price_timeframe]
+        working_width_pct = (
+            (zone.resistance_bottom - zone.support_top) / reference * Decimal("100")
+        )
+        minimum = width_filter.get("min_pct")
+        maximum = width_filter.get("max_pct")
+        if minimum not in (None, "") and working_width_pct < _decimal(
+            minimum, "local working width min_pct"
+        ):
+            long_entry = None
+            short_entry = None
+        if maximum not in (None, "") and working_width_pct > _decimal(
+            maximum, "local working width max_pct"
+        ):
+            long_entry = None
+            short_entry = None
     if bool(policy.get("require_macro_relation", False)):
         relation = _mapping(policy.get("macro_relation"), "local macro_relation")
         if str(relation.get("operator") or "") != "INSIDE_DIRECTIONAL_ZONE":
