@@ -50,7 +50,7 @@ tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
 
 if [[ ! -d "$runtime_release" ]]; then
   as_repo_owner install -d -m 0750 "$runtime_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src production/src/bybit_workbench/dispatcher_v2 operations config research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
+  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- src production/src/bybit_workbench/dispatcher_v2 operations config research/server/backup research/server/connectivity research/server/monitoring research/server/control pyproject.toml     | runuser -u cripta -- tar -xf - -C "$runtime_release"
 fi
 if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner install -d -m 0750 "$tooling_release"
@@ -108,6 +108,8 @@ runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
 
 unit_specs=(
   "research/server/connectivity/cripta-bybit-latency.service|cripta-bybit-latency.service|runtime"
+  "research/server/backup/cripta-backup.service|cripta-backup.service|runtime"
+  "research/server/backup/cripta-backup.timer|cripta-backup.timer|runtime"
   "operations/systemd/cripta-dashboard.service|cripta-dashboard.service|runtime"
   "operations/dispatcher_v2/cripta-dispatcher-v2-context-correlator.service|cripta-dispatcher-v2-context-correlator.service|runtime"
   "operations/dispatcher_v2/cripta-dispatcher-v2.service|cripta-dispatcher-v2.service|runtime"

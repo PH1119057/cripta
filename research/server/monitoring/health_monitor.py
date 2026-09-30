@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -13,6 +14,8 @@ SAFETY = Path("/var/lib/cripta/safety/latest.json")
 PRIVATE = Path("/var/lib/cripta/private_runtime/status.json")
 BACKUP = Path("/var/lib/cripta/backup/latest.json")
 DATA = Path("/data/cripta")
+EXPECT_PRIVATE_WS = os.environ.get("CRIPTA_EXPECT_PRIVATE_WS", "1") == "1"
+EXPECT_TRADE_WS = os.environ.get("CRIPTA_EXPECT_TRADE_WS", "1") == "1"
 
 
 def read(path: Path) -> dict[str, object]:
@@ -30,7 +33,11 @@ def initialize(connection: psycopg.Connection) -> None:
     connection.commit()
 
 
-def evaluate() -> dict[str, object]:
+def evaluate(
+    *,
+    expect_private_ws: bool = EXPECT_PRIVATE_WS,
+    expect_trade_ws: bool = EXPECT_TRADE_WS,
+) -> dict[str, object]:
     now = int(time.time())
     public, safety, private, backup = read(PUBLIC), read(SAFETY), read(PRIVATE), read(BACKUP)
     issues: list[dict[str, str]] = []
@@ -41,8 +48,14 @@ def evaluate() -> dict[str, object]:
     if safety.get("state") != "healthy" or safety_age > 90: issues.append({"severity": "red", "code": "exchange_truth", "message": f"exchange truth state={safety.get('state')} age={safety_age} с"})
     private_state = (private.get("private") or {}).get("state")
     trade_state = (private.get("trade") or {}).get("state")
-    if private_state != "connected": issues.append({"severity": "red", "code": "private_ws", "message": f"private WS: {private_state}"})
-    if trade_state != "authenticated-locked": issues.append({"severity": "yellow", "code": "trade_ws", "message": f"trade WS: {trade_state}"})
+    if expect_private_ws and private_state != "connected":
+        issues.append(
+            {"severity": "red", "code": "private_ws", "message": f"private WS: {private_state}"}
+        )
+    if expect_trade_ws and trade_state != "authenticated-locked":
+        issues.append(
+            {"severity": "yellow", "code": "trade_ws", "message": f"trade WS: {trade_state}"}
+        )
     disk = shutil.disk_usage(DATA)
     if disk.free < 8 * 1024 ** 3: issues.append({"severity": "red", "code": "disk", "message": "свободно меньше аварийного резерва 8 ГБ"})
     elif disk.free < 15 * 1024 ** 3: issues.append({"severity": "yellow", "code": "disk", "message": "свободно меньше 15 ГБ"})

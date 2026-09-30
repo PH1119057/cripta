@@ -6,7 +6,7 @@ Requires=data-cripta.mount
 [Service]
 Type=oneshot
 User=root
-ExecStart=/srv/cripta/backup/backup.sh
+ExecStart=/usr/bin/bash /srv/cripta/runtime/current/research/server/backup/backup.sh
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
