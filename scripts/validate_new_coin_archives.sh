@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root=/data/cripta/datasets/raw/20260518_20260816
-sealed=/srv/cripta/reports/holdout_new15/archive_validation_20260824
+sealed=/data/cripta/research/runs/_legacy_srv_reports_20260911/holdout_new15/archive_validation_20260824
 mkdir -p "$sealed"
 
 old='^(1000PEPE|ADA|BTC|DOGE|ETH|LINK|SOL|UNI|XRP)USDT$'
