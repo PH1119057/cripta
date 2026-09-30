@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.2
+**Версия:** 10.3
 **Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -180,6 +180,58 @@ Post-removal verification:
 
 T4 completion does not imply MICRO_LIVE/LIVE readiness or re-arm.
 
+## 1.2.3 Health/backup operational repair — CHECKED HERE 2026-09-30
+
+Post-T4 forensic выявил пропущенный operational debt:
+- `cripta-health-monitor` считал намеренно disabled private/trade WS аварией;
+- штатный `cripta-backup.timer` существовал, но был disabled, поэтому
+  `/var/lib/cripta/backup/latest.json` оставался на verified backup 2026-09-03;
+- `cripta-backup.service` исполнял `/srv/cripta/backup/backup.sh`, то есть
+  один executable legacy root остался вне T1/T4 inventory.
+
+Git-first repair:
+- implementation commit: `23988f8f8f3bb69bd707359e41a0223cb3d02871`;
+- runtime installer теперь упаковывает `research/server/backup` и устанавливает
+  `cripta-backup.service` + `cripta-backup.timer` из exact runtime release;
+- backup ExecStart:
+  `/usr/bin/bash /srv/cripta/runtime/current/research/server/backup/backup.sh`;
+- health unit явно задаёт `CRIPTA_EXPECT_PRIVATE_WS=0` и
+  `CRIPTA_EXPECT_TRADE_WS=0` для current intentionally-disabled private runtime;
+- strict backup freshness check сохранён;
+- targeted tests 4/4 PASS, governance 21/21 PASS, full pytest
+  1463 passed / 64 skipped;
+- legacy health-monitor Ruff debt не расширен:
+  baseline diagnostics=20, repaired diagnostics=16, `NEW_DIAGNOSTICS=0`.
+
+Deployment/runtime evidence:
+```text
+REMOTE_HEAD      = 23988f8f8f3bb69bd707359e41a0223cb3d02871
+SOURCE_HEAD      = 23988f8f8f3bb69bd707359e41a0223cb3d02871
+INSTALLED_COMMIT = 23988f8f8f3bb69bd707359e41a0223cb3d02871
+LOADED_COMMIT    = 23988f8f8f3bb69bd707359e41a0223cb3d02871
+```
+
+- canonical installer: `DEPLOY_EXACT_VERIFIED_COMMIT=PASS`;
+- mainnet gate=0; real execution permissions=0;
+- open/reconciliation positions, hot positions, pending commands/orders = 0;
+- `cripta-backup.timer` enabled/active;
+- `Persistent=true` immediately triggered the missed daily backup;
+- verified backup: `/data/cripta/backups/system/20260930T094231Z`;
+- backup service `Result=success / ExecMainStatus=0`;
+- backup payload contains verified `cripta.pgdump`, `project.tar.gz`,
+  `configuration.tar.gz` and `SHA256SUMS`;
+- health monitor after backup: `state=green`, `issues=[]`;
+- next timer trigger observed:
+  2026-10-01 03:26:57 UTC (randomized daily 03:20 UTC schedule);
+- old `/srv/cripta/backup` passed process/system/source zero-reference gate,
+  was archive/restore verified and removed;
+- legacy backup archive:
+  `/data/cripta/script_archive/legacy_srv_backup_20260930_1000/legacy_srv_backup.tar`;
+- archive SHA256:
+  `f4ef2ac80434ce5e9ec7dfdb047a4244a927d4784e22e57abe56bf6d7315e220`.
+
+Этот repair не меняет Strategy/trading policy и не даёт MICRO_LIVE/LIVE rights.
+
 ## 1.3 Filesystem permission hardening — CHECKED HERE 2026-09-28
 
 FINDING был подтверждён реальными runtime failures, а не только static audit:
@@ -328,8 +380,9 @@ SOURCE_ROOT                           = PRESENT / current
 /srv/cripta/research_inputs           = REMOVED
 /srv/cripta/test_gate_venv            = REMOVED
 /srv/cripta/research_watchdog         = ABSENT
-/srv/cripta/runtime                   = PRESENT / T4 COMPLETE;
-                                        current -> release 72797f38...
+/srv/cripta/runtime                   = PRESENT / post-T4 operational repair;
+                                        current -> release 23988f8...
+/srv/cripta/backup                    = REMOVED after verified backup-runtime repair
 legacy runtime code paths under /srv  = REMOVED after zero-reference + archive/restore verification
 /data/cripta/script_archive           = PRESENT
 ```
