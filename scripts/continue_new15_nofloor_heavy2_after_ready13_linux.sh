@@ -6,15 +6,15 @@ readonly READY13_UNIT="cripta-entry-path-new15-nofloor-full-ready13.service"
 readonly PYTHON_BIN="/data/cripta/research/worktrees/minute_entry_book_v1/.venv/bin/python"
 readonly SOURCE_ROOT="/data/cripta/research/worktrees/universal_entry_v1/source_stage"
 readonly RAW_ROOT="/data/cripta/datasets/raw/20260518_20260816"
-readonly ENTRY_ROOT="/srv/cripta/reports/universal_entry_v1/NEW15_HOLDOUT_20260824"
-readonly OUTPUT_ROOT="/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_NO_FLOOR_FULL_20260824"
+readonly ENTRY_ROOT="/data/cripta/research/runs/_legacy_srv_reports_20260911/universal_entry_v1/NEW15_HOLDOUT_20260824"
+readonly OUTPUT_ROOT="/data/cripta/research/runs/_legacy_srv_reports_20260911/universal_entry_path_replay_v1/NEW15_NO_FLOOR_FULL_20260824"
 
 while systemctl is-active --quiet "${CURRENT_UNIT}" || systemctl is-active --quiet "${READY13_UNIT}"; do
   sleep 20
 done
 
 for symbol in NEARUSDT XLMUSDT; do
-  test -f "/srv/cripta/reports/universal_entry_path_replay_v1/NEW15_FULL_20260824/${symbol}/RUN_COMPLETE.json"
+  test -f "/data/cripta/research/runs/_legacy_srv_reports_20260911/universal_entry_path_replay_v1/NEW15_FULL_20260824/${symbol}/RUN_COMPLETE.json"
 done
 
 export PYTHONPATH="${SOURCE_ROOT}/src"
