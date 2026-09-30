@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.5
-**Дата:** 2026-09-25
+**Версия:** 1.6
+**Дата:** 2026-09-30
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -386,6 +386,13 @@ Exit Engine обязан claim/acknowledge StrategyPosition. Entry больше 
 - состояния позиции.
 
 Исторический Entry snapshot и текущая геометрия — разные объекты.
+
+Для owner-approved L5-3 Strategy текущая L5-3 после confirmed fill является
+Exit-side геометрией. Entry один раз передаёт initial protection, рассчитанную
+из Entry snapshot; последующие изменения L5-3 не дают Entry права менять TP/SL.
+Если exact ExitPlan разрешает dynamic L5-3 target, Exit Engine может заменять TP
+по текущей целевой внутренней границе L5-3 (LONG — верхней, SHORT — нижней),
+сохраняя Entry/Exit ownership boundary.
 
 Если одну и ту же Strategy geometry потребляют Entry, Exit, Position Supervisor
 и Analyst/replay, они обязаны использовать один versioned geometry contract:
