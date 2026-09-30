@@ -415,6 +415,9 @@ def test_current_operational_sources_do_not_use_legacy_research_bridges() -> Non
         "/srv/cripta/research_inputs",
         "/srv/cripta/test_gate_venv",
         "/srv/cripta/reports",
+        "/srv/cripta/operations",
+        "/srv/cripta/config",
+        "/srv/cripta/dataset",
     )
     findings: list[str] = []
     for root in roots:

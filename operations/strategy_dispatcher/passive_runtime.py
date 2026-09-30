@@ -136,7 +136,7 @@ def main() -> int:
     parser.add_argument(
         "--profile-dir",
         type=Path,
-        default=Path("/srv/cripta/config/strategy_dispatcher/profiles"),
+        default=Path("/srv/cripta/runtime/current/config/strategy_dispatcher/profiles"),
     )
     parser.add_argument(
         "--state-root", type=Path, default=Path("/var/lib/cripta/strategy_dispatcher")

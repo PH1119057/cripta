@@ -6,7 +6,7 @@ param(
     [string]$ConfirmPlanId = ''
 )
 
-$remoteScript = '/srv/cripta/operations/server_resources/servercore_resource_control.py'
+$remoteScript = '/srv/cripta/runtime/current/operations/server_resources/servercore_resource_control.py'
 $arguments = @('robot-admin', 'sudo', '/usr/bin/python3', $remoteScript, $Command)
 if ($Command -in @('plan', 'apply')) {
     $arguments += @('--profile', $Profile)

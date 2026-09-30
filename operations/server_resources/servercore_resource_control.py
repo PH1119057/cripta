@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PROFILES = Path("/srv/cripta/operations/server_resources/resource_profiles.json")
+DEFAULT_PROFILES = Path("/srv/cripta/runtime/current/operations/server_resources/resource_profiles.json")
 DEFAULT_ENV = Path("/etc/cripta/servercore.env")
 AUDIT = Path("/var/log/cripta/servercore-resource-audit.jsonl")
 
