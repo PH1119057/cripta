@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.0
+**Версия:** 10.1
 **Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -130,6 +130,55 @@ Historical-origin helper `/usr/local/sbin/cripta-permission-preflight` оста�
 `38cc16c08ba396e485bb72d03ec5b8bd96f743e66ce7fbe8b9bf338e6fd778a1` совпадает с current source bytes.
 
 T3 liveness/loaded-path evidence не является T4 runtime-behavior verification и не даёт MICRO_LIVE/LIVE rights.
+
+## 1.2.2 T4 runtime behavior + legacy-root cleanup — CHECKED HERE 2026-09-30
+
+T4 runtime verification after T3:
+- two independent post-deploy snapshots over 20 seconds showed stable PIDs and `NRestarts=0` for the checked active runtime services;
+- connectivity message count and status timestamp advanced;
+- MAYAK status advanced and `mayak_v2.snapshots` / `mayak_v2.coin_market_contexts` row counts advanced;
+- Dispatcher status advanced and `dispatcher_v2.global_market_contexts` / `dispatcher_v2.coin_market_contexts` row counts advanced;
+- Lifecycle Supervisor and Universal Exit heartbeat/status advanced with `trading_rights=NONE` / `execution_rights=NONE`;
+- Universal Entry observer remained `observer_ready=true`, `state=IDLE`, `trading_effect=NONE`, reason=`no enabled StrategyActivation`;
+- Exit Runtime heartbeat advanced;
+- Safety observer remained `healthy`, open positions/orders = 0;
+- mainnet gate=0 and real execution permissions=0 throughout.
+
+Component provenance clarification:
+- Dispatcher runtime code/package remained unchanged from component origin `ff259fdc173841a02cc6bb633af5ed5765614df1`;
+- Dispatcher V2 context-correlator code remained unchanged from component origin `6d6bfd035128bac090809127d9c9e56e4cf2ce98`;
+- therefore those `source_commit` fields are component-code provenance, not stale `LOADED_COMMIT`.
+
+Pre-existing findings not caused by T3/T4 migration:
+- `cripta-health-monitor` remains RED because it still treats intentionally disabled private/trade WS as unhealthy and its `/var/lib/cripta/backup/latest.json` points to an old verified backup; monitoring history shows the same RED state before T3;
+- latest Dispatcher trading-capacity snapshot is correctly marked `STALE`; private runtime remains intentionally inactive/disabled, so this is not represented as fresh capacity.
+
+Legacy runtime cleanup preconditions:
+- live `/proc` cmdline/cwd/exe/maps scan: zero references to the legacy runtime roots;
+- active systemd/cron/local-sbin scan: zero live references to the legacy runtime roots;
+- current operational source has no runtime dependency on those roots; installer retains only conditional historical-link backup checks;
+- exact archive root preflight PASS (`/data/cripta/script_archive`, root:cripta 750).
+
+Verified archive before removal:
+- archive: `/data/cripta/script_archive/runtime_legacy_cleanup_T4_20260930_0844/legacy_runtime_roots.tar`;
+- tar SHA256: `aa7a7f8de0fa56645dffd39be56d030bbd92d008155c329ef4cef8b069046ab0`;
+- source/restored manifests each contain 61,367 objects and are byte-identical;
+- manifest SHA256: `fb952c92860c2098f721a6482bfa8129d3eea81f95809646e17993fd125c5fb1`;
+- restore verification used tar ACL/xattr/numeric-owner preservation and completed PASS.
+
+Removed only after the above gates:
+`/srv/cripta/production`, `/srv/cripta/monitoring`, `/srv/cripta/connectivity`,
+`/srv/cripta/dashboard`, `/srv/cripta/trade_lifecycle`,
+`/srv/cripta/universal_entry_observer`, `/srv/cripta/universal_entry_consumer`,
+`/srv/cripta/control`, `/srv/cripta/jobs`.
+
+Post-removal verification:
+- all 17 expected active runtime/research-tooling services remained active with unchanged PIDs and `NRestarts=0`;
+- runtime heartbeats/status/DB rows continued to advance;
+- mainnet gate=0, real execution permissions=0, hot positions=0, pending hot orders=0;
+- R4 research compatibility bridges were not modified by T4.
+
+T4 completion does not imply MICRO_LIVE/LIVE readiness or re-arm.
 
 ## 1.3 Filesystem permission hardening — CHECKED HERE 2026-09-28
 
@@ -278,12 +327,10 @@ SOURCE_ROOT                           = PRESENT / current
 /srv/cripta/research_cache            = compatibility symlink -> /data research
 /srv/cripta/research_inputs           = compatibility symlink -> /data research
 /srv/cripta/test_gate_venv            = compatibility symlink -> /data research cache
-/srv/cripta/research_watchdog         = no live systemd reference found in T3 forensic;
-                                        physical cleanup remains T4/cleanup scope
-/srv/cripta/runtime                   = PRESENT / T3 COMPLETE;
+/srv/cripta/research_watchdog         = ABSENT
+/srv/cripta/runtime                   = PRESENT / T4 COMPLETE;
                                         current -> release 72797f38...
-legacy runtime code paths under /srv  = physically retained for rollback/T4;
-                                        no active T3 unit definition references them
+legacy runtime code paths under /srv  = REMOVED after zero-reference + archive/restore verification
 /data/cripta/script_archive           = PRESENT
 ```
 
@@ -314,8 +361,11 @@ T2 staging evidence, historical checkpoint 2026-09-29:
   `LOADED_COMMIT=d4800b4...` до T3 не объявляются.
 
 T3 CHECKED HERE 2026-09-30: active runtime consumers переключены на
-`/srv/cripta/runtime/current`; legacy runtime directories физически сохранены
-как rollback/T4 material и этой фазой не удалялись.
+`/srv/cripta/runtime/current`.
+
+T4 CHECKED HERE 2026-09-30: broader runtime behavior подтверждено повторными
+срезами, затем legacy runtime directories удалены после zero-reference и
+archive/restore equivalence gate.
 
 Migration order / state:
 
@@ -327,7 +377,7 @@ PHASE R4  PARTIAL   physical payload migrated; compatibility bridges remain
 PHASE T1  COMPLETE  active runtime consumers inventoried
 PHASE T2  COMPLETE  build /srv/cripta/runtime release layout in Git/release contract
 PHASE T3  COMPLETE  exact verified release deployed; loaded-path/liveness cutover PASS
-PHASE T4  PENDING   prove broader runtime behavior, then remove legacy runtime code roots
+PHASE T4  COMPLETE  runtime behavior/repeat checks PASS; legacy runtime code roots archived+removed
 ```
 
 T1 active-consumer inventory, historical checkpoint 2026-09-29:
