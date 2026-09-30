@@ -8,6 +8,8 @@ Type=simple
 User=cripta
 Group=cripta
 Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_EXPECT_PRIVATE_WS=0
+Environment=CRIPTA_EXPECT_TRADE_WS=0
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/research/server/monitoring/health_monitor.py
 Restart=always
 RestartSec=5
