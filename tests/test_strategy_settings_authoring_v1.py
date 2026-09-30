@@ -234,3 +234,34 @@ def test_new_version_preserves_explicit_legacy_safety_envelope_without_inventing
     assert initial["take_profit_enabled"] is True
     assert initial["stop_loss_pct"] == "2.00"
     assert initial["take_profit_pct"] == "3.00"
+
+
+def test_l53_dynamic_exit_separates_initial_target_from_exit_target() -> None:
+    raw = _minimal_payload()
+    raw["exit_policy"]["hard_stop"] = {"enabled": True, "percent": "2.00"}
+    raw["exit_policy"]["take_profit"] = {"enabled": False}
+    raw["exit_policy"]["local_zone_exit"] = {
+        "enabled": True,
+        "geometry": "L5-3",
+        "target": "OPPOSITE_INNER_BOUNDARY",
+        "update_mode": "EACH_CAUSAL_GEOMETRY_CHANGE",
+        "target_fact_path": "fact.geometry.l5_3.target_inner",
+    }
+    raw["protection_policy"]["initial_protection"] = {
+        "stop_loss_enabled": True,
+        "stop_loss_pct": "2.00",
+        "take_profit_enabled": True,
+        "take_profit_reference_path": "fact.local_geometry.5.resistance_bottom",
+        "trigger_by": "LastPrice",
+        "tpsl_mode": "Full",
+    }
+    card = card_from_editable(
+        raw,
+        approved_at=datetime(2026, 9, 30, tzinfo=UTC),
+        approved_source="owner-approved-test",
+    )
+    exit_policy = card.exit_policy.to_dict()
+    initial = card.protection_policy.to_dict()["initial_protection"]
+    assert exit_policy["take_profit"] == {"enabled": False}
+    assert exit_policy["local_zone_exit"]["geometry"] == "L5-3"
+    assert initial["take_profit_reference_path"] == "fact.local_geometry.5.resistance_bottom"

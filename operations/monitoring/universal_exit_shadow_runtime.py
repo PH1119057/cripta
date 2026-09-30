@@ -4,20 +4,28 @@ import json
 import os
 import signal
 import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.lifecycle_ack import (
     claim_exit_position,
     mark_exit_claims_stale,
 )
+from bybit_workbench.universal_entry.contracts import FrozenPolicy, TradeDirection
+from bybit_workbench.universal_entry.fingerprint import fingerprint
+from bybit_workbench.universal_entry.market_watch import compute_l53_zone
+from bybit_workbench.universal_exit.contracts import ExitObservation
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
 from bybit_workbench.universal_exit.loader import load_exit_binding
+from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 
 DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
@@ -29,6 +37,7 @@ CONSUMER_ID = os.environ.get(
     "universal-exit-shadow-v1",
 ).strip()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_EXIT_SHADOW_POLL_SECONDS", "1.0"))
+PUBLIC_REST = os.environ.get("CRIPTA_U5_PUBLIC_REST", "").rstrip("/")
 STATUS_PATH = Path(
     os.environ.get(
         "CRIPTA_UNIVERSAL_EXIT_SHADOW_STATUS_PATH",
@@ -36,6 +45,7 @@ STATUS_PATH = Path(
     )
 )
 running = True
+_l53_cache: dict[str, tuple[datetime, Any]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +121,109 @@ def claim_cycle(
     return ClaimCycleResult(tuple(claimed), tuple(blocked))
 
 
+def _fetch_l53_observation(position: object, plan: object, *, now: datetime) -> ExitObservation:
+    if not PUBLIC_REST:
+        raise RuntimeError("CRIPTA_U5_PUBLIC_REST is required for L5-3 Exit observation")
+    symbol = str(position.symbol)
+    cached = _l53_cache.get(symbol)
+    if cached is not None and now < cached[1].observed_at + timedelta(minutes=5, seconds=2):
+        fact_observed_at, zone = cached
+    else:
+        query = urllib.parse.urlencode(
+            {"category": "linear", "symbol": symbol, "interval": "5", "limit": "240"}
+        )
+        with urllib.request.urlopen(
+            f"{PUBLIC_REST}/v5/market/kline?{query}", timeout=10
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if str(payload.get("retCode")) != "0":
+            raise RuntimeError(f"Bybit kline failed: {payload.get('retMsg')}")
+        result = payload.get("result")
+        if not isinstance(result, dict) or not isinstance(result.get("list"), list):
+            raise RuntimeError("Bybit kline result.list missing")
+        candles = map_rest_klines(
+            result["list"], symbol=symbol, interval="5", observed_at=now
+        )
+        zone = compute_l53_zone(candles)
+        if zone is None:
+            raise RuntimeError("L5-3 geometry is not mature")
+        if cached is not None and cached[1].observed_at == zone.observed_at:
+            fact_observed_at = cached[0]
+        else:
+            fact_observed_at = now
+        _l53_cache[symbol] = (fact_observed_at, zone)
+    target_inner = (
+        zone.resistance_bottom
+        if position.direction is TradeDirection.LONG
+        else zone.support_top
+    )
+    geometry = {
+        "spec": "L5-3",
+        "observed_at": zone.observed_at,
+        "range_high": str(zone.range_high),
+        "range_low": str(zone.range_low),
+        "atr": str(zone.atr),
+        "resistance_top": str(zone.resistance_top),
+        "resistance_bottom": str(zone.resistance_bottom),
+        "support_top": str(zone.support_top),
+        "support_bottom": str(zone.support_bottom),
+        "target_inner": str(target_inner),
+        "effective_lookback": zone.effective_lookback,
+    }
+    observation_id = "exit-observation-" + fingerprint(
+        {
+            "strategy_position_id": position.strategy_position_id,
+            "exit_plan_fingerprint": plan.exit_plan_fingerprint,
+            "geometry": geometry,
+            "observed_at": fact_observed_at,
+        }
+    )[:32]
+    return ExitObservation(
+        observation_id=observation_id,
+        strategy_position_id=position.strategy_position_id,
+        symbol=symbol,
+        event_at=zone.observed_at,
+        observed_at=fact_observed_at,
+        received_at=fact_observed_at,
+        event_kind="GEOMETRY_L5_3",
+        attributes=FrozenPolicy.from_mapping({"geometry": {"l5_3": geometry}}),
+        source_refs=(f"bybit:kline:5:{symbol}:{zone.observed_at.isoformat()}",),
+    )
+
+
+def _evaluate_claimed_positions(
+    connection: psycopg.Connection[Any],
+    engine: UniversalExitEngine,
+    position_ids: tuple[str, ...],
+    *,
+    now: datetime,
+) -> tuple[int, tuple[tuple[str, str], ...]]:
+    store = PostgresExitShadowStore(connection)
+    recorded = 0
+    blocked: list[tuple[str, str]] = []
+    for position_id in position_ids:
+        try:
+            position, plan = load_exit_binding(connection, strategy_position_id=position_id)
+            observation = _fetch_l53_observation(position, plan, now=now)
+            prior_rows = connection.execute(
+                """SELECT rule_id FROM strategy_exit.exit_decisions
+                     WHERE strategy_position_id=%s AND repeat_policy='ONCE_PER_POSITION'""",
+                (position_id,),
+            ).fetchall()
+            prior_once = frozenset(str(row["rule_id"]) for row in prior_rows)
+            evaluation = engine.evaluate(
+                position,
+                plan,
+                observation,
+                prior_once_rule_ids=prior_once,
+            )
+            store.record(evaluation, position=position, plan=plan)
+            recorded += 1
+        except (KeyError, RuntimeError, ValueError, OSError) as exc:
+            blocked.append((position_id, f"{type(exc).__name__}: {exc}"))
+    return recorded, tuple(blocked)
+
+
 def main() -> int:
     global running
     if MODE != "ENABLED":
@@ -133,17 +246,25 @@ def main() -> int:
                     now=now,
                     consumer_instance_id=CONSUMER_ID,
                 )
+            recorded_count, evaluation_blocks = _evaluate_claimed_positions(
+                connection,
+                engine,
+                cycle.claimed_positions,
+                now=now,
+            )
+            all_blocks = cycle.blocked_positions + evaluation_blocks
             _status(
                 {
                     "state": "RUNNING",
                     "observed_at": now.isoformat(),
                     "claimed_positions": list(cycle.claimed_positions),
                     "claimed_count": len(cycle.claimed_positions),
+                    "evaluations_recorded": recorded_count,
                     "blocked_positions": [
                         {"strategy_position_id": position_id, "reason": reason}
-                        for position_id, reason in cycle.blocked_positions
+                        for position_id, reason in all_blocks
                     ],
-                    "blocked_count": len(cycle.blocked_positions),
+                    "blocked_count": len(all_blocks),
                     "engine": type(engine).__name__,
                     "execution_rights": "NONE",
                 }

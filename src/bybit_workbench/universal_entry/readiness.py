@@ -219,12 +219,15 @@ def assess_strategy_runtime_readiness(
                 "Псевдосделка требует положительный initial stop_loss_pct.",
             )
         )
-    if not _positive_decimal(initial.get("take_profit_pct")):
+    target_pct_ready = _positive_decimal(initial.get("take_profit_pct"))
+    target_path = str(initial.get("take_profit_reference_path") or "").strip()
+    target_path_ready = target_path.startswith("fact.")
+    if not target_pct_ready and not target_path_ready:
         paper_reasons.append(
             RuntimeReadinessReason(
                 "PAPER_INITIAL_TAKE_PROFIT_NOT_SET",
                 "PAPER",
-                "Псевдосделка требует положительный initial take_profit_pct.",
+                "Псевдосделка требует initial TP: percent или causal fact reference.",
             )
         )
 

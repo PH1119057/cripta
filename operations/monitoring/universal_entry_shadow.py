@@ -1733,6 +1733,21 @@ def _run_observer_epoch(
                     f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
                 )
             closed_boundaries[(fact.symbol, timeframe)] = boundary
+            if timeframe == "5":
+                paper.on_candle_closed(
+                    Candle(
+                        symbol=fact.symbol,
+                        timeframe="5",
+                        opened_at=datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC),
+                        closed_at=boundary,
+                        open=Decimal(str(attrs["open"])),
+                        high=Decimal(str(attrs["high"])),
+                        low=Decimal(str(attrs["low"])),
+                        close=Decimal(str(attrs["close"])),
+                        volume=Decimal(str(attrs["volume"])),
+                        is_closed=True,
+                    )
+                )
         refresh_inputs(fact.observed_at)
         contexts: dict[str, ObjectiveContext] = {}
         if global_context is not None and global_context.observed_at <= fact.observed_at:

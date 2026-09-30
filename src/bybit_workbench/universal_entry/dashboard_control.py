@@ -483,7 +483,19 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 local_policy.get("lookback_by_timeframe"),
                 "local_entry_policy.lookback_by_timeframe",
             )
-            for timeframe in ("5", "15"):
+            configured_timeframes = local_policy.get("timeframes")
+            if configured_timeframes is None:
+                local_timeframes = ["5", "15"]
+            else:
+                local_timeframes = [
+                    str(item)
+                    for item in _list(configured_timeframes, "local_entry_policy.timeframes")
+                ]
+                if not local_timeframes or len(set(local_timeframes)) != len(local_timeframes):
+                    raise ValueError("local_entry_policy.timeframes must be unique and non-empty")
+                if any(item not in {"1", "5", "15"} for item in local_timeframes):
+                    raise ValueError("local_entry_policy.timeframes contains unsupported timeframe")
+            for timeframe in local_timeframes:
                 try:
                     count = int(str(lookbacks.get(timeframe)))
                 except (TypeError, ValueError):
@@ -493,17 +505,14 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 if count <= 0:
                     raise ValueError(f"local_entry_policy lookback {timeframe} must be positive")
             use_1m = _bool(local_policy.get("use_1m", False), "local_entry_policy.use_1m")
-            if use_1m:
-                try:
-                    one_minute = int(str(lookbacks.get("1")))
-                except (TypeError, ValueError):
-                    raise ValueError("local_entry_policy lookback 1 must be integer") from None
-                if one_minute <= 0:
-                    raise ValueError("local_entry_policy lookback 1 must be positive")
+            if configured_timeframes is not None and use_1m != ("1" in local_timeframes):
+                raise ValueError("local_entry_policy.use_1m must match explicit timeframes")
             require_confluence = _bool(
                 local_policy.get("require_5m_15m_confluence", False),
                 "local_entry_policy.require_5m_15m_confluence",
             )
+            if require_confluence and not {"5", "15"}.issubset(set(local_timeframes)):
+                raise ValueError("5m/15m confluence requires both local timeframes")
             if (
                 require_confluence
                 and _decimal(
@@ -513,7 +522,7 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 < 0
             ):
                 raise ValueError("local_entry_policy.confluence_max_gap_percent cannot be negative")
-            valid_timeframes = {"5", "15"} | ({"1"} if use_1m else set())
+            valid_timeframes = set(local_timeframes)
             if str(local_policy.get("price_timeframe") or "") not in valid_timeframes:
                 raise ValueError("local_entry_policy.price_timeframe must be an enabled timeframe")
             fields = _mapping(
@@ -530,6 +539,28 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                 raise ValueError(
                     "local_entry_policy requires exact zone field for Strategy direction"
                 )
+            width_filter_value = local_policy.get("working_width_filter")
+            if width_filter_value is not None:
+                width_filter = _mapping(
+                    width_filter_value, "local_entry_policy.working_width_filter"
+                )
+                width_enabled = _bool(
+                    width_filter.get("enabled"),
+                    "local_entry_policy.working_width_filter.enabled",
+                )
+                if width_enabled:
+                    minimum = width_filter.get("min_pct")
+                    maximum = width_filter.get("max_pct")
+                    if minimum in (None, "") and maximum in (None, ""):
+                        raise ValueError("working_width_filter requires min_pct and/or max_pct")
+                    min_value = None if minimum in (None, "") else _decimal(minimum, "working_width_filter.min_pct")
+                    max_value = None if maximum in (None, "") else _decimal(maximum, "working_width_filter.max_pct")
+                    if min_value is not None and min_value < 0:
+                        raise ValueError("working_width_filter.min_pct cannot be negative")
+                    if max_value is not None and max_value <= 0:
+                        raise ValueError("working_width_filter.max_pct must be positive")
+                    if min_value is not None and max_value is not None and min_value > max_value:
+                        raise ValueError("working_width_filter min_pct cannot exceed max_pct")
             require_macro = _bool(
                 local_policy.get("require_macro_relation", False),
                 "local_entry_policy.require_macro_relation",
@@ -667,7 +698,23 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
             "keep it disabled until an exact ExitPlan consumer contract exists"
         )
     local_zone_exit = _mapping(exit_policy.get("local_zone_exit"), "exit_policy.local_zone_exit")
-    _bool(local_zone_exit.get("enabled"), "exit_policy.local_zone_exit.enabled")
+    local_zone_enabled = _bool(
+        local_zone_exit.get("enabled"), "exit_policy.local_zone_exit.enabled"
+    )
+    if local_zone_enabled:
+        if str(local_zone_exit.get("geometry") or "") != "L5-3":
+            raise ValueError("enabled local_zone_exit currently requires geometry=L5-3")
+        if str(local_zone_exit.get("target") or "") != "OPPOSITE_INNER_BOUNDARY":
+            raise ValueError(
+                "enabled local_zone_exit requires target=OPPOSITE_INNER_BOUNDARY"
+            )
+        if str(local_zone_exit.get("update_mode") or "") != "EACH_CAUSAL_GEOMETRY_CHANGE":
+            raise ValueError(
+                "enabled local_zone_exit requires update_mode=EACH_CAUSAL_GEOMETRY_CHANGE"
+            )
+        target_path = str(local_zone_exit.get("target_fact_path") or "").strip()
+        if not target_path.startswith("fact."):
+            raise ValueError("enabled local_zone_exit requires exact target_fact_path")
 
     time_exit = exit_policy.get("time_exit")
     if time_exit is not None:
@@ -713,8 +760,9 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     take_profit_enabled = _bool(target_policy.get("enabled"), "exit_policy.take_profit.enabled")
     if hard_enabled != stop_enabled:
         raise ValueError("hard_stop and initial_protection stop enablement must match")
-    if take_profit_enabled != target_enabled:
-        raise ValueError("take_profit and initial_protection target enablement must match")
+    # Initial TP protects the entry handshake and is not the Exit Engine target.
+    # Legacy fixed-percent Strategies may keep both enabled, but a dynamic
+    # Exit-side target is allowed to use initial protection independently.
     if stop_enabled:
         if _decimal(
             initial_protection.get("stop_loss_pct"),
@@ -724,13 +772,32 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     elif initial_protection.get("stop_loss_pct") not in (None, ""):
         raise ValueError("disabled initial stop cannot carry hidden stop_loss_pct")
     if target_enabled:
-        if _decimal(
-            initial_protection.get("take_profit_pct"),
-            "protection_policy.initial_protection.take_profit_pct",
-        ) != _decimal(target_policy.get("percent"), "exit_policy.take_profit.percent"):
-            raise ValueError("take_profit percent must match initial protection target")
-    elif initial_protection.get("take_profit_pct") not in (None, ""):
-        raise ValueError("disabled initial target cannot carry hidden take_profit_pct")
+        target_pct = initial_protection.get("take_profit_pct")
+        target_path = str(initial_protection.get("take_profit_reference_path") or "").strip()
+        if (target_pct in (None, "")) == (not target_path):
+            raise ValueError(
+                "enabled initial target requires exactly one of take_profit_pct or "
+                "take_profit_reference_path"
+            )
+        if target_path:
+            if not target_path.startswith("fact."):
+                raise ValueError("take_profit_reference_path must start with fact.")
+        else:
+            initial_pct = _decimal(
+                target_pct,
+                "protection_policy.initial_protection.take_profit_pct",
+            )
+            if initial_pct <= 0:
+                raise ValueError("initial take_profit_pct must be positive")
+            if take_profit_enabled and initial_pct != _decimal(
+                target_policy.get("percent"), "exit_policy.take_profit.percent"
+            ):
+                raise ValueError("fixed take_profit percent must match initial protection target")
+    elif (
+        initial_protection.get("take_profit_pct") not in (None, "")
+        or initial_protection.get("take_profit_reference_path") not in (None, "")
+    ):
+        raise ValueError("disabled initial target cannot carry hidden target values")
     if any(
         str(_mapping(item, "exit context feature").get("mode") or "OFF") != "OFF"
         for item in _list(exit_policy.get("context_feature_policy", []), "exit context features")

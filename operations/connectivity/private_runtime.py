@@ -881,11 +881,28 @@ def initial_protection_contract(payload: dict[str, object]) -> dict[str, object]
     if not isinstance(raw, dict):
         raise RuntimeError("ENTRY_INITIAL_PROTECTION_CONTRACT_MISSING")
     stop_loss_pct = Decimal(str(raw.get("stop_loss_pct") or 0))
-    take_profit_pct = Decimal(str(raw.get("take_profit_pct") or 0))
+    take_profit_pct_raw = raw.get("take_profit_pct")
+    take_profit_price_raw = raw.get("take_profit_price")
+    if (take_profit_pct_raw in (None, "")) == (take_profit_price_raw in (None, "")):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_TARGET_AMBIGUOUS")
+    take_profit_pct = (
+        None
+        if take_profit_pct_raw in (None, "")
+        else Decimal(str(take_profit_pct_raw))
+    )
+    take_profit_price = (
+        None
+        if take_profit_price_raw in (None, "")
+        else Decimal(str(take_profit_price_raw))
+    )
     trigger_by = str(raw.get("trigger_by") or "")
     tpsl_mode = str(raw.get("tpsl_mode") or "")
-    if stop_loss_pct <= 0 or take_profit_pct <= 0:
+    if stop_loss_pct <= 0:
         raise RuntimeError("ENTRY_INITIAL_PROTECTION_PERCENT_INVALID")
+    if take_profit_pct is not None and take_profit_pct <= 0:
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_PERCENT_INVALID")
+    if take_profit_price is not None and take_profit_price <= 0:
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_PRICE_INVALID")
     if trigger_by != "LastPrice":
         raise RuntimeError("ENTRY_INITIAL_PROTECTION_TRIGGER_UNSUPPORTED")
     if tpsl_mode != "Full":
@@ -893,6 +910,7 @@ def initial_protection_contract(payload: dict[str, object]) -> dict[str, object]
     return {
         "stop_loss_pct": stop_loss_pct,
         "take_profit_pct": take_profit_pct,
+        "take_profit_price": take_profit_price,
         "trigger_by": trigger_by,
         "tpsl_mode": tpsl_mode,
     }
@@ -1315,13 +1333,31 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise RuntimeError("Bybit did not return actual average entry price")
             contract = initial_protection_contract(payload)
             trigger_by = str(contract["trigger_by"])
-            stop, target = calculate_initial_boundaries(
-                entry=actual_entry,
-                side=side,
-                tick=tick,
-                stop_loss_pct=contract["stop_loss_pct"],
-                take_profit_pct=contract["take_profit_pct"],
-            )
+            if contract["take_profit_pct"] is not None:
+                stop, target = calculate_initial_boundaries(
+                    entry=actual_entry,
+                    side=side,
+                    tick=tick,
+                    stop_loss_pct=contract["stop_loss_pct"],
+                    take_profit_pct=contract["take_profit_pct"],
+                )
+            else:
+                stop, _unused_target = calculate_initial_boundaries(
+                    entry=actual_entry,
+                    side=side,
+                    tick=tick,
+                    stop_loss_pct=contract["stop_loss_pct"],
+                    take_profit_pct=Decimal("1"),
+                )
+                target = quantize(
+                    contract["take_profit_price"],
+                    tick,
+                    upward=side == "Buy",
+                )
+                if (side == "Buy" and target <= actual_entry) or (
+                    side == "Sell" and target >= actual_entry
+                ):
+                    raise RuntimeError("ENTRY_INITIAL_PROTECTION_TARGET_WRONG_SIDE")
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
         stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":trigger_by,"slOrderType":"Market"}
         if kind == "initial_protection":
