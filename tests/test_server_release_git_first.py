@@ -213,3 +213,12 @@ def test_verified_installer_prunes_release_backups_to_one_previous_with_short_co
     assert "exactly 1 latest previous deploy rollback backup" in rules
     assert "maximum lifetime = 7 * 24h" in rules
     assert "/data/cripta/backups/system/<timestamp>" in rules
+
+def test_verified_installer_manages_download_expansion_unit() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    assert (
+        "research/server/cripta-download-expansion.service"
+        "|cripta-download-expansion.service|tooling"
+    ) in source
+    assert "  cripta-download-expansion.service\\n" in source
+
