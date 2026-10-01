@@ -330,3 +330,29 @@ QUARANTINED_SYMBOLS =
   это другой audit/operational data contour;
 - возврат любого из четырёх symbol в acquisition/retention требует нового
   явного owner decision и актуальной exchange-eligibility проверки.
+
+## 18. Bybit KZ quarantine: data acquisition / retention
+
+OWNER DECISION 2026-10-01:
+
+```text
+QUARANTINED_SYMBOLS =
+  1000PEPEUSDT
+  DOGEUSDT
+  NEARUSDT
+  XLMUSDT
+```
+
+Пока действует этот owner decision:
+- эти четыре symbol не входят в current Research acquisition universe;
+- их запрещено добавлять в frozen-dataset downloader defaults, expansion jobs,
+  latency telemetry universe и opportunity-tracker defaults;
+- existing raw/orderbook/public-trades, symbol-specific caches, derived
+  indicators и Research outputs по этой четвёрке подлежат удалению с
+  `/data/cripta`;
+- liquidation archive по этой четвёрке не создаётся/не докачивается;
+- historical trading/audit records в PostgreSQL не удаляются этим правилом:
+  это другой audit/operational data contour;
+- возврат любого из четырёх symbol в acquisition/retention требует нового
+  явного owner decision и актуальной exchange-eligibility проверки.
+
