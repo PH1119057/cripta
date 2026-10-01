@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.4
+**Версия:** 10.5
 **Дата:** 2026-09-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -120,7 +120,7 @@ T3 deployment/liveness evidence:
 - все 17 expected previously-active runtime/research-tooling services после deploy active;
 - фактические process cmdline/WorkingDirectory там, где применимо, разрешаются через `/srv/cripta/runtime/current` либо `/data/cripta/research/tooling/current`;
 - checked active unit definitions не содержат ссылок на legacy runtime code roots;
-- Universal Entry consumer, private runtime, Strategy Dispatcher, Entry shadow scanner, Universal Entry shadow и causal context correlator остались inactive/disabled;
+- Universal Entry consumer, private runtime, Strategy Dispatcher, Universal Entry shadow и causal context correlator остались inactive/disabled; Entry shadow scanner RETIRED by owner decision 2026-10-01;
 - mainnet gate=0; real execution permissions=0; open/reconciliation positions=0; active slot claims/reservations=0; pending commands/orders=0; active LIVE-arm sessions=0.
 
 Backup T3:
@@ -424,6 +424,16 @@ Cold historical/offload material is consolidated under
 - `legacy_srv_residuals_20260930`;
 - `final_legacy_srv_roots_20260930`;
 - `legacy_srv_root_markers_20260930`.
+
+Research internal cleanup / owner decision 2026-10-01:
+- `cripta-entry-shadow-scanner.service` retired and removed from current release/systemd contract;
+- completed NEW15/EO4 continuation launchers that depended on legacy
+  `minute_entry_book_v1` / `universal_entry_v1` worktrees were removed from
+  current source; Git history and research outputs remain evidence;
+- after verified deploy the two legacy worktrees are re-homed to
+  `ARCHIVE_ROOT`, not kept as current Research worktrees;
+- current registered Research Git worktrees are limited to active feature work
+  plus explicitly current research/data-maintenance bundles.
 
 Final executable path repair/deploy:
 - implementation commit:
