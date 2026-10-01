@@ -122,6 +122,8 @@ def test_system_backup_keeps_exactly_two_latest_verified_generations() -> None:
     assert "keep exactly the two newest verified generations" in backup_script
     assert 'if (( ${#verified_generations[@]} > 2 )); then' in backup_script
     assert 'for old_stamp in "${verified_generations[@]:2}"' in backup_script
+    assert "20??????T??????Z" in backup_script
+    assert "20????????T??????Z" not in backup_script
     assert "SYSTEM BACKUP RETENTION = exactly 2 latest verified generations" in rules
     assert "/data/cripta/backups/system" in rules
     assert "keeps exactly the 2 latest verified generations" in current_map

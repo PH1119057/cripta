@@ -400,7 +400,7 @@ SYSTEM BACKUP RETENTION = exactly 2 latest verified generations
 - retention применяется только после успешного создания и verification нового
   system backup;
 - удаляются только каталоги canonical timestamp-form
-  `20????????T??????Z` внутри exact `/data/cripta/backups/system`;
+  `20??????T??????Z` внутри exact `/data/cripta/backups/system`;
 - два newest verified поколения сохраняются, более старые удаляются;
 - incomplete `.<timestamp>.tmp` не считаются verified generation и удаляются
   существующим cleanup trap;
