@@ -9,10 +9,45 @@ RUNTIME_ROOT="${CRIPTA_RUNTIME_ROOT:-/srv/cripta/runtime}"
 RESEARCH_TOOLING_ROOT="${CRIPTA_RESEARCH_TOOLING_ROOT:-/data/cripta/research/tooling}"
 BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_backups}"
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
+CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
+CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
+CONTROL_MAX_AGE_SECONDS=604800
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
 sql_scalar() { runuser -u postgres -- psql -X -Atqc "$1" cripta; }
+
+prune_release_backups() {
+  local now dir marker expires
+  local control_kept=0
+  local -a release_backups=()
+
+  now="$(date -u +%s)"
+  mapfile -t release_backups < <(
+    find "$BACKUP_ROOT" -regextype posix-extended       -mindepth 1 -maxdepth 1 -type d       -regex '.*/20[0-9]{6}_[0-9]{6}_[0-9a-f]{40}_to_[0-9a-f]{40}'       -print | sort -r
+  )
+
+  for dir in "${release_backups[@]}"; do
+    if [[ "$dir" == "$backup" ]]; then
+      [[ -f "$dir/CONTROL_CHECKPOINT" ]] && control_kept=1
+      echo "RELEASE_BACKUP_RETAINED=$dir reason=latest"
+      continue
+    fi
+
+    marker="$dir/CONTROL_CHECKPOINT"
+    if [[ -f "$marker" && "$control_kept" == "0" ]]; then
+      expires="$(awk -F= '$1=="expires_at_epoch" {print $2; exit}' "$marker")"
+      if [[ "$expires" =~ ^[0-9]+$ ]] && (( expires >= now )); then
+        control_kept=1
+        echo "RELEASE_BACKUP_RETAINED=$dir reason=control_checkpoint"
+        continue
+      fi
+    fi
+
+    rm -rf -- "$dir"
+    echo "RELEASE_BACKUP_PRUNED=$dir"
+  done
+}
 
 [[ "$(id -u)" -eq 0 ]] || die "installer must run as root"
 exec 9>/run/lock/cripta-install-verified-release.lock
@@ -20,6 +55,10 @@ flock -n 9 || die "another release installer is already running"
 [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_RELEASE_COMMIT is invalid"
 [[ "$EXPECTED_BASELINE" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_EXPECTED_BASELINE_COMMIT is invalid"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
+[[ "$CONTROL_CHECKPOINT" == "0" || "$CONTROL_CHECKPOINT" == "1" ]] || die "CRIPTA_RELEASE_CONTROL_CHECKPOINT must be 0 or 1"
+if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
+  [[ -n "$CONTROL_REASON" ]] || die "CRIPTA_RELEASE_CONTROL_REASON is required for a control checkpoint"
+fi
 
 remote="$(as_repo_owner git -C "$SOURCE" ls-remote origin refs/heads/main | awk 'NR==1{print $1}')"
 [[ "$remote" == "$RELEASE_COMMIT" ]] || die "remote main differs from requested release commit"
@@ -104,6 +143,15 @@ install -d -o root -g root -m 0700 "$backup"
   echo "research_tooling_release=$tooling_release"
   echo "created_at=$stamp"
 } > "$backup/release_identity.txt"
+if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
+  control_created_epoch="$(date -u +%s)"
+  control_expires_epoch="$((control_created_epoch + CONTROL_MAX_AGE_SECONDS))"
+  {
+    echo "created_at_epoch=$control_created_epoch"
+    echo "expires_at_epoch=$control_expires_epoch"
+    echo "reason=$CONTROL_REASON"
+  } > "$backup/CONTROL_CHECKPOINT"
+fi
 runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
 
 unit_specs=(
@@ -268,6 +316,8 @@ chmod 0640 "$STATE_ROOT/INSTALLED_COMMIT"
 printf '%s\n' "$backup" > "$STATE_ROOT/LAST_BACKUP"
 chown root:cripta "$STATE_ROOT/LAST_BACKUP"
 chmod 0640 "$STATE_ROOT/LAST_BACKUP"
+
+prune_release_backups
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
 echo "INSTALLED_COMMIT=$RELEASE_COMMIT"
