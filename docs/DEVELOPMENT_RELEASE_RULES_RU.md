@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.6 · 2026-09-29
+**Версия:** 1.7 · 2026-10-01
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -333,6 +333,54 @@ Root-only temp directory нельзя использовать как destinatio
 До backup проверить directory owner, mode, effective writer, output file creation и free space.
 
 Предпочтительно root shell открывает output, а `postgres` пишет через inherited fd/stdout, либо заранее используется каталог с узкими корректными правами.
+
+## 14.1 Retention deploy rollback backups
+
+`/data/cripta/script_archive/release_backups` хранит локальные rollback checkpoints,
+создаваемые непосредственно перед verified deploy. Это не основной системный
+backup и не Research dataset/result archive.
+
+Owner decision 2026-10-01:
+
+```text
+NORMAL RETENTION
+  current deployed release
+  + exactly 1 latest previous deploy rollback backup
+
+CONTROL CHECKPOINT
+  allowed only for explicitly approved major system restructuring:
+  DB structure/migration, major service topology, large runtime contour change,
+  or equivalent high-impact release
+  + must be explicitly marked by the deploy
+  + maximum lifetime = 7 * 24h
+  + after expiry it is deleted by the next successful deploy retention pass
+```
+
+Правила:
+- обычный deploy не сохраняет цепочку старых rollback snapshots «на всякий
+  случай»;
+- после успешного deploy retention оставляет только самый свежий deploy backup;
+- дополнительно может временно сохраняться максимум один marked
+  `CONTROL_CHECKPOINT`, если он ещё не старше 7 суток;
+- если newest deploy backup сам является control checkpoint, дополнительный
+  предыдущий control checkpoint не сохраняется;
+- expired control checkpoint не защищается от удаления;
+- control checkpoint создаётся только явным owner-approved release decision,
+  а не автоматически из размера changeset;
+- retention выполняется только после успешного deploy/runtime safety checks,
+  чтобы не удалить предыдущую rollback point при failed cutover;
+- backup deletion ограничивается exact `release_backups` root и каталогами
+  canonical timestamp/release naming contract;
+- основной verified system backup
+  `/data/cripta/backups/system/<timestamp>` имеет отдельную retention policy и
+  этим правилом не удаляется.
+
+Current installer contract:
+- `CRIPTA_RELEASE_CONTROL_CHECKPOINT=0|1`;
+- при значении `1` обязателен непустой
+  `CRIPTA_RELEASE_CONTROL_REASON`;
+- installer пишет marker `CONTROL_CHECKPOINT` с UTC creation/expiry metadata;
+- maximum protected age = 604800 seconds.
 
 ## 15. Migration + backfill должны быть атомарны
 
