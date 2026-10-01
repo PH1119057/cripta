@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.7 · 2026-10-01
+**Версия:** 1.8 · 2026-10-01
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -381,6 +381,34 @@ Current installer contract:
   `CRIPTA_RELEASE_CONTROL_REASON`;
 - installer пишет marker `CONTROL_CHECKPOINT` с UTC creation/expiry metadata;
 - maximum protected age = 604800 seconds.
+
+## 14.2 Retention verified system backups
+
+`/data/cripta/backups/system/<UTC timestamp>` — основной локальный verified
+system backup. Он шире deploy rollback checkpoint: содержит полный PostgreSQL
+dump `cripta`, архив project/runtime surface под `/srv/cripta`, shared
+reports и критичные system/nginx/TLS/credential configs. Heavy datasets и
+Research runs в него намеренно не входят.
+
+Owner decision 2026-10-01:
+
+```text
+SYSTEM BACKUP RETENTION = exactly 2 latest verified generations
+```
+
+Правила:
+- retention применяется только после успешного создания и verification нового
+  system backup;
+- удаляются только каталоги canonical timestamp-form
+  `20????????T??????Z` внутри exact `/data/cripta/backups/system`;
+- два newest verified поколения сохраняются, более старые удаляются;
+- incomplete `.<timestamp>.tmp` не считаются verified generation и удаляются
+  существующим cleanup trap;
+- deploy rollback retention из §14.1 независим и не считается одной из двух
+  system-backup generations;
+- heavy datasets / Research evidence требуют отдельного data/research backup
+  решения и не считаются покрытыми system backup только потому, что project
+  runtime сохранён.
 
 ## 15. Migration + backfill должны быть атомарны
 

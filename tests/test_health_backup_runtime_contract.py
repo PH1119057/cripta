@@ -106,3 +106,22 @@ def test_health_unit_declares_disabled_private_trade_expectations() -> None:
     ).read_text(encoding="utf-8")
     assert "Environment=CRIPTA_EXPECT_PRIVATE_WS=0" in unit
     assert "Environment=CRIPTA_EXPECT_TRADE_WS=0" in unit
+
+
+def test_system_backup_keeps_exactly_two_latest_verified_generations() -> None:
+    backup_script = (
+        ROOT / "research" / "server" / "backup" / "backup.sh"
+    ).read_text(encoding="utf-8")
+    rules = (ROOT / "docs" / "DEVELOPMENT_RELEASE_RULES_RU.md").read_text(
+        encoding="utf-8"
+    )
+    current_map = (ROOT / "docs" / "CURRENT_PROJECT_MAP_RU.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "keep exactly the two newest verified generations" in backup_script
+    assert 'if (( ${#verified_generations[@]} > 2 )); then' in backup_script
+    assert 'for old_stamp in "${verified_generations[@]:2}"' in backup_script
+    assert "SYSTEM BACKUP RETENTION = exactly 2 latest verified generations" in rules
+    assert "/data/cripta/backups/system" in rules
+    assert "keeps exactly the 2 latest verified generations" in current_map
