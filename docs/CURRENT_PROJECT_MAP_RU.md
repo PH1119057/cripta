@@ -453,15 +453,6 @@ Bybit KZ quarantine data cleanup / owner decision 2026-10-01:
 - PostgreSQL historical trading/audit records are preserved;
 - re-adding any quarantined symbol requires a new owner decision.
 
-Bybit KZ quarantine data cleanup / owner decision 2026-10-01:
-- current quarantined symbols: `1000PEPEUSDT`, `DOGEUSDT`, `NEARUSDT`,
-  `XLMUSDT`;
-- these symbols are excluded from Research acquisition/latency/opportunity
-  defaults and from frozen dataset expansion;
-- their symbol-specific payload under `/data/cripta` is retired/deleted;
-- PostgreSQL historical trading/audit records are preserved;
-- re-adding any quarantined symbol requires a new owner decision.
-
 Current Research cleanup checkpoint, CHECKED HERE 2026-10-01:
 
 ```text
