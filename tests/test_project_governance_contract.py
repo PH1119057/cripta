@@ -481,3 +481,26 @@ def test_retired_entry_shadow_scanner_and_legacy_worktrees_do_not_return() -> No
                 if token in body:
                     findings.append(f"{file.relative_to(ROOT)}: {token}")
     assert findings == []
+
+def test_bybit_kz_quarantine4_is_absent_from_research_acquisition_defaults() -> None:
+    forbidden = ("1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT")
+
+    downloader = _read("research/server/download_frozen_segment.py")
+    expansion = _read("research/server/cripta-download-expansion.service")
+    latency_unit = _read("research/server/connectivity/cripta-bybit-latency.service")
+    latency_probe = _read("research/server/connectivity/latency_probe.py")
+    opportunity = _read("research/server/monitoring/opportunity_tracker.py")
+
+    for symbol in forbidden:
+        assert symbol not in downloader
+        assert symbol not in expansion
+        assert symbol not in latency_unit
+        assert symbol not in latency_probe
+        assert symbol not in opportunity
+
+    rules = _read("docs/RESEARCH_COMPUTE_RULES_RU.md")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    for symbol in forbidden:
+        assert symbol in rules
+        assert symbol in current_map
+
