@@ -51,5 +51,12 @@ chown root:cripta /var/lib/cripta/backup/latest.json.tmp
 chmod 0640 /var/lib/cripta/backup/latest.json.tmp
 mv /var/lib/cripta/backup/latest.json.tmp /var/lib/cripta/backup/latest.json
 
-# Local operational retention. External/off-site retention is a separate task.
-find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20????????T??????Z' -mtime +14 -exec rm -rf -- {} +
+# Local operational retention: keep exactly the two newest verified generations.
+mapfile -t verified_generations < <(
+  find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20????????T??????Z' -printf '%f\n' | sort -r
+)
+if (( ${#verified_generations[@]} > 2 )); then
+  for old_stamp in "${verified_generations[@]:2}"; do
+    rm -rf -- "$backup_root/$old_stamp"
+  done
+fi
