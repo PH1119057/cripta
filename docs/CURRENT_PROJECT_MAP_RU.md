@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
 **Версия:** 10.5
-**Дата:** 2026-09-30
+**Дата:** 2026-10-01
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -434,6 +434,29 @@ Research internal cleanup / owner decision 2026-10-01:
   `ARCHIVE_ROOT`, not kept as current Research worktrees;
 - current registered Research Git worktrees are limited to active feature work
   plus explicitly current research/data-maintenance bundles.
+
+Current Research cleanup checkpoint, CHECKED HERE 2026-10-01:
+
+```text
+REMOTE_HEAD      = 8abc9155cfae487de00bd8f468a192eca6a83f8f
+SOURCE_HEAD      = 8abc9155cfae487de00bd8f468a192eca6a83f8f
+INSTALLED_COMMIT = 8abc9155cfae487de00bd8f468a192eca6a83f8f
+LOADED_COMMIT    = 8abc9155cfae487de00bd8f468a192eca6a83f8f
+RESEARCH_TOOLING = 8abc9155cfae487de00bd8f468a192eca6a83f8f
+```
+
+Research worktrees after internal cleanup:
+- `entry_l53_reference` — active feature worktree;
+- `exit_dynamic_l53` — active feature worktree;
+- `legacy_srv_research` — intentionally retained data-maintenance bundle for
+  enabled `cripta-download-expansion.service`;
+- retired `minute_entry_book_v1` and `universal_entry_v1` are absent from
+  `RESEARCH_ROOT/worktrees` and preserved under
+  `/data/cripta/script_archive/retired_entry_shadow_scanner_worktrees_20261001`;
+- `RESEARCH_ROOT/tmp` contains no payload objects;
+- `RESEARCH_ROOT/tooling/releases` contains only the current tooling release;
+- `cripta-entry-shadow-scanner.service` is absent from systemd and remains
+  listed only as an installer retirement tombstone.
 
 Final executable path repair/deploy:
 - implementation commit:
