@@ -167,6 +167,7 @@ unit_specs=(
   "research/server/jobs/cripta-job-intake.service|cripta-job-intake.service|tooling"
   "research/server/jobs/cripta-job-runner.service|cripta-job-runner.service|tooling"
   "research/server/dataset/cripta-dataset-manifest.service|cripta-dataset-manifest.service|tooling"
+  "research/server/cripta-download-expansion.service|cripta-download-expansion.service|tooling"
   "operations/systemd/cripta-lifecycle-supervisor.service|cripta-lifecycle-supervisor.service|runtime"
   "operations/systemd/cripta-m3-trade-analyst.service|cripta-m3-trade-analyst.service|runtime"
   "operations/systemd/cripta-mayak-v2.service|cripta-mayak-v2.service|runtime"
@@ -228,6 +229,7 @@ managed_services=(
   cripta-mayak-v2-report.service
   cripta-bybit-latency.service
   cripta-dashboard.service
+  cripta-download-expansion.service
   cripta-dispatcher-v2-context-correlator.service
   cripta-dispatcher-v2.service
   cripta-exit-runtime.service
