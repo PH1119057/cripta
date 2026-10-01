@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.5
+**Версия:** 10.6
 **Дата:** 2026-10-01
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -434,6 +434,15 @@ Research internal cleanup / owner decision 2026-10-01:
   `ARCHIVE_ROOT`, not kept as current Research worktrees;
 - current registered Research Git worktrees are limited to active feature work
   plus explicitly current research/data-maintenance bundles.
+
+System backup retention / owner decision 2026-10-01:
+- `/data/cripta/backups/system` keeps exactly the 2 latest verified generations;
+- latest verified generation at this checkpoint:
+  `/data/cripta/backups/system/20261001T032409Z`;
+- deploy rollback backups are governed separately by
+  `DEVELOPMENT_RELEASE_RULES §14.1`;
+- heavy datasets and Research runs are not included in system backup and are
+  not covered by this two-generation retention rule.
 
 Current Research cleanup checkpoint, CHECKED HERE 2026-10-01:
 
