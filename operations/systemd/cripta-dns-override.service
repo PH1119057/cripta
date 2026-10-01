@@ -1,0 +1,15 @@
+[Unit]
+Description=Cripta reliable DNS override
+Wants=network-online.target systemd-resolved.service
+After=network-online.target systemd-resolved.service
+PartOf=systemd-resolved.service
+Before=cripta-private-runtime.service cripta-opportunity-tracker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/resolvectl dns eth0 1.1.1.1 8.8.8.8
+ExecStartPost=/bin/sh -c '/usr/bin/resolvectl dns eth0 | /usr/bin/grep -Fq "1.1.1.1 8.8.8.8"'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

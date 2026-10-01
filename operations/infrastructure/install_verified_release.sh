@@ -111,6 +111,7 @@ unit_specs=(
   "research/server/backup/cripta-backup.service|cripta-backup.service|runtime"
   "research/server/backup/cripta-backup.timer|cripta-backup.timer|runtime"
   "operations/systemd/cripta-dashboard.service|cripta-dashboard.service|runtime"
+  "operations/systemd/cripta-dns-override.service|cripta-dns-override.service|runtime"
   "operations/dispatcher_v2/cripta-dispatcher-v2-context-correlator.service|cripta-dispatcher-v2-context-correlator.service|runtime"
   "operations/dispatcher_v2/cripta-dispatcher-v2.service|cripta-dispatcher-v2.service|runtime"
   "operations/monitoring/cripta-exit-runtime.service|cripta-exit-runtime.service|runtime"
@@ -135,11 +136,19 @@ unit_specs=(
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
   "operations/monitoring/cripta-causal-context-correlator.service|cripta-causal-context-correlator.service|runtime"
   "operations/strategy_dispatcher/cripta-strategy-dispatcher.service|cripta-strategy-dispatcher.service|runtime"
-  "operations/systemd/cripta-entry-shadow-scanner.service|cripta-entry-shadow-scanner.service|runtime"
 )
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
+  if [[ -e "/etc/systemd/system/$unit" || -L "/etc/systemd/system/$unit" ]]; then
+    install -d -m 0700 "$backup/files/etc/systemd/system"
+    cp -a "/etc/systemd/system/$unit" "$backup/files/etc/systemd/system/$unit"
+  fi
+done
+retired_units=(
+  cripta-entry-shadow-scanner.service
+)
+for unit in "${retired_units[@]}"; do
   if [[ -e "/etc/systemd/system/$unit" || -L "/etc/systemd/system/$unit" ]]; then
     install -d -m 0700 "$backup/files/etc/systemd/system"
     cp -a "/etc/systemd/system/$unit" "$backup/files/etc/systemd/system/$unit"
@@ -164,7 +173,6 @@ done
 
 managed_services=(
   cripta-universal-entry-shadow.service
-  cripta-entry-shadow-scanner.service
   cripta-strategy-dispatcher.service
   cripta-causal-context-correlator.service
   cripta-u5-oi30s-source-soak.service
@@ -222,6 +230,11 @@ CRIPTA_RESEARCH_TOOLING_ROOT=$RESEARCH_TOOLING_ROOT/current
 EOF
 chown root:cripta /etc/cripta/release.env
 chmod 0640 /etc/cripta/release.env
+
+for unit in "${retired_units[@]}"; do
+  systemctl disable --now "$unit" >/dev/null 2>&1 || true
+  rm -f "/etc/systemd/system/$unit"
+done
 
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql"
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'

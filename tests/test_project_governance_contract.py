@@ -456,3 +456,28 @@ def test_legacy_research_discovery_and_final_filesystem_state_are_explicit() -> 
         "FILESYSTEM_RESTRUCTURING=COMPLETE",
     ):
         assert token in current_map
+
+def test_retired_entry_shadow_scanner_and_legacy_worktrees_do_not_return() -> None:
+    installer = _read("operations/infrastructure/install_verified_release.sh")
+    current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
+    assert "cripta-entry-shadow-scanner.service|cripta-entry-shadow-scanner.service" not in installer
+    assert "Entry shadow scanner RETIRED by owner decision 2026-10-01" in current_map
+
+    forbidden = (
+        "/data/cripta/research/worktrees/minute_entry_book_v1",
+        "/data/cripta/research/worktrees/universal_entry_v1",
+    )
+    roots = (ROOT / "operations", ROOT / "scripts", ROOT / "research" / "server")
+    findings: list[str] = []
+    for root in roots:
+        for file in root.rglob("*"):
+            if not file.is_file() or "__pycache__" in file.parts:
+                continue
+            try:
+                body = file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for token in forbidden:
+                if token in body:
+                    findings.append(f"{file.relative_to(ROOT)}: {token}")
+    assert findings == []
