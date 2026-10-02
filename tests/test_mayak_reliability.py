@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from operations.monitoring import mayak_v2
 
@@ -67,3 +68,33 @@ def test_report_continuity_is_explicit_about_gaps() -> None:
     assert result["missing_snapshots"] == 2
     assert result["max_gap_minutes"] == 3
     assert result["coverage_pct"] == 60.0
+
+
+def test_liquidation_checkpoint_restores_persisted_exact_events() -> None:
+    collector = mayak_v2.Collector()
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+    rows = [
+        ((now - timedelta(minutes=minute)).timestamp(), "BTCUSDT", "Buy", 100.0, 2.0)
+        for minute in range(2, 7)
+    ]
+    collector._restore_liquidation_checkpoint(rows)
+    collector.engine.set_instrument_support("linear", set(collector.engine.symbols))
+    collector.engine.on_transport(
+        "linear", connected=True, timestamp=now.timestamp() - 3600
+    )
+    collector.engine.on_transport("linear", connected=True, timestamp=now.timestamp())
+    collector.engine.on_liquidation(
+        "BTCUSDT", (now - timedelta(seconds=10)).timestamp(), "Buy", 100.0, 2.0
+    )
+    liquidation = collector.engine.snapshot(now)["liquidations"]
+    assert liquidation["status"] == "VALID"
+    assert liquidation["baseline_nonzero_minutes"] == 5
+    assert liquidation["current_1m_usd"] == 200.0
+
+
+def test_liquidation_checkpoint_query_is_bounded_and_causal() -> None:
+    source = Path("operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
+    assert "FROM mayak_v2.liquidations" in source
+    assert "occurred_at >= clock_timestamp() - interval '24 hours'" in source
+    assert "occurred_at <= clock_timestamp()" in source
+    assert "ORDER BY occurred_at" in source

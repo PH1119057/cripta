@@ -219,6 +219,15 @@ class Collector:
                 SELECT coalesce(max(extract(epoch FROM (regular_minute-previous))/60),0)
                 FROM ordered WHERE previous IS NOT NULL"""
             ).fetchone()[0]
+            liquidation_rows = db.execute(
+                """SELECT extract(epoch FROM occurred_at),symbol,position_side,
+                          bankruptcy_price,executed_size
+                   FROM mayak_v2.liquidations
+                   WHERE occurred_at >= clock_timestamp() - interval '24 hours'
+                     AND occurred_at <= clock_timestamp()
+                   ORDER BY occurred_at"""
+            ).fetchall()
+        self._restore_liquidation_checkpoint(liquidation_rows)
         if latest is not None:
             self.last_persisted_minute = latest[0]
             self.previous_state = str(latest[1])
@@ -232,6 +241,19 @@ class Collector:
             self.continuity_expected_snapshots = expected
             self.continuity_missing_snapshots = max(0, expected - self.continuity_actual_snapshots)
         self.continuity_max_gap_minutes = int(float(max_gap or 0))
+
+    def _restore_liquidation_checkpoint(
+        self, rows: list[tuple[Any, str, str, float, float]]
+    ) -> None:
+        """Restore persisted exact liquidation events without inventing missing events."""
+        for occurred_at, symbol, side, price, size in rows:
+            self.engine.on_liquidation(
+                str(symbol),
+                float(occurred_at),
+                str(side),
+                float(price),
+                float(size),
+            )
 
     def _advance_continuity(self, minute: datetime) -> dict[str, Any]:
         previous = self.last_persisted_minute
