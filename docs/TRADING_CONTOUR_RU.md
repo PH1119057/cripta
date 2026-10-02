@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.6
-**Дата:** 2026-09-30
+**Версия:** 1.7
+**Дата:** 2026-10-02
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -188,6 +188,49 @@ hedge не может быть сохранён как silently executable.
 - authoring template не содержит числовых trading defaults;
 - неподдержанный decision/execution-affecting setting нельзя silently сохранить
   как исполняемый: authoring/materialization/readiness обязаны fail-closed.
+
+## 1.9 Strategy-owned market context interpretation
+
+Торговый смысл объективного MAYAK/Dispatcher context принадлежит только exact
+Strategy version.
+
+Каждая StrategyCard, которая может читать market context, обязана явно
+декларировать usage отдельно для фаз ENTRY, OPEN_POSITION/POSITION и EXIT.
+
+Для каждой фазы declaration различает минимум:
+
+~~~text
+NONE
+OBSERVE_ONLY
+POLICY
+~~~
+
+Пустой/отсутствующий список context requirements не считается доказательством
+осознанного NONE.
+
+Если фаза имеет POLICY, exact Strategy version хранит versioned Strategy
+Context Policy с feature/context id, required scope, causal freshness/quality
+requirement, comparator/condition, missing/stale behavior, resulting Strategy
+decision/action и exact version/fingerprint.
+
+Один и тот же MarketRegime разные Strategy вправе трактовать противоположно.
+MAYAK/Dispatcher не могут сами добавлять эту интерпретацию.
+
+Research result также не меняет её автоматически:
+
+~~~text
+MARKET FACT / CONTEXT
+-> RESEARCH / OOS
+-> OWNER DECISION
+-> NEW STRATEGY VERSION
+-> TEST / SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
+~~~
+
+Materializer/readiness обязаны fail-closed, если Strategy заявляет POLICY, но
+поддержка/consumer path required context не доказаны.
 
 # 2. ENTRY — универсальный Entry Engine
 

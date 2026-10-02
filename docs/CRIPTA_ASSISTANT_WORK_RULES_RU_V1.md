@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.2 · 2026-09-29
+**Версия:** 3.3 · 2026-10-02
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -113,6 +113,49 @@ RESEARCH / EVIDENCE
 ```
 
 Dataset reuse does not imply logic/policy reuse.
+
+## 4.3 Capability migration Hard Stop
+
+Архитектурный cleanup не считается завершённым, если он только удалил
+неправильного owner capability.
+
+Для любого переноса/удаления/ослабления обязанности до implementation требуется
+BEFORE / AFTER CAPABILITY MATRIX минимум с полями:
+
+~~~text
+CAPABILITY
+BEFORE_OWNER
+BEFORE_STATUS
+AFTER_OWNER
+AFTER_STATUS
+REPLACEMENT_IMPLEMENTED
+MIGRATION_REQUIRED
+TEST_EVIDENCE
+~~~
+
+Если ранее требуемая capability после changeset имеет NO OWNER,
+NOT IMPLEMENTED или неизвестный consumer path:
+
+~~~text
+ARCHITECTURE_CAPABILITY_GAP=YES
+HARD_STOP=YES
+PREPARED=NO
+OWNER_DECISION_REQUIRED=YES
+~~~
+
+Нельзя продолжать только потому, что новая локальная boundary архитектурно
+чище. Сначала owner decision + канон задают нового владельца/отказ от
+capability, затем implementation.
+
+Перед architecture-sensitive change исполнитель отдельно отвечает:
+
+1. что перестаёт работать;
+2. какие existing capabilities затронуты;
+3. кто владел ими до изменения;
+4. кто владеет ими после;
+5. реализован ли replacement;
+6. не теряется ли causal/history/replay comparability;
+7. какие tests/runtime evidence доказывают завершённость migration.
 
 ## 5. Upper architecture
 

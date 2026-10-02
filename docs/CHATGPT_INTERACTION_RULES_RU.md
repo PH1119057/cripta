@@ -1,7 +1,7 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.8
-**Дата:** 2026-09-28
+**Версия:** 1.9
+**Дата:** 2026-10-02
 **Статус:** обязательный канонический META-контракт взаимодействия
 
 Этот документ регулирует способ совместной работы владельца проекта и ChatGPT.
@@ -261,3 +261,50 @@ Exact UI Project Instructions text ведётся как derived artifact
 8. если меняется документация — выполнен ли INDEX §17 documentation gate;
 9. если меняются Project Instructions/Project Source — соблюдены ли UI limits
    8000 chars / 12 files.
+# 15. Architecture capability Hard Stop
+
+Явное решение владельца может изменить архитектуру, но исполнитель не имеет
+права молча уничтожить уже утверждённую системную capability только потому,
+что её прежнему owner запрещено ею владеть.
+
+Перед архитектурно чувствительной mutation обязательно проверить:
+
+~~~text
+CAPABILITY
+OLD_OWNER
+OLD_CONTRACT
+CHANGE
+NEW_OWNER
+NEW_CANON
+NEW_IMPLEMENTATION
+MIGRATION
+TEST / EVIDENCE
+~~~
+
+Если изменение удаляет, ослабляет, переносит или делает passive-only ранее
+утверждённую capability, а новый owner/contract/implementation ещё не
+определены и не готовы, применяется:
+
+~~~text
+ARCHITECTURE_CAPABILITY_GAP=YES
+HARD_STOP=YES
+CANON_UPDATE_REQUIRED=YES
+OWNER_DECISION_REQUIRED=YES
+MIGRATION_COMPLETE=NO
+OLD_CAPABILITY_DECOMMISSION_ALLOWED=NO
+~~~
+
+Исполнитель обязан прямо сообщить владельцу, какая capability исчезнет или
+останется без consumer/owner, а не считать локально правильное разделение
+ответственности завершённой архитектурой.
+
+После owner decision порядок остаётся:
+
+~~~text
+CANON UPDATE
+-> IMPLEMENTATION
+-> TEST
+-> GITHUB
+-> DEPLOY [если нужен]
+-> RUNTIME EVIDENCE
+~~~

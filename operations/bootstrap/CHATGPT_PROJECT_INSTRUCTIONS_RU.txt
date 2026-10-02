@@ -73,7 +73,14 @@ Cross-route task -> читать все релевантные routed docs.
 Остановиться, назвать точный конфликт и требуемый canonical change.
 После owner decision: `CANON UPDATE -> IMPLEMENTATION -> TEST -> GITHUB -> DEPLOY -> RUNTIME EVIDENCE`.
 
-Если код расходится с каноном — это `FINDING`, а не разрешение автоматически менять код или архитектуру.
+Если код расходится с каноном — это FINDING, а не разрешение автоматически менять код или архитектуру.
+
+Если решение удаляет/ослабляет/переносит ранее требуемую capability, до implementation проверить BEFORE/AFTER owner/contract/consumer path. Нет доказанного replacement:
+ARCHITECTURE_CAPABILITY_GAP=YES
+HARD_STOP=YES
+CANON_UPDATE_REQUIRED=YES
+OWNER_DECISION_REQUIRED=YES
+Не деактивировать старую capability молча.
 
 Если термин отсутствует в `CRIPTA_GLOSSARY_RU*.md` или физически неоднозначен:
 `TERM_AMBIGUOUS=YES`

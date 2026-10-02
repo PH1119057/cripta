@@ -83,3 +83,9 @@ operational profile и open architecture decisions) находятся в
 Для server-side work текущие non-secret actors/write-roots/prohibitions
 зафиксированы в `docs/CURRENT_PROJECT_MAP_RU.md §1.4`; постоянный permission
 contract — в `docs/DEVELOPMENT_RELEASE_RULES_RU.md §5.1 и §19.1–19.4`.
+## Architecture capability guardrail
+
+При architecture-sensitive change запрещено молча удалять существующую
+capability вместе с неправильным owner. Если replacement owner/contract/
+implementation не доказаны, действует ARCHITECTURE_CAPABILITY_GAP=YES +
+HARD_STOP=YES. Exact contract: META §15, WORK §4.3, ARCH §13.

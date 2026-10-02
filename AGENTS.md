@@ -61,6 +61,21 @@ OWNER_DECISION_REQUIRED=YES
 Если термин отсутствует в `docs/CRIPTA_GLOSSARY_RU*.md` или физически
 неоднозначен — не додумывать, запросить owner decision.
 
+## Architecture capability Hard Stop
+
+Если patch/решение удаляет, ослабляет или переносит ранее требуемую capability,
+до implementation обязательна BEFORE/AFTER capability matrix. Capability без
+доказанного нового owner/contract/consumer path означает:
+
+~~~text
+ARCHITECTURE_CAPABILITY_GAP=YES
+HARD_STOP=YES
+OWNER_DECISION_REQUIRED=YES
+PREPARED=NO
+~~~
+
+См. META §15, WORK §4.3, ARCH §13.
+
 ## Server-side write scripts
 
 Перед написанием/запуском script, который пишет на сервере или переключает

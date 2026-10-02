@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.0
-**Дата:** 2026-09-30
+**Версия:** 2.1
+**Дата:** 2026-10-02
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -266,6 +266,39 @@ LONG/SHORT не переименовывают физические объект
 **CONSUMED_CONTEXT** — контекст, который конкретный EntryPlan/ExitPlan реально
 прочитал и использовал.
 
+**Market fact / рыночный факт** — причинный strategy-agnostic факт внешнего
+рынка, принадлежащий MAYAK observation semantics. Сам по себе не является
+торговым решением.
+
+**MarketRegime** — versioned причинная классификация объективного состояния
+рынка, которая различает не только мгновенный импульс, но и устойчивый режим
+по multi-horizon evidence. Exact thresholds/horizons не следуют из термина.
+
+**MarketRegimeEpisode** — причинный interval/episode одного устойчивого
+MarketRegime с exact start/last-confirmed/duration, severity, breadth,
+synchronization, quality и provenance. Не является StrategySignal.
+
+**MarketObservationAlert** — durable уведомляемый факт значимого изменения
+рыночного режима либо качества observation source. Не является trading command
+или Strategy policy.
+
+**Dispatcher Market Context** — strategy-agnostic прикладная нормализация
+market facts/regime для downstream consumers с freshness/quality/coverage и
+provenance. Не отвечает, подходит ли рынок конкретной Strategy.
+
+**CoinMarketContext** — objective per-instrument context, сохраняющий физически
+раздельные price/money/liquidity/positioning/liquidation/relative-strength/
+quality dimensions.
+
+**CoinMarketRating** — опциональная strategy-agnostic оценка объективного
+состояния инструмента по отдельно утверждённой формуле. Не использует PnL или
+success rate наших Strategy/Entry и не является StrategyCoinFit.
+
+**Strategy Context Policy** — immutable часть exact Strategy version,
+интерпретирующая разрешённые objective MAYAK/Dispatcher context facts для
+конкретной фазы ENTRY/POSITION/EXIT. Только Strategy владеет торговым смыслом
+такой policy.
+
 # 11. Execution
 
 **ExecutionRequest** — immutable запрос на исполнение уже принятого Entry или
@@ -485,6 +518,13 @@ Process-state vocabulary для development/research/compute/install:
 Эти process-state terms не заменяют META evidence/status vocabulary
 `CHECKED HERE / NOT CHECKED HERE / FINDING / RESEARCH RESULT / OWNER DECISION /
 CANON / IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED`.
+
+**Architecture capability** — требуемая системная способность с exact owner,
+contract, consumer/provider path и доказательством реализации.
+
+**Architecture capability gap** — состояние, когда ранее требуемая capability
+удалена/ослаблена/перенесена, но новый owner, contract, implementation или
+consumer path отсутствует/не доказан. Это Hard Stop до owner decision/canon.
 
 # 16. Запрещённые/исторические обозначения
 

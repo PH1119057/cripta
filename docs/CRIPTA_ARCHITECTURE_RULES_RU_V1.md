@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.4
-**Дата:** 2026-09-19
+**Версия:** 2.5
+**Дата:** 2026-10-02
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -563,3 +563,38 @@ Entry conditions и Strategy capital request -> Strategy/EntryPlan + Entry Engin
 ```
 
 Код не является автоматическим источником новой архитектуры.
+# 13. Conservation of capability ownership
+
+Разделение ответственности не должно уничтожать системную обязанность.
+
+Если capability удаляется из слоя A из-за правильной ownership boundary, до
+decommission обязательно существует одно из двух owner-approved состояний:
+
+~~~text
+A. capability больше не нужна проекту -> explicit owner decision + canon removal
+
+B. capability нужна ->
+   exact NEW_OWNER
+   + canonical contract
+   + implemented consumer/provider path
+   + migration plan
+   + tests/evidence
+~~~
+
+Состояние OLD_OWNER=forbidden, NEW_OWNER=conceptually named,
+NEW_IMPLEMENTATION=absent не является завершённой архитектурной миграцией.
+
+Для архитектурных ревизий обязательна BEFORE / AFTER CAPABILITY MATRIX.
+Потеря owner, consumer path, replay/audit path или operator-visible output для
+ранее утверждённой capability означает:
+
+~~~text
+ARCHITECTURE_CAPABILITY_GAP=YES
+HARD_STOP=YES
+CANON_UPDATE_REQUIRED=YES
+OWNER_DECISION_REQUIRED=YES
+~~~
+
+Особенно это относится к границам MAYAK -> Dispatcher -> Strategy: запрет
+Strategy-specific semantics в MAYAK/Dispatcher не отменяет обязанность exact
+Strategy владеть своей интерпретацией объективного market context.

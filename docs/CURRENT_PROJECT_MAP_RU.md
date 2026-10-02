@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.7
-**Дата:** 2026-10-01
+**Версия:** 10.8
+**Дата:** 2026-10-02
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1120,3 +1120,74 @@ PASS
 6. owner-approved MICRO_LIVE limits;
 7. отдельное explicit owner approval на real arm;
 8. только после этого MICRO_LIVE; full LIVE не следует из MICRO_LIVE автоматически.
+# 22. Observation contour completion — OWNER DECISION / CHECKED HERE 2026-10-02
+
+OWNER DECISION 2026-10-02:
+
+~~~text
+DOCUMENTATION FIRST
+-> IMPLEMENTATION IN SEPARATE STAGES
+-> NO SILENT LIVE/TRADING EFFECT
+~~~
+
+Canonical target:
+- MAYAK remains strategy-agnostic external-market observer;
+- MAYAK distinguishes instant movement from persistent multi-horizon
+  MarketRegime/MarketRegimeEpisode;
+- observation continuity/coverage is an explicit quality dimension;
+- significant regime/data-quality transitions can produce durable
+  MarketObservationAlert without trading rights;
+- Dispatcher remains strategy-agnostic but provides useful structured
+  global/per-coin context rather than Strategy suitability;
+- CoinMarketRating is objective-only and requires separate approved formula;
+- trading interpretation belongs only to exact Strategy Context Policy;
+- Strategy explicitly declares context usage per ENTRY/POSITION/EXIT phase;
+- architecture changes use capability-conservation Hard Stop before old
+  capability decommission.
+
+CHECKED HERE against GitHub/source/runtime 2026-10-02:
+
+~~~text
+SOURCE_HEAD at audit        = cddf7e7449b449652a8ac1dd97807ae534ce2081
+MAYAK primary MarketState   = current 5m-return panel classifier
+MAYAK 15m/60m evidence      = exists, not primary persistent regime owner
+snapshot persistence        = minute write depends on now.second < 2
+observed DB snapshot gaps   = up to ~65 minutes in checked recent window
+dispatcher_v2 rating status = NOT_IMPLEMENTED
+current compatibility card  = mayak_context_policy []
+                              dispatcher_context_policy []
+current exact raw archive   = available research tree through 2026-08-16;
+                              Sep/Oct equivalent public_trades archive
+                              NOT FOUND in checked raw contour
+~~~
+
+Recent DB coverage audit for retained MAYAK coin contexts
+2026-09-21 07:43 UTC -> 2026-10-02 16:50 UTC:
+
+~~~text
+OI                         ~99.21%
+funding                    ~99.21%
+spot 5m flow               ~99.04%
+spot/derivatives books     ~99.21%
+derivatives 5m flow        ~67.44%
+liquidations VALID         ~45.16%
+liquidations WARMUP        ~54.84%
+~~~
+
+These are FINDING / CHECKED HERE, not new trading policy.
+
+Implementation status at publication of this documentation decision:
+
+~~~text
+persistent MarketRegime        = NOT IMPLEMENTED
+MarketRegimeEpisode            = NOT IMPLEMENTED
+durable MarketObservationAlert = NOT IMPLEMENTED
+snapshot cadence repair        = NOT IMPLEMENTED
+liquidation continuity repair  = NOT IMPLEMENTED
+CoinMarketRating formula       = NOT IMPLEMENTED
+Strategy phase context usage   = CANON UPDATED / IMPLEMENTATION PENDING
+modern exact replay contour    = GAP / IMPLEMENTATION PENDING
+~~~
+
+No Strategy behavior, LIVE gate, Entry/Exit decision or Exchange mutation is
+changed by this documentation revision.

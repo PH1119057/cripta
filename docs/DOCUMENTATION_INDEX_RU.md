@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.6
-**Дата:** 2026-09-29
+**Версия:** 3.7
+**Дата:** 2026-10-02
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -393,6 +393,7 @@ CANONICAL_TOKEN/LIST CONSISTENCY
 MAP_CURRENT_VS_HISTORICAL_LABELS
 RELEASE/RUNTIME IDENTITY WORDING
 OPEN_DECISIONS_NOT_SILENTLY_CLOSED
+CAPABILITY_OWNERSHIP_CONSERVATION
 CHATGPT_UI_CAPACITY
 PROJECT_INSTRUCTIONS_LENGTH
 PROJECT_SOURCE_FILE_COUNT
@@ -521,3 +522,36 @@ README + AGENTS + Project Instructions template обновляются в том
 
 Target rule не делает migration `IMPLEMENTED`: MAP обязан отдельно показывать
 legacy/current paths до завершённого deploy/runtime verification.
+# 18. Observation contour / capability-conservation revision — 2026-10-02
+
+OWNER DECISION 2026-10-02 is incorporated without adding a new current
+canonical file.
+
+Canonical ownership:
+- META: architecture-capability Hard Stop and mandatory warning before silent
+  loss of an existing capability;
+- WORK: BEFORE/AFTER capability matrix and migration-preparedness gate;
+- ARCH: conservation of capability ownership across layer-boundary changes;
+- OBSERVATION_ANALYTICS: persistent multi-horizon MarketRegime, continuity/
+  quality, MarketObservationAlert, useful strategy-agnostic Dispatcher context;
+- TRADING_CONTOUR: exact Strategy owns market-context interpretation per
+  ENTRY/POSITION/EXIT phase;
+- GLOSSARY: MarketRegime/episode/alert/context/policy/capability terms;
+- MAP: dated implementation/runtime findings and pending implementation status.
+
+The revision explicitly preserves:
+
+~~~text
+MAYAK = strategy-agnostic observation
+Dispatcher = strategy-agnostic applied context
+Strategy = sole owner of trading interpretation
+Research = evidence only
+~~~
+
+It does not approve any stress threshold, LONG/SHORT rule, Entry/Exit filter or
+LIVE effect. Those require the existing research -> owner decision -> new
+Strategy version -> validation path.
+
+Bootstrap-visible Hard Stop behavior is mirrored in README / AGENTS /
+operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt; document set,
+mandatory pre-read, routing and Project Source count remain unchanged.

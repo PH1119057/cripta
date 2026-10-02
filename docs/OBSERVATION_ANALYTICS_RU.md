@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.4
-**Дата:** 2026-09-25
+**Версия:** 1.5
+**Дата:** 2026-10-02
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -81,6 +81,87 @@ Live и historical replay должны использовать одинаков
 
 MAYAK/наблюдательный контур может причинно материализовать Geometry state/timeline по exact GeometrySpec, полученному из Strategy layer. MAYAK не выбирает depth/ATR/width/gap/stabilization. Один exact fingerprint рассчитывается один раз на symbol и может переиспользоваться consumers; иной result-affecting parameter => иной fingerprint. Timeline хранит достаточные current/previous boundaries, component extrema, ATR, structural-change/stability timestamps и provenance для причинного replay. Торговая интерпретация остаётся только в EntryPlan/ExitPlan.
 
+## 1.8 MarketRegime и persistent episode
+
+MAYAK обязан различать мгновенное движение и устойчивый общерыночный режим.
+
+Один короткий horizon не может быть единственным физическим смыслом
+MarketRegime. Канонически MAYAK должен иметь causal multi-horizon evidence,
+достаточный минимум для различения:
+
+~~~text
+INSTANT STATE
+SHORT-HORIZON REGIME
+PERSISTENT REGIME
+~~~
+
+Exact horizons/thresholds не являются global defaults и утверждаются только
+после research/owner decision.
+
+MarketRegime должен опираться на versioned набор объективных факторов, где
+доступны: direction, breadth, synchronization, persistence/duration,
+acceleration/deceleration, BTC/ETH anchors, data quality/coverage и
+money/OI/liquidation/liquidity evidence без подмены missing -> neutral.
+
+Устойчивое состояние материализуется как causal MarketRegimeEpisode с минимум:
+
+~~~text
+regime_id
+started_at
+last_confirmed_at
+duration
+direction
+severity
+breadth
+synchronization
+quality
+evidence/provenance
+~~~
+
+Episode не является Strategy signal и не содержит LONG/SHORT command.
+
+## 1.9 Continuity, quality и MarketObservationAlert
+
+MAYAK является инфраструктурным источником наблюдения, поэтому continuity
+само является измеряемой частью качества.
+
+Для требуемой snapshot cadence должны быть доступны минимум:
+
+~~~text
+EXPECTED_SNAPSHOTS
+ACTUAL_SNAPSHOTS
+MISSING_SNAPSHOTS
+MAX_GAP
+COVERAGE_PCT
+~~~
+
+Пропущенная временная корзина не маскируется следующим snapshot.
+
+Quality обязана позволять различить как минимум независимое доверие к price/
+regime, money flow, positioning/OI/funding, liquidations, liquidity/order book
+и composite context.
+
+Если значимый объективный рыночный режим меняется либо деградирует качество
+критичного observation source, наблюдательный контур обязан уметь создать
+durable MarketObservationAlert.
+
+Минимальные классы:
+
+~~~text
+REGIME_CHANGE
+MARKET_WIDE_STRESS
+SYNCHRONIZATION_SPIKE
+LIQUIDATION_CASCADE
+DATA_QUALITY_DEGRADATION
+SOURCE_OUTAGE
+~~~
+
+Alert сообщает факт внешнего рынка/качества, имеет durable event/delivery/
+retry/acknowledgement либо explicit escalation, но не является Entry/Exit
+command и не создаёт trading rights MAYAK/Dispatcher. UI-only без durable
+delivery не считается доставленным alert, если класс события настроен как
+owner-notifiable.
+
 # 2. DISPATCHER — объективный прикладной контекст
 
 ## 2.1 Назначение
@@ -135,6 +216,34 @@ Dispatcher:
 иметь provenance.
 
 Missing/stale/partial не становятся neutral.
+
+## 2.6 Dispatcher обязан добавлять прикладную структуру, а не скрытую Strategy policy
+
+Dispatcher не должен быть простым byte-for-byte transport MAYAK и одновременно
+не имеет права возвращаться к Strategy suitability.
+
+Его canonical работа — causal strategy-agnostic normalization объективной
+среды в устойчивый прикладной context, включая там, где доступны: global
+direction, stress/severity, regime_id/regime age/transition, breadth,
+synchronization, money pressure, positioning/OI, liquidation state, liquidity,
+BTC/ETH anchors и quality/coverage/freshness.
+
+Это описание среды, не решение ALLOW/BLOCK, не GOOD_MATCH конкретной Strategy
+и не выбор LONG/SHORT.
+
+## 2.7 CoinMarketContext / CoinMarketRating
+
+Для каждого инструмента Dispatcher обязан иметь структурированный
+CoinMarketContext, сохраняющий раздельный физический смысл price, money,
+liquidity, positioning, liquidations, relative strength и quality.
+
+CoinMarketRating допускается только как strategy-agnostic объективная
+характеристика состояния инструмента. Он не может использовать PnL, success
+rate наших Entry или suitability конкретной Strategy.
+
+До отдельного owner-approved research/formula один scalar rating не
+придумывается. Вектор объективных dimensions предпочтительнее ложной единой
+оценки. Текущий implementation status хранится в CURRENT_PROJECT_MAP.
 
 # 3. MONITORING — наблюдение и UI
 
