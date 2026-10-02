@@ -220,5 +220,46 @@ def test_verified_installer_manages_download_expansion_unit() -> None:
         "research/server/cripta-download-expansion.service"
         "|cripta-download-expansion.service|tooling"
     ) in source
-    assert "  cripta-download-expansion.service\\n" in source
+    assert "  cripta-download-expansion.service\n" in source
 
+
+
+def test_verified_installer_manages_public_trade_archive_units() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    assert (
+        "research/server/dataset/cripta-public-trade-archive.service"
+        "|cripta-public-trade-archive.service|tooling"
+    ) in source
+    assert (
+        "research/server/dataset/cripta-public-trade-archive.timer"
+        "|cripta-public-trade-archive.timer|tooling"
+    ) in source
+    assert "  cripta-public-trade-archive.timer\n" in source
+    assert "/data/cripta/datasets/raw/bybit_public_trades_daily_v1" in source
+
+
+def test_verified_installer_validates_release_units_before_mutation() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    assert "research/server/cripta-download-expansion.service" in source
+    assert (
+        "research/server/jobs research/server/dataset "
+        "research/server/cripta-download-expansion.service"
+    ) in source
+    preflight = source.index("UNIT_SOURCE_PREFLIGHT=PASS")
+    backup = source.index("pg_dump -Fc -d cripta")
+    stop_loop = source.index('for service in "${managed_services[@]}"; do')
+    switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    assert preflight < backup < stop_loop < switch
+    assert "unit source missing before mutation" in source[:backup]
+
+
+def test_verified_installer_checks_actual_runtime_and_tooling_baseline() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    runtime_guard = source.index("runtime baseline mismatch")
+    tooling_guard = source.index("tooling baseline mismatch")
+    backup = source.index("pg_dump -Fc -d cripta")
+    switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    assert runtime_guard < backup < switch
+    assert tooling_guard < backup < switch
+    assert 'current_runtime="$(readlink -f "$RUNTIME_ROOT/current"' in source
+    assert 'current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current"' in source

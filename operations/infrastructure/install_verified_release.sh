@@ -79,8 +79,18 @@ pending_commands="$(sql_scalar "SELECT count(*) FROM runtime.trade_commands WHER
 pending_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders WHERE order_status IN ('New','PartiallyFilled','Untriggered')")"
 [[ "$pending_orders" == "0" ]] || die "pending Exchange order exists"
 
+current_runtime="$(readlink -f "$RUNTIME_ROOT/current" 2>/dev/null || true)"
+current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current" 2>/dev/null || true)"
+[[ -n "$current_runtime" && -f "$current_runtime/INSTALLED_COMMIT" ]] || die "current runtime identity missing"
+[[ -n "$current_tooling" && -f "$current_tooling/INSTALLED_COMMIT" ]] || die "current tooling identity missing"
+actual_runtime_baseline="$(runuser -u cripta -- cat "$current_runtime/INSTALLED_COMMIT")"
+actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_COMMIT")"
+[[ "$actual_runtime_baseline" == "$EXPECTED_BASELINE" ]] || die "runtime baseline mismatch: actual=$actual_runtime_baseline expected=$EXPECTED_BASELINE"
+[[ "$actual_tooling_baseline" == "$EXPECTED_BASELINE" ]] || die "tooling baseline mismatch: actual=$actual_tooling_baseline expected=$EXPECTED_BASELINE"
+
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
 install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLING_ROOT/releases"
+install -d -o cripta -g cripta -m 0750 /data/cripta/datasets/raw/bybit_public_trades_daily_v1
 install -d -o root -g root -m 0700 "$BACKUP_ROOT"
 install -d -o root -g cripta -m 0750 "$STATE_ROOT"
 
@@ -93,7 +103,7 @@ if [[ ! -d "$runtime_release" ]]; then
 fi
 if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner install -d -m 0750 "$tooling_release"
-  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset     | runuser -u cripta -- tar -xf - -C "$tooling_release"
+  as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
 
 runtime_requirements="$runtime_release/operations/runtime/runtime_requirements.lock"
@@ -131,6 +141,52 @@ rm -f "$next_runtime" "$next_tooling"
 ln -s "$runtime_release" "$next_runtime"
 ln -s "$tooling_release" "$next_tooling"
 
+unit_specs=(
+  "research/server/connectivity/cripta-bybit-latency.service|cripta-bybit-latency.service|runtime"
+  "research/server/backup/cripta-backup.service|cripta-backup.service|runtime"
+  "research/server/backup/cripta-backup.timer|cripta-backup.timer|runtime"
+  "operations/systemd/cripta-dashboard.service|cripta-dashboard.service|runtime"
+  "operations/systemd/cripta-dns-override.service|cripta-dns-override.service|runtime"
+  "operations/dispatcher_v2/cripta-dispatcher-v2-context-correlator.service|cripta-dispatcher-v2-context-correlator.service|runtime"
+  "operations/dispatcher_v2/cripta-dispatcher-v2.service|cripta-dispatcher-v2.service|runtime"
+  "operations/monitoring/cripta-exit-runtime.service|cripta-exit-runtime.service|runtime"
+  "research/server/monitoring/cripta-health-monitor.service|cripta-health-monitor.service|runtime"
+  "research/server/jobs/cripta-job-intake.service|cripta-job-intake.service|tooling"
+  "research/server/jobs/cripta-job-runner.service|cripta-job-runner.service|tooling"
+  "research/server/dataset/cripta-dataset-manifest.service|cripta-dataset-manifest.service|tooling"
+  "research/server/dataset/cripta-public-trade-archive.service|cripta-public-trade-archive.service|tooling"
+  "research/server/dataset/cripta-public-trade-archive.timer|cripta-public-trade-archive.timer|tooling"
+  "research/server/cripta-download-expansion.service|cripta-download-expansion.service|tooling"
+  "operations/systemd/cripta-lifecycle-supervisor.service|cripta-lifecycle-supervisor.service|runtime"
+  "operations/systemd/cripta-m3-trade-analyst.service|cripta-m3-trade-analyst.service|runtime"
+  "operations/systemd/cripta-mayak-v2.service|cripta-mayak-v2.service|runtime"
+  "operations/systemd/cripta-mayak-v2-report.service|cripta-mayak-v2-report.service|runtime"
+  "operations/systemd/cripta-mayak-v2-weekly-report.service|cripta-mayak-v2-weekly-report.service|runtime"
+  "research/server/monitoring/cripta-opportunity-tracker.service|cripta-opportunity-tracker.service|runtime"
+  "operations/monitoring/cripta-position-supervisor.service|cripta-position-supervisor.service|runtime"
+  "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
+  "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
+  "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
+  "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
+  "operations/systemd/cripta-universal-entry-consumer.service|cripta-universal-entry-consumer.service|runtime"
+  "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
+  "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
+  "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
+  "operations/monitoring/cripta-causal-context-correlator.service|cripta-causal-context-correlator.service|runtime"
+  "operations/strategy_dispatcher/cripta-strategy-dispatcher.service|cripta-strategy-dispatcher.service|runtime"
+)
+
+for spec in "${unit_specs[@]}"; do
+  IFS='|' read -r src_rel unit scope <<<"$spec"
+  if [[ "$scope" == "tooling" ]]; then
+    source_unit="$tooling_release/$src_rel"
+  else
+    source_unit="$runtime_release/$src_rel"
+  fi
+  [[ -f "$source_unit" ]] || die "unit source missing before mutation: $source_unit"
+done
+echo "UNIT_SOURCE_PREFLIGHT=PASS"
+
 stamp="$(date -u +%Y%m%d_%H%M%S)"
 backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
@@ -153,39 +209,6 @@ if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
   } > "$backup/CONTROL_CHECKPOINT"
 fi
 runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
-
-unit_specs=(
-  "research/server/connectivity/cripta-bybit-latency.service|cripta-bybit-latency.service|runtime"
-  "research/server/backup/cripta-backup.service|cripta-backup.service|runtime"
-  "research/server/backup/cripta-backup.timer|cripta-backup.timer|runtime"
-  "operations/systemd/cripta-dashboard.service|cripta-dashboard.service|runtime"
-  "operations/systemd/cripta-dns-override.service|cripta-dns-override.service|runtime"
-  "operations/dispatcher_v2/cripta-dispatcher-v2-context-correlator.service|cripta-dispatcher-v2-context-correlator.service|runtime"
-  "operations/dispatcher_v2/cripta-dispatcher-v2.service|cripta-dispatcher-v2.service|runtime"
-  "operations/monitoring/cripta-exit-runtime.service|cripta-exit-runtime.service|runtime"
-  "research/server/monitoring/cripta-health-monitor.service|cripta-health-monitor.service|runtime"
-  "research/server/jobs/cripta-job-intake.service|cripta-job-intake.service|tooling"
-  "research/server/jobs/cripta-job-runner.service|cripta-job-runner.service|tooling"
-  "research/server/dataset/cripta-dataset-manifest.service|cripta-dataset-manifest.service|tooling"
-  "research/server/cripta-download-expansion.service|cripta-download-expansion.service|tooling"
-  "operations/systemd/cripta-lifecycle-supervisor.service|cripta-lifecycle-supervisor.service|runtime"
-  "operations/systemd/cripta-m3-trade-analyst.service|cripta-m3-trade-analyst.service|runtime"
-  "operations/systemd/cripta-mayak-v2.service|cripta-mayak-v2.service|runtime"
-  "operations/systemd/cripta-mayak-v2-report.service|cripta-mayak-v2-report.service|runtime"
-  "operations/systemd/cripta-mayak-v2-weekly-report.service|cripta-mayak-v2-weekly-report.service|runtime"
-  "research/server/monitoring/cripta-opportunity-tracker.service|cripta-opportunity-tracker.service|runtime"
-  "operations/monitoring/cripta-position-supervisor.service|cripta-position-supervisor.service|runtime"
-  "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
-  "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
-  "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
-  "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
-  "operations/systemd/cripta-universal-entry-consumer.service|cripta-universal-entry-consumer.service|runtime"
-  "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
-  "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
-  "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
-  "operations/monitoring/cripta-causal-context-correlator.service|cripta-causal-context-correlator.service|runtime"
-  "operations/strategy_dispatcher/cripta-strategy-dispatcher.service|cripta-strategy-dispatcher.service|runtime"
-)
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
@@ -228,6 +251,7 @@ managed_services=(
   cripta-mayak-v2-weekly-report.service
   cripta-mayak-v2-report.service
   cripta-bybit-latency.service
+  cripta-public-trade-archive.timer
   cripta-dashboard.service
   cripta-download-expansion.service
   cripta-dispatcher-v2-context-correlator.service
