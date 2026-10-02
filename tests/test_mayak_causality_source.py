@@ -14,3 +14,6 @@ def test_regular_snapshot_is_idempotent_per_calendar_minute() -> None:
     assert "last_persisted_minute" in source
     assert "mayak_v2_one_regular_per_minute" in source
     assert "snapshot_kind='REGULAR'" in source
+    assert "now.second < 2" not in source
+    assert "minute > self.last_persisted_minute" in source
+    assert "collector_continuity" in source

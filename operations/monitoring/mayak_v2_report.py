@@ -41,6 +41,16 @@ def main() -> None:
             FROM mayak_v2.events WHERE occurred_at BETWEEN %s AND %s ORDER BY occurred_at""",
             (since, until),
         ).fetchall()
+        regular_minutes = [
+            row[0]
+            for row in db.execute(
+                """SELECT regular_minute FROM mayak_v2.snapshots
+                WHERE snapshot_kind='REGULAR' AND regular_minute BETWEEN %s AND %s
+                ORDER BY regular_minute""",
+                (since, until),
+            ).fetchall()
+        ]
+    continuity = _continuity(regular_minutes)
     summary = {
         "период_суток": days,
         "начало": since.isoformat(),
@@ -57,6 +67,7 @@ def main() -> None:
             for row in states
         ],
         "связанных_торговых_событий": len(events),
+        "непрерывность_regular_snapshot": continuity,
         "оговорка": "Маяк наблюдает и не изменяет торговые решения.",
     }
     (target / "СВОДКА.json").write_text(
@@ -91,6 +102,35 @@ def main() -> None:
         events,
     )
     print(target)
+
+
+def _continuity(minutes: list[datetime]) -> dict[str, object]:
+    if not minutes:
+        return {
+            "first_minute": None,
+            "last_minute": None,
+            "expected_snapshots": 0,
+            "actual_snapshots": 0,
+            "missing_snapshots": 0,
+            "max_gap_minutes": 0,
+            "coverage_pct": None,
+        }
+    unique = sorted(set(minutes))
+    expected = int((unique[-1] - unique[0]).total_seconds() // 60) + 1
+    gaps = [
+        int((right - left).total_seconds() // 60)
+        for left, right in zip(unique, unique[1:], strict=False)
+    ]
+    actual = len(unique)
+    return {
+        "first_minute": unique[0].isoformat(),
+        "last_minute": unique[-1].isoformat(),
+        "expected_snapshots": expected,
+        "actual_snapshots": actual,
+        "missing_snapshots": max(0, expected - actual),
+        "max_gap_minutes": max(gaps, default=0),
+        "coverage_pct": round(actual / expected * 100, 6) if expected else None,
+    }
 
 
 def write_csv(path: Path, headings: tuple[str, ...], rows: list[tuple[object, ...]]) -> None:

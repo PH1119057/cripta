@@ -67,7 +67,14 @@ class Collector:
         self.last_persisted_handoff: dict[str, Any] | None = None
         self.pending_liquidations: list[tuple[float, str, str, float, float]] = []
         self.liquidation_lock = threading.Lock()
+        self.state_write_lock = threading.Lock()
         self.subscription_acks: dict[str, dict[str, Any]] = {}
+        self.previous_state: str | None = None
+        self.continuity_start_minute: datetime | None = None
+        self.continuity_expected_snapshots = 0
+        self.continuity_actual_snapshots = 0
+        self.continuity_missing_snapshots = 0
+        self.continuity_max_gap_minutes = 0
 
     def prepare(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +193,75 @@ class Collector:
                 provenance JSONB NOT NULL,
                 content_hash TEXT UNIQUE NOT NULL)""")
             db.commit()
+        self._load_persistence_checkpoint()
+
+    def _load_persistence_checkpoint(self) -> None:
+        with psycopg.connect(DSN) as db:
+            latest = db.execute(
+                """SELECT s.regular_minute,s.state,j.dispatcher_handoff
+                FROM mayak_v2.snapshots s
+                LEFT JOIN mayak_v2.observation_journal j ON j.snapshot_id=s.id
+                WHERE s.snapshot_kind='REGULAR' AND s.regular_minute IS NOT NULL
+                ORDER BY s.regular_minute DESC LIMIT 1"""
+            ).fetchone()
+            stats = db.execute(
+                """SELECT min(regular_minute),max(regular_minute),count(*)
+                FROM mayak_v2.snapshots
+                WHERE snapshot_kind='REGULAR' AND regular_minute IS NOT NULL"""
+            ).fetchone()
+            max_gap = db.execute(
+                """WITH ordered AS (
+                    SELECT regular_minute,
+                           lag(regular_minute) OVER(ORDER BY regular_minute) AS previous
+                    FROM mayak_v2.snapshots
+                    WHERE snapshot_kind='REGULAR' AND regular_minute IS NOT NULL
+                )
+                SELECT coalesce(max(extract(epoch FROM (regular_minute-previous))/60),0)
+                FROM ordered WHERE previous IS NOT NULL"""
+            ).fetchone()[0]
+        if latest is not None:
+            self.last_persisted_minute = latest[0]
+            self.previous_state = str(latest[1])
+            if isinstance(latest[2], dict):
+                self.last_persisted_handoff = latest[2]
+        first, last, actual = stats
+        self.continuity_start_minute = first
+        self.continuity_actual_snapshots = int(actual or 0)
+        if first is not None and last is not None:
+            expected = int((last - first).total_seconds() // 60) + 1
+            self.continuity_expected_snapshots = expected
+            self.continuity_missing_snapshots = max(0, expected - self.continuity_actual_snapshots)
+        self.continuity_max_gap_minutes = int(float(max_gap or 0))
+
+    def _advance_continuity(self, minute: datetime) -> dict[str, Any]:
+        previous = self.last_persisted_minute
+        if previous is None:
+            self.continuity_start_minute = minute
+            delta_minutes = 1
+        else:
+            delta_minutes = max(1, int((minute - previous).total_seconds() // 60))
+        self.continuity_expected_snapshots += delta_minutes
+        self.continuity_actual_snapshots += 1
+        self.continuity_missing_snapshots += max(0, delta_minutes - 1)
+        self.continuity_max_gap_minutes = max(self.continuity_max_gap_minutes, delta_minutes)
+        self.last_persisted_minute = minute
+        coverage = (
+            self.continuity_actual_snapshots / self.continuity_expected_snapshots
+            if self.continuity_expected_snapshots
+            else 1.0
+        )
+        return {
+            "scope_started_at": (
+                self.continuity_start_minute.isoformat() if self.continuity_start_minute else None
+            ),
+            "regular_minute": minute.isoformat(),
+            "expected_snapshots": self.continuity_expected_snapshots,
+            "actual_snapshots": self.continuity_actual_snapshots,
+            "missing_snapshots": self.continuity_missing_snapshots,
+            "max_gap_minutes": self.continuity_max_gap_minutes,
+            "last_gap_minutes": delta_minutes,
+            "coverage_pct": round(coverage * 100, 6),
+        }
 
     def run(self) -> None:
         self.prepare()
@@ -196,7 +272,6 @@ class Collector:
         ]
         for thread in threads:
             thread.start()
-        previous_state: str | None = None
         next_ratios = 0.0
         while not self.stop.wait(1):
             now = datetime.now(UTC)
@@ -205,12 +280,9 @@ class Collector:
                 next_ratios = time.monotonic() + 300
             snapshot = self.engine.snapshot(now)
             minute = now.replace(second=0, microsecond=0)
-            if (
-                self.last_persisted_minute is None
-                or now.second < 2 and minute != self.last_persisted_minute
-            ):
+            if self.last_persisted_minute is None or minute > self.last_persisted_minute:
+                snapshot["collector_continuity"] = self._advance_continuity(minute)
                 snapshot_id = self._persist_snapshot(snapshot)
-                self.last_persisted_minute = minute
                 self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
                 self._persist_coin_market_contexts(snapshot_id, snapshot)
@@ -218,9 +290,9 @@ class Collector:
                 self._persist_shared_market_context(snapshot_id, snapshot)
                 self.last_persisted_handoff = snapshot["dispatcher_handoff"]
                 state = str(snapshot["state"])
-                if state != previous_state:
-                    self._persist_state_event(snapshot_id, snapshot, previous_state)
-                    previous_state = state
+                if state != self.previous_state:
+                    self._persist_state_event(snapshot_id, snapshot, self.previous_state)
+                    self.previous_state = state
             if self.last_persisted_handoff is not None:
                 snapshot["dispatcher_handoff"] = self.last_persisted_handoff
             self.last_snapshot = snapshot
@@ -313,7 +385,14 @@ class Collector:
                 self.engine.on_transport(
                     market, connected=False, timestamp=time.time(), error=type(exc).__name__
                 )
-                self._write_error(market, exc)
+                try:
+                    self._write_error(market, exc)
+                except Exception as write_exc:  # noqa: BLE001 - reconnect must survive status failures
+                    print(
+                        "MAYAK_STATUS_WRITE_ERROR "
+                        f"market={market} error={type(write_exc).__name__}: {write_exc}",
+                        flush=True,
+                    )
                 self.stop.wait(3)
             finally:
                 if sock is not None:
@@ -603,9 +682,18 @@ class Collector:
             db.commit()
 
     def _write_state(self, snapshot: dict[str, Any]) -> None:
-        tmp = STATE_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(snapshot, ensure_ascii=False, default=str), encoding="utf-8")
-        tmp.replace(STATE_PATH)
+        with self.state_write_lock:
+            tmp = STATE_PATH.with_name(
+                f"{STATE_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            try:
+                tmp.write_text(
+                    json.dumps(snapshot, ensure_ascii=False, default=str), encoding="utf-8"
+                )
+                tmp.replace(STATE_PATH)
+            finally:
+                with suppress(FileNotFoundError):
+                    tmp.unlink()
 
     def _persist_shared_market_context(
         self, snapshot_id: int, snapshot: dict[str, Any]
@@ -634,7 +722,9 @@ class Collector:
             db.commit()
 
     def _write_error(self, market: str, exc: Exception) -> None:
-        payload = self.last_snapshot or {"state": "прогрев", "confidence": 0, "coins": {}}
+        payload = dict(
+            self.last_snapshot or {"state": "прогрев", "confidence": 0, "coins": {}}
+        )
         payload["collector_error"] = {
             "market": market,
             "message": str(exc),
