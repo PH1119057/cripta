@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.1
+**Версия:** 11.2
 **Дата:** 2026-10-03
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1344,3 +1344,39 @@ modern exact replay contour          = TERM/BOUNDARY NOT CANONICALLY DEFINED
 ~~~
 
 No trading behavior or Exchange state was changed.
+
+## 22.3 Observation Replay Contour boundary — OWNER DECISION 2026-10-03
+
+OWNER DECISION:
+
+~~~text
+MODERN EXACT REPLAY = FULL OBSERVATION CONTOUR
+MAYAK
+-> DISPATCHER
+-> QUALITY / CONTINUITY
+-> MarketObservationAlert STAGE
+-> STOP BEFORE STRATEGY / TRADING
+~~~
+
+Exact boundary:
+- production `LiveMayakEngine` semantics are reused by replay;
+- production Dispatcher V2 builders are reused by replay;
+- quality/continuity remain explicit causal evidence;
+- alert stage is part of replay;
+- current automatic alert-generation policy = `NO_POLICY`;
+- no alert threshold, severity threshold, regime winner, CoinMarketRating,
+  Strategy suitability or Strategy context policy is inferred;
+- explicit historical MarketObservationAlert facts may be replayed;
+- account/trading-capacity state is outside the mandatory market replay unless
+  supplied as a separate causal technical input;
+- Strategy/Entry/Exit/Execution/Exchange mutation are outside this contour.
+
+Current implementation status at this owner decision:
+
+~~~text
+CausalMayakReplay / same LiveMayakEngine = IMPLEMENTED
+Dispatcher V2 production builders        = IMPLEMENTED
+quality/continuity in MAYAK/Dispatcher    = IMPLEMENTED
+durable MarketObservationAlert infra      = IMPLEMENTED / DEPLOYED
+full composed Observation Replay Contour  = IMPLEMENTATION PENDING
+automatic alert generation                = NO_PO

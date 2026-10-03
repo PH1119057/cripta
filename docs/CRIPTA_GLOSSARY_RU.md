@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.2
+**Версия:** 2.3
 **Дата:** 2026-10-03
 **Статус:** обязательный канонический терминологический контракт
 
@@ -473,6 +473,34 @@ reconciliation нельзя освобождать ownership/capital или по
 request/reservation/slot lineage, capital accounting и совместимый Exchange
 position-mode contract. В текущем one-way contract same-symbol hedge unsupported
 и обязан fail-closed; встречный order не может молча считаться hedge.
+
+**Observation Replay Contour / observation-contour replay** — causal historical
+воспроизведение полного strategy-agnostic наблюдательного pipeline:
+
+~~~text
+historical market events
+-> MAYAK production feature semantics
+-> MAYAK quality / continuity
+-> Dispatcher V2 production builders
+-> MarketObservationAlert stage
+~~~
+
+Граница replay заканчивается до Strategy. Observation Replay Contour не создаёт
+StrategySignal, EntryDecision, ExitDecision, ExecutionRequest и Exchange
+mutation. Account/trading-capacity state не входит в обязательный market replay
+и может присутствовать только как отдельно предоставленный causal technical
+input.
+
+Alert stage является обязательной частью полного contour, но отсутствие
+owner-approved alert generation policy означает `NO_POLICY`: replay не имеет
+права придумывать thresholds, severity или alert из самого факта наличия
+market/quality evidence. Явно предоставленный causal MarketObservationAlert
+может быть воспроизведён как observation fact; автоматическая генерация
+разрешена только exact owner-approved policy/version.
+
+**NO_POLICY** — fail-closed статус stage, для которого архитектурное место и
+контракт существуют, но decision/generation policy не утверждена. `NO_POLICY`
+не равен `NO_DATA`, `NORMAL`, `NONE` или отсутствию stage.
 
 # 14. Качество данных
 

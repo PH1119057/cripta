@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.6
+**Версия:** 1.7
 **Дата:** 2026-10-03
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -510,6 +510,42 @@ Counterfactual outcome всегда отделяется от фактическ
 Точные обязательные условия real arm определены в
 docs/TRADING_CONTOUR_RU*.md §4.7. Ни liveness сервиса, ни DEPLOY, ни зелёные
 unit tests сами по себе не дают LIVE rights.
+
+## 4.12 Observation Replay Contour
+
+OWNER DECISION 2026-10-03: modern exact replay для наблюдательного контура
+означает полный causal strategy-agnostic pipeline:
+
+~~~text
+historical market events
+-> MAYAK
+-> quality / continuity
+-> Dispatcher V2
+-> MarketObservationAlert stage
+~~~
+
+Обязательные свойства:
+- historical event ordering причинный; event/snapshot time не движется назад;
+- MAYAK replay использует тот же `LiveMayakEngine`, а не копию feature formulas;
+- Dispatcher replay использует те же production `dispatcher_v2` builders,
+  config fingerprints, freshness/coverage/data-quality semantics;
+- missing/stale/partial сохраняются как quality states и не становятся neutral;
+- provenance сохраняет source lineage и `trading_command=false`;
+- replay output не содержит Strategy suitability, CoinMarketRating formula,
+  StrategySignal, Entry/Exit/Execution command;
+- trading/account capacity не обязана входить в market replay и может
+  добавляться только отдельным causal technical input;
+- alert stage присутствует всегда.
+
+До отдельной owner-approved alert generation policy alert stage имеет exact
+статус `NO_POLICY`. В таком состоянии replay не генерирует
+`REGIME_CHANGE`, `MARKET_WIDE_STRESS`, `SYNCHRONIZATION_SPIKE`,
+`LIQUIDATION_CASCADE`, `DATA_QUALITY_DEGRADATION` или `SOURCE_OUTAGE` по
+неутверждённым thresholds. Он может причинно воспроизвести явно существующий
+MarketObservationAlert fact с его exact class/payload/provenance.
+
+Observation Replay Contour заканчивается до Strategy и не является
+LIVE EQUIVALENCE торгового контура сам по себе.
 
 # 5. Общая граница наблюдательного контура
 
