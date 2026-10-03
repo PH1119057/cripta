@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.2
+**Версия:** 11.3
 **Дата:** 2026-10-03
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1379,4 +1379,71 @@ Dispatcher V2 production builders        = IMPLEMENTED
 quality/continuity in MAYAK/Dispatcher    = IMPLEMENTED
 durable MarketObservationAlert infra      = IMPLEMENTED / DEPLOYED
 full composed Observation Replay Contour  = IMPLEMENTATION PENDING
-automatic alert generation                = NO_PO
+automatic alert generation                = NO_POLICY / NOT APPROVED
+~~~
+
+## 22.4 Observation Replay Contour implementation — CHECKED HERE 2026-10-03
+
+Pre-publication implementation/runtime checkpoint:
+
+~~~text
+REMOTE_HEAD      = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+SOURCE_HEAD      = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+INSTALLED_COMMIT = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+LOADED_COMMIT    = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+MAINNET_GATE     = DISARMED
+~~~
+
+IMPLEMENTED / DEPLOYED:
+- `ObservationContourReplay` composes the complete strategy-agnostic replay
+  boundary selected in §22.3;
+- MAYAK uses existing `CausalMayakReplay` and the same `LiveMayakEngine`;
+- MAYAK live persistence and replay share exact pure source-record builders for
+  `shared_market_contexts` / `coin_market_contexts`;
+- minute continuity uses one shared `MinuteContinuityTracker` in live Collector
+  and replay;
+- replay loads the exact production `dispatcher_v2` package from the installed
+  release and calls its production builders/serialization instead of copying
+  formulas;
+- quality/coverage/freshness and `trading_effect=NONE` are preserved;
+- alert stage is always present with `NO_POLICY`; automatic generated alerts
+  remain empty until a separate owner-approved alert-generation policy exists;
+- explicit causal historical MarketObservationAlert facts use the same pure
+  alert builder/content hash as durable live alert creation;
+- Strategy/Entry/Exit/Execution/Exchange mutation are absent from replay.
+
+TEST / RUNTIME EVIDENCE:
+
+~~~text
+targeted observation/replay suite = 24 passed
+full pytest                        = 1499 passed / 64 skipped / 0 failed
+Ruff changed code                  = PASS
+mypy new/shared modules            = PASS
+runtime ObservationReplay E2E      = PASS
+runtime dispatcher package         = exact installed production package
+alert policy                       = NO_POLICY
+automatic generated alerts         = 0
+3-minute replay continuity gap     = 2 missing snapshots [expected]
+~~~
+
+Post-deploy liveness:
+- `cripta-mayak-v2.service` active, `NRestarts=0`;
+- `cripta-dispatcher-v2.service` active, `NRestarts=0`;
+- `cripta-lifecycle-supervisor.service` active, `NRestarts=0`;
+- latest live MAYAK continuity retained `last_gap_minutes=1` after deploy;
+- execution permissions/open positions/hot positions/pending commands/
+  pending orders = 0;
+- mainnet remained disarmed.
+
+Observation-contour roadmap after this checkpoint:
+
+~~~text
+R10 multi-horizon evidence           = DONE / UTILITY_NOT_CONFIRMED
+R11 durable alert infrastructure     = DONE / DEPLOYED / CONTROLLED VERIFIED
+R12 Dispatcher persistent-regime use = BLOCKED BY UTILITY_NOT_CONFIRMED
+R13 CoinMarketRating                  = OWNER DECISION REQUIRED / FORMULA ABSENT
+R14 Strategy regime-context use       = FORBIDDEN BY CURRENT OWNER DECISION
+R15 Observation Replay Contour        = DONE / DEPLOYED / RUNTIME BEHAVIOR VERIFIED
+~~~
+
+No trading behavior or Exchange state was changed by R15.
