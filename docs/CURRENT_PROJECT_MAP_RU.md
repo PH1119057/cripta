@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.0
+**Версия:** 11.1
 **Дата:** 2026-10-03
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1287,3 +1287,60 @@ automatic alert/regime promotion  = FORBIDDEN
 This decision permits neutral evidence storage/transport only. It does not
 promote the research result into Strategy policy, MarketRegime classification,
 MarketRegimeEpisode boundaries or LIVE behavior.
+
+## 22.2 Durable MarketObservationAlert infrastructure — CHECKED HERE 2026-10-03
+
+Pre-publication implementation/deploy checkpoint, CHECKED HERE 2026-10-03:
+
+~~~text
+REMOTE_HEAD      = 458ebb173d729ef328149c2464166047c4dd32f3
+SOURCE_HEAD      = 458ebb173d729ef328149c2464166047c4dd32f3
+INSTALLED_COMMIT = 458ebb173d729ef328149c2464166047c4dd32f3
+LOADED_COMMIT    = 458ebb173d729ef328149c2464166047c4dd32f3
+MAINNET_GATE     = DISARMED
+~~~
+
+Implemented/deployed:
+- immutable `mayak_v2.market_observation_alerts`;
+- mutable `mayak_v2.market_observation_alert_deliveries`;
+- canonical alert classes:
+  `REGIME_CHANGE`, `MARKET_WIDE_STRESS`, `SYNCHRONIZATION_SPIKE`,
+  `LIQUIDATION_CASCADE`, `DATA_QUALITY_DEGRADATION`, `SOURCE_OUTAGE`;
+- delivery lifecycle:
+  `PENDING -> DELIVERED -> ACKNOWLEDGED` with retry and
+  `ESCALATION_REQUIRED`;
+- `owner_notifiable=false` by default;
+- provenance requires `trading_command=false`;
+- alert facts are immutable; delivery rows have no DELETE privilege for
+  runtime actor `cripta`.
+
+Controlled DB behavior, CHECKED HERE:
+- runtime actor / DB current_user = `cripta`;
+- controlled `SOURCE_OUTAGE` alert completed
+  `PENDING -> DELIVERED -> ACKNOWLEDGED`;
+- scenario ran in one transaction and was rolled back;
+- post-rollback production alert rows = 0;
+- post-rollback production delivery rows = 0.
+
+Runtime/liveness after deploy:
+- MAYAK, Dispatcher V2 and Lifecycle Supervisor active;
+- checked service restart counts = 0;
+- execution permissions/open positions/hot positions/pending commands/
+  pending orders = 0;
+- no automatic market alert trigger was enabled.
+
+Current observation-contour status:
+
+~~~text
+MarketRegimeEvidence 1w/2w/4w     = KEEP / UTILITY_NOT_CONFIRMED
+persistent MarketRegime             = IMPLEMENTATION PENDING
+MarketRegimeEpisode                 = IMPLEMENTATION PENDING
+durable MarketObservationAlert infra= IMPLEMENTED / DEPLOYED / CONTROLLED VERIFIED
+automatic alert generation          = NOT IMPLEMENTED / POLICY NOT APPROVED
+Dispatcher persistent-regime enrich = BLOCKED BY UTILITY_NOT_CONFIRMED
+CoinMarketRating formula             = OWNER DECISION REQUIRED
+Strategy use of this regime evidence = FORBIDDEN BY CURRENT OWNER DECISION
+modern exact replay contour          = TERM/BOUNDARY NOT CANONICALLY DEFINED
+~~~
+
+No trading behavior or Exchange state was changed.
