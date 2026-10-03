@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.1
-**Дата:** 2026-10-02
+**Версия:** 2.2
+**Дата:** 2026-10-03
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -273,6 +273,18 @@ LONG/SHORT не переименовывают физические объект
 **MarketRegime** — versioned причинная классификация объективного состояния
 рынка, которая различает не только мгновенный импульс, но и устойчивый режим
 по multi-horizon evidence. Exact thresholds/horizons не следуют из термина.
+
+**MarketRegimeEvidence** — причинный strategy-agnostic набор объективных
+multi-horizon наблюдений, достаточный для последующей оценки режима, но сам по
+себе не являющийся MarketRegime, MarketRegimeEpisode или торговой policy.
+Текущий owner-approved research contour сохраняет раздельные `1w/2w/4w`
+trailing-window evidence и не усредняет их в один threshold.
+
+**UTILITY_NOT_CONFIRMED** — статус исследовательского evidence, означающий:
+объект/признак разрешено сохранять и анализировать, но его полезность для
+Strategy, Dispatcher suitability, CoinMarketRating, alert/regime policy либо
+другого decision-affecting использования не подтверждена. Такой статус не
+разрешает автоматическое operational/trading применение.
 
 **MarketRegimeEpisode** — причинный interval/episode одного устойчивого
 MarketRegime с exact start/last-confirmed/duration, severity, breadth,

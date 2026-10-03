@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.9
+**Версия:** 11.0
 **Дата:** 2026-10-03
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1237,3 +1237,53 @@ modern exact replay contour    = GAP / IMPLEMENTATION PENDING
 
 No Strategy behavior, LIVE gate, Entry/Exit decision or Exchange mutation is
 changed by this documentation revision.
+
+## 22.1 MarketRegime multi-window research — OWNER DECISION / RESEARCH RESULT 2026-10-03
+
+OWNER DECISION 2026-10-03:
+
+~~~text
+KEEP 1w / 2w / 4w EVIDENCE SEPARATELY
+UTILITY_NOT_CONFIRMED
+NO WINNER / NO CONSENSUS POLICY
+NO TRADING EFFECT
+CONTINUE OBSERVATION-CONTOUR ROADMAP
+~~~
+
+Research run:
+
+~~~text
+/data/cripta/research/runs/market_regime_multihorizon_focus15_20261003
+~~~
+
+CHECKED HERE research evidence:
+- focus universe = 15 symbols, directionally separated UP/DOWN research
+  populations corresponding to LONG/SHORT path analysis;
+- horizons checked = 5m / 15m / 30m / 60m / 120m / 180m;
+- adaptive trailing windows checked = 1w / 2w / 4w;
+- fixed debounce checked = 0/1/2/3m;
+- adaptive gap quantiles checked = P25/P50/P75;
+- 495/495 Bybit daily public-trade gap archives for 2026-08-16..2026-09-17
+  were causally streamed to minute data with 0 missing / 0 errors;
+- exact source bytes checked = 5,330,890,143;
+- long-horizon evidence was more persistent than short-only impulse across all
+  checked 30 symbol×direction populations for Q60/Q70/Q80 on train and holdout;
+- no single 1w/2w/4w window, no C1/C2/C3 consensus rule and no tested debounce
+  value was strong enough to become canonical policy.
+
+Current status after this owner decision:
+
+~~~text
+MarketRegimeEvidence 1w/2w/4w  = RESEARCH COMPLETE / KEEP AS EVIDENCE
+evidence utility                  = UTILITY_NOT_CONFIRMED
+persistent MarketRegime           = IMPLEMENTATION PENDING
+MarketRegimeEpisode               = IMPLEMENTATION PENDING
+debounce/hysteresis policy        = NOT APPROVED
+automatic Strategy use            = FORBIDDEN
+automatic CoinMarketRating use    = FORBIDDEN
+automatic alert/regime promotion  = FORBIDDEN
+~~~
+
+This decision permits neutral evidence storage/transport only. It does not
+promote the research result into Strategy policy, MarketRegime classification,
+MarketRegimeEpisode boundaries or LIVE behavior.

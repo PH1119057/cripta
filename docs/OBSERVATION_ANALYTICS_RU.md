@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.5
-**Дата:** 2026-10-02
+**Версия:** 1.6
+**Дата:** 2026-10-03
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -97,6 +97,26 @@ PERSISTENT REGIME
 
 Exact horizons/thresholds не являются global defaults и утверждаются только
 после research/owner decision.
+
+OWNER DECISION 2026-10-03: исследованный adaptive multi-window слой пока
+сохраняется только как объективное evidence с
+`UTILITY_NOT_CONFIRMED`. Для каждого symbol причинно сохраняются раздельные
+`1w / 2w / 4w` trailing-window evidence по направлению движения и доступным
+`60m / 120m / 180m` horizons. Эти окна не усредняются в один threshold,
+не выбирается универсальный winner, и `C1/C2/C3` consensus не становится
+канонической классификацией.
+
+Research evidence 2026-10-03 подтверждает, что наличие long-horizon evidence
+физически устойчивее short-only impulse в исследованном focus15, но полезность
+этого слоя для Strategy, CoinMarketRating, Dispatcher suitability либо
+автоматического MarketRegimeEpisode **не подтверждена**. Поэтому:
+- evidence хранится с exact window/horizon/direction/provenance/quality;
+- disagreement между `1w/2w/4w` не маскируется усреднением;
+- исследованные debounce `0/1/2/3m` и adaptive `P25/P50/P75` не становятся
+  policy/default;
+- evidence не меняет Entry/Position/Exit и не создаёт trading rights;
+- promotion в regime classification/episode policy требует нового
+  `RESEARCH RESULT -> OWNER DECISION -> CANON`.
 
 MarketRegime должен опираться на versioned набор объективных факторов, где
 доступны: direction, breadth, synchronization, persistence/duration,
