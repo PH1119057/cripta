@@ -141,6 +141,7 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         "flock -n 9",
         "/srv/cripta/dashboard/universal_entry_source",
         "< \"$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql\"",
+        "< \"$RUNTIME_ROOT/current/operations/sql/20261003_market_observation_alert_v1.sql\"",
         "CRIPTA_RELEASE_COMMIT",
         "INSTALLED_COMMIT",
         "GATE=DISARMED",

@@ -311,6 +311,7 @@ for unit in "${retired_units[@]}"; do
 done
 
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql"
+runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261003_market_observation_alert_v1.sql"
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'
 UPDATE control.live_arm_sessions
    SET state='CLOSED',
