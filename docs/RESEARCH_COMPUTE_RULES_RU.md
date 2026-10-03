@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.7 · 2026-10-01
+**Версия:** 1.8 · 2026-10-04
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -114,6 +114,55 @@ ALL ENTRY -> minute-by-minute causal state -> reusable research dataset -> analy
 Пилот нужен для проверки механики, данных, наличия явления и стоимости расчёта. Общий вывод требует full-universe проверки и, где применимо, разрезов symbol/direction/time regime, coverage, false positives/negatives и economics after commissions.
 
 Для кандидата считать минимум: пойманные/пропущенные проблемные случаи, испорченные хорошие сделки, saved losses, lost good trades, destroyed recoveries, extra fees/slippage и итог после комиссий.
+
+### 13.1 Conservative execution-cost baseline
+
+OWNER DECISION 2026-10-04:
+
+Для поиска и сравнения торговых Strategy/Entry/Exit кандидатов базовый
+research/backtest cost model всегда считается консервативно:
+
+```text
+ENTRY_FEE_MODEL = TAKER
+EXIT_FEE_MODEL  = TAKER
+BASELINE        = TAKER / TAKER
+```
+
+Причина: до реализации нельзя гарантировать, что фактический Entry или Exit
+получит maker fill. Нельзя объявлять слабоположительную стратегию прибыльной
+за счёт предполагаемой maker-комиссии. Maker/maker, maker/taker и иные
+варианты допускаются только как отдельный sensitivity-case рядом с
+`TAKER / TAKER`, но не вместо baseline.
+
+Slippage считается отдельной чувствительностью, если есть доказанная модель
+или owner-approved assumption. Taker baseline не заменяет slippage-модель,
+но обеспечивает консервативный fee floor для раннего отбора кандидатов.
+
+### 13.2 Causal passive-order optimization для заранее известного уровня
+
+Если точка потенциального Entry или Take Profit известна заранее из уже
+доступной causal geometry, Research обязан отдельно проверить возможность
+пассивного limit/maker исполнения как execution optimization.
+
+Для кандидата с шестисвечным подтверждением owner direction 2026-10-04:
+на пятой закрытой свече допускается отдельный research-вариант с заранее
+выставленной limit-заявкой на известном уровне, а на шестой свече проверяется,
+сохраняются ли остальные условия допуска.
+
+При этом:
+- такой passive/pre-placement вариант не меняет базовый `TAKER / TAKER`
+  economics;
+- fill до полного подтверждения считается отдельной execution semantics и
+  должен быть явно помечен; его нельзя молча приравнивать к Entry после
+  шестой свечи;
+- заранее известный Take Profit также исследуется как passive limit/maker
+  candidate, но baseline economics остаётся taker до доказанной execution
+  semantics;
+- досрочное закрытие/flip по новому market/structure event может потребовать
+  taker; его maker/taker природа исследуется отдельно;
+- никакой pre-placement не переносится в LIVE без exact Strategy version,
+  Execution contract, cancellation/revalidation rules, tests и обычного
+  owner-approved promotion path.
 
 ## 14. Не смешивать наблюдение, причину и интерпретацию
 
