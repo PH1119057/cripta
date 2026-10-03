@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.3 · 2026-10-02
+**Версия:** 3.4 · 2026-10-04
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -369,6 +369,47 @@ Owner communication is primarily Russian. English is retained for exact code/API
 DB identifiers where translation hurts precision.
 
 Trading reports use «после комиссий».
+
+## 12.1 Обязательный расчётный контракт в аналитических отчётах
+
+Для любого анализа торговых данных, replay/backtest/OOS, сравнительной
+статистики Strategy/Entry/Exit или расчёта economics исполнитель обязан **до
+первой таблицы, метрики или вывода** явно указать exact contract расчёта.
+Минимальный блок:
+
+```text
+ENTRY
+EXIT
+EXECUTION / COST MODEL
+FILTERS / FLAGS
+DATASET / PERIOD / UNIVERSE
+POSITION / RE-ENTRY / TERMINAL HANDLING
+```
+
+Требования:
+- `ENTRY` описывается физически и полностью: geometry/horizon, direction,
+  thresholds, stability/confirmation conditions и момент, в который они
+  проверяются;
+- `EXIT` перечисляет все активные причины закрытия и их приоритет/first-event
+  semantics; если сравниваются несколько Exit, у каждой таблицы должен быть
+  однозначно указан конкретный Exit;
+- `EXECUTION / COST MODEL` указывает maker/taker assumption, комиссии,
+  slippage, nominal/capital model и fill-price semantics, если они влияют на
+  результат;
+- `FILTERS / FLAGS` перечисляет все дополнительные включённые/выключенные
+  фильтры и research flags (`STAY`, stabilization, cooldown, regime filter и
+  т.п.), а не только новый исследуемый признак;
+- `DATASET / PERIOD / UNIVERSE` фиксирует источник данных, exact period и набор
+  symbol/direction;
+- `POSITION / RE-ENTRY / TERMINAL HANDLING` фиксирует правила same-side signal,
+  opposite signal/flip, повторного Entry, unresolved position в конце периода и
+  иных lifecycle деталей, влияющих на число/результат сделок.
+
+Запрещено молча наследовать Entry/Exit/flags из предыдущего сообщения, старого
+чата, памяти или соседнего research run. Если exact contract результата нельзя
+однозначно восстановить по executable/source snapshot/result manifest, такой
+результат нельзя публиковать как сопоставимый: сначала восстановить contract
+или явно поставить `BLOCKED / NOT CHECKED HERE`.
 
 ## 13. Main process principle
 
