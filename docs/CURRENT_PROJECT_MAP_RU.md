@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 10.8
-**Дата:** 2026-10-02
+**Версия:** 10.9
+**Дата:** 2026-10-03
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -452,6 +452,52 @@ Bybit KZ quarantine data cleanup / owner decision 2026-10-01:
 - their symbol-specific payload under `/data/cripta` is retired/deleted;
 - PostgreSQL historical trading/audit records are preserved;
 - re-adding any quarantined symbol requires a new owner decision.
+
+Reusable `L5-3 CLEAN` research baseline — OWNER DECISION / CHECKED HERE
+2026-10-03:
+
+```text
+DATASET_ID = L5-3 CLEAN v1
+ARTIFACT   = /data/cripta/research/runs/l53_clean_v1_20261003
+FAST_QUERY = /data/cripta/research/runs/l53_clean_v1_20261003/results/l53_clean.sqlite
+RAW_ROOT   = /data/cripta/datasets/raw/20260518_20260816
+RANGE      = 2026-05-18 .. 2026-08-15
+SYMBOLS    = 15
+STATES     = 385813
+TOUCHES    = 116867
+```
+
+Symbols:
+`LINKUSDT, UNIUSDT, HBARUSDT, LTCUSDT, XRPUSDT, AVAXUSDT, DOTUSDT,
+AAVEUSDT, SUIUSDT, ARBUSDT, BCHUSDT, ADAUSDT, APTUSDT, OPUSDT, INJUSDT`.
+
+Dataset contract:
+- geometry is exact canonical L5-3: 36 fully closed 5m bars,
+  `range_low=min(low36)`, `range_high=max(high36)`, Wilder ATR200,
+  `half_width=ATR200*0.5`, gap=0;
+- `results/parts/states_<SYMBOL>.csv.gz` contains every causal L5-3 state
+  available at `state_effective_ts`;
+- `results/parts/touches_<SYMBOL>.csv.gz` contains the first raw public-trade
+  touch per `state + side`: LONG = lower inner boundary, SHORT = upper inner
+  boundary;
+- `results/l53_clean.sqlite` is the primary fast analytical surface; schema,
+  per-symbol counts and provenance are stored beside it;
+- CLEAN contains no width threshold, STAND6, Entry/Exit rule, occupancy,
+  TP/SL/outcome, approach, H3/H9 confluence, MAYAK/Dispatcher or market-regime
+  filter;
+- working width is preserved as absolute width plus explicitly named percentage
+  metrics relative to lower inner boundary, upper inner boundary and midpoint.
+  To reproduce the 2026-10-03 research convention called
+  `working_width_pct`, use `working_width_pct_lower`; this is a research
+  retrieval convention, not a Strategy default;
+- pilot exact-equivalence against a known current L5-3 event = PASS;
+  SQLite integrity = PASS; build stderr = empty.
+
+This artifact is a reusable RESEARCH baseline/evidence. It does not itself
+define Strategy policy, activate Strategy, change Entry/Exit behavior or grant
+Execution rights. New research should prefer filtering this baseline over
+re-reading multi-gigabyte raw public trades when its stored causal fields are
+sufficient.
 
 Current Research cleanup checkpoint, CHECKED HERE 2026-10-01:
 
