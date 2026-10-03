@@ -1,6 +1,6 @@
 # CRIPTA — core work rules for ChatGPT / Codex / developer
 
-**Версия:** 3.4 · 2026-10-04
+**Версия:** 3.5 · 2026-10-04
 **Статус:** обязательный core process contract
 **Source of truth:** GitHub `PH1119057/cripta:main`; `/srv/cripta/source_checkout`
 — synchronized operational mirror, not a second authority.
@@ -395,7 +395,9 @@ POSITION / RE-ENTRY / TERMINAL HANDLING
   однозначно указан конкретный Exit;
 - `EXECUTION / COST MODEL` указывает maker/taker assumption, комиссии,
   slippage, nominal/capital model и fill-price semantics, если они влияют на
-  результат;
+  результат. Если владелец явно не задал иной sensitivity-case, базовый
+  research/backtest economics считается консервативно как `TAKER / TAKER` для
+  Entry и Exit; потенциальная maker-экономия не имеет права улучшать baseline;
 - `FILTERS / FLAGS` перечисляет все дополнительные включённые/выключенные
   фильтры и research flags (`STAY`, stabilization, cooldown, regime filter и
   т.п.), а не только новый исследуемый признак;
