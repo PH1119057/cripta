@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import signal
@@ -17,6 +16,11 @@ from typing import Any
 import psycopg
 import websocket
 
+from bybit_workbench.mayak.context_records import (
+    coin_market_context_records,
+    shared_market_context_record,
+)
+from bybit_workbench.mayak.continuity import MinuteContinuityTracker
 from bybit_workbench.mayak.core.live import LiveMayakEngine
 
 EXCLUDED = {"1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"}
@@ -70,11 +74,7 @@ class Collector:
         self.state_write_lock = threading.Lock()
         self.subscription_acks: dict[str, dict[str, Any]] = {}
         self.previous_state: str | None = None
-        self.continuity_start_minute: datetime | None = None
-        self.continuity_expected_snapshots = 0
-        self.continuity_actual_snapshots = 0
-        self.continuity_missing_snapshots = 0
-        self.continuity_max_gap_minutes = 0
+        self.continuity = MinuteContinuityTracker()
 
     def prepare(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -234,13 +234,20 @@ class Collector:
             if isinstance(latest[2], dict):
                 self.last_persisted_handoff = latest[2]
         first, last, actual = stats
-        self.continuity_start_minute = first
-        self.continuity_actual_snapshots = int(actual or 0)
+        actual_count = int(actual or 0)
+        expected_count = 0
+        missing_count = 0
         if first is not None and last is not None:
-            expected = int((last - first).total_seconds() // 60) + 1
-            self.continuity_expected_snapshots = expected
-            self.continuity_missing_snapshots = max(0, expected - self.continuity_actual_snapshots)
-        self.continuity_max_gap_minutes = int(float(max_gap or 0))
+            expected_count = int((last - first).total_seconds() // 60) + 1
+            missing_count = max(0, expected_count - actual_count)
+        self.continuity = MinuteContinuityTracker(
+            start_minute=first,
+            last_minute=last,
+            expected_snapshots=expected_count,
+            actual_snapshots=actual_count,
+            missing_snapshots=missing_count,
+            max_gap_minutes=int(float(max_gap or 0)),
+        )
 
     def _restore_liquidation_checkpoint(
         self, rows: list[tuple[Any, str, str, float, float]]
@@ -256,34 +263,9 @@ class Collector:
             )
 
     def _advance_continuity(self, minute: datetime) -> dict[str, Any]:
-        previous = self.last_persisted_minute
-        if previous is None:
-            self.continuity_start_minute = minute
-            delta_minutes = 1
-        else:
-            delta_minutes = max(1, int((minute - previous).total_seconds() // 60))
-        self.continuity_expected_snapshots += delta_minutes
-        self.continuity_actual_snapshots += 1
-        self.continuity_missing_snapshots += max(0, delta_minutes - 1)
-        self.continuity_max_gap_minutes = max(self.continuity_max_gap_minutes, delta_minutes)
+        result = self.continuity.advance(minute)
         self.last_persisted_minute = minute
-        coverage = (
-            self.continuity_actual_snapshots / self.continuity_expected_snapshots
-            if self.continuity_expected_snapshots
-            else 1.0
-        )
-        return {
-            "scope_started_at": (
-                self.continuity_start_minute.isoformat() if self.continuity_start_minute else None
-            ),
-            "regular_minute": minute.isoformat(),
-            "expected_snapshots": self.continuity_expected_snapshots,
-            "actual_snapshots": self.continuity_actual_snapshots,
-            "missing_snapshots": self.continuity_missing_snapshots,
-            "max_gap_minutes": self.continuity_max_gap_minutes,
-            "last_gap_minutes": delta_minutes,
-            "coverage_pct": round(coverage * 100, 6),
-        }
+        return result
 
     def run(self) -> None:
         self.prepare()
@@ -630,29 +612,36 @@ class Collector:
     def _persist_coin_market_contexts(
         self, snapshot_id: int, snapshot: dict[str, Any]
     ) -> None:
-        contexts = snapshot.get("coin_market_contexts") or {}
-        rows = []
-        for context in contexts.values():
-            payload = context["payload"]
-            provenance = context["provenance"]
-            rows.append(
-                (
-                    context["coin_context_id"],
-                    snapshot_id,
-                    context["observed_at"],
-                    context["symbol"],
-                    context["schema_version"],
-                    context["engine_version"],
-                    context["feature_version"],
-                    context["config_fingerprint"],
-                    context["data_quality"],
-                    json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True),
-                    json.dumps(provenance, ensure_ascii=False, default=str, sort_keys=True),
-                    context["content_hash"],
-                )
-            )
-        if not rows:
+        records = coin_market_context_records(snapshot_id, snapshot)
+        if not records:
             return
+        rows = [
+            (
+                record["coin_context_id"],
+                record["mayak_snapshot_id"],
+                record["observed_at"],
+                record["symbol"],
+                record["schema_version"],
+                record["engine_version"],
+                record["feature_version"],
+                record["config_fingerprint"],
+                record["data_quality"],
+                json.dumps(
+                    record["payload"],
+                    ensure_ascii=False,
+                    default=str,
+                    sort_keys=True,
+                ),
+                json.dumps(
+                    record["provenance"],
+                    ensure_ascii=False,
+                    default=str,
+                    sort_keys=True,
+                ),
+                record["content_hash"],
+            )
+            for record in records
+        ]
         with psycopg.connect(DSN) as db:
             db.cursor().executemany(
                 """INSERT INTO mayak_v2.coin_market_contexts(
@@ -721,11 +710,7 @@ class Collector:
         self, snapshot_id: int, snapshot: dict[str, Any]
     ) -> None:
         """Persist the immutable market observation; it never carries a trade command."""
-        handoff = snapshot["dispatcher_handoff"]
-        canonical = json.dumps(
-            handoff, ensure_ascii=False, default=str, sort_keys=True, separators=(",", ":")
-        )
-        content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        record = shared_market_context_record(snapshot_id, snapshot)
         with psycopg.connect(DSN) as db:
             db.execute(
                 """INSERT INTO mayak_v2.shared_market_contexts(
@@ -735,10 +720,22 @@ class Collector:
                     VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT(market_context_id) DO NOTHING""",
                 (
-                    handoff["market_context_id"], snapshot_id, handoff["observed_at"],
-                    snapshot["engine_version"], handoff["market_context_schema_version"],
-                    snapshot["config_fingerprint"], handoff["data_quality"], canonical,
-                    json.dumps(handoff["provenance"], ensure_ascii=False), content_hash,
+                    record["market_context_id"],
+                    record["mayak_snapshot_id"],
+                    record["observed_at"],
+                    record["mayak_version"],
+                    record["schema_version"],
+                    record["config_fingerprint"],
+                    record["data_quality"],
+                    json.dumps(
+                        record["payload"],
+                        ensure_ascii=False,
+                        default=str,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    json.dumps(record["provenance"], ensure_ascii=False),
+                    record["content_hash"],
                 ),
             )
             db.commit()

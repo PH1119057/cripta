@@ -40,6 +40,7 @@ class MarketObservationAlert:
     owner_notifiable: bool
     payload: Mapping[str, object]
     provenance: Mapping[str, object]
+    content_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +77,7 @@ def _value(
     return row[index]
 
 
-def create_market_observation_alert(
-    connection: ConnectionLike,
+def build_market_observation_alert(
     *,
     alert_class: str,
     observed_at: datetime,
@@ -108,7 +108,39 @@ def create_market_observation_alert(
         "provenance": dict(provenance),
     }
     content_hash = _fingerprint(content)
-    alert_id = f"market-alert-{content_hash[:32]}"
+    return MarketObservationAlert(
+        alert_id=f"market-alert-{content_hash[:32]}",
+        alert_class=alert_class,
+        observed_at=observed_utc,
+        source_component=source_component,
+        scope_key=scope_key,
+        owner_notifiable=owner_notifiable,
+        payload=dict(payload),
+        provenance=dict(provenance),
+        content_hash=content_hash,
+    )
+
+
+def create_market_observation_alert(
+    connection: ConnectionLike,
+    *,
+    alert_class: str,
+    observed_at: datetime,
+    source_component: str,
+    scope_key: str,
+    payload: Mapping[str, object],
+    provenance: Mapping[str, object],
+    owner_notifiable: bool = False,
+) -> MarketObservationAlert:
+    alert = build_market_observation_alert(
+        alert_class=alert_class,
+        observed_at=observed_at,
+        source_component=source_component,
+        scope_key=scope_key,
+        payload=payload,
+        provenance=provenance,
+        owner_notifiable=owner_notifiable,
+    )
 
     connection.execute(
         """INSERT INTO mayak_v2.market_observation_alerts(
@@ -117,29 +149,32 @@ def create_market_observation_alert(
            ) VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
            ON CONFLICT(alert_id) DO NOTHING""",
         (
-            alert_id,
-            alert_class,
-            observed_utc,
-            source_component,
-            scope_key,
-            owner_notifiable,
-            canonical_json(dict(payload)),
-            canonical_json(dict(provenance)),
-            content_hash,
+            alert.alert_id,
+            alert.alert_class,
+            alert.observed_at,
+            alert.source_component,
+            alert.scope_key,
+            alert.owner_notifiable,
+            canonical_json(dict(alert.payload)),
+            canonical_json(dict(alert.provenance)),
+            alert.content_hash,
         ),
     )
 
-    if owner_notifiable:
-        delivery_id = f"market-alert-delivery-{_fingerprint({'alert_id': alert_id})[:32]}"
+    if alert.owner_notifiable:
+        delivery_id = (
+            "market-alert-delivery-"
+            + _fingerprint({"alert_id": alert.alert_id})[:32]
+        )
         delivery_payload = {
             "delivery_id": delivery_id,
-            "alert_id": alert_id,
-            "alert_class": alert_class,
-            "observed_at": observed_utc.isoformat(),
-            "source_component": source_component,
-            "scope_key": scope_key,
-            "payload": dict(payload),
-            "provenance": dict(provenance),
+            "alert_id": alert.alert_id,
+            "alert_class": alert.alert_class,
+            "observed_at": alert.observed_at.isoformat(),
+            "source_component": alert.source_component,
+            "scope_key": alert.scope_key,
+            "payload": dict(alert.payload),
+            "provenance": dict(alert.provenance),
         }
         connection.execute(
             """INSERT INTO mayak_v2.market_observation_alert_deliveries(
@@ -149,19 +184,15 @@ def create_market_observation_alert(
                ) VALUES(%s,%s,'OWNER_WEBHOOK','PENDING',0,%s,
                         NULL,NULL,NULL,NULL,NULL,%s::jsonb)
                ON CONFLICT(alert_id) DO NOTHING""",
-            (delivery_id, alert_id, observed_utc, canonical_json(delivery_payload)),
+            (
+                delivery_id,
+                alert.alert_id,
+                alert.observed_at,
+                canonical_json(delivery_payload),
+            ),
         )
 
-    return MarketObservationAlert(
-        alert_id=alert_id,
-        alert_class=alert_class,
-        observed_at=observed_utc,
-        source_component=source_component,
-        scope_key=scope_key,
-        owner_notifiable=owner_notifiable,
-        payload=dict(payload),
-        provenance=dict(provenance),
-    )
+    return alert
 
 
 def due_alert_deliveries(
