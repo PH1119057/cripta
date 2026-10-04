@@ -9,6 +9,8 @@ def test_r1_micro_live_uses_smallint_global_gate_contract() -> None:
     )
     assert "SET enabled=1," in source
     assert "SET enabled=0," in source
-    assert "SET enabled=true," not in source
-    assert "SET enabled=false," not in source
+    assert "UPDATE control.execution_gates\n              SET enabled=1," in source
+    assert "UPDATE control.execution_gates\n              SET enabled=0," in source
+    assert "UPDATE control.execution_gates\n              SET enabled=true," not in source
+    assert "UPDATE control.execution_gates\n              SET enabled=false," not in source
     assert "VALUES(%s,'mainnet',false,true,true" in source
