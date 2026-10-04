@@ -20,3 +20,8 @@ def test_private_runtime_dropin_exposes_safety_observer_module() -> None:
     source = (ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf").read_text(encoding="utf-8")
     assert ":/srv/cripta/runtime/current/research/server/connectivity" in source
     assert (ROOT / "research/server/connectivity/safety_observer.py").is_file()
+
+
+def test_private_runtime_dropin_selects_universal_entry() -> None:
+    source = (ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf").read_text(encoding="utf-8")
+    assert "Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY" in source
