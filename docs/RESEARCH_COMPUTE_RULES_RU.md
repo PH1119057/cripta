@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.9 · 2026-10-04
+**Версия:** 2.0 · 2026-10-04
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -454,3 +454,33 @@ Before any real activation, current exchange eligibility, exact Strategy version
 initial loss-containment, implementation equivalence and all LIVE-arm gates from
 `TRADING_CONTOUR §4.7` remain mandatory. R1 research evidence alone never
 satisfies those gates.
+
+### 19.4 R1 execution-selection checkpoint — OWNER DECISION 2026-10-04
+
+The implementation target selected from the current R1 research chain is:
+
+```text
+ENTRY SIGNAL
+  strict confirmed R1 only
+
+ENTRY EXECUTION
+  PostOnly LIMIT at 0.10% favorable offset from confirmed Entry
+  no pre-confirmation placement
+  no taker fallback
+  cancel/skip on exact-level change, rule invalidation, target-before-fill or superseding opposite signal
+
+NORMAL EXIT
+  already-resting opposite-inner TP = maker reduce-only limit
+
+HARD EXIT
+  target-reprice marketable / forced close = immediate taker
+  no trailing/chase/PostOnly waiting
+```
+
+Evidence summary:
+- current first-five cohort `APT/INJ/DOT/LTC/ARB`, OLD90 + RECENT14: direct confirmed Entry with taker entry + resting-maker TP produced approximately +245.40 USD after commissions on 100 USD nominal per trade; 0.10% favorable PostOnly Entry with causal occupancy produced approximately +323.00 USD after commissions;
+- all 15 screened symbols over the same two periods moved from approximately +247.01 USD to +457.39 USD after commissions under the same execution change;
+- 0.10% offset changed the actual trade sequence/occupancy and is therefore an execution-policy result, not a fee-only rescore;
+- delayed maker handling for hard exits is deliberately rejected despite small historical improvements because the waiting tail can be materially worse in unseen market conditions.
+
+These numbers are research evidence, not guaranteed future economics. The policy decision being promoted is the execution semantics above, not the historical P&L.

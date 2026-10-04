@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.3
-**Дата:** 2026-10-03
+**Версия:** 2.4
+**Дата:** 2026-10-04
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -400,10 +400,11 @@ physical slot claim и не имеет Exchange mutation rights.
 
 **Исследование / research** — получение доказательств. Не канон и не Strategy.
 
-**R1** — current research label для исследуемого L5-3 ping-pong Strategy Candidate.
-R1 не является production Strategy ID и сам по себе не даёт SHADOW/MICRO_LIVE/LIVE
-rights. Exact R1 research contract и screening lineage фиксируются в
-`TRADING_CONTOUR §1.10` и `RESEARCH_COMPUTE §19`.
+**R1** — current label для owner-approved L5-3 Strategy Candidate и exact
+implementation target. R1 не является production Strategy ID и сам по себе не
+даёт MICRO_LIVE/LIVE rights. Реализация и SHADOW/test validation разрешены
+только по exact contract из `TRADING_CONTOUR §1.10`; research screening и
+execution-selection lineage фиксируются в `RESEARCH_COMPUTE §19`.
 
 **Evidence / доказательный материал** — результат исследования/runtime-наблюдения.
 

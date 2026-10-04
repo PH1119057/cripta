@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.8
-**Дата:** 2026-10-02
+**Версия:** 1.9
+**Дата:** 2026-10-04
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -232,51 +232,61 @@ MARKET FACT / CONTEXT
 Materializer/readiness обязаны fail-closed, если Strategy заявляет POLICY, но
 поддержка/consumer path required context не доказаны.
 
-## 1.10 R1 — current research Strategy Candidate
+## 1.10 R1 — owner-approved implementation candidate
 
-OWNER DECISION 2026-10-04: label `R1` используется для текущего исследуемого
-L5-3 ping-pong Strategy Candidate. Это не active production Strategy и не
-разрешение LIVE.
-
-Текущий исследовательский contract R1:
+OWNER DECISION 2026-10-04: `R1` остаётся current label исследованной L5-3 Strategy Candidate, но ниже зафиксирован exact implementation target, разрешённый для реализации и SHADOW/test validation. Это всё ещё не production Strategy ID и не разрешение MICRO_LIVE/LIVE.
 
 ```text
 GEOMETRY
   L5-3 = rolling 36 fully closed 5m candles
   ATR = Wilder ATR200
   half_width = 0.5 * ATR200
+  strict STAY = all 6 finalized states have equal opposite structural boundary
 
-ENTRY
+ENTRY SIGNAL
   LONG  = touch current lower_inner
   SHORT = touch current upper_inner
   entry-side structural boundary stable >= 6 finalized 5m states
   current working_width_pct_lower >= 1%
-  opposite structural boundary = STAY research filter
 
-EXIT / LIFECYCLE
+ENTRY EXECUTION
+  signal first; no pre-confirmation order
+  ordinary FLAT Entry = PostOnly LIMIT_OFFSET 0.10% favorable from confirmed calculated R1 Entry price:
+    LONG  = Entry * (1 - 0.0010)
+    SHORT = Entry * (1 + 0.0010)
+  PostOnly must fail/cancel rather than cross as taker
+  no time-based taker fallback
+  pending Entry is cancelled/skipped when its exact signal level changes, R1 rule becomes invalid, the opposite target is reached before fill, or an opposite qualified signal supersedes it
+
+OCCUPANCY / PING-PONG
+  same-symbol ONE_WAY ownership remains mandatory
   while occupied, same-side qualified Entry is ignored
-  first qualified opposite Entry closes current position
-  the same opposite Entry immediately opens the opposite side (ping-pong flip)
-  unresolved final position is not force-closed in replay
+  first qualified opposite Entry keeps baseline hard-flip semantics:
+    immediate taker close of current position
+    immediate taker open of the opposite position
+  this hard-flip path does not receive maker-delay optimization
 
-ECONOMICS BASELINE
-  TAKER / TAKER according to RESEARCH_COMPUTE §13.1
+EXIT
+  dynamic target = current opposite L5-3 inner boundary
+  when price reaches an already-resting target -> reduce-only LIMIT maker TP
+  when a newly recalculated target is already marketable -> immediate taker close
+  any owner-approved hard/forced close remains immediate taker
+  no trailing/chase/maker-wait delay is allowed for hard exits
+
+TERMINAL REPLAY
+  unresolved final position is not force-closed
 ```
 
-Current evidence used the historical endpoint-STAY implementation: opposite
-structural boundary at the first and last point of the six-state window is
-equal. This is explicitly not yet equivalent to strict all-six STAY; strict
-STAY remains a pending research correction and must not be silently substituted
-into old evidence.
+Research evidence checkpoint 2026-10-04:
+- strict all-six STAY produced the same event/economics result as the earlier endpoint-STAY replay on the tested OLD90 + RECENT14 raw datasets;
+- hard stops at -1.0%, -1.5% and -2.0% worsened aggregate R1 economics and are not part of this implementation target;
+- confirmed-entry PostOnly offsets 0.05%, 0.10% and 0.20% were replayed with causal occupancy; 0.10% was the strongest aggregate candidate across both the current first-five cohort and all 15 screened symbols;
+- pre-confirmation fifth-state maker placement is rejected: it changed Entry semantics and produced premature invalid fills;
+- delayed maker conversion of hard exits is rejected by OWNER DECISION 2026-10-04 because future adverse movement is unbounded relative to the small fee saving; hard exits remain immediate taker.
 
-Hard stops at -1.0%, -1.5% and -2.0% were tested as research variants on the
-same R1 lifecycle and did not improve aggregate economics. They are evidence,
-not approved R1 policy.
+The current first-five R1 cohort remains: `APTUSDT / INJUSDT / DOTUSDT / LTCUSDT / ARBUSDT`.
 
-R1 may become an exact Strategy version only through the normal promotion path:
-research evidence -> owner decision -> immutable StrategyCard/version -> tests /
-SHADOW -> LIVE equivalence -> MICRO_LIVE -> LIVE. Documentation of R1 as a
-candidate does not arm mainnet or create execution rights.
+R1 implementation does not satisfy real-arm readiness by itself. Before any real Exchange mutation, an owner-approved initial loss-containment contract, exact immutable StrategyCard/version, implementation/replay equivalence, SHADOW evidence, LIVE EQUIVALENCE, MICRO_LIVE and all gates from §4.7 remain mandatory. Until that chain is complete, mainnet stays disarmed.
 
 # 2. ENTRY — универсальный Entry Engine
 
