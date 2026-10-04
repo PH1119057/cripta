@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.7
+**Версия:** 1.8
 **Дата:** 2026-10-02
 **Статус:** активный канонический контракт торгового контура
 
@@ -231,6 +231,52 @@ MARKET FACT / CONTEXT
 
 Materializer/readiness обязаны fail-closed, если Strategy заявляет POLICY, но
 поддержка/consumer path required context не доказаны.
+
+## 1.10 R1 — current research Strategy Candidate
+
+OWNER DECISION 2026-10-04: label `R1` используется для текущего исследуемого
+L5-3 ping-pong Strategy Candidate. Это не active production Strategy и не
+разрешение LIVE.
+
+Текущий исследовательский contract R1:
+
+```text
+GEOMETRY
+  L5-3 = rolling 36 fully closed 5m candles
+  ATR = Wilder ATR200
+  half_width = 0.5 * ATR200
+
+ENTRY
+  LONG  = touch current lower_inner
+  SHORT = touch current upper_inner
+  entry-side structural boundary stable >= 6 finalized 5m states
+  current working_width_pct_lower >= 1%
+  opposite structural boundary = STAY research filter
+
+EXIT / LIFECYCLE
+  while occupied, same-side qualified Entry is ignored
+  first qualified opposite Entry closes current position
+  the same opposite Entry immediately opens the opposite side (ping-pong flip)
+  unresolved final position is not force-closed in replay
+
+ECONOMICS BASELINE
+  TAKER / TAKER according to RESEARCH_COMPUTE §13.1
+```
+
+Current evidence used the historical endpoint-STAY implementation: opposite
+structural boundary at the first and last point of the six-state window is
+equal. This is explicitly not yet equivalent to strict all-six STAY; strict
+STAY remains a pending research correction and must not be silently substituted
+into old evidence.
+
+Hard stops at -1.0%, -1.5% and -2.0% were tested as research variants on the
+same R1 lifecycle and did not improve aggregate economics. They are evidence,
+not approved R1 policy.
+
+R1 may become an exact Strategy version only through the normal promotion path:
+research evidence -> owner decision -> immutable StrategyCard/version -> tests /
+SHADOW -> LIVE equivalence -> MICRO_LIVE -> LIVE. Documentation of R1 as a
+candidate does not arm mainnet or create execution rights.
 
 # 2. ENTRY — универсальный Entry Engine
 
