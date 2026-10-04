@@ -439,14 +439,29 @@ def _validate_post_signal_policy(lifecycle: Mapping[str, object]) -> None:
 
 
 def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
-    directions = _list(raw.get("direction_policy"), "direction_policy")
-    if len(directions) != 1 or str(directions[0]) not in {"LONG", "SHORT"}:
-        raise ValueError("new Strategy UI version requires exactly one direction: LONG or SHORT")
+    directions = [str(item) for item in _list(raw.get("direction_policy"), "direction_policy")]
+    if not directions or any(item not in {"LONG", "SHORT"} for item in directions):
+        raise ValueError("direction_policy must contain LONG and/or SHORT")
+    if len(set(directions)) != len(directions):
+        raise ValueError("direction_policy must not contain duplicates")
     if not str(raw.get("name") or "").strip():
         raise ValueError("Strategy name is required")
     _validate_symbols_scope(raw)
 
     entry = _mapping(raw.get("entry_policy"), "entry_policy")
+    watch_raw = entry.get("watch_policy")
+    watch_operator = ""
+    if isinstance(watch_raw, Mapping):
+        geometry_raw = watch_raw.get("geometry")
+        if isinstance(geometry_raw, Mapping):
+            watch_operator = str(geometry_raw.get("operator") or "")
+    if watch_operator == "L53_STABLE_RANGE":
+        if set(directions) != {"LONG", "SHORT"}:
+            raise ValueError(
+                "L53_STABLE_RANGE R1 requires combined LONG and SHORT direction_policy"
+            )
+    elif len(directions) != 1:
+        raise ValueError("new Strategy UI version requires exactly one direction: LONG or SHORT")
     reference = entry.get("entry_reference_policy")
     if reference is not None:
         policy = _mapping(reference, "entry_policy.entry_reference_policy")
@@ -553,8 +568,16 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     maximum = width_filter.get("max_pct")
                     if minimum in (None, "") and maximum in (None, ""):
                         raise ValueError("working_width_filter requires min_pct and/or max_pct")
-                    min_value = None if minimum in (None, "") else _decimal(minimum, "working_width_filter.min_pct")
-                    max_value = None if maximum in (None, "") else _decimal(maximum, "working_width_filter.max_pct")
+                    min_value = (
+                        None
+                        if minimum in (None, "")
+                        else _decimal(minimum, "working_width_filter.min_pct")
+                    )
+                    max_value = (
+                        None
+                        if maximum in (None, "")
+                        else _decimal(maximum, "working_width_filter.max_pct")
+                    )
                     if min_value is not None and min_value < 0:
                         raise ValueError("working_width_filter.min_pct cannot be negative")
                     if max_value is not None and max_value <= 0:
@@ -583,23 +606,75 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         if geometry_value is not None:
             geometry = _mapping(geometry_value, "entry_policy.watch_policy.geometry")
             if watch_enabled:
-                if str(geometry.get("operator") or "") != "RANGE_ATR_CONFLUENCE":
-                    raise ValueError("enabled Strategy UI Entry requires RANGE_ATR_CONFLUENCE")
+                operator = str(geometry.get("operator") or "")
                 timeframes = [
                     str(item) for item in _list(geometry.get("timeframes"), "geometry.timeframes")
                 ]
-                if set(timeframes) != {"5", "15"}:
-                    raise ValueError("enabled Strategy UI Entry requires 5m and 15m geometry")
-                lookbacks = _mapping(
-                    geometry.get("lookback_by_timeframe"), "geometry.lookback_by_timeframe"
-                )
-                for timeframe in ("5", "15"):
-                    try:
-                        bars = int(str(lookbacks.get(timeframe)))
-                    except (TypeError, ValueError):
-                        raise ValueError(f"geometry lookback {timeframe} must be integer") from None
-                    if bars <= 0:
-                        raise ValueError(f"geometry lookback {timeframe} must be positive")
+                if operator == "RANGE_ATR_CONFLUENCE":
+                    if set(timeframes) != {"5", "15"}:
+                        raise ValueError(
+                            "RANGE_ATR_CONFLUENCE requires 5m and 15m geometry"
+                        )
+                    lookbacks = _mapping(
+                        geometry.get("lookback_by_timeframe"),
+                        "geometry.lookback_by_timeframe",
+                    )
+                    for timeframe in ("5", "15"):
+                        try:
+                            bars = int(str(lookbacks.get(timeframe)))
+                        except (TypeError, ValueError):
+                            raise ValueError(
+                                f"geometry lookback {timeframe} must be integer"
+                            ) from None
+                        if bars <= 0:
+                            raise ValueError(
+                                f"geometry lookback {timeframe} must be positive"
+                            )
+                    if (
+                        _decimal(
+                            geometry.get("confluence_max_gap_percent"),
+                            "confluence_max_gap_percent",
+                        )
+                        < 0
+                    ):
+                        raise ValueError(
+                            "confluence_max_gap_percent cannot be negative"
+                        )
+                elif operator == "L53_STABLE_RANGE":
+                    if timeframes != ["5"]:
+                        raise ValueError("L53_STABLE_RANGE requires only 5m geometry")
+                    exact = {
+                        "lookback": 36,
+                        "atr_period": 200,
+                        "stable_states": 6,
+                    }
+                    for field, expected in exact.items():
+                        try:
+                            actual = int(str(geometry.get(field)))
+                        except (TypeError, ValueError):
+                            raise ValueError(
+                                f"L53_STABLE_RANGE {field} must be integer"
+                            ) from None
+                        if actual != expected:
+                            raise ValueError(
+                                f"L53_STABLE_RANGE requires {field}={expected}"
+                            )
+                    if _decimal(
+                        geometry.get("zone_half_width_atr"),
+                        "zone_half_width_atr",
+                    ) != Decimal("0.5"):
+                        raise ValueError(
+                            "L53_STABLE_RANGE requires zone_half_width_atr=0.5"
+                        )
+                    if _decimal(
+                        geometry.get("working_width_min_pct"),
+                        "working_width_min_pct",
+                    ) != Decimal("1"):
+                        raise ValueError(
+                            "L53_STABLE_RANGE requires working_width_min_pct=1"
+                        )
+                else:
+                    raise ValueError("enabled Strategy UI Entry has unsupported geometry")
                 try:
                     atr_period = int(str(geometry.get("atr_period")))
                 except (TypeError, ValueError):
@@ -608,14 +683,6 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     raise ValueError("geometry atr_period must be positive")
                 if _decimal(geometry.get("zone_half_width_atr"), "zone_half_width_atr") <= 0:
                     raise ValueError("zone_half_width_atr must be positive")
-                if (
-                    _decimal(
-                        geometry.get("confluence_max_gap_percent"),
-                        "confluence_max_gap_percent",
-                    )
-                    < 0
-                ):
-                    raise ValueError("confluence_max_gap_percent cannot be negative")
             _validate_shock_reset_policy(geometry)
         elif watch_enabled:
             raise ValueError("enabled Strategy UI Entry requires geometry")
@@ -758,17 +825,28 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     target_policy = _mapping(exit_policy.get("take_profit"), "exit_policy.take_profit")
     hard_enabled = _bool(hard_policy.get("enabled"), "exit_policy.hard_stop.enabled")
     take_profit_enabled = _bool(target_policy.get("enabled"), "exit_policy.take_profit.enabled")
-    if hard_enabled != stop_enabled:
-        raise ValueError("hard_stop and initial_protection stop enablement must match")
-    # Initial TP protects the entry handshake and is not the Exit Engine target.
-    # Legacy fixed-percent Strategies may keep both enabled, but a dynamic
-    # Exit-side target is allowed to use initial protection independently.
+    protection_role = str(initial_protection.get("role") or "NORMAL_EXIT").upper()
+    catastrophic_guard = protection_role == "CATASTROPHIC_GUARD"
+    if hard_enabled != stop_enabled and not (catastrophic_guard and stop_enabled and not hard_enabled):
+        raise ValueError(
+            "hard_stop and initial_protection stop enablement must match unless "
+            "initial_protection.role=CATASTROPHIC_GUARD"
+        )
+    # Initial protection may be a terminal catastrophic guard independent of
+    # the normal Exit Engine. All other fixed stops must still match Exit.
     if stop_enabled:
-        if _decimal(
+        initial_stop = _decimal(
             initial_protection.get("stop_loss_pct"),
             "protection_policy.initial_protection.stop_loss_pct",
-        ) != _decimal(hard_policy.get("percent"), "exit_policy.hard_stop.percent"):
+        )
+        if initial_stop <= 0:
+            raise ValueError("initial protection stop_loss_pct must be positive")
+        if hard_enabled and initial_stop != _decimal(
+            hard_policy.get("percent"), "exit_policy.hard_stop.percent"
+        ):
             raise ValueError("hard_stop percent must match initial protection stop")
+        if catastrophic_guard and hard_enabled:
+            raise ValueError("CATASTROPHIC_GUARD must not duplicate normal hard_stop")
     elif initial_protection.get("stop_loss_pct") not in (None, ""):
         raise ValueError("disabled initial stop cannot carry hidden stop_loss_pct")
     if target_enabled:

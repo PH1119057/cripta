@@ -172,6 +172,8 @@ unit_specs=(
   "operations/systemd/cripta-universal-entry-observer.service|cripta-universal-entry-observer.service|runtime"
   "operations/systemd/cripta-universal-entry-shadow.service|cripta-universal-entry-shadow.service|runtime"
   "operations/systemd/cripta-universal-exit-shadow.service|cripta-universal-exit-shadow.service|runtime"
+  "operations/systemd/cripta-universal-exit-consumer.service|cripta-universal-exit-consumer.service|runtime"
+  "operations/systemd/cripta-r1-reverse-worker.service|cripta-r1-reverse-worker.service|runtime"
   "operations/monitoring/cripta-causal-context-correlator.service|cripta-causal-context-correlator.service|runtime"
   "operations/strategy_dispatcher/cripta-strategy-dispatcher.service|cripta-strategy-dispatcher.service|runtime"
 )

@@ -12,7 +12,7 @@ from bybit_workbench.domain.models import Candle
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import EntryEvaluation, ObjectiveContext, TradeDirection
 from .fingerprint import canonical_json, fingerprint
-from .market_watch import compute_l53_zone
+from .market_watch import compute_l53_zone, compute_r1_l53_stable_zone
 from .runtime_loader import ActiveStrategyBundle
 
 
@@ -168,6 +168,45 @@ class PaperTradeRuntime:
                 return
             raise ValueError("paper L5-3 candle time regressed")
         history.append(candle)
+        r1_zone = compute_r1_l53_stable_zone(tuple(history))
+        pending = self._connection.execute(
+            """SELECT paper_order_id,direction,payload
+                 FROM strategy_entry.paper_orders
+                WHERE state='PENDING' AND symbol=%s""",
+            (candle.symbol,),
+        ).fetchall()
+        for pending_row in pending:
+            pending_payload = dict(_mapping(pending_row[2], "paper pending payload"))
+            if str(pending_payload.get("entry_lifetime_mode") or "") != "SIGNAL_VALIDITY":
+                continue
+            validity = _mapping(
+                pending_payload.get("entry_validity"),
+                "paper pending entry_validity",
+            )
+            if str(validity.get("operator") or "") != "R1_EXACT_SIGNAL":
+                raise ValueError("paper SIGNAL_VALIDITY operator unsupported")
+            direction = str(pending_row[1])
+            expected = (
+                None
+                if r1_zone is None
+                else (
+                    r1_zone.support_top
+                    if direction == TradeDirection.LONG.value
+                    else r1_zone.resistance_bottom
+                )
+            )
+            original = _decimal(
+                validity.get("signal_entry_price"),
+                "paper R1 original entry",
+                positive=True,
+            )
+            if expected is None or expected != original:
+                self._connection.execute(
+                    """UPDATE strategy_entry.paper_orders
+                          SET state='CANCELLED',updated_at=clock_timestamp()
+                        WHERE paper_order_id=%s AND state='PENDING'""",
+                    (str(pending_row[0]),),
+                )
         zone = compute_l53_zone(tuple(history))
         if zone is None:
             return
@@ -252,6 +291,7 @@ class PaperTradeRuntime:
             raise ValueError("paper leverage must be positive")
 
         order_type = str(execution_policy.get("order_type") or "").upper()
+        lifetime_mode: str | None = None
         if order_type == "MARKET":
             offset = Decimal("0")
             ttl: int | None = None
@@ -261,9 +301,21 @@ class PaperTradeRuntime:
                 "paper execution offset",
                 positive=True,
             )
-            ttl = int(str(execution_policy.get("entry_limit_ttl_seconds") or 0))
-            if ttl <= 0:
-                raise ValueError("paper LIMIT_OFFSET requires positive TTL")
+            lifetime_mode = str(
+                execution_policy.get("entry_lifetime_mode") or "TIME_TTL"
+            ).upper()
+            if lifetime_mode == "TIME_TTL":
+                ttl = int(str(execution_policy.get("entry_limit_ttl_seconds") or 0))
+                if ttl <= 0:
+                    raise ValueError("paper TIME_TTL LIMIT_OFFSET requires positive TTL")
+            elif lifetime_mode == "SIGNAL_VALIDITY":
+                if execution_policy.get("entry_limit_ttl_seconds") not in (None, ""):
+                    raise ValueError("paper SIGNAL_VALIDITY cannot carry numeric TTL")
+                if str(execution_policy.get("entry_validity_operator") or "") != "R1_EXACT_SIGNAL":
+                    raise ValueError("paper SIGNAL_VALIDITY requires R1_EXACT_SIGNAL")
+                ttl = None
+            else:
+                raise ValueError(f"unsupported paper entry lifetime: {lifetime_mode}")
         else:
             raise ValueError(f"unsupported paper order type: {order_type}")
 
@@ -271,27 +323,34 @@ class PaperTradeRuntime:
             protection_policy.get("initial_protection"),
             "paper initial_protection",
         )
-        stop_loss_pct = _decimal(
-            initial.get("stop_loss_pct"), "paper initial stop", positive=True
+        stop_enabled = bool(initial.get("stop_loss_enabled", True))
+        target_enabled = bool(initial.get("take_profit_enabled", True))
+        stop_loss_pct = (
+            _decimal(initial.get("stop_loss_pct"), "paper initial stop", positive=True)
+            if stop_enabled
+            else None
         )
         take_profit_pct_raw = initial.get("take_profit_pct")
         take_profit_reference_path = str(
             initial.get("take_profit_reference_path") or ""
         ).strip()
-        if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
-            raise ValueError(
-                "paper initial target requires exactly one percent or fact reference"
+        take_profit_pct: Decimal | None = None
+        take_profit_price: Decimal | None = None
+        if target_enabled:
+            if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
+                raise ValueError(
+                    "paper enabled initial target requires exactly one percent or fact reference"
+                )
+            take_profit_pct = (
+                _decimal(take_profit_pct_raw, "paper initial target", positive=True)
+                if not take_profit_reference_path
+                else None
             )
-        take_profit_pct = (
-            _decimal(take_profit_pct_raw, "paper initial target", positive=True)
-            if not take_profit_reference_path
-            else None
-        )
-        take_profit_price = (
-            _fact_reference(attrs, take_profit_reference_path)
-            if take_profit_reference_path
-            else None
-        )
+            take_profit_price = (
+                _fact_reference(attrs, take_profit_reference_path)
+                if take_profit_reference_path
+                else None
+            )
         payload: dict[str, object] = {
             "source": "universal_entry_paper",
             "strategy_attempt_id": intent.strategy_attempt_id,
@@ -312,14 +371,42 @@ class PaperTradeRuntime:
             "price": str(reference),
             "entry_offset_pct": str(offset),
             "entry_limit_ttl_seconds": ttl,
+            "entry_lifetime_mode": lifetime_mode,
+            "entry_time_in_force": (
+                None
+                if order_type == "MARKET"
+                else str(execution_policy.get("time_in_force") or "GTC").upper()
+            ),
+            "entry_validity": (
+                None
+                if lifetime_mode != "SIGNAL_VALIDITY"
+                else {
+                    "operator": str(execution_policy.get("entry_validity_operator") or ""),
+                    "signal_entry_price": str(reference),
+                    "signal_target_price": attrs.get("r1_opposite_inner_target"),
+                }
+            ),
             "entry_policy": "universal_entry_paper",
             "policy_version": intent.strategy_version,
             "initial_protection": {
-                "stop_loss_pct": str(stop_loss_pct),
+                "stop_loss_enabled": stop_enabled,
+                "take_profit_enabled": target_enabled,
                 **(
-                    {"take_profit_price": str(take_profit_price), "take_profit_reference_path": take_profit_reference_path}
+                    {"stop_loss_pct": str(stop_loss_pct)}
+                    if stop_loss_pct is not None
+                    else {}
+                ),
+                **(
+                    {
+                        "take_profit_price": str(take_profit_price),
+                        "take_profit_reference_path": take_profit_reference_path,
+                    }
                     if take_profit_price is not None
-                    else {"take_profit_pct": str(take_profit_pct)}
+                    else (
+                        {"take_profit_pct": str(take_profit_pct)}
+                        if take_profit_pct is not None
+                        else {}
+                    )
                 ),
                 "trigger_by": str(initial.get("trigger_by") or ""),
                 "tpsl_mode": str(initial.get("tpsl_mode") or ""),
@@ -329,6 +416,14 @@ class PaperTradeRuntime:
                 "exit_plan_fingerprint": intent.exit_plan_fingerprint,
             },
         }
+        if attrs.get("r1_opposite_inner_target") not in (None, ""):
+            payload["dynamic_take_profit_price"] = str(
+                _decimal(
+                    attrs.get("r1_opposite_inner_target"),
+                    "paper R1 initial dynamic target",
+                    positive=True,
+                )
+            )
         payload["exit_policy"] = card.exit_policy.to_dict()
         payload["lifecycle_policy"] = card.lifecycle_policy.to_dict()
         payload["paper_model"] = {
@@ -337,6 +432,90 @@ class PaperTradeRuntime:
             "fees": "NOT_INCLUDED_IN_GROSS_PNL",
         }
 
+        open_row = self._connection.execute(
+            """SELECT paper_position_id,direction,entry_price,quantity,best_price,
+                      mfe_pct,mae_pct
+                 FROM strategy_entry.paper_positions
+                WHERE state='OPEN' AND leg_type='PRIMARY'
+                  AND strategy_id=%s AND strategy_version=%s AND symbol=%s
+                ORDER BY opened_at DESC,paper_position_id DESC LIMIT 1""",
+            (intent.strategy_id, intent.strategy_version, intent.symbol),
+        ).fetchone()
+        forced_flip = False
+        if open_row is not None:
+            current_direction = str(open_row[1])
+            if current_direction == intent.direction.value:
+                return None
+            old_entry = _decimal(open_row[2], "paper flip old entry", positive=True)
+            old_qty = _decimal(open_row[3], "paper flip old quantity", positive=True)
+            old_best = _decimal(open_row[4], "paper flip old best", positive=True)
+            old_mfe = _decimal(open_row[5], "paper flip old mfe")
+            old_mae = _decimal(open_row[6], "paper flip old mae")
+            old_move = _directional_move(old_entry, reference, current_direction)
+            old_gross = _pnl(old_qty, old_entry, reference, current_direction)
+            best = (
+                max(old_best, reference)
+                if current_direction == TradeDirection.LONG.value
+                else min(old_best, reference)
+            )
+            self._connection.execute(
+                """UPDATE strategy_entry.paper_positions
+                      SET state='CLOSED',closed_at=%s,exit_price=%s,
+                          exit_reason='OPPOSITE_ENTRY_FORCED_FLIP',
+                          best_price=%s,mfe_pct=%s,mae_pct=%s,
+                          gross_pnl_usdt=%s,gross_return_pct=%s,
+                          updated_at=clock_timestamp()
+                    WHERE paper_position_id=%s AND state='OPEN'""",
+                (
+                    intent.observed_at,
+                    reference,
+                    best,
+                    max(old_mfe, old_move),
+                    min(old_mae, old_move),
+                    old_gross,
+                    old_move,
+                    str(open_row[0]),
+                ),
+            )
+            self._event(
+                str(open_row[0]),
+                intent.observed_at,
+                "OPPOSITE_ENTRY_FORCED_FLIP",
+                reference,
+                old_gross,
+                old_move,
+                {"next_direction": intent.direction.value, "execution_kind": "TAKER"},
+            )
+            forced_flip = True
+            order_type = "MARKET"
+            offset = Decimal("0")
+            ttl = None
+            lifetime_mode = None
+            payload["entry_offset_pct"] = "0"
+            payload["entry_limit_ttl_seconds"] = None
+            payload["entry_lifetime_mode"] = None
+            payload["entry_time_in_force"] = None
+            payload["entry_validity"] = None
+            payload["execution_kind"] = "TAKER_FLIP"
+
+        pending_row = self._connection.execute(
+            """SELECT paper_order_id,direction
+                 FROM strategy_entry.paper_orders
+                WHERE state='PENDING'
+                  AND strategy_id=%s AND strategy_version=%s AND symbol=%s
+                ORDER BY requested_at DESC,paper_order_id DESC LIMIT 1""",
+            (intent.strategy_id, intent.strategy_version, intent.symbol),
+        ).fetchone()
+        if pending_row is not None:
+            if str(pending_row[1]) == intent.direction.value:
+                return str(pending_row[0])
+            self._connection.execute(
+                """UPDATE strategy_entry.paper_orders
+                      SET state='CANCELLED',updated_at=clock_timestamp()
+                    WHERE paper_order_id=%s AND state='PENDING'""",
+                (str(pending_row[0]),),
+            )
+
         limit_price: Decimal | None = None
         expires_at: datetime | None = None
         if order_type == "LIMIT_OFFSET":
@@ -344,8 +523,8 @@ class PaperTradeRuntime:
                 limit_price = reference * (Decimal("1") - offset / Decimal("100"))
             else:
                 limit_price = reference * (Decimal("1") + offset / Decimal("100"))
-            assert ttl is not None
-            expires_at = intent.observed_at + timedelta(seconds=ttl)
+            if ttl is not None:
+                expires_at = intent.observed_at + timedelta(seconds=ttl)
 
         paper_order_id = (
             "paper-order-"
@@ -381,7 +560,33 @@ class PaperTradeRuntime:
                 canonical_json(payload),
             ),
         )
+        if forced_flip:
+            self._fill_specific_order(
+                paper_order_id,
+                reference,
+                intent.observed_at,
+            )
         return paper_order_id
+
+    def _fill_specific_order(
+        self,
+        paper_order_id: str,
+        fill_price: Decimal,
+        observed_at: datetime,
+    ) -> None:
+        row = self._connection.execute(
+            """SELECT paper_order_id,execution_request_id,strategy_activation_id,
+                      strategy_id,strategy_version,strategy_config_fingerprint,
+                      entry_plan_fingerprint,exit_plan_fingerprint,signal_id,
+                      symbol,direction,order_type,requested_at,limit_price,expires_at,payload
+                 FROM strategy_entry.paper_orders
+                WHERE paper_order_id=%s AND state='PENDING'""",
+            (paper_order_id,),
+        ).fetchone()
+        if row is None:
+            return
+        self._open_filled_order(row, fill_price, observed_at)
+
 
     def on_public_trade(
         self,
@@ -393,6 +598,69 @@ class PaperTradeRuntime:
     ) -> None:
         self._fill_orders(symbol, price, observed_at)
         self._update_positions(symbol, price, observed_at, contexts or {})
+
+    def _open_filled_order(
+        self,
+        row: tuple[object, ...],
+        fill_price: Decimal,
+        observed_at: datetime,
+    ) -> None:
+        payload = _mapping(row[15], "paper order payload")
+        stake = _decimal(payload.get("stake_usdt"), "stake_usdt", positive=True)
+        leverage = int(str(payload.get("leverage")))
+        notional = stake * Decimal(leverage)
+        quantity = notional / fill_price
+        position_id = "paper-pos-" + fingerprint({"paper_order_id": row[0]})[:32]
+        self._connection.execute(
+            """UPDATE strategy_entry.paper_orders
+                  SET state='FILLED',filled_at=%s,filled_price=%s,updated_at=clock_timestamp()
+                WHERE paper_order_id=%s AND state='PENDING'""",
+            (observed_at, fill_price, row[0]),
+        )
+        self._connection.execute(
+            """INSERT INTO strategy_entry.paper_positions(
+                   paper_position_id,paper_order_id,parent_position_id,leg_type,
+                   strategy_activation_id,strategy_id,strategy_version,
+                   strategy_config_fingerprint,entry_plan_fingerprint,
+                   exit_plan_fingerprint,signal_id,symbol,direction,state,opened_at,
+                   entry_price,stake_usdt,leverage,notional_usdt,quantity,best_price,payload)
+               VALUES(%s,%s,NULL,'PRIMARY',%s,%s,%s,%s,%s,%s,%s,%s,%s,'OPEN',
+                      %s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+               ON CONFLICT(paper_position_id) DO NOTHING""",
+            (
+                position_id,
+                row[0],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                row[7],
+                row[8],
+                row[9],
+                row[10],
+                observed_at,
+                fill_price,
+                stake,
+                leverage,
+                notional,
+                quantity,
+                fill_price,
+                canonical_json(dict(payload)),
+            ),
+        )
+        self._event(
+            position_id,
+            observed_at,
+            "OPENED",
+            fill_price,
+            None,
+            Decimal("0"),
+            {
+                "order_type": row[11],
+                "execution_kind": dict(payload).get("execution_kind", "MAKER"),
+            },
+        )
 
     def _fill_orders(self, symbol: str, price: Decimal, observed_at: datetime) -> None:
         rows = self._connection.execute(
@@ -420,57 +688,37 @@ class PaperTradeRuntime:
                 continue
             direction = str(row[10])
             order_type = str(row[11])
+            payload = _mapping(row[15], "paper order payload")
+            if str(payload.get("entry_lifetime_mode") or "") == "SIGNAL_VALIDITY":
+                validity = _mapping(
+                    payload.get("entry_validity"),
+                    "paper pending entry_validity",
+                )
+                target = _decimal(
+                    validity.get("signal_target_price"),
+                    "paper R1 pending target",
+                    positive=True,
+                )
+                target_hit = (
+                    direction == TradeDirection.LONG.value and price >= target
+                ) or (
+                    direction == TradeDirection.SHORT.value and price <= target
+                )
+                if target_hit:
+                    self._connection.execute(
+                        """UPDATE strategy_entry.paper_orders
+                              SET state='CANCELLED',updated_at=clock_timestamp()
+                            WHERE paper_order_id=%s AND state='PENDING'""",
+                        (row[0],),
+                    )
+                    continue
             fill_price = price
             if order_type == "LIMIT_OFFSET":
                 limit_price = _decimal(row[13], "paper limit", positive=True)
                 if not _crossed_limit(direction, price, limit_price):
                     continue
                 fill_price = limit_price
-            payload = _mapping(row[15], "paper order payload")
-            stake = _decimal(payload.get("stake_usdt"), "stake_usdt", positive=True)
-            leverage = int(str(payload.get("leverage")))
-            notional = stake * Decimal(leverage)
-            quantity = notional / fill_price
-            position_id = "paper-pos-" + fingerprint({"paper_order_id": row[0]})[:32]
-            self._connection.execute(
-                """UPDATE strategy_entry.paper_orders
-                      SET state='FILLED',filled_at=%s,filled_price=%s,updated_at=clock_timestamp()
-                    WHERE paper_order_id=%s AND state='PENDING'""",
-                (observed_at, fill_price, row[0]),
-            )
-            self._connection.execute(
-                """INSERT INTO strategy_entry.paper_positions(
-                       paper_position_id,paper_order_id,parent_position_id,leg_type,
-                       strategy_activation_id,strategy_id,strategy_version,
-                       strategy_config_fingerprint,entry_plan_fingerprint,
-                       exit_plan_fingerprint,signal_id,symbol,direction,state,opened_at,
-                       entry_price,stake_usdt,leverage,notional_usdt,quantity,best_price,payload)
-                   VALUES(%s,%s,NULL,'PRIMARY',%s,%s,%s,%s,%s,%s,%s,%s,%s,'OPEN',
-                          %s,%s,%s,%s,%s,%s,%s,%s::jsonb)
-                   ON CONFLICT(paper_position_id) DO NOTHING""",
-                (
-                    position_id,
-                    row[0],
-                    row[2],
-                    row[3],
-                    row[4],
-                    row[5],
-                    row[6],
-                    row[7],
-                    row[8],
-                    row[9],
-                    direction,
-                    observed_at,
-                    fill_price,
-                    stake,
-                    leverage,
-                    notional,
-                    quantity,
-                    fill_price,
-                    canonical_json(payload),
-                ),
-            )
-            self._event(position_id, observed_at, "OPENED", fill_price, None, None, {})
+            self._open_filled_order(row, fill_price, observed_at)
 
     def _update_positions(
         self,
@@ -527,15 +775,17 @@ class PaperTradeRuntime:
         tp_price: Decimal | None = None
         if leg_type == "PRIMARY":
             initial = _mapping(payload.get("initial_protection"), "paper initial protection")
-            stop_pct = _decimal(initial.get("stop_loss_pct"), "paper stop", positive=True)
-            if initial.get("take_profit_price") not in (None, ""):
-                tp_price = _decimal(
-                    initial.get("take_profit_price"), "paper take profit price", positive=True
-                )
-            else:
-                tp_pct = _decimal(
-                    initial.get("take_profit_pct"), "paper take profit", positive=True
-                )
+            if bool(initial.get("stop_loss_enabled", True)):
+                stop_pct = _decimal(initial.get("stop_loss_pct"), "paper stop", positive=True)
+            if bool(initial.get("take_profit_enabled", True)):
+                if initial.get("take_profit_price") not in (None, ""):
+                    tp_price = _decimal(
+                        initial.get("take_profit_price"), "paper take profit price", positive=True
+                    )
+                else:
+                    tp_pct = _decimal(
+                        initial.get("take_profit_pct"), "paper take profit", positive=True
+                    )
             dynamic_target = payload.get("dynamic_take_profit_price")
             if dynamic_target not in (None, ""):
                 tp_price = _decimal(

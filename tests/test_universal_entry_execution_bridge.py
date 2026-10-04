@@ -70,7 +70,13 @@ def _bundle(*, enabled: bool = True, limit: bool = False) -> BridgePolicyBundle:
         "max_request_age_seconds": 30,
     }
     if limit:
-        execution_policy.update({"entry_offset_pct": "0.20", "entry_limit_ttl_seconds": 45})
+        execution_policy.update(
+            {
+                "entry_offset_pct": "0.20",
+                "entry_limit_ttl_seconds": 45,
+                "time_in_force": "POST_ONLY",
+            }
+        )
     capital = {
         "require_capacity": True,
         "requested_amount": "10",
@@ -154,6 +160,7 @@ def test_short_limit_policy_maps_only_explicit_strategy_values() -> None:
     )
     assert prepared.payload["side"] == "Sell"
     assert prepared.payload["entry_offset_pct"] == "0.20"
+    assert prepared.payload["entry_time_in_force"] == "POST_ONLY"
     assert prepared.payload["entry_limit_ttl_seconds"] == 45
 
 

@@ -53,7 +53,7 @@ def test_ambiguous_exchange_mutation_marks_exit_reconciliation_required() -> Non
     assert "os._exit(75)" in block
 
 
-def test_exit_consumer_gate_is_only_before_dispatch_not_request_materialization() -> None:
+def test_exit_consumer_survives_new_entry_gate_disarm() -> None:
     materialize = CONSUMER.index("def materialize_once(")
     dispatch = CONSUMER.index("def dispatch_once(")
     run_once = CONSUMER.index("def run_once(")
@@ -61,7 +61,8 @@ def test_exit_consumer_gate_is_only_before_dispatch_not_request_materialization(
     dispatch_block = CONSUMER[dispatch:run_once]
     assert "_execution_gate_enabled" not in materialize_block
     assert "persist_exit_execution_request(" in materialize_block
-    assert "_execution_gate_enabled" in dispatch_block
+    assert "_execution_gate_enabled" not in dispatch_block
+    assert "Exit ownership survives Entry disarm" in dispatch_block
     assert "publish_runtime_exit_command(" in dispatch_block
 
 

@@ -164,8 +164,7 @@ class PostgresEntryAdmissionPort:
                       AND product_category='LINEAR'
                       AND instrument=%s
                     ORDER BY observed_at DESC,created_at DESC
-                    LIMIT 1
-                    FOR SHARE""",
+                    LIMIT 1""",
                 (request.account_ref, request.symbol),
             ).fetchone()
             if mode is None:

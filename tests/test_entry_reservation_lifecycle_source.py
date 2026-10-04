@@ -47,7 +47,11 @@ def test_limit_ttl_has_no_hidden_30_second_default() -> None:
     block = PRIVATE[cancel:worker]
     assert 'entry_limit_ttl_seconds") or 30' not in block
     assert "limit Entry is missing Strategy-owned entry_limit_ttl_seconds" in block
-    assert "resolve_cancelled_entry_reservation_after_reconcile(" in block
+    assert "_cancel_entry_limit(" in block
+    helper = PRIVATE.index("def _cancel_entry_limit(")
+    helper_end = PRIVATE.index("def cancel_expired_entry_limits(", helper)
+    helper_block = PRIVATE[helper:helper_end]
+    assert "resolve_cancelled_entry_reservation_after_reconcile(" in helper_block
 
 
 def test_worker_releases_only_pre_ack_failures_and_escalates_post_ack() -> None:

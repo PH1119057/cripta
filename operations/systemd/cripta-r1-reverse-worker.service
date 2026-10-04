@@ -1,0 +1,26 @@
+[Unit]
+Description=Cripta R1 one-way close-and-reverse worker
+After=network-online.target postgresql.service cripta-private-runtime.service cripta-universal-entry-consumer.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
+Environment=CRIPTA_R1_REVERSE_MAINNET=DISABLED
+EnvironmentFile=-/etc/cripta/r1_reverse_worker.env
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/r1_reverse_worker.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

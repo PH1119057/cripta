@@ -140,18 +140,64 @@ def validate_exit_mutation(
         _require_market(order_type, label)
 
     elif action_kind is ExitActionKind.SET_TP:
-        _strict_keys(
-            mutation,
-            required=frozenset({"take_profit_price", "trigger_by", "tpsl_mode", "order_type"}),
-            label=label,
-        )
-        result["take_profit_price"] = str(_positive_decimal(mutation, "take_profit_price", label))
-        trigger = _require_text(mutation, "trigger_by", label)
-        mode = _require_text(mutation, "tpsl_mode", label)
-        order_type = _require_text(mutation, "order_type", label)
-        _validate_trigger_by(trigger, label)
-        _require_full(mode, label)
-        _require_market(order_type, label)
+        order_type = _require_text(mutation, "order_type", label).upper()
+        if order_type == "MARKET":
+            _strict_keys(
+                mutation,
+                required=frozenset(
+                    {"take_profit_price", "trigger_by", "tpsl_mode", "order_type"}
+                ),
+                label=label,
+            )
+            result["take_profit_price"] = str(
+                _positive_decimal(mutation, "take_profit_price", label)
+            )
+            trigger = _require_text(mutation, "trigger_by", label)
+            mode = _require_text(mutation, "tpsl_mode", label)
+            _validate_trigger_by(trigger, label)
+            _require_full(mode, label)
+            result["order_type"] = "MARKET"
+        elif order_type == "LIMIT":
+            _strict_keys(
+                mutation,
+                required=frozenset(
+                    {
+                        "take_profit_price",
+                        "order_type",
+                        "time_in_force",
+                        "quantity",
+                        "marketable_action",
+                    }
+                ),
+                label=label,
+            )
+            result["take_profit_price"] = str(
+                _positive_decimal(mutation, "take_profit_price", label)
+            )
+            if _require_text(mutation, "time_in_force", label).upper() != "POST_ONLY":
+                raise ExitExecutionBridgeBlocked(
+                    ExitExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                    "SET_TP LIMIT currently requires POST_ONLY",
+                )
+            if _require_text(mutation, "quantity", label).upper() != "ALL":
+                raise ExitExecutionBridgeBlocked(
+                    ExitExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                    "SET_TP LIMIT currently requires quantity=ALL",
+                )
+            if _require_text(mutation, "marketable_action", label).upper() != "CLOSE_MARKET":
+                raise ExitExecutionBridgeBlocked(
+                    ExitExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                    "SET_TP LIMIT requires marketable_action=CLOSE_MARKET",
+                )
+            result["order_type"] = "LIMIT"
+            result["time_in_force"] = "POST_ONLY"
+            result["quantity"] = "ALL"
+            result["marketable_action"] = "CLOSE_MARKET"
+        else:
+            raise ExitExecutionBridgeBlocked(
+                ExitExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                f"SET_TP unsupported order_type={order_type}",
+            )
 
     elif action_kind is ExitActionKind.SET_PROTECTION:
         _strict_keys(

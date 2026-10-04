@@ -333,21 +333,71 @@ def prepare_runtime_entry_command(
 
     reference_path = _require_text(execution_policy, "reference_value_path", "execution_policy")
     reference_price = _resolve_fact_reference(request, reference_path)
-    order_type = _require_text(execution_policy, "order_type", "execution_policy").upper()
+    execution_override = str(request_payload.get("execution_override") or "").upper()
+    if execution_override:
+        if execution_override != "OPPOSITE_FLIP_TAKER":
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                f"unsupported execution_override={execution_override}",
+            )
+        reverse_policy = _mapping(
+            lifecycle_policy.get("reverse_on_opposite_signal"),
+            "lifecycle_policy.reverse_on_opposite_signal",
+        )
+        if (
+            not bool(reverse_policy.get("enabled", False))
+            or str(reverse_policy.get("close_execution") or "").upper() != "MARKET"
+            or str(reverse_policy.get("open_execution") or "").upper() != "MARKET"
+            or str(reverse_policy.get("position_mode") or "") != "ONE_WAY"
+            or int(str(reverse_policy.get("position_idx") or -1)) != 0
+        ):
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                "OPPOSITE_FLIP_TAKER is not authorized by immutable lifecycle policy",
+            )
+        order_type = "MARKET"
+    else:
+        order_type = _require_text(
+            execution_policy, "order_type", "execution_policy"
+        ).upper()
     if order_type == "MARKET":
         offset_pct = Decimal("0")
         ttl_seconds: int | None = None
+        time_in_force: str | None = None
     elif order_type == "LIMIT_OFFSET":
         offset_pct = _decimal(
             execution_policy.get("entry_offset_pct"),
             "execution_policy.entry_offset_pct",
             positive=True,
         )
-        ttl_seconds = _integer(
-            execution_policy.get("entry_limit_ttl_seconds"),
-            "execution_policy.entry_limit_ttl_seconds",
-            positive=True,
-        )
+        lifetime_mode = str(
+            execution_policy.get("entry_lifetime_mode") or "TIME_TTL"
+        ).upper()
+        if lifetime_mode == "TIME_TTL":
+            ttl_seconds = _integer(
+                execution_policy.get("entry_limit_ttl_seconds"),
+                "execution_policy.entry_limit_ttl_seconds",
+                positive=True,
+            )
+        elif lifetime_mode == "SIGNAL_VALIDITY":
+            if execution_policy.get("entry_limit_ttl_seconds") not in (None, ""):
+                raise ExecutionBridgeBlocked(
+                    ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                    "SIGNAL_VALIDITY must not carry entry_limit_ttl_seconds",
+                )
+            ttl_seconds = None
+        else:
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                "LIMIT_OFFSET entry_lifetime_mode must be TIME_TTL or SIGNAL_VALIDITY",
+            )
+        raw_time_in_force = str(execution_policy.get("time_in_force") or "GTC").upper()
+        if raw_time_in_force not in {"GTC", "POST_ONLY"}:
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                "LIMIT_OFFSET execution_policy.time_in_force must be GTC or POST_ONLY",
+            )
+        time_in_force = raw_time_in_force
     else:
         raise ExecutionBridgeBlocked(
             ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
@@ -357,25 +407,38 @@ def prepare_runtime_entry_command(
     initial = _mapping(
         protection_policy.get("initial_protection"), "protection_policy.initial_protection"
     )
+    stop_enabled = bool(initial.get("stop_loss_enabled", True))
+    if not stop_enabled:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+            "real Strategy execution requires initial stop_loss_enabled=true",
+        )
     stop_loss = _decimal(
         initial.get("stop_loss_pct"), "initial_protection.stop_loss_pct", positive=True
     )
+    target_enabled = bool(initial.get("take_profit_enabled", True))
     take_profit_pct_raw = initial.get("take_profit_pct")
     take_profit_reference_path = str(
         initial.get("take_profit_reference_path") or ""
     ).strip()
-    if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
-        raise ExecutionBridgeBlocked(
-            ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
-            "initial protection requires exactly one take_profit_pct or take_profit_reference_path",
-        )
     take_profit: Decimal | None = None
     take_profit_price: Decimal | None = None
-    if take_profit_reference_path:
-        take_profit_price = _resolve_fact_reference(request, take_profit_reference_path)
-    else:
-        take_profit = _decimal(
-            take_profit_pct_raw, "initial_protection.take_profit_pct", positive=True
+    if target_enabled:
+        if (take_profit_pct_raw in (None, "")) == (not take_profit_reference_path):
+            raise ExecutionBridgeBlocked(
+                ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+                "enabled initial TP requires exactly one pct or fact reference",
+            )
+        if take_profit_reference_path:
+            take_profit_price = _resolve_fact_reference(request, take_profit_reference_path)
+        else:
+            take_profit = _decimal(
+                take_profit_pct_raw, "initial_protection.take_profit_pct", positive=True
+            )
+    elif take_profit_pct_raw not in (None, "") or take_profit_reference_path:
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.POLICY_UNSUPPORTED,
+            "disabled initial TP must not carry a target",
         )
     trigger_by = _require_text(initial, "trigger_by", "initial_protection")
     tpsl_mode = _require_text(initial, "tpsl_mode", "initial_protection")
@@ -393,6 +456,8 @@ def prepare_runtime_entry_command(
     command_id = "ue-" + fingerprint({"execution_request_id": request.execution_request_id})[:32]
     exit_fp = str(exit_plan["exit_plan_fingerprint"])
     protection = {
+        "stop_loss_enabled": True,
+        "take_profit_enabled": target_enabled,
         "stop_loss_pct": str(stop_loss),
         "trigger_by": trigger_by,
         "tpsl_mode": tpsl_mode,
@@ -431,7 +496,23 @@ def prepare_runtime_entry_command(
         "price": str(reference_price),
         "entry_offset_pct": str(offset_pct),
         "entry_limit_ttl_seconds": ttl_seconds,
+        "entry_lifetime_mode": (
+            None
+            if order_type == "MARKET"
+            else str(execution_policy.get("entry_lifetime_mode") or "TIME_TTL").upper()
+        ),
+        "entry_time_in_force": time_in_force,
+        "entry_validity": (
+            None
+            if order_type == "MARKET"
+            else {
+                "operator": str(execution_policy.get("entry_validity_operator") or ""),
+                "signal_entry_price": str(reference_price),
+                "signal_target_price": signal_attributes.get("r1_opposite_inner_target"),
+            }
+        ),
         "entry_policy": "universal_entry",
+        "execution_override": execution_override or None,
         "policy_version": request.strategy_version,
         "bot_instance_id": "universal-entry",
         "initial_protection": protection,

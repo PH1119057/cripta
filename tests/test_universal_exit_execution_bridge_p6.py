@@ -115,6 +115,16 @@ def decision(
             },
         ),
         (
+            ExitActionKind.SET_TP,
+            {
+                "take_profit_price": "10.50",
+                "order_type": "LIMIT",
+                "time_in_force": "POST_ONLY",
+                "quantity": "ALL",
+                "marketable_action": "CLOSE_MARKET",
+            },
+        ),
+        (
             ExitActionKind.SET_PROTECTION,
             {
                 "stop_price": "9.90",

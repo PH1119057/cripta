@@ -1,0 +1,26 @@
+[Unit]
+Description=Cripta Universal Exit mainnet execution consumer
+After=network-online.target postgresql.service cripta-private-runtime.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/cripta/release.env
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
+Environment=CRIPTA_UNIVERSAL_EXIT_MAINNET_CONSUMER=DISABLED
+EnvironmentFile=-/etc/cripta/universal_exit_consumer.env
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_exit_consumer.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

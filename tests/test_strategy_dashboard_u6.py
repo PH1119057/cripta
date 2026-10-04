@@ -528,6 +528,71 @@ def test_strategy_authoring_context_catalog_is_exact_current_34_groups() -> None
         assert required in ids
 
 
+def test_r1_l53_authoring_allows_combined_long_short() -> None:
+    template = strategy_authoring_template()
+    template.update(
+        {
+            "strategy_id": "r1-test",
+            "strategy_version": "1.0",
+            "name": "R1 implementation candidate",
+            "symbols": ["APTUSDT"],
+            "scope": {"kind": "symbols", "symbols": ["APTUSDT"]},
+            "direction_policy": ["LONG", "SHORT"],
+        }
+    )
+    template["entry_policy"]["watch_policy"] = {
+        "enabled": True,
+        "candidate_timeframe_minutes": 5,
+        "required_closed_timeframes": ["5"],
+        "events": {
+            "bar_open": "BAR_OPEN",
+            "candle_closed": "CANDLE_CLOSED",
+            "open_interest": "OPEN_INTEREST",
+            "trade": "PUBLIC_TRADE",
+        },
+        "geometry": {
+            "operator": "L53_STABLE_RANGE",
+            "timeframes": ["5"],
+            "lookback": 36,
+            "atr_period": 200,
+            "zone_half_width_atr": "0.5",
+            "stable_states": 6,
+            "working_width_min_pct": "1",
+            "shock_reset_policy": {"enabled": False},
+        },
+        "hourly_swing": {"enabled": False},
+        "direction_rules": {
+            "LONG": {
+                "entry_zone_field": "support_top",
+                "touch_comparator": "LTE",
+            },
+            "SHORT": {
+                "entry_zone_field": "resistance_bottom",
+                "touch_comparator": "GTE",
+            },
+        },
+        "direction_precedence": ["LONG", "SHORT"],
+        "candidate_lifecycle": {"clear_on_touch": True},
+        "flow": {"enabled": False},
+        "oi": {"enabled": False},
+        "derived_event_kind": "R1_TOUCH",
+    }
+    template["entry_policy"]["execution_policy"] = {
+        "order_type": "LIMIT_OFFSET",
+        "entry_offset_pct": "0.10",
+        "entry_limit_ttl_seconds": 300,
+        "time_in_force": "POST_ONLY",
+        "max_request_age_seconds": 10,
+        "reference_value_path": "fact.calculated_entry_price",
+    }
+    created = card_from_editable(
+        template,
+        approved_at=NOW,
+        approved_source="dashboard:owner",
+    )
+    assert created.direction_policy == (TradeDirection.LONG, TradeDirection.SHORT)
+
+
 def test_new_strategy_ui_version_requires_exactly_one_direction() -> None:
     base = make_card()
     editable = card_to_editable(base)

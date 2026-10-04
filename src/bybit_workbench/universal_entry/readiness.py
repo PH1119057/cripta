@@ -200,34 +200,74 @@ def assess_strategy_runtime_readiness(
                     "LIMIT_OFFSET требует положительный execution entry_offset_pct.",
                 )
             )
-        if not _positive_int(execution.get("entry_limit_ttl_seconds")):
+        lifetime_mode = str(
+            execution.get("entry_lifetime_mode") or "TIME_TTL"
+        ).upper()
+        if lifetime_mode == "TIME_TTL":
+            if not _positive_int(execution.get("entry_limit_ttl_seconds")):
+                paper_reasons.append(
+                    RuntimeReadinessReason(
+                        "PAPER_LIMIT_TTL_NOT_SET",
+                        "PAPER",
+                        "TIME_TTL LIMIT_OFFSET требует положительный TTL.",
+                    )
+                )
+        elif lifetime_mode == "SIGNAL_VALIDITY":
+            if execution.get("entry_limit_ttl_seconds") not in (None, ""):
+                paper_reasons.append(
+                    RuntimeReadinessReason(
+                        "PAPER_SIGNAL_VALIDITY_HAS_TTL",
+                        "PAPER",
+                        "SIGNAL_VALIDITY не допускает numeric Entry TTL.",
+                    )
+                )
+            if str(execution.get("entry_validity_operator") or "") != "R1_EXACT_SIGNAL":
+                paper_reasons.append(
+                    RuntimeReadinessReason(
+                        "PAPER_SIGNAL_VALIDITY_OPERATOR_UNSUPPORTED",
+                        "PAPER",
+                        "R1 SIGNAL_VALIDITY требует entry_validity_operator=R1_EXACT_SIGNAL.",
+                    )
+                )
+        else:
             paper_reasons.append(
                 RuntimeReadinessReason(
-                    "PAPER_LIMIT_TTL_NOT_SET",
+                    "PAPER_ENTRY_LIFETIME_UNSUPPORTED",
                     "PAPER",
-                    "LIMIT_OFFSET требует положительный TTL псевдозаявки.",
+                    "LIMIT_OFFSET lifetime должен быть TIME_TTL или SIGNAL_VALIDITY.",
+                )
+            )
+        time_in_force = str(execution.get("time_in_force") or "GTC").upper()
+        if time_in_force not in {"GTC", "POST_ONLY"}:
+            paper_reasons.append(
+                RuntimeReadinessReason(
+                    "PAPER_LIMIT_TIME_IN_FORCE_UNSUPPORTED",
+                    "PAPER",
+                    "LIMIT_OFFSET time_in_force должен быть GTC или POST_ONLY.",
                 )
             )
 
     protection = card.protection_policy.to_dict()
     initial = _mapping(protection.get("initial_protection"))
-    if not _positive_decimal(initial.get("stop_loss_pct")):
+    stop_enabled = bool(initial.get("stop_loss_enabled", True))
+    target_enabled = bool(initial.get("take_profit_enabled", True))
+    if stop_enabled and not _positive_decimal(initial.get("stop_loss_pct")):
         paper_reasons.append(
             RuntimeReadinessReason(
                 "PAPER_INITIAL_STOP_NOT_SET",
                 "PAPER",
-                "Псевдосделка требует положительный initial stop_loss_pct.",
+                "Включённый initial stop требует положительный stop_loss_pct.",
             )
         )
     target_pct_ready = _positive_decimal(initial.get("take_profit_pct"))
     target_path = str(initial.get("take_profit_reference_path") or "").strip()
     target_path_ready = target_path.startswith("fact.")
-    if not target_pct_ready and not target_path_ready:
+    if target_enabled and not target_pct_ready and not target_path_ready:
         paper_reasons.append(
             RuntimeReadinessReason(
                 "PAPER_INITIAL_TAKE_PROFIT_NOT_SET",
                 "PAPER",
-                "Псевдосделка требует initial TP: percent или causal fact reference.",
+                "Включённый initial TP требует percent или causal fact reference.",
             )
         )
 
@@ -235,6 +275,14 @@ def assess_strategy_runtime_readiness(
     # monitoring is allowed to simulate a fixed Strategy amount without tying the
     # experiment to current wallet availability.
     execution_reasons.extend(paper_reasons)
+    if not stop_enabled:
+        execution_reasons.append(
+            RuntimeReadinessReason(
+                "LIVE_INITIAL_LOSS_CONTAINMENT_REQUIRED",
+                "EXECUTION",
+                "Real Strategy требует owner-approved initial loss-containment.",
+            )
+        )
     if not require_capacity:
         execution_reasons.append(
             RuntimeReadinessReason(
@@ -275,7 +323,6 @@ def assess_strategy_runtime_readiness(
     for field, code, label in (
         ("break_even", "LIVE_EXIT_BREAK_EVEN_NOT_WIRED", "безубыточность"),
         ("trailing", "LIVE_EXIT_TRAILING_NOT_WIRED", "trailing"),
-        ("local_zone_exit", "LIVE_EXIT_LOCAL_ZONE_NOT_WIRED", "выход по локальной зоне"),
         ("time_exit", "LIVE_EXIT_TIME_NOT_WIRED", "выход по времени"),
     ):
         if _enabled(exit_policy.get(field)):

@@ -328,6 +328,48 @@ def compute_l53_zone(candles: Sequence[Candle]) -> GenericZone | None:
     )
 
 
+def compute_r1_l53_stable_zone(
+    candles: Sequence[Candle],
+    *,
+    stable_states: int = 6,
+    working_width_min_pct: Decimal = Decimal("1"),
+) -> GenericZone | None:
+    """Return current R1 L5-3 zone only when the exact strict-STAY contract holds."""
+
+    if stable_states <= 0:
+        raise ValueError("R1 stable_states must be positive")
+    if working_width_min_pct < 0:
+        raise ValueError("R1 working_width_min_pct cannot be negative")
+    closed = tuple(
+        item for item in candles if item.is_closed and str(item.timeframe) == "5"
+    )
+    minimum = 200 + stable_states - 1
+    if len(closed) < minimum:
+        return None
+    zones: list[GenericZone] = []
+    for offset in range(stable_states - 1, -1, -1):
+        end = len(closed) - offset
+        zone = compute_l53_zone(closed[:end])
+        if zone is None:
+            return None
+        zones.append(zone)
+    if len({zone.range_low for zone in zones}) != 1:
+        return None
+    if len({zone.range_high for zone in zones}) != 1:
+        return None
+    current = zones[-1]
+    if current.support_top <= 0:
+        return None
+    working_width_pct = (
+        (current.resistance_bottom - current.support_top)
+        / current.support_top
+        * Decimal("100")
+    )
+    if working_width_pct < working_width_min_pct:
+        return None
+    return current
+
+
 def _apply_entry_reference_policy(
     plan: EntryPlan, calculated_entry: Decimal
 ) -> tuple[Decimal, Decimal]:
@@ -491,10 +533,24 @@ def _derived_history_limit(policy: Mapping[str, object]) -> int:
             raise ValueError("history_limit must be positive")
         return result
     geometry = _mapping(policy.get("geometry"), "geometry")
-    lookbacks = _mapping(geometry.get("lookback_by_timeframe"), "geometry.lookback_by_timeframe")
-    candidates = [_integer(value, f"lookback {key}") for key, value in lookbacks.items()]
+    operator = str(geometry.get("operator") or "")
+    candidates: list[int] = []
+    lookbacks_raw = geometry.get("lookback_by_timeframe")
+    if lookbacks_raw is not None:
+        lookbacks = _mapping(lookbacks_raw, "geometry.lookback_by_timeframe")
+        candidates.extend(
+            _integer(value, f"lookback {key}") for key, value in lookbacks.items()
+        )
+    elif operator == "L53_STABLE_RANGE":
+        candidates.append(_integer(geometry.get("lookback"), "geometry.lookback"))
+    else:
+        raise ValueError("geometry.lookback_by_timeframe is required")
     if geometry.get("atr_period") is not None:
-        candidates.append(_integer(geometry.get("atr_period"), "atr_period"))
+        atr_period = _integer(geometry.get("atr_period"), "atr_period")
+        candidates.append(atr_period)
+        if operator == "L53_STABLE_RANGE":
+            stable_states = _integer(geometry.get("stable_states"), "stable_states")
+            candidates.append(atr_period + stable_states - 1)
     shock = geometry.get("shock_reset_policy") or geometry.get("shock")
     if (
         isinstance(shock, Mapping)
@@ -968,6 +1024,16 @@ class ParameterizedCausalMarketWatch:
             }
             for timeframe, zone in candidate.geometry.items()
         }
+        r1_target = None
+        if candidate.entry_reference_source == "R1_L53":
+            zone_5 = candidate.geometry.get("5")
+            if zone_5 is None:
+                raise ValueError("R1 candidate lost 5m geometry")
+            r1_target = (
+                zone_5.resistance_bottom
+                if direction is TradeDirection.LONG
+                else zone_5.support_top
+            )
         attrs = {
             "candidate_id": candidate.candidate_id,
             "direction": direction.value,
@@ -980,6 +1046,7 @@ class ParameterizedCausalMarketWatch:
             ),
             "entry_reference_source": candidate.entry_reference_source,
             "entry_offset_pct_signed": candidate.entry_offset_pct_signed,
+            "r1_opposite_inner_target": r1_target,
             "price": price,
             "zone_gap_percent": gap,
             "geometry": geometry_payload,
@@ -1056,6 +1123,165 @@ class ParameterizedCausalMarketWatch:
         )
         state.candidate = None
 
+    def _ensure_r1_candidate(
+        self,
+        plan: EntryPlan,
+        state: _WatchState,
+        symbol: str,
+        bar_open: datetime,
+        *,
+        observed_at: datetime,
+        geometry_policy: Mapping[str, object],
+    ) -> None:
+        policy = _policy(plan)
+        if _integer(
+            policy.get("candidate_timeframe_minutes"),
+            "candidate_timeframe_minutes",
+        ) != 5:
+            raise ValueError("R1 L53_STABLE_RANGE requires candidate_timeframe_minutes=5")
+        required = tuple(
+            str(item)
+            for item in _sequence(
+                policy.get("required_closed_timeframes"),
+                "required_closed_timeframes",
+            )
+        )
+        if required != ("5",):
+            raise ValueError("R1 L53_STABLE_RANGE requires only closed 5m history")
+        lifecycle = _mapping(policy["candidate_lifecycle"], "candidate_lifecycle")
+        if not bool(lifecycle.get("clear_on_touch")):
+            raise ValueError("R1 L53_STABLE_RANGE requires clear_on_touch=true")
+        if tuple(str(item) for item in _sequence(
+            geometry_policy.get("timeframes"), "geometry.timeframes"
+        )) != ("5",):
+            raise ValueError("L53_STABLE_RANGE requires timeframes=['5']")
+        if _integer(geometry_policy.get("lookback"), "geometry.lookback") != 36:
+            raise ValueError("L53_STABLE_RANGE requires lookback=36")
+        if _integer(geometry_policy.get("atr_period"), "geometry.atr_period") != 200:
+            raise ValueError("L53_STABLE_RANGE requires atr_period=200")
+        if _decimal(
+            geometry_policy.get("zone_half_width_atr"), "geometry.zone_half_width_atr"
+        ) != Decimal("0.5"):
+            raise ValueError("L53_STABLE_RANGE requires zone_half_width_atr=0.5")
+        stable_states = _integer(
+            geometry_policy.get("stable_states"), "geometry.stable_states"
+        )
+        if stable_states != 6:
+            raise ValueError("L53_STABLE_RANGE requires stable_states=6")
+        width_min = _decimal(
+            geometry_policy.get("working_width_min_pct"),
+            "geometry.working_width_min_pct",
+        )
+        if width_min != Decimal("1"):
+            raise ValueError("L53_STABLE_RANGE requires working_width_min_pct=1")
+        if bool(plan.local_entry_policy.to_dict().get("enabled", False)):
+            raise ValueError("R1 L53_STABLE_RANGE does not permit local_entry_policy")
+        if bool(plan.entry_reference_policy.to_dict().get("enabled", False)):
+            raise ValueError(
+                "R1 calculated Entry must not be shifted by entry_reference_policy"
+            )
+        hourly_swing = _mapping(policy["hourly_swing"], "hourly_swing")
+        if bool(hourly_swing.get("enabled")):
+            raise ValueError("R1 L53_STABLE_RANGE does not permit hourly_swing filter")
+        if bool(_mapping(policy["flow"], "flow").get("enabled")):
+            raise ValueError("R1 L53_STABLE_RANGE does not permit flow filter")
+        if bool(_mapping(policy["oi"], "oi").get("enabled")):
+            raise ValueError("R1 L53_STABLE_RANGE does not permit OI filter")
+
+        rows = tuple(state.candles.get("5", ()))
+        zone = compute_r1_l53_stable_zone(
+            rows,
+            stable_states=stable_states,
+            working_width_min_pct=width_min,
+        )
+        if zone is None:
+            self._clear_candidate(state, observed_at, "R1 strict STAY unavailable")
+            return
+        direction_rules = _mapping(policy["direction_rules"], "direction_rules")
+        long_entry: Decimal | None = None
+        short_entry: Decimal | None = None
+        if TradeDirection.LONG in plan.directions:
+            rule = _mapping(direction_rules.get("LONG"), "direction_rules.LONG")
+            if str(rule.get("entry_zone_field") or "") != "support_top":
+                raise ValueError("R1 LONG requires entry_zone_field=support_top")
+            long_entry = zone.support_top
+        if TradeDirection.SHORT in plan.directions:
+            rule = _mapping(direction_rules.get("SHORT"), "direction_rules.SHORT")
+            if str(rule.get("entry_zone_field") or "") != "resistance_bottom":
+                raise ValueError("R1 SHORT requires entry_zone_field=resistance_bottom")
+            short_entry = zone.resistance_bottom
+        if long_entry is None and short_entry is None:
+            self._clear_candidate(state, observed_at, "R1 has no enabled direction")
+            return
+        source_refs = (
+            f"candle:{symbol}:5:{rows[-1].opened_at.isoformat()}",
+        )
+        candidate_id = (
+            "candidate-"
+            + fingerprint(
+                {
+                    "plan": plan.entry_plan_fingerprint,
+                    "symbol": symbol,
+                    "bar_open": bar_open,
+                    "long_entry": long_entry,
+                    "short_entry": short_entry,
+                    "geometry": {"5": zone},
+                    "r1_stable_states": stable_states,
+                    "r1_working_width_min_pct": width_min,
+                }
+            )[:24]
+        )
+        candidate = _Candidate(
+            candidate_id=candidate_id,
+            bar_opened_at=bar_open,
+            bar_reference_price=state.bar_reference_price or rows[-1].close,
+            long_entry=long_entry,
+            short_entry=short_entry,
+            long_calculated_entry=long_entry,
+            short_calculated_entry=short_entry,
+            entry_reference_source="R1_L53",
+            entry_offset_pct_signed=Decimal("0"),
+            long_gap_percent=Decimal("0") if long_entry is not None else None,
+            short_gap_percent=Decimal("0") if short_entry is not None else None,
+            oi_features=None,
+            geometry={"5": zone},
+            local_geometry={},
+            source_refs=source_refs,
+        )
+        if state.candidate == candidate:
+            return
+        state.candidate = candidate
+        state.current_bar_open = bar_open
+        state.traces.append(
+            WatchTracePoint(
+                "candidate",
+                candidate_id,
+                observed_at,
+                FrozenPolicy.from_mapping(
+                    {
+                        "candidate_bar_at": bar_open,
+                        "long_entry": long_entry,
+                        "short_entry": short_entry,
+                        "entry_reference_source": "R1_L53",
+                        "entry_offset_pct_signed": Decimal("0"),
+                        "long_gap_percent": candidate.long_gap_percent,
+                        "short_gap_percent": candidate.short_gap_percent,
+                        "geometry": {
+                            "5": {
+                                "support_top": zone.support_top,
+                                "support_bottom": zone.support_bottom,
+                                "resistance_top": zone.resistance_top,
+                                "resistance_bottom": zone.resistance_bottom,
+                                "atr": zone.atr,
+                                "range_low": zone.range_low,
+                                "range_high": zone.range_high,
+                            }
+                        },
+                    }
+                ),
+            )
+        )
+
     def _ensure_candidate(
         self,
         plan: EntryPlan,
@@ -1083,7 +1309,18 @@ class ParameterizedCausalMarketWatch:
                 self._clear_candidate(state, observed_at, f"{timeframe} history not closed")
                 return
         geometry_policy = _mapping(policy["geometry"], "geometry")
-        if str(geometry_policy.get("operator")) != "RANGE_ATR_CONFLUENCE":
+        geometry_operator = str(geometry_policy.get("operator") or "")
+        if geometry_operator == "L53_STABLE_RANGE":
+            self._ensure_r1_candidate(
+                plan,
+                state,
+                symbol,
+                bar_open,
+                observed_at=observed_at,
+                geometry_policy=geometry_policy,
+            )
+            return
+        if geometry_operator != "RANGE_ATR_CONFLUENCE":
             raise ValueError("unsupported geometry operator")
         timeframes = tuple(
             str(item)

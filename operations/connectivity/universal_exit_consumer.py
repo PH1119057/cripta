@@ -144,8 +144,8 @@ def dispatch_once(
     *,
     now: datetime,
 ) -> str:
-    if not _execution_gate_enabled(connection):
-        return "EXECUTION_GATE_DISARMED"
+    # Exit ownership survives Entry disarm. The mainnet gate controls new Entry,
+    # not lifecycle completion of an already-owned StrategyPosition.
     row = _next_request(connection)
     if row is None:
         return "NO_REQUEST"

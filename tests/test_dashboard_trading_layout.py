@@ -6,11 +6,13 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
-        "tradeSubnav.after(tradeOperatorBar,openTradesSection,closedTradesSection,"
-        "strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection)"
+        "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection,"
+        "closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,"
+        "coinMonitorSection,signalObservationSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
+        "strategyTradeControlSection",
         "openTradesSection",
         "closedTradesSection",
         "strategyPaperOpenSection",
@@ -64,7 +66,7 @@ def test_supervisor_explanation_is_only_in_expanded_position_card() -> None:
 def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
     assert "function selectTradeSubpage(name)" in SOURCE
     assert "trade-subpage-hidden" in SOURCE
-    assert "tradeSubnav.after(tradeOperatorBar,openTradesSection" in SOURCE
+    assert "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection" in SOURCE
     assert 'id="tradeOperatorBar" class="trade-operator-bar"' in SOURCE
     assert ".trade-operator-bar{grid-column:1/-1;position:sticky" in SOURCE
     for legacy in (

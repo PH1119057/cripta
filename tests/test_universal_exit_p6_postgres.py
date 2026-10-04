@@ -500,14 +500,15 @@ def test_materialize_request_is_exact_and_gate_independent() -> None:
         assert row["exit_plan_fingerprint"] == ids["exit_fp"]
         assert row["requested_at"] == NOW
         assert row["expires_at"] == NOW + timedelta(seconds=30)
-        assert dispatch_once(connection, now=NOW) == "EXECUTION_GATE_DISARMED"
+        dispatched = dispatch_once(connection, now=NOW)
+        assert dispatched.startswith("DISPATCHED:")
         count = connection.execute(
             """SELECT count(*) FROM runtime.trade_commands
                 WHERE command_type='strategy_exit'
                   AND payload_json::jsonb->>'strategy_position_id'=%s""",
             (ids["position_id"],),
         ).fetchone()
-        assert count == {"count": 0}
+        assert count == {"count": 1}
 
 
 def test_dispatch_is_atomic_and_duplicate_publish_is_idempotent() -> None:
