@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 1.9
+**Версия:** 2.0
 **Дата:** 2026-10-04
 **Статус:** активный канонический контракт торгового контура
 
@@ -287,6 +287,137 @@ Research evidence checkpoint 2026-10-04:
 The current first-five R1 cohort remains: `APTUSDT / INJUSDT / DOTUSDT / LTCUSDT / ARBUSDT`.
 
 R1 implementation does not satisfy real-arm readiness by itself. Before any real Exchange mutation, an owner-approved initial loss-containment contract, exact immutable StrategyCard/version, implementation/replay equivalence, SHADOW evidence, LIVE EQUIVALENCE, MICRO_LIVE and all gates from §4.7 remain mandatory. Until that chain is complete, mainnet stays disarmed.
+
+## 1.10.1 R1 — documentation-to-implementation mapping
+
+DOCUMENTATION RESEARCH 2026-10-04: exact R1 contract из §1.10 сопоставлен с
+текущими StrategyCard / EntryPlan / ExitPlan / Execution contracts и с
+research lineage из `RESEARCH_COMPUTE §19`.
+
+### Что сохраняется без изменения торговой семантики
+
+R1 реализуется как **новая immutable StrategyCard**. Существующие
+`entry_v1_monitor_*` и `experimental_h9_h3_*` не редактируются и не
+переиспользуются как R1.
+
+Одна R1 StrategyCard должна владеть обоими направлениями:
+
+```text
+direction_policy = [LONG, SHORT]
+symbols = [APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT]
+
+one-way physical slot:
+  account/product/symbol/positionIdx=0
+  one active R1 position per symbol
+```
+
+Разделение R1 на независимые LONG-card и SHORT-card запрещено для этой версии:
+оно разрушило бы owner-approved ping-pong lifecycle, потому что opposite Entry
+является переходом одной StrategyPosition, а не конкуренцией двух Strategy за
+один physical slot.
+
+R1 EntryPlan должен материализовать:
+
+```text
+watch geometry:
+  timeframe = 5m
+  rolling fully closed candles = 36
+  ATR = Wilder ATR200
+  zone_half_width_atr = 0.5
+  strict STAY states = 6
+  working_width_pct >= 1%
+
+LONG  touch = lower_inner
+SHORT touch = upper_inner
+
+flow/OI/hourly-swing/cooldown/legacy confluence filters = OFF
+pre-confirmation placement = FORBIDDEN
+```
+
+R1 Entry execution policy:
+
+```text
+confirmed signal
+-> LIMIT_OFFSET 0.10% favorable
+-> PostOnly
+-> maker fill or no Entry
+
+LONG  limit = confirmed Entry * 0.999
+SHORT limit = confirmed Entry * 1.001
+```
+
+Для R1 **numeric time TTL не является исследованным торговым правилом**.
+Pending Entry живёт только пока exact R1 signal остаётся действительным и
+должен быть отменён при любом из условий из §1.10: exact signal level changed,
+R1 invalidated, opposite target reached before fill, opposite qualified signal
+superseded. Existing generic implementation requirement
+`entry_limit_ttl_seconds > 0` therefore cannot be silently reused for R1;
+implementation must support signal-validity lifetime without inventing an
+untested timeout. No timeout-to-taker fallback is allowed.
+
+R1 ExitPlan:
+
+```text
+normal target:
+  current opposite L5-3 inner boundary
+
+already-resting target price hit:
+  reduce-only LIMIT maker TP
+
+new causal geometry makes recalculated target already marketable:
+  immediate MARKET / taker close
+
+opposite qualified Entry while occupied:
+  immediate MARKET / taker close current
+  immediate taker open opposite
+  same Strategy / same symbol / one-way transition
+
+hard-stop / break-even / trailing / liquidation exit / time exit:
+  not part of current R1 implementation target
+```
+
+Waiting for a maker price on a hard exit is explicitly forbidden for current R1.
+Historical event-study improvement is not promoted because the adverse tail
+during waiting is not bounded by the small fee saving.
+
+### Required implementation deltas before an exact R1 card can run
+
+Current code is not yet equivalent to the contract above. The implementation
+pass must close these exact gaps rather than changing R1 semantics:
+
+1. **Strategy authoring:** current new-card validator allows exactly one
+   direction. It must allow combined `LONG + SHORT` for the explicit
+   bidirectional R1 contract without relaxing unrelated Strategy validation.
+2. **Entry geometry:** current generic market watch does not yet have the exact
+   strict-six L5-3 operator required by R1.
+3. **PostOnly Entry:** current `LIMIT_OFFSET` runtime path sends `GTC`.
+   R1 needs explicit PostOnly propagation through StrategyCard -> EntryPlan ->
+   EntryExecutionRequest -> Execution.
+4. **Pending Entry invalidation:** current numeric TTL mechanism is insufficient.
+   R1 needs cancellation by exact Strategy signal validity, with no invented
+   numeric timeout and no taker fallback.
+5. **Dynamic maker TP:** `local_zone_exit` exists in authoring/PAPER surfaces
+   but current readiness marks it not wired for LIVE. R1 needs exact
+   opposite-inner target ownership, resting reduce-only maker order and causal
+   replacement.
+6. **Close-and-reverse:** opposite R1 Entry while a same-symbol position is
+   owned must be an atomic/auditable one-way lifecycle transition. A normal
+   competing Entry admission must not race the still-owned slot.
+7. **Hard exit:** marketable target reprice / forced close remains immediate
+   taker. No trailing/chase/PostOnly wait is added.
+
+### Protection and activation boundary
+
+Research did not approve a new initial loss-containment number. Tested hard
+stops `-1.0/-1.5/-2.0%` worsened R1 economics and are not promoted.
+
+Therefore the first implementation card may be created only as
+**disabled / SHADOW-test candidate** with no real execution permission. No
+existing legacy stop or TP may be inherited as an R1 default.
+
+Before any MICRO_LIVE/LIVE permission, owner must approve an exact initial
+loss-containment contract in a new immutable R1 Strategy version, followed by
+implementation equivalence, LIVE EQUIVALENCE and the gates in §4.7.
 
 # 2. ENTRY — универсальный Entry Engine
 

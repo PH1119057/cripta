@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.0 · 2026-10-04
+**Версия:** 2.1 · 2026-10-04
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -484,3 +484,52 @@ Evidence summary:
 - delayed maker handling for hard exits is deliberately rejected despite small historical improvements because the waiting tail can be materially worse in unseen market conditions.
 
 These numbers are research evidence, not guaranteed future economics. The policy decision being promoted is the execution semantics above, not the historical P&L.
+
+### 19.5 Full R1 documentation research checkpoint
+
+CHECKED HERE 2026-10-04: current canonical R1 was compared against the complete
+2026-10-04 research chain. No trading-semantic mismatch was found between the
+selected implementation target and the evidence used to select it.
+
+Evidence lineage:
+
+```text
+l53_r1_strict_stay_taker_20261004
+  strict all-six STAY check
+
+l53_r1_hardstops_taker_20261004
+  -1.0 / -1.5 / -2.0 hard-stop variants rejected
+
+l53_r11_preplacement_entry_20261004
+  fifth-state pre-confirmation maker placement rejected
+
+l53_r11_entry_offset_postonly_20261004
+  confirmed Entry offsets 0.05 / 0.10 / 0.20% with causal occupancy;
+  0.10% selected
+
+l53_r11_e010_hard_exit_postonly_20261004
+  delayed maker hard-exit event study;
+  result deliberately NOT promoted
+```
+
+The selected R1 policy is therefore exactly:
+
+```text
+strict R1 signal
++ confirmed-entry PostOnly offset 0.10%
++ no pre-confirmation Entry
++ no timeout-to-taker fallback
++ dynamic opposite-inner resting maker TP
++ immediate taker for marketable reprice / forced close
++ one-way close-and-reverse
++ no tested hard stop promoted
+```
+
+Implementation gaps in current code are not research permission to alter these
+rules. They are implementation findings and must be closed against
+`TRADING_CONTOUR §1.10.1`.
+
+The current first implementation stage is SHADOW/test only. Real activation
+still requires a separately owner-approved initial loss-containment contract;
+historical V1/S2/S3 protection values must not be inherited.
+
