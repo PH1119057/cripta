@@ -25,3 +25,9 @@ def test_private_runtime_dropin_exposes_safety_observer_module() -> None:
 def test_private_runtime_dropin_selects_universal_entry() -> None:
     source = (ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf").read_text(encoding="utf-8")
     assert "Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY" in source
+
+
+def test_private_runtime_position_mode_freshness_window() -> None:
+    source = (ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf").read_text(encoding="utf-8")
+    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
+    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
