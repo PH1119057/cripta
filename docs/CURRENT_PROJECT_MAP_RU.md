@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.3
-**Дата:** 2026-10-03
+**Версия:** 11.4
+**Дата:** 2026-10-04
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1026,9 +1026,15 @@ POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION
 ```
 
 При этом production owner delivery channel сейчас не настроен
-(`critical_delivery.configured=false`). Поэтому
-`CRITICAL_FAULT_DELIVERY=PASS` для real arm пока ставить нельзя, хотя сам
-delivery contract реализован и controlled behavior verified.
+(`critical_delivery.configured=false`). Исторически это блокировало real arm.
+
+OWNER DECISION 2026-10-04: для exact текущего R1 MICRO_LIVE
+(`r1_aptusdt / r1_injusdt / r1_dotusdt / r1_ltcusdt / r1_arbusdt`,
+по 10 USDT, 1x) owner разрешил запуск без owner webhook. В этом scope
+`CRITICAL_FAULT_DELIVERY` фиксируется как
+`OWNER_WAIVED_FOR_R1_MICRO_LIVE`, а не как `PASS`. Durable
+fault/delivery/retry/ack/escalation contract остаётся включённым. Для других
+Strategy, иного cohort/лимитов или полного LIVE waiver не действует.
 
 # 18. LIVE / MICRO_LIVE readiness — CHECKED HERE 2026-09-28
 
@@ -1089,6 +1095,35 @@ Entry observer сейчас `state=IDLE`,
 В `runtime.position_mode_states` сейчас 0 rows.
 В `control.live_arm_evidence` сейчас 0 rows.
 В `control.live_arm_sessions` сейчас 0 rows.
+
+## 18.1 R1 MICRO_LIVE readiness — CHECKED HERE 2026-10-04
+
+Fresh runtime evidence перед arm:
+
+```text
+SOURCE_HEAD / INSTALLED_COMMIT / LOADED_COMMIT = 6e4deef20da7bcd1755456fd5139b965de7c6421
+R1 StrategyActivation = 5 enabled, exact cohort only
+other StrategyActivation = 0
+private runtime = connected
+trade websocket = authenticated-locked
+fresh reconciliation = PASS, positions=0, orders=0
+wallet account type = UNIFIED
+wallet equity ≈ 58.17 USDT
+position mode = ONE_WAY, positionIdx=0 on all 5 R1 symbols
+Entry consumer = ENABLED / UNIVERSAL_ENTRY
+Exit consumer = ENABLED
+R1 reverse worker = ENABLED
+R1 loaded-plan equivalence preflight = PASS 5/5
+mainnet gate = DISARMED before final arm
+execution permissions = 0 before final arm
+critical_delivery.configured = false
+CRITICAL_FAULT_DELIVERY = OWNER_WAIVED_FOR_R1_MICRO_LIVE
+```
+
+Owner approval for the exact R1 MICRO_LIVE scope is explicit in the current
+conversation and mirrored into TRADING_CONTOUR §4.7. This checkpoint does not
+itself claim that final gate/permissions have already been armed; those remain
+runtime evidence after the corresponding mutation.
 
 Следовательно:
 
