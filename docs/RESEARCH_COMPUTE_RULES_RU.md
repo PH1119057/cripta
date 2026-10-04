@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 1.8 · 2026-10-04
+**Версия:** 1.9 · 2026-10-04
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -381,3 +381,76 @@ QUARANTINED_SYMBOLS =
   явного owner decision и актуальной exchange-eligibility проверки.
 
 
+
+
+## 19. R1 research screening / symbol selection lineage
+
+OWNER DECISION 2026-10-04: current R1 research contract is defined in
+`TRADING_CONTOUR §1.10`. This section owns the research screening procedure and
+records why the current first five symbols were selected.
+
+### 19.1 Required screening matrix
+
+Each candidate symbol is evaluated on the same exact R1 contract with the
+conservative `TAKER / TAKER` baseline from §13.1. The minimum directional /
+period matrix is:
+
+```text
+OLD90 LONG
+OLD90 SHORT
+RECENT14 LONG
+RECENT14 SHORT
+```
+
+Each cell reports after-commission economics and sample count. A positive cell
+means average trade economics for that exact symbol × direction × period is
+strictly above zero after the baseline commissions.
+
+Ranking is shown first by number of positive cells: 4/4, then 3/4, 2/4, 1/4,
+0/4. Within a tier, aggregate economics/sample evidence is shown for owner
+review; the ranking itself does not automatically activate or exclude a symbol.
+Selection into a live/shadow universe remains an explicit owner decision.
+
+### 19.2 Current first-five R1 cohort — evidence checkpoint 2026-10-04
+
+The current 15-symbol screen produced this first-five owner-selected cohort:
+
+```text
+APTUSDT  = 4/4 positive
+INJUSDT  = 4/4 positive
+DOTUSDT  = 4/4 positive
+LTCUSDT  = 3/4 positive
+ARBUSDT  = 3/4 positive
+```
+
+Selection basis was the R1 four-cell directional/period screen after
+`TAKER / TAKER` commissions, not coin narrative, market capitalization or a
+Dispatcher rating. At the evidence checkpoint, these five symbols together
+produced fewer trades than the full 15-symbol universe while improving aggregate
+after-commission economics. Exact numbers remain research results in the run
+artifacts and are not frozen here as Strategy policy.
+
+The five-symbol set is a current research/live-candidate cohort, not a permanent
+R1 universe. Additional symbols must be tested through the same exact matrix and
+reported with the exact calculation contract before owner inclusion/exclusion.
+Dataset reuse does not allow policy reuse from another Strategy or historical
+screen.
+
+### 19.3 Further R1 symbol research
+
+For new symbols, use the same R1 geometry/Entry/Exit semantics and the current
+approved cost baseline. Report at minimum:
+- the four directional/period cells and sample counts;
+- aggregate money after commissions;
+- trades/day and money/day for the tested horizon;
+- materially negative tails / lifecycle findings;
+- any data-quality or exchange-eligibility limitation.
+
+Changing Entry, Exit, STAY semantics, fee model or lifecycle while screening a
+new symbol creates a different research variant and must be labelled separately;
+it cannot be mixed into the R1 cohort ranking.
+
+Before any real activation, current exchange eligibility, exact Strategy version,
+initial loss-containment, implementation equivalence and all LIVE-arm gates from
+`TRADING_CONTOUR §4.7` remain mandatory. R1 research evidence alone never
+satisfies those gates.
