@@ -154,6 +154,9 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
     assert "import sqlalchemy" in source
     assert "import bybit_workbench.dispatcher_v2" in source
     assert "systemctl start cripta-universal-entry-consumer.service" not in source
+    assert '"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" migrate' in source
+    assert '"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" validate' in source
+    assert source.index('"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" migrate') < source.index("systemctl daemon-reload")
     assert (
         "-f /srv/cripta/runtime/current/operations/sql/"
         "20260920_slot_admission_v1.sql"
