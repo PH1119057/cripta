@@ -584,6 +584,66 @@ def entry_shadow_state() -> dict[str, object]:
     return state
 
 
+def strategy_trade_monitor_state() -> dict[str, object]:
+    if not UNIVERSAL_ENTRY_OBSERVER_STATE.exists():
+        return {
+            "state": "OFF",
+            "observer_ready": False,
+            "updated_at": None,
+            "facts_received": 0,
+            "signals": 0,
+            "items": [],
+        }
+    try:
+        loaded = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "state": "ERROR",
+            "observer_ready": False,
+            "updated_at": None,
+            "facts_received": 0,
+            "signals": 0,
+            "items": [],
+        }
+    if not isinstance(loaded, dict):
+        return {
+            "state": "ERROR",
+            "observer_ready": False,
+            "updated_at": None,
+            "facts_received": 0,
+            "signals": 0,
+            "items": [],
+        }
+    keep = (
+        "strategy_id",
+        "strategy_version",
+        "symbol",
+        "direction",
+        "state",
+        "current_price",
+        "entry_price",
+        "distance_pct",
+        "candidate_id",
+        "last_touch_at",
+        "updated_at",
+    )
+    items = []
+    for raw in loaded.get("strategy_monitors", []):
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("symbol") or "") in BYBIT_KZ_UNSUPPORTED:
+            continue
+        items.append({key: raw.get(key) for key in keep})
+    return {
+        "state": loaded.get("state"),
+        "observer_ready": bool(loaded.get("observer_ready")),
+        "updated_at": loaded.get("updated_at"),
+        "facts_received": int(loaded.get("facts_received") or 0),
+        "signals": int(loaded.get("signals") or 0),
+        "items": items,
+    }
+
+
 def strategy_monitor_state() -> dict[str, object]:
     state: dict[str, object]
     if not UNIVERSAL_ENTRY_OBSERVER_STATE.exists():
@@ -3498,6 +3558,9 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     if view == "signals"
                     else None,
                     "strategy_monitor": strategy_monitor_state() if view == "monitor" else None,
+                    "trade_strategy_monitor": strategy_trade_monitor_state()
+                    if view == "open"
+                    else None,
                     "entry_shadow": None,
                     "paper_strategy": strategy_paper_state()
                     if view in {"paper_open", "paper_closed"}
