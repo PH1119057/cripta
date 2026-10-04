@@ -1434,343 +1434,1615 @@ def _observer_status(
         {
             "updated_at": datetime.now(UTC).isoformat(),
             "service": "cripta-universal-entry-observer.service",
-            "runtime_molz{béq¶»§q«^wŽùçvòµëÚWÜÚ[Ï]\JÚWÚ\ÝÜžJKˆØœÙ\™YØ][ØœÙ\™YØ]ˆ
-BˆYˆ[Š[›™\œÊHOH[ŠÞ[X›ÛÊN‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ˜Ø]\Ø[\ÝÜžHÙYY[˜ÛÛ\]HŠBˆØ]K›X\š×ÜÙYYØÛÛ\]J
-BˆÛÛ\\˜]ÜˆHÛ›[™T\š]PÛÛ\\˜]ÜŠY[]K[›™\œÊBˆÝ]HHØ]KœÝ]WØ]
-]][YK››ÝÊUÊJBˆ\ÝÜÝ]HHÝ]Bˆ˜XÝ×Ü™XÙZ]™YHˆ›Ý×ÛZ[]\ÎˆXÝÜÝ‹Ù]Ù]][YWWHHÜÞ[X›ÛˆÙ]
+            "runtime_mode": "MULTI_STRATEGY_OBSERVER",
+            "state": state,
+            "reason": reason,
+            "observer_ready": state in {"IDLE", "WARMUP", "RUNNING", "RELOADING"},
+            "trading_effect": "NONE",
+            "source_commit": LOADED_COMMIT,
+            "fact_source_id": FACT_SOURCE_ID,
+            "observer_epoch_id": epoch_id,
+            "active_strategies": len(active_bundles),
+            "active_entry_plans": [
+                cast(Any, item).entry_plan.entry_plan_fingerprint for item in active_bundles
+            ],
+            "active_exit_plans": [
+                cast(Any, item).exit_plan.exit_plan_fingerprint for item in active_bundles
+            ],
+            "symbols": list(symbols),
+            "facts_received": facts_received,
+            "evaluations": evaluations,
+            "signals": signals,
+            "warmup_until": None if warmup_until is None else warmup_until.isoformat(),
+            "sensor_status": dict(sensor_status or {}),
+            "strategy_monitors": [dict(item) for item in strategy_monitors],
+        },
+    )
 
-H›ÜˆÞ[X›Û[ˆÞ[X›ÛßBˆ\ÝÛÚWÜØ[\NˆXÝÜÝ‹]][YWHHßBˆ˜YWØÝ\œÛÜœÎˆXÝÜÝ‹˜YPÝ\œÛÜ—HHßBˆ˜YWØÝ\œ™[ÜÙ\WÙ^X×ÚYÎˆXÝÜÝ‹Ù]ÜÝ—WHHßBˆ˜YWÜ›ÛÙ—Û[Û›ÝÛšXÎˆXÝÜÝ‹›Ø]HHßBˆÚWØÝ\œÛÜœÎˆXÝÜÝ‹ÚTØ[\PÝ\œÛÜ—HHßBˆ˜\—ÛÜ[—Ø›Ý[™\šY\ÎˆXÝÜÝ‹]][YWHHßBˆY\\ˆH^XÝ˜XÝY\\Š
-Bˆ˜[œÜÜÜ™XÛÛ›™XÝÈHˆ˜YWØ]Y]ÈHˆ˜YWØ]Y]Ü™XÛÛ›™XÝÈHˆÚWØÛÛ™šYÈH
-ˆÚLÌÐÛÛ™šYÊˆ˜XÝÜÛÝ\˜ÙWÚYQPÕÔÓÕTÑWÒQˆ™\]Z\™YÜÞ[X›ÛÏ]\JÞ[X›ÛÊKˆÛÝÜÙXÛÛ™ÏLÌˆ™\]Y\ÝÝ[Y[Ý]ÜÙXÛÛ™ÏMKŒˆ™]žWÚ[\˜[ÜÙXÛÛ™ÏLŒKˆ
-BˆYˆ\ÙWÜ™\ÝÛÚLÌÂˆ[ÙH›Û™Bˆ
-BˆÚWÚX[HÚLÌÒX[˜XÚÙ\ŠÚWØÛÛ™šYÊHYˆÚWØÛÛ™šYÈ\È›Ý›Û™H[ÙH›Û™BˆÚWÜ™\Ý[Îˆ]Y]YK”]Y]YVÓÚTÛÝ™\Ý[HH]Y]YK”]Y]YJ
-BˆÚWÜÝÜÙ]™[H™XY[™Ë‘]™[
 
-Bˆ˜YWÛZ\œ›ÜˆHX›XÕ˜YSZ\œ›ÜY™™\Šˆ\JÞ[X›ÛÊKˆ™][[Û—ÜÙXÛÛ™ÏSRT”“Ô—Ô‘US•SÓ—ÔÑPÓÓ‘Ëˆ
-Bˆ˜YWÛZ\œ›Ü—ÜÝÜH™XY[™Ë‘]™[
+def _observer_unknown_prestart_warmup_seconds(
+    bundles: tuple[object, ...], service_started_at: datetime
+) -> int:
+    horizons = [
+        derive_unknown_prestart_horizon_seconds(cast(Any, bundle).entry_plan)
+        if cast(Any, bundle).activation.enabled_at < service_started_at
+        else 0
+        for bundle in bundles
+    ]
+    return max(horizons, default=0)
 
-Bˆ˜YWÛZ\œ›Ü—Ü™XYHH™XY[™Ë‘]™[
 
-B‚ˆYˆÜš]WÜÝ]\Êˆ
-‹˜[œÜÜÜÝ]NˆÝˆHÓÓ“‘PÕQ‹^˜NˆX\[™ÖÜÝ‹Øš™XÝH›Û™HH›Û™Bˆ
-HOˆ›Û™N‚ˆ^[ØYHÜÝ]\×Ü^[ØY
-ˆY[]OZY[]KˆÝ]OYØ]KœÝ]WØ]
-]][YK››ÝÊUÊJKˆØ]OYØ]KˆÛÛ\\˜]ÜXÛÛ\\˜]Ü‹ˆ˜XÝ×Ü™XÙZ]™YY˜XÝ×Ü™XÙZ]™YˆÙYYYÜÞ[X›ÛÏ[[Š[›™\œÊKˆÝ[ÜÞ[X›ÛÏ[[ŠÞ[X›ÛÊKˆ
-HÂˆ˜[œÜÜÜÝ]HŽˆ˜[œÜÜÜÝ]Kˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆœÙ\šXÙWÚ[œÝ[˜ÙWÚYŽˆY[]KœÙ\šXÙWÚ[œÝ[˜ÙWÚYˆÜ×Ü[™×Ú[\˜[ÜÙXÛÛ™ÈŽˆS‘×ÒS•T•SÔÑPÓÓ‘ËˆÜ×ÜÛ™×Ý[Y[Ý]ÜÙXÛÛ™ÈŽˆÓ‘×ÕSQSÕUÔÑPÓÓ‘Ëˆ˜YWÜÚ[[˜ÙWØ]Y]ÜÙXÛÛ™ÈŽˆQWÔÒSSÑWÐUQUÔÑPÓÓ‘Ëˆ˜YWØ]Y]Ü™\]Y\ÝÝ[Y[Ý]ÜÙXÛÛ™ÈŽˆQWÐUQUÔ‘TUQTÕÕSQSÕUÔÑPÓÓ‘Ëˆ˜YWØ]Y]ÈŽˆ˜YWØ]Y]Ëˆ˜YWØ]Y]Ü™XÛÛ›™XÝÈŽˆ˜YWØ]Y]Ü™XÛÛ›™XÝËˆ˜YWÜ›Ý™[—ÜÞ[X›ÛÈŽˆ[Š˜YWÜ›ÛÙ—Û[Û›ÝÛšXÊKˆBˆYˆÚWÚX[\È›Ý›Û™N‚ˆ^[ØY\]JÚWÚX[œÛ˜\ÚÝ
+def _run_observer_epoch(
+    connection: Any,
+    bundles: tuple[object, ...],
+    stopping: Callable[[], bool],
+    service_started_at: datetime,
+) -> str:
+    epoch_started = datetime.now(UTC)
+    signature = _observer_light_signature(connection)
+    if not signature:
+        return "RELOAD"
+    registry = ActivePlanRegistry()
+    consumer_instance_id = (
+        f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
+        f"{service_started_at.isoformat()}"
+    )
+    for raw_bundle in bundles:
+        bundle = cast(Any, raw_bundle)
+        registry.register_card(bundle.card)
+        materialized = registry.activate(bundle.activation)
+        if materialized.entry_plan_fingerprint != bundle.entry_plan.entry_plan_fingerprint:
+            raise RuntimeError("observer materialized EntryPlan fingerprint mismatch")
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "universal_entry_multi_strategy_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
+    engine = UniversalEntryEngine(registry)
+    store = StrategyEntryStore(connection)
+    counterfactual_store = AnalystCounterfactualStore(connection)
+    paper = PaperTradeRuntime(connection)
+    real_admission_required_for = _real_execution_activation_ids(connection, bundles)
+    entry_admission_port = (
+        PostgresEntryAdmissionPort(connection)
+        if real_admission_required_for
+        else None
+    )
+    bundle_by_entry_plan = {
+        cast(Any, item).entry_plan.entry_plan_fingerprint: cast(Any, item) for item in bundles
+    }
+    symbols = tuple(
+        sorted({symbol for bundle in cast(Any, bundles) for symbol in bundle.card.symbols})
+    )
+    intervals = _observer_intervals(bundles)
+    if "5" not in intervals:
+        raise RuntimeError("production observer requires 5m candidate transport")
+    epoch_id = (
+        "ueo-"
+        + fingerprint(
+            {
+                "started_at": epoch_started,
+                "plans": [
+                    cast(Any, bundle).entry_plan.entry_plan_fingerprint for bundle in bundles
+                ],
+                "source_commit": LOADED_COMMIT,
+            }
+        )[:32]
+    )
+    warmup_seconds = _observer_unknown_prestart_warmup_seconds(bundles, service_started_at)
+    warmup_until = epoch_started + timedelta(seconds=warmup_seconds)
+    required_flow_symbols = {
+        symbol
+        for bundle in cast(Any, bundles)
+        if bool(bundle.entry_plan.watch_policy.to_dict().get("flow", {}).get("enabled", False))
+        for symbol in bundle.entry_plan.symbols
+    }
+    required_oi_symbols = {
+        symbol
+        for bundle in cast(Any, bundles)
+        if bool(bundle.entry_plan.watch_policy.to_dict().get("oi", {}).get("enabled", False))
+        for symbol in bundle.entry_plan.symbols
+    }
 
-JBˆZ\œ›Ü—ÜÛ˜\ÚÝH˜YWÛZ\œ›Ü‹œÛ˜\ÚÝ
+    closed_boundaries: dict[tuple[str, str], datetime] = {}
+    for symbol in symbols:
+        observed = datetime.now(UTC)
+        history = _fetch_history(symbol, observed, intervals)
+        oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
+        for timeframe in intervals:
+            rows = history.get(timeframe, ())
+            if not rows:
+                raise RuntimeError(f"observer causal history seed missing {symbol}:{timeframe}")
+            closed_boundaries[(symbol, timeframe)] = max(item.closed_at for item in rows)
+        engine.load_watch_history(
+            symbol,
+            {key: tuple(value) for key, value in history.items()},
+            tuple(oi_history),
+            observed_at=observed,
+        )
+        time.sleep(0.05)
 
-Bˆ^[ØY\]JˆÂˆ˜YWÛZ\œ›Ü—ÜÝ]HŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈœÝ]H—Kˆ˜YWÛZ\œ›Ü—Ù\ØÚŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈ™\ØÚ—Kˆ˜YWÛZ\œ›Ü—Ù]™[ÈŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈ™]™[È—Kˆ˜YWÛZ\œ›Ü—Ù\XØ]\ÈŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈ™\XØ]\È—Kˆ˜YWÛZ\œ›Ü—ÙØ\ÈŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈ™Ø\È—Kˆ˜YWÛZ\œ›Ü—Û\ÝÜ™XÙZ]™YØ]ŽˆZ\œ›Ü—ÜÛ˜\ÚÝÈ›\ÝÜ™XÙZ]™YØ]—Kˆ˜YWÛZ\œ›Ü—Ü™][[Û—ÜÙXÛÛ™ÈŽˆRT”“Ô—Ô‘US•SÓ—ÔÑPÓÓ‘ËˆBˆ
-BˆYˆ^˜N‚ˆ^[ØY\]JXÝ
-^˜JJBˆØ]ÛZX×ÚœÛÛŠÕUT×ÔU^[ØY
-B‚ˆYˆ›ØÙ\Ü×Ù˜XÝ
-ˆ˜XÝˆX\šÙ]˜XÝ[™[ÜKˆ
-‹ˆ˜YWØÝ\œÛÜŽˆ˜YPÝ\œÛÜˆ›Û™HH›Û™KˆÚWØÝ\œÛÜŽˆÚTØ[\PÝ\œÛÜˆ›Û™HH›Û™Kˆ
-HOˆ›ÛÛ‚ˆ›Û›ØØ[˜XÝ×Ü™XÙZ]™Y\ÝÜÝ]BˆYˆ›ÝY\\‹˜XØÙ\
-˜XÝ™˜XÝÚY
-N‚ˆ™]\›ˆYBˆYˆ˜XÝ™]™[ÚÚ[™OH”P“P×ÕQHŽ‚ˆYˆ˜YWØÝ\œÛÜˆ\È›Û™N‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›Jˆ”P“P×ÕQHXØÙ\YÚ]Ý]^XÝ˜[œÜÜÝ\œÛÜˆ‚ˆ
-Bˆ™]š[Ý\×Ý˜YHH˜YWØÝ\œÛÜœË™Ù]
-˜XÝœÞ[X›Û
-BˆYˆ™]š[Ý\×Ý˜YH\È›Ý›Û™H[™˜YWØÝ\œÛÜ‹œÙ\H™]š[Ý\×Ý˜YKœÙ\N‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›Jˆˆ”P“P×ÕQHÜ›ÜÜË\Ù\]Y[˜ÙH™YÜ™\ÜÙY›ÜˆÙ˜XÝœÞ[X›ÛH‚ˆ
-BˆYˆ™]š[Ý\×Ý˜YH\È›Û™HÜˆ˜YWØÝ\œÛÜ‹œÙ\Hˆ™]š[Ý\×Ý˜YKœÙ\N‚ˆ˜YWØÝ\œ™[ÜÙ\WÙ^X×ÚYÖÙ˜XÝœÞ[X›ÛHHÝ˜YWØÝ\œÛÜ‹™^X×ÚYBˆ[ÙN‚ˆ˜YWØÝ\œ™[ÜÙ\WÙ^X×ÚYËœÙ]Y˜][
-˜XÝœÞ[X›ÛÙ]
+    flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
+    last_trade_prices: dict[str, Decimal] = {}
+    oi_seen: set[str] = set()
+    trade_cursors: dict[str, TradeCursor] = {}
+    trade_current_seq_exec_ids: dict[str, set[str]] = {}
+    trade_proof_monotonic: dict[str, float] = {}
+    deduper = ExactFactDeduper()
+    oi_config = Oi30sConfig(
+        fact_source_id=FACT_SOURCE_ID,
+        required_symbols=symbols,
+        slot_seconds=30,
+        request_timeout_seconds=5.0,
+        retry_interval_seconds=0.25,
+    )
+    oi_health = Oi30sHealthTracker(oi_config)
+    oi_results: queue.Queue[OiSlotResult] = queue.Queue()
+    oi_stop = threading.Event()
+    trade_mirror = PublicTradeMirrorBuffer(
+        tuple(symbols),
+        retention_seconds=MIRROR_RETENTION_SECONDS,
+    )
+    trade_mirror_stop = threading.Event()
+    trade_mirror_ready = threading.Event()
+    trade_mirror_thread = threading.Thread(
+        target=_run_public_trade_mirror,
+        args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+        name="universal-entry-observer-public-trade-mirror",
+        daemon=True,
+    )
+    oi_thread = threading.Thread(
+        target=_run_rest_oi30s_worker,
+        args=(oi_config, oi_results, oi_stop),
+        name="universal-entry-observer-oi30s",
+        daemon=True,
+    )
+    sock: Any | None = None
+    facts_received = 0
+    evaluations_count = 0
+    signals_count = 0
+    last_inputs_refresh = 0.0
+    global_context: ObjectiveContext | None = None
+    coin_contexts: dict[str, ObjectiveContext] = {}
+    capacity: TradingCapacitySnapshot | None = None
+    current_signature = signature
+    provenance = FrozenPolicy.from_mapping(
+        {
+            "source": "universal_entry_multi_strategy_observer",
+            "observer_epoch_id": epoch_id,
+            "source_commit": LOADED_COMMIT,
+            "fact_source_id": FACT_SOURCE_ID,
+        }
+    )
 
-JK˜Y
-ˆ˜YWØÝ\œÛÜ‹™^X×ÚYˆ
-Bˆ˜YWØÝ\œÛÜœÖÙ˜XÝœÞ[X›ÛHH˜YWØÝ\œÛÜ‚ˆ[Yˆ˜XÝ™]™[ÚÚ[™OH“ÔS—ÒS•T‘TÕŽ‚ˆYˆ\ÙWÜ™\ÝÛÚLÌÎ‚ˆ]œÈH˜XÝ˜]šX]\Ë×ÙXÝ
+    def sensor_status(now: datetime) -> dict[str, object]:
+        flow_counts = {
+            symbol: len(flow_minutes[symbol]) for symbol in sorted(required_flow_symbols)
+        }
+        missing_flow = [symbol for symbol, count in flow_counts.items() if count < 5]
+        missing_oi = sorted(required_oi_symbols.difference(oi_seen))
+        return {
+            "time_ready": now >= warmup_until,
+            "flow_required_symbols": sorted(required_flow_symbols),
+            "flow_minute_counts": flow_counts,
+            "flow_missing_symbols": missing_flow,
+            "oi_required_symbols": sorted(required_oi_symbols),
+            "oi_seen_symbols": sorted(oi_seen),
+            "oi_missing_symbols": missing_oi,
+        }
 
-BˆYˆ]œË™Ù]
-™˜XÝÜÛÝ\˜ÙWÚYŠHOHPÕÔÓÕTÑWÒQÜˆ›Ý]œË™Ù]
-œÛÝÚYŠN‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›Jˆ”‘TÕÔS—ÒS•T‘TÕ˜XÝXÚÜÈ^XÝÛÝ\˜ÙKÜÛÝY[]H‚ˆ
-Bˆ[ÙN‚ˆYˆÚWØÝ\œÛÜˆ\È›Û™N‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›Jˆ“ÔS—ÒS•T‘TÕXØÙ\YÚ]Ý]^XÝÒLÌÈÝ\œÛÜˆ‚ˆ
-BˆÚWØÝ\œÛÜœÖÙ˜XÝœÞ[X›ÛHHÚWØÝ\œÛÜ‚ˆ[Yˆ˜XÝ™]™[ÚÚ[™OHÐS‘WÐÓÔÑQŽ‚ˆ]œÈH˜XÝ˜]šX]\Ë×ÙXÝ
+    def sensor_ready(now: datetime) -> bool:
+        status = sensor_status(now)
+        return bool(
+            status["time_ready"]
+            and not status["flow_missing_symbols"]
+            and not status["oi_missing_symbols"]
+        )
 
-Bˆ[YYœ˜[YHHÝŠ]œÖÈ[YYœ˜[YH—JBˆ›Ý[™\žHH]][YK™œ›ÛZ\ÛÙ›Ü›X]
-ÝŠ]œÖÈ˜ÛÜÙYØ]—JJK˜\Ý[Y^›Û™JUÊBˆ™]š[Ý\×ØÛÜÙYHÛÜÙYØ›Ý[™\šY\Ë™Ù]
+    def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
+        rows: list[Mapping[str, object]] = []
+        for raw_bundle in bundles:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                watch = engine.watch_snapshot(plan.entry_plan_fingerprint, symbol)
+                lifecycle = engine.lifecycle_snapshot(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                cooldown_until = engine.candidate_cooldown_until(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                current_price = last_trade_prices.get(symbol)
+                geometry = {
+                    timeframe: {
+                        "range_high": str(zone.range_high),
+                        "range_low": str(zone.range_low),
+                        "atr": str(zone.atr),
+                        "resistance_top": str(zone.resistance_top),
+                        "resistance_bottom": str(zone.resistance_bottom),
+                        "support_top": str(zone.support_top),
+                        "support_bottom": str(zone.support_bottom),
+                        "effective_lookback": zone.effective_lookback,
+                        "regime_reset_at": (
+                            None
+                            if zone.regime_reset_at is None
+                            else zone.regime_reset_at.isoformat()
+                        ),
+                    }
+                    for timeframe, zone in watch.geometry.items()
+                }
+                for direction in plan.directions:
+                    entry_price = (
+                        watch.long_entry if direction.value == "LONG" else watch.short_entry
+                    )
+                    distance_pct: Decimal | None = None
+                    if current_price is not None and entry_price is not None and entry_price > 0:
+                        if direction.value == "LONG":
+                            distance_pct = (
+                                (current_price - entry_price) / entry_price * Decimal("100")
+                            )
+                        else:
+                            distance_pct = (
+                                (entry_price - current_price) / entry_price * Decimal("100")
+                            )
+                    embargo_active = (
+                        lifecycle.entry_embargo_until is not None
+                        and now < lifecycle.entry_embargo_until
+                    )
+                    cooldown_active = cooldown_until is not None and now < cooldown_until
+                    if embargo_active:
+                        state = "EMBARGO"
+                    elif cooldown_active:
+                        state = "COOLDOWN"
+                    elif watch.hourly_swing_blocked:
+                        state = "SWING_BLOCK"
+                    elif entry_price is None:
+                        state = "WAITING"
+                    elif distance_pct is not None and distance_pct <= 0:
+                        state = "AT_OR_BEYOND_ENTRY"
+                    elif distance_pct is not None and distance_pct <= Decimal("1"):
+                        state = "APPROACH"
+                    else:
+                        state = "WATCH"
+                    rows.append(
+                        {
+                            "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                            "strategy_id": plan.strategy_id,
+                            "strategy_version": plan.strategy_version,
+                            "strategy_name": bundle.card.name,
+                            "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                            "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                            "activation_id": plan.strategy_activation_id,
+                            "symbol": symbol,
+                            "direction": direction.value,
+                            "state": state,
+                            "current_price": None if current_price is None else str(current_price),
+                            "entry_price": None if entry_price is None else str(entry_price),
+                            "distance_pct": None if distance_pct is None else str(distance_pct),
+                            "candidate_id": watch.candidate_id,
+                            "candidate_bar_at": (
+                                None
+                                if watch.candidate_bar_at is None
+                                else watch.candidate_bar_at.isoformat()
+                            ),
+                            "geometry": geometry,
+                            "hourly_swing_blocked": watch.hourly_swing_blocked,
+                            "hourly_swing_percent": (
+                                None
+                                if watch.hourly_swing_percent is None
+                                else str(watch.hourly_swing_percent)
+                            ),
+                            "flow_condition_met": watch.last_flow_condition_met,
+                            "oi_condition_met": watch.last_oi_condition_met,
+                            "last_touch_at": (
+                                None
+                                if watch.last_touch_at is None
+                                else watch.last_touch_at.isoformat()
+                            ),
+                            "candidate_cooldown_until": (
+                                None if cooldown_until is None else cooldown_until.isoformat()
+                            ),
+                            "tracked_outcomes": lifecycle.tracked_outcomes,
+                            "last_resolution": lifecycle.last_resolution,
+                            "last_resolution_at": (
+                                None
+                                if lifecycle.last_resolution_at is None
+                                else lifecycle.last_resolution_at.isoformat()
+                            ),
+                            "entry_embargo_until": (
+                                None
+                                if lifecycle.entry_embargo_until is None
+                                else lifecycle.entry_embargo_until.isoformat()
+                            ),
+                            "updated_at": now.isoformat(),
+                        }
+                    )
+        return tuple(rows)
 
-˜XÝœÞ[X›Û[YYœ˜[YJJBˆYˆ™]š[Ý\×ØÛÜÙY\È›Ý›Û™H[™›Ý[™\žH™]š[Ý\×ØÛÜÙY‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›JˆˆÐS‘WÐÓÔÑQ›Ý[™\žH™YÜ™\ÜÙY›ÜˆÙ˜XÝœÞ[X›ÛNžÝ[YYœ˜[Y_H‚ˆ
-BˆÛÜÙYØ›Ý[™\šY\ÖÊ˜XÝœÞ[X›Û[YYœ˜[YJWHH›Ý[™\žBˆ[Yˆ˜XÝ™]™[ÚÚ[™OHT—ÓÔSˆŽ‚ˆ]œÈH˜XÝ˜]šX]\Ë×ÙXÝ
+    def refresh_inputs(fact_at: datetime) -> None:
+        nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
+        now_mono = time.monotonic()
+        if now_mono - last_inputs_refresh < 1.0:
+            return
+        global_context, coin_contexts, capacity = _observer_objective_inputs(
+            connection, symbols, fact_at
+        )
+        last_inputs_refresh = now_mono
 
-Bˆ›Ý[™\žHH]][YK™œ›ÛZ\ÛÙ›Ü›X]
-ÝŠ]œÖÈ›Ü[™YØ]—JJK˜\Ý[Y^›Û™JUÊBˆ™]š[Ý\×Ø˜\ˆH˜\—ÛÜ[—Ø›Ý[™\šY\Ë™Ù]
-˜XÝœÞ[X›Û
-BˆYˆ™]š[Ý\×Ø˜\ˆ\È›Ý›Û™H[™›Ý[™\žH™]š[Ý\×Ø˜\Ž‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›JˆT—ÓÔSˆ›Ý[™\žH™YÜ™\ÜÙY›ÜˆÙ˜XÝœÞ[X›ÛHŠBˆ˜\—ÛÜ[—Ø›Ý[™\šY\ÖÙ˜XÝœÞ[X›ÛHH›Ý[™\žB‚ˆ›Ý\›˜[˜\[™
-˜XÝ
-Bˆ˜XÝ×Ü™XÙZ]™Y
-ÏHBˆYˆ˜XÝ™]™[ÚÚ[™OH”P“P×ÕQHŽ‚ˆ›Ý×ÛZ[]\ÖÙ˜XÝœÞ[X›ÛK˜Y
-ˆ˜XÝ›ØœÙ\™YØ]˜\Ý[Y^›Û™JUÊKœ™\XÙJÙXÛÛ™LZXÜ›ÜÙXÛÛ™L
-Bˆ
-Bˆ›Ý×Ü™XYHH[
-[ŠZ[]\ÊHHH›ÜˆZ[]\È[ˆ›Ý×ÛZ[]\Ë˜[Y\Ê
-JBˆÚWÜ™XYHHYBˆYˆÚWÚX[\È›Ý›Û™N‚ˆÚWÜÛ˜\ÚÝHÚWÚX[œÛ˜\ÚÝ
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        nonlocal facts_received, evaluations_count, signals_count
+        if not deduper.accept(fact.fact_id):
+            return
+        if fact.event_kind == "PUBLIC_TRADE":
+            if cursor is None:
+                raise ContinuityNotProvable("observer PUBLIC_TRADE lacks exact cursor")
+            previous = trade_cursors.get(fact.symbol)
+            if previous is not None and cursor.seq < previous.seq:
+                raise ContinuityNotProvable(
+                    f"observer PUBLIC_TRADE sequence regressed for {fact.symbol}"
+                )
+            if previous is None or cursor.seq > previous.seq:
+                trade_current_seq_exec_ids[fact.symbol] = {cursor.exec_id}
+            else:
+                trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(cursor.exec_id)
+            trade_cursors[fact.symbol] = cursor
+            trade_proof_monotonic[fact.symbol] = time.monotonic()
+            trade_attrs = fact.attributes.to_dict()
+            last_trade_prices[fact.symbol] = Decimal(str(trade_attrs["price"]))
+            flow_minutes[fact.symbol].add(
+                fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+            )
+            cutoff = fact.observed_at - timedelta(minutes=10)
+            flow_minutes[fact.symbol] = {
+                minute for minute in flow_minutes[fact.symbol] if minute >= cutoff
+            }
+        elif fact.event_kind == "OPEN_INTEREST":
+            oi_seen.add(fact.symbol)
+        elif fact.event_kind == "CANDLE_CLOSED":
+            attrs = fact.attributes.to_dict()
+            timeframe = str(attrs.get("timeframe") or "")
+            boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            prior = closed_boundaries.get((fact.symbol, timeframe))
+            if prior is not None and boundary < prior:
+                raise ContinuityNotProvable(
+                    f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
+                )
+            closed_boundaries[(fact.symbol, timeframe)] = boundary
+            if timeframe == "5":
+                paper.on_candle_closed(
+                    Candle(
+                        symbol=fact.symbol,
+                        timeframe="5",
+                        opened_at=datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC),
+                        closed_at=boundary,
+                        open=Decimal(str(attrs["open"])),
+                        high=Decimal(str(attrs["high"])),
+                        low=Decimal(str(attrs["low"])),
+                        close=Decimal(str(attrs["close"])),
+                        volume=Decimal(str(attrs["volume"])),
+                        is_closed=True,
+                    )
+                )
+        refresh_inputs(fact.observed_at)
+        contexts: dict[str, ObjectiveContext] = {}
+        if global_context is not None and global_context.observed_at <= fact.observed_at:
+            contexts["dispatcher.global"] = global_context
+        coin = coin_contexts.get(fact.symbol)
+        if coin is not None and coin.observed_at <= fact.observed_at:
+            contexts["dispatcher.coin"] = coin
+        if fact.event_kind == "PUBLIC_TRADE":
+            attrs = fact.attributes.to_dict()
+            paper.on_public_trade(
+                symbol=fact.symbol,
+                price=Decimal(str(attrs["price"])),
+                observed_at=fact.observed_at,
+                contexts=contexts,
+            )
+        readiness = (
+            _real_entry_technical_readiness(
+                connection,
+                observed_at=fact.observed_at,
+            )
+            if real_admission_required_for
+            else TechnicalReadiness(
+                True,
+                fact.observed_at,
+                "SHADOW observer causal transport is continuous",
+            )
+        )
+        evaluation_transaction = (
+            connection.transaction() if real_admission_required_for else nullcontext()
+        )
+        with evaluation_transaction:
+            evaluations = engine.process(
+                fact,
+                contexts=contexts,
+                capacity=capacity,
+                technical_readiness=readiness,
+                account_ref="BYBIT:UNIFIED",
+                entry_admission_port=entry_admission_port,
+                real_admission_required_for=real_admission_required_for,
+                exchange_position_keys={
+                    symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+                    for symbol in symbols
+                },
+                allow_new_signals=sensor_ready(fact.observed_at),
+            )
+            facts_received += 1
+            for evaluation in evaluations:
+                store.record_evaluation(evaluation, provenance=provenance)
+                bundle = bundle_by_entry_plan.get(
+                    evaluation.signal.entry_plan_fingerprint
+                )
+                if bundle is None:
+                    raise RuntimeError(
+                        "observer exact Strategy/EntryPlan bundle is missing"
+                    )
+                _maybe_record_reverse_transition(
+                    connection,
+                    evaluation,
+                    bundle,
+                )
+                if (
+                    evaluation.signal.strategy_activation_id
+                    in real_admission_required_for
+                ):
+                    candidate = build_insufficient_funds_candidate(
+                        evaluation,
+                        entry_plan=bundle.entry_plan,
+                        exit_plan=bundle.exit_plan,
+                        captured_at=fact.observed_at,
+                    )
+                    if candidate is not None:
+                        counterfactual_store.record_candidate(candidate)
+                paper.create_order(evaluation, bundle, now=fact.observed_at)
+                evaluations_count += 1
+                signals_count += 1
 
-BˆÚWÜ™XYHH
-ˆ[
-ÝŠÚWÜÛ˜\ÚÝÈ˜ÛÛ\]WÜÛÝÈ—JJHˆˆ[™ÚWÜÛ˜\ÚÝÈ›ÚWÜÛÝ\˜ÙWÜÝ]H—HOH’PSH‚ˆ
-BˆYˆ›Ý×Ü™XYH[™ÚWÜ™XYN‚ˆØ]K›X\š×Û]™WÜÙ[œÛÜ—ØÛÛ\]J
-BˆÝ\œ™[ÜÝ]HHØ]KœÝ]WØ]
-˜XÝ›ØœÙ\™YØ]
-BˆYˆÝ\œ™[ÜÝ]H\ÈÚYÝÐÛÛ\\˜Xš[]K”T’UWÐÓÓTTP“N‚ˆØœÙ\˜][ÛˆHÛÛ\\˜]Ü‹œ›ØÙ\ÜÊ˜XÝ
-BˆÝÜ™Kœ™XÛÜ™ÛØœÙ\˜][ÛŠØœÙ\˜][ÛŠBˆÝÜ™K\]WÜÝ[[X\žJˆY[]KˆÂˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆÝ\œ™[ÜÝ]K˜[YKˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-Bˆ[ÙN‚ˆ[›™\œÖÙ˜XÝœÞ[X›ÛKœÝ\
-˜XÝ
-BˆYˆÝ\œ™[ÜÝ]H\È›Ý\ÝÜÝ]N‚ˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏXÝ\œ™[ÜÝ]K˜[YKˆØØÝ\œ™YØ]Y˜XÝ›ØœÙ\™YØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆÝ\œ™[ÜÝ]K˜[YKˆœ™X\ÛÛˆŽˆØ]Kœ™X\ÛÛ‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-Bˆ\ÝÜÝ]HHÝ\œ™[ÜÝ]BˆYˆÛÛ\\˜]Ü‹™š\œÝÛZ\ÛX]Ú\È›Ý›Û™N‚ˆš[˜[ÜÝ[[X\žHHÂˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ‘RS‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆBˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH‘RS‹ˆØØÝ\œ™YØ]Y˜XÝ›ØœÙ\™YØ]ˆÝ[[X\žOYš[˜[ÜÝ[[X\žKˆ
-BˆÜš]WÜÝ]\Ê˜[œÜÜÜÝ]OHÓÓ“‘PÕQ‹^˜O^Èœ[—ÜÝ]\ÈŽˆ‘RSŸJBˆ™]\›ˆ˜[ÙBˆ™]\›ˆYB‚ˆYˆÛÛXÝÛÚWÜ™\Ý[Ê
-HOˆ\ÝÓÚTÛÝ™\Ý[N‚ˆ[™[™Îˆ\ÝÓÚTÛÝ™\Ý[HH×BˆÚ[HYN‚ˆžN‚ˆ[™[™Ë˜\[™
-ÚWÜ™\Ý[Ë™Ù]Û›ÝØZ]
+    try:
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "observer publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
+        oi_thread.start()
+        sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
+        buffered_messages = list(buffered)
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
+        next_status = 0.0
+        next_signature = 0.0
+        _observer_status(
+            state="WARMUP" if not sensor_ready(datetime.now(UTC)) else "RUNNING",
+            epoch_id=epoch_id,
+            active_bundles=bundles,
+            symbols=symbols,
+            warmup_until=warmup_until,
+            reason="causal seed complete",
+            sensor_status=sensor_status(datetime.now(UTC)),
+            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+        )
+        while not stopping():
+            now_mono = time.monotonic()
+            if now_mono >= next_signature:
+                latest_signature = _observer_light_signature(connection)
+                if latest_signature != current_signature:
+                    _observer_status(
+                        state="RELOADING",
+                        epoch_id=epoch_id,
+                        active_bundles=bundles,
+                        symbols=symbols,
+                        facts_received=facts_received,
+                        evaluations=evaluations_count,
+                        signals=signals_count,
+                        warmup_until=warmup_until,
+                        reason="StrategyActivation set changed",
+                        sensor_status=sensor_status(datetime.now(UTC)),
+                        strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                    )
+                    return "RELOAD"
+                next_signature = now_mono + 1.0
+            stale = tuple(
+                symbol
+                for symbol, cursor in trade_cursors.items()
+                if now_mono - trade_proof_monotonic.get(symbol, now_mono)
+                >= TRADE_SILENCE_AUDIT_SECONDS
+            )
+            if stale:
+                try:
+                    _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
+                except PublicTradeStreamBehind as audit_exc:
+                    cutoff_at = datetime.now(UTC)
+                    recovered = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=cutoff_at,
+                    )
+                    if not recovered:
+                        raise ContinuityNotProvable(
+                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
+                        ) from audit_exc
+                    for event in recovered:
+                        if event.symbol not in stale:
+                            continue
+                        process_fact(
+                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                proven_at = time.monotonic()
+                for symbol in stale:
+                    trade_proof_monotonic[symbol] = proven_at
+            while True:
+                try:
+                    oi_result = oi_results.get_nowait()
+                except queue.Empty:
+                    break
+                oi_health.accept(oi_result)
+                if oi_result.state is not OiSlotState.COMPLETE:
+                    raise ContinuityNotProvable(
+                        f"observer OI30S slot {oi_result.slot_id} is {oi_result.state.value}"
+                    )
+                for fact in oi_result.facts:
+                    process_fact(fact)
+            message: dict[str, Any] | None = None
+            received_at = datetime.now(UTC)
+            if buffered_messages:
+                message = buffered_messages.pop(0)
+            else:
+                try:
+                    raw = sock.recv()
+                    received_at = datetime.now(UTC)
+                    if raw in (None, ""):
+                        raise websocket.WebSocketConnectionClosedException(
+                            "observer public WebSocket closed"
+                        )
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        message = cast(dict[str, Any], parsed)
+                except websocket.WebSocketTimeoutException:
+                    pass
+            now_mono = time.monotonic()
+            if message is not None:
+                if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                    heartbeat.note_pong(now_mono)
+                elif message.get("op") != "subscribe":
+                    heartbeat.note_market_frame(now_mono)
+                topic = str(message.get("topic") or "")
+                if topic.startswith("publicTrade."):
+                    data = message.get("data")
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, Mapping):
+                                symbol = str(item.get("s") or "").upper()
+                                if symbol in symbols:
+                                    process_fact(
+                                        _trade_fact(item, received_at),
+                                        _trade_cursor(item),
+                                    )
+                elif topic.startswith("kline."):
+                    for fact in _kline_facts(message, received_at):
+                        if fact.symbol in symbols:
+                            process_fact(fact)
+            if heartbeat.deadline_exceeded(now_mono):
+                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
+            if heartbeat.ping_due(now_mono):
+                sock.send('{"op":"ping"}')
+                heartbeat.note_ping_sent(now_mono)
+            if now_mono >= next_status:
+                running = sensor_ready(datetime.now(UTC))
+                _observer_status(
+                    state="RUNNING" if running else "WARMUP",
+                    epoch_id=epoch_id,
+                    active_bundles=bundles,
+                    symbols=symbols,
+                    facts_received=facts_received,
+                    evaluations=evaluations_count,
+                    signals=signals_count,
+                    warmup_until=warmup_until,
+                    reason=(
+                        "all active StrategyPlans consume one causal fact stream"
+                        if running
+                        else "waiting for plan-owned pre-start influence/sensor completeness"
+                    ),
+                    sensor_status=sensor_status(datetime.now(UTC)),
+                    strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                )
+                next_status = now_mono + 2.0
+        return "STOP"
+    finally:
+        oi_stop.set()
+        oi_thread.join(timeout=2.0)
+        trade_mirror_stop.set()
+        trade_mirror_thread.join(timeout=2.0)
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
 
-JBˆ^Ù\]Y]YK‘[\N‚ˆ™]\›ˆ[™[™Â‚ˆYˆ™XÛÜ™ÛÚWÜÛÝ
-™\Ý[ˆÚTÛÝ™\Ý[
-HOˆ›ÛÛ‚ˆYˆÚWÚX[\È›Û™N‚ˆ˜Z\ÙH[[YQ\œ›ÜŠ”‘TÕÒHÛÝ™XÙZ]™YÚ]Ý]ÒHX[˜XÚÙ\ˆŠBˆÚWÚX[˜XØÙ\
-™\Ý[
-BˆØØÝ\œ™YØ]H™\Ý[œ™\ÜÛœÙWÜ™XÙZ]™YØ]Üˆ™\Ý[œÛÝÙ[™Ø]ˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH“ÒLÌ×ÔÓÕ‹ˆØØÝ\œ™YØ][ØØÝ\œ™YØ]ˆ^[ØY^Âˆ™˜XÝÜÛÝ\˜ÙWÚYŽˆ™\Ý[™˜XÝÜÛÝ\˜ÙWÚYˆœÛÝÚYŽˆ™\Ý[œÛÝÚYˆ››ÛZ[˜[ÜÛÝØ]Žˆ™\Ý[››ÛZ[˜[ÜÛÝØ]š\ÛÙ›Ü›X]
 
-KˆœÛÝÙ[™Ø]Žˆ™\Ý[œÛÝÙ[™Ø]š\ÛÙ›Ü›X]
+def _run_multi_strategy_observer() -> None:
+    if not LOADED_COMMIT:
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
+    if FACT_SOURCE_ID != REST_OI30S_SOURCE_ID or OI_SAMPLE_SECONDS != 30:
+        raise RuntimeError(
+            "multi-Strategy observer requires BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1 at 30s"
+        )
+    OBSERVER_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    service_started_at = datetime.now(UTC)
+    stopping_flag = False
 
-KˆœÝ]HŽˆ™\Ý[œÝ]K˜[YKˆ˜][\ÈŽˆ™\Ý[˜][\Ëˆœ™\]Y\ÝÜÝ\YØ]Žˆ
-ˆ›Û™BˆYˆ™\Ý[œ™\]Y\ÝÜÝ\YØ]\È›Û™Bˆ[ÙH™\Ý[œ™\]Y\ÝÜÝ\YØ]š\ÛÙ›Ü›X]
+    def stop(_signum: int, _frame: object) -> None:
+        nonlocal stopping_flag
+        stopping_flag = True
 
-Bˆ
-Kˆœ™\ÜÛœÙWÜ™XÙZ]™YØ]Žˆ
-ˆ›Û™BˆYˆ™\Ý[œ™\ÜÛœÙWÜ™XÙZ]™YØ]\È›Û™Bˆ[ÙH™\Ý[œ™\ÜÛœÙWÜ™XÙZ]™YØ]š\ÛÙ›Ü›X]
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    with psycopg.connect(DATABASE_DSN, autocommit=True) as connection:
+        while not stopping_flag:
+            try:
+                bundles = load_active_strategy_bundles(connection)
+                if not bundles:
+                    _observer_status(
+                        state="IDLE",
+                        epoch_id=None,
+                        active_bundles=(),
+                        symbols=(),
+                        reason="no enabled StrategyActivation",
+                    )
+                    time.sleep(1.0)
+                    continue
+                outcome = _run_observer_epoch(
+                    connection,
+                    cast(tuple[object, ...], bundles),
+                    lambda: stopping_flag,
+                    service_started_at,
+                )
+                if outcome == "STOP":
+                    break
+            except Exception as exc:
+                _observer_status(
+                    state="ERROR",
+                    epoch_id=None,
+                    active_bundles=(),
+                    symbols=(),
+                    reason=f"{type(exc).__name__}: {exc}",
+                )
+                if stopping_flag:
+                    break
+                time.sleep(2.0)
+    _observer_status(
+        state="STOPPED",
+        epoch_id=None,
+        active_bundles=(),
+        symbols=(),
+        reason="service stopped",
+    )
 
-Bˆ
-Kˆ™^Ú[™ÙWÜÙ\™\—ÛØœÙ\™YØ]Žˆ
-ˆ›Û™BˆYˆ™\Ý[™^Ú[™ÙWÜÙ\™\—ÛØœÙ\™YØ]\È›Û™Bˆ[ÙH™\Ý[™^Ú[™ÙWÜÙ\™\—ÛØœÙ\™YØ]š\ÛÙ›Ü›X]
 
-Bˆ
-Kˆ™[]™\žWÙ[^WÜÙXÛÛ™ÈŽˆ™\Ý[™[]™\žWÙ[^WÜÙXÛÛ™Ëˆ›Z\ÜÚ[™×ÜÞ[X›ÛÈŽˆ\Ý
-™\Ý[›Z\ÜÚ[™×ÜÞ[X›ÛÊKˆš[˜[YÜÞ[X›ÛÈŽˆ\Ý
-™\Ý[š[˜[YÜÞ[X›ÛÊKˆ˜XØÙ\YÜÞ[X›ÛÈŽˆÙ˜XÝœÞ[X›Û›Üˆ˜XÝ[ˆ™\Ý[™˜XÝ×Kˆ™˜XÝÚYÈŽˆÙ˜XÝ™˜XÝÚY›Üˆ˜XÝ[ˆ™\Ý[™˜XÝ×KˆœÛÝ\˜ÙWÜ™YœÈŽˆÛ\Ý
-˜XÝœÛÝ\˜ÙWÜ™YœÊH›Üˆ˜XÝ[ˆ™\Ý[™˜XÝ×Kˆœ›Ý™[˜[˜ÙHŽˆ™\Ý[œ›Ý™[˜[˜ÙKˆœ™X\ÛÛˆŽˆ™\Ý[œ™X\ÛÛ‹ˆšX[ŽˆÚWÚX[œÛ˜\ÚÝ
+def _run_parity_main() -> None:
+    if not LOADED_COMMIT:
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
+    if OI_SAMPLE_SECONDS <= 0:
+        raise RuntimeError("CRIPTA_U5_OI_SAMPLE_SECONDS must be positive")
+    use_rest_oi30s = FACT_SOURCE_ID == REST_OI30S_SOURCE_ID
+    if use_rest_oi30s and OI_SAMPLE_SECONDS != 30:
+        raise RuntimeError("REST current OI source requires exact 30-second slots")
+    bundle = load_v1_compatibility_bundle(PROJECT_ROOT)
+    plan, _ = materialize_plans(bundle.card, bundle.activation)
+    calibration_path = PROJECT_ROOT / bundle.calibration_relative_path
+    calibration_size = calibration_path.stat().st_size
+    if calibration_size != 4647:
+        raise RuntimeError("frozen calibration size does not match published U4 evidence")
+    symbols = bundle.card.symbols
+    if len(symbols) != 10:
+        raise RuntimeError("U5 frozen V1 Strategy scope must contain exactly 10 symbols")
 
-Kˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆKˆ
-BˆYˆ™\Ý[œÝ]H\ÈÚTÛÝÝ]KÓÓTUN‚ˆ™]\›ˆYBˆ™X\ÛÛˆHˆ“ÒLÌÈÛÝ\˜ÙHÛÝÜ™\Ý[œÛÝÚYH\ÈÜ™\Ý[œÝ]K˜[Y_NˆÜ™\Ý[œ™X\ÛÛŸH‚ˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ][ØØÝ\œ™YØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š›ÚWÚX[œÛ˜\ÚÝ
+    started_at = datetime.now(UTC)
+    service_instance_id = f"{socket.gethostname()}:{os.getpid()}:{started_at.isoformat()}"
+    parity_run_id = (
+        "spr-"
+        + fingerprint(
+            {
+                "strategy": bundle.card.strategy_config_fingerprint,
+                "plan": plan.entry_plan_fingerprint,
+                "service": service_instance_id,
+                "started_at": started_at,
+            }
+        )[:32]
+    )
+    identity = ShadowRunIdentity(
+        parity_run_id=parity_run_id,
+        strategy_id=bundle.card.strategy_id,
+        strategy_version=bundle.card.strategy_version,
+        strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+        entry_plan_fingerprint=plan.entry_plan_fingerprint,
+        calibration_sha256=bundle.calibration_sha256,
+        calibration_size=calibration_size,
+        baseline_source_commit=BASELINE_COMMIT,
+        universal_source_commit=LOADED_COMMIT,
+        fact_source_id=FACT_SOURCE_ID,
+        service_instance_id=service_instance_id,
+        started_at=started_at,
+    )
+    gate = ShadowComparabilityGate(
+        started_at,
+        required_warmup_seconds=derive_unknown_prestart_horizon_seconds(plan),
+    )
+    journal = DurableFactJournal(JOURNAL_PATH)
+    stopping = False
 
-Kˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OHÓÓ“‘PÕQ‹ˆ^˜O^Èœ[—ÜÝ]\ÈŽˆ““ÕÐÓÓTTP“H‹˜ÛÛ[Z]WÜ™X\ÛÛˆŽˆ™X\ÛÛŸKˆ
-Bˆ™]\›ˆ˜[ÙB‚ˆYˆ›ØÙ\Ü×ÛÚWÜ™\Ý[Ê™\Ý[Îˆ\ÝÓÚTÛÝ™\Ý[JHOˆ›ÛÛ‚ˆ›Üˆ™\Ý[[ˆ™\Ý[Î‚ˆYˆ›Ý™XÛÜ™ÛÚWÜÛÝ
-™\Ý[
-N‚ˆ™]\›ˆ˜[ÙBˆ›Üˆ˜XÝ[ˆ™\Ý[™˜XÝÎ‚ˆYˆ›Ý›ØÙ\Ü×Ù˜XÝ
-˜XÝ
-N‚ˆ™]\›ˆ˜[ÙBˆ™]\›ˆYB‚ˆYˆY\ÜØYÙWÚ][\ÊˆY\ÜØYÙNˆX\[™ÖÜÝ‹Øš™XÝK™XÙZ]™YØ]ˆ]][YBˆ
-HOˆ\VÝ\VÓX\šÙ]˜XÝ[™[ÜK˜YPÝ\œÛÜˆ›Û™KÚTØ[\PÝ\œÛÜˆ›Û™WK‹‹—N‚ˆÜXÈHÝŠY\ÜØYÙK™Ù]
-ÜXÈŠHÜˆˆŠBˆ™\Ý[ˆ\ÝÝ\VÓX\šÙ]˜XÝ[™[ÜK˜YPÝ\œÛÜˆ›Û™KÚTØ[\PÝ\œÛÜˆ›Û™WWHH×BˆYˆÜXËœÝ\ÝÚ]
-œX›XÕ˜YKˆŠN‚ˆ]HHY\ÜØYÙK™Ù]
-™]HŠBˆYˆ\Ú[œÝ[˜ÙJ]K\Ý
-N‚ˆ›Üˆ][H[ˆ]N‚ˆYˆ›Ý\Ú[œÝ[˜ÙJ][KX\[™ÊN‚ˆÛÛ[YBˆÞ[X›ÛHÝŠ][K™Ù]
-œÈŠHÜˆˆŠK\\Š
-BˆYˆÞ[X›Û›Ý[ˆ[›™\œÎ‚ˆÛÛ[YBˆ˜YWÜ›ÛÙ—Û[Û›ÝÛšXÖÜÞ[X›ÛHH[YK›[Û›ÝÛšXÊ
-Bˆ™\Ý[˜\[™
+    def request_stop(_signum: int, _frame: object) -> None:
+        nonlocal stopping
+        stopping = True
 
-Ý˜YWÙ˜XÝ
-][K™XÙZ]™YØ]
-KÝ˜YWØÝ\œÛÜŠ][JK›Û™JJBˆ[YˆÜXËœÝ\ÝÚ]
-šÛ[™KˆŠN‚ˆ™\Ý[™^[™
-ˆ
-˜XÝ›Û™K›Û™JBˆ›Üˆ˜XÝ[ˆÚÛ[™WÙ˜XÝÊY\ÜØYÙK™XÙZ]™YØ]
-BˆYˆ˜XÝœÞ[X›Û[ˆ[›™\œÂˆ
-Bˆ[Yˆ›Ý\ÙWÜ™\ÝÛÚLÌÈ[™ÜXËœÝ\ÝÚ]
-XÚÙ\œËˆŠN‚ˆÚWÜ™\Ý[HÝXÚÙ\—ÛÚWÙ˜XÝ
-Y\ÜØYÙK™XÙZ]™YØ]\ÝÛÚWÜØ[\JBˆYˆÚWÜ™\Ý[\È›Ý›Û™N‚ˆ˜XÝÝ\œÛÜˆHÚWÜ™\Ý[ˆYˆ˜XÝœÞ[X›Û[ˆ[›™\œÎ‚ˆ™\Ý[˜\[™
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
 
-˜XÝ›Û™KÝ\œÛÜŠJBˆ™]\›ˆ\J™\Ý[
-B‚ˆYˆ›ØÙ\Ü×ÛY\ÜØYÙJY\ÜØYÙNˆX\[™ÖÜÝ‹Øš™XÝK™XÙZ]™YØ]ˆ]][YJHOˆ›ÛÛ‚ˆYˆY\ÜØYÙK™Ù]
-›ÜŠHOHœÝXœØÜšX™HŽ‚ˆYˆY\ÜØYÙK™Ù]
-œÝXØÙ\ÜÈŠH\È˜[ÙHÜˆY\ÜØYÙK™Ù]
-œ™]ÛÙHŠH›Ý[ˆ
-›Û™K
-N‚ˆ˜Z\ÙHÛÛ›™XÝ[Û‘\œ›ÜŠ•MHX›XÈÝXœØÜš\[Ûˆ™Z™XÝYŠBˆ™]\›ˆYBˆYˆY\ÜØYÙK™Ù]
-›ÜŠHOHœÛ™ÈˆÜˆY\ÜØYÙK™Ù]
-œ™]Û\ÙÈŠHOHœÛ™ÈŽ‚ˆ™]\›ˆYBˆ›Üˆ˜XÝ˜YWØÝ\œÛÜ‹ÚWØÝ\œÛÜˆ[ˆY\ÜØYÙWÚ][\ÊY\ÜØYÙK™XÙZ]™YØ]
-N‚ˆYˆ›Ý›ØÙ\Ü×Ù˜XÝ
-˜XÝ˜YWØÝ\œÛÜ]˜YWØÝ\œÛÜ‹ÚWØÝ\œÛÜ[ÚWØÝ\œÛÜŠN‚ˆ™]\›ˆ˜[ÙBˆ™]\›ˆYB‚ˆ˜YWÛZ\œ›Ü—Ý™XYH™XY[™Ë•™XY
-ˆ\™Ù]WÜ[—ÜX›X×Ý˜YWÛZ\œ›Ü‹ˆ\™ÜÏJ\JÞ[X›ÛÊK˜YWÛZ\œ›Ü‹˜YWÛZ\œ›Ü—ÜÝÜ˜YWÛZ\œ›Ü—Ü™XYJKˆ˜[YOHMK\X›XË]˜YK[Z\œ›Üˆ‹ˆY[[ÛUYKˆ
-Bˆ˜YWÛZ\œ›Ü—Ý™XYœÝ\
+    connection = psycopg.connect(DATABASE_DSN, autocommit=True)
+    store = ShadowParityStore(connection)
+    store.ensure_policy_identity(bundle.card, plan)
+    recovered_run_id = store.finalize_unfinished_run_for_restart(
+        strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+        entry_plan_fingerprint=plan.entry_plan_fingerprint,
+        fact_source_id=FACT_SOURCE_ID,
+        occurred_at=started_at,
+    )
+    initial_summary: dict[str, object] = {
+        "trading_effect": "NONE",
+        "state": "WARMUP",
+        "reason": "service startup",
+        "recovered_unfinished_run_id": recovered_run_id,
+        "symbols": list(symbols),
+        "facts_received": 0,
+        "comparable_events": 0,
+        "matched_events": 0,
+        "mismatches_by_category": {},
+        "transport_reconnects": 0,
+    }
+    store.start_run(identity, summary=initial_summary)
 
-BˆYˆ›Ý˜YWÛZ\œ›Ü—Ü™XYKØZ]
-RT”“Ô—Ô‘PQWÕSQSÕUÔÑPÓÓ‘ÊN‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›JˆœX›XÕ˜YHZ\œ›ÜˆY›Ý™XÛÛYH™XYH™Y›Ü™HÝ\\XY[™H‚ˆ
-BˆYˆ˜YWÛZ\œ›Ü‹œÛ˜\ÚÝ
+    runners: dict[str, V1DeterministicParityRunner] = {}
+    sock: Any | None = None
+    oi_stop_event: threading.Event | None = None
+    oi_thread: threading.Thread | None = None
+    trade_mirror_stop: threading.Event | None = None
+    trade_mirror_thread: threading.Thread | None = None
+    try:
+        closed_boundaries: dict[tuple[str, str], datetime] = {}
+        for symbol in symbols:
+            if stopping:
+                break
+            observed_at = datetime.now(UTC)
+            history = _fetch_history(symbol, observed_at)
+            oi_history = _fetch_oi_history(symbol)
+            runner_history: dict[str, tuple[object, ...]] = {
+                timeframe: tuple(rows) for timeframe, rows in history.items()
+            }
+            for timeframe, rows in history.items():
+                if not rows:
+                    raise RuntimeError(f"causal history seed missing {symbol}:{timeframe}")
+                closed_boundaries[(symbol, timeframe)] = max(row.closed_at for row in rows)
+            runners[symbol] = V1DeterministicParityRunner(
+                bundle,
+                symbol=symbol,
+                candles=runner_history,
+                oi_points=tuple(oi_history),
+                observed_at=observed_at,
+            )
+        if len(runners) != len(symbols):
+            raise RuntimeError("causal history seed incomplete")
+        gate.mark_seed_complete()
+        comparator = OnlineParityComparator(identity, runners)
+        state = gate.state_at(datetime.now(UTC))
+        last_state = state
+        facts_received = 0
+        flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
+        last_oi_sample: dict[str, datetime] = {}
+        trade_cursors: dict[str, TradeCursor] = {}
+        trade_current_seq_exec_ids: dict[str, set[str]] = {}
+        trade_proof_monotonic: dict[str, float] = {}
+        oi_cursors: dict[str, OiSampleCursor] = {}
+        bar_open_boundaries: dict[str, datetime] = {}
+        deduper = ExactFactDeduper()
+        transport_reconnects = 0
+        trade_audits = 0
+        trade_audit_reconnects = 0
+        oi_config = (
+            Oi30sConfig(
+                fact_source_id=FACT_SOURCE_ID,
+                required_symbols=tuple(symbols),
+                slot_seconds=30,
+                request_timeout_seconds=5.0,
+                retry_interval_seconds=0.25,
+            )
+            if use_rest_oi30s
+            else None
+        )
+        oi_health = Oi30sHealthTracker(oi_config) if oi_config is not None else None
+        oi_results: queue.Queue[OiSlotResult] = queue.Queue()
+        oi_stop_event = threading.Event()
+        trade_mirror = PublicTradeMirrorBuffer(
+            tuple(symbols),
+            retention_seconds=MIRROR_RETENTION_SECONDS,
+        )
+        trade_mirror_stop = threading.Event()
+        trade_mirror_ready = threading.Event()
 
-VÈœÝ]H—HOHPÕU‘HŽ‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›JœX›XÕ˜YHZ\œ›ÜˆÝ\\ÛÛ[Z]H\È›ÝXÝ]™HŠBˆÜš]WÜÝ]\Ê
-BˆYˆÚWØÛÛ™šYÈ\È›Ý›Û™N‚ˆÚWÝ™XYH™XY[™Ë•™XY
-ˆ\™Ù]WÜ[—Ü™\ÝÛÚLÌ×ÝÛÜšÙ\‹ˆ\™ÜÏJÚWØÛÛ™šYËÚWÜ™\Ý[ËÚWÜÝÜÙ]™[
-Kˆ˜[YOHMK\™\Ý[ÚLÌÈ‹ˆY[[ÛUYKˆ
-BˆÚWÝ™XYœÝ\
+        def write_status(
+            *, transport_state: str = "CONNECTED", extra: Mapping[str, object] | None = None
+        ) -> None:
+            payload = _status_payload(
+                identity=identity,
+                state=gate.state_at(datetime.now(UTC)),
+                gate=gate,
+                comparator=comparator,
+                facts_received=facts_received,
+                seeded_symbols=len(runners),
+                total_symbols=len(symbols),
+            ) | {
+                "transport_state": transport_state,
+                "transport_reconnects": transport_reconnects,
+                "service_instance_id": identity.service_instance_id,
+                "ws_ping_interval_seconds": PING_INTERVAL_SECONDS,
+                "ws_pong_timeout_seconds": PONG_TIMEOUT_SECONDS,
+                "trade_silence_audit_seconds": TRADE_SILENCE_AUDIT_SECONDS,
+                "trade_audit_request_timeout_seconds": TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS,
+                "trade_audits": trade_audits,
+                "trade_audit_reconnects": trade_audit_reconnects,
+                "trade_proven_symbols": len(trade_proof_monotonic),
+            }
+            if oi_health is not None:
+                payload.update(oi_health.snapshot())
+            mirror_snapshot = trade_mirror.snapshot()
+            payload.update(
+                {
+                    "trade_mirror_state": mirror_snapshot["state"],
+                    "trade_mirror_epoch": mirror_snapshot["epoch"],
+                    "trade_mirror_events": mirror_snapshot["events"],
+                    "trade_mirror_duplicates": mirror_snapshot["duplicates"],
+                    "trade_mirror_gaps": mirror_snapshot["gaps"],
+                    "trade_mirror_last_received_at": mirror_snapshot["last_received_at"],
+                    "trade_mirror_retention_seconds": MIRROR_RETENTION_SECONDS,
+                }
+            )
+            if extra:
+                payload.update(dict(extra))
+            _atomic_json(STATUS_PATH, payload)
 
-BˆÛØÚËÚ[š]X[Ü™XYWÛØØ[Ú[š]X[Ü™XYWÜÙ\™\‹[š]X[ØY™™\ˆHØÛÛ›™XÝØ[™ÜÝXœØÜšX™JˆÞ[X›ÛÂˆ
-BˆY™™\™YÛY\ÜØYÙ\Îˆ\ÝÙXÝÜÝ‹[žWWHH\Ý
-[š]X[ØY™™\ŠBˆX\™X]HX›XÕÜÒX\™X]
-ˆS‘×ÒS•T•SÔÑPÓÓ‘ËˆÓ‘×ÕSQSÕUÔÑPÓÓ‘ËˆÝ\YÛ[Û›ÝÛšXÏ][YK›[Û›ÝÛšXÊ
-Kˆ
-Bˆ™^ÜÝ]\ÈH[YK›[Û›ÝÛšXÊ
-Bˆ˜[œÜÜÙ\œ›ÜœÈH
-ˆÙXœÛØÚÙ]•ÙX”ÛØÚÙ]ÛÛ›™XÝ[ÛÛÜÙY^Ù\[Û‹ˆÛÛ›™XÝ[Û‘\œ›Ü‹ˆÔÑ\œ›Ü‹ˆÜÛ”ÔÓ\œ›Ü‹ˆ
-B‚ˆÚ[H›ÝÝÜ[™Î‚ˆžN‚ˆ]Y]Û›ÝÈH[YK›[Û›ÝÛšXÊ
-BˆÝ[WÝ˜YWÜÞ[X›ÛÈH\JˆÞ[X›Ûˆ›ÜˆÞ[X›Û[ˆÞ[X›ÛÂˆYˆÞ[X›Û[ˆ˜YWØÝ\œÛÜœÂˆ[™]Y]Û›ÝÈH˜YWÜ›ÛÙ—Û[Û›ÝÛšXË™Ù]
-Þ[X›Û]Y]Û›ÝÊBˆHQWÔÒSSÑWÐUQUÔÑPÓÓ‘Âˆ
-BˆYˆÝ[WÝ˜YWÜÞ[X›ÛÎ‚ˆžN‚ˆØ]Y]ÜX›X×Ý˜YWÜÚ[[˜ÙJˆÝ[WÝ˜YWÜÞ[X›ÛËˆ˜YWØÝ\œÛÜœËˆ˜YWØÝ\œ™[ÜÙ\WÙ^X×ÚYËˆ
-Bˆ^Ù\X›XÕ˜YTÝ™X[P™Z[™‚ˆ˜YWØ]Y]Ü™XÛÛ›™XÝÈ
-ÏHBˆ˜Z\ÙBˆ^Ù\ÛÛ[Z]S›Ý›Ý˜X›H\È]Y]Ù^Î‚ˆ™X\ÛÛˆHÝŠ]Y]Ù^ÊBˆØØÝ\œ™YØ]H]][YK››ÝÊUÊBˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•ÐÓÓ•S•RUH‹ˆØØÝ\œ™YØ][ØØÝ\œ™YØ]ˆ^[ØY^Âˆ™\™XÝŽˆ““ÕÔ“ÕP“H‹ˆœÛÝ\˜ÙHŽˆ”P“P×ÕQWÔÒSSÑWÐUQU‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆœÞ[X›ÛÈŽˆ\Ý
-Ý[WÝ˜YWÜÞ[X›ÛÊKˆKˆ
-BˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ][ØØÝ\œ™YØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ˜YWØ]Y]ÈŽˆ˜YWØ]Y]Ëˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OH““ÕÔ“ÕP“H‹ˆ^˜O^Âˆœ[—ÜÝ]\ÈŽˆ““ÕÐÓÓTTP“H‹ˆ˜ÛÛ[Z]WÜ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆKˆ
-Bˆ™]\›‚ˆ[ÙN‚ˆ˜YWØ]Y]È
-ÏHBˆ]Y]Ü›Ý™[—Ø]H[YK›[Û›ÝÛšXÊ
-Bˆ›ÜˆÞ[X›Û[ˆÝ[WÝ˜YWÜÞ[X›ÛÎ‚ˆ˜YWÜ›ÛÙ—Û[Û›ÝÛšXÖÜÞ[X›ÛHH]Y]Ü›Ý™[—Ø]ˆYˆ\ÙWÜ™\ÝÛÚLÌÈ[™›Ý›ØÙ\Ü×ÛÚWÜ™\Ý[ÊÛÛXÝÛÚWÜ™\Ý[Ê
-JN‚ˆ™]\›‚ˆY\ÜØYÙNˆXÝÜÝ‹[žWH›Û™HH›Û™Bˆ™XÙZ]™YØ]H]][YK››ÝÊUÊBˆYˆY™™\™YÛY\ÜØYÙ\Î‚ˆY\ÜØYÙHHY™™\™YÛY\ÜØYÙ\ËœÜ
-
-Bˆ[ÙN‚ˆžN‚ˆ˜]×ÛY\ÜØYÙHHÛØÚËœ™XÝŠ
-Bˆ™XÙZ]™YØ]H]][YK››ÝÊUÊBˆYˆ˜]×ÛY\ÜØYÙH[ˆ
-›Û™KˆŠN‚ˆ˜Z\ÙHÙXœÛØÚÙ]•ÙX”ÛØÚÙ]ÛÛ›™XÝ[ÛÛÜÙY^Ù\[ÛŠˆœX›XÈÙX”ÛØÚÙ]ÛÜÙY‚ˆ
-Bˆ\œÙYHœÛÛ‹›ØYÊ˜]×ÛY\ÜØYÙJBˆYˆ\Ú[œÝ[˜ÙJ\œÙYXÝ
-N‚ˆY\ÜØYÙHHØ\Ý
-XÝÜÝ‹[žWK\œÙY
-Bˆ^Ù\ÙXœÛØÚÙ]•ÙX”ÛØÚÙ][Y[Ý]^Ù\[ÛŽ‚ˆ\ÜÂˆ›Ý×Û[Û›ÝÛšXÈH[YK›[Û›ÝÛšXÊ
-BˆYˆY\ÜØYÙH\È›Ý›Û™N‚ˆYˆY\ÜØYÙK™Ù]
-›ÜŠHOHœÛ™ÈˆÜˆY\ÜØYÙK™Ù]
-œ™]Û\ÙÈŠHOHœÛ™ÈŽ‚ˆX\™X]››ÝWÜÛ™Ê›Ý×Û[Û›ÝÛšXÊBˆ[YˆY\ÜØYÙK™Ù]
-›ÜŠHOHœÝXœØÜšX™HŽ‚ˆX\™X]››ÝWÛX\šÙ]Ùœ˜[YJ›Ý×Û[Û›ÝÛšXÊBˆYˆ›Ý›ØÙ\Ü×ÛY\ÜØYÙJY\ÜØYÙK™XÙZ]™YØ]
-N‚ˆ™]\›‚ˆYˆX\™X]™XY[™WÙ^ÙYYY
-›Ý×Û[Û›ÝÛšXÊN‚ˆ˜Z\ÙHÙXœÛØÚÙ]•ÙX”ÛØÚÙ]ÛÛ›™XÝ[ÛÛÜÙY^Ù\[ÛŠˆ˜\XØ][ÛˆX\™X]XY[™H^ÙYYY‚ˆ
-BˆYˆX\™X]œ[™×ÙYJ›Ý×Û[Û›ÝÛšXÊN‚ˆÛØÚËœÙ[™
-	ÞÈ›ÜŽˆœ[™ÈŸIÊBˆX\™X]››ÝWÜ[™×ÜÙ[
-›Ý×Û[Û›ÝÛšXÊBˆYˆ›Ý×Û[Û›ÝÛšXÈH™^ÜÝ]\Î‚ˆÜš]WÜÝ]\Ê
-Bˆ™^ÜÝ]\ÈH›Ý×Û[Û›ÝÛšXÈ
-È‹Œˆ^Ù\˜[œÜÜÙ\œ›ÜœÈ\È^Î‚ˆYˆÝÜ[™Î‚ˆœ™XZÂˆ\ØÛÛ›™XÝYØ]H]][YK››ÝÊUÊBˆÝ\œÛÜ—ÜÛ˜\ÚÝHÝ˜[œÜÜØÝ\œÛÜ—Ü^[ØY
-ˆ˜YWØÝ\œÛÜœÏ]˜YWØÝ\œÛÜœËˆÚWØÝ\œÛÜœÏ[ÚWØÝ\œÛÜœËˆÛÜÙYØ›Ý[™\šY\ÏXÛÜÙYØ›Ý[™\šY\Ëˆ˜\—ÛÜ[—Ø›Ý[™\šY\ÏX˜\—ÛÜ[—Ø›Ý[™\šY\Ëˆ
-BˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•ÑTÐÓÓ“‘PÕ‹ˆØØÝ\œ™YØ]Y\ØÛÛ›™XÝYØ]ˆ^[ØY^Âˆ™\œ›ÜˆŽˆˆžÝ\J^ÊK—×Û˜[YW×ßNˆÙ^ßH‹ˆœÝ]HŽˆ\ÝÜÝ]K˜[YKˆ˜Ý\œÛÜœÈŽˆÝ\œÛÜ—ÜÛ˜\ÚÝˆKˆ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OH”UTÑQ‹ˆ^˜O^È˜[œÜÜÙ\ØÛÛ›™XÝØ]Žˆ\ØÛÛ›™XÝYØ]š\ÛÙ›Ü›X]
+        def process_fact(
+            fact: MarketFactEnvelope,
+            *,
+            trade_cursor: TradeCursor | None = None,
+            oi_cursor: OiSampleCursor | None = None,
+        ) -> bool:
+            nonlocal facts_received, last_state
+            if not deduper.accept(fact.fact_id):
+                return True
+            if fact.event_kind == "PUBLIC_TRADE":
+                if trade_cursor is None:
+                    raise ContinuityNotProvable(
+                        "PUBLIC_TRADE accepted without exact transport cursor"
+                    )
+                previous_trade = trade_cursors.get(fact.symbol)
+                if previous_trade is not None and trade_cursor.seq < previous_trade.seq:
+                    raise ContinuityNotProvable(
+                        f"PUBLIC_TRADE cross-sequence regressed for {fact.symbol}"
+                    )
+                if previous_trade is None or trade_cursor.seq > previous_trade.seq:
+                    trade_current_seq_exec_ids[fact.symbol] = {trade_cursor.exec_id}
+                else:
+                    trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(
+                        trade_cursor.exec_id
+                    )
+                trade_cursors[fact.symbol] = trade_cursor
+            elif fact.event_kind == "OPEN_INTEREST":
+                if use_rest_oi30s:
+                    attrs = fact.attributes.to_dict()
+                    if attrs.get("fact_source_id") != FACT_SOURCE_ID or not attrs.get("slot_id"):
+                        raise ContinuityNotProvable(
+                            "REST OPEN_INTEREST fact lacks exact source/slot identity"
+                        )
+                else:
+                    if oi_cursor is None:
+                        raise ContinuityNotProvable(
+                            "OPEN_INTEREST accepted without exact OI30S cursor"
+                        )
+                    oi_cursors[fact.symbol] = oi_cursor
+            elif fact.event_kind == "CANDLE_CLOSED":
+                attrs = fact.attributes.to_dict()
+                timeframe = str(attrs["timeframe"])
+                boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+                previous_closed = closed_boundaries.get((fact.symbol, timeframe))
+                if previous_closed is not None and boundary < previous_closed:
+                    raise ContinuityNotProvable(
+                        f"CANDLE_CLOSED boundary regressed for {fact.symbol}:{timeframe}"
+                    )
+                closed_boundaries[(fact.symbol, timeframe)] = boundary
+            elif fact.event_kind == "BAR_OPEN":
+                attrs = fact.attributes.to_dict()
+                boundary = datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC)
+                previous_bar = bar_open_boundaries.get(fact.symbol)
+                if previous_bar is not None and boundary < previous_bar:
+                    raise ContinuityNotProvable(f"BAR_OPEN boundary regressed for {fact.symbol}")
+                bar_open_boundaries[fact.symbol] = boundary
 
-_Kˆ
-BˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆÛØÚË˜ÛÜÙJ
-B‚ˆ[™[™×ÙØ\ÛÚNˆ\ÝÓÚTÛÝ™\Ý[HH×BˆžN‚ˆYˆ\ÙWÜ™\ÝÛÚLÌÎ‚ˆ™XÛÛ›™XÝÙ\œ›ÜœÈH˜[œÜÜÙ\œ›ÜœÈ
-È
-ÙXœÛØÚÙ]•ÙX”ÛØÚÙ][Y[Ý]^Ù\[Û‹
-BˆÚ[HYN‚ˆ›ÜˆÚWÜ™\Ý[[ˆÛÛXÝÛÚWÜ™\Ý[Ê
-N‚ˆYˆ›Ý™XÛÜ™ÛÚWÜÛÝ
-ÚWÜ™\Ý[
-N‚ˆ™]\›‚ˆ[™[™×ÙØ\ÛÚK˜\[™
-ÚWÜ™\Ý[
-BˆžN‚ˆ™]×ÜÛØÚË™XYWÛØØ[Ø]™XYWÜÙ\™\—Ø]™XÛÛ›™XÝØY™™\ˆH
-ˆØÛÛ›™XÝØ[™ÜÝXœØÜšX™JÞ[X›ÛÊBˆ
-Bˆœ™XZÂˆ^Ù\™XÛÛ›™XÝÙ\œ›ÜœÎ‚ˆ[YKœÛY\
-ŒJBˆ[ÙN‚ˆ™]×ÜÛØÚË™XYWÛØØ[Ø]™XYWÜÙ\™\—Ø]™XÛÛ›™XÝØY™™\ˆH
-ˆÜ™XÛÛ›™XÝÝ[[ÛÚWÜØY™JÞ[X›ÛËÚWØÝ\œÛÜœÊBˆ
-Bˆ^Ù\ÛÛ[Z]S›Ý›Ý˜X›H\ÈØ\Ù^Î‚ˆ™X\ÛÛˆHÝŠØ\Ù^ÊBˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•ÐÓÓ•S•RUH‹ˆØØÝ\œ™YØ]Y]][YK››ÝÊUÊKˆ^[ØY^Âˆ™\™XÝŽˆ““ÕÔ“ÕP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™\ØÛÛ›™XÝØ]Žˆ\ØÛÛ›™XÝYØ]š\ÛÙ›Ü›X]
+            journal.append(fact)
+            facts_received += 1
+            if fact.event_kind == "PUBLIC_TRADE":
+                flow_minutes[fact.symbol].add(
+                    fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+                )
+            flow_ready = all(len(minutes) >= 5 for minutes in flow_minutes.values())
+            oi_ready = True
+            if oi_health is not None:
+                oi_snapshot = oi_health.snapshot()
+                oi_ready = (
+                    int(str(oi_snapshot["complete_slots"])) > 0
+                    and oi_snapshot["oi_source_state"] == "HEALTHY"
+                )
+            if flow_ready and oi_ready:
+                gate.mark_live_sensor_complete()
+            current_state = gate.state_at(fact.observed_at)
+            if current_state is ShadowComparability.PARITY_COMPARABLE:
+                observation = comparator.process(fact)
+                store.record_observation(observation)
+                store.update_summary(
+                    identity,
+                    {
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+            else:
+                runners[fact.symbol].step(fact)
+            if current_state is not last_state:
+                store.transition_run(
+                    identity,
+                    status=current_state.value,
+                    occurred_at=fact.observed_at,
+                    summary={
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "reason": gate.reason,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+                last_state = current_state
+            if comparator.first_mismatch is not None:
+                final_summary = {
+                    "trading_effect": "NONE",
+                    "state": "FAIL",
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **comparator.summary(),
+                }
+                store.transition_run(
+                    identity,
+                    status="FAIL",
+                    occurred_at=fact.observed_at,
+                    summary=final_summary,
+                )
+                write_status(transport_state="CONNECTED", extra={"run_status": "FAIL"})
+                return False
+            return True
 
-Kˆ˜Ý\œÛÜœÈŽˆÝ\œÛÜ—ÜÛ˜\ÚÝˆKˆ
-BˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ]Y]][YK››ÝÊUÊKˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OH““ÕÔ“ÕP“H‹ˆ^˜O^Èœ[—ÜÝ]\ÈŽˆ““ÕÐÓÓTTP“H‹˜ÛÛ[Z]WÜ™X\ÛÛˆŽˆ™X\ÛÛŸKˆ
-Bˆ™]\›‚‚ˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•Ô‘PÓÓ“‘PÕ‹ˆØØÝ\œ™YØ]\™XYWÛØØ[Ø]ˆ^[ØY^Âˆ™\ØÛÛ›™XÝØ]Žˆ\ØÛÛ›™XÝYØ]š\ÛÙ›Ü›X]
+        def collect_oi_results() -> list[OiSlotResult]:
+            pending: list[OiSlotResult] = []
+            while True:
+                try:
+                    pending.append(oi_results.get_nowait())
+                except queue.Empty:
+                    return pending
 
-KˆœÝXœØÜš\[Û—Ü™XYWÛØØ[Ø]Žˆ™XYWÛØØ[Ø]š\ÛÙ›Ü›X]
+        def record_oi_slot(result: OiSlotResult) -> bool:
+            if oi_health is None:
+                raise RuntimeError("REST OI slot received without OI health tracker")
+            oi_health.accept(result)
+            occurred_at = result.response_received_at or result.slot_end_at
+            _record_transport_event(
+                connection,
+                identity,
+                category="OI30S_SLOT",
+                occurred_at=occurred_at,
+                payload={
+                    "fact_source_id": result.fact_source_id,
+                    "slot_id": result.slot_id,
+                    "nominal_slot_at": result.nominal_slot_at.isoformat(),
+                    "slot_end_at": result.slot_end_at.isoformat(),
+                    "state": result.state.value,
+                    "attempts": result.attempts,
+                    "request_started_at": (
+                        None
+                        if result.request_started_at is None
+                        else result.request_started_at.isoformat()
+                    ),
+                    "response_received_at": (
+                        None
+                        if result.response_received_at is None
+                        else result.response_received_at.isoformat()
+                    ),
+                    "exchange_server_observed_at": (
+                        None
+                        if result.exchange_server_observed_at is None
+                        else result.exchange_server_observed_at.isoformat()
+                    ),
+                    "delivery_delay_seconds": result.delivery_delay_seconds,
+                    "missing_symbols": list(result.missing_symbols),
+                    "invalid_symbols": list(result.invalid_symbols),
+                    "accepted_symbols": [fact.symbol for fact in result.facts],
+                    "fact_ids": [fact.fact_id for fact in result.facts],
+                    "source_refs": [list(fact.source_refs) for fact in result.facts],
+                    "provenance": result.provenance,
+                    "reason": result.reason,
+                    "health": oi_health.snapshot(),
+                    "trading_effect": "NONE",
+                },
+            )
+            if result.state is OiSlotState.COMPLETE:
+                return True
+            reason = f"OI30S source slot {result.slot_id} is {result.state.value}: {result.reason}"
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=occurred_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **oi_health.snapshot(),
+                    **comparator.summary(),
+                },
+            )
+            write_status(
+                transport_state="CONNECTED",
+                extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+            )
+            return False
 
-KˆœÝXœØÜš\[Û—Ü™XYWÜÙ\™\—Ø]Žˆ™XYWÜÙ\™\—Ø]š\ÛÙ›Ü›X]
+        def process_oi_results(results: list[OiSlotResult]) -> bool:
+            for result in results:
+                if not record_oi_slot(result):
+                    return False
+                for fact in result.facts:
+                    if not process_fact(fact):
+                        return False
+            return True
 
-Kˆ™Ø\ÜÙXÛÛ™ÈŽˆX^
-Œ
-™XYWÛØØ[Ø]H\ØÛÛ›™XÝYØ]
-KÝ[ÜÙXÛÛ™Ê
-JKˆ˜Ý\œÛÜœÈŽˆÝ\œÛÜ—ÜÛ˜\ÚÝˆKˆ
-Bˆ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙHH”‘TÕÔ‘PÑS•ÕQH‚ˆZ\œ›Ü—Ù˜[˜XÚ×Ü™X\ÛÛŽˆÝˆ›Û™HH›Û™Bˆ˜YWÛÝ™\œšYNˆ\VÝ\VÓX\šÙ]˜XÝ[™[ÜK˜YPÝ\œÛÜ—K‹‹—H›Û™HH›Û™BˆžN‚ˆZ\œ›Ü—ØÝ\œÛÜœËZ\œ›Ü—ÜÙ\WÚYÈH˜YWÛZ\œ›Ü‹˜Ý\œ™[ØÝ\œÛÜœÊ
-BˆYˆÙ]
-Z\œ›Ü—ØÝ\œÛÜœÊHOHÙ]
-Þ[X›ÛÊN‚ˆ˜Z\ÙHÛÛ[Z]S›Ý›Ý˜X›JˆœX›XÕ˜YHZ\œ›ÜˆXÚÜÈ^XÝÝ\œ™[Ý\œÛÜœÈ‚ˆ™›Üˆ[™\]Z\™YÞ[X›ÛÈ‚ˆ
-BˆÈHÛÛ[[Ý\ÛHPÕU‘HZ\œ›Üˆ\ØÚ\È]Ù[ˆH^XÝÜ™\™YˆÈX›XÕ˜YH˜[œÜÜ›ÛÙ‹ˆÈ›Ý˜XÙH]YØZ[œÝH]\ˆ‘TÕˆÈÛ˜\ÚÝ\™NÈ]Û˜\ÚÝØ[ˆÛÛZ[ˆ™]Ù\ˆ˜Y\È[™˜[Ù[BˆÈ\Ü]X[YžHHX[HZ\œ›Ü‹‚ˆZ\œ›Ü—Ù]™[ÈH˜YWÛZ\œ›Ü‹œ™XÛÝ™\—ØY\Šˆ˜YWØÝ\œÛÜœËˆÝ]Ù™—Ø]\™XYWÜÙ\™\—Ø]ˆ
-Bˆ˜YWÛÝ™\œšYHH\Jˆ
-ˆÜ™\^WÝ˜YWÙ˜XÝ
-ˆ]™[˜\×Ü™\^WÝ˜YJ
-Kˆ]™[œ™XÙZ]™YØ]ˆ
-Kˆ˜YPÝ\œÛÜŠˆ]™[œÞ[X›Ûˆ]™[™^X×ÚYˆ]™[œÙ\Kˆ]™[˜YYØ]ˆ
-Kˆ
-Bˆ›Üˆ]™[[ˆZ\œ›Ü—Ù]™[Âˆ
-Bˆ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙHH“RT”“Ô—ÕÔÈ‚ˆ^Ù\
-ÛÛ[Z]S›Ý›Ý˜X›KX›XÕ˜YTÝ™X[P™Z[™
-H\ÈZ\œ›Ü—Ù^Î‚ˆZ\œ›Ü—Ù˜[˜XÚ×Ü™X\ÛÛˆHˆžÝ\JZ\œ›Ü—Ù^ÊK—×Û˜[YW×ßNˆÛZ\œ›Ü—Ù^ßH‚‚ˆžN‚ˆ™\^WÚ][\Ë™\^WØÛÝ[ÈHÜ™XÛÝ™\—ÜX›X×ÙØ\
-ˆÞ[X›ÛÏ\Þ[X›ÛËˆ™XYWÛØØ[Ø]\™XYWÛØØ[Ø]ˆ™XYWÜÙ\™\—Ø]\™XYWÜÙ\™\—Ø]ˆ˜YWØÝ\œÛÜœÏ]˜YWØÝ\œÛÜœËˆÚWØÝ\œÛÜœÏ[ÚWØÝ\œÛÜœËˆÛÜÙYØ›Ý[™\šY\ÏXÛÜÙYØ›Ý[™\šY\Ëˆ˜\—ÛÜ[—Ø›Ý[™\šY\ÏX˜\—ÛÜ[—Ø›Ý[™\šY\ËˆÛ›ÝÛ—Ý˜YWÙ^X×ÚYÏ]˜YWØÝ\œ™[ÜÙ\WÙ^X×ÚYËˆ˜YWÜ™\^WÛÝ™\œšYO]˜YWÛÝ™\œšYKˆ
-Bˆ^Ù\ÛÛ[Z]S›Ý›Ý˜X›H\ÈØ\Ù^Î‚ˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆ™]×ÜÛØÚË˜ÛÜÙJ
-Bˆ™X\ÛÛˆHÝŠØ\Ù^ÊBˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•ÐÓÓ•S•RUH‹ˆØØÝ\œ™YØ]Y]][YK››ÝÊUÊKˆ^[ØY^Âˆ™\™XÝŽˆ““ÕÔ“ÕP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™\ØÛÛ›™XÝØ]Žˆ\ØÛÛ›™XÝYØ]š\ÛÙ›Ü›X]
+        def message_items(
+            message: Mapping[str, object], received_at: datetime
+        ) -> tuple[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None], ...]:
+            topic = str(message.get("topic") or "")
+            result: list[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None]] = []
+            if topic.startswith("publicTrade."):
+                data = message.get("data")
+                if isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, Mapping):
+                            continue
+                        symbol = str(item.get("s") or "").upper()
+                        if symbol not in runners:
+                            continue
+                        trade_proof_monotonic[symbol] = time.monotonic()
+                        result.append((_trade_fact(item, received_at), _trade_cursor(item), None))
+            elif topic.startswith("kline."):
+                result.extend(
+                    (fact, None, None)
+                    for fact in _kline_facts(message, received_at)
+                    if fact.symbol in runners
+                )
+            elif not use_rest_oi30s and topic.startswith("tickers."):
+                oi_result = _ticker_oi_fact(message, received_at, last_oi_sample)
+                if oi_result is not None:
+                    fact, cursor = oi_result
+                    if fact.symbol in runners:
+                        result.append((fact, None, cursor))
+            return tuple(result)
 
-KˆœÝXœØÜš\[Û—Ü™XYWÜÙ\™\—Ø]Žˆ™XYWÜÙ\™\—Ø]š\ÛÙ›Ü›X]
+        def process_message(message: Mapping[str, object], received_at: datetime) -> bool:
+            if message.get("op") == "subscribe":
+                if message.get("success") is False or message.get("retCode") not in (None, 0):
+                    raise ConnectionError("U5 public subscription rejected")
+                return True
+            if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                return True
+            for fact, trade_cursor, oi_cursor in message_items(message, received_at):
+                if not process_fact(fact, trade_cursor=trade_cursor, oi_cursor=oi_cursor):
+                    return False
+            return True
 
-Kˆ˜Ý\œÛÜœÈŽˆÝ\œÛÜ—ÜÛ˜\ÚÝˆKˆ
-BˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ]Y]][YK››ÝÊUÊKˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OH““ÕÔ“ÕP“H‹ˆ^˜O^Èœ[—ÜÝ]\ÈŽˆ““ÕÐÓÓTTP“H‹˜ÛÛ[Z]WÜ™X\ÛÛˆŽˆ™X\ÛÛŸKˆ
-Bˆ™]\›‚‚ˆYˆ\ÙWÜ™\ÝÛÚLÌÎ‚ˆ›ÜˆÚWÜ™\Ý[[ˆÛÛXÝÛÚWÜ™\Ý[Ê
-N‚ˆYˆ›Ý™XÛÜ™ÛÚWÜÛÝ
-ÚWÜ™\Ý[
-N‚ˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆ™]×ÜÛØÚË˜ÛÜÙJ
-Bˆ™]\›‚ˆ[™[™×ÙØ\ÛÚK˜\[™
-ÚWÜ™\Ý[
-BˆÚWÙØ\Ù˜XÝÈHÙ˜XÝ›Üˆ™\Ý[[ˆ[™[™×ÙØ\ÛÚH›Üˆ˜XÝ[ˆ™\Ý[™˜XÝ×Bˆ™\^WØÛÝ[ÖÈ“ÔS—ÒS•T‘TÕ—HH[ŠÚWÙØ\Ù˜XÝÊBˆÛÛXš[™YÜ™\^HHÛY\™ÙWÙØ\ÛÚWÝÚ]Ý]Ü™[Ü™\š[™×Ü™\^Jˆ™\^WÚ][\ËˆÚWÙØ\Ù˜XÝËˆ
-Bˆ[ÙN‚ˆÛÛXš[™YÜ™\^HH\Ý
-™\^WÚ][\ÊBˆ›Üˆ™\^WÙ˜XÝ™\^WÝ˜YWØÝ\œÛÜˆ[ˆÛÛXš[™YÜ™\^N‚ˆYˆ›Ý›ØÙ\Ü×Ù˜XÝ
-™\^WÙ˜XÝ˜YWØÝ\œÛÜ\™\^WÝ˜YWØÝ\œÛÜŠN‚ˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆ™]×ÜÛØÚË˜ÛÜÙJ
-Bˆ™]\›‚ˆ™XÛÝ™\žWÜ›Ý™[—Ø]H[YK›[Û›ÝÛšXÊ
-Bˆ›ÜˆÞ[X›Û[ˆÞ[X›ÛÎ‚ˆ˜YWÜ›ÛÙ—Û[Û›ÝÛšXÖÜÞ[X›ÛHH™XÛÝ™\žWÜ›Ý™[—Ø]ˆ˜[œÜÜÜ™XÛÛ›™XÝÈ
-ÏHBˆÜ™XÛÜ™Ý˜[œÜÜÙ]™[
-ˆÛÛ›™XÝ[Û‹ˆY[]KˆØ]YÛÜžOH•S”ÔÔ•ÐÓÓ•S•RUH‹ˆØØÝ\œ™YØ]Y]][YK››ÝÊUÊKˆ^[ØY^Âˆ™\™XÝŽˆ”“Õ‘S—ÐÓÓTUH‹ˆ™\ØÛÛ›™XÝØ]Žˆ\ØÛÛ›™XÝYØ]š\ÛÙ›Ü›X]
+        trade_mirror_thread = threading.Thread(
+            target=_run_public_trade_mirror,
+            args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+            name="u5-public-trade-mirror",
+            daemon=True,
+        )
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("publicTrade mirror startup continuity is not active")
+        write_status()
+        if oi_config is not None:
+            oi_thread = threading.Thread(
+                target=_run_rest_oi30s_worker,
+                args=(oi_config, oi_results, oi_stop_event),
+                name="u5-rest-oi30s",
+                daemon=True,
+            )
+            oi_thread.start()
+        sock, _initial_ready_local, _initial_ready_server, initial_buffer = _connect_and_subscribe(
+            symbols
+        )
+        buffered_messages: list[dict[str, Any]] = list(initial_buffer)
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
+        next_status = time.monotonic()
+        transport_errors = (
+            websocket.WebSocketConnectionClosedException,
+            ConnectionError,
+            OSError,
+            ssl.SSLError,
+        )
 
-KˆœÝXœØÜš\[Û—Ü™XYWÛØØ[Ø]Žˆ™XYWÛØØ[Ø]š\ÛÙ›Ü›X]
+        while not stopping:
+            try:
+                audit_now = time.monotonic()
+                stale_trade_symbols = tuple(
+                    symbol
+                    for symbol in symbols
+                    if symbol in trade_cursors
+                    and audit_now - trade_proof_monotonic.get(symbol, audit_now)
+                    >= TRADE_SILENCE_AUDIT_SECONDS
+                )
+                if stale_trade_symbols:
+                    try:
+                        _audit_public_trade_silence(
+                            stale_trade_symbols,
+                            trade_cursors,
+                            trade_current_seq_exec_ids,
+                        )
+                    except PublicTradeStreamBehind:
+                        trade_audit_reconnects += 1
+                        raise
+                    except ContinuityNotProvable as audit_exc:
+                        reason = str(audit_exc)
+                        occurred_at = datetime.now(UTC)
+                        _record_transport_event(
+                            connection,
+                            identity,
+                            category="TRANSPORT_CONTINUITY",
+                            occurred_at=occurred_at,
+                            payload={
+                                "verdict": "NOT_PROVABLE",
+                                "source": "PUBLIC_TRADE_SILENCE_AUDIT",
+                                "reason": reason,
+                                "symbols": list(stale_trade_symbols),
+                            },
+                        )
+                        store.transition_run(
+                            identity,
+                            status="NOT_COMPARABLE",
+                            occurred_at=occurred_at,
+                            summary={
+                                "trading_effect": "NONE",
+                                "state": "NOT_COMPARABLE",
+                                "reason": reason,
+                                "facts_received": facts_received,
+                                "transport_reconnects": transport_reconnects,
+                                "trade_audits": trade_audits,
+                                **comparator.summary(),
+                            },
+                        )
+                        write_status(
+                            transport_state="NOT_PROVABLE",
+                            extra={
+                                "run_status": "NOT_COMPARABLE",
+                                "continuity_reason": reason,
+                            },
+                        )
+                        return
+                    else:
+                        trade_audits += 1
+                        audit_proven_at = time.monotonic()
+                        for symbol in stale_trade_symbols:
+                            trade_proof_monotonic[symbol] = audit_proven_at
+                if use_rest_oi30s and not process_oi_results(collect_oi_results()):
+                    return
+                message: dict[str, Any] | None = None
+                received_at = datetime.now(UTC)
+                if buffered_messages:
+                    message = buffered_messages.pop(0)
+                else:
+                    try:
+                        raw_message = sock.recv()
+                        received_at = datetime.now(UTC)
+                        if raw_message in (None, ""):
+                            raise websocket.WebSocketConnectionClosedException(
+                                "public WebSocket closed"
+                            )
+                        parsed = json.loads(raw_message)
+                        if isinstance(parsed, dict):
+                            message = cast(dict[str, Any], parsed)
+                    except websocket.WebSocketTimeoutException:
+                        pass
+                now_monotonic = time.monotonic()
+                if message is not None:
+                    if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                        heartbeat.note_pong(now_monotonic)
+                    elif message.get("op") != "subscribe":
+                        heartbeat.note_market_frame(now_monotonic)
+                    if not process_message(message, received_at):
+                        return
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "application heartbeat deadline exceeded"
+                    )
+                if heartbeat.ping_due(now_monotonic):
+                    sock.send('{"op":"ping"}')
+                    heartbeat.note_ping_sent(now_monotonic)
+                if now_monotonic >= next_status:
+                    write_status()
+                    next_status = now_monotonic + 2.0
+            except transport_errors as exc:
+                if stopping:
+                    break
+                disconnected_at = datetime.now(UTC)
+                cursor_snapshot = _transport_cursor_payload(
+                    trade_cursors=trade_cursors,
+                    oi_cursors=oi_cursors,
+                    closed_boundaries=closed_boundaries,
+                    bar_open_boundaries=bar_open_boundaries,
+                )
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_DISCONNECT",
+                    occurred_at=disconnected_at,
+                    payload={
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "state": last_state.value,
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                write_status(
+                    transport_state="PAUSED",
+                    extra={"transport_disconnect_at": disconnected_at.isoformat()},
+                )
+                with suppress(Exception):
+                    sock.close()
 
-KˆœÝXœØÜš\[Û—Ü™XYWÜÙ\™\—Ø]Žˆ™XYWÜÙ\™\—Ø]š\ÛÙ›Ü›X]
+                pending_gap_oi: list[OiSlotResult] = []
+                try:
+                    if use_rest_oi30s:
+                        reconnect_errors = transport_errors + (websocket.WebSocketTimeoutException,)
+                        while True:
+                            for oi_result in collect_oi_results():
+                                if not record_oi_slot(oi_result):
+                                    return
+                                pending_gap_oi.append(oi_result)
+                            try:
+                                new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                                    _connect_and_subscribe(symbols)
+                                )
+                                break
+                            except reconnect_errors:
+                                time.sleep(0.25)
+                    else:
+                        new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                            _reconnect_until_oi_safe(symbols, oi_cursors)
+                        )
+                except ContinuityNotProvable as gap_exc:
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
 
-KˆœØ[YWÜ\š]WÜ[—ÚYŽˆY[]Kœ\š]WÜ[—ÚYˆœØ[YWÜÙ\šXÙWÚ[œÝ[˜ÙWÚYŽˆY[]KœÙ\šXÙWÚ[œÝ[˜ÙWÚYˆœØ[YWÜÝ\YØ]ŽˆY[]KœÝ\YØ]š\ÛÙ›Ü›X]
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_RECONNECT",
+                    occurred_at=ready_local_at,
+                    payload={
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "gap_seconds": max(0.0, (ready_local_at - disconnected_at).total_seconds()),
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                trade_recovery_source = "REST_RECENT_TRADE"
+                mirror_fallback_reason: str | None = None
+                trade_override: tuple[tuple[MarketFactEnvelope, TradeCursor], ...] | None = None
+                try:
+                    mirror_cursors, mirror_seq_ids = trade_mirror.current_cursors()
+                    if set(mirror_cursors) != set(symbols):
+                        raise ContinuityNotProvable(
+                            "publicTrade mirror lacks exact current cursors "
+                            "for all required symbols"
+                        )
+                    # A continuously ACTIVE mirror epoch is itself the exact ordered
+                    # publicTrade transport proof. Do not race it against a later REST
+                    # snapshot here; that snapshot can contain newer trades and falsely
+                    # disqualify a healthy mirror.
+                    mirror_events = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=ready_server_at,
+                    )
+                    trade_override = tuple(
+                        (
+                            _replay_trade_fact(
+                                event.as_replay_trade(),
+                                event.received_at,
+                            ),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                        for event in mirror_events
+                    )
+                    trade_recovery_source = "MIRROR_WS"
+                except (ContinuityNotProvable, PublicTradeStreamBehind) as mirror_exc:
+                    mirror_fallback_reason = f"{type(mirror_exc).__name__}: {mirror_exc}"
 
-Kˆœ™\^WØÛÝ[ÈŽˆ™\^WØÛÝ[Ëˆ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙHŽˆ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙKˆ›Z\œ›Ü—Ù˜[˜XÚ×Ü™X\ÛÛˆŽˆZ\œ›Ü—Ù˜[˜XÚ×Ü™X\ÛÛ‹ˆ˜Ý\œÛÜœ×Ø™Y›Ü™HŽˆÝ\œÛÜ—ÜÛ˜\ÚÝˆ˜Ý\œÛÜœ×ØY\ˆŽˆÝ˜[œÜÜØÝ\œÛÜ—Ü^[ØY
-ˆ˜YWØÝ\œÛÜœÏ]˜YWØÝ\œÛÜœËˆÚWØÝ\œÛÜœÏ[ÚWØÝ\œÛÜœËˆÛÜÙYØ›Ý[™\šY\ÏXÛÜÙYØ›Ý[™\šY\Ëˆ˜\—ÛÜ[—Ø›Ý[™\šY\ÏX˜\—ÛÜ[—Ø›Ý[™\šY\Ëˆ
-KˆKˆ
-BˆÛØÚÈH™]×ÜÛØÚÂˆY™™\™YÛY\ÜØYÙ\ÈH\Ý
-™XÛÛ›™XÝØY™™\ŠBˆX\™X]HX›XÕÜÒX\™X]
-ˆS‘×ÒS•T•SÔÑPÓÓ‘ËˆÓ‘×ÕSQSÕUÔÑPÓÓ‘ËˆÝ\YÛ[Û›ÝÛšXÏ][YK›[Û›ÝÛšXÊ
-Kˆ
-Bˆ™^ÜÝ]\ÈH[YK›[Û›ÝÛšXÊ
-BˆÜš]WÜÝ]\Êˆ˜[œÜÜÜÝ]OHÓÓ“‘PÕQ‹ˆ^˜O^Âˆ›\ÝÝ˜[œÜÜØÛÛ[Z]HŽˆ”“Õ‘S—ÐÓÓTUH‹ˆ›\ÝÜ™XÛÛ›™XÝØ]Žˆ™XYWÛØØ[Ø]š\ÛÙ›Ü›X]
+                try:
+                    replay_items, replay_counts = _recover_public_gap(
+                        symbols=symbols,
+                        ready_local_at=ready_local_at,
+                        ready_server_at=ready_server_at,
+                        trade_cursors=trade_cursors,
+                        oi_cursors=oi_cursors,
+                        closed_boundaries=closed_boundaries,
+                        bar_open_boundaries=bar_open_boundaries,
+                        known_trade_exec_ids=trade_current_seq_exec_ids,
+                        trade_replay_override=trade_override,
+                    )
+                except ContinuityNotProvable as gap_exc:
+                    with suppress(Exception):
+                        new_sock.close()
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "subscription_ready_server_at": ready_server_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
 
-Kˆ›\ÝÝ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙHŽˆ˜YWÜ™XÛÝ™\žWÜÛÝ\˜ÙKˆKˆ
-BˆÛÛ[YB‚ˆÝÜYØ]H]][YK››ÝÊUÊBˆš[˜[ÜÝ]HHØ]KœÝ]WØ]
-ÝÜYØ]
-BˆYˆš[˜[ÜÝ]H\ÈÚYÝÐÛÛ\\˜Xš[]K”T’UWÐÓÓTTP“N‚ˆš[˜[ÜÝ]\ÈH”TÔÈˆYˆÛÛ\\˜]Ü‹™š\œÝÛZ\ÛX]Ú\È›Û™H[ÙH‘RS‚ˆ[ÙN‚ˆš[˜[ÜÝ]\ÈH““ÕÐÓÓTTP“H‚ˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏYš[˜[ÜÝ]\ËˆØØÝ\œ™YØ]\ÝÜYØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆš[˜[ÜÝ]\Ëˆ™˜XÝ×Ü™XÙZ]™YŽˆ˜XÝ×Ü™XÙZ]™Yˆ˜[œÜÜÜ™XÛÛ›™XÝÈŽˆ˜[œÜÜÜ™XÛÛ›™XÝËˆ
-Š˜ÛÛ\\˜]Ü‹œÝ[[X\žJ
-KˆKˆ
-Bˆ^Ù\ÛÛ[Z]S›Ý›Ý˜X›H\È^Î‚ˆ˜Z[YØ]H]][YK››ÝÊUÊBˆ™X\ÛÛˆHˆžÝ\J^ÊK—×Û˜[YW×ßNˆÙ^ßH‚ˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ]Y˜Z[YØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆKˆ
-BˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆØ]ÛZX×ÚœÛÛŠˆÕUT×ÔUˆÂˆ\]YØ]Žˆ˜Z[YØ]š\ÛÙ›Ü›X]
+                if use_rest_oi30s:
+                    for oi_result in collect_oi_results():
+                        if not record_oi_slot(oi_result):
+                            with suppress(Exception):
+                                new_sock.close()
+                            return
+                        pending_gap_oi.append(oi_result)
+                    oi_gap_facts = [fact for result in pending_gap_oi for fact in result.facts]
+                    replay_counts["OPEN_INTEREST"] = len(oi_gap_facts)
+                    combined_replay = _merge_gap_oi_without_reordering_replay(
+                        replay_items,
+                        oi_gap_facts,
+                    )
+                else:
+                    combined_replay = list(replay_items)
+                for replay_fact, replay_trade_cursor in combined_replay:
+                    if not process_fact(replay_fact, trade_cursor=replay_trade_cursor):
+                        with suppress(Exception):
+                            new_sock.close()
+                        return
+                recovery_proven_at = time.monotonic()
+                for symbol in symbols:
+                    trade_proof_monotonic[symbol] = recovery_proven_at
+                transport_reconnects += 1
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_CONTINUITY",
+                    occurred_at=datetime.now(UTC),
+                    payload={
+                        "verdict": "PROVEN_COMPLETE",
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "same_parity_run_id": identity.parity_run_id,
+                        "same_service_instance_id": identity.service_instance_id,
+                        "same_started_at": identity.started_at.isoformat(),
+                        "replay_counts": replay_counts,
+                        "trade_recovery_source": trade_recovery_source,
+                        "mirror_fallback_reason": mirror_fallback_reason,
+                        "cursors_before": cursor_snapshot,
+                        "cursors_after": _transport_cursor_payload(
+                            trade_cursors=trade_cursors,
+                            oi_cursors=oi_cursors,
+                            closed_boundaries=closed_boundaries,
+                            bar_open_boundaries=bar_open_boundaries,
+                        ),
+                    },
+                )
+                sock = new_sock
+                buffered_messages = list(reconnect_buffer)
+                heartbeat = PublicWsHeartbeat(
+                    PING_INTERVAL_SECONDS,
+                    PONG_TIMEOUT_SECONDS,
+                    started_monotonic=time.monotonic(),
+                )
+                next_status = time.monotonic()
+                write_status(
+                    transport_state="CONNECTED",
+                    extra={
+                        "last_transport_continuity": "PROVEN_COMPLETE",
+                        "last_reconnect_at": ready_local_at.isoformat(),
+                        "last_trade_recovery_source": trade_recovery_source,
+                    },
+                )
+                continue
 
-KˆœÙ\šXÙHŽˆ˜Üš\K][š]™\œØ[Y[žK\ÚYÝËœÙ\šXÙH‹ˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœ\š]WÜ[—ÚYŽˆY[]Kœ\š]WÜ[—ÚYˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœÝ]WÜ™X\ÛÛˆŽˆ™X\ÛÛ‹ˆœÛÝ\˜ÙWØÛÛ[Z]ŽˆY[]K[š]™\œØ[ÜÛÝ\˜ÙWØÛÛ[Z]ˆ™˜XÝÜÛÝ\˜ÙWÚYŽˆY[]K™˜XÝÜÛÝ\˜ÙWÚYˆœÙ\šXÙWÚ[œÝ[˜ÙWÚYŽˆY[]KœÙ\šXÙWÚ[œÝ[˜ÙWÚYˆKˆ
-Bˆ™]\›‚ˆ^Ù\^Ù\[Ûˆ\È^Î‚ˆ˜Z[YØ]H]][YK››ÝÊUÊBˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆÝÜ™K˜[œÚ][Û—Ü[ŠˆY[]KˆÝ]\ÏH““ÕÐÓÓTTP“H‹ˆØØÝ\œ™YØ]Y˜Z[YØ]ˆÝ[[X\žO^Âˆ˜Y[™×ÙY™™XÝŽˆ““Ó‘H‹ˆœÝ]HŽˆ““ÕÐÓÓTTP“H‹ˆœ™X\ÛÛˆŽˆˆžÝ\J^ÊK—×Û˜[YW×ßNˆÙ^ßH‹ˆKˆ
-Bˆ˜Z\ÙBˆš[˜[N‚ˆYˆÚWÜÝÜÙ]™[\È›Ý›Û™N‚ˆÚWÜÝÜÙ]™[œÙ]
+        stopped_at = datetime.now(UTC)
+        final_state = gate.state_at(stopped_at)
+        if final_state is ShadowComparability.PARITY_COMPARABLE:
+            final_status = "PASS" if comparator.first_mismatch is None else "FAIL"
+        else:
+            final_status = "NOT_COMPARABLE"
+        store.transition_run(
+            identity,
+            status=final_status,
+            occurred_at=stopped_at,
+            summary={
+                "trading_effect": "NONE",
+                "state": final_status,
+                "facts_received": facts_received,
+                "transport_reconnects": transport_reconnects,
+                **comparator.summary(),
+            },
+        )
+    except ContinuityNotProvable as exc:
+        failed_at = datetime.now(UTC)
+        reason = f"{type(exc).__name__}: {exc}"
+        with suppress(Exception):
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=failed_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                },
+            )
+        with suppress(Exception):
+            _atomic_json(
+                STATUS_PATH,
+                {
+                    "updated_at": failed_at.isoformat(),
+                    "service": "cripta-universal-entry-shadow.service",
+                    "trading_effect": "NONE",
+                    "parity_run_id": identity.parity_run_id,
+                    "state": "NOT_COMPARABLE",
+                    "state_reason": reason,
+                    "source_commit": identity.universal_source_commit,
+                    "fact_source_id": identity.fact_source_id,
+                    "service_instance_id": identity.service_instance_id,
+                },
+            )
+        return
+    except Exception as exc:
+        failed_at = datetime.now(UTC)
+        with suppress(Exception):
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=failed_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+            )
+        raise
+    finally:
+        if oi_stop_event is not None:
+            oi_stop_event.set()
+        if oi_thread is not None:
+            oi_thread.join(timeout=2.0)
+        if trade_mirror_stop is not None:
+            trade_mirror_stop.set()
+        if trade_mirror_thread is not None:
+            trade_mirror_thread.join(timeout=2.0)
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
+        connection.close()
 
-BˆYˆÚWÝ™XY\È›Ý›Û™N‚ˆÚWÝ™XYš›Ú[Š[Y[Ý]L‹Œ
-BˆYˆ˜YWÛZ\œ›Ü—ÜÝÜ\È›Ý›Û™N‚ˆ˜YWÛZ\œ›Ü—ÜÝÜœÙ]
 
-BˆYˆ˜YWÛZ\œ›Ü—Ý™XY\È›Ý›Û™N‚ˆ˜YWÛZ\œ›Ü—Ý™XYš›Ú[Š[Y[Ý]L‹Œ
-BˆYˆÛØÚÈ\È›Ý›Û™N‚ˆÚ]Ý\™\ÜÊ^Ù\[ÛŠN‚ˆÛØÚË˜ÛÜÙJ
-BˆÛÛ›™XÝ[Û‹˜ÛÜÙJ
-B‚‚™YˆXZ[Š
-HOˆ›Û™N‚ˆYˆ•S•SQWÓSÑHOH“USWÔÕUQÖWÓÐ”ÑT•‘TˆŽ‚ˆÜ[—Û][WÜÝ˜]YÞWÛØœÙ\™\Š
-Bˆ™]\›‚ˆYˆ•S•SQWÓSÑHOH”T’UWÕŒHŽ‚ˆ˜Z\ÙH[[YQ\œ›ÜŠˆ[œÝ\ÜYÔ’TWÕMWÔ•S•SQWÓSÑO^Ô•S•SQWÓSÑ_HŠBˆÕUWÔ“ÓÕ›ZÙ\Š\™[ÏUYK^\ÝÛÚÏUYJBˆÜ[—Ü\š]WÛXZ[Š
-B‚‚šYˆ×Û˜[YW×ÈOH—×ÛXZ[—×ÈŽ‚ˆXZ[Š
-B
+def main() -> None:
+    if RUNTIME_MODE == "MULTI_STRATEGY_OBSERVER":
+        _run_multi_strategy_observer()
+        return
+    if RUNTIME_MODE != "PARITY_V1":
+        raise RuntimeError(f"unsupported CRIPTA_U5_RUNTIME_MODE={RUNTIME_MODE}")
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    _run_parity_main()
+
+
+if __name__ == "__main__":
+    main()
