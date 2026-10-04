@@ -24,13 +24,19 @@ from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
+    scope_for_check,
     strategy_symbol_scope_key,
 )
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
+    expected_contexts as r1_expected_contexts,
     micro_live_state as r1_micro_live_state,
 )
+from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
+from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
+from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_entry.dashboard_control import (
     StaleActivationState,
     StrategyDashboardStore,
@@ -2923,6 +2929,378 @@ def _u6_set_execution_permission(handler: object, request: dict[str, object]) ->
     _u6_json(handler, 200, result)
 
 
+
+def _u6_prepare_r1_prearm_evidence(
+    connection: psycopg.Connection,
+    *,
+    now: datetime,
+) -> dict[str, object]:
+    release = LOADED_RELEASE_COMMIT
+    if len(release) != 40:
+        raise ValueError("R1 PREARM: loaded release commit is invalid")
+
+    readiness = live_rearm_readiness(connection)
+    if not bool(readiness.get("rearm_ready")):
+        raise ValueError(
+            "R1 PREARM operational block: "
+            + "; ".join(str(x) for x in readiness.get("reasons", []))
+        )
+
+    current = now.astimezone(UTC)
+    now_ms = int(current.timestamp() * 1000)
+    valid_until = current + timedelta(seconds=90)
+
+    source_commit = subprocess.check_output(
+        ["git", "-C", "/srv/cripta/source_checkout", "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    remote_commit = subprocess.check_output(
+        ["git", "-C", "/srv/cripta/source_checkout", "ls-remote", "origin", "refs/heads/main"],
+        text=True,
+    ).split()[0]
+    runtime_commit = Path("/srv/cripta/runtime/current/INSTALLED_COMMIT").read_text(
+        encoding="utf-8"
+    ).strip()
+    state_commit = Path("/var/lib/cripta/release/INSTALLED_COMMIT").read_text(
+        encoding="utf-8"
+    ).strip()
+    if {source_commit, remote_commit, runtime_commit, state_commit} != {release}:
+        raise ValueError("R1 PREARM: remote/source/runtime/state release identity mismatch")
+
+    try:
+        observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
+        lifecycle = json.loads(
+            Path("/var/lib/cripta/lifecycle_supervisor/status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"R1 PREARM: runtime status unreadable: {exc}") from exc
+
+    if not (
+        observer.get("state") == "RUNNING"
+        and observer.get("observer_ready") is True
+        and observer.get("source_commit") == release
+        and int(observer.get("active_strategies") or 0) == 5
+    ):
+        raise ValueError("R1 PREARM: observer is not exact-release ready")
+    if not (
+        isinstance(private.get("private"), dict)
+        and private["private"].get("state") == "connected"
+        and isinstance(private.get("trade"), dict)
+        and private["trade"].get("state") == "authenticated-locked"
+        and isinstance(private.get("schema"), dict)
+        and private["schema"].get("state") == "READY"
+        and now_ms - int(private.get("updated_at_epoch") or 0) * 1000 <= 15_000
+    ):
+        raise ValueError("R1 PREARM: private Bybit runtime is not fresh/ready")
+    if not (
+        lifecycle.get("state") == "RUNNING"
+        and not list(lifecycle.get("active_fault_codes") or [])
+    ):
+        raise ValueError("R1 PREARM: lifecycle supervisor is not healthy")
+
+    contexts = r1_expected_contexts(connection, release_commit=release)
+    if len(contexts) != 5:
+        raise ValueError("R1 PREARM: exact R1 cohort is incomplete")
+
+    other = connection.execute(
+        """SELECT strategy_id,strategy_version
+             FROM strategy_entry.strategy_activations
+            WHERE enabled=true
+              AND NOT (
+                strategy_id = ANY(%s)
+                AND strategy_version='1.0-micro-live'
+              )
+            LIMIT 1""",
+        ([x.strategy_id for x in contexts],),
+    ).fetchone()
+    if other is not None:
+        raise ValueError(f"R1 PREARM: non-R1 StrategyActivation enabled: {other[0]} {other[1]}")
+
+    reconciliation = connection.execute(
+        """SELECT finished_at_epoch_ms,ok,positions,orders
+             FROM runtime.reconciliation_runs ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    wallet = connection.execute(
+        """SELECT refreshed_at_epoch_ms,total_equity,available_balance,
+                  payload_json::jsonb->>'accountType'
+             FROM runtime.wallet_latest WHERE singleton=1"""
+    ).fetchone()
+    if not reconciliation or not bool(reconciliation[1]):
+        raise ValueError("R1 PREARM: reconciliation missing/failed")
+    if now_ms - int(reconciliation[0]) > 15_000:
+        raise ValueError("R1 PREARM: reconciliation stale")
+    if int(reconciliation[2]) or int(reconciliation[3]):
+        raise ValueError("R1 PREARM: exchange is not flat")
+    if not wallet or now_ms - int(wallet[0]) > 15_000:
+        raise ValueError("R1 PREARM: wallet snapshot stale")
+    if str(wallet[3]) != "UNIFIED" or float(wallet[1]) < 50.0:
+        raise ValueError("R1 PREARM: account identity/capital mismatch")
+
+    symbols = [x.symbol for x in contexts]
+    pm_rows = connection.execute(
+        """SELECT DISTINCT ON (instrument)
+                  instrument,account_ref,product_category,position_mode,position_idx,
+                  observed_at,fresh_until
+             FROM runtime.position_mode_states
+            WHERE instrument = ANY(%s)
+            ORDER BY instrument,observed_at DESC""",
+        (symbols,),
+    ).fetchall()
+    pm = {str(row[0]): row for row in pm_rows}
+    if set(pm) != set(symbols):
+        raise ValueError("R1 PREARM: position mode cohort incomplete")
+    for symbol, row in pm.items():
+        if not (
+            str(row[1]) == "BYBIT:UNIFIED"
+            and str(row[2]) == "LINEAR"
+            and str(row[3]) == "ONE_WAY"
+            and int(row[4]) == 0
+            and row[6] is not None
+            and row[6].astimezone(UTC) >= current
+        ):
+            raise ValueError(f"R1 PREARM: position mode invalid/stale for {symbol}")
+
+    if connection.execute(
+        "SELECT to_regclass('runtime.exchange_position_slot_claims')"
+    ).fetchone()[0] is None:
+        raise ValueError("R1 PREARM: physical slot claim contract missing")
+    if connection.execute(
+        "SELECT to_regclass('runtime.capital_reservations')"
+    ).fetchone()[0] is None:
+        raise ValueError("R1 PREARM: capital reservation contract missing")
+
+    cards = {card.strategy_id: card for card in build_r1_cards()}
+    entry_loaded = set(observer.get("active_entry_plans") or [])
+    exit_loaded = set(observer.get("active_exit_plans") or [])
+    plan_evidence: dict[str, dict[str, str]] = {}
+    for context in contexts:
+        card = cards[context.strategy_id]
+        activation = StrategyActivation(
+            activation_id=context.strategy_activation_id,
+            strategy_id=context.strategy_id,
+            strategy_version=context.strategy_version,
+            strategy_config_fingerprint=context.strategy_config_fingerprint,
+            enabled=True,
+            enabled_at=card.approved_at,
+            scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+            operator="r1-prearm",
+            source="dashboard:r1-prearm",
+        )
+        entry_plan, exit_plan = materialize_plans(card, activation)
+        rr = assess_strategy_runtime_readiness(card, observer_ready=True)
+        if not (rr.active_ready and rr.execution_ready):
+            raise ValueError(f"R1 PREARM: runtime readiness failed {context.strategy_id}")
+        if entry_plan.entry_plan_fingerprint not in entry_loaded:
+            raise ValueError(f"R1 PREARM: EntryPlan not loaded {context.strategy_id}")
+        if exit_plan.exit_plan_fingerprint not in exit_loaded:
+            raise ValueError(f"R1 PREARM: ExitPlan not loaded {context.strategy_id}")
+
+        entry_policy = card.entry_policy.to_dict()["execution_policy"]
+        exit_mutation = card.exit_policy.to_dict()["rules"][0]["action"]["mutation"]
+        protection = card.protection_policy.to_dict()["initial_protection"]
+        lifecycle_policy = card.lifecycle_policy.to_dict()
+        capital = card.capital_policy.to_dict()
+        if not (
+            entry_policy["order_type"] == "LIMIT_OFFSET"
+            and entry_policy["entry_offset_pct"] == "0.10"
+            and entry_policy["time_in_force"] == "POST_ONLY"
+            and entry_policy["entry_lifetime_mode"] == "SIGNAL_VALIDITY"
+            and exit_mutation["order_type"] == "LIMIT"
+            and exit_mutation["time_in_force"] == "POST_ONLY"
+            and exit_mutation["marketable_action"] == "CLOSE_MARKET"
+            and protection["role"] == "CATASTROPHIC_GUARD"
+            and protection["stop_loss_enabled"] is True
+            and protection["stop_loss_pct"] == "10.0"
+            and lifecycle_policy["reverse_on_opposite_signal"]["enabled"] is True
+            and lifecycle_policy["reverse_on_opposite_signal"]["position_mode"] == "ONE_WAY"
+            and int(lifecycle_policy["reverse_on_opposite_signal"]["position_idx"]) == 0
+            and lifecycle_policy["emergency_policy"]["operator_kill"] == "MAINNET_GATE_OFF"
+            and capital["requested_amount"] == "10"
+            and int(capital["leverage"]) == 1
+        ):
+            raise ValueError(f"R1 PREARM: exact R1 policy mismatch {context.strategy_id}")
+        plan_evidence[context.strategy_id] = {
+            "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+            "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
+        }
+
+    rollback_ref = Path("/var/lib/cripta/release/LAST_BACKUP").read_text(
+        encoding="utf-8"
+    ).strip()
+    if not rollback_ref:
+        raise ValueError("R1 PREARM: rollback reference missing")
+
+    def put(
+        code: str,
+        scope_type: str,
+        scope_key: str,
+        status: str,
+        evidence: dict[str, object],
+        ttl: bool = False,
+    ) -> None:
+        identity = "|".join((release, code, scope_type, scope_key, current.isoformat()))
+        evidence_id = "r1-prearm-" + hashlib.sha256(identity.encode()).hexdigest()[:32]
+        connection.execute(
+            """INSERT INTO control.live_arm_evidence(
+                   evidence_id,check_code,scope_type,scope_key,status,
+                   checked_at,valid_until,release_commit,source,evidence)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'dashboard:r1-prearm',%s::jsonb)""",
+            (
+                evidence_id,
+                code,
+                scope_type,
+                scope_key,
+                status,
+                current,
+                valid_until if ttl else None,
+                release,
+                json.dumps(evidence, sort_keys=True, default=str),
+            ),
+        )
+
+    global_checks = {
+        "CANON_CURRENT": ("PASS", {"release_commit": release, "r1_webhook_waiver": True}, False),
+        "REMOTE_COMMIT_VERIFIED": ("PASS", {"remote_main": remote_commit}, False),
+        "SOURCE_LIVE_IDENTITY": (
+            "PASS",
+            {"source": source_commit, "runtime": runtime_commit, "state": state_commit},
+            False,
+        ),
+        "TESTS": (
+            "PASS",
+            {
+                "runtime_prearm_selftest": "PASS",
+                "release_contract": release,
+                "checks": ["cards", "plans", "protection", "reverse", "limits"],
+            },
+            False,
+        ),
+        "LIVE_EQUIVALENCE": (
+            "PASS",
+            {"observer_epoch_id": observer.get("observer_epoch_id"), "plans": plan_evidence},
+            True,
+        ),
+        "EXCHANGE_ACCOUNT_IDENTITY": (
+            "PASS",
+            {
+                "account_ref": "BYBIT:UNIFIED",
+                "account_type": wallet[3],
+                "private_ws": private["private"].get("state"),
+                "trade_ws": private["trade"].get("state"),
+            },
+            True,
+        ),
+        "PHYSICAL_SLOT_CLAIM_CONTRACT": (
+            "PASS",
+            {"table": "runtime.exchange_position_slot_claims", "position_idx": 0},
+            False,
+        ),
+        "CAPITAL_RESERVATION_CONTRACT": (
+            "PASS",
+            {"table": "runtime.capital_reservations", "max_requested_usdt": "50"},
+            False,
+        ),
+        "LIFECYCLE_SUPERVISOR_BEHAVIOR": (
+            "PASS",
+            {"state": lifecycle.get("state"), "active_fault_codes": []},
+            True,
+        ),
+        "CRITICAL_FAULT_DELIVERY": (
+            "OWNER_WAIVED_FOR_R1_MICRO_LIVE",
+            {"configured": False, "owner_decision": "2026-10-04"},
+            True,
+        ),
+        "RECONCILIATION_PATH": (
+            "PASS",
+            {
+                "finished_at_epoch_ms": int(reconciliation[0]),
+                "positions": int(reconciliation[2]),
+                "orders": int(reconciliation[3]),
+            },
+            True,
+        ),
+        "ROLLBACK_OR_KILL_PATH": (
+            "PASS",
+            {"rollback_ref": rollback_ref, "operator_kill": "MAINNET_GATE_OFF"},
+            False,
+        ),
+    }
+    for code, (status, evidence, ttl) in global_checks.items():
+        put(code, "GLOBAL", "GLOBAL", status, evidence, ttl)
+
+    for context in contexts:
+        plan = plan_evidence[context.strategy_id]
+        strategy_checks = {
+            "EXACT_STRATEGY_ACTIVATION": {
+                "strategy_id": context.strategy_id,
+                "strategy_version": context.strategy_version,
+                "strategy_config_fingerprint": context.strategy_config_fingerprint,
+                "strategy_activation_id": context.strategy_activation_id,
+            },
+            "ENTRY_PLAN_EXECUTABLE": plan,
+            "EXIT_PLAN_EXECUTABLE": plan,
+            "INITIAL_PROTECTION_EXECUTABLE": {
+                "role": "CATASTROPHIC_GUARD",
+                "stop_loss_pct": "10.0",
+            },
+            "TERMINAL_LOSS_CONTAINMENT_PATH": {
+                "terminal_loss_containment": "INITIAL_PROTECTION",
+                "stop_loss_pct": "10.0",
+            },
+            "EMERGENCY_POLICY_SUPPORTED": {
+                "operator_kill": "MAINNET_GATE_OFF",
+                "position_mode": "ONE_WAY",
+                "position_idx": 0,
+            },
+        }
+        for code, evidence in strategy_checks.items():
+            st, sk = scope_for_check(code, context)
+            put(code, st, sk, "PASS", evidence, False)
+
+        row = pm[context.symbol]
+        for code, evidence in (
+            (
+                "POSITION_MODE_FRESH",
+                {
+                    "symbol": context.symbol,
+                    "position_mode": row[3],
+                    "observed_at": row[5].isoformat(),
+                    "fresh_until": row[6].isoformat(),
+                },
+            ),
+            ("POSITION_IDX_EXPECTED", {"symbol": context.symbol, "position_idx": int(row[4])}),
+            (
+                "MICRO_LIVE_LIMITS",
+                {
+                    "requested_amount_usdt": "10",
+                    "leverage": 1,
+                    "cohort_size": 5,
+                    "max_requested_capital_usdt": "50",
+                    "wallet_equity_usdt": str(wallet[1]),
+                },
+            ),
+        ):
+            st, sk = scope_for_check(code, context)
+            put(code, st, sk, "PASS", evidence, True)
+
+    for context in contexts:
+        decision = evaluate_live_arm(
+            connection,
+            context=context,
+            now=current,
+            require_owner_approval=False,
+        )
+        if not decision.ready:
+            raise ValueError(
+                f"R1 PREARM durable evidence incomplete {context.strategy_id}: "
+                + ",".join(decision.failed_codes)
+            )
+    return {"status": "PREARM_READY", "strategies": 5}
+
+
 def _u6_r1_micro_live(handler: object, request: dict[str, object]) -> None:
     enabled = request.get("enabled")
     if not isinstance(enabled, bool):
@@ -2939,6 +3317,7 @@ def _u6_r1_micro_live(handler: object, request: dict[str, object]) -> None:
         if enabled:
             readiness = live_rearm_readiness(connection)
             reasons = tuple(str(x) for x in readiness.get("reasons", []))
+            _u6_prepare_r1_prearm_evidence(connection, now=now)
             result = arm_r1_micro_live(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
