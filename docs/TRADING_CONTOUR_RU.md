@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.1
+**Версия:** 2.2
 **Дата:** 2026-10-04
 **Статус:** активный канонический контракт торгового контура
 
@@ -422,31 +422,58 @@ pass must close these exact gaps rather than changing R1 semantics:
 
 ### Protection and activation boundary
 
-Research did not approve a new initial loss-containment number. Tested hard
-stops `-1.0/-1.5/-2.0%` worsened R1 economics and are not promoted.
+Research did not select a trading hard-stop at `-1.0/-1.5/-2.0%`;
+those variants worsened R1 economics and remain rejected as normal Exit policy.
 
-Therefore the first five implementation cards are created as
-**disabled / DEMO-SHADOW candidates** with no mainnet execution permission.
-They must nevertheless use the full production execution mechanics on the
-non-mainnet/demo rail: exact Entry/Exit plans, one-way ownership, reservations,
-PostOnly order lifecycle, dynamic maker TP, close-and-reverse, reconciliation
-and audit lineage.
+OWNER DECISION 2026-10-04 introduces a separate **catastrophic initial
+loss-containment guard** for real-money R1:
 
-OWNER DECISION 2026-10-04: rollout order is:
+```text
+initial catastrophic stop = -10.0% from actual filled Entry
+execution = immediate MARKET / taker
+scope = every R1 StrategyPosition
+purpose = terminal safety only; not normal R1 Exit optimization
+```
+
+This `-10%` guard is not research evidence of optimal Exit. It is the
+owner-approved terminal loss-containment path required for MICRO_LIVE and must
+not alter dynamic opposite-inner TP, PostOnly Entry, or ping-pong semantics.
+
+OWNER DECISION 2026-10-04 replaces the previous DEMO prerequisite. Current R1
+rollout is:
 
 ```text
 IMPLEMENT
 -> TEST
--> DEMO / non-mainnet end-to-end trades
--> verify exact R1 mechanics
--> owner reviews evidence
--> only then consider MICRO_LIVE
+-> IMPLEMENTATION / LIVE EQUIVALENCE
+-> MICRO_LIVE on mainnet
+-> runtime behavior evidence
+-> owner review before any larger limits
 ```
 
-No existing legacy stop or TP may be inherited as an R1 default. Before any
-MICRO_LIVE/LIVE permission, owner must approve an exact initial loss-containment
-contract in a new immutable R1 Strategy version, followed by implementation
-equivalence, LIVE EQUIVALENCE and the gates in §4.7.
+MICRO_LIVE limits for R1 v1:
+
+```text
+strategies = exactly 5:
+  r1_aptusdt / r1_injusdt / r1_dotusdt / r1_ltcusdt / r1_arbusdt
+requested_amount per Strategy = 10 USDT
+leverage = 1x
+maximum simultaneous requested capital = 50 USDT
+position mode = ONE_WAY
+positionIdx = 0
+other Strategy activations = disabled
+```
+
+The five immutable R1 cards may be armed on mainnet only after all §4.7 gates
+are proved against the exact published/deployed release. Owner approval in this
+section satisfies the **policy decision** to proceed to MICRO_LIVE, but it does
+not waive any technical fail-closed gate, identity check, reconciliation check,
+or release-evidence requirement.
+
+No existing legacy stop, TP, BE or trailing setting may be inherited as an R1
+default. Any change to `10 USDT`, `1x`, the five-symbol cohort or the `-10%`
+catastrophic guard requires a new immutable Strategy version / owner decision
+as applicable.
 
 # 2. ENTRY — универсальный Entry Engine
 
