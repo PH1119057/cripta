@@ -42,7 +42,23 @@ REQUIRED_LIVE_ARM_CHECKS = (
     *STRATEGY_SYMBOL_LIVE_ARM_CHECKS,
 )
 
-_LIVE_ARM_STATUSES = {"PASS", "FAIL", "UNKNOWN", "STALE", "NOT_CHECKED_HERE"}
+_LIVE_ARM_STATUSES = {
+    "PASS",
+    "FAIL",
+    "UNKNOWN",
+    "STALE",
+    "NOT_CHECKED_HERE",
+    "OWNER_WAIVED_FOR_R1_MICRO_LIVE",
+}
+
+_R1_MICRO_LIVE_STRATEGY_IDS = {
+    "r1_aptusdt",
+    "r1_injusdt",
+    "r1_dotusdt",
+    "r1_ltcusdt",
+    "r1_arbusdt",
+}
+_R1_MICRO_LIVE_VERSION = "1.0-micro-live"
 
 
 class CursorLike(Protocol):
@@ -94,10 +110,11 @@ class LiveArmCheck:
     release_commit: str | None
     source: str | None
     detail: str
+    waived: bool = False
 
     @property
     def passed(self) -> bool:
-        return self.status == "PASS"
+        return self.status == "PASS" or self.waived
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +281,15 @@ def evaluate_live_arm(
                 f"{release_commit!r}"
             )
 
+        waived = (
+            code == "CRITICAL_FAULT_DELIVERY"
+            and status == "OWNER_WAIVED_FOR_R1_MICRO_LIVE"
+            and context.strategy_id in _R1_MICRO_LIVE_STRATEGY_IDS
+            and context.strategy_version == _R1_MICRO_LIVE_VERSION
+        )
+        if waived:
+            detail = "owner-scoped R1 MICRO_LIVE webhook waiver"
+
         checks.append(
             LiveArmCheck(
                 code=code,
@@ -275,6 +301,7 @@ def evaluate_live_arm(
                 release_commit=release_commit,
                 source=source,
                 detail=detail,
+                waived=waived,
             )
         )
 

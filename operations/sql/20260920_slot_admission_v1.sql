@@ -367,7 +367,14 @@ CREATE TABLE IF NOT EXISTS control.live_arm_evidence (
         'ROLLBACK_OR_KILL_PATH'
     )),
     CHECK (scope_type IN ('GLOBAL','STRATEGY','STRATEGY_SYMBOL')),
-    CHECK (status IN ('PASS','FAIL','UNKNOWN','STALE','NOT_CHECKED_HERE')),
+    CHECK (status IN (
+        'PASS',
+        'FAIL',
+        'UNKNOWN',
+        'STALE',
+        'NOT_CHECKED_HERE',
+        'OWNER_WAIVED_FOR_R1_MICRO_LIVE'
+    )),
     CHECK (length(release_commit)=40),
     CHECK (valid_until IS NULL OR valid_until >= checked_at),
     CHECK (jsonb_typeof(evidence)='object')
