@@ -882,6 +882,16 @@ UNKNOWN/STALE/NOT CHECKED HERE по обязательному пункту оз
 MICRO_LIVE имеет отдельный лимит риска/капитала/символов и не является
 синонимом полного LIVE.
 
+OWNER DECISION 2026-10-04 — scoped exception только для текущего R1 MICRO_LIVE:
+для exact cohort `r1_aptusdt / r1_injusdt / r1_dotusdt / r1_ltcusdt / r1_arbusdt`,
+`requested_amount=10 USDT` на Strategy, `leverage=1x`, owner явно разрешил
+real arm при `critical_delivery.configured=false`. Поэтому именно для этого
+MICRO_LIVE `CRITICAL_FAULT_DELIVERY` не является blocking pre-arm check и
+фиксируется как `OWNER_WAIVED_FOR_R1_MICRO_LIVE`, а не как ложный `PASS`.
+Durable fault/delivery/retry/ack/escalation contract остаётся обязательным и
+не отключается. Исключение не распространяется на другую Strategy, иной cohort,
+увеличение лимитов или полный LIVE; для них применяется обычный checklist выше.
+
 # 5. Сквозной handoff
 
 Единственное каноническое определение обязательной lifecycle-chain находится в
