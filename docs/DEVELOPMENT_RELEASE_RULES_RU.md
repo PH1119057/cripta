@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.8 · 2026-10-01
+**Версия:** 1.9 · 2026-10-04
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -1063,3 +1063,98 @@ STOP=YES
 
 INSTALLED_COMMIT и LOADED_COMMIT не копируются из MANIFEST автоматически.
 Они подтверждаются отдельной post-deploy/runtime проверкой.
+
+## 43. Owner-visible incremental development checkpoints
+
+OWNER DECISION 2026-10-04: длительная development/release работа не выполняется
+как один непрерывный multi-hour проход без промежуточного owner-visible
+checkpoint.
+
+Обязательная единица работы:
+
+```text
+ONE STAGE
+-> exact goal
+-> bounded mutation scope
+-> exact verification
+-> owner-visible checkpoint
+-> only then NEXT STAGE
+```
+
+Правила:
+
+1. Один stage должен иметь одну понятную цель. Нельзя без необходимости
+   объединять в один непрерывный проход UI change, schema investigation,
+   migration authoring, service redesign, deployment и LIVE readiness.
+
+2. После завершения stage обязательно сообщить владельцу:
+   ```text
+   STAGE = PASS | BLOCKED | FAILED
+   CHANGED
+   CHECKED HERE
+   GITHUB / DEPLOY / RUNTIME status
+   NEXT STAGE
+   ```
+   Переход к следующему независимому stage не должен скрывать уже достигнутый
+   stable checkpoint.
+
+3. Потеря tool connection, timeout или delivery failure не означает, что stage
+   надо повторить. Сначала выполнить read-only recovery:
+   ```text
+   inspect authoritative state
+   -> classify what completed
+   -> resume from last proved checkpoint
+   ```
+   Mutation не повторяется вслепую.
+
+4. Git publication является отдельным checkpoint. После publication exact
+   `REMOTE_HEAD` проверяется до следующего operational stage.
+
+5. **Source sync + exact verified deploy являются одной operational stage** для
+   обычного Git-first release:
+   ```text
+   verify REMOTE_HEAD
+   -> sync operational mirror to exact commit
+   -> verify SOURCE_HEAD
+   -> deploy exact verified release
+   -> verify INSTALLED_COMMIT / LOADED_COMMIT
+   -> checkpoint
+   ```
+   Их нельзя искусственно растягивать на два owner-facing этапа, если между
+   ними нет реального blocker / owner decision.
+
+6. PostgreSQL migration выполняется как отдельная mutation только когда текущий
+   release действительно содержит schema/data migration. Уже доказанная
+   migration не является поводом заново исследовать DB во время несвязанного
+   UI change. Release installer всё равно обязан применить required idempotent
+   migration согласно exact release contract.
+
+7. Локальное UI изменение не расширяет scope автоматически. Если задача —
+   добавить/изменить кнопку, таблицу или отображение существующего control
+   contract, обязательны targeted UI/control tests и release verification.
+   Повторный research, redesign DB, изменение Strategy semantics или
+   архитектурная переработка разрешены только при найденном concrete blocker,
+   который кратко фиксируется владельцу до расширения scope.
+
+8. Если в ходе stage найден новый blocker, который требует другого
+   архитектурного/торгового решения, текущий stage получает `BLOCKED`;
+   нельзя молча уходить в многочасовую соседнюю разработку.
+
+9. После stable checkpoint применять §40: остановиться и сообщить результат.
+   Следующий stage начинается как новая bounded unit of work.
+
+Для текущего owner workflow нормальная крупная последовательность:
+
+```text
+CANON / DEVELOPMENT RULE
+-> IMPLEMENTATION + TARGETED TEST
+-> GITHUB PUBLICATION
+-> SYNC + DEPLOY [единый stage]
+-> REQUIRED MIGRATION [только если release её содержит]
+-> RUNTIME/UI VERIFICATION
+-> отдельный OWNER ARM, если он вообще требуется
+```
+
+Это process rule не изменяет trading policy и не ослабляет fail-closed
+release/LIVE gates.
+
