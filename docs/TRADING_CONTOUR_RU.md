@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 2026-10-04
 **Статус:** активный канонический контракт торгового контура
 
@@ -300,21 +300,35 @@ R1 реализуется как **новая immutable StrategyCard**. Суще
 `entry_v1_monitor_*` и `experimental_h9_h3_*` не редактируются и не
 переиспользуются как R1.
 
-Одна R1 StrategyCard должна владеть обоими направлениями:
+OWNER DECISION 2026-10-04: R1 разворачивается как **пять отдельных
+immutable StrategyCard — по одной на каждый symbol**, при этом каждая карточка
+владеет обоими направлениями LONG+SHORT и полным ping-pong lifecycle:
 
 ```text
-direction_policy = [LONG, SHORT]
-symbols = [APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT]
+r1_aptusdt  -> symbols=[APTUSDT] -> direction_policy=[LONG, SHORT]
+r1_injusdt  -> symbols=[INJUSDT] -> direction_policy=[LONG, SHORT]
+r1_dotusdt  -> symbols=[DOTUSDT] -> direction_policy=[LONG, SHORT]
+r1_ltcusdt  -> symbols=[LTCUSDT] -> direction_policy=[LONG, SHORT]
+r1_arbusdt  -> symbols=[ARBUSDT] -> direction_policy=[LONG, SHORT]
+
+capital_policy per Strategy:
+  requested_amount = 10 USDT
+  leverage = 1x
 
 one-way physical slot:
   account/product/symbol/positionIdx=0
   one active R1 position per symbol
 ```
 
-Разделение R1 на независимые LONG-card и SHORT-card запрещено для этой версии:
-оно разрушило бы owner-approved ping-pong lifecycle, потому что opposite Entry
-является переходом одной StrategyPosition, а не конкуренцией двух Strategy за
-один physical slot.
+Это сохраняет исследованную семантику: LONG и SHORT **не разделяются на две
+независимые Strategy одного symbol**. Opposite Entry остаётся transition одной
+StrategyPosition внутри той же per-symbol StrategyCard. Разделение на отдельные
+LONG-card и SHORT-card запрещено для R1 v1, потому что создало бы конкуренцию за
+один physical slot и изменило бы исследованный ping-pong lifecycle.
+
+Сумма 10 USDT и leverage=1x принадлежат StrategyCard, а не общей online-trading
+настройке. Их последующее изменение требует новой immutable Strategy version,
+если меняется торговая/капитальная policy.
 
 R1 EntryPlan должен материализовать:
 
@@ -411,13 +425,28 @@ pass must close these exact gaps rather than changing R1 semantics:
 Research did not approve a new initial loss-containment number. Tested hard
 stops `-1.0/-1.5/-2.0%` worsened R1 economics and are not promoted.
 
-Therefore the first implementation card may be created only as
-**disabled / SHADOW-test candidate** with no real execution permission. No
-existing legacy stop or TP may be inherited as an R1 default.
+Therefore the first five implementation cards are created as
+**disabled / DEMO-SHADOW candidates** with no mainnet execution permission.
+They must nevertheless use the full production execution mechanics on the
+non-mainnet/demo rail: exact Entry/Exit plans, one-way ownership, reservations,
+PostOnly order lifecycle, dynamic maker TP, close-and-reverse, reconciliation
+and audit lineage.
 
-Before any MICRO_LIVE/LIVE permission, owner must approve an exact initial
-loss-containment contract in a new immutable R1 Strategy version, followed by
-implementation equivalence, LIVE EQUIVALENCE and the gates in §4.7.
+OWNER DECISION 2026-10-04: rollout order is:
+
+```text
+IMPLEMENT
+-> TEST
+-> DEMO / non-mainnet end-to-end trades
+-> verify exact R1 mechanics
+-> owner reviews evidence
+-> only then consider MICRO_LIVE
+```
+
+No existing legacy stop or TP may be inherited as an R1 default. Before any
+MICRO_LIVE/LIVE permission, owner must approve an exact initial loss-containment
+contract in a new immutable R1 Strategy version, followed by implementation
+equivalence, LIVE EQUIVALENCE and the gates in §4.7.
 
 # 2. ENTRY — универсальный Entry Engine
 
