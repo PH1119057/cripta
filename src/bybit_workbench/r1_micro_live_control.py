@@ -289,7 +289,7 @@ def arm(
 
     connection.execute(
         """UPDATE control.execution_gates
-              SET enabled=true,
+              SET enabled=1,
                   reason='R1 MICRO_LIVE explicitly armed by owner',
                   updated_at_epoch_ms=%s
             WHERE mode='mainnet'""",
@@ -333,7 +333,7 @@ def disarm(
     previous = bool(gate and gate[0])
     connection.execute(
         """UPDATE control.execution_gates
-              SET enabled=false,
+              SET enabled=0,
                   reason='R1 MICRO_LIVE stopped by owner',
                   updated_at_epoch_ms=%s
             WHERE mode='mainnet'""",
