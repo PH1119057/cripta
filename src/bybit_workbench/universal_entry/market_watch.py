@@ -776,12 +776,15 @@ class ParameterizedCausalMarketWatch:
         else:
             bucket.sell_notional += notional
         flow_policy = _mapping(policy["flow"], "flow")
-        all_offsets = [
-            _integer(item, "flow offset")
-            for item in _sequence(
-                flow_policy.get("required_offsets_minutes"), "flow.required_offsets_minutes"
-            )
-        ]
+        if not bool(flow_policy.get("enabled")):
+            all_offsets: list[int] = []
+        else:
+            all_offsets = [
+                _integer(item, "flow offset")
+                for item in _sequence(
+                    flow_policy.get("required_offsets_minutes"), "flow.required_offsets_minutes"
+                )
+            ]
         retention = max(all_offsets, default=0) + 5
         cutoff = minute - timedelta(minutes=retention)
         for key in tuple(state.flow):
