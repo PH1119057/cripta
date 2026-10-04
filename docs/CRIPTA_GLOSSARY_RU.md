@@ -400,6 +400,11 @@ physical slot claim и не имеет Exchange mutation rights.
 
 **Исследование / research** — получение доказательств. Не канон и не Strategy.
 
+**R1** — current research label для исследуемого L5-3 ping-pong Strategy Candidate.
+R1 не является production Strategy ID и сам по себе не даёт SHADOW/MICRO_LIVE/LIVE
+rights. Exact R1 research contract и screening lineage фиксируются в
+`TRADING_CONTOUR §1.10` и `RESEARCH_COMPUTE §19`.
+
 **Evidence / доказательный материал** — результат исследования/runtime-наблюдения.
 
 **Канон** — только явно утверждённые владельцем активные документы и точная
