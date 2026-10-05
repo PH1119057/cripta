@@ -244,6 +244,65 @@ expected baseline = verified
 
 До independent remote SHA verification production deploy запрещён.
 
+## 8.1 Presentation-only Dashboard UI release — независим от trading runtime
+
+OWNER DECISION 2026-10-05:
+
+Presentation-only изменение Dashboard UI не является изменением торгового
+runtime и не должно останавливать реальную торговлю.
+
+```text
+presentation-only UI
+-> Git-first verified UI commit
+-> UI-only validation
+-> atomic UI asset deploy
+-> UI verification
+
+НЕ ТРЕБУЕТ:
+mainnet gate = 0
+Execution OFF
+Strategy deactivation
+restart Entry/Exit/private runtime
+restart trading services
+```
+
+Для этого существует отдельная identity:
+
+```text
+DASHBOARD_UI_COMMIT
+DASHBOARD_UI_ROOT = /srv/cripta/dashboard-ui
+```
+
+`DASHBOARD_UI_COMMIT` не заменяет `INSTALLED_COMMIT` / `LOADED_COMMIT`:
+application/trading runtime и presentation UI версионируются независимо.
+
+Presentation-only scope разрешён только если diff **не меняет**:
+- server/API handlers, authentication/authorization;
+- API endpoint selection, request payloads или mutation/control actions;
+- Strategy/Entry/Exit/Execution semantics;
+- gates, permissions, LIVE-arm/re-arm;
+- decision/execution-affecting JavaScript;
+- runtime service/unit/config semantics.
+
+Изменение control-affecting UI/JS не считается presentation-only и идёт через
+обычный runtime release contract.
+
+Canonical UI-only deploy rail обязан:
+- брать bytes только из exact verified Git commit, уже опубликованного на
+  approved GitHub ref;
+- fail-closed проверять presentation-only scope;
+- не изменять `mainnet gate`, StrategyActivation или execution permissions;
+- до/после доказывать неизменность trading gate/permissions;
+- не останавливать и не перезапускать trading services;
+- для static asset, читаемого на каждый HTTP request, не перезапускать даже
+  dashboard service без необходимости;
+- атомарно переключать только UI asset;
+- сохранять exact `DASHBOARD_UI_COMMIT` и source/live hash evidence.
+
+Full runtime installer обязан сохранять эту физическую независимость и
+подключать runtime Dashboard к current UI asset, а не возвращать presentation
+asset под общий trading-runtime lifecycle.
+
 ## 9. Strongest practical gate
 
 По возможности:
