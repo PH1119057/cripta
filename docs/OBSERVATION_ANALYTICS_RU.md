@@ -306,6 +306,14 @@ UI/read-model:
 - не пересчитывает Entry независимо от канонического runtime;
 - неизвестное показывает как неизвестное.
 
+Deployment contract presentation-layer:
+- presentation-only HTML/CSS/read-model rendering может обновляться независимо
+  от trading runtime;
+- такой deploy не требует disarm, Strategy deactivation или restart торговых
+  сервисов;
+- control/API/auth/mutation semantics не входят в presentation-only scope;
+- exact UI bytes имеют отдельную `DASHBOARD_UI_COMMIT` identity.
+
 ## 3.5 Lifecycle Supervisor
 
 Lifecycle Supervisor — технический сквозной контролёр lifecycle. Он не является
