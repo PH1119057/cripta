@@ -886,7 +886,28 @@ def strategy_paper_state() -> dict[str, object]:
                   AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
                 ORDER BY p.opened_at DESC LIMIT 1000"""
         ).fetchall()
-        aggregate_rows = connection.execute(
+        active_aggregate_rows = connection.execute(
+            """SELECT p.strategy_id,p.strategy_version,c.name,
+                      count(*) FILTER (WHERE p.leg_type='PRIMARY') AS positions,
+                      count(*) FILTER (WHERE p.state='OPEN') AS open_positions,
+                      count(*) FILTER (WHERE p.state='CLOSED') AS closed_positions,
+                      coalesce(sum(p.gross_pnl_usdt) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(avg(p.gross_return_pct) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(avg(p.mfe_pct) FILTER (WHERE p.leg_type='PRIMARY'),0),
+                      coalesce(avg(p.mae_pct) FILTER (WHERE p.leg_type='PRIMARY'),0)
+                 FROM strategy_entry.paper_positions p
+                 JOIN strategy_entry.strategy_activations a
+                   ON a.strategy_id=p.strategy_id
+                  AND a.strategy_version=p.strategy_version
+                  AND a.strategy_config_fingerprint=p.strategy_config_fingerprint
+                  AND a.enabled=true
+                 LEFT JOIN strategy_entry.strategy_cards c
+                   ON c.strategy_id=p.strategy_id AND c.strategy_version=p.strategy_version
+                  AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
+                GROUP BY p.strategy_id,p.strategy_version,c.name
+                ORDER BY p.strategy_id,p.strategy_version"""
+        ).fetchall()
+        historical_aggregate_rows = connection.execute(
             """SELECT p.strategy_id,p.strategy_version,c.name,
                       count(*) FILTER (WHERE p.leg_type='PRIMARY') AS positions,
                       count(*) FILTER (WHERE p.state='OPEN') AS open_positions,
@@ -934,21 +955,26 @@ def strategy_paper_state() -> dict[str, object]:
         }
         for row in position_rows
     ]
-    summary = [
-        {
-            "strategy_id": row[0], "strategy_version": row[1], "strategy_name": row[2],
-            "positions": int(row[3]), "open_positions": int(row[4]),
-            "closed_positions": int(row[5]), "gross_pnl_usdt": str(row[6]),
-            "avg_return_pct": str(row[7]), "avg_mfe_pct": str(row[8]), "avg_mae_pct": str(row[9]),
-        }
-        for row in aggregate_rows
-    ]
+    def aggregate_payload(rows: list[object]) -> list[dict[str, object]]:
+        return [
+            {
+                "strategy_id": row[0], "strategy_version": row[1], "strategy_name": row[2],
+                "positions": int(row[3]), "open_positions": int(row[4]),
+                "closed_positions": int(row[5]), "gross_pnl_usdt": str(row[6]),
+                "avg_return_pct": str(row[7]), "avg_mfe_pct": str(row[8]), "avg_mae_pct": str(row[9]),
+            }
+            for row in rows
+        ]
+
+    summary = aggregate_payload(active_aggregate_rows)
+    history_summary = aggregate_payload(historical_aggregate_rows)
     return {
         "installed": True,
         "pending": pending,
         "open": [item for item in positions if item["state"] == "OPEN"],
         "closed": [item for item in positions if item["state"] == "CLOSED"],
         "summary": summary,
+        "history_summary": history_summary,
     }
 
 
