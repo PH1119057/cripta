@@ -1135,6 +1135,50 @@ MAINNET = DISARMED
 
 Это fail-closed состояние является ожидаемым и не считается дефектом.
 
+## 18.2 R1 MICRO_LIVE current runtime — CHECKED HERE 2026-10-05
+
+This section supersedes §18.1 **for current runtime status only**. §18.1 is
+retained as historical pre-arm evidence from 2026-10-04 and must not be read as
+the current gate state.
+
+CHECKED HERE against PostgreSQL/runtime after the owner-approved bugfix deploy
+and exact R1 re-arm:
+
+```text
+SOURCE_HEAD / REMOTE_HEAD                  = 49a86e5996452ee79d17569ee24749f0eba9a8be
+INSTALLED_COMMIT / LOADED_COMMIT           = 49a86e5996452ee79d17569ee24749f0eba9a8be
+mainnet gate                               = ARMED / enabled=1
+gate reason                                = R1 MICRO_LIVE explicitly armed by owner
+enabled R1 execution permissions           = 5
+active exact R1 LIVE-arm sessions          = 5
+enabled exact R1 StrategyActivation        = 5
+open real positions                        = 0
+hot/pending exchange orders                = 0
+```
+
+Current exact R1 cohort remains:
+
+```text
+APTUSDT
+INJUSDT
+DOTUSDT
+LTCUSDT
+ARBUSDT
+```
+
+This is `MICRO_LIVE`, not unrestricted `LIVE`.
+
+```text
+READY_FOR_LIVE       = NO
+READY_FOR_MICRO_LIVE = YES [current exact owner-approved R1 scope]
+MAINNET              = ARMED [R1 MICRO_LIVE exact cohort only]
+```
+
+The MarketRegime prospective validator/research contour has no
+Strategy/Entry/Exit/Execution mutation path and does not change this state.
+Research observations must report this runtime truth but must not mutate gate,
+execution permissions or LIVE-arm.
+
 # 19. Repository / security checkpoint
 
 CHECKED HERE 2026-09-21:
