@@ -65,7 +65,7 @@ class PlanState:
         kind = fact.event_kind.upper()
         self.event_counts[kind] = self.event_counts.get(kind, 0) + 1
         self.recent_events.append((kind, fact.observed_at))
-        if kind == "TOUCH" and independent_touch:
+        if kind in _TOUCH_EVENT_KINDS and independent_touch:
             self.touch_count += 1
             self.last_touch_at = fact.observed_at
             self.exited_zone_since_touch = False
@@ -244,12 +244,15 @@ def _duration_seconds(value: Decimal, unit: str | None) -> Decimal:
     return value * factors[unit]
 
 
+_TOUCH_EVENT_KINDS = frozenset({"TOUCH", "R1_TOUCH"})
+
+
 def is_independent_touch(
     fact: MarketFactEnvelope,
     state: PlanState,
     policy: TouchPolicy,
 ) -> bool:
-    if fact.event_kind.upper() != "TOUCH":
+    if fact.event_kind.upper() not in _TOUCH_EVENT_KINDS:
         return False
     next_touch_number = state.touch_count + 1
     if policy.maximum_touch_count is not None and next_touch_number > policy.maximum_touch_count:
