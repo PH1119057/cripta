@@ -108,6 +108,11 @@ Filesystem contours читать из MAP/DEVELOPMENT/RESEARCH: source=`/srv/cri
 
 Patch/deploy не имеет права молча включать LIVE. Re-arm требует current LIVE-arm contract и explicit owner approval.
 
+Presentation-only Dashboard UI deploy отделён от trading runtime: он не требует
+disarm/Execution OFF/restart trading services. API/control/decision-affecting
+UI/JS не является presentation-only и идёт через full runtime release.
+
+
 ## 7. Server-side scripts
 
 Перед написанием/запуском server-side script/service/job, который пишет на filesystem или меняет effective actor, обязательно читать:
