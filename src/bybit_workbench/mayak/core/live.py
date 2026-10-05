@@ -505,10 +505,10 @@ class SourceStamp:
 
 class LiveMayakEngine:
     ARCHITECTURE_VERSION = "1.1"
-    FEATURE_VERSION = "objective-coin-context-v2"
+    FEATURE_VERSION = "objective-coin-context-v3"
     """Pure, causal, read-only market observer. It has no execution dependency."""
 
-    VERSION = "mayak-v2.2"
+    VERSION = "mayak-v2.3"
 
     def __init__(self, symbols: tuple[str, ...], *, exact_liquidations: bool = True) -> None:
         self.symbols = symbols

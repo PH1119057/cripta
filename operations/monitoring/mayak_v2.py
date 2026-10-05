@@ -190,12 +190,30 @@ class Collector:
                 scope text NOT NULL,
                 gap_started_at timestamptz NOT NULL,
                 gap_ended_at timestamptz NOT NULL,
-                duration_seconds double precision NOT NULL,
+                missing_units integer CHECK(missing_units > 0),
+                duration_seconds double precision CHECK(duration_seconds > 0),
                 detected_at timestamptz NOT NULL DEFAULT clock_timestamp(),
                 repair_status text NOT NULL DEFAULT 'UNREPAIRED',
                 repair_source text,
                 provenance jsonb NOT NULL DEFAULT '{}'::jsonb,
-                PRIMARY KEY(source,scope,gap_started_at,gap_ended_at))""")
+                PRIMARY KEY(source,scope,gap_started_at,gap_ended_at),
+                CHECK(missing_units IS NOT NULL OR duration_seconds IS NOT NULL))""")
+            db.execute(
+                "ALTER TABLE mayak_v2.continuity_gaps "
+                "ADD COLUMN IF NOT EXISTS missing_units integer"
+            )
+            db.execute(
+                "ALTER TABLE mayak_v2.continuity_gaps "
+                "ADD COLUMN IF NOT EXISTS duration_seconds double precision"
+            )
+            db.execute(
+                "ALTER TABLE mayak_v2.continuity_gaps "
+                "ALTER COLUMN duration_seconds DROP NOT NULL"
+            )
+            db.execute(
+                "ALTER TABLE mayak_v2.continuity_gaps "
+                "ALTER COLUMN missing_units DROP NOT NULL"
+            )
             db.execute(
                 "CREATE INDEX IF NOT EXISTS mayak_v2_continuity_gaps_started "
                 "ON mayak_v2.continuity_gaps(gap_started_at DESC)"
@@ -217,7 +235,7 @@ class Collector:
         self._load_persistence_checkpoint()
 
     def _backfill_snapshot_continuity_gaps(self) -> None:
-        """Materialize historical missing minute buckets without inventing snapshots."""
+        """Persist known historical cadence gaps without synthesizing snapshots."""
         with psycopg.connect(DSN) as db:
             db.execute(
                 """WITH ordered AS (
@@ -227,12 +245,12 @@ class Collector:
                     WHERE snapshot_kind='REGULAR' AND regular_minute IS NOT NULL
                 )
                 INSERT INTO mayak_v2.continuity_gaps(
-                    source,scope,gap_started_at,gap_ended_at,duration_seconds,
+                    source,scope,gap_started_at,gap_ended_at,missing_units,
                     repair_status,provenance)
                 SELECT 'SNAPSHOT_CADENCE','GLOBAL',
                        previous + interval '1 minute',
                        regular_minute - interval '1 minute',
-                       extract(epoch FROM (regular_minute-previous))-60,
+                       (extract(epoch FROM (regular_minute-previous))/60)::integer - 1,
                        'UNREPAIRED',
                        jsonb_build_object(
                            'detected_by','DATA_CONTINUITY_REPAIR_V1',
@@ -251,23 +269,31 @@ class Collector:
         scope: str,
         started_at: datetime,
         ended_at: datetime,
+        missing_units: int | None = None,
+        duration_seconds: float | None = None,
         provenance: dict[str, Any],
     ) -> None:
         if ended_at < started_at:
             return
-        duration_seconds = max(0.0, (ended_at - started_at).total_seconds())
+        if missing_units is not None and missing_units <= 0:
+            return
+        if duration_seconds is not None and duration_seconds <= 0:
+            return
+        if missing_units is None and duration_seconds is None:
+            return
         with psycopg.connect(DSN) as db:
             db.execute(
                 """INSERT INTO mayak_v2.continuity_gaps(
-                    source,scope,gap_started_at,gap_ended_at,duration_seconds,
-                    repair_status,provenance)
-                   VALUES(%s,%s,%s,%s,%s,'UNREPAIRED',%s::jsonb)
+                    source,scope,gap_started_at,gap_ended_at,missing_units,
+                    duration_seconds,repair_status,provenance)
+                   VALUES(%s,%s,%s,%s,%s,%s,'UNREPAIRED',%s::jsonb)
                    ON CONFLICT(source,scope,gap_started_at,gap_ended_at) DO NOTHING""",
                 (
                     source,
                     scope,
                     started_at,
                     ended_at,
+                    missing_units,
                     duration_seconds,
                     json.dumps(provenance, ensure_ascii=False, sort_keys=True),
                 ),
@@ -349,16 +375,17 @@ class Collector:
         result = self.continuity.advance(minute)
         gap_start = result.get("gap_started_at")
         gap_end = result.get("gap_ended_at")
-        if gap_start and gap_end:
+        missing_units = int(result.get("gap_missing_minutes") or 0)
+        if gap_start and gap_end and missing_units > 0:
             self._persist_continuity_gap(
                 source="SNAPSHOT_CADENCE",
                 scope="GLOBAL",
                 started_at=datetime.fromisoformat(str(gap_start)),
                 ended_at=datetime.fromisoformat(str(gap_end)),
+                missing_units=missing_units,
                 provenance={
                     "detected_by": "DATA_CONTINUITY_REPAIR_V1",
                     "semantics": "MISSING_BUCKETS_NOT_SYNTHESIZED",
-                    "missing_minutes": result.get("gap_missing_minutes"),
                 },
             )
         self.last_persisted_minute = minute
@@ -468,6 +495,7 @@ class Collector:
                 scope=market,
                 started_at=datetime.fromtimestamp(gap_started_at, UTC),
                 ended_at=datetime.fromtimestamp(connected_at, UTC),
+                duration_seconds=connected_at - gap_started_at,
                 provenance={
                     "detected_by": "DATA_CONTINUITY_REPAIR_V1",
                     "semantics": "EXACT_EVENTS_DURING_GAP_UNKNOWN",

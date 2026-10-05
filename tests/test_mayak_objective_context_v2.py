@@ -192,7 +192,8 @@ def test_coin_market_context_contains_no_trading_command_or_strategy_outcome() -
         assert forbidden not in serialized
     assert context["provenance"]["trading_command"] is False
     assert context["schema_version"] == "coin-market-context-v1"
-    assert context["engine_version"] == "mayak-v2.2"
+    assert context["engine_version"] == "mayak-v2.3"
+    assert context["feature_version"] == "objective-coin-context-v3"
 
 
 def test_spot_subscription_limit_and_ack_contract_are_explicit() -> None:
