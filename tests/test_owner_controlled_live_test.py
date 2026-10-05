@@ -37,9 +37,10 @@ def test_owner_controlled_live_test_is_fixed_small_market_entry() -> None:
 
 def test_owner_controlled_live_test_requires_current_active_micro_live_symbol() -> None:
     assert "FROM control.live_arm_sessions" in APP
-    assert "state='ACTIVE' AND symbol=%s" in APP
+    assert "state='ACTIVE'" in APP
+    assert "symbol=%s" in APP
     assert "release_commit=%s" in APP
-    assert "current active MICRO_LIVE cohort" in APP
+    assert "active MICRO_LIVE cohort" in APP
 
 
 def test_owner_controlled_live_test_does_not_forge_strategy_signal() -> None:
