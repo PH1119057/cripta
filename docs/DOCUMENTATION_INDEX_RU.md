@@ -555,3 +555,25 @@ Strategy version -> validation path.
 Bootstrap-visible Hard Stop behavior is mirrored in README / AGENTS /
 operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt; document set,
 mandatory pre-read, routing and Project Source count remain unchanged.
+
+
+# 19. Dashboard UI release separation — 2026-10-05
+
+OWNER DECISION 2026-10-05:
+
+Presentation-only Dashboard UI получает отдельный release/deploy lifecycle и
+не должен останавливать trading runtime.
+
+Canonical ownership:
+- ARCH: presentation UI boundary;
+- OBSERVATION_ANALYTICS: UI/read-model semantics;
+- DEVELOPMENT_RELEASE: exact UI-only Git/deploy gate;
+- GLOSSARY: `DASHBOARD_UI_COMMIT`;
+- MAP: current physical/runtime state.
+
+Правило не разрешает обходить full release для API/auth/control/mutation или
+decision/execution-affecting JavaScript. Только presentation-only asset может
+обновляться при открытом mainnet gate и Execution ON.
+
+Document set, mandatory pre-read, routing и Project Source count не меняются.
+README / AGENTS / Project Instructions template синхронизированы в этом cycle.
