@@ -82,6 +82,34 @@ SESSION_SECRET_FILE = Path(
     os.environ.get("CRIPTA_SESSION_SECRET_FILE", "/etc/cripta-dashboard/session.secret")
 )
 SESSION_COOKIE = "cripta_session"
+PAPER_MAKER_FEE_RATE = 0.00020
+PAPER_TAKER_FEE_RATE = 0.00055
+REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
+
+
+def _paper_entry_fee_rate(order_type: object) -> float:
+    return PAPER_MAKER_FEE_RATE if str(order_type or "").upper() == "LIMIT_OFFSET" else PAPER_TAKER_FEE_RATE
+
+
+def _paper_exit_fee_rate(exit_reason: object) -> float:
+    return PAPER_MAKER_FEE_RATE if str(exit_reason or "").upper() == "TAKE_PROFIT" else PAPER_TAKER_FEE_RATE
+
+
+def _paper_net_pnl_usdt(
+    *, gross_pnl: object, entry_price: object, exit_price: object,
+    quantity: object, order_type: object, exit_reason: object,
+) -> float | None:
+    if any(value is None for value in (gross_pnl, entry_price, exit_price, quantity)):
+        return None
+    qty = float(quantity)
+    entry = float(entry_price)
+    exit_value = float(exit_price)
+    gross = float(gross_pnl)
+    entry_fee = entry * qty * _paper_entry_fee_rate(order_type)
+    exit_fee = exit_value * qty * _paper_exit_fee_rate(exit_reason)
+    return gross - entry_fee - exit_fee
+
+
 ALLOWED_SERVICES = (
     "cripta-dashboard.service",
     "cripta-download-frozen.service",
@@ -445,14 +473,24 @@ def strategy_signal_monitor_state(*, window_hours: int = 24) -> dict[str, object
                         current_price = float(raw_price)
                         entry_price = float(row[16])
                         quantity = float(row[17])
-                        pnl = (
+                        gross_open = (
                             (current_price - entry_price) * quantity
                             if str(row[6]) == "LONG"
                             else (entry_price - current_price) * quantity
                         )
+                        entry_fee = entry_price * quantity * _paper_entry_fee_rate(row[8])
+                        exit_fee = current_price * quantity * PAPER_TAKER_FEE_RATE
+                        pnl = gross_open - entry_fee - exit_fee
                         pnl_kind = "open"
                 elif position_state == "CLOSED":
-                    pnl = None if row[21] is None else float(row[21])
+                    pnl = _paper_net_pnl_usdt(
+                        gross_pnl=row[21],
+                        entry_price=row[16],
+                        exit_price=row[19],
+                        quantity=row[17],
+                        order_type=row[8],
+                        exit_reason=row[20],
+                    )
                     pnl_kind = "closed" if pnl is not None else None
                     result_class = (
                         "positive" if pnl is not None and pnl > 0
@@ -493,6 +531,7 @@ def strategy_signal_monitor_state(*, window_hours: int = 24) -> dict[str, object
                         "result_text": result_text,
                         "pnl_usdt": pnl,
                         "pnl_kind": pnl_kind,
+                        "pnl_basis": "AFTER_COMMISSIONS",
                         "return_pct": None if row[22] is None else float(row[22]),
                         "mfe_pct": None if row[23] is None else float(row[23]),
                         "mae_pct": None if row[24] is None else float(row[24]),
@@ -857,6 +896,10 @@ def live_trading_state() -> dict[str, object]:
 
 
 def strategy_paper_state() -> dict[str, object]:
+    try:
+        paper_tickers = live_tickers()
+    except Exception:
+        paper_tickers = {}
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         if connection.execute(
             "SELECT to_regclass('strategy_entry.paper_positions')"
@@ -880,8 +923,10 @@ def strategy_paper_state() -> dict[str, object]:
                       p.best_price,p.mfe_pct,p.mae_pct,p.active_stop_price,p.trailing_active,
                       p.hedge_opened,p.closed_at,p.exit_price,p.exit_reason,p.gross_pnl_usdt,
                       p.gross_return_pct,p.signal_id,p.entry_plan_fingerprint,
-                      p.exit_plan_fingerprint
+                      p.exit_plan_fingerprint,o.order_type
                  FROM strategy_entry.paper_positions p
+                 LEFT JOIN strategy_entry.paper_orders o
+                   ON o.paper_order_id=p.paper_order_id
                  LEFT JOIN strategy_entry.strategy_cards c
                    ON c.strategy_id=p.strategy_id AND c.strategy_version=p.strategy_version
                   AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
@@ -892,11 +937,20 @@ def strategy_paper_state() -> dict[str, object]:
                       count(*) FILTER (WHERE p.leg_type='PRIMARY') AS positions,
                       count(*) FILTER (WHERE p.state='OPEN') AS open_positions,
                       count(*) FILTER (WHERE p.state='CLOSED') AS closed_positions,
-                      coalesce(sum(p.gross_pnl_usdt) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(sum(
+                          p.gross_pnl_usdt
+                          - p.entry_price*p.quantity*(
+                              CASE WHEN o.order_type='LIMIT_OFFSET' THEN 0.0002 ELSE 0.00055 END
+                            )
+                          - p.exit_price*p.quantity*(
+                              CASE WHEN p.exit_reason='TAKE_PROFIT' THEN 0.0002 ELSE 0.00055 END
+                            )
+                      ) FILTER (WHERE p.state='CLOSED'),0),
                       coalesce(avg(p.gross_return_pct) FILTER (WHERE p.state='CLOSED'),0),
                       coalesce(avg(p.mfe_pct) FILTER (WHERE p.leg_type='PRIMARY'),0),
                       coalesce(avg(p.mae_pct) FILTER (WHERE p.leg_type='PRIMARY'),0)
                  FROM strategy_entry.paper_positions p
+                 LEFT JOIN strategy_entry.paper_orders o ON o.paper_order_id=p.paper_order_id
                  JOIN strategy_entry.strategy_activations a
                    ON a.strategy_id=p.strategy_id
                   AND a.strategy_version=p.strategy_version
@@ -913,11 +967,20 @@ def strategy_paper_state() -> dict[str, object]:
                       count(*) FILTER (WHERE p.leg_type='PRIMARY') AS positions,
                       count(*) FILTER (WHERE p.state='OPEN') AS open_positions,
                       count(*) FILTER (WHERE p.state='CLOSED') AS closed_positions,
-                      coalesce(sum(p.gross_pnl_usdt) FILTER (WHERE p.state='CLOSED'),0),
+                      coalesce(sum(
+                          p.gross_pnl_usdt
+                          - p.entry_price*p.quantity*(
+                              CASE WHEN o.order_type='LIMIT_OFFSET' THEN 0.0002 ELSE 0.00055 END
+                            )
+                          - p.exit_price*p.quantity*(
+                              CASE WHEN p.exit_reason='TAKE_PROFIT' THEN 0.0002 ELSE 0.00055 END
+                            )
+                      ) FILTER (WHERE p.state='CLOSED'),0),
                       coalesce(avg(p.gross_return_pct) FILTER (WHERE p.state='CLOSED'),0),
                       coalesce(avg(p.mfe_pct) FILTER (WHERE p.leg_type='PRIMARY'),0),
                       coalesce(avg(p.mae_pct) FILTER (WHERE p.leg_type='PRIMARY'),0)
                  FROM strategy_entry.paper_positions p
+                 LEFT JOIN strategy_entry.paper_orders o ON o.paper_order_id=p.paper_order_id
                  LEFT JOIN strategy_entry.strategy_cards c
                    ON c.strategy_id=p.strategy_id AND c.strategy_version=p.strategy_version
                   AND c.strategy_config_fingerprint=p.strategy_config_fingerprint
@@ -952,17 +1015,46 @@ def strategy_paper_state() -> dict[str, object]:
             "gross_pnl_usdt": None if row[24] is None else str(row[24]),
             "gross_return_pct": None if row[25] is None else str(row[25]),
             "signal_id": row[26], "entry_plan_fingerprint": row[27],
-            "exit_plan_fingerprint": row[28],
+            "exit_plan_fingerprint": row[28], "entry_order_type": row[29],
+            "net_pnl_usdt": _paper_net_pnl_usdt(
+                gross_pnl=row[24], entry_price=row[10], exit_price=row[22],
+                quantity=row[14], order_type=row[29], exit_reason=row[23],
+            ),
         }
         for row in position_rows
     ]
+    for item in positions:
+        if item["state"] != "OPEN":
+            continue
+        ticker = paper_tickers.get(str(item["symbol"])) or {}
+        current_price = (
+            ticker.get("bid_price")
+            if item["direction"] == "LONG"
+            else ticker.get("ask_price")
+        ) or ticker.get("last_price") or ticker.get("mark_price")
+        if current_price in (None, ""):
+            continue
+        entry = float(item["entry_price"])
+        qty = float(item["quantity"])
+        current = float(current_price)
+        gross = (
+            (current - entry) * qty
+            if item["direction"] == "LONG"
+            else (entry - current) * qty
+        )
+        entry_fee = entry * qty * _paper_entry_fee_rate(item["entry_order_type"])
+        exit_fee = current * qty * PAPER_TAKER_FEE_RATE
+        item["current_price"] = str(current_price)
+        item["net_pnl_usdt"] = gross - entry_fee - exit_fee
+        item["pnl_basis"] = "AFTER_COMMISSIONS_TO_IMMEDIATE_CLOSE"
     def aggregate_payload(rows: list[object]) -> list[dict[str, object]]:
         return [
             {
                 "strategy_id": row[0], "strategy_version": row[1], "strategy_name": row[2],
                 "positions": int(row[3]), "open_positions": int(row[4]),
-                "closed_positions": int(row[5]), "gross_pnl_usdt": str(row[6]),
+                "closed_positions": int(row[5]), "net_pnl_usdt": str(row[6]),
                 "avg_return_pct": str(row[7]), "avg_mfe_pct": str(row[8]), "avg_mae_pct": str(row[9]),
+                "pnl_basis": "AFTER_COMMISSIONS",
             }
             for row in rows
         ]
@@ -990,7 +1082,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ownership_rows = []
         if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
             ownership_rows = connection.execute(
-                """SELECT o.symbol,o.position_idx,o.side,o.strategy_id,o.strategy_version,c.name
+                """SELECT o.symbol,o.position_idx,o.side,o.strategy_id,o.strategy_version,c.name,
+                      coalesce((
+                          SELECT sum(e.exec_fee::numeric)
+                            FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
+                            JOIN runtime.executions e ON e.exec_id=xid.exec_id
+                      ),0) AS entry_fee_actual
                    FROM runtime.position_ownership o
                    LEFT JOIN strategy_entry.strategy_cards c
                      ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
@@ -1104,6 +1201,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             "strategy_id": str(row[3]),
             "strategy_version": str(row[4]),
             "strategy_name": None if row[5] is None else str(row[5]),
+            "entry_fee_actual": float(row[6] or 0),
         }
         for row in ownership_rows
     }
@@ -1138,6 +1236,18 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         executable_price = ticker.get("bid_price") if row[2] == "Buy" else ticker.get("ask_price")
         trailing_order, trailing_updated = trailing_by_symbol.get(str(row[0]), ({}, None))
         ownership = ownership_by_position.get((str(row[0]), int(row[1] or 0), str(row[2])))
+        entry_price = float(row[4] or 0)
+        position_size = float(row[3] or 0)
+        executable_value = float(executable_price or ticker.get("last_price") or raw.get("markPrice") or 0)
+        gross_to_close = (
+            (executable_value - entry_price) * position_size
+            if row[2] == "Buy"
+            else (entry_price - executable_value) * position_size
+        ) if entry_price > 0 and executable_value > 0 and position_size > 0 else None
+        net_to_close = None
+        if gross_to_close is not None and ownership is not None:
+            exit_fee_estimate = executable_value * position_size * REAL_IMMEDIATE_CLOSE_FEE_RATE
+            net_to_close = gross_to_close - float(ownership["entry_fee_actual"]) - exit_fee_estimate
         positions.append(
             {
                 "symbol": row[0],
@@ -1160,6 +1270,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "trailing_trigger_by": trailing_order.get("triggerBy"),
                 "trailing_updated_at_epoch_ms": trailing_updated,
                 "unrealised_pnl": raw.get("unrealisedPnl"),
+                "net_pnl_to_close": net_to_close,
+                "pnl_basis": "AFTER_COMMISSIONS_TO_IMMEDIATE_CLOSE",
                 "position_value": raw.get("positionValue"),
                 "supervisor": supervisor_by_symbol.get(str(row[0])),
                 "strategy_id": None if ownership is None else ownership["strategy_id"],
@@ -2115,10 +2227,7 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
             "Закрыто",
             "Цена",
             "Причина биржи",
-            "До комиссий USDT",
-            "Комиссия входа USDT",
-            "Комиссия выхода USDT",
-            "Чистый итог USDT",
+            "После комиссий USDT",
         ]
     )
     rows = [
@@ -2137,10 +2246,9 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
                 x["qty"],
                 x["price"],
                 x["reason"],
-                x["gross_pnl"],
-                x["entry_fee"],
-                x["exit_fee"],
-                x["net_pnl"],
+                x.get("actual_net_pnl")
+                if x.get("actual_net_pnl") is not None
+                else x["net_pnl"],
             ]
         )
     stem = "закрытые_реальные_сделки"
