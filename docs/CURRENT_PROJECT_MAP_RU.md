@@ -1514,11 +1514,39 @@ Such deploy:
 
 Current implementation migration from runtime-owned
 `operations/dashboard/index.html` to the separate UI rail is part of the same
-owner-approved change. Until runtime evidence is recorded after deployment,
-status is:
+owner-approved change.
+
+CHECKED HERE 2026-10-05 after first UI-only deploy:
 
 ```text
-CANON      = YES
-IMPLEMENTED = IN PROGRESS
-DEPLOYED    = NOT YET VERIFIED HERE
+pre-publication SOURCE/REMOTE snapshot = 45e38252c786c093ebcb41ccce4091018ff20bb0
+INSTALLED_COMMIT                       = ee7bf29cb5249151a90fc3ee8eeb1fdf2684a8b0
+LOADED_COMMIT                          = ee7bf29cb5249151a90fc3ee8eeb1fdf2684a8b0
+DASHBOARD_UI_COMMIT                    = 45e38252c786c093ebcb41ccce4091018ff20bb0
+DASHBOARD_UI_ROOT                      = /srv/cripta/dashboard-ui
+OPERATIONAL_DELTA_COMMIT               = 45e38252c786c093ebcb41ccce4091018ff20bb0
+AFFECTED_OPERATIONAL_PATH              = /usr/local/sbin/cripta-deploy-dashboard-ui
+```
+
+Runtime evidence:
+- presentation-only verifier: `PASS`;
+- UI source/live SHA256 equal:
+  `152cdd213a3ea1c32e865d930c87d6fa9dceb4d3fd854565c017ee94aa1fae61`;
+- `mainnet gate` remained `1`;
+- enabled execution permissions remained `5`;
+- enabled StrategyActivation count remained `5`;
+- active exact LIVE-arm sessions remained `5`;
+- Universal Entry observer/consumer, private runtime, Universal Exit consumer,
+  Lifecycle Supervisor and Dashboard kept the same PIDs with `NRestarts=0`;
+- no trading service and no Dashboard service was restarted.
+
+Status:
+
+```text
+CANON                         = YES
+IMPLEMENTED                   = YES
+DEPLOYED                      = YES
+RUNTIME LIVENESS VERIFIED     = YES
+RUNTIME BEHAVIOR VERIFIED     = YES [UI hot-swap + gate/permission invariance]
+TRADING BEHAVIOR CHANGED      = NO
 ```
