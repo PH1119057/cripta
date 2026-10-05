@@ -592,6 +592,15 @@ contract, consumer/provider path и доказательством реализ�
 удалена/ослаблена/перенесена, но новый owner, contract, implementation или
 consumer path отсутствует/не доказан. Это Hard Stop до owner decision/canon.
 
+**Owner-controlled real execution smoke-test** — explicit owner-triggered
+diagnostic real order used to prove the production Execution/private-runtime ->
+Exchange mutation/fill/protection path. It is not StrategySignal,
+EntryDecision, EntryExecutionRequest or StrategyPosition evidence and is not
+counted as Strategy performance.
+
+**owner_controlled_live_test** — exact runtime source marker for the current
+implementation of that diagnostic command.
+
 # 16. Запрещённые/исторические обозначения
 
 **M3** — ошибочный исторический артефакт голосового распознавания слова

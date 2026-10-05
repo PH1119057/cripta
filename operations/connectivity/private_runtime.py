@@ -1920,19 +1920,58 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 stop_loss_pct=contract["stop_loss_pct"],
                 take_profit_pct=contract["take_profit_pct"],
             )
-            protection = api_post(
-                "/v5/position/trading-stop",
-                {
-                    "category": "linear", "symbol": symbol,
-                    "positionIdx": int(filled_position.get("positionIdx") or 0),
-                    "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
-                    "takeProfit": str(actual_target), "slTriggerBy": str(contract["trigger_by"]),
-                    "tpTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
-                    "tpOrderType": "Market",
-                },
-                key,
-                secret,
-            )
+            try:
+                protection = api_post(
+                    "/v5/position/trading-stop",
+                    {
+                        "category": "linear", "symbol": symbol,
+                        "positionIdx": int(filled_position.get("positionIdx") or 0),
+                        "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
+                        "takeProfit": str(actual_target), "slTriggerBy": str(contract["trigger_by"]),
+                        "tpTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
+                        "tpOrderType": "Market",
+                    },
+                    key,
+                    secret,
+                )
+            except RuntimeError as exc:
+                if "not modified" not in str(exc).lower():
+                    raise
+                verified_payload, _ = api_get(
+                    "/v5/position/list",
+                    {"category": "linear", "symbol": symbol},
+                    key,
+                    secret,
+                )
+                verified_position = next(
+                    (
+                        item
+                        for item in ((verified_payload.get("result") or {}).get("list") or [])
+                        if Decimal(str(item.get("size") or 0)) > 0
+                        and int(item.get("positionIdx") or 0)
+                        == int(filled_position.get("positionIdx") or 0)
+                        and str(item.get("side") or "") == side
+                    ),
+                    None,
+                )
+                if verified_position is None:
+                    raise RuntimeError(
+                        "entry protection not-modified could not be verified: position missing"
+                    ) from exc
+                verified_stop = Decimal(str(verified_position.get("stopLoss") or 0))
+                verified_target = Decimal(str(verified_position.get("takeProfit") or 0))
+                if verified_stop != actual_stop or verified_target != actual_target:
+                    raise RuntimeError(
+                        "entry protection not-modified verification mismatch "
+                        f"requested_stop={actual_stop} actual_stop={verified_stop} "
+                        f"requested_target={actual_target} actual_target={verified_target}"
+                    ) from exc
+                protection = {
+                    "retCode": 0,
+                    "retMsg": "not modified",
+                    "idempotent": True,
+                    "verifiedFromExchange": True,
+                }
             result["actualProtection"] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": str(actual_target), "exchange": protection.get("retMsg"),

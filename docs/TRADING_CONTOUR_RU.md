@@ -892,6 +892,38 @@ Durable fault/delivery/retry/ack/escalation contract остаётся обяза
 не отключается. Исключение не распространяется на другую Strategy, иной cohort,
 увеличение лимитов или полный LIVE; для них применяется обычный checklist выше.
 
+## 4.8 Owner-controlled real execution smoke-test
+
+OWNER DECISION 2026-10-06: для проверки самого production execution transport
+разрешён отдельный **owner-controlled real smoke-test**, который не является
+StrategySignal / EntryDecision / EntryExecutionRequest и не подменяет R1.
+
+Exact current contract:
+
+```text
+trigger = only explicit owner click in authenticated Dashboard
+scope = symbol from current ACTIVE R1 MICRO_LIVE cohort
+direction = LONG or SHORT selected by owner
+stake = 10 USDT
+leverage = 1x
+entry = immediate MARKET
+initial stop = -0.5% from actual fill
+take profit = +0.5% from actual fill
+position mode = ONE_WAY / positionIdx=0
+transport = production private runtime -> Bybit
+```
+
+The smoke-test is an operator control-plane command. It MUST NOT:
+- be generated autonomously;
+- forge StrategySignal/EntryDecision/ExecutionRequest lineage;
+- enter R1 performance/research statistics as a Strategy trade;
+- bypass a closed global mainnet gate, current active MICRO_LIVE symbol scope,
+  occupied Exchange position/order, or stale runtime readiness.
+
+Its purpose is only to prove the downstream Exchange mutation/fill/protection
+path under explicit owner control. Any later use as Strategy behavior requires
+normal Strategy canon/versioning.
+
 # 5. Сквозной handoff
 
 Единственное каноническое определение обязательной lifecycle-chain находится в

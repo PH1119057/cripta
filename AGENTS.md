@@ -43,6 +43,10 @@ AUTHORITATIVE: GitHub PH1119057/cripta:main
 OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
+Owner-controlled real execution smoke-test — explicit operator-only diagnostic,
+not StrategySignal/EntryDecision semantics. Exact current contract:
+TRADING_CONTOUR §4.8; architecture boundary: ARCH §7.1.
+
 Dashboard presentation/read-model deploy отделён от trading runtime:
 он не требует disarm/Execution OFF/restart торговых сервисов. Static UI и
 строго read-only projections/aggregations могут обновляться независимо; backend
