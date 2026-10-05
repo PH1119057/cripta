@@ -406,6 +406,19 @@ operational-safety workflow, но не выбирает emergency action сам�
 не означает автоматическое закрытие уже открытой позиции без отдельного
 разрешённого действия.
 
+## 7.1 Owner-controlled execution diagnostic
+
+A manually confirmed owner smoke-test is a separate control-plane mutation
+capability, not a Strategy execution decision.
+
+It may call the same production Execution/private-runtime adapter to prove
+Exchange order/fill/protection behavior, but it has no right to synthesize
+StrategySignal, EntryDecision or StrategyPosition evidence. It must carry an
+explicit diagnostic source marker, remain operator-triggered only and be
+excluded from Strategy performance semantics.
+
+Current exact limits are owned by TRADING_CONTOUR §4.8.
+
 # 8. EXCHANGE
 
 Exchange — внешний источник фактической истины об orders/fills/positions,
