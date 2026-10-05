@@ -328,3 +328,45 @@ def test_nonzero_liquidation_keeps_intensity_warm_until_full_baseline() -> None:
     assert metrics["acceleration"] is not None
     assert metrics["breadth"] is not None
     assert metrics["phase"] is None
+
+
+
+def test_nonzero_liquidation_becomes_valid_after_full_60m_continuity() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 3700)
+    for minute in (10, 20, 30, 40, 50):
+        item.on_liquidation(
+            "BTCUSDT",
+            (now - timedelta(minutes=minute)).timestamp(),
+            "Buy",
+            100,
+            2,
+        )
+    item.on_liquidation(
+        "BTCUSDT", (now - timedelta(seconds=10)).timestamp(), "Buy", 100, 2
+    )
+
+    metrics = item.snapshot(now)["liquidations"]
+    assert metrics["feature_status"]["intensity"] == "VALID"
+    assert metrics["feature_status"]["acceleration"] == "VALID"
+    assert metrics["feature_status"]["breadth"] == "VALID"
+    assert metrics["feature_status"]["phase"] == "VALID"
+    assert metrics["intensity"] is not None
+    assert metrics["phase"] is not None
+
+
+def test_symbol_liquidation_windows_fail_closed_until_each_window_is_continuous() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 400)
+
+    context = item.snapshot(now)["coin_market_contexts"]["BTCUSDT"]["payload"]["liquidations"]
+    assert context["1m"]["status"] == "VALID"
+    assert context["5m"]["status"] == "VALID"
+    assert context["15m"]["status"] == "WARMUP"
+    assert context["30m"]["status"] == "WARMUP"
+    assert context["15m"]["total_notional_usd"] is None
+    assert context["30m"]["total_notional_usd"] is None

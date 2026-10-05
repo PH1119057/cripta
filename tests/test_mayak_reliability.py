@@ -31,9 +31,19 @@ def test_continuity_counts_missed_calendar_minutes_explicitly(monkeypatch) -> No
     assert later["gap_ended_at"] == "2026-10-02T12:02:00+00:00"
     assert later["gap_missing_minutes"] == 2
     assert later["coverage_pct"] == 50.0
-    assert len(persisted) == 1
-    assert persisted[0]["source"] == "SNAPSHOT_CADENCE"
-    assert persisted[0]["scope"] == "GLOBAL"
+    assert persisted == [
+        {
+            "source": "SNAPSHOT_CADENCE",
+            "scope": "GLOBAL",
+            "started_at": first + timedelta(minutes=1),
+            "ended_at": first + timedelta(minutes=2),
+            "missing_units": 2,
+            "provenance": {
+                "detected_by": "DATA_CONTINUITY_REPAIR_V1",
+                "semantics": "MISSING_BUCKETS_NOT_SYNTHESIZED",
+            },
+        }
+    ]
 
 
 def test_state_writes_are_atomic_under_concurrent_error_and_main_loop(
@@ -134,7 +144,20 @@ def test_transport_gap_is_persisted_exactly_once_on_reconnect(monkeypatch) -> No
     assert gap["scope"] == "linear"
     assert gap["started_at"] == datetime.fromtimestamp(100.0, UTC)
     assert gap["ended_at"] == datetime.fromtimestamp(112.5, UTC)
+    assert gap["duration_seconds"] == 12.5
     assert gap["provenance"]["semantics"] == "EXACT_EVENTS_DURING_GAP_UNKNOWN"
 
     collector._mark_transport_connected("linear", 120.0)
     assert len(persisted) == 1
+
+
+
+def test_continuity_gap_schema_supports_bucket_and_transport_semantics() -> None:
+    source = Path("operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
+    assert "missing_units integer CHECK(missing_units > 0)" in source
+    assert "duration_seconds double precision CHECK(duration_seconds > 0)" in source
+    assert "missing_units IS NOT NULL OR duration_seconds IS NOT NULL" in source
+    assert "ADD COLUMN IF NOT EXISTS missing_units integer" in source
+    assert "ALTER COLUMN duration_seconds DROP NOT NULL" in source
+    assert '"WS_TRANSPORT"' in source
+    assert '"EXACT_EVENTS_DURING_GAP_UNKNOWN"' in source
