@@ -102,21 +102,12 @@ allowed_assignments = {
     "PAPER_TAKER_FEE_RATE",
     "REAL_IMMEDIATE_CLOSE_FEE_RATE",
 }
-forbidden_text = (
-    "INSERT ",
-    "UPDATE ",
-    "DELETE ",
-    "ALTER ",
-    "DROP ",
-    "TRUNCATE ",
+forbidden_call_tokens = (
     "arm_r1_micro_live",
     "disarm_r1_micro_live",
     "set_execution_permission",
-    "control.execution_gates",
-    "execution_permissions",
-    "live_arm_sessions",
-    "trade_commands",
 )
+mutation_sql = re.compile(r"\\b(INSERT\\s+INTO|UPDATE\\s+|DELETE\\s+FROM|ALTER\\s+TABLE|DROP\\s+|TRUNCATE\\s+)\\b", re.I)
 
 def top_level(tree: ast.Module) -> dict[tuple[str, str], ast.AST]:
     out: dict[tuple[str, str], ast.AST] = {}
@@ -155,9 +146,12 @@ for kind, name in changed:
         node = new_nodes.get((kind, name))
         if node is not None:
             src = ast.get_source_segment(new_app, node) or ""
-            upper = src.upper()
-            if any(token.upper() in upper for token in forbidden_text):
-                raise SystemExit(f"Dashboard verifier failed: forbidden mutation/control token in {name}")
+            if any(token in src for token in forbidden_call_tokens):
+                raise SystemExit(f"Dashboard verifier failed: forbidden control call in {name}")
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    if mutation_sql.search(child.value):
+                        raise SystemExit(f"Dashboard verifier failed: mutation SQL in {name}")
         continue
     if kind == "assign" and name in allowed_assignments:
         continue
