@@ -185,15 +185,9 @@ class LiquidationWindow:
     def metrics(
         self, now: float, symbols: tuple[str, ...], connected_since: float | None
     ) -> dict[str, Any]:
-        if connected_since is None or now - connected_since < 900:
-            return {
-                "status": "WARMUP",
-                "observed_at": None,
-                "intensity": None,
-                "acceleration": None,
-                "breadth": None,
-                "phase": None,
-            }
+        continuous_seconds = (
+            max(0.0, now - connected_since) if connected_since is not None else 0.0
+        )
         with self.lock:
             rows = tuple(self.rows)
         current = [row for row in rows if row[0] >= now - 60]
@@ -203,24 +197,17 @@ class LiquidationWindow:
         for offset in range(1, 61):
             lower = now - (offset + 1) * 60
             upper = now - offset * 60
-            completed_minutes.append(sum(row[3] for row in prior if lower <= row[0] < upper))
+            completed_minutes.append(
+                sum(row[3] for row in prior if lower <= row[0] < upper)
+            )
         calibrated = sorted(value for value in completed_minutes if value > 0)
-        if current_usd > 0 and len(calibrated) < 5:
-            return {
-                "status": "WARMUP",
-                "observed_at": None,
-                "intensity": None,
-                "acceleration": None,
-                "breadth": None,
-                "phase": None,
-                "current_1m_usd": current_usd,
-                "baseline_nonzero_minutes": len(calibrated),
-                "baseline_required_nonzero_minutes": 5,
-            }
         ordered = calibrated or [0.0]
 
         def quantile(fraction: float) -> float:
-            index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * fraction) - 1))
+            index = min(
+                len(ordered) - 1,
+                max(0, math.ceil(len(ordered) * fraction) - 1),
+            )
             return ordered[index]
 
         p50, p90, p99 = quantile(0.50), quantile(0.90), quantile(0.99)
@@ -234,6 +221,7 @@ class LiquidationWindow:
             intensity = "HIGH"
         else:
             intensity = "EXTREME"
+
         previous_average = sum(completed_minutes[:5]) / 5
         if previous_average == 0:
             acceleration = "STABLE" if current_usd == 0 else "SURGING"
@@ -250,6 +238,7 @@ class LiquidationWindow:
                 if ratio > 1.1
                 else "STABLE"
             )
+
         active = {row[1] for row in rows if row[0] >= now - 300}
         share = len(active) / max(1, len(symbols))
         breadth = (
@@ -267,7 +256,8 @@ class LiquidationWindow:
             "NONE"
             if intensity == "NONE"
             else "CASCADE"
-            if intensity in {"HIGH", "EXTREME"} and acceleration in {"RISING", "SURGING"}
+            if intensity in {"HIGH", "EXTREME"}
+            and acceleration in {"RISING", "SURGING"}
             else "EXHAUSTION"
             if intensity in {"HIGH", "EXTREME"}
             and acceleration in {"FALLING", "FALLING_FAST"}
@@ -277,17 +267,58 @@ class LiquidationWindow:
             if acceleration in {"FALLING", "FALLING_FAST"}
             else "UNCERTAIN"
         )
+
+        intensity_status = (
+            "WARMUP"
+            if continuous_seconds < 60
+            else "WARMUP"
+            if current_usd > 0 and continuous_seconds < 3600
+            else "WARMUP"
+            if current_usd > 0 and len(calibrated) < 5
+            else "VALID"
+        )
+        acceleration_status = "VALID" if continuous_seconds >= 360 else "WARMUP"
+        breadth_status = "VALID" if continuous_seconds >= 300 else "WARMUP"
+        phase_status = (
+            intensity_status
+            if intensity == "NONE"
+            else "VALID"
+            if intensity_status == "VALID" and acceleration_status == "VALID"
+            else "WARMUP"
+        )
+        feature_status = {
+            "intensity": intensity_status,
+            "acceleration": acceleration_status,
+            "breadth": breadth_status,
+            "phase": phase_status,
+        }
+        overall_status = (
+            "VALID" if all(value == "VALID" for value in feature_status.values()) else "WARMUP"
+        )
         latest = max((row[0] for row in rows), default=None)
         return {
-            "status": "VALID",
+            "status": overall_status,
+            "feature_status": feature_status,
+            "continuous_seconds": round(continuous_seconds, 3),
+            "required_continuous_seconds": {
+                "intensity_none": 60,
+                "intensity_nonzero": 3600,
+                "acceleration": 360,
+                "breadth": 300,
+                "phase_nonzero": 3600,
+            },
             "observed_at": latest,
-            "intensity": intensity,
-            "acceleration": acceleration,
-            "breadth": breadth,
-            "phase": phase,
+            "intensity": intensity if intensity_status == "VALID" else None,
+            "acceleration": acceleration if acceleration_status == "VALID" else None,
+            "breadth": breadth if breadth_status == "VALID" else None,
+            "phase": phase if phase_status == "VALID" else None,
             "current_1m_usd": current_usd,
-            "long_liquidated_1m_usd": sum(row[3] for row in current if row[2] == "Buy"),
-            "short_liquidated_1m_usd": sum(row[3] for row in current if row[2] == "Sell"),
+            "long_liquidated_1m_usd": sum(
+                row[3] for row in current if row[2] == "Buy"
+            ),
+            "short_liquidated_1m_usd": sum(
+                row[3] for row in current if row[2] == "Sell"
+            ),
             "active_symbols_5m": len(active),
             "universe_size": len(symbols),
             "baseline_nonzero_minutes": len(calibrated),
@@ -299,59 +330,60 @@ class LiquidationWindow:
         self, now: float, symbol: str, connected_since: float | None
     ) -> dict[str, Any]:
         """Return exact, causal liquidation facts for one symbol."""
-        if connected_since is None or now - connected_since < 900:
-            return {"status": "WARMUP", "observed_at": None, "phase": None}
+        continuous_seconds = (
+            max(0.0, now - connected_since) if connected_since is not None else 0.0
+        )
         with self.lock:
             rows = tuple(row for row in self.rows if row[0] <= now and row[1] == symbol)
 
         result: dict[str, Any] = {}
         for label, seconds in (("1m", 60), ("5m", 300), ("15m", 900), ("30m", 1800)):
+            status = "VALID" if continuous_seconds >= seconds else "WARMUP"
             current = [row for row in rows if row[0] > now - seconds]
             result[label] = {
-                "long_count": sum(row[2] == "Buy" for row in current),
-                "short_count": sum(row[2] == "Sell" for row in current),
-                "long_notional_usd": sum(row[3] for row in current if row[2] == "Buy"),
-                "short_notional_usd": sum(row[3] for row in current if row[2] == "Sell"),
-                "total_notional_usd": sum(row[3] for row in current),
+                "status": status,
+                "long_count": (
+                    sum(row[2] == "Buy" for row in current) if status == "VALID" else None
+                ),
+                "short_count": (
+                    sum(row[2] == "Sell" for row in current) if status == "VALID" else None
+                ),
+                "long_notional_usd": (
+                    sum(row[3] for row in current if row[2] == "Buy")
+                    if status == "VALID"
+                    else None
+                ),
+                "short_notional_usd": (
+                    sum(row[3] for row in current if row[2] == "Sell")
+                    if status == "VALID"
+                    else None
+                ),
+                "total_notional_usd": (
+                    sum(row[3] for row in current) if status == "VALID" else None
+                ),
             }
 
         completed_minutes: list[float] = []
         for offset in range(1, 61):
             lower = now - (offset + 1) * 60
             upper = now - offset * 60
-            completed_minutes.append(sum(row[3] for row in rows if lower < row[0] <= upper))
+            completed_minutes.append(
+                sum(row[3] for row in rows if lower < row[0] <= upper)
+            )
         calibrated = sorted(value for value in completed_minutes if value > 0)
-        current_usd = float(result["1m"]["total_notional_usd"])
+        current_rows = [row for row in rows if row[0] > now - 60]
+        current_usd = float(sum(row[3] for row in current_rows))
         previous_average = sum(completed_minutes[:5]) / 5
         acceleration_value = (current_usd - previous_average) / 5
         latest = max((row[0] for row in rows), default=None)
-        result.update(
-            {
-                "observed_at": latest,
-                "current_1m_usd": current_usd,
-                "prior_5m_average_usd_per_min": previous_average,
-                "speed_usd_per_min": current_usd,
-                "acceleration_usd_per_min2": acceleration_value,
-                "baseline_nonzero_minutes": len(calibrated),
-                "baseline_required_nonzero_minutes": 5,
-                "side_semantics": {"Buy": "LONG_LIQUIDATED", "Sell": "SHORT_LIQUIDATED"},
-            }
-        )
-        if current_usd > 0 and len(calibrated) < 5:
-            result.update(
-                {
-                    "status": "WARMUP",
-                    "intensity": None,
-                    "acceleration": None,
-                    "phase": None,
-                    "normalization_to_p50": None,
-                }
-            )
-            return result
 
         ordered = calibrated or [0.0]
+
         def quantile(fraction: float) -> float:
-            index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * fraction) - 1))
+            index = min(
+                len(ordered) - 1,
+                max(0, math.ceil(len(ordered) * fraction) - 1),
+            )
             return ordered[index]
 
         p50, p90, p99 = quantile(0.50), quantile(0.90), quantile(0.99)
@@ -365,15 +397,21 @@ class LiquidationWindow:
             intensity = "HIGH"
         else:
             intensity = "EXTREME"
+
         if previous_average == 0:
             acceleration = "STABLE" if current_usd == 0 else "SURGING"
         else:
             ratio = current_usd / previous_average
             acceleration = (
-                "FALLING_FAST" if ratio <= 0.5 else
-                "FALLING" if ratio < 0.9 else
-                "SURGING" if ratio >= 2.0 else
-                "RISING" if ratio > 1.1 else "STABLE"
+                "FALLING_FAST"
+                if ratio <= 0.5
+                else "FALLING"
+                if ratio < 0.9
+                else "SURGING"
+                if ratio >= 2.0
+                else "RISING"
+                if ratio > 1.1
+                else "STABLE"
             )
         if intensity == "NONE":
             phase = "NONE"
@@ -387,16 +425,65 @@ class LiquidationWindow:
             phase = "RECOVERY"
         else:
             phase = "UNCERTAIN"
+
+        intensity_status = (
+            "WARMUP"
+            if continuous_seconds < 60
+            else "WARMUP"
+            if current_usd > 0 and continuous_seconds < 3600
+            else "WARMUP"
+            if current_usd > 0 and len(calibrated) < 5
+            else "VALID"
+        )
+        acceleration_status = "VALID" if continuous_seconds >= 360 else "WARMUP"
+        phase_status = (
+            intensity_status
+            if intensity == "NONE"
+            else "VALID"
+            if intensity_status == "VALID" and acceleration_status == "VALID"
+            else "WARMUP"
+        )
         result.update(
             {
-                "status": "VALID",
-                "intensity": intensity,
-                "acceleration": acceleration,
-                "phase": phase,
-                "normalization_to_p50": current_usd / p50 if p50 > 0 else None,
-                "baseline_p50_usd": p50,
-                "baseline_p90_usd": p90,
-                "baseline_p99_usd": p99,
+                "status": (
+                    "VALID"
+                    if intensity_status == "VALID" and acceleration_status == "VALID"
+                    else "WARMUP"
+                ),
+                "feature_status": {
+                    "intensity": intensity_status,
+                    "acceleration": acceleration_status,
+                    "phase": phase_status,
+                },
+                "continuous_seconds": round(continuous_seconds, 3),
+                "observed_at": latest,
+                "current_1m_usd": current_usd if continuous_seconds >= 60 else None,
+                "prior_5m_average_usd_per_min": (
+                    previous_average if acceleration_status == "VALID" else None
+                ),
+                "speed_usd_per_min": current_usd if continuous_seconds >= 60 else None,
+                "acceleration_usd_per_min2": (
+                    acceleration_value if acceleration_status == "VALID" else None
+                ),
+                "baseline_nonzero_minutes": len(calibrated),
+                "baseline_required_nonzero_minutes": 5,
+                "side_semantics": {
+                    "Buy": "LONG_LIQUIDATED",
+                    "Sell": "SHORT_LIQUIDATED",
+                },
+                "intensity": intensity if intensity_status == "VALID" else None,
+                "acceleration": (
+                    acceleration if acceleration_status == "VALID" else None
+                ),
+                "phase": phase if phase_status == "VALID" else None,
+                "normalization_to_p50": (
+                    current_usd / p50
+                    if p50 > 0 and intensity_status == "VALID"
+                    else None
+                ),
+                "baseline_p50_usd": p50 if intensity_status == "VALID" else None,
+                "baseline_p90_usd": p90 if intensity_status == "VALID" else None,
+                "baseline_p99_usd": p99 if intensity_status == "VALID" else None,
             }
         )
         return result
@@ -1067,9 +1154,12 @@ class LiveMayakEngine:
             return "NEUTRAL"
 
         def liquidation_feature(name: str) -> dict[str, Any]:
-            if liquidations["status"] != "VALID":
+            status = (liquidations.get("feature_status") or {}).get(
+                name, liquidations["status"]
+            )
+            if status != "VALID":
                 return {
-                    "status": liquidations["status"],
+                    "status": status,
                     "confidence": 0.0,
                     "feature_confidence": 0.0,
                     "coverage": derivatives_coverage,
@@ -1079,7 +1169,7 @@ class LiveMayakEngine:
             event_at = liquidations.get("observed_at")
             feature_observed_at = (
                 datetime.fromtimestamp(event_at, UTC).isoformat()
-                if event_at is not None
+                if event_at is not None and liquidations.get(name) != "NONE"
                 else observed_at
             )
             return {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @dataclass(slots=True)
@@ -17,11 +17,16 @@ class MinuteContinuityTracker:
         if self.last_minute is not None and minute < self.last_minute:
             raise ValueError("continuity minute cannot move backwards")
         previous = self.last_minute
+        gap_started_at: datetime | None = None
+        gap_ended_at: datetime | None = None
         if previous is None:
             self.start_minute = minute
             delta_minutes = 1
         else:
             delta_minutes = max(1, int((minute - previous).total_seconds() // 60))
+            if delta_minutes > 1:
+                gap_started_at = previous + timedelta(minutes=1)
+                gap_ended_at = minute - timedelta(minutes=1)
         self.expected_snapshots += delta_minutes
         self.actual_snapshots += 1
         self.missing_snapshots += max(0, delta_minutes - 1)
@@ -42,5 +47,8 @@ class MinuteContinuityTracker:
             "missing_snapshots": self.missing_snapshots,
             "max_gap_minutes": self.max_gap_minutes,
             "last_gap_minutes": delta_minutes,
+            "gap_started_at": gap_started_at.isoformat() if gap_started_at else None,
+            "gap_ended_at": gap_ended_at.isoformat() if gap_ended_at else None,
+            "gap_missing_minutes": max(0, delta_minutes - 1),
             "coverage_pct": round(coverage * 100, 6),
         }

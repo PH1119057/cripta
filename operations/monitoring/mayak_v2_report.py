@@ -50,7 +50,39 @@ def main() -> None:
                 (since, until),
             ).fetchall()
         ]
+        quality_row = db.execute(
+            """SELECT count(*) AS total,
+                      count(*) FILTER (WHERE spot_net_usd IS NOT NULL) AS spot_valid,
+                      count(*) FILTER (WHERE derivatives_net_usd IS NOT NULL) AS derivatives_valid,
+                      count(*) FILTER (WHERE open_interest IS NOT NULL) AS oi_valid
+               FROM mayak_v2.coin_minutes
+               WHERE observed_at BETWEEN %s AND %s""",
+            (since, until),
+        ).fetchone()
+        liquidation_quality = db.execute(
+            """SELECT coalesce(payload->'liquidations'->>'status','NO_DATA') AS status,
+                      count(*)
+               FROM mayak_v2.snapshots
+               WHERE snapshot_kind='REGULAR' AND observed_at BETWEEN %s AND %s
+               GROUP BY 1 ORDER BY 2 DESC""",
+            (since, until),
+        ).fetchall()
+        continuity_gaps = db.execute(
+            """SELECT source,scope,count(*),sum(duration_seconds),max(duration_seconds),
+                      min(gap_started_at),max(gap_ended_at)
+               FROM mayak_v2.continuity_gaps
+               WHERE gap_started_at <= %s AND gap_ended_at >= %s
+               GROUP BY source,scope ORDER BY source,scope""",
+            (until, since),
+        ).fetchall()
     continuity = _continuity(regular_minutes)
+    total_quality_rows = int(quality_row[0] or 0)
+    source_coverage = {
+        "rows": total_quality_rows,
+        "spot_5m_flow_pct": _pct(quality_row[1], total_quality_rows),
+        "derivatives_5m_flow_pct": _pct(quality_row[2], total_quality_rows),
+        "open_interest_pct": _pct(quality_row[3], total_quality_rows),
+    }
     summary = {
         "период_суток": days,
         "начало": since.isoformat(),
@@ -68,7 +100,26 @@ def main() -> None:
         ],
         "связанных_торговых_событий": len(events),
         "непрерывность_regular_snapshot": continuity,
-        "оговорка": "Маяк наблюдает и не изменяет торговые решения.",
+        "покрытие_источников": source_coverage,
+        "качество_ликвидаций": [
+            {"status": row[0], "snapshots": row[1]} for row in liquidation_quality
+        ],
+        "durable_continuity_gaps": [
+            {
+                "source": row[0],
+                "scope": row[1],
+                "gaps": row[2],
+                "duration_seconds_total": row[3],
+                "duration_seconds_max": row[4],
+                "first_gap_started_at": row[5],
+                "last_gap_ended_at": row[6],
+            }
+            for row in continuity_gaps
+        ],
+        "оговорка": (
+            "Маяк наблюдает и не изменяет торговые решения. "
+            "Пропущенные buckets/events не синтезируются."
+        ),
     }
     (target / "СВОДКА.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
@@ -102,6 +153,12 @@ def main() -> None:
         events,
     )
     print(target)
+
+
+def _pct(valid: object, total: int) -> float | None:
+    if total <= 0:
+        return None
+    return round(int(valid or 0) / total * 100, 6)
 
 
 def _continuity(minutes: list[datetime]) -> dict[str, object]:

@@ -8,8 +8,14 @@ from pathlib import Path
 from operations.monitoring import mayak_v2
 
 
-def test_continuity_counts_missed_calendar_minutes_explicitly() -> None:
+def test_continuity_counts_missed_calendar_minutes_explicitly(monkeypatch) -> None:
     collector = mayak_v2.Collector()
+    persisted: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        collector,
+        "_persist_continuity_gap",
+        lambda **kwargs: persisted.append(kwargs),
+    )
     first = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
     one = collector._advance_continuity(first)
     assert one["expected_snapshots"] == 1
@@ -21,7 +27,13 @@ def test_continuity_counts_missed_calendar_minutes_explicitly() -> None:
     assert later["actual_snapshots"] == 2
     assert later["missing_snapshots"] == 2
     assert later["max_gap_minutes"] == 3
+    assert later["gap_started_at"] == "2026-10-02T12:01:00+00:00"
+    assert later["gap_ended_at"] == "2026-10-02T12:02:00+00:00"
+    assert later["gap_missing_minutes"] == 2
     assert later["coverage_pct"] == 50.0
+    assert len(persisted) == 1
+    assert persisted[0]["source"] == "SNAPSHOT_CADENCE"
+    assert persisted[0]["scope"] == "GLOBAL"
 
 
 def test_state_writes_are_atomic_under_concurrent_error_and_main_loop(
@@ -98,3 +110,31 @@ def test_liquidation_checkpoint_query_is_bounded_and_causal() -> None:
     assert "occurred_at >= clock_timestamp() - interval '24 hours'" in source
     assert "occurred_at <= clock_timestamp()" in source
     assert "ORDER BY occurred_at" in source
+
+
+
+def test_transport_gap_is_persisted_exactly_once_on_reconnect(monkeypatch) -> None:
+    collector = mayak_v2.Collector()
+    persisted: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        collector,
+        "_persist_continuity_gap",
+        lambda **kwargs: persisted.append(kwargs),
+    )
+
+    collector._mark_transport_disconnected("linear", 100.0, error="Timeout")
+    collector._mark_transport_disconnected("linear", 105.0, error="Timeout")
+    assert collector.transport_gap_started_at["linear"] == 100.0
+
+    collector._mark_transport_connected("linear", 112.5)
+    assert collector.transport_gap_started_at["linear"] is None
+    assert len(persisted) == 1
+    gap = persisted[0]
+    assert gap["source"] == "WS_TRANSPORT"
+    assert gap["scope"] == "linear"
+    assert gap["started_at"] == datetime.fromtimestamp(100.0, UTC)
+    assert gap["ended_at"] == datetime.fromtimestamp(112.5, UTC)
+    assert gap["provenance"]["semantics"] == "EXACT_EVENTS_DURING_GAP_UNKNOWN"
+
+    collector._mark_transport_connected("linear", 120.0)
+    assert len(persisted) == 1

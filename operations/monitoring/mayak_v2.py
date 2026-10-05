@@ -75,6 +75,11 @@ class Collector:
         self.subscription_acks: dict[str, dict[str, Any]] = {}
         self.previous_state: str | None = None
         self.continuity = MinuteContinuityTracker()
+        self.transport_gap_started_at: dict[str, float | None] = {
+            "spot": None,
+            "linear": None,
+        }
+        self.transport_gap_lock = threading.Lock()
 
     def prepare(self) -> None:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -180,6 +185,21 @@ class Collector:
                 "CREATE INDEX IF NOT EXISTS mayak_v2_liquidations_at "
                 "ON mayak_v2.liquidations(occurred_at DESC)"
             )
+            db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.continuity_gaps(
+                source text NOT NULL,
+                scope text NOT NULL,
+                gap_started_at timestamptz NOT NULL,
+                gap_ended_at timestamptz NOT NULL,
+                duration_seconds double precision NOT NULL,
+                detected_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                repair_status text NOT NULL DEFAULT 'UNREPAIRED',
+                repair_source text,
+                provenance jsonb NOT NULL DEFAULT '{}'::jsonb,
+                PRIMARY KEY(source,scope,gap_started_at,gap_ended_at))""")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS mayak_v2_continuity_gaps_started "
+                "ON mayak_v2.continuity_gaps(gap_started_at DESC)"
+            )
             db.execute("""CREATE TABLE IF NOT EXISTS mayak_v2.shared_market_contexts(
                 market_context_id TEXT PRIMARY KEY,
                 mayak_snapshot_id BIGINT NOT NULL REFERENCES mayak_v2.snapshots(id),
@@ -193,7 +213,66 @@ class Collector:
                 provenance JSONB NOT NULL,
                 content_hash TEXT UNIQUE NOT NULL)""")
             db.commit()
+        self._backfill_snapshot_continuity_gaps()
         self._load_persistence_checkpoint()
+
+    def _backfill_snapshot_continuity_gaps(self) -> None:
+        """Materialize historical missing minute buckets without inventing snapshots."""
+        with psycopg.connect(DSN) as db:
+            db.execute(
+                """WITH ordered AS (
+                    SELECT regular_minute,
+                           lag(regular_minute) OVER(ORDER BY regular_minute) AS previous
+                    FROM mayak_v2.snapshots
+                    WHERE snapshot_kind='REGULAR' AND regular_minute IS NOT NULL
+                )
+                INSERT INTO mayak_v2.continuity_gaps(
+                    source,scope,gap_started_at,gap_ended_at,duration_seconds,
+                    repair_status,provenance)
+                SELECT 'SNAPSHOT_CADENCE','GLOBAL',
+                       previous + interval '1 minute',
+                       regular_minute - interval '1 minute',
+                       extract(epoch FROM (regular_minute-previous))-60,
+                       'UNREPAIRED',
+                       jsonb_build_object(
+                           'detected_by','DATA_CONTINUITY_REPAIR_V1',
+                           'semantics','MISSING_BUCKETS_NOT_SYNTHESIZED')
+                FROM ordered
+                WHERE previous IS NOT NULL
+                  AND regular_minute-previous > interval '1 minute'
+                ON CONFLICT(source,scope,gap_started_at,gap_ended_at) DO NOTHING"""
+            )
+            db.commit()
+
+    def _persist_continuity_gap(
+        self,
+        *,
+        source: str,
+        scope: str,
+        started_at: datetime,
+        ended_at: datetime,
+        provenance: dict[str, Any],
+    ) -> None:
+        if ended_at < started_at:
+            return
+        duration_seconds = max(0.0, (ended_at - started_at).total_seconds())
+        with psycopg.connect(DSN) as db:
+            db.execute(
+                """INSERT INTO mayak_v2.continuity_gaps(
+                    source,scope,gap_started_at,gap_ended_at,duration_seconds,
+                    repair_status,provenance)
+                   VALUES(%s,%s,%s,%s,%s,'UNREPAIRED',%s::jsonb)
+                   ON CONFLICT(source,scope,gap_started_at,gap_ended_at) DO NOTHING""",
+                (
+                    source,
+                    scope,
+                    started_at,
+                    ended_at,
+                    duration_seconds,
+                    json.dumps(provenance, ensure_ascii=False, sort_keys=True),
+                ),
+            )
+            db.commit()
 
     def _load_persistence_checkpoint(self) -> None:
         with psycopg.connect(DSN) as db:
@@ -233,6 +312,10 @@ class Collector:
             self.previous_state = str(latest[1])
             if isinstance(latest[2], dict):
                 self.last_persisted_handoff = latest[2]
+            startup_gap_origin = latest[0].timestamp()
+            with self.transport_gap_lock:
+                for market in self.transport_gap_started_at:
+                    self.transport_gap_started_at[market] = startup_gap_origin
         first, last, actual = stats
         actual_count = int(actual or 0)
         expected_count = 0
@@ -264,6 +347,20 @@ class Collector:
 
     def _advance_continuity(self, minute: datetime) -> dict[str, Any]:
         result = self.continuity.advance(minute)
+        gap_start = result.get("gap_started_at")
+        gap_end = result.get("gap_ended_at")
+        if gap_start and gap_end:
+            self._persist_continuity_gap(
+                source="SNAPSHOT_CADENCE",
+                scope="GLOBAL",
+                started_at=datetime.fromisoformat(str(gap_start)),
+                ended_at=datetime.fromisoformat(str(gap_end)),
+                provenance={
+                    "detected_by": "DATA_CONTINUITY_REPAIR_V1",
+                    "semantics": "MISSING_BUCKETS_NOT_SYNTHESIZED",
+                    "missing_minutes": result.get("gap_missing_minutes"),
+                },
+            )
         self.last_persisted_minute = minute
         return result
 
@@ -348,13 +445,45 @@ class Collector:
             except (OSError, ValueError, KeyError, TypeError):
                 self.engine.set_instrument_support(market, None)
 
+    def _mark_transport_disconnected(
+        self, market: str, disconnected_at: float, error: str | None = None
+    ) -> None:
+        with self.transport_gap_lock:
+            if self.transport_gap_started_at.get(market) is None:
+                self.transport_gap_started_at[market] = disconnected_at
+        self.engine.on_transport(
+            market,
+            connected=False,
+            timestamp=disconnected_at,
+            error=error,
+        )
+
+    def _mark_transport_connected(self, market: str, connected_at: float) -> None:
+        with self.transport_gap_lock:
+            gap_started_at = self.transport_gap_started_at.get(market)
+            self.transport_gap_started_at[market] = None
+        if gap_started_at is not None and connected_at > gap_started_at:
+            self._persist_continuity_gap(
+                source="WS_TRANSPORT",
+                scope=market,
+                started_at=datetime.fromtimestamp(gap_started_at, UTC),
+                ended_at=datetime.fromtimestamp(connected_at, UTC),
+                provenance={
+                    "detected_by": "DATA_CONTINUITY_REPAIR_V1",
+                    "semantics": "EXACT_EVENTS_DURING_GAP_UNKNOWN",
+                    "endpoint": WS[market],
+                },
+            )
+        self.engine.on_transport(market, connected=True, timestamp=connected_at)
+
     def _socket_loop(self, market: str) -> None:
         while not self.stop.is_set():
             sock = None
             try:
                 sock = websocket.create_connection(WS[market], timeout=10)
                 sock.settimeout(1)
-                self.engine.on_transport(market, connected=True, timestamp=time.time())
+                connected_at = time.time()
+                self._mark_transport_connected(market, connected_at)
                 topics = [
                     topic
                     for symbol in self.symbols
@@ -386,8 +515,9 @@ class Collector:
                         sock.send('{"op":"ping"}')
                         ping = time.monotonic() + 20
             except Exception as exc:  # noqa: BLE001 - collector must recover from any WS failure
-                self.engine.on_transport(
-                    market, connected=False, timestamp=time.time(), error=type(exc).__name__
+                disconnected_at = time.time()
+                self._mark_transport_disconnected(
+                    market, disconnected_at, error=type(exc).__name__
                 )
                 try:
                     self._write_error(market, exc)

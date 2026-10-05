@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -283,3 +283,48 @@ def test_mayak_runner_subscribes_and_persists_all_liquidations() -> None:
     assert "mayak_v2.liquidations" in source
     assert "db.executemany(" not in source
     assert "db.cursor().executemany(" in source
+
+
+
+def test_liquidation_features_use_individual_continuity_windows() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 120)
+    snapshot = item.snapshot(now)
+    liquidations = snapshot["liquidations"]
+    assert liquidations["feature_status"]["intensity"] == "VALID"
+    assert liquidations["intensity"] == "NONE"
+    assert liquidations["feature_status"]["acceleration"] == "WARMUP"
+    assert liquidations["feature_status"]["breadth"] == "WARMUP"
+    assert liquidations["feature_status"]["phase"] == "VALID"
+    assert liquidations["phase"] == "NONE"
+
+    handoff = snapshot["dispatcher_handoff"]["dispatcher_features"]
+    assert handoff["liquidation.intensity"]["status"] == "VALID"
+    assert handoff["liquidation.intensity"]["value"] == "NONE"
+    assert handoff["liquidation.acceleration"]["status"] == "WARMUP"
+    assert handoff["liquidation.breadth"]["status"] == "WARMUP"
+    assert handoff["liquidation.phase"]["status"] == "VALID"
+    assert handoff["liquidation.phase"]["value"] == "NONE"
+
+
+def test_nonzero_liquidation_keeps_intensity_warm_until_full_baseline() -> None:
+    item = engine()
+    now = datetime.now(UTC)
+    item.set_instrument_support("linear", set(item.symbols))
+    item.on_transport("linear", connected=True, timestamp=now.timestamp() - 400)
+    item.on_liquidation(
+        "BTCUSDT", (now - timedelta(seconds=10)).timestamp(), "Buy", 100, 2
+    )
+    snapshot = item.snapshot(now)
+    metrics = snapshot["liquidations"]
+    assert metrics["feature_status"]["intensity"] == "WARMUP"
+    assert metrics["feature_status"]["acceleration"] == "VALID"
+    assert metrics["feature_status"]["breadth"] == "VALID"
+    assert metrics["feature_status"]["phase"] == "WARMUP"
+    assert metrics["intensity"] is None
+    assert metrics["acceleration"] is not None
+    assert metrics["breadth"] is not None
+    assert metrics["phase"] is None
