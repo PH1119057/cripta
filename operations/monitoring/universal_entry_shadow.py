@@ -34,7 +34,6 @@ from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     active_live_arm_session,
-    evaluate_live_arm,
 )
 from bybit_workbench.universal_entry import (
     DataQuality,
@@ -1186,14 +1185,10 @@ def _real_execution_activation_ids(
             except ValueError:
                 activation_ready = False
                 break
-            if not evaluate_live_arm(
-                connection,
-                context=context,
-                now=current,
-                require_owner_approval=True,
-            ).ready:
-                activation_ready = False
-                break
+            # LIVE-arm evidence is a pre-arm contract. After a successful
+            # owner-approved arm, ongoing real admission is guarded by the
+            # exact release-bound active arm session plus per-entry technical
+            # readiness and atomic Entry admission below.
             if active_live_arm_session(connection, context=context) is None:
                 activation_ready = False
                 break
