@@ -4,9 +4,10 @@ UI = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 
 
 def test_trade_command_status_has_visible_severity() -> None:
-    assert "trade-command-alert error" in UI
-    assert "trade-command-alert warn" in UI
-    assert "trade-command-alert success" in UI
+    assert ".trade-command-alert.error" in UI
+    assert ".trade-command-alert.warn" in UI
+    assert ".trade-command-alert.success" in UI
+    assert "tradeCommandStatus.className=`trade-command-alert ${severity}`" in UI
     assert "КРИТИЧЕСКИЙ ОТКАЗ КОМАНДЫ" in UI
 
 
