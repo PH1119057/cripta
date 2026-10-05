@@ -1482,3 +1482,43 @@ R15 Observation Replay Contour        = DONE / DEPLOYED / RUNTIME BEHAVIOR VERIF
 ~~~
 
 No trading behavior or Exchange state was changed by R15.
+
+
+# 24. Dashboard UI release separation — owner decision 2026-10-05
+
+OWNER DECISION:
+
+```text
+presentation-only Dashboard UI
+!= trading/application runtime
+```
+
+Target physical/release identity:
+
+```text
+DASHBOARD_UI_ROOT   = /srv/cripta/dashboard-ui
+DASHBOARD_UI_COMMIT = exact verified Git commit for current presentation asset
+```
+
+Presentation-only HTML/CSS/read-model rendering may be deployed while
+`mainnet gate=OPEN` and Strategy `Execution ON`, provided the UI-only verifier
+proves that API/auth/control/mutation and decision/execution-affecting semantics
+did not change.
+
+Such deploy:
+- must not stop/restart Entry, Exit, private runtime, observer, lifecycle or
+  other trading services;
+- must not modify StrategyActivation, execution permissions or LIVE-arm;
+- should not restart Dashboard itself when the static asset is read per request;
+- records independent UI commit/hash evidence.
+
+Current implementation migration from runtime-owned
+`operations/dashboard/index.html` to the separate UI rail is part of the same
+owner-approved change. Until runtime evidence is recorded after deployment,
+status is:
+
+```text
+CANON      = YES
+IMPLEMENTED = IN PROGRESS
+DEPLOYED    = NOT YET VERIFIED HERE
+```
