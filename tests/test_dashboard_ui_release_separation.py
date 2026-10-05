@@ -10,11 +10,11 @@ UI_DEPLOY = Path("operations/infrastructure/deploy_dashboard_ui.sh").read_text(e
 
 
 def test_canon_separates_presentation_ui_from_trading_runtime() -> None:
-    assert "Presentation-only Dashboard UI release" in DEV
+    assert "Presentation/read-model-only изменение Dashboard" in DEV
     assert "не должно останавливать реальную торговлю" in DEV
     assert "DASHBOARD_UI_COMMIT" in DEV
     assert "Presentation UI boundary" in ARCH
-    assert "presentation-only HTML/CSS/read-model rendering" in OBS
+    assert "presentation HTML/CSS и read-only Dashboard projections/aggregations" in OBS
     assert "Dashboard UI release separation" in MAP
 
 
