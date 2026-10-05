@@ -49,9 +49,11 @@ OPERATIONAL MIRROR: /srv/cripta/source_checkout
 
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
 
-Presentation-only Dashboard UI имеет отдельный verified release identity
-`DASHBOARD_UI_COMMIT` и не требует остановки trading runtime. API/control/
-decision-affecting UI changes в этот scope не входят. Exact rule:
+Dashboard presentation/read-model имеет отдельный verified release identity
+`DASHBOARD_UI_COMMIT` и не требует остановки trading runtime. Static assets и
+строго read-only projections/aggregations могут обновляться независимо; backend
+read-model change перезапускает только Dashboard. Auth/control/mutation или
+trading-decision changes в этот scope не входят. Exact rule:
 `DEVELOPMENT_RELEASE §8.1`.
 
 
