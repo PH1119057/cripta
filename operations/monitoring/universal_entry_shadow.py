@@ -1868,10 +1868,11 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
+        admission_time = datetime.now(UTC) if real_admission_required_for else fact.observed_at
         readiness = (
             _real_entry_technical_readiness(
                 connection,
-                observed_at=fact.observed_at,
+                observed_at=admission_time,
             )
             if real_admission_required_for
             else TechnicalReadiness(
@@ -1897,6 +1898,7 @@ def _run_observer_epoch(
                     for symbol in symbols
                 },
                 allow_new_signals=sensor_ready(fact.observed_at),
+                admission_time=admission_time,
             )
             facts_received += 1
             for evaluation in evaluations:
