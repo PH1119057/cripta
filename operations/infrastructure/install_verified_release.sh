@@ -108,13 +108,14 @@ if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
 
-# Presentation UI is a separate release identity. Bootstrap it only when the
-# independent UI rail has not been initialized yet; otherwise preserve the
-# current UI across full application-runtime deploys.
-if [[ ! -f "$DASHBOARD_UI_ROOT/current/index.html" ]]; then
+# Dashboard presentation/read-model is a separate release identity. Bootstrap it only when the
+# independent Dashboard rail has not been initialized yet; otherwise preserve the
+# current Dashboard bundle across full application-runtime deploys.
+if [[ ! -f "$DASHBOARD_UI_ROOT/current/index.html" || ! -f "$DASHBOARD_UI_ROOT/current/app.py" ]]; then
   ui_bootstrap="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"
   install -d -o root -g cripta -m 0755 "$ui_bootstrap"
   install -o root -g cripta -m 0644 "$runtime_release/operations/dashboard/index.html" "$ui_bootstrap/index.html"
+  install -o root -g cripta -m 0644 "$runtime_release/operations/dashboard/app.py" "$ui_bootstrap/app.py"
   printf '%s\n' "$RELEASE_COMMIT" > "$ui_bootstrap/DASHBOARD_UI_COMMIT"
   chown root:cripta "$ui_bootstrap/DASHBOARD_UI_COMMIT"
   chmod 0644 "$ui_bootstrap/DASHBOARD_UI_COMMIT"
@@ -123,9 +124,11 @@ if [[ ! -f "$DASHBOARD_UI_ROOT/current/index.html" ]]; then
   ln -s "$ui_bootstrap" "$next_ui"
   mv -Tf "$next_ui" "$DASHBOARD_UI_ROOT/current"
 fi
-[[ -f "$DASHBOARD_UI_ROOT/current/index.html" ]] || die "current Dashboard UI asset missing"
-rm -f "$runtime_release/operations/dashboard/index.html"
+[[ -f "$DASHBOARD_UI_ROOT/current/index.html" ]] || die "current Dashboard HTML asset missing"
+[[ -f "$DASHBOARD_UI_ROOT/current/app.py" ]] || die "current Dashboard read-model app missing"
+rm -f "$runtime_release/operations/dashboard/index.html" "$runtime_release/operations/dashboard/app.py"
 ln -s "$DASHBOARD_UI_ROOT/current/index.html" "$runtime_release/operations/dashboard/index.html"
+ln -s "$DASHBOARD_UI_ROOT/current/app.py" "$runtime_release/operations/dashboard/app.py"
 
 runtime_requirements="$runtime_release/operations/runtime/runtime_requirements.lock"
 [[ -f "$runtime_requirements" ]] || die "runtime dependency lock missing"
