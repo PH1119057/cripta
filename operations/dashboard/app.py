@@ -896,6 +896,10 @@ def live_trading_state() -> dict[str, object]:
 
 
 def strategy_paper_state() -> dict[str, object]:
+    try:
+        paper_tickers = live_tickers()
+    except Exception:
+        paper_tickers = {}
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
         if connection.execute(
             "SELECT to_regclass('strategy_entry.paper_positions')"
@@ -1019,6 +1023,30 @@ def strategy_paper_state() -> dict[str, object]:
         }
         for row in position_rows
     ]
+    for item in positions:
+        if item["state"] != "OPEN":
+            continue
+        ticker = paper_tickers.get(str(item["symbol"])) or {}
+        current_price = (
+            ticker.get("bid_price")
+            if item["direction"] == "LONG"
+            else ticker.get("ask_price")
+        ) or ticker.get("last_price") or ticker.get("mark_price")
+        if current_price in (None, ""):
+            continue
+        entry = float(item["entry_price"])
+        qty = float(item["quantity"])
+        current = float(current_price)
+        gross = (
+            (current - entry) * qty
+            if item["direction"] == "LONG"
+            else (entry - current) * qty
+        )
+        entry_fee = entry * qty * _paper_entry_fee_rate(item["entry_order_type"])
+        exit_fee = current * qty * PAPER_TAKER_FEE_RATE
+        item["current_price"] = str(current_price)
+        item["net_pnl_usdt"] = gross - entry_fee - exit_fee
+        item["pnl_basis"] = "AFTER_COMMISSIONS_TO_IMMEDIATE_CLOSE"
     def aggregate_payload(rows: list[object]) -> list[dict[str, object]]:
         return [
             {
