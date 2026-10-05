@@ -4119,11 +4119,86 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             "current_stop",
                             "trailing_stop",
                             "close",
+                            "owner_test_entry",
                         } or not symbol.endswith("USDT"):
                             raise ValueError("недопустимая команда")
-                        command_id = f"web-{kind[:4]}-{symbol[:12]}-{int(time.time() * 1000)}"
+                        command_type = kind
                         command_payload: dict[str, object] = {}
-                        if kind == "trailing_stop":
+                        if kind == "owner_test_entry":
+                            if request.get("confirmed") is not True:
+                                raise ValueError("контрольный реальный вход не подтверждён")
+                            direction = str(request.get("direction") or "").upper()
+                            if direction not in {"LONG", "SHORT"}:
+                                raise ValueError("направление контрольной сделки должно быть LONG или SHORT")
+                            stake = Decimal(str(request.get("stake_usdt") or "10"))
+                            leverage = int(request.get("leverage") or 1)
+                            stop_loss_pct = Decimal(str(request.get("stop_loss_pct") or "0.5"))
+                            take_profit_pct = Decimal(str(request.get("take_profit_pct") or "0.5"))
+                            if (
+                                stake != Decimal("10")
+                                or leverage != 1
+                                or stop_loss_pct != Decimal("0.5")
+                                or take_profit_pct != Decimal("0.5")
+                            ):
+                                raise ValueError(
+                                    "контрольная сделка фиксирована: 10 USDT, 1x, SL 0,5%, TP 0,5%"
+                                )
+                            gate = connection.execute(
+                                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+                            ).fetchone()
+                            if not gate or not bool(gate[0]):
+                                raise ValueError("mainnet gate закрыт")
+                            active_arm = connection.execute(
+                                """SELECT 1 FROM control.live_arm_sessions
+                                     WHERE state='ACTIVE' AND symbol=%s
+                                       AND release_commit=%s
+                                     LIMIT 1""",
+                                (symbol, LOADED_RELEASE_COMMIT),
+                            ).fetchone()
+                            if active_arm is None:
+                                raise ValueError(
+                                    "контрольный вход разрешён только для монеты текущего active MICRO_LIVE cohort"
+                                )
+                            occupied = connection.execute(
+                                """SELECT
+                                    EXISTS(SELECT 1 FROM runtime.hot_positions
+                                           WHERE symbol=%s AND NULLIF(size,'')::numeric > 0)
+                                    OR EXISTS(SELECT 1 FROM runtime.hot_orders
+                                              WHERE symbol=%s
+                                                AND order_status IN ('New','PartiallyFilled','Untriggered')
+                                                AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false)
+                                    OR EXISTS(SELECT 1 FROM runtime.trade_commands
+                                              WHERE symbol=%s AND command_type='entry'
+                                                AND state IN ('queued','running'))""",
+                                (symbol, symbol, symbol),
+                            ).fetchone()
+                            if occupied and bool(occupied[0]):
+                                raise ValueError("по монете уже есть позиция, входная заявка или команда")
+                            ticker = live_tickers().get(symbol) or {}
+                            reference_price = str(ticker.get("last_price") or "")
+                            if not reference_price or Decimal(reference_price) <= 0:
+                                raise ValueError("нет свежей цены Bybit для контрольного входа")
+                            command_type = "entry"
+                            command_payload = {
+                                "source": "owner_controlled_live_test",
+                                "stake_usdt": "10",
+                                "leverage": 1,
+                                "side": "Buy" if direction == "LONG" else "Sell",
+                                "price": reference_price,
+                                "entry_offset_pct": "0",
+                                "entry_policy": "owner_controlled_live_test",
+                                "policy_version": "2026-10-06-smoke-v1",
+                                "initial_protection": {
+                                    "stop_loss_enabled": True,
+                                    "take_profit_enabled": True,
+                                    "stop_loss_pct": "0.5",
+                                    "take_profit_pct": "0.5",
+                                    "take_profit_price": None,
+                                    "trigger_by": "LastPrice",
+                                    "tpsl_mode": "Full",
+                                },
+                            }
+                        elif kind == "trailing_stop":
                             enabled = bool(request.get("enabled"))
                             distance_pct = float(request.get("distance_pct", 0.2))
                             if distance_pct < 0.05 or distance_pct > 5:
@@ -4131,11 +4206,16 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                     "отступ плавающего стопа должен быть от 0,05% до 5%"
                                 )
                             command_payload = {"enabled": enabled, "distance_pct": distance_pct}
+                        command_id = (
+                            f"web-test-{symbol[:10]}-{int(time.time() * 1000)}"
+                            if kind == "owner_test_entry"
+                            else f"web-{kind[:4]}-{symbol[:12]}-{int(time.time() * 1000)}"
+                        )
                         connection.execute(
                             "INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,%s,'queued',%s)",
                             (
                                 command_id,
-                                kind,
+                                command_type,
                                 symbol,
                                 json.dumps(command_payload),
                                 int(time.time() * 1000),
