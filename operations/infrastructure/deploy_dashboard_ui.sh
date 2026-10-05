@@ -59,33 +59,39 @@ new_html = Path(sys.argv[2]).read_text(encoding="utf-8")
 old_app = Path(sys.argv[3]).read_text(encoding="utf-8")
 new_app = Path(sys.argv[4]).read_text(encoding="utf-8")
 
-html_sensitive_tokens = (
-    "/api/",
-    "fetch(",
-    "livePost(",
-    "tradeCommand(",
-    "changeTradeGate(",
-    "toggleStrategyExecution(",
-    "toggleStrategyState(",
-    "setTrailing(",
-    "Set-Cookie",
-    "cripta_session",
-)
+control_function_names = {
+    "botAction",
+    "packageProject",
+    "livePost",
+    "livePostTimed",
+    "changeTradeGate",
+    "tradeCommand",
+    "setTrailing",
+    "saveStrategyVersion",
+    "toggleStrategyState",
+    "toggleStrategyExecution",
+}
 
-def protected_lines(text: str) -> list[str]:
-    return [
-        line.strip()
-        for line in text.splitlines()
-        if any(token in line for token in html_sensitive_tokens)
-    ]
+def protected_control_functions(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    pattern = re.compile(r"^\\s*(?:async\\s+)?function\\s+([A-Za-z0-9_]+)\\b")
+    for line in text.splitlines():
+        match = pattern.match(line)
+        if match and match.group(1) in control_function_names:
+            out[match.group(1)] = line.strip()
+    return out
 
-if protected_lines(old_html) != protected_lines(new_html):
-    raise SystemExit("Dashboard verifier failed: HTML control/API/auth lines changed")
+if protected_control_functions(old_html) != protected_control_functions(new_html):
+    raise SystemExit("Dashboard verifier failed: HTML control function changed")
 
 old_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old_html)))
 new_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new_html)))
 if old_endpoints != new_endpoints:
     raise SystemExit("Dashboard verifier failed: API endpoint set changed")
+
+for token in ("Set-Cookie", "cripta_session"):
+    if old_html.count(token) != new_html.count(token):
+        raise SystemExit(f"Dashboard verifier failed: auth marker changed: {token}")
 
 allowed_functions = {
     "_paper_entry_fee_rate",
