@@ -544,14 +544,15 @@ BEHAVIOR.
 runtime_build_ref — audit identity реально загруженного runtime artifact/source
 commit/build.
 
-**Dashboard UI release / presentation-only UI release** — отдельный
-verified release статических presentation/read-model assets Dashboard, который
-не меняет server/API/control/trading semantics и может обновляться без остановки
-реальной торговли.
+**Dashboard presentation/read-model release** — отдельный verified
+release operator-facing Dashboard presentation assets и строго read-only
+projection/aggregation code. Он не меняет auth/control/trading semantics и
+может обновляться без остановки реальной торговли; read-only backend change
+может требовать restart только Dashboard service.
 
-**DASHBOARD_UI_COMMIT** — exact verified Git commit, из которого загружены
-current presentation-only Dashboard assets. Это отдельная identity и она не
-заменяет `INSTALLED_COMMIT` / `LOADED_COMMIT`.
+**DASHBOARD_UI_COMMIT** — exact verified Git commit, из которого загружен
+current Dashboard presentation/read-model bundle. Это отдельная identity и она
+не заменяет `INSTALLED_COMMIT` / `LOADED_COMMIT`.
 
 **OPERATIONAL_DELTA_COMMIT** — verified Git commit, из которого точечно
 применён отдельный production file/unit/config без полного package/release
