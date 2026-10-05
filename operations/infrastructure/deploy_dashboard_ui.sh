@@ -234,11 +234,17 @@ gate_after="$(sql_scalar "SELECT coalesce((SELECT enabled::int FROM control.exec
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 activations_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.strategy_activations WHERE enabled=true")"
 
-[[ "$gate_after" == "$gate_before" ]] || die "UI deploy changed mainnet gate"
-[[ "$permissions_after" == "$permissions_before" ]] || die "UI deploy changed execution permissions"
-[[ "$activations_after" == "$activations_before" ]] || die "UI deploy changed StrategyActivation count"
+[[ "$gate_after" == "$gate_before" ]] || die "Dashboard deploy changed mainnet gate"
+[[ "$permissions_after" == "$permissions_before" ]] || die "Dashboard deploy changed execution permissions"
+[[ "$activations_after" == "$activations_before" ]] || die "Dashboard deploy changed StrategyActivation count"
 
-while IFS=
+while IFS="$(printf '\t')" read -r unit pid_before restarts_before; do
+  pid_after="$(systemctl show "$unit" -p MainPID --value 2>/dev/null || true)"
+  restarts_after="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"
+  [[ "$pid_after" == "$pid_before" ]] || die "Dashboard deploy changed trading service PID: $unit"
+  [[ "$restarts_after" == "$restarts_before" ]] || die "Dashboard deploy restarted trading service: $unit"
+done < "$tmp/trading_before.tsv"
+
 cat > "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json" <<EOF
 {
   "dashboard_ui_commit": "$UI_COMMIT",
@@ -266,38 +272,6 @@ echo "LIVE_PATH=$live_path"
 echo "HTML_LIVE_SHA256=$html_live_sha"
 echo "APP_LIVE_SHA256=$app_live_sha"
 echo "DASHBOARD_RESTARTED=$dashboard_restarted"
-echo "GATE_UNCHANGED=$gate_after"
-echo "EXECUTION_PERMISSIONS_UNCHANGED=$permissions_after"
-echo "TRADING_SERVICES_RESTARTED=0"
-\t' read -r unit pid_before restarts_before; do
-  pid_after="$(systemctl show "$unit" -p MainPID --value 2>/dev/null || true)"
-  restarts_after="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"
-  [[ "$pid_after" == "$pid_before" ]] || die "Dashboard deploy changed trading service PID: $unit"
-  [[ "$restarts_after" == "$restarts_before" ]] || die "Dashboard deploy restarted trading service: $unit"
-done < "$tmp/trading_before.tsv"
-
-cat > "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json" <<EOF
-{
-  "dashboard_ui_commit": "$UI_COMMIT",
-  "previous_dashboard_ui_commit": "$previous_commit",
-  "live_path": "$live_path",
-  "source_sha256": "$source_sha",
-  "live_sha256": "$live_sha",
-  "mainnet_gate_before": $gate_before,
-  "mainnet_gate_after": $gate_after,
-  "execution_permissions_before": $permissions_before,
-  "execution_permissions_after": $permissions_after,
-  "strategy_activations_before": $activations_before,
-  "strategy_activations_after": $activations_after
-}
-EOF
-chown root:cripta "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json"
-chmod 0640 "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json"
-
-echo "DASHBOARD_UI_DEPLOY=PASS"
-echo "DASHBOARD_UI_COMMIT=$UI_COMMIT"
-echo "LIVE_PATH=$live_path"
-echo "LIVE_SHA256=$live_sha"
 echo "GATE_UNCHANGED=$gate_after"
 echo "EXECUTION_PERMISSIONS_UNCHANGED=$permissions_after"
 echo "TRADING_SERVICES_RESTARTED=0"
