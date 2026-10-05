@@ -1722,6 +1722,33 @@ def _run_observer_epoch(
                             "current_price": None if current_price is None else str(current_price),
                             "entry_price": None if entry_price is None else str(entry_price),
                             "distance_pct": None if distance_pct is None else str(distance_pct),
+                            "r1_stability": (
+                                None
+                                if watch.r1_stability is None
+                                else {
+                                    "required_states": watch.r1_stability.required_states,
+                                    "available_states": watch.r1_stability.available_states,
+                                    "strict_stable_states": watch.r1_stability.strict_stable_states,
+                                    "low_stable_states": watch.r1_stability.low_stable_states,
+                                    "high_stable_states": watch.r1_stability.high_stable_states,
+                                    "working_width_pct": (
+                                        None
+                                        if watch.r1_stability.working_width_pct is None
+                                        else str(watch.r1_stability.working_width_pct)
+                                    ),
+                                    "working_width_min_pct": str(
+                                        watch.r1_stability.working_width_min_pct
+                                    ),
+                                    "width_ready": watch.r1_stability.width_ready,
+                                    "history_ready": watch.r1_stability.history_ready,
+                                    "reset_reason": watch.r1_stability.reset_reason,
+                                    "observed_at": (
+                                        None
+                                        if watch.r1_stability.observed_at is None
+                                        else watch.r1_stability.observed_at.isoformat()
+                                    ),
+                                }
+                            ),
                             "candidate_id": watch.candidate_id,
                             "candidate_bar_at": (
                                 None

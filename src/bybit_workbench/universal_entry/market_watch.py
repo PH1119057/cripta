@@ -43,6 +43,21 @@ class WatchTracePoint:
 
 
 @dataclass(frozen=True, slots=True)
+class R1StabilityDiagnostic:
+    required_states: int
+    available_states: int
+    strict_stable_states: int
+    low_stable_states: int
+    high_stable_states: int
+    working_width_pct: Decimal | None
+    working_width_min_pct: Decimal
+    width_ready: bool
+    history_ready: bool
+    reset_reason: str | None
+    observed_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class MarketWatchSnapshot:
     candidate_id: str | None
     candidate_bar_at: datetime | None
@@ -56,6 +71,7 @@ class MarketWatchSnapshot:
     last_flow_condition_met: bool | None
     last_oi_condition_met: bool | None
     last_touch_at: datetime | None
+    r1_stability: R1StabilityDiagnostic | None
 
 
 @dataclass(slots=True)
@@ -106,6 +122,7 @@ class _WatchState:
     last_oi_condition_met: bool | None = None
     last_touch_at: datetime | None = None
     history_ready: bool = False
+    r1_stability: R1StabilityDiagnostic | None = None
     traces: list[WatchTracePoint] = field(default_factory=list)
 
 
@@ -325,6 +342,103 @@ def compute_l53_zone(candles: Sequence[Candle]) -> GenericZone | None:
         shock_multiple=Decimal("1"),
         maturity_minutes=0,
         shock_mode="OFF",
+    )
+
+
+def compute_r1_l53_stability_diagnostic(
+    candles: Sequence[Candle],
+    *,
+    stable_states: int = 6,
+    working_width_min_pct: Decimal = Decimal("1"),
+) -> R1StabilityDiagnostic:
+    """Describe causal progress toward the exact strict-STAY R1 contract."""
+
+    if stable_states <= 0:
+        raise ValueError("R1 stable_states must be positive")
+    if working_width_min_pct < 0:
+        raise ValueError("R1 working_width_min_pct cannot be negative")
+
+    closed = tuple(
+        item for item in candles if item.is_closed and str(item.timeframe) == "5"
+    )
+    available = min(stable_states, max(0, len(closed) - 199))
+    zones: list[GenericZone] = []
+    for offset in range(available - 1, -1, -1):
+        end = len(closed) - offset
+        zone = compute_l53_zone(closed[:end])
+        if zone is not None:
+            zones.append(zone)
+
+    if not zones:
+        return R1StabilityDiagnostic(
+            required_states=stable_states,
+            available_states=available,
+            strict_stable_states=0,
+            low_stable_states=0,
+            high_stable_states=0,
+            working_width_pct=None,
+            working_width_min_pct=working_width_min_pct,
+            width_ready=False,
+            history_ready=False,
+            reset_reason="HISTORY_WARMUP",
+            observed_at=None,
+        )
+
+    current = zones[-1]
+
+    def recent_count(predicate: object) -> int:
+        count = 0
+        for zone in reversed(zones):
+            if not predicate(zone):  # type: ignore[operator]
+                break
+            count += 1
+        return count
+
+    low_count = recent_count(lambda zone: zone.range_low == current.range_low)
+    high_count = recent_count(lambda zone: zone.range_high == current.range_high)
+    strict_count = recent_count(
+        lambda zone: (
+            zone.range_low == current.range_low
+            and zone.range_high == current.range_high
+        )
+    )
+    width_pct: Decimal | None = None
+    if current.support_top > 0:
+        width_pct = (
+            (current.resistance_bottom - current.support_top)
+            / current.support_top
+            * Decimal("100")
+        )
+    width_ready = width_pct is not None and width_pct >= working_width_min_pct
+
+    reset_reason: str | None = None
+    if len(zones) >= 2:
+        previous = zones[-2]
+        low_changed = previous.range_low != current.range_low
+        high_changed = previous.range_high != current.range_high
+        if low_changed and high_changed:
+            reset_reason = "BOTH_CHANGED"
+        elif low_changed:
+            reset_reason = "LOW_CHANGED"
+        elif high_changed:
+            reset_reason = "HIGH_CHANGED"
+    if reset_reason is None and available < stable_states:
+        reset_reason = "COLLECTING"
+    elif reset_reason is None and strict_count >= stable_states and not width_ready:
+        reset_reason = "WIDTH_TOO_NARROW"
+
+    return R1StabilityDiagnostic(
+        required_states=stable_states,
+        available_states=available,
+        strict_stable_states=strict_count,
+        low_stable_states=low_count,
+        high_stable_states=high_count,
+        working_width_pct=width_pct,
+        working_width_min_pct=working_width_min_pct,
+        width_ready=width_ready,
+        history_ready=len(closed) >= 200,
+        reset_reason=reset_reason,
+        observed_at=current.observed_at,
     )
 
 
@@ -1192,6 +1306,11 @@ class ParameterizedCausalMarketWatch:
             raise ValueError("R1 L53_STABLE_RANGE does not permit OI filter")
 
         rows = tuple(state.candles.get("5", ()))
+        state.r1_stability = compute_r1_l53_stability_diagnostic(
+            rows,
+            stable_states=stable_states,
+            working_width_min_pct=width_min,
+        )
         zone = compute_r1_l53_stable_zone(
             rows,
             stable_states=stable_states,
@@ -1577,7 +1696,7 @@ class ParameterizedCausalMarketWatch:
         state = self._states.get((entry_plan_fingerprint, symbol))
         if state is None:
             return MarketWatchSnapshot(
-                None, None, {}, None, None, None, None, False, None, None, None, None
+                None, None, {}, None, None, None, None, False, None, None, None, None, None
             )
         candidate = state.candidate
         return MarketWatchSnapshot(
@@ -1593,6 +1712,7 @@ class ParameterizedCausalMarketWatch:
             last_flow_condition_met=state.last_flow_condition_met,
             last_oi_condition_met=state.last_oi_condition_met,
             last_touch_at=state.last_touch_at,
+            r1_stability=state.r1_stability,
         )
 
     def drain_trace(self, entry_plan_fingerprint: str, symbol: str) -> tuple[WatchTracePoint, ...]:

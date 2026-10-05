@@ -624,6 +624,7 @@ def strategy_trade_monitor_state() -> dict[str, object]:
         "entry_price",
         "distance_pct",
         "candidate_id",
+        "r1_stability",
         "last_touch_at",
         "updated_at",
     )
