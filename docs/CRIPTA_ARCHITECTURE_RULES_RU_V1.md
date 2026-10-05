@@ -431,17 +431,21 @@ Exchange — внешний источник фактической истины
 
 ## 9.0 Presentation UI boundary
 
-OWNER DECISION 2026-10-05: визуальный/read-model слой Dashboard физически и
-release-wise отделён от trading runtime.
+OWNER DECISION 2026-10-05: presentation/read-model слой Dashboard физически
+и release-wise отделён от trading runtime.
 
-Presentation-only UI не владеет Strategy/Entry/Exit/Execution, не меняет
-решения и не требует остановки trading services при deploy. Он может иметь
-отдельную `DASHBOARD_UI_COMMIT` identity и обновляться атомарно при работающем
-MICRO_LIVE/LIVE.
+Dashboard presentation/read-model не владеет Strategy/Entry/Exit/Execution,
+не меняет решения и не требует остановки trading services при deploy. Он может
+иметь отдельную `DASHBOARD_UI_COMMIT` identity и обновляться атомарно при
+работающем MICRO_LIVE/LIVE.
 
-Это разрешение относится только к presentation assets. Server handlers,
-authentication, control/mutation actions и decision/execution-affecting
-JavaScript остаются частью application runtime и проходят полный release gate.
+В independent Dashboard scope входят static assets и строго read-only
+server-side projections/aggregations already-existing runtime/DB facts.
+Read-only backend change может перезапустить только Dashboard service.
+
+Authentication, control/mutation handlers, Exchange mutation, gates,
+permissions, Strategy/Entry/Exit/Execution semantics и decision-affecting code
+остаются частью application/trading runtime и проходят полный release gate.
 
 ## 9.1 Lifecycle Supervisor
 

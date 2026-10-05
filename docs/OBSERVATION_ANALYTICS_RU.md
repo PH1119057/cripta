@@ -304,15 +304,24 @@ UI/read-model:
 - позволяет владельцу управлять только разрешёнными control-сущностями;
 - не содержит скрытую торговую policy;
 - не пересчитывает Entry независимо от канонического runtime;
-- неизвестное показывает как неизвестное.
+- неизвестное показывает как неизвестное;
+- в operational monetary surfaces показывает **один итог после комиссий**;
+  gross PnL и отдельные fee components остаются audit/internal evidence, но не
+  дублируются в operator-facing money result;
+- положительный monetary result = green, отрицательный = red, zero = neutral;
+  MAE как adverse metric также отображается red, а не warning-orange.
 
-Deployment contract presentation-layer:
-- presentation-only HTML/CSS/read-model rendering может обновляться независимо
-  от trading runtime;
-- такой deploy не требует disarm, Strategy deactivation или restart торговых
-  сервисов;
-- control/API/auth/mutation semantics не входят в presentation-only scope;
-- exact UI bytes имеют отдельную `DASHBOARD_UI_COMMIT` identity.
+Deployment contract presentation/read-model layer:
+- presentation HTML/CSS и read-only Dashboard projections/aggregations могут
+  обновляться независимо от trading runtime;
+- такой deploy не требует disarm, Strategy deactivation или restart Entry/Exit/
+  private runtime/observer/lifecycle services;
+- если меняется read-only Dashboard backend, допустим restart **только**
+  `cripta-dashboard.service`;
+- auth, control/mutation endpoints, Strategy/Entry/Exit/Execution semantics,
+  gates/permissions/LIVE-arm и decision-affecting code не входят в этот scope;
+- exact Dashboard presentation/read-model bytes имеют отдельную
+  `DASHBOARD_UI_COMMIT` identity.
 
 ## 3.5 Lifecycle Supervisor
 

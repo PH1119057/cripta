@@ -44,19 +44,22 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 as_repo_owner git -C "$SOURCE" show "$previous_commit:operations/dashboard/index.html" > "$tmp/old.html"
 as_repo_owner git -C "$SOURCE" show "$UI_COMMIT:operations/dashboard/index.html" > "$tmp/new.html"
-[[ -s "$tmp/new.html" ]] || die "new UI asset is empty"
+as_repo_owner git -C "$SOURCE" show "$previous_commit:operations/dashboard/app.py" > "$tmp/old_app.py"
+as_repo_owner git -C "$SOURCE" show "$UI_COMMIT:operations/dashboard/app.py" > "$tmp/new_app.py"
+[[ -s "$tmp/new.html" && -s "$tmp/new_app.py" ]] || die "Dashboard bundle is incomplete"
 
-python3 - "$tmp/old.html" "$tmp/new.html" <<'PY'
+python3 - "$tmp/old.html" "$tmp/new.html" "$tmp/old_app.py" "$tmp/new_app.py" <<'PY'
 from pathlib import Path
+import ast
 import re
 import sys
 
-old = Path(sys.argv[1]).read_text(encoding="utf-8")
-new = Path(sys.argv[2]).read_text(encoding="utf-8")
+old_html = Path(sys.argv[1]).read_text(encoding="utf-8")
+new_html = Path(sys.argv[2]).read_text(encoding="utf-8")
+old_app = Path(sys.argv[3]).read_text(encoding="utf-8")
+new_app = Path(sys.argv[4]).read_text(encoding="utf-8")
 
-# Presentation-only rail is intentionally strict. Any change touching network
-# mutation/control/auth semantics must fall back to the full runtime release.
-sensitive_tokens = (
+html_sensitive_tokens = (
     "/api/",
     "fetch(",
     "livePost(",
@@ -73,19 +76,104 @@ def protected_lines(text: str) -> list[str]:
     return [
         line.strip()
         for line in text.splitlines()
-        if any(token in line for token in sensitive_tokens)
+        if any(token in line for token in html_sensitive_tokens)
     ]
 
-if protected_lines(old) != protected_lines(new):
-    raise SystemExit("presentation-only verification failed: control/API/auth lines changed")
+if protected_lines(old_html) != protected_lines(new_html):
+    raise SystemExit("Dashboard verifier failed: HTML control/API/auth lines changed")
 
-old_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old)))
-new_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new)))
+old_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old_html)))
+new_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new_html)))
 if old_endpoints != new_endpoints:
-    raise SystemExit("presentation-only verification failed: API endpoint set changed")
+    raise SystemExit("Dashboard verifier failed: API endpoint set changed")
 
-print("PRESENTATION_ONLY_SCOPE=PASS")
+allowed_functions = {
+    "_paper_entry_fee_rate",
+    "_paper_exit_fee_rate",
+    "_paper_net_pnl_usdt",
+    "_signal_monitor_summary",
+    "strategy_signal_monitor_state",
+    "strategy_paper_state",
+    "_live_trading_state",
+    "export_trading_table",
+}
+allowed_assignments = {
+    "PAPER_MAKER_FEE_RATE",
+    "PAPER_TAKER_FEE_RATE",
+    "REAL_IMMEDIATE_CLOSE_FEE_RATE",
+}
+forbidden_call_tokens = (
+    "arm_r1_micro_live",
+    "disarm_r1_micro_live",
+    "set_execution_permission",
+)
+mutation_sql = re.compile(r"\\b(INSERT\\s+INTO|UPDATE\\s+|DELETE\\s+FROM|ALTER\\s+TABLE|DROP\\s+|TRUNCATE\\s+)\\b", re.I)
+
+def top_level(tree: ast.Module) -> dict[tuple[str, str], ast.AST]:
+    out: dict[tuple[str, str], ast.AST] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out[(type(node).__name__, node.name)] = node
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            out[("import", ast.dump(node, include_attributes=False))] = node
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = []
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    names.append(target.id)
+            key = ",".join(names) if names else ast.dump(node, include_attributes=False)
+            out[("assign", key)] = node
+        else:
+            out[(type(node).__name__, ast.dump(node, include_attributes=False))] = node
+    return out
+
+old_tree = ast.parse(old_app)
+new_tree = ast.parse(new_app)
+old_nodes = top_level(old_tree)
+new_nodes = top_level(new_tree)
+
+all_keys = set(old_nodes) | set(new_nodes)
+changed: list[tuple[str, str]] = []
+for key in sorted(all_keys):
+    a = old_nodes.get(key)
+    b = new_nodes.get(key)
+    if a is None or b is None or ast.dump(a, include_attributes=False) != ast.dump(b, include_attributes=False):
+        changed.append(key)
+
+for kind, name in changed:
+    if kind in {"FunctionDef", "AsyncFunctionDef"} and name in allowed_functions:
+        node = new_nodes.get((kind, name))
+        if node is not None:
+            src = ast.get_source_segment(new_app, node) or ""
+            if any(token in src for token in forbidden_call_tokens):
+                raise SystemExit(f"Dashboard verifier failed: forbidden control call in {name}")
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                    if mutation_sql.search(child.value):
+                        raise SystemExit(f"Dashboard verifier failed: mutation SQL in {name}")
+        continue
+    if kind == "assign" and name in allowed_assignments:
+        continue
+    raise SystemExit(f"Dashboard verifier failed: non-read-model app.py change: {kind} {name}")
+
+print("DASHBOARD_PRESENTATION_READ_MODEL_SCOPE=PASS")
+print("APP_CHANGED_NODES=" + ",".join(f"{k}:{n}" for k,n in changed))
 PY
+
+# Capture trading-service identities before any Dashboard switch.
+trading_units=(
+  cripta-universal-entry-observer.service
+  cripta-universal-entry-consumer.service
+  cripta-private-runtime.service
+  cripta-universal-exit-consumer.service
+  cripta-lifecycle-supervisor.service
+  cripta-r1-reverse-worker.service
+)
+: > "$tmp/trading_before.tsv"
+for unit in "${trading_units[@]}"; do
+  printf '%s\t%s\t%s\n' "$unit"     "$(systemctl show "$unit" -p MainPID --value 2>/dev/null || true)"     "$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"     >> "$tmp/trading_before.tsv"
+done
 
 gate_before="$(sql_scalar "SELECT coalesce((SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'),-1)")"
 permissions_before="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
@@ -97,6 +185,7 @@ if [[ ! -d "$release_dir" ]]; then
   install -d -o root -g cripta -m 0755 "$release_dir"
 fi
 install -o root -g cripta -m 0644 "$tmp/new.html" "$release_dir/index.html"
+install -o root -g cripta -m 0644 "$tmp/new_app.py" "$release_dir/app.py"
 printf '%s\n' "$UI_COMMIT" > "$release_dir/DASHBOARD_UI_COMMIT"
 chown root:cripta "$release_dir/DASHBOARD_UI_COMMIT"
 chmod 0644 "$release_dir/DASHBOARD_UI_COMMIT"
@@ -106,37 +195,66 @@ rm -f "$next_ui"
 ln -s "$release_dir" "$next_ui"
 mv -Tf "$next_ui" "$UI_ROOT/current"
 
-# Dashboard app reads index.html on every request. Point only this presentation
-# asset at the independent UI release. No service restart is needed.
+# Switch the independent presentation/read-model bundle atomically per path.
 next_live="$current_runtime/operations/dashboard/.index.html-$UI_COMMIT"
 rm -f "$next_live"
 ln -s "$UI_ROOT/current/index.html" "$next_live"
 mv -Tf "$next_live" "$live_path"
+
+live_app="$current_runtime/operations/dashboard/app.py"
+next_app="$current_runtime/operations/dashboard/.app.py-$UI_COMMIT"
+rm -f "$next_app"
+ln -s "$UI_ROOT/current/app.py" "$next_app"
+mv -Tf "$next_app" "$live_app"
+
+# Static-only changes need no restart. A read-model backend change restarts only
+# the Dashboard process; no trading service may be touched.
+old_app_sha="$(sha256sum "$tmp/old_app.py" | awk '{print $1}')"
+new_app_sha="$(sha256sum "$tmp/new_app.py" | awk '{print $1}')"
+dashboard_restarted=0
+if [[ "$old_app_sha" != "$new_app_sha" ]]; then
+  systemctl restart cripta-dashboard.service
+  systemctl is-active --quiet cripta-dashboard.service || die "Dashboard restart failed"
+  dashboard_restarted=1
+fi
 
 install -d -o root -g cripta -m 0750 "$STATE_ROOT"
 printf '%s\n' "$UI_COMMIT" > "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 chown root:cripta "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 chmod 0640 "$STATE_ROOT/DASHBOARD_UI_COMMIT"
 
-source_sha="$(sha256sum "$release_dir/index.html" | awk '{print $1}')"
-live_sha="$(sha256sum "$live_path" | awk '{print $1}')"
-[[ "$source_sha" == "$live_sha" ]] || die "UI source/live hash mismatch"
+html_source_sha="$(sha256sum "$release_dir/index.html" | awk '{print $1}')"
+html_live_sha="$(sha256sum "$live_path" | awk '{print $1}')"
+app_source_sha="$(sha256sum "$release_dir/app.py" | awk '{print $1}')"
+app_live_sha="$(sha256sum "$live_app" | awk '{print $1}')"
+[[ "$html_source_sha" == "$html_live_sha" ]] || die "Dashboard HTML source/live hash mismatch"
+[[ "$app_source_sha" == "$app_live_sha" ]] || die "Dashboard app source/live hash mismatch"
 
 gate_after="$(sql_scalar "SELECT coalesce((SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'),-1)")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 activations_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.strategy_activations WHERE enabled=true")"
 
-[[ "$gate_after" == "$gate_before" ]] || die "UI deploy changed mainnet gate"
-[[ "$permissions_after" == "$permissions_before" ]] || die "UI deploy changed execution permissions"
-[[ "$activations_after" == "$activations_before" ]] || die "UI deploy changed StrategyActivation count"
+[[ "$gate_after" == "$gate_before" ]] || die "Dashboard deploy changed mainnet gate"
+[[ "$permissions_after" == "$permissions_before" ]] || die "Dashboard deploy changed execution permissions"
+[[ "$activations_after" == "$activations_before" ]] || die "Dashboard deploy changed StrategyActivation count"
+
+while IFS="$(printf '\t')" read -r unit pid_before restarts_before; do
+  pid_after="$(systemctl show "$unit" -p MainPID --value 2>/dev/null || true)"
+  restarts_after="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || true)"
+  [[ "$pid_after" == "$pid_before" ]] || die "Dashboard deploy changed trading service PID: $unit"
+  [[ "$restarts_after" == "$restarts_before" ]] || die "Dashboard deploy restarted trading service: $unit"
+done < "$tmp/trading_before.tsv"
 
 cat > "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json" <<EOF
 {
   "dashboard_ui_commit": "$UI_COMMIT",
   "previous_dashboard_ui_commit": "$previous_commit",
   "live_path": "$live_path",
-  "source_sha256": "$source_sha",
-  "live_sha256": "$live_sha",
+  "html_source_sha256": "$html_source_sha",
+  "html_live_sha256": "$html_live_sha",
+  "app_source_sha256": "$app_source_sha",
+  "app_live_sha256": "$app_live_sha",
+  "dashboard_restarted": $dashboard_restarted,
   "mainnet_gate_before": $gate_before,
   "mainnet_gate_after": $gate_after,
   "execution_permissions_before": $permissions_before,
@@ -151,7 +269,9 @@ chmod 0640 "$STATE_ROOT/DASHBOARD_UI_DEPLOY.json"
 echo "DASHBOARD_UI_DEPLOY=PASS"
 echo "DASHBOARD_UI_COMMIT=$UI_COMMIT"
 echo "LIVE_PATH=$live_path"
-echo "LIVE_SHA256=$live_sha"
+echo "HTML_LIVE_SHA256=$html_live_sha"
+echo "APP_LIVE_SHA256=$app_live_sha"
+echo "DASHBOARD_RESTARTED=$dashboard_restarted"
 echo "GATE_UNCHANGED=$gate_after"
 echo "EXECUTION_PERMISSIONS_UNCHANGED=$permissions_after"
 echo "TRADING_SERVICES_RESTARTED=0"

@@ -248,15 +248,15 @@ expected baseline = verified
 
 OWNER DECISION 2026-10-05:
 
-Presentation-only изменение Dashboard UI не является изменением торгового
-runtime и не должно останавливать реальную торговлю.
+Presentation/read-model-only изменение Dashboard не является изменением
+торгового runtime и не должно останавливать реальную торговлю.
 
 ```text
-presentation-only UI
--> Git-first verified UI commit
--> UI-only validation
--> atomic UI asset deploy
--> UI verification
+presentation/read-model Dashboard
+-> Git-first verified Dashboard commit
+-> fail-closed scope validation
+-> atomic Dashboard asset/read-model deploy
+-> Dashboard verification
 
 НЕ ТРЕБУЕТ:
 mainnet gate = 0
@@ -274,29 +274,44 @@ DASHBOARD_UI_ROOT = /srv/cripta/dashboard-ui
 ```
 
 `DASHBOARD_UI_COMMIT` не заменяет `INSTALLED_COMMIT` / `LOADED_COMMIT`:
-application/trading runtime и presentation UI версионируются независимо.
+application/trading runtime и Dashboard presentation/read-model bundle
+версионируются независимо.
 
-Presentation-only scope разрешён только если diff **не меняет**:
-- server/API handlers, authentication/authorization;
-- API endpoint selection, request payloads или mutation/control actions;
-- Strategy/Entry/Exit/Execution semantics;
+Independent Dashboard scope разрешён для:
+- HTML/CSS/presentation JavaScript;
+- read-only Dashboard projections/aggregations/formatting, которые только читают
+  уже существующие runtime/DB facts и формируют operator read-model;
+- export formatting тех же read-only фактов.
+
+Scope **не имеет права менять**:
+- authentication/authorization;
+- POST/control/mutation handlers, request payloads или control endpoint
+  semantics;
+- Strategy/Entry/Exit/Execution behavior;
 - gates, permissions, LIVE-arm/re-arm;
+- exchange mutation;
 - decision/execution-affecting JavaScript;
-- runtime service/unit/config semantics.
+- non-Dashboard runtime service/unit/config semantics.
 
-Изменение control-affecting UI/JS не считается presentation-only и идёт через
-обычный runtime release contract.
+Если меняется только static asset — restart Dashboard не нужен.
+Если меняется approved read-only Dashboard backend — разрешён restart только
+`cripta-dashboard.service`; trading services restart запрещён.
+
+Любое control/auth/mutation/decision-affecting изменение не считается
+Dashboard read-model change и идёт через обычный runtime release contract.
 
 Canonical UI-only deploy rail обязан:
 - брать bytes только из exact verified Git commit, уже опубликованного на
   approved GitHub ref;
-- fail-closed проверять presentation-only scope;
+- fail-closed проверять presentation/read-model scope;
 - не изменять `mainnet gate`, StrategyActivation или execution permissions;
 - до/после доказывать неизменность trading gate/permissions;
 - не останавливать и не перезапускать trading services;
 - для static asset, читаемого на каждый HTTP request, не перезапускать даже
   dashboard service без необходимости;
-- атомарно переключать только UI asset;
+- для read-only backend change перезапускать только Dashboard и доказывать, что
+  PIDs/NRestarts trading services не изменились;
+- атомарно переключать только Dashboard presentation/read-model bundle;
 - сохранять exact `DASHBOARD_UI_COMMIT` и source/live hash evidence.
 
 Full runtime installer обязан сохранять эту физическую независимость и
