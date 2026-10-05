@@ -108,6 +108,10 @@ Filesystem contours читать из MAP/DEVELOPMENT/RESEARCH: source=`/srv/cri
 
 Patch/deploy не имеет права молча включать LIVE. Re-arm требует current LIVE-arm contract и explicit owner approval.
 
+Owner-controlled real execution smoke-test — только explicit owner-triggered
+diagnostic; не StrategySignal/EntryDecision и не Strategy statistics.
+Exact current contract: TRADING_CONTOUR §4.8; ARCH §7.1.
+
 Dashboard presentation/read-model deploy отделён от trading runtime: static UI и
 строго read-only projections/aggregations не требуют disarm/Execution OFF или
 restart trading services; backend read-model может restart только Dashboard.
