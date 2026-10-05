@@ -599,3 +599,25 @@ Canonical ownership:
 
 Document set, mandatory pre-read, routing and Project Source count are unchanged.
 README / AGENTS / Project Instructions bootstrap are synchronized in this cycle.
+
+
+# 21. Owner-controlled execution smoke-test — 2026-10-06
+
+OWNER DECISION 2026-10-06:
+
+- authenticated Dashboard may expose an explicit owner-only real execution
+  smoke-test;
+- it is a control-plane diagnostic, not Strategy behavior;
+- current exact test is 10 USDT, 1x, MARKET, SL -0.5%, TP +0.5%;
+- only symbols in the current ACTIVE R1 MICRO_LIVE cohort are eligible;
+- the command uses production private runtime and must not forge Strategy
+  lineage or pollute Strategy performance statistics.
+
+Canonical ownership:
+- ARCH §7.1: architectural boundary;
+- TRADING_CONTOUR §4.8: exact trading/control contract;
+- GLOSSARY: term/source marker;
+- MAP: implementation/deploy/runtime evidence.
+
+Document set, mandatory pre-read, routing and Project Source count are unchanged.
+README / AGENTS / Project Instructions bootstrap are synchronized in this cycle.
