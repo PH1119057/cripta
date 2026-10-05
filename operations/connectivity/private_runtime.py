@@ -36,6 +36,7 @@ from safety_observer import api_get
 
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
+from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
 
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
@@ -74,6 +75,10 @@ RECONCILIATION_MAX_AGE_MS = int(
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0
 MUTATION_CLOCK_MAX_ABS_OFFSET_MS = 500.0
+PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
+PRIVATE_RECONNECT_RECOVERED_REASON = (
+    "private WS reconnect recovered: verified R1 arm restored"
+)
 
 
 class ExchangeMutationBarrier(RuntimeError):
@@ -153,6 +158,165 @@ def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
         (reason, now_ms),
     )
     connection.commit()
+
+
+
+def mainnet_gate_enabled(connection: psycopg.Connection) -> bool:
+    row = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    return bool(row and row[0])
+
+
+def restore_r1_gate_after_verified_reconnect(
+    connection: psycopg.Connection,
+    *,
+    reconnect_started_ms: int,
+    hot_positions: int,
+    hot_orders: int,
+) -> bool:
+    """Restore only an already owner-armed flat R1 cohort after verified reconnect."""
+    if hot_positions or hot_orders:
+        return False
+
+    gate = connection.execute(
+        "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet' FOR UPDATE"
+    ).fetchone()
+    if (
+        not gate
+        or bool(gate[0])
+        or str(gate[1] or "") != PRIVATE_RECONNECT_GATE_REASON
+    ):
+        connection.rollback()
+        return False
+
+    try:
+        release_commit = Path("/proc/self/cwd/INSTALLED_COMMIT").read_text(
+            encoding="utf-8"
+        ).strip()
+    except OSError:
+        connection.rollback()
+        return False
+    if len(release_commit) != 40:
+        connection.rollback()
+        return False
+
+    expected_ids = set(R1_STRATEGY_IDS.values())
+    active_sessions = connection.execute(
+        """SELECT strategy_id
+             FROM control.live_arm_sessions
+            WHERE state='ACTIVE'
+              AND release_commit=%s
+              AND strategy_version=%s""",
+        (release_commit, R1_VERSION),
+    ).fetchall()
+    if len(active_sessions) != 5 or {str(row[0]) for row in active_sessions} != expected_ids:
+        connection.rollback()
+        return False
+    if connection.execute(
+        "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'"
+    ).fetchone()[0] != 5:
+        connection.rollback()
+        return False
+
+    permissions = connection.execute(
+        """SELECT strategy_id,strategy_version
+             FROM strategy_entry.execution_permissions
+            WHERE enabled=true"""
+    ).fetchall()
+    if len(permissions) != 5 or {
+        (str(row[0]), str(row[1])) for row in permissions
+    } != {(strategy_id, R1_VERSION) for strategy_id in expected_ids}:
+        connection.rollback()
+        return False
+
+    activations = connection.execute(
+        """SELECT strategy_id,strategy_version
+             FROM strategy_entry.strategy_activations
+            WHERE enabled=true"""
+    ).fetchall()
+    if len(activations) != 5 or {
+        (str(row[0]), str(row[1])) for row in activations
+    } != {(strategy_id, R1_VERSION) for strategy_id in expected_ids}:
+        connection.rollback()
+        return False
+
+    reconciliation = connection.execute(
+        """SELECT started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders
+             FROM runtime.reconciliation_runs ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    if (
+        not reconciliation
+        or int(reconciliation[0]) < reconnect_started_ms
+        or str(reconciliation[2]) != "reconnect"
+        or not bool(reconciliation[3])
+        or int(reconciliation[4]) != 0
+        or int(reconciliation[5]) != 0
+    ):
+        connection.rollback()
+        return False
+
+    wallet = connection.execute(
+        """SELECT refreshed_at_epoch_ms,payload_json::jsonb->>'accountType'
+             FROM runtime.wallet_latest WHERE singleton=1"""
+    ).fetchone()
+    if (
+        not wallet
+        or int(wallet[0]) < reconnect_started_ms
+        or str(wallet[1]) != "UNIFIED"
+    ):
+        connection.rollback()
+        return False
+
+    mode_rows = connection.execute(
+        """SELECT DISTINCT ON (instrument)
+                  instrument,position_mode,position_idx,observed_at,fresh_until
+             FROM runtime.position_mode_states
+            WHERE account_ref='BYBIT:UNIFIED'
+              AND product_category='LINEAR'
+              AND instrument = ANY(%s)
+              AND observed_at >= to_timestamp(%s / 1000.0)
+            ORDER BY instrument,observed_at DESC""",
+        (list(R1_SYMBOLS), reconnect_started_ms),
+    ).fetchall()
+    now = datetime.now(UTC)
+    if len(mode_rows) != 5 or {str(row[0]) for row in mode_rows} != set(R1_SYMBOLS):
+        connection.rollback()
+        return False
+    if any(
+        str(row[1]) != "ONE_WAY"
+        or int(row[2] if row[2] is not None else -1) != 0
+        or row[4] is None
+        or row[4].astimezone(UTC) < now
+        for row in mode_rows
+    ):
+        connection.rollback()
+        return False
+
+    now_ms = int(time.time() * 1000)
+    connection.execute(
+        """UPDATE control.execution_gates
+              SET enabled=1,reason=%s,updated_at_epoch_ms=%s
+            WHERE mode='mainnet'
+              AND enabled=0
+              AND reason=%s""",
+        (PRIVATE_RECONNECT_RECOVERED_REASON, now_ms, PRIVATE_RECONNECT_GATE_REASON),
+    )
+    connection.execute(
+        """INSERT INTO control.execution_gate_events(
+               at_epoch_ms,mode,previous_enabled,requested_enabled,
+               resulting_enabled,reason,source,origin,request_id,settings_version)
+           VALUES(%s,'mainnet',false,true,true,%s,
+                  'private_runtime','safety_recovery',%s,%s)""",
+        (
+            now_ms,
+            PRIVATE_RECONNECT_RECOVERED_REASON,
+            f"private-reconnect-recover-{reconnect_started_ms}",
+            R1_VERSION,
+        ),
+    )
+    connection.commit()
+    return True
 
 
 def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
@@ -2439,6 +2603,8 @@ def collect_position_mode_states(
     key: str,
     secret: str,
     now_ms: int,
+    *,
+    force_refresh: bool = False,
 ) -> list[dict[str, object]]:
     """GET-only per-symbol mode observations for active Strategy universes."""
     with connection.transaction():
@@ -2457,7 +2623,7 @@ def collect_position_mode_states(
         return []
     refresh_seconds = int(os.environ.get("CRIPTA_POSITION_MODE_REFRESH_SECONDS", "30") or 30)
     observed_at = datetime.fromtimestamp(now_ms / 1000, tz=UTC)
-    if refresh_seconds > 0:
+    if refresh_seconds > 0 and not force_refresh:
         cutoff = observed_at - timedelta(seconds=refresh_seconds)
         with connection.transaction():
             recent = {
@@ -2578,7 +2744,11 @@ def reconcile(
         ]
         order_list = (orders.get("result") or {}).get("list") or []
         position_mode_states = collect_position_mode_states(
-            connection, key, secret, now
+            connection,
+            key,
+            secret,
+            now,
+            force_refresh=reason != "periodic",
         )
         fetch_history = reason != "periodic"
         if not fetch_history:
@@ -2740,17 +2910,43 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
 def private_loop(key: str, secret: str) -> None:
     reconnects = 0
     connection = db("cripta-private-ws")
+    recovering = False
+    restore_gate_after_reconnect = False
+    reconnect_started_ms = 0
     while running:
         try:
-            if reconnects > 0:
-                disarm_new_entries(connection, "private WS reconnect: owner re-arm required")
-            hot_positions, hot_orders = reconcile(connection, key, secret, "startup" if reconnects == 0 else "reconnect")
+            hot_positions, hot_orders = reconcile(
+                connection,
+                key,
+                secret,
+                "startup" if reconnects == 0 else "reconnect",
+            )
             ws = websocket.create_connection(PRIVATE_URL, timeout=10, enable_multithread=False)
             ws.settimeout(1)
             auth(ws, key, secret)
             ws.send(json.dumps({"op": "subscribe", "args": ["order.linear", "execution.linear", "position.linear", "wallet"]}, separators=(",", ":")))
             connection_event(connection, "private", "connected", reconnects=reconnects)
             atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
+            if recovering:
+                restored = False
+                if restore_gate_after_reconnect:
+                    restored = restore_r1_gate_after_verified_reconnect(
+                        connection,
+                        reconnect_started_ms=reconnect_started_ms,
+                        hot_positions=hot_positions,
+                        hot_orders=hot_orders,
+                    )
+                connection_event(
+                    connection,
+                    "private",
+                    "reconnect_verified",
+                    reconnects=reconnects,
+                    gate_restored=restored,
+                    gate_was_open=restore_gate_after_reconnect,
+                )
+                recovering = False
+                restore_gate_after_reconnect = False
+                reconnect_started_ms = 0
             next_ping = time.monotonic() + 20
             next_reconcile = time.monotonic() + 5
             while running:
@@ -2772,6 +2968,15 @@ def private_loop(key: str, secret: str) -> None:
                     atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
                     next_reconcile = time.monotonic() + (1 if hot_positions else 5)
         except Exception as exc:
+            if not recovering:
+                try:
+                    restore_gate_after_reconnect = mainnet_gate_enabled(connection)
+                except Exception:
+                    restore_gate_after_reconnect = False
+                    connection.rollback()
+                reconnect_started_ms = int(time.time() * 1000)
+                recovering = True
+            disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)
             reconnects += 1
             connection_event(connection, "private", "reconnecting", error=f"{type(exc).__name__}: {exc}", reconnects=reconnects)
             atomic_status("private", {"state": "reconnecting", "reconnects": reconnects, "error": f"{type(exc).__name__}: {exc}"})
