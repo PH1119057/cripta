@@ -210,8 +210,12 @@ mv -Tf "$next_live" "$live_path"
 live_app="$current_runtime/operations/dashboard/app.py"
 next_app="$current_runtime/operations/dashboard/.app.py-$UI_COMMIT"
 rm -f "$next_app"
-ln -s "$UI_ROOT/current/app.py" "$next_app"
+install -o cripta -g cripta -m 0644 "$UI_ROOT/current/app.py" "$next_app"
 mv -Tf "$next_app" "$live_app"
+
+# Keep app.py physically inside operations/dashboard so sibling imports such as
+# archive_v2 remain resolvable through Python's script-directory sys.path.
+[[ -f "$live_app" && ! -L "$live_app" ]] || die "Dashboard app must be a regular in-directory file"
 
 # Static-only changes need no restart. A read-model backend change restarts only
 # the Dashboard process; no trading service may be touched.
