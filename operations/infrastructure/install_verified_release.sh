@@ -6,6 +6,7 @@ RELEASE_COMMIT="${CRIPTA_RELEASE_COMMIT:-}"
 EXPECTED_BASELINE="${CRIPTA_EXPECTED_BASELINE_COMMIT:-}"
 EXPECTED_TREE="${CRIPTA_RELEASE_TREE_SHA:-}"
 RUNTIME_ROOT="${CRIPTA_RUNTIME_ROOT:-/srv/cripta/runtime}"
+DASHBOARD_UI_ROOT="${CRIPTA_DASHBOARD_UI_ROOT:-/srv/cripta/dashboard-ui}"
 RESEARCH_TOOLING_ROOT="${CRIPTA_RESEARCH_TOOLING_ROOT:-/data/cripta/research/tooling}"
 BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_backups}"
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
@@ -89,6 +90,7 @@ actual_tooling_baseline="$(runuser -u cripta -- cat "$current_tooling/INSTALLED_
 [[ "$actual_tooling_baseline" == "$EXPECTED_BASELINE" ]] || die "tooling baseline mismatch: actual=$actual_tooling_baseline expected=$EXPECTED_BASELINE"
 
 install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT" "$RUNTIME_ROOT/releases"
+install -d -o root -g cripta -m 0755 "$DASHBOARD_UI_ROOT" "$DASHBOARD_UI_ROOT/releases"
 install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLING_ROOT/releases"
 install -d -o cripta -g cripta -m 0750 /data/cripta/datasets/raw/bybit_public_trades_daily_v1
 install -d -o root -g root -m 0700 "$BACKUP_ROOT"
@@ -105,6 +107,25 @@ if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner install -d -m 0750 "$tooling_release"
   as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
+
+# Presentation UI is a separate release identity. Bootstrap it only when the
+# independent UI rail has not been initialized yet; otherwise preserve the
+# current UI across full application-runtime deploys.
+if [[ ! -f "$DASHBOARD_UI_ROOT/current/index.html" ]]; then
+  ui_bootstrap="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"
+  install -d -o root -g cripta -m 0755 "$ui_bootstrap"
+  install -o root -g cripta -m 0644 "$runtime_release/operations/dashboard/index.html" "$ui_bootstrap/index.html"
+  printf '%s\n' "$RELEASE_COMMIT" > "$ui_bootstrap/DASHBOARD_UI_COMMIT"
+  chown root:cripta "$ui_bootstrap/DASHBOARD_UI_COMMIT"
+  chmod 0644 "$ui_bootstrap/DASHBOARD_UI_COMMIT"
+  next_ui="$DASHBOARD_UI_ROOT/.current-$RELEASE_COMMIT"
+  rm -f "$next_ui"
+  ln -s "$ui_bootstrap" "$next_ui"
+  mv -Tf "$next_ui" "$DASHBOARD_UI_ROOT/current"
+fi
+[[ -f "$DASHBOARD_UI_ROOT/current/index.html" ]] || die "current Dashboard UI asset missing"
+rm -f "$runtime_release/operations/dashboard/index.html"
+ln -s "$DASHBOARD_UI_ROOT/current/index.html" "$runtime_release/operations/dashboard/index.html"
 
 runtime_requirements="$runtime_release/operations/runtime/runtime_requirements.lock"
 [[ -f "$runtime_requirements" ]] || die "runtime dependency lock missing"
@@ -232,7 +253,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -297,11 +318,13 @@ done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming
+install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/deploy_dashboard_ui.sh" /usr/local/sbin/cripta-deploy-dashboard-ui
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF
 CRIPTA_RELEASE_COMMIT=$RELEASE_COMMIT
 CRIPTA_RUNTIME_ROOT=$RUNTIME_ROOT/current
+CRIPTA_DASHBOARD_UI_ROOT=$DASHBOARD_UI_ROOT
 CRIPTA_RESEARCH_TOOLING_ROOT=$RESEARCH_TOOLING_ROOT/current
 EOF
 chown root:cripta /etc/cripta/release.env
@@ -361,6 +384,7 @@ prune_release_backups
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
 echo "INSTALLED_COMMIT=$RELEASE_COMMIT"
 echo "RUNTIME_CURRENT=$(readlink -f "$RUNTIME_ROOT/current")"
+echo "DASHBOARD_UI_CURRENT=$(readlink -f "$DASHBOARD_UI_ROOT/current")"
 echo "RESEARCH_TOOLING_CURRENT=$(readlink -f "$RESEARCH_TOOLING_ROOT/current")"
 echo "BACKUP=$backup"
 echo "GATE=DISARMED"
