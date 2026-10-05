@@ -577,3 +577,25 @@ decision/execution-affecting JavaScript. Только presentation-only asset м
 
 Document set, mandatory pre-read, routing и Project Source count не меняются.
 README / AGENTS / Project Instructions template синхронизированы в этом cycle.
+
+
+# 20. Operator money / Dashboard read-model revision — 2026-10-05
+
+OWNER DECISION 2026-10-05:
+
+- operator-facing real/paper monetary result is one value **после комиссий**;
+- gross PnL and individual fee components remain internal/audit evidence;
+- positive money = green, negative money = red, zero = neutral;
+- MAE/adverse result is red rather than warning-orange;
+- Dashboard strictly read-only projections/aggregations belong to the independent
+  Dashboard presentation/read-model release rail and must not stop trading.
+
+Canonical ownership:
+- ARCH: Dashboard read-model boundary;
+- OBSERVATION_ANALYTICS: operator presentation semantics;
+- DEVELOPMENT_RELEASE: independent verified deploy scope;
+- GLOSSARY: Dashboard bundle identity;
+- MAP: dated implementation/runtime evidence.
+
+Document set, mandatory pre-read, routing and Project Source count are unchanged.
+README / AGENTS / Project Instructions bootstrap are synchronized in this cycle.
