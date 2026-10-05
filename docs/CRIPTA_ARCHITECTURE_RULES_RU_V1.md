@@ -429,6 +429,20 @@ Exchange — внешний источник фактической истины
 - operational safety;
 - архивирование и аудит.
 
+## 9.0 Presentation UI boundary
+
+OWNER DECISION 2026-10-05: визуальный/read-model слой Dashboard физически и
+release-wise отделён от trading runtime.
+
+Presentation-only UI не владеет Strategy/Entry/Exit/Execution, не меняет
+решения и не требует остановки trading services при deploy. Он может иметь
+отдельную `DASHBOARD_UI_COMMIT` identity и обновляться атомарно при работающем
+MICRO_LIVE/LIVE.
+
+Это разрешение относится только к presentation assets. Server handlers,
+authentication, control/mutation actions и decision/execution-affecting
+JavaScript остаются частью application runtime и проходят полный release gate.
+
 ## 9.1 Lifecycle Supervisor
 
 Lifecycle Supervisor контролирует сквозную корректность lifecycle, но не
