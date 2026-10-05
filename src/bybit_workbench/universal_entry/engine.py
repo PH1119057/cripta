@@ -86,6 +86,7 @@ class UniversalEntryEngine:
         real_admission_required_for: frozenset[str] = frozenset(),
         exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
+        admission_time: datetime | None = None,
     ) -> tuple[EntryEvaluation, ...]:
         available_sensors = dict(sensors or {})
         available_contexts = dict(contexts or {})
@@ -262,7 +263,7 @@ class UniversalEntryEngine:
                         plan,
                         signal,
                         attempt,
-                        fact_for_predicate.observed_at,
+                        admission_time or fact_for_predicate.observed_at,
                         capacity=capacity,
                         technical_readiness=technical_readiness,
                         account_ref=account_ref,
