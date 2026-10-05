@@ -1678,7 +1678,48 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         "tpOrderType": "Market",
                     }
                 )
-        result = api_post("/v5/position/trading-stop", stop_request, key, secret)
+        try:
+            result = api_post("/v5/position/trading-stop", stop_request, key, secret)
+        except RuntimeError as exc:
+            if kind != "initial_protection" or "not modified" not in str(exc).lower():
+                raise
+            verified_payload, _ = api_get(
+                "/v5/position/list",
+                {"category": "linear", "symbol": symbol},
+                key,
+                secret,
+            )
+            verified_position = next(
+                (
+                    item
+                    for item in ((verified_payload.get("result") or {}).get("list") or [])
+                    if Decimal(str(item.get("size") or 0)) > 0
+                    and int(item.get("positionIdx") or 0)
+                    == int(position.get("positionIdx") or 0)
+                    and str(item.get("side") or "") == side
+                ),
+                None,
+            )
+            if verified_position is None:
+                raise RuntimeError(
+                    "initial protection not-modified could not be verified: position missing"
+                ) from exc
+            verified_stop = Decimal(str(verified_position.get("stopLoss") or 0))
+            verified_target = Decimal(str(verified_position.get("takeProfit") or 0))
+            stop_matches = verified_stop == stop
+            target_matches = target is None or verified_target == target
+            if not stop_matches or not target_matches:
+                raise RuntimeError(
+                    "initial protection not-modified verification mismatch "
+                    f"requested_stop={stop} actual_stop={verified_stop} "
+                    f"requested_target={target} actual_target={verified_target}"
+                ) from exc
+            result = {
+                "retCode": 0,
+                "retMsg": "not modified",
+                "idempotent": True,
+                "verifiedFromExchange": True,
+            }
         if kind == "break_even":
             result["protectionPlan"] = {name: str(value) for name, value in plan.items()}
         elif kind == "initial_protection":
