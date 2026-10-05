@@ -128,7 +128,9 @@ fi
 [[ -f "$DASHBOARD_UI_ROOT/current/app.py" ]] || die "current Dashboard read-model app missing"
 rm -f "$runtime_release/operations/dashboard/index.html" "$runtime_release/operations/dashboard/app.py"
 ln -s "$DASHBOARD_UI_ROOT/current/index.html" "$runtime_release/operations/dashboard/index.html"
-ln -s "$DASHBOARD_UI_ROOT/current/app.py" "$runtime_release/operations/dashboard/app.py"
+install -o cripta -g cripta -m 0644 "$DASHBOARD_UI_ROOT/current/app.py" "$runtime_release/operations/dashboard/app.py"
+[[ -f "$runtime_release/operations/dashboard/app.py" && ! -L "$runtime_release/operations/dashboard/app.py" ]] ||
+  die "Dashboard app must remain a regular in-directory file"
 
 runtime_requirements="$runtime_release/operations/runtime/runtime_requirements.lock"
 [[ -f "$runtime_requirements" ]] || die "runtime dependency lock missing"

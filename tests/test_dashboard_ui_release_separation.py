@@ -28,11 +28,13 @@ def test_ui_deploy_does_not_restart_or_disarm_trading_services() -> None:
     assert "DASHBOARD_PRESENTATION_READ_MODEL_SCOPE=PASS" in UI_DEPLOY
     assert "Dashboard deploy changed trading service PID" in UI_DEPLOY
     assert "Dashboard deploy restarted trading service" in UI_DEPLOY
+    assert "Dashboard app must be a regular in-directory file" in UI_DEPLOY
 
 
 def test_full_runtime_installer_preserves_independent_ui_identity() -> None:
     assert 'DASHBOARD_UI_ROOT="${CRIPTA_DASHBOARD_UI_ROOT:-/srv/cripta/dashboard-ui}"' in INSTALLER
     assert 'ln -s "$DASHBOARD_UI_ROOT/current/index.html"' in INSTALLER
-    assert 'ln -s "$DASHBOARD_UI_ROOT/current/app.py"' in INSTALLER
+    assert 'install -o cripta -g cripta -m 0644 "$DASHBOARD_UI_ROOT/current/app.py"' in INSTALLER
+    assert "Dashboard app must remain a regular in-directory file" in INSTALLER
     assert "/usr/local/sbin/cripta-deploy-dashboard-ui" in INSTALLER
     assert "CRIPTA_DASHBOARD_UI_ROOT=$DASHBOARD_UI_ROOT" in INSTALLER
