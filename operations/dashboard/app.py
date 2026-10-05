@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import base64
 import csv
 import ctypes
