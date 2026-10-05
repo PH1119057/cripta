@@ -32,7 +32,7 @@ from runtime_schema import (
     EXPECTED_RUNTIME_SCHEMA_VERSION,
     validate_runtime_schema_contract,
 )
-from safety_observer import api_get
+from safety_observer import api_get as safety_api_get
 
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
@@ -73,6 +73,8 @@ RECONCILIATION_MAX_AGE_MS = int(
     os.environ.get("CRIPTA_RECONCILIATION_MAX_AGE_MS", "15000")
 )
 SIGNED_RECV_WINDOW = "5000"
+SIGNED_READ_RECV_WINDOW = "10000"
+SIGNED_READ_TIMEOUT_SECONDS = 5.0
 SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0
 MUTATION_CLOCK_MAX_ABS_OFFSET_MS = 500.0
 PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
@@ -95,6 +97,66 @@ class AmbiguousBybitMutation(ExchangeMutationBarrier):
 
 class BybitMutationRejected(RuntimeError):
     """Bybit explicitly rejected the mutation."""
+
+
+class ExchangeReadUnavailable(RuntimeError):
+    """Read-only exchange truth could not be refreshed deterministically."""
+
+
+def api_get(
+    path: str,
+    params: dict[str, str],
+    key: str = "",
+    secret: str = "",
+) -> tuple[dict[str, object], float]:
+    """Bybit GET. Signed live reads get a wider window than trading mutations."""
+    if not key:
+        return safety_api_get(path, params, key, secret)
+
+    query = urllib.parse.urlencode(sorted(params.items()))
+    started = time.perf_counter()
+    last_timestamp_ms = 0
+    for attempt in range(2):
+        timestamp_ms = max(int(time.time() * 1000), last_timestamp_ms + 1)
+        last_timestamp_ms = timestamp_ms
+        timestamp = str(timestamp_ms)
+        signature = hmac.new(
+            secret.encode(),
+            f"{timestamp}{key}{SIGNED_READ_RECV_WINDOW}{query}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        request = urllib.request.Request(
+            f"{REST_URL}{path}{'?' + query if query else ''}",
+            headers={
+                "X-BAPI-API-KEY": key,
+                "X-BAPI-TIMESTAMP": timestamp,
+                "X-BAPI-RECV-WINDOW": SIGNED_READ_RECV_WINDOW,
+                "X-BAPI-SIGN": signature,
+                "User-Agent": "cripta-live-read/1",
+            },
+        )
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=SIGNED_READ_TIMEOUT_SECONDS,
+            ) as response:
+                payload = json.load(response)
+        except (TimeoutError, urllib.error.URLError, OSError, ValueError) as exc:
+            raise ExchangeReadUnavailable(
+                f"Bybit GET transport failed path={path} "
+                f"error={type(exc).__name__}:{exc}"
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise ExchangeReadUnavailable(
+                f"Bybit GET returned non-object payload path={path}"
+            )
+        code = int(payload.get("retCode", -1))
+        if code == 10002 and attempt == 0:
+            continue
+        return payload, (time.perf_counter() - started) * 1000
+
+    raise AssertionError("unreachable signed GET retry state")
 
 
 def executable_close_price(symbol: str, side: str) -> Decimal:
@@ -2682,6 +2744,11 @@ def collect_position_mode_states(
             }
         if recent == set(symbols):
             return []
+        if not force_refresh:
+            # Periodic account reconciliation must stay cheap. Refresh at most
+            # one stale mode proof per cycle; 90s validity lets the five R1
+            # symbols stay staggered without blocking the critical account read.
+            symbols = [symbol for symbol in symbols if symbol not in recent][:1]
     freshness_seconds = int(os.environ.get("CRIPTA_POSITION_MODE_FRESHNESS_SECONDS", "0") or 0)
     result: list[dict[str, object]] = []
     for symbol in symbols:
@@ -2691,8 +2758,11 @@ def collect_position_mode_states(
             key,
             secret,
         )
-        if body.get("retCode") != 0:
-            raise RuntimeError(f"position-mode probe rejected for {symbol}")
+        if int(body.get("retCode", -1)) != 0:
+            raise ExchangeReadUnavailable(
+                f"position-mode probe rejected for {symbol}: "
+                f"retCode={body.get('retCode')} retMsg={body.get('retMsg')}"
+            )
         items = (body.get("result") or {}).get("list") or []
         indexes = sorted({int(item.get("positionIdx", -1)) for item in items})
         if indexes and set(indexes).issubset({0}):
@@ -2776,8 +2846,21 @@ def reconcile(
             key,
             secret,
         )
-        if any(item.get("retCode") != 0 for item in (wallet, positions, orders)):
-            raise RuntimeError("exchange rejected reconciliation request")
+        rejected = [
+            (name, payload)
+            for name, payload in (
+                ("wallet", wallet),
+                ("positions", positions),
+                ("orders", orders),
+            )
+            if int(payload.get("retCode", -1)) != 0
+        ]
+        if rejected:
+            detail = "; ".join(
+                f"{name}:retCode={payload.get('retCode')} retMsg={payload.get('retMsg')}"
+                for name, payload in rejected
+            )
+            raise ExchangeReadUnavailable(f"reconciliation read rejected: {detail}")
         now = int(time.time() * 1000)
         position_list = [
             p for p in ((positions.get("result") or {}).get("list") or [])
@@ -2819,8 +2902,12 @@ def reconcile(
                 key,
                 secret,
             )
-            if order_history_response.get("retCode") != 0:
-                raise RuntimeError("exchange rejected order-history reconciliation request")
+            if int(order_history_response.get("retCode", -1)) != 0:
+                raise ExchangeReadUnavailable(
+                    "order-history reconciliation rejected: "
+                    f"retCode={order_history_response.get('retCode')} "
+                    f"retMsg={order_history_response.get('retMsg')}"
+                )
             order_history = (order_history_response.get("result") or {}).get("list") or []
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
         with connection.transaction():
@@ -2851,6 +2938,15 @@ def reconcile(
             (started, int(time.time() * 1000), reason, f"{type(exc).__name__}: {exc}"),
         )
         connection.commit()
+        if isinstance(exc, ExchangeReadUnavailable):
+            raise
+        if isinstance(
+            exc,
+            (TimeoutError, urllib.error.URLError, OSError, ValueError),
+        ):
+            raise ExchangeReadUnavailable(
+                f"reconciliation read unavailable: {type(exc).__name__}:{exc}"
+            ) from exc
         raise
 
 
@@ -3004,10 +3100,43 @@ def private_loop(key: str, secret: str) -> None:
                     ws.send('{"op":"ping"}')
                     next_ping = time.monotonic() + 20
                 if time.monotonic() >= next_reconcile:
-                    hot_positions, hot_orders = reconcile(connection, key, secret, "periodic")
+                    reconcile_started_monotonic = time.monotonic()
+                    try:
+                        hot_positions, hot_orders = reconcile(
+                            connection, key, secret, "periodic"
+                        )
+                    except ExchangeReadUnavailable as exc:
+                        previous = status.get("private", {})
+                        connection_event(
+                            connection,
+                            "private",
+                            "reconciliation_degraded",
+                            error=f"{type(exc).__name__}: {exc}",
+                            reconnects=reconnects,
+                        )
+                        atomic_status(
+                            "private",
+                            {
+                                "state": "connected",
+                                "connected_at_epoch": previous.get("connected_at_epoch"),
+                                "reconnects": reconnects,
+                                "last_message_epoch": previous.get("last_message_epoch"),
+                                "hot_positions": previous.get("hot_positions", 0),
+                                "hot_orders": previous.get("hot_orders", 0),
+                                "reconciliation_error": f"{type(exc).__name__}: {exc}",
+                            },
+                        )
+                        # Keep the healthy private WS connected. Entry admission
+                        # independently requires a <=15s successful reconciliation.
+                        next_reconcile = time.monotonic() + 1.0
+                        continue
                     previous = status.get("private", {})
                     atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
-                    next_reconcile = time.monotonic() + (1 if hot_positions else 5)
+                    cadence = 1.0 if hot_positions else 5.0
+                    next_reconcile = max(
+                        reconcile_started_monotonic + cadence,
+                        time.monotonic() + 0.25,
+                    )
         except Exception as exc:
             if not recovering:
                 try:
