@@ -43,6 +43,11 @@ AUTHORITATIVE: GitHub PH1119057/cripta:main
 OPERATIONAL MIRROR: /srv/cripta/source_checkout
 ```
 
+Presentation-only Dashboard UI deploy отделён от trading runtime:
+он не требует disarm/Execution OFF/restart торговых сервисов. Это разрешено
+только для визуального/read-model scope; API/control/decision-affecting JS
+остаётся full runtime change. См. DEVELOPMENT_RELEASE §8.1.
+
 Project Source, память, старые чаты/ZIP, локальные копии, Git history,
 `archive/**`, `patch_backups/**` и historical payload docs не являются
 current authority.
