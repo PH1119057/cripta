@@ -49,6 +49,10 @@ OPERATIONAL MIRROR: /srv/cripta/source_checkout
 
 Installed runtime, PostgreSQL и Exchange truth проверяются отдельно.
 
+Owner-controlled real execution smoke-test is an explicit operator diagnostic,
+not Strategy behavior. Exact contract: `TRADING_CONTOUR §4.8`, architecture
+boundary: `ARCH §7.1`.
+
 Dashboard presentation/read-model имеет отдельный verified release identity
 `DASHBOARD_UI_COMMIT` и не требует остановки trading runtime. Static assets и
 строго read-only projections/aggregations могут обновляться независимо; backend
