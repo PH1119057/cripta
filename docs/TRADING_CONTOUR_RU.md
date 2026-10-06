@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.3
+**Версия:** 2.4
 **Дата:** 2026-10-06
 **Статус:** активный канонический контракт торгового контура
 
@@ -876,6 +876,7 @@ REMOTE_COMMIT_VERIFIED=PASS
 SOURCE_LIVE_IDENTITY=PASS
 TESTS=PASS
 LIVE_EQUIVALENCE=PASS
+PAPER_REAL_DECISION_PARITY=PASS
 
 EXCHANGE_ACCOUNT_IDENTITY=PASS
 POSITION_MODE_FRESH=PASS
@@ -944,6 +945,52 @@ The smoke-test is an operator control-plane command. It MUST NOT:
 Its purpose is only to prove the downstream Exchange mutation/fill/protection
 path under explicit owner control. Any later use as Strategy behavior requires
 normal Strategy canon/versioning.
+
+## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
+
+Execution mode — это выбор среды исполнения одной активной Strategy, а не
+выбор другой торговой реализации.
+
+```text
+StrategyActivation OFF
+  -> Strategy не формирует новые attempts
+
+StrategyActivation ON + real execution permission OFF
+  -> PAPER
+  -> общий Entry/Exit lifecycle остаётся активным
+  -> Exchange open/close mutation запрещена
+  -> execution/fill/position lifecycle симулируется
+
+StrategyActivation ON + real execution permission ON
+  -> REAL candidate
+  -> тот же StrategySignal / attempt / mode-neutral EntryExecutionIntent
+  -> mandatory real admission / gates
+  -> real EntryExecutionRequest только после ACCEPTED
+  -> Exchange mutation/reconciliation
+```
+
+`mainnet gate` остаётся дополнительным global safety barrier и не превращает
+PAPER в отдельную Strategy.
+
+Для одного `strategy_attempt` PAPER и REAL execution взаимоисключающие. При
+REAL mode admission failure не разрешается открывать PAPER-position как
+fallback. Operator/read-model обязан показывать exact real block reason.
+
+`EntryExecutionIntent` — mode-neutral представление уже рассчитанных
+Strategy-owned Entry execution semantics до выбора adapter. Оно несёт exact
+Strategy/Plan lineage, direction, reference/limit policy, validity и
+protection/lifecycle inputs. REAL `EntryExecutionRequest` создаётся из этого же
+intent только после real admission; PAPER simulation adapter потребляет этот же
+intent без подделки real admission entities.
+
+Для Exit обе среды обязаны использовать один exact ExitPlan и Universal Exit
+decision semantics. PAPER отличается только simulated execution/fill truth;
+REAL — Exchange execution/reconciliation truth. Любое result-affecting
+расхождение Entry/Exit policy между PAPER и REAL является defect.
+
+Перед включением real execution exact Strategy version должна иметь
+`PAPER_REAL_DECISION_PARITY=PASS`. Этот gate не заменяет account/slot/capital/
+position-mode/mainnet safety checks.
 
 # 5. Сквозной handoff
 
