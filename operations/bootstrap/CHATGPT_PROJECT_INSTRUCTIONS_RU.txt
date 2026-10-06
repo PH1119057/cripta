@@ -112,8 +112,7 @@ Owner-controlled real execution smoke-test — только explicit owner-trigg
 diagnostic; не StrategySignal/EntryDecision и не Strategy statistics.
 Exact current contract: TRADING_CONTOUR §4.8; ARCH §7.1.
 
-PAPER/REAL: один Strategy/Entry/Exit lifecycle, PAPER XOR REAL adapter.
-Exact contract: ARCH §7.2; TRADING_CONTOUR §4.9; GLOSSARY §11.
+PAPER/REAL canon: ARCH §7.2; TRADING_CONTOUR §4.9; GLOSSARY §11.
 
 Dashboard presentation/read-model deploy отделён от trading runtime: static UI и
 строго read-only projections/aggregations не требуют disarm/Execution OFF или
