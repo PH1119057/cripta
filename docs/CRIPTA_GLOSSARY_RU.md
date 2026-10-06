@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.6
+**Версия:** 2.7
 **Дата:** 2026-10-06
 **Статус:** обязательный канонический терминологический контракт
 
@@ -331,7 +331,32 @@ Exit decision с exact Strategy/Plan/decision lineage.
 **ExitExecutionRequest** — ExecutionRequest для принятого ExitDecision и exact
 StrategyPosition.
 
-**Execution** — технический слой Exchange mutation и reconciliation.
+**Execution** — технический слой исполнения уже рассчитанной Strategy policy.
+Он выбирает утверждённую среду исполнения, но не меняет Entry/Exit смысл.
+
+**Execution mode / режим исполнения** — runtime state одной активной Strategy:
+`PAPER` либо `REAL`. Это не Strategy version и не торговый параметр.
+`StrategyActivation` управляет жизнью Strategy, а real execution permission
+разрешает REAL environment. Для одного `strategy_attempt`: PAPER XOR REAL.
+
+**EntryExecutionIntent** — mode-neutral immutable intent после
+`StrategySignal`/`strategy_attempt`, содержащий exact Strategy/EntryPlan/ExitPlan
+lineage и рассчитанные Strategy-owned execution semantics до real admission или
+PAPER simulation. Он не является Exchange mutation и не равен
+`EntryDecision=ACCEPTED`.
+
+**PAPER execution adapter** — simulation adapter того же Entry/Exit lifecycle.
+Он не мутирует Exchange, не создаёт фиктивный physical slot/capital reservation
+и не подделывает real EntryDecision/Exchange acknowledgement.
+
+**REAL execution adapter** — execution environment, который после mandatory
+real admission создаёт/потребляет real ExecutionRequest и выполняет Exchange
+mutation/reconciliation.
+
+**PAPER_REAL_DECISION_PARITY** — обязательный pre-arm invariant: на одинаковых
+causal facts PAPER и REAL используют одну Strategy/Entry/Exit semantics и
+различаются только разрешёнными real-only admission/exchange facts и
+execution-result evidence. FAIL/UNKNOWN блокирует real arm.
 
 **Exchange** — внешняя торговая площадка и источник фактической истины об
 orders/fills/positions/account state.
