@@ -21,11 +21,17 @@
 .paper-card-scroll{max-height:620px;overflow:auto;display:grid;gap:8px}.paper-card{padding:10px;border:1px solid var(--line);border-radius:9px;background:#09131b}.paper-card summary{cursor:pointer}.paper-leg{font-size:11px;padding:2px 6px;border-radius:9px;background:#263746;color:#dbe8f0}    .signal-monitor-toolbar{display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin:10px 0 14px}.signal-monitor-toolbar label{min-width:280px}.signal-monitor-toolbar select{width:100%;padding:8px;background:#071018;color:var(--text);border:1px solid var(--line);border-radius:7px}.signal-stat-grid{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:8px;margin:10px 0 14px}.signal-stat{padding:10px;border:1px solid var(--line);border-radius:9px;background:#0a151e}.signal-stat b{display:block;font-size:20px;margin-top:2px}.signal-strategy-summary{margin:8px 0 14px}.signal-row-positive td{background:rgba(46,160,90,.16)}.signal-row-negative td{background:rgba(210,68,68,.17)}.signal-row-open td{background:rgba(245,176,65,.17)}.signal-row-no-entry td{background:rgba(120,135,150,.10)}.signal-status{font-weight:700}.signal-status.positive{color:var(--ok)}.signal-status.negative{color:#ff7b7b}.signal-status.open{color:var(--warn)}.signal-status.no_entry,.signal-status.neutral{color:var(--muted)}.signal-strategy-name{font-weight:700}.signal-strategy-version{font-size:11px;color:var(--muted)}.strategy-monitor-row-green td{background:rgba(46,160,90,.10)}.strategy-monitor-row-yellow td{background:rgba(245,176,65,.08)}.strategy-monitor-row-red td{background:rgba(210,68,68,.08)}.strategy-readiness{display:inline-flex;align-items:center;gap:6px;font-weight:800}.strategy-readiness-detail{display:block;margin-top:3px;font-size:11px}.strategy-readiness.green{color:var(--ok)}.strategy-readiness.yellow{color:var(--warn)}.strategy-readiness.red{color:#ff7b7b}@media(max-width:1100px){.signal-stat-grid{grid-template-columns:repeat(4,minmax(120px,1fr))}}@media(max-width:650px){.signal-stat-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}}
 
 .trade-operator-bar{grid-column:1/-1;position:sticky;top:104px;z-index:80;padding:12px 14px;border:1px solid #355169;border-radius:11px;background:rgba(9,19,27,.985);box-shadow:0 10px 24px #050b10cc}.trade-operator-grid{display:grid;grid-template-columns:repeat(5,minmax(125px,1fr));gap:8px}.trade-operator-metric{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#0b151e}.trade-operator-metric .value{display:block;font-size:18px;font-weight:800;margin-top:2px}.trade-gate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.trade-gate-reasons{flex:1;min-width:320px}.trade-gate-reasons ul{margin:4px 0 0;padding-left:20px}.trade-audio-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px}.trade-audio-row label{display:grid;gap:3px;color:var(--muted);font-size:11px}.trade-audio-row select{padding:6px;border:1px solid var(--line);border-radius:6px;background:#071018;color:var(--text)}.owner-test-grid{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;align-items:end}.owner-test-grid label{display:grid;gap:4px;color:var(--muted)}.owner-test-grid select,.owner-test-grid input{padding:8px;border:1px solid var(--line);border-radius:7px;background:#071018;color:var(--text)}.owner-test-fixed{font-weight:800;color:var(--text)}.operator-link-ok{color:var(--ok)}.operator-link-warn{color:var(--warn)}.operator-link-bad{color:#ff7b7b}@media(max-width:900px){.trade-operator-grid{grid-template-columns:repeat(2,minmax(125px,1fr))}}
+.durable-fault-banner{display:block;margin:0 0 18px;padding:14px 16px;border:2px solid #ef5b5b;border-radius:12px;background:#40181dcc;box-shadow:0 0 0 1px #ef5b5b33,0 10px 28px #0007}.durable-fault-banner[hidden]{display:none!important}.durable-fault-banner h2{margin:0 0 8px;color:#ff9b9b;font-size:18px}.durable-fault-summary{font-weight:800;color:#ffd0d0;margin-bottom:10px}.durable-fault-item{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #8c4141}.durable-fault-item:first-child{border-top:0}.durable-fault-meta{font-size:12px;color:#f0b8b8;overflow-wrap:anywhere}.durable-fault-error{font-weight:750;color:#fff;margin:3px 0}.durable-fault-unavailable{color:#ffb7b7;font-weight:800}@media(max-width:760px){.durable-fault-item{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
   <header><div><div class="muted">SERVER RESEARCH CONTROL PLANE</div><h1>Cripta · инфраструктура</h1></div><div id="stamp" class="muted">загрузка…</div></header>
   <nav aria-label="Разделы"><button class="tab active" data-panel="liveDesk">Торговля</button><div class="menu-group"><button class="tab menu-label" type="button">Настройки ▾</button><div class="menu-items"><button class="tab" data-panel="entry">Настройки входа</button><button class="tab" data-panel="strategies">Стратегии входа и выхода</button><button class="tab" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="serverControl">Ресурсы сервера</button></div></div><div class="menu-group"><button class="tab menu-label" type="button">Статистика и исследования ▾</button><div class="menu-items"><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="testLibrary">Библиотека тестов</button><button class="tab" data-panel="bots">Торговые боты</button></div></div><button class="tab" data-panel="history">История исследований</button><button class="tab" data-panel="rules">Правила проекта</button><button class="tab" data-panel="checklist">Чек-лист</button><a class="tab" href="/logout">Выйти</a></nav>
+  <section id="observerFaultBanner" class="durable-fault-banner" hidden aria-live="assertive">
+    <h2>RED · ошибка Universal Entry observer</h2>
+    <div id="observerFaultSummary" class="durable-fault-summary">—</div>
+    <div id="observerFaultItems"></div>
+  </section>
   <section id="infra" class="grid panel active">
     <article class="card full"><h2>Общее состояние</h2><div id="health" class="metric">—</div><div id="healthIssues" class="muted">—</div></article>
     <article class="card"><h2>Данные</h2><div id="dataSize" class="metric">—</div><div class="muted" id="period">—</div><div class="bar"><i id="diskBar"></i></div></article>
@@ -671,9 +677,52 @@ function renderSharedMarketContext(c){const e=document.getElementById('sharedMar
 function tradingViewport(){return {closed:document.querySelector('.closed-scroll')?.scrollTop||0,signals:document.querySelector('.signal-scroll')?.scrollTop||0}}
 function restoreTradingViewport(v){requestAnimationFrame(()=>{const closed=document.querySelector('.closed-scroll'),signals=document.querySelector('.signal-scroll');if(closed)closed.scrollTop=v.closed;if(signals)signals.scrollTop=v.signals})}
 async function refreshEntryShadow(){if(gateChanging)return;const viewport=tradingViewport(),d=await fetchLiveStateData(),page=activeTradePage(),selected=window.getSelection()?.anchorNode,tableSelected=selected&&(positionRows.contains(selected)||realClosedRows.contains(selected)||liveRows.contains(selected));if(!tableSelected){renderLiveState(d);installPositionCards()}if(page==='monitor')renderStrategyMonitor(d.strategy_monitor);if(page==='paper_open'||page==='paper_closed')renderStrategyPaper(d.paper_strategy);if(page==='open')applyLiquidityLabels();processAudio(d);restoreTradingViewport(viewport)}
+async function resolveObserverFault(faultId){
+  const reason=prompt('Причина явного resolution durable observer fault:');
+  if(reason===null)return;
+  const exactReason=reason.trim();
+  if(!exactReason){alert('Причина resolution обязательна.');return}
+  if(!confirm(`Закрыть fault ${faultId} как RESOLVED?\n\n${exactReason}`))return;
+  const r=await fetch('/api/observer-faults/resolve',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({fault_id:faultId,reason:exactReason})
+  });
+  const out=await r.json();
+  if(!r.ok){alert(out.error||'Fault не удалось закрыть');return}
+  await refresh();
+}
+function renderObserverFaults(model){
+  const banner=document.getElementById('observerFaultBanner');
+  const summary=document.getElementById('observerFaultSummary');
+  const body=document.getElementById('observerFaultItems');
+  const value=model||{state:'unavailable',items:[],error:'read-model отсутствует'};
+  const items=Array.isArray(value.items)?value.items:[];
+  if(value.state==='unavailable'){
+    banner.hidden=false;
+    summary.textContent='Durable fault journal недоступен — состояние observer нельзя считать зелёным.';
+    body.innerHTML=`<div class="durable-fault-unavailable">${safe(value.error||'unknown error')}</div>`;
+    return;
+  }
+  if(!items.length){
+    banner.hidden=true;
+    summary.textContent='—';
+    body.innerHTML='';
+    return;
+  }
+  banner.hidden=false;
+  summary.textContent=`Unresolved faults: ${items.length}. Успешный observer epoch не закроет их автоматически.`;
+  body.innerHTML=items.map(x=>{
+    const first=x.first_seen_at?new Date(x.first_seen_at).toLocaleString('ru-RU'):'—';
+    const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
+    const count=Number(x.occurrence_count||1);
+    const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'observer runtime fault';
+    return `<div class="durable-fault-item"><div><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div></div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></div>`;
+  }).join('');
+}
 async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});const d=await r.json();
   stamp.textContent='обновлено '+new Date(d.generated_at_epoch*1000).toLocaleString('ru-RU'); dataSize.textContent=size(d.disk.used)+' / '+size(d.disk.total); period.textContent=(d.evaluation_start||'—')+' → '+(d.evaluation_end||'—'); diskBar.style.width=(100*d.disk.used/d.disk.total).toFixed(1)+'%';
-  const hs=d.health||{};health.textContent=hs.state==='green'?'GREEN · всё штатно':hs.state==='yellow'?'YELLOW · требуется внимание':hs.state==='red'?'RED · есть критическая проблема':'UNKNOWN';health.className='metric '+(hs.state==='green'?'ok':hs.state==='yellow'?'warn':'');healthIssues.textContent=(hs.issues||[]).map(x=>x.message).join(' · ')||'Активных замечаний нет';
+  const hs=d.health||{};health.textContent=hs.state==='green'?'GREEN · всё штатно':hs.state==='yellow'?'YELLOW · требуется внимание':hs.state==='red'?'RED · есть критическая проблема':'UNKNOWN';health.className='metric '+(hs.state==='green'?'ok':hs.state==='yellow'?'warn':hs.state==='red'?'loss':'');healthIssues.textContent=(hs.issues||[]).map(x=>x.message).join(' · ')||'Активных замечаний нет';renderObserverFaults(d.observer_faults);
   download.textContent=(d.download.status||'не запущена')+' · '+(d.download.files_ready||0); downloadCurrent.textContent=d.download.current||'—'; jobs.textContent=[d.jobs.queued,d.jobs.running,d.jobs.completed,d.jobs.failed].join(' / ');
   const money=n=>n==null?'—':n>=1e9?'$'+(n/1e9).toFixed(2)+' млрд':n>=1e6?'$'+(n/1e6).toFixed(1)+' млн':'$'+Math.round(n).toLocaleString('ru-RU');
   const roles={indicator:'индикатор',trading:'торговая',excluded_meme:'мем · исключена'};
