@@ -10,6 +10,7 @@ import socket
 import ssl
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1438,6 +1439,83 @@ def _maybe_record_reverse_transition(
     return transition_id
 
 
+OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
+
+
+def _record_observer_runtime_fault(
+    connection: Any,
+    exc: BaseException,
+    *,
+    observed_at: datetime,
+    observer_epoch_id: str | None,
+) -> str:
+    current = observed_at.astimezone(UTC)
+    error_type = type(exc).__name__
+    error_message = (str(exc) or error_type)[:1000]
+    signature = fingerprint(
+        {
+            "service": "cripta-universal-entry-observer.service",
+            "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+            "source_commit": LOADED_COMMIT,
+            "error_type": error_type,
+            "error_message": error_message,
+        }
+    )[:32]
+    fault_id = "observer-fault-" + signature
+    exact_ids = {
+        "service": "cripta-universal-entry-observer.service",
+        "source_commit": LOADED_COMMIT,
+        "fault_signature": signature,
+    }
+    payload = {
+        "service": "cripta-universal-entry-observer.service",
+        "runtime_mode": "MULTI_STRATEGY_OBSERVER",
+        "source_commit": LOADED_COMMIT,
+        "error_type": error_type,
+        "error_message": error_message,
+        "last_observer_epoch_id": observer_epoch_id,
+        "first_seen_at": current.isoformat(),
+        "last_seen_at": current.isoformat(),
+        "occurrence_count": 1,
+        "auto_resolve": False,
+        "owner_resolution_required": True,
+        "traceback": traceback.format_exc(limit=8)[-6000:],
+    }
+    connection.execute(
+        """INSERT INTO runtime.lifecycle_faults(
+               fault_id,fault_code,severity,state,strategy_position_id,
+               detected_at,resolved_at,exact_ids,payload
+           ) VALUES(%s,%s,'ERROR','OPEN',NULL,%s,NULL,%s::jsonb,%s::jsonb)
+           ON CONFLICT(fault_id) DO UPDATE
+           SET state='OPEN',
+               resolved_at=NULL,
+               payload=(
+                   runtime.lifecycle_faults.payload
+                   || EXCLUDED.payload
+                   || jsonb_build_object(
+                       'first_seen_at',
+                       coalesce(
+                           runtime.lifecycle_faults.payload->>'first_seen_at',
+                           EXCLUDED.payload->>'first_seen_at'
+                       ),
+                       'occurrence_count',
+                       coalesce(
+                           (runtime.lifecycle_faults.payload->>'occurrence_count')::bigint,
+                           0
+                       ) + 1
+                   )
+               )""",
+        (
+            fault_id,
+            OBSERVER_RUNTIME_FAULT_CODE,
+            current,
+            json.dumps(exact_ids, ensure_ascii=False, sort_keys=True),
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    return fault_id
+
+
 def _observer_status(
     *,
     state: str,
@@ -2187,12 +2265,33 @@ def _run_multi_strategy_observer() -> None:
                 if outcome == "STOP":
                     break
             except Exception as exc:
+                try:
+                    fault_id = _record_observer_runtime_fault(
+                        connection,
+                        exc,
+                        observed_at=datetime.now(UTC),
+                        observer_epoch_id=None,
+                    )
+                except Exception as persist_exc:
+                    _observer_status(
+                        state="ERROR",
+                        epoch_id=None,
+                        active_bundles=(),
+                        symbols=(),
+                        reason=(
+                            f"{type(exc).__name__}: {exc}; durable fault persistence "
+                            f"failed: {type(persist_exc).__name__}: {persist_exc}"
+                        ),
+                    )
+                    raise RuntimeError(
+                        "Universal Entry observer durable fault persistence failed"
+                    ) from persist_exc
                 _observer_status(
                     state="ERROR",
                     epoch_id=None,
                     active_bundles=(),
                     symbols=(),
-                    reason=f"{type(exc).__name__}: {exc}",
+                    reason=f"{type(exc).__name__}: {exc} [fault_id={fault_id}]",
                 )
                 if stopping_flag:
                     break
