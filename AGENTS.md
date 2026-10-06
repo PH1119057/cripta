@@ -47,6 +47,11 @@ Owner-controlled real execution smoke-test — explicit operator-only diagnostic
 not StrategySignal/EntryDecision semantics. Exact current contract:
 TRADING_CONTOUR §4.8; architecture boundary: ARCH §7.1.
 
+PAPER/REAL mode must not fork Strategy/Entry/Exit semantics. One attempt selects
+exactly one execution environment; read current contract in ARCH §7.2,
+TRADING_CONTOUR §4.9 and GLOSSARY §11. Do not infer behavior from historical
+`PaperTradeRuntime`; real arm requires `PAPER_REAL_DECISION_PARITY=PASS`.
+
 Dashboard presentation/read-model deploy отделён от trading runtime:
 он не требует disarm/Execution OFF/restart торговых сервисов. Static UI и
 строго read-only projections/aggregations могут обновляться независимо; backend
