@@ -34,6 +34,10 @@ from runtime_schema import (
 )
 from safety_observer import api_get as safety_api_get
 
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
 from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
@@ -69,9 +73,7 @@ ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1"
 if ENTRY_COMMAND_SOURCE not in {"LEGACY_V1", "UNIVERSAL_ENTRY"}:
     raise RuntimeError(f"unsupported CRIPTA_ENTRY_COMMAND_SOURCE={ENTRY_COMMAND_SOURCE}")
 PROCESS_STARTED_AT_MS = int(time.time() * 1000)
-RECONCILIATION_MAX_AGE_MS = int(
-    os.environ.get("CRIPTA_RECONCILIATION_MAX_AGE_MS", "15000")
-)
+ACCOUNT_REF = "BYBIT:UNIFIED"
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -390,21 +392,12 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
     private = status.get("private", {})
     if not isinstance(private, dict) or private.get("state") != "connected":
         return False, "PRIVATE_WS_NOT_CONNECTED"
-    latest = connection.execute(
-        """SELECT finished_at_epoch_ms,ok FROM runtime.reconciliation_runs
-           ORDER BY id DESC LIMIT 1"""
-    ).fetchone()
-    now_ms = int(time.time() * 1000)
-    if (
-        not latest
-        or not bool(latest[1])
-        or now_ms - int(latest[0]) > RECONCILIATION_MAX_AGE_MS
-    ):
-        return False, "FRESH_RECONCILIATION_REQUIRED"
-    wallet = connection.execute(
-        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
-    ).fetchone()
-    if not wallet or now_ms - int(wallet[0]) > RECONCILIATION_MAX_AGE_MS:
+    try:
+        current_complete_account_state_generation(
+            connection,
+            account_ref=ACCOUNT_REF,
+        )
+    except AccountStateGenerationUnavailable:
         return False, "MANDATORY_EXCHANGE_STATE_STALE"
     if not connection.execute(
         "SELECT 1 FROM runtime.trade_settings WHERE singleton=1"
@@ -1788,585 +1781,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result["actualProtection"] = {
                 "entryPrice": str(actual_entry),
                 "stopLoss": str(stop),
-                "takeProfit": None if target is None else str(target),
-            }
-    elif kind == "trailing_stop":
-        if not position: raise RuntimeError("open position not found")
-        enabled = bool(payload.get("enabled"))
-        params: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","slTriggerBy":"LastPrice"}
-        if enabled:
-            distance_pct = Decimal(str(payload.get("distance_pct") or "0.2"))
-            if distance_pct < Decimal("0.05") or distance_pct > Decimal("5"):
-                raise RuntimeError("trailing stop distance must be from 0.05% to 5%")
-            mark = executable_close_price(symbol, str(position["side"]))
-            distance = quantize(mark * distance_pct / Decimal("100"), tick, upward=True)
-            plan = protection_plan(connection, symbol, position, tick)
-            if not trailing_start_preserves_protection(
-                side=str(position["side"]),
-                mark=mark,
-                distance=distance,
-                protected_stop=plan["stop"],
-            ):
-                raise RuntimeError(
-                    "trailing stop is blocked: its initial stop would not preserve calculated net profit"
-                )
-            params["trailingStop"] = str(max(distance, tick))
-        else:
-            params["trailingStop"] = "0"
-        try:
-            result = api_post("/v5/position/trading-stop", params, key, secret)
-        except RuntimeError as exc:
-            if "not modified" not in str(exc).lower():
-                raise
-            result = {"retCode": 0, "retMsg": "not modified", "idempotent": True}
-    elif kind == "entry":
-        if position: raise RuntimeError("position already exists")
-        existing_orders, _ = api_get(
-            "/v5/order/realtime",
-            {"category": "linear", "symbol": symbol, "openOnly": "0", "limit": "50"},
-            key,
-            secret,
-        )
-        active_entry = next(
-            (
-                order
-                for order in ((existing_orders.get("result") or {}).get("list") or [])
-                if order.get("orderStatus") in {"New", "PartiallyFilled", "Untriggered"}
-                and not bool(order.get("reduceOnly"))
-            ),
-            None,
-        )
-        if active_entry:
-            raise RuntimeError("по монете уже существует незавершённая заявка на вход")
-        stake, leverage, side, signal_price = Decimal(str(payload["stake_usdt"])), int(payload["leverage"]), str(payload["side"]), Decimal(str(payload["price"]))
-        offset = Decimal(str(payload.get("entry_offset_pct") or 0)) / Decimal("100")
-        price = signal_price * (Decimal("1") - offset if side == "Buy" else Decimal("1") + offset)
-        price = quantize(price, tick, upward=side == "Sell")
-        wallet, _ = api_get("/v5/account/wallet-balance", {"accountType":"UNIFIED"}, key, secret); account=((wallet.get("result") or {}).get("list") or [{}])[0]
-        available=account_available_usdt(account)
-        if available < stake: raise RuntimeError("недостаточно доступного баланса")
-        qty=quantize(stake*Decimal(leverage)/price,qty_step)
-        if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
-        api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
-        contract = initial_protection_contract(payload)
-        stop,target=calculate_initial_boundaries(
-            entry=price,
-            side=side,
-            tick=tick,
-            stop_loss_pct=contract["stop_loss_pct"],
-            take_profit_pct=contract["take_profit_pct"],
-        )
-        # V36: Entry submits server-side initial SL/TP atomically with the entry order.
-        # Post-fill reconciliation may only re-anchor the same strategy-owned contract
-        # to the actual average fill; it is never the first protection mutation.
-        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36],"tpslMode":str(contract["tpsl_mode"]),"stopLoss":str(stop),"takeProfit":str(target),"slTriggerBy":str(contract["trigger_by"]),"tpTriggerBy":str(contract["trigger_by"]),"slOrderType":"Market","tpOrderType":"Market"}
-        if offset > 0:
-            entry_time_in_force = str(payload.get("entry_time_in_force") or "GTC").upper()
-            if entry_time_in_force == "POST_ONLY":
-                bybit_time_in_force = "PostOnly"
-            elif entry_time_in_force == "GTC":
-                bybit_time_in_force = "GTC"
-            else:
-                raise RuntimeError(
-                    f"unsupported entry_time_in_force {entry_time_in_force}"
-                )
-            order.update({"price": str(price), "timeInForce": bybit_time_in_force})
-        result=api_post("/v5/order/create", order, key, secret)
-        exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
-        if not exchange_order_id:
-            raise ExchangeMutationBarrier(
-                "entry order acknowledged without exchange orderId"
-            )
-        try:
-            mark_entry_order_acknowledged(
-                connection,
-                command_id=command_id,
-                exchange_order_id=exchange_order_id,
-                acknowledged_at=datetime.now(UTC),
-            )
-            connection.commit()
-        except Exception as exc:
-            raise ExchangeMutationBarrier(
-                f"entry order acknowledged but reservation handoff failed: {exc}"
-            ) from exc
-        if offset == 0:
-            filled_position = None
-            for _ in range(20):
-                current, _ = api_get(
-                    "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
-                )
-                filled_position = next(
-                    (
-                        item
-                        for item in ((current.get("result") or {}).get("list") or [])
-                        if Decimal(str(item.get("size") or 0)) > 0
-                    ),
-                    None,
-                )
-                if filled_position:
-                    break
-                time.sleep(0.25)
-            if not filled_position:
-                raise ExchangeMutationBarrier(
-                    "market entry acknowledged but actual fill is not yet confirmed"
-                )
-            actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
-            if actual_entry <= 0:
-                raise RuntimeError("Bybit не вернул фактическую цену исполнения")
-            actual_stop, actual_target = calculate_initial_boundaries(
-                entry=actual_entry,
-                side=side,
-                tick=tick,
-                stop_loss_pct=contract["stop_loss_pct"],
-                take_profit_pct=contract["take_profit_pct"],
-            )
-            try:
-                protection = api_post(
-                    "/v5/position/trading-stop",
-                    {
-                        "category": "linear", "symbol": symbol,
-                        "positionIdx": int(filled_position.get("positionIdx") or 0),
-                        "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
-                        "takeProfit": str(actual_target), "slTriggerBy": str(contract["trigger_by"]),
-                        "tpTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
-                        "tpOrderType": "Market",
-                    },
-                    key,
-                    secret,
-                )
-            except RuntimeError as exc:
-                if "not modified" not in str(exc).lower():
-                    raise
-                verified_payload, _ = api_get(
-                    "/v5/position/list",
-                    {"category": "linear", "symbol": symbol},
-                    key,
-                    secret,
-                )
-                verified_position = next(
-                    (
-                        item
-                        for item in ((verified_payload.get("result") or {}).get("list") or [])
-                        if Decimal(str(item.get("size") or 0)) > 0
-                        and int(item.get("positionIdx") or 0)
-                        == int(filled_position.get("positionIdx") or 0)
-                        and str(item.get("side") or "") == side
-                    ),
-                    None,
-                )
-                if verified_position is None:
-                    raise RuntimeError(
-                        "entry protection not-modified could not be verified: position missing"
-                    ) from exc
-                verified_stop = Decimal(str(verified_position.get("stopLoss") or 0))
-                verified_target = Decimal(str(verified_position.get("takeProfit") or 0))
-                if verified_stop != actual_stop or verified_target != actual_target:
-                    raise RuntimeError(
-                        "entry protection not-modified verification mismatch "
-                        f"requested_stop={actual_stop} actual_stop={verified_stop} "
-                        f"requested_target={actual_target} actual_target={verified_target}"
-                    ) from exc
-                protection = {
-                    "retCode": 0,
-                    "retMsg": "not modified",
-                    "idempotent": True,
-                    "verifiedFromExchange": True,
-                }
-            result["actualProtection"] = {
-                "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
-                "takeProfit": str(actual_target), "exchange": protection.get("retMsg"),
-            }
-    else: raise RuntimeError("unknown command type")
-    before_position = None if position is None else dict(position)
-    try:
-        reconcile(connection, key, secret, "after_command")
-    except Exception as exc:
-        raise ExchangeMutationBarrier(
-            f"post-mutation reconciliation failed: {exc}"
-        ) from exc
-    record_protection_or_owner_event(
-        connection, command_id, kind, symbol, payload, before_position
-    )
-    connection.execute("UPDATE runtime.trade_commands SET state='completed',finished_at_epoch_ms=%s,result_json=%s WHERE command_id=%s",(int(time.time()*1000),json.dumps(result,ensure_ascii=False),command_id)); connection.commit()
-
-
-def _r1_signal_validity(
-    payload: dict[str, object],
-    symbol: str,
-) -> tuple[bool, str]:
-    validity = payload.get("entry_validity")
-    if not isinstance(validity, dict):
-        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY payload is missing entry_validity")
-    if str(validity.get("operator") or "") != "R1_EXACT_SIGNAL":
-        raise ExchangeMutationBarrier("unsupported R1 entry validity operator")
-    side = str(payload.get("side") or "")
-    if side not in {"Buy", "Sell"}:
-        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY payload has invalid side")
-    original_entry = Decimal(str(validity.get("signal_entry_price") or 0))
-    original_target = Decimal(str(validity.get("signal_target_price") or 0))
-    if original_entry <= 0 or original_target <= 0:
-        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY prices are invalid")
-
-    ticker, _ = api_get(
-        "/v5/market/tickers",
-        {"category": "linear", "symbol": symbol},
-    )
-    item = ((ticker.get("result") or {}).get("list") or [{}])[0]
-    last = Decimal(str(item.get("lastPrice") or 0))
-    if last <= 0:
-        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY ticker price unavailable")
-    target_hit = (side == "Buy" and last >= original_target) or (
-        side == "Sell" and last <= original_target
-    )
-    if target_hit:
-        return False, "R1_OPPOSITE_TARGET_REACHED_BEFORE_FILL"
-
-    query = urllib.parse.urlencode(
-        {"category": "linear", "symbol": symbol, "interval": "5", "limit": "240"}
-    )
-    request = urllib.request.Request(
-        f"{REST_URL}/v5/market/kline?{query}",
-        headers={"User-Agent": "cripta-r1-entry-validity/1"},
-    )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        raw = json.loads(response.read().decode("utf-8"))
-    if int(raw.get("retCode", -1)) != 0:
-        raise ExchangeMutationBarrier(
-            f"R1 SIGNAL_VALIDITY kline failed: {raw.get('retMsg')}"
-        )
-    rows = ((raw.get("result") or {}).get("list") or [])
-    candles = map_rest_klines(
-        rows,
-        symbol=symbol,
-        interval="5",
-        observed_at=datetime.now(UTC),
-    )
-    zone = compute_r1_l53_stable_zone(candles)
-    if zone is None:
-        return False, "R1_SIGNAL_RULE_INVALIDATED"
-    current_entry = zone.support_top if side == "Buy" else zone.resistance_bottom
-    if current_entry != original_entry:
-        return False, "R1_EXACT_ENTRY_LEVEL_CHANGED"
-    return True, "R1_SIGNAL_STILL_VALID"
-
-
-def _cancel_entry_limit(
-    connection: psycopg.Connection,
-    key: str,
-    secret: str,
-    *,
-    order_id: str,
-    symbol: str,
-    command_id: str,
-    reason: str,
-) -> None:
-    api_post(
-        "/v5/order/cancel",
-        {"category": "linear", "symbol": symbol, "orderId": order_id},
-        key,
-        secret,
-        accepted_codes=(110001,),
-    )
-    try:
-        reconcile(connection, key, secret, reason)
-        reservation_state = resolve_cancelled_entry_reservation_after_reconcile(
-            connection,
-            command_id=command_id,
-            exchange_order_id=order_id,
-        )
-        connection.commit()
-        if reservation_state == "RECONCILIATION_REQUIRED":
-            raise ExchangeMutationBarrier(
-                f"{reason}: cancel did not prove deterministic fill state"
-            )
-    except ExchangeMutationBarrier:
-        raise
-    except Exception as exc:
-        raise ExchangeMutationBarrier(
-            f"{reason}: cancel reconciliation failed: {exc}"
-        ) from exc
-
-
-def cancel_expired_entry_limits(
-    connection: psycopg.Connection, key: str, secret: str, now_ms: int
-) -> None:
-    """Cancel limit Entries only by their exact Strategy-owned lifetime contract."""
-
-    rows = connection.execute(
-        """SELECT o.order_id,o.symbol,c.command_id,c.requested_at_epoch_ms,c.payload_json
-             FROM runtime.hot_orders o
-             JOIN runtime.trade_commands c ON o.order_link_id=c.command_id
-            WHERE c.command_type='entry' AND c.state='completed'"""
-    ).fetchall()
-    for order_id, symbol, command_id, requested_at, raw_payload in rows:
-        payload = json.loads(raw_payload)
-        if Decimal(str(payload.get("entry_offset_pct") or 0)) <= 0:
-            continue
-        lifetime_mode = str(payload.get("entry_lifetime_mode") or "TIME_TTL").upper()
-        if lifetime_mode == "SIGNAL_VALIDITY":
-            still_valid, reason = _r1_signal_validity(payload, str(symbol))
-            if still_valid:
-                continue
-            _cancel_entry_limit(
-                connection,
-                key,
-                secret,
-                order_id=str(order_id),
-                symbol=str(symbol),
-                command_id=str(command_id),
-                reason=reason,
-            )
-            continue
-        if lifetime_mode != "TIME_TTL":
-            raise ExchangeMutationBarrier(
-                f"unsupported entry_lifetime_mode={lifetime_mode}"
-            )
-        raw_ttl = payload.get("entry_limit_ttl_seconds")
-        if raw_ttl is None:
-            raise ExchangeMutationBarrier(
-                "TIME_TTL limit Entry is missing Strategy-owned entry_limit_ttl_seconds"
-            )
-        ttl_seconds = int(raw_ttl)
-        if ttl_seconds <= 0:
-            raise ExchangeMutationBarrier(
-                "TIME_TTL limit Entry has non-positive Strategy-owned TTL"
-            )
-        if now_ms - int(requested_at) < ttl_seconds * 1000:
-            continue
-        _cancel_entry_limit(
-            connection,
-            key,
-            secret,
-            order_id=str(order_id),
-            symbol=str(symbol),
-            command_id=str(command_id),
-            reason="expired_entry_limit",
-        )
-
-
-def command_worker_loop(key: str, secret: str) -> None:
-    connection = db("cripta-private-command")
-    next_limit_cleanup = 0.0
-    next_heartbeat = 0.0
-    while running:
-        if time.monotonic() >= next_heartbeat:
-            atomic_status(
-                "command",
-                {"state": "running", "heartbeat_epoch": int(time.time())},
-            )
-            next_heartbeat = time.monotonic() + 5
-        gate=connection.execute("SELECT enabled,updated_at_epoch_ms FROM control.execution_gates WHERE mode='mainnet'").fetchone()
-        settings=connection.execute("SELECT stake_usdt,leverage,enabled_symbols_json,updated_at_epoch_ms,entry_offset_pct,entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,trailing_distance_pct,entry_policy FROM runtime.trade_settings WHERE singleton=1").fetchone()
-        if settings:
-            gate_enabled = bool(gate and gate[0])
-            configured_entry_policy = str(settings[9] or "base_entry_v1")
-            entry_policy = configured_entry_policy
-            configured=set(json.loads(settings[2]))
-            enabled=configured - EXCLUDED_TRADING_SYMBOLS
-            now_ms=int(time.time()*1000)
-            if time.monotonic() >= next_limit_cleanup:
-                try:
-                    cancel_expired_entry_limits(connection, key, secret, now_ms)
-                except ExchangeMutationBarrier as exc:
-                    handle_exchange_mutation_barrier(
-                        connection, key, secret, None, exc
-                    )
-                except Exception:
-                    connection.rollback()
-                next_limit_cleanup = time.monotonic() + 1
-            pickup_window_ms = 10_000 if entry_policy == "base_entry_v1" else SIGNAL_PICKUP_WINDOW_MS
-            fresh_after=max(
-                now_ms-pickup_window_ms,
-                int(gate[1] or 0),
-                int(settings[3] or 0),
-            )
-            signals = []
-            if ENTRY_COMMAND_SOURCE == "LEGACY_V1":
-                signals=connection.execute("""SELECT signal_id,symbol,direction,signal_price,signal_at_epoch_ms FROM monitoring.opportunities
-                    WHERE bot_id='entry-v1-shadow' AND decision='shadow' AND signal_at_epoch_ms >= %s
-                    ORDER BY signal_at_epoch_ms DESC LIMIT 100""",(fresh_after,)).fetchall()
-            for signal_id,symbol,direction,price,signal_at_ms in signals:
-                observed_context = None
-                if symbol in EXCLUDED_TRADING_SYMBOLS:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "монета находится в карантине")
-                    continue
-                if symbol not in enabled:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "монета выключена в торговых настройках")
-                    continue
-                if entry_policy == "m3_full_live_v1":
-                    observed_context = observe_m3_entry_context(
-                        connection,
-                        signal_id=str(signal_id), symbol=str(symbol),
-                        direction=str(direction), signal_at_ms=int(signal_at_ms),
-                    )
-                occupied=connection.execute("""SELECT
-                    EXISTS(SELECT 1 FROM runtime.hot_positions WHERE symbol=%s) OR
-                    EXISTS(SELECT 1 FROM runtime.hot_orders WHERE symbol=%s AND order_status IN ('New','PartiallyFilled','Untriggered')) OR
-                    EXISTS(SELECT 1 FROM runtime.trade_commands WHERE symbol=%s AND command_type='entry' AND state IN ('queued','running'))""",(symbol,symbol,symbol)).fetchone()[0]
-                if occupied:
-                    record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                          "запрещён", "по монете уже есть позиция, заявка или команда")
-                    continue
-                if not gate_enabled:
-                    record_entry_decision(
-                        connection, signal_id, symbol, direction, signal_at_ms,
-                        "теневой допуск",
-                        "все проверки пройдены, но реальный торговый шлюз закрыт",
-                    )
-                    continue
-                geometry = connection.execute(
-                    """SELECT geometry_handoff_id,strategy_id,strategy_version,payload
-                       FROM monitoring.entry_geometry_handoffs WHERE signal_id=%s""",
-                    (signal_id,),
-                ).fetchone()
-                if geometry is None:
-                    record_entry_decision(
-                        connection, signal_id, symbol, direction, signal_at_ms,
-                        "запрещён",
-                        "нет причинной неизменяемой геометрии Entry; "
-                        "нет immutable Entry handoff с strategy initial protection",
-                        entry_policy=entry_policy,
-                        policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
-                    )
-                    continue
-                geometry_payload = (
-                    geometry[3] if isinstance(geometry[3], dict) else json.loads(str(geometry[3]))
-                )
-                initial_protection = geometry_payload.get("initial_protection")
-                if not isinstance(initial_protection, dict):
-                    record_entry_decision(
-                        connection, signal_id, symbol, direction, signal_at_ms,
-                        "запрещён", "нет strategy initial protection в immutable Entry handoff",
-                        entry_policy=entry_policy,
-                    )
-                    continue
-                if (
-                    str(initial_protection.get("strategy_id") or "") != str(geometry[1])
-                    or str(initial_protection.get("strategy_version") or "") != str(geometry[2])
-                ):
-                    record_entry_decision(
-                        connection, signal_id, symbol, direction, signal_at_ms,
-                        "запрещён", "strategy initial protection не соответствует Entry handoff",
-                        entry_policy=entry_policy,
-                    )
-                    continue
-                cid="auto-"+hashlib.sha256(str(signal_id).encode()).hexdigest()[:28]
-                body={"stake_usdt":settings[0],"leverage":settings[1],"side":"Buy" if direction=="long" else "Sell","price":price,"signal_id":signal_id,"entry_offset_pct":settings[4],"entry_limit_ttl_seconds":settings[5],"entry_policy":entry_policy,"policy_version":"1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1","bot_instance_id":BOT_INSTANCE_ID,"geometry_handoff_id":geometry[0],"strategy_id":geometry[1],"strategy_version":geometry[2],"initial_protection":initial_protection}
-                connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                    VALUES(%s,'entry',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",(cid,symbol,json.dumps(body),int(time.time()*1000)))
-                if geometry is not None:
-                    connection.execute(
-                        """INSERT INTO runtime.entry_geometry_bindings(
-                            entry_command_id,geometry_handoff_id,signal_id,bot_instance_id,
-                            strategy_id,strategy_version,payload)
-                            VALUES(%s,%s,%s,%s,%s,%s,%s)
-                            ON CONFLICT(entry_command_id) DO NOTHING""",
-                        (
-                            cid, geometry[0], signal_id, BOT_INSTANCE_ID,
-                            geometry[1], geometry[2],
-                            json.dumps(geometry[3], ensure_ascii=False, default=str),
-                        ),
-                    )
-                record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
-                                      "разрешён", "проверки пройдены, команда поставлена в очередь",
-                                      command_id=cid, entry_policy=entry_policy,
-                                      policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
-                                      observed_context=observed_context)
-            connection.commit()
-        filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
-            FROM runtime.trade_commands c JOIN runtime.executions e ON e.order_link_id=c.command_id
-            WHERE c.command_type='entry' AND c.state='completed'
-              AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
-            GROUP BY c.command_id,c.symbol,c.payload_json""").fetchall()
-        for entry_id,symbol,fill_time_ms,raw_entry_payload in filled_entries:
-            position_row=connection.execute(
-                "SELECT side,size,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
-                (symbol,),
-            ).fetchone()
-            if not position_row:
-                continue
-            raw=json.loads(position_row[3])
-            open_time_ms=int(raw.get("openTime") or 0)
-            if open_time_ms and abs(open_time_ms-int(fill_time_ms or 0)) > 10_000:
-                continue
-            actual_entry=Decimal(str(position_row[2]))
-            entry_payload = (
-                raw_entry_payload
-                if isinstance(raw_entry_payload, dict)
-                else json.loads(str(raw_entry_payload))
-            )
-            initial_protection = entry_payload.get("initial_protection")
-            if not isinstance(initial_protection, dict):
-                raise RuntimeError("filled Entry lost immutable initial protection contract")
-            execution_rows = connection.execute(
-                """SELECT exec_id,order_id,order_link_id,exec_time_ms
-                   FROM runtime.executions WHERE order_link_id=%s
-                   ORDER BY exec_time_ms,exec_id""",
-                (entry_id,),
-            ).fetchall()
-            binding = connection.execute(
-                """SELECT geometry_handoff_id,signal_id,bot_instance_id,
-                          strategy_id,strategy_version
-                   FROM runtime.entry_geometry_bindings WHERE entry_command_id=%s""",
-                (entry_id,),
-            ).fetchone()
-            universal_lineage = None
-            if binding is None:
-                universal_lineage = load_universal_entry_lineage(
-                    connection,
-                    command_id=str(entry_id),
-                    command_payload=entry_payload,
-                )
-                if (
-                    str(entry_payload.get("source") or "") == "universal_entry"
-                    and universal_lineage is None
-                ):
-                    raise RuntimeError("Universal Entry fill lost durable request lineage")
-            if execution_rows and (binding is not None or universal_lineage is not None):
-                position_idx = int(raw.get("positionIdx") or 0)
-                first_execution_id = str(execution_rows[0][0])
-                first_fill_ms = int(execution_rows[0][3] or fill_time_ms)
-                position_id, trade_id = stable_cycle_ids(
-                    entry_command_id=str(entry_id),
-                    first_execution_id=first_execution_id,
-                    symbol=str(symbol),
-                    side=str(position_row[0]),
-                    position_idx=position_idx,
-                )
-                exchange_order_ids = sorted({str(row[1]) for row in execution_rows})
-                client_order_ids = sorted({str(row[2]) for row in execution_rows})
-                execution_ids = [str(row[0]) for row in execution_rows]
-                if binding is not None:
-                    owner_bot = str(binding[2])
-                    owner_strategy_id = str(binding[3])
-                    owner_strategy_version = str(binding[4])
-                    owner_signal_id = str(binding[1])
-                    geometry_handoff_id = binding[0]
-                    connection.execute(
-                        """INSERT INTO runtime.position_ownership(
-                            position_id,trade_id,bot_instance_id,strategy_id,strategy_version,
-                            signal_id,entry_command_id,geometry_handoff_id,symbol,side,
-                            actual_avg_fill,actual_qty,fill_at,exchange_order_ids,
-                            client_order_ids,execution_ids,exchange_position_key,position_idx)
-                            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                                   to_timestamp(%s/1000.0),%s,%s,%s,%s,%s)
-                            ON CONFLICT(entry_command_id) DO UPDATE SET
-                              actual_avg_fill=excluded.actual_avg_fill,
-                              actual_qty=excluded.actual_qty,
-                              exchange_order_ids=excluded.exchange_order_ids,
-                              client_order_ids=excluded.client_order_ids,
-                              execution_ids=excluded.execution_ids,
-                              exchange_position_key=excluded.exchange_position_key,
-                              position_idx=excluded.position_idx""",
-                        (
-                            position_id, trade_id, owner_bot, owner_strategy_id,
-                            owner_strategy_version, owner_signal_id, entry_id,
-                            geometry_handoff_id, symbol, position_row[0],
-                            actual_entry, Decimal(str(position_row[1])), first_fill_ms,
-                            json.dumps(exchange_order_ids),
-                            json.dumps(client_order_ids),
+      
+…[sentinelx: truncated 30572 bytes]…
+_order_ids),
                             json.dumps(execution_ids),
                             f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
                             position_idx,
@@ -2867,12 +2284,45 @@ def persist_position_mode_states(
         )
 
 
+def _account_generation_id(started_ms: int, reason: str) -> str:
+    return "acctgen-" + hashlib.sha256(
+        f"{BOT_INSTANCE_ID}|{PROCESS_STARTED_AT_MS}|{started_ms}|{reason}".encode()
+    ).hexdigest()[:32]
+
+
+def _begin_account_state_generation(
+    connection: psycopg.Connection,
+    *,
+    generation_id: str,
+    started_ms: int,
+    reason: str,
+) -> None:
+    with connection.transaction():
+        connection.execute(
+            """INSERT INTO runtime.account_state_generations(
+                   generation_id,account_ref,reason,state,started_at,position_mode_refs,
+                   error,created_at,updated_at)
+               VALUES(%s,%s,%s,'COLLECTING',to_timestamp(%s / 1000.0),'{}'::jsonb,
+                      '',clock_timestamp(),clock_timestamp())""",
+            (generation_id, ACCOUNT_REF, reason, started_ms),
+        )
+
+
 def reconcile(
     connection: psycopg.Connection, key: str, secret: str, reason: str
 ) -> tuple[int, int]:
     started = int(time.time() * 1000)
+    generation_id = _account_generation_id(started, reason)
+    _begin_account_state_generation(
+        connection,
+        generation_id=generation_id,
+        started_ms=started,
+        reason=reason,
+    )
     try:
-        wallet, _ = api_get("/v5/account/wallet-balance", {"accountType": "UNIFIED"}, key, secret)
+        # Inventory first, exact position-mode proofs next, wallet last. The
+        # generation is admitted only as one COMPLETE unit; component ages are
+        # never compared independently for real Entry.
         positions, _ = api_get(
             "/v5/position/list",
             {"category": "linear", "settleCoin": "USDT", "limit": "200"},
@@ -2887,11 +2337,7 @@ def reconcile(
         )
         rejected = [
             (name, payload)
-            for name, payload in (
-                ("wallet", wallet),
-                ("positions", positions),
-                ("orders", orders),
-            )
+            for name, payload in (("positions", positions), ("orders", orders))
             if int(payload.get("retCode", -1)) != 0
         ]
         if rejected:
@@ -2900,28 +2346,35 @@ def reconcile(
                 for name, payload in rejected
             )
             raise ExchangeReadUnavailable(f"reconciliation read rejected: {detail}")
-        now = int(time.time() * 1000)
+
         position_list = [
             p for p in ((positions.get("result") or {}).get("list") or [])
             if float(p.get("size") or 0) != 0
         ]
         order_list = (orders.get("result") or {}).get("list") or []
+        active_order_list = [
+            item
+            for item in order_list
+            if str(item.get("orderStatus") or "") in {"New", "PartiallyFilled", "Untriggered"}
+            and str(item.get("reduceOnly") or "false").lower() != "true"
+            and str(item.get("closeOnTrigger") or "false").lower() != "true"
+        ]
+
+        mode_observed_ms = int(time.time() * 1000)
         position_mode_states = collect_position_mode_states(
             connection,
             key,
             secret,
-            now,
-            force_refresh=reason != "periodic",
+            mode_observed_ms,
+            force_refresh=True,
         )
+
         fetch_history = reason != "periodic"
         if not fetch_history:
             current_keys = {
                 (str(item.get("symbol") or ""), int(item.get("positionIdx") or 0))
                 for item in position_list
             }
-            # Close the read transaction before the later write transaction.
-            # Otherwise psycopg transaction() becomes a SAVEPOINT under the
-            # implicit outer transaction and periodic reconciliation leaks it.
             with connection.transaction():
                 owned_keys = {
                     (str(row[0]), int(row[1] or 0))
@@ -2930,9 +2383,9 @@ def reconcile(
                            WHERE state='OPEN' AND close_link_status='OPEN'"""
                     ).fetchall()
                 }
-            # Recovery/audit exception: history is fetched only when an owned cycle disappeared.
             missing_owned_position = bool(owned_keys - current_keys)
             fetch_history = missing_owned_position
+
         order_history: list[dict[str, object]] = []
         if fetch_history:
             order_history_response, _ = api_get(
@@ -2948,8 +2401,33 @@ def reconcile(
                     f"retMsg={order_history_response.get('retMsg')}"
                 )
             order_history = (order_history_response.get("result") or {}).get("list") or []
+
+        wallet, _ = api_get(
+            "/v5/account/wallet-balance",
+            {"accountType": "UNIFIED"},
+            key,
+            secret,
+        )
+        if int(wallet.get("retCode", -1)) != 0:
+            raise ExchangeReadUnavailable(
+                "reconciliation read rejected: "
+                f"wallet:retCode={wallet.get('retCode')} retMsg={wallet.get('retMsg')}"
+            )
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
+        if str(account.get("accountType") or "") != "UNIFIED":
+            raise ExchangeReadUnavailable("reconciliation wallet accountType is not UNIFIED")
+
+        now = int(time.time() * 1000)
+        mode_refs = {
+            str(item["instrument"]): str(item["position_mode_state_ref"])
+            for item in position_mode_states
+        }
+        available = account_available_usdt(account)
         with connection.transaction():
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (ACCOUNT_REF,),
+            )
             connection.execute("DELETE FROM runtime.hot_positions")
             connection.execute("DELETE FROM runtime.hot_orders")
             for p in position_list:
@@ -2962,21 +2440,60 @@ def reconcile(
             upsert_wallet(connection, account, now)
             reconcile_position_ownership(connection, position_list, now, order_history)
             connection.execute(
+                """UPDATE runtime.account_state_generations
+                      SET state='COMPLETE',
+                          completed_at=clock_timestamp(),
+                          account_type=%s,
+                          total_equity=%s,
+                          wallet_balance=%s,
+                          available_balance=%s,
+                          positions_count=%s,
+                          active_orders_count=%s,
+                          position_mode_refs=%s::jsonb,
+                          wallet_payload=%s::jsonb,
+                          error='',
+                          updated_at=clock_timestamp()
+                    WHERE generation_id=%s AND state='COLLECTING'""",
+                (
+                    str(account.get("accountType") or ""),
+                    str(account.get("totalEquity") or "0"),
+                    str(account.get("totalWalletBalance") or "0"),
+                    str(available),
+                    len(position_list),
+                    len(active_order_list),
+                    json.dumps(mode_refs, ensure_ascii=False),
+                    json.dumps(account, ensure_ascii=False),
+                    generation_id,
+                ),
+            )
+            connection.execute(
                 """INSERT INTO runtime.reconciliation_runs(
                     started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
                     VALUES(%s,%s,%s,1,%s,%s,'')""",
-                (started, int(time.time() * 1000), reason, len(position_list), len(order_list)),
+                (started, now, reason, len(position_list), len(order_list)),
             )
         return len(position_list), len(order_list)
     except Exception as exc:
         connection.rollback()
-        connection.execute(
-            """INSERT INTO runtime.reconciliation_runs(
-                started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
-                VALUES(%s,%s,%s,0,0,0,%s)""",
-            (started, int(time.time() * 1000), reason, f"{type(exc).__name__}: {exc}"),
-        )
-        connection.commit()
+        finished = int(time.time() * 1000)
+        with connection.transaction():
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (ACCOUNT_REF,),
+            )
+            connection.execute(
+                """UPDATE runtime.account_state_generations
+                      SET state='FAILED',completed_at=clock_timestamp(),
+                          error=%s,updated_at=clock_timestamp()
+                    WHERE generation_id=%s AND state='COLLECTING'""",
+                (f"{type(exc).__name__}: {exc}", generation_id),
+            )
+            connection.execute(
+                """INSERT INTO runtime.reconciliation_runs(
+                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
+                    VALUES(%s,%s,%s,0,0,0,%s)""",
+                (started, finished, reason, f"{type(exc).__name__}: {exc}"),
+            )
         if isinstance(exc, ExchangeReadUnavailable):
             raise
         if isinstance(

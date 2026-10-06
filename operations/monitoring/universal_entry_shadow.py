@@ -23,6 +23,10 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.counterfactual import (
     AnalystCounterfactualStore,
     build_insufficient_funds_candidate,
@@ -1197,52 +1201,31 @@ def _real_execution_activation_ids(
     return frozenset(ready)
 
 
-def _real_entry_technical_readiness(
+def _real_entry_account_state(
     connection: Any,
     *,
+    symbol: str,
     observed_at: datetime,
-) -> TechnicalReadiness:
-    raw_max_age = os.environ.get("CRIPTA_REAL_ENTRY_ACCOUNT_STATE_MAX_AGE_SECONDS", "").strip()
-    if not raw_max_age:
-        return TechnicalReadiness(
-            False,
-            observed_at,
-            "real Entry account-state freshness policy is not configured",
-        )
+) -> tuple[TechnicalReadiness, TradingCapacitySnapshot | None]:
     try:
-        max_age = int(raw_max_age)
-    except ValueError:
-        return TechnicalReadiness(False, observed_at, "invalid real Entry account-state max age")
-    if max_age <= 0:
-        return TechnicalReadiness(
-            False,
-            observed_at,
-            "real Entry account-state max age must be positive",
+        generation = current_complete_account_state_generation(
+            connection,
+            account_ref="BYBIT:UNIFIED",
+            acquire_account_lock=True,
         )
+    except AccountStateGenerationUnavailable as exc:
+        return TechnicalReadiness(False, observed_at, str(exc)), None
 
-    now_ms = int(observed_at.astimezone(UTC).timestamp() * 1000)
-    reconciliation = connection.execute(
-        """SELECT finished_at_epoch_ms,ok
-             FROM runtime.reconciliation_runs
-            ORDER BY id DESC LIMIT 1"""
-    ).fetchone()
-    if (
-        reconciliation is None
-        or not bool(reconciliation[1])
-        or now_ms - int(reconciliation[0]) < 0
-        or now_ms - int(reconciliation[0]) > max_age * 1000
-    ):
-        return TechnicalReadiness(False, observed_at, "fresh Exchange reconciliation is required")
-
-    wallet = connection.execute(
-        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
-    ).fetchone()
-    if (
-        wallet is None
-        or now_ms - int(wallet[0]) < 0
-        or now_ms - int(wallet[0]) > max_age * 1000
-    ):
-        return TechnicalReadiness(False, observed_at, "fresh account wallet state is required")
+    state_ref = generation.position_mode_refs.get(symbol)
+    if not state_ref:
+        return (
+            TechnicalReadiness(
+                False,
+                observed_at,
+                f"current account state generation has no position-mode proof for {symbol}",
+            ),
+            None,
+        )
 
     critical_fault = connection.execute(
         """SELECT fault_code
@@ -1251,15 +1234,29 @@ def _real_entry_technical_readiness(
             ORDER BY detected_at LIMIT 1"""
     ).fetchone()
     if critical_fault is not None:
-        return TechnicalReadiness(
-            False,
-            observed_at,
-            f"open critical lifecycle fault: {critical_fault[0]}",
+        return (
+            TechnicalReadiness(
+                False,
+                observed_at,
+                f"open critical lifecycle fault: {critical_fault[0]}",
+            ),
+            None,
         )
-    return TechnicalReadiness(
-        True,
-        observed_at,
-        "required account state and reconciliation are fresh",
+
+    capacity = TradingCapacitySnapshot(
+        capacity_snapshot_id=generation.generation_id,
+        observed_at=generation.completed_at,
+        available_for_new_trading=generation.available_balance,
+        quality=DataQuality.HIGH,
+        source_ref=f"runtime.account_state_generations:{generation.generation_id}",
+    )
+    return (
+        TechnicalReadiness(
+            True,
+            observed_at,
+            f"complete account state generation {generation.generation_id}",
+        ),
+        capacity,
     )
 
 
@@ -1778,240 +1775,9 @@ def _run_observer_epoch(
                                 None
                                 if lifecycle.last_resolution_at is None
                                 else lifecycle.last_resolution_at.isoformat()
-                            ),
-                            "entry_embargo_until": (
-                                None
-                                if lifecycle.entry_embargo_until is None
-                                else lifecycle.entry_embargo_until.isoformat()
-                            ),
-                            "updated_at": now.isoformat(),
-                        }
-                    )
-        return tuple(rows)
-
-    def refresh_inputs(fact_at: datetime) -> None:
-        nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
-        now_mono = time.monotonic()
-        if now_mono - last_inputs_refresh < 1.0:
-            return
-        global_context, coin_contexts, capacity = _observer_objective_inputs(
-            connection, symbols, fact_at
-        )
-        last_inputs_refresh = now_mono
-
-    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
-        nonlocal facts_received, evaluations_count, signals_count
-        if not deduper.accept(fact.fact_id):
-            return
-        if fact.event_kind == "PUBLIC_TRADE":
-            if cursor is None:
-                raise ContinuityNotProvable("observer PUBLIC_TRADE lacks exact cursor")
-            previous = trade_cursors.get(fact.symbol)
-            if previous is not None and cursor.seq < previous.seq:
-                raise ContinuityNotProvable(
-                    f"observer PUBLIC_TRADE sequence regressed for {fact.symbol}"
-                )
-            if previous is None or cursor.seq > previous.seq:
-                trade_current_seq_exec_ids[fact.symbol] = {cursor.exec_id}
-            else:
-                trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(cursor.exec_id)
-            trade_cursors[fact.symbol] = cursor
-            trade_proof_monotonic[fact.symbol] = time.monotonic()
-            trade_attrs = fact.attributes.to_dict()
-            last_trade_prices[fact.symbol] = Decimal(str(trade_attrs["price"]))
-            flow_minutes[fact.symbol].add(
-                fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
-            )
-            cutoff = fact.observed_at - timedelta(minutes=10)
-            flow_minutes[fact.symbol] = {
-                minute for minute in flow_minutes[fact.symbol] if minute >= cutoff
-            }
-        elif fact.event_kind == "OPEN_INTEREST":
-            oi_seen.add(fact.symbol)
-        elif fact.event_kind == "CANDLE_CLOSED":
-            attrs = fact.attributes.to_dict()
-            timeframe = str(attrs.get("timeframe") or "")
-            boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
-            prior = closed_boundaries.get((fact.symbol, timeframe))
-            if prior is not None and boundary < prior:
-                raise ContinuityNotProvable(
-                    f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
-                )
-            closed_boundaries[(fact.symbol, timeframe)] = boundary
-            if timeframe == "5":
-                paper.on_candle_closed(
-                    Candle(
-                        symbol=fact.symbol,
-                        timeframe="5",
-                        opened_at=datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC),
-                        closed_at=boundary,
-                        open=Decimal(str(attrs["open"])),
-                        high=Decimal(str(attrs["high"])),
-                        low=Decimal(str(attrs["low"])),
-                        close=Decimal(str(attrs["close"])),
-                        volume=Decimal(str(attrs["volume"])),
-                        is_closed=True,
-                    )
-                )
-        refresh_inputs(fact.observed_at)
-        contexts: dict[str, ObjectiveContext] = {}
-        if global_context is not None and global_context.observed_at <= fact.observed_at:
-            contexts["dispatcher.global"] = global_context
-        coin = coin_contexts.get(fact.symbol)
-        if coin is not None and coin.observed_at <= fact.observed_at:
-            contexts["dispatcher.coin"] = coin
-        if fact.event_kind == "PUBLIC_TRADE":
-            attrs = fact.attributes.to_dict()
-            paper.on_public_trade(
-                symbol=fact.symbol,
-                price=Decimal(str(attrs["price"])),
-                observed_at=fact.observed_at,
-                contexts=contexts,
-            )
-        admission_time = datetime.now(UTC) if real_admission_required_for else fact.observed_at
-        readiness = (
-            _real_entry_technical_readiness(
-                connection,
-                observed_at=admission_time,
-            )
-            if real_admission_required_for
-            else TechnicalReadiness(
-                True,
-                fact.observed_at,
-                "SHADOW observer causal transport is continuous",
-            )
-        )
-        evaluation_transaction = (
-            connection.transaction() if real_admission_required_for else nullcontext()
-        )
-        with evaluation_transaction:
-            evaluations = engine.process(
-                fact,
-                contexts=contexts,
-                capacity=capacity,
-                technical_readiness=readiness,
-                account_ref="BYBIT:UNIFIED",
-                entry_admission_port=entry_admission_port,
-                real_admission_required_for=real_admission_required_for,
-                exchange_position_keys={
-                    symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
-                    for symbol in symbols
-                },
-                allow_new_signals=sensor_ready(fact.observed_at),
-                admission_time=admission_time,
-            )
-            facts_received += 1
-            for evaluation in evaluations:
-                store.record_evaluation(evaluation, provenance=provenance)
-                bundle = bundle_by_entry_plan.get(
-                    evaluation.signal.entry_plan_fingerprint
-                )
-                if bundle is None:
-                    raise RuntimeError(
-                        "observer exact Strategy/EntryPlan bundle is missing"
-                    )
-                _maybe_record_reverse_transition(
-                    connection,
-                    evaluation,
-                    bundle,
-                )
-                if (
-                    evaluation.signal.strategy_activation_id
-                    in real_admission_required_for
-                ):
-                    candidate = build_insufficient_funds_candidate(
-                        evaluation,
-                        entry_plan=bundle.entry_plan,
-                        exit_plan=bundle.exit_plan,
-                        captured_at=fact.observed_at,
-                    )
-                    if candidate is not None:
-                        counterfactual_store.record_candidate(candidate)
-                paper.create_order(evaluation, bundle, now=fact.observed_at)
-                evaluations_count += 1
-                signals_count += 1
-
-    try:
-        trade_mirror_thread.start()
-        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
-            raise ContinuityNotProvable(
-                "observer publicTrade mirror did not become ready before startup deadline"
-            )
-        if trade_mirror.snapshot()["state"] != "ACTIVE":
-            raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
-        oi_thread.start()
-        sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
-        buffered_messages = list(buffered)
-        heartbeat = PublicWsHeartbeat(
-            PING_INTERVAL_SECONDS,
-            PONG_TIMEOUT_SECONDS,
-            started_monotonic=time.monotonic(),
-        )
-        next_status = 0.0
-        next_signature = 0.0
-        _observer_status(
-            state="WARMUP" if not sensor_ready(datetime.now(UTC)) else "RUNNING",
-            epoch_id=epoch_id,
-            active_bundles=bundles,
-            symbols=symbols,
-            warmup_until=warmup_until,
-            reason="causal seed complete",
-            sensor_status=sensor_status(datetime.now(UTC)),
-            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
-        )
-        while not stopping():
-            now_mono = time.monotonic()
-            if now_mono >= next_signature:
-                latest_signature = _observer_light_signature(connection)
-                if latest_signature != current_signature:
-                    _observer_status(
-                        state="RELOADING",
-                        epoch_id=epoch_id,
-                        active_bundles=bundles,
-                        symbols=symbols,
-                        facts_received=facts_received,
-                        evaluations=evaluations_count,
-                        signals=signals_count,
-                        warmup_until=warmup_until,
-                        reason="StrategyActivation set changed",
-                        sensor_status=sensor_status(datetime.now(UTC)),
-                        strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
-                    )
-                    return "RELOAD"
-                next_signature = now_mono + 1.0
-            stale = tuple(
-                symbol
-                for symbol, cursor in trade_cursors.items()
-                if now_mono - trade_proof_monotonic.get(symbol, now_mono)
-                >= TRADE_SILENCE_AUDIT_SECONDS
-            )
-            if stale:
-                try:
-                    _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
-                except PublicTradeStreamBehind as audit_exc:
-                    cutoff_at = datetime.now(UTC)
-                    recovered = trade_mirror.recover_after(
-                        trade_cursors,
-                        cutoff_at=cutoff_at,
-                    )
-                    if not recovered:
-                        raise ContinuityNotProvable(
-                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
-                        ) from audit_exc
-                    for event in recovered:
-                        if event.symbol not in stale:
-                            continue
-                        process_fact(
-                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
-                            TradeCursor(
-                                event.symbol,
-                                event.exec_id,
-                                event.seq,
-                                event.traded_at,
-                            ),
-                        )
-                proven_at = time.monotonic()
-                for symbol in stale:
+       
+…[sentinelx: truncated 10909 bytes]…
+tale:
                     trade_proof_monotonic[symbol] = proven_at
             while True:
                 try:

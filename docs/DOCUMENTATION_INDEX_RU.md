@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.7
-**Дата:** 2026-10-02
+**Версия:** 3.8
+**Дата:** 2026-10-06
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -621,3 +621,22 @@ Canonical ownership:
 
 Document set, mandatory pre-read, routing and Project Source count are unchanged.
 README / AGENTS / Project Instructions bootstrap are synchronized in this cycle.
+
+# 22. Real Entry account-state generation revision — 2026-10-06
+
+OWNER DECISION:
+- исправить production FK/order-of-durability defect real Entry без ослабления
+  referential integrity;
+- убрать класс независимых секундных wallet/reconciliation/capacity gates из
+  generation-backed real Entry;
+- использовать единый current COMPLETE AccountStateGeneration;
+- следующий COLLECTING generation не инвалидирует предыдущий COMPLETE;
+- terminal FAILED fail-closed блокирует admission до следующего COMPLETE;
+- StrategySignal / EntryExecutionRequest TTL остаются временными контрактами;
+- current R1 market/entry/exit/economic policy и MICRO_LIVE symbol/stake scope
+  этой ревизией не расширяются.
+
+ARCH владеет atomic admission/generation invariant, TRADING_CONTOUR — его
+торговым применением, GLOSSARY — термином AccountStateGeneration. Эта ревизия
+не меняет active document topology, mandatory pre-read или Project Source set,
+поэтому README / AGENTS / Project Instructions topology update не требуется.

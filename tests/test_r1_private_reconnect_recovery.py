@@ -17,12 +17,15 @@ def test_private_reconnect_is_temporarily_fail_closed_not_permanent_owner_rearm(
     assert "gate_restored=restored" in text
 
 
-def test_reconnect_forces_fresh_position_mode_probe() -> None:
+def test_account_generation_forces_exact_position_mode_probe_every_cycle() -> None:
     text = source()
     assert "force_refresh: bool = False" in text
     assert "if refresh_seconds > 0 and not force_refresh:" in text
-    assert 'force_refresh=reason != "periodic"' in text
-
+    start = text.index("def reconcile(")
+    body = text[start:text.index("def upsert_exchange_order_history(", start)]
+    assert "force_refresh=True" in body
+    assert "position_mode_refs" in body
+    assert "runtime.account_state_generations" in body
 
 def test_reconnect_auto_restore_is_scoped_to_exact_flat_owner_armed_r1() -> None:
     text = source()

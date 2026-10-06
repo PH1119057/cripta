@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.5
-**Дата:** 2026-10-02
+**Версия:** 2.6
+**Дата:** 2026-10-06
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -231,6 +231,42 @@ reservation до reconciliation.
 
 Dispatcher capacity snapshot остаётся advisory fact и не является lock/ledger.
 
+### 5.1.1 AccountStateGeneration для real Entry
+
+OWNER DECISION 2026-10-06: real Entry admission больше не определяется
+независимыми wall-clock age gates для reconciliation, wallet и trading capacity.
+
+Private account contour материализует один causal AccountStateGeneration:
+
+COLLECTING -> COMPLETE | FAILED
+
+COMPLETE generation содержит одним поколением минимум:
+- exact exchange/account identity;
+- wallet/account type и доступный капитал;
+- current positions;
+- active orders;
+- exact position-mode state refs для всех active real Strategy symbols;
+- started/completed timestamps и provenance.
+
+Для real Entry используется current latest terminal generation. Новый
+COLLECTING не инвалидирует предыдущий COMPLETE: сбор следующего поколения сам
+по себе не делает подтверждённое состояние счёта плохим. Новый FAILED делает
+account state unusable fail-closed до следующего COMPLETE.
+
+Real admission обязан под account-level lock доказать, что используемый
+generation всё ещё current, его capital совпадает с reservation input, а
+position-mode ref exact symbol принадлежит этому generation. После этого идут
+physical slot claim и capital reservation.
+
+В generation-backed real admission запрещены независимые gates вида
+wallet_age=N, reconciliation_age=N и capacity_age=N. Historical /
+non-generation compatibility path может сохранять age metadata, но не является
+production real-admission authority.
+
+Время остаётся trading/lifecycle semantics только там, где оно физически
+значимо: StrategySignal / EntryExecutionRequest validity/expiry, exchange
+mutation timeout и иные отдельно канонизированные deadlines.
+
 ## 5.2 Physical Exchange position slot и position mode
 
 Логическая независимость Strategy не означает право нескольким Strategy
@@ -288,10 +324,13 @@ reconciliation. Execution не переключает position mode автома
 Fresh mode verification обязательна минимум при:
 - real activation/re-arm;
 - добавлении нового symbol в real Strategy universe;
-- Entry admission после истечения freshness;
 - private-state reconnect/recovery, если continuity не доказана;
 - обнаруженном Exchange/account configuration change;
 - снятии position-mode-related fail-closed state.
+
+Для каждого production real Entry exact position-mode proof берётся из current
+COMPLETE AccountStateGeneration по §5.1.1. Отдельный per-entry
+freshness expiry / fresh_until clock не является вторым admission gate.
 
 ## 5.3 Decision outcome, request state и lifecycle fault
 

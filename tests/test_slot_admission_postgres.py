@@ -324,6 +324,73 @@ def test_same_attempt_is_idempotent_with_same_claim_and_reservation() -> None:
     assert first.capital_reservation.reservation_id == second.capital_reservation.reservation_id
 
 
+def test_outer_transaction_can_persist_attempt_after_admission() -> None:
+    """Regression: real engine admits before StrategyEntryStore writes the attempt."""
+    assert DSN is not None
+    prefix = "slot-deferred-attempt-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=1)
+    _seed_mode(prefix, identity)
+    attempt_id = f"{prefix}-attempt-1"
+    signal_id = f"{prefix}-signal-1"
+
+    request = _request(prefix, 1, identity)
+    with psycopg.connect(DSN) as connection, connection.transaction():
+        receipt = PostgresEntryAdmissionPort(connection).admit(request)
+        assert receipt.exchange_position_slot_claim_id
+        missing = connection.execute(
+            "SELECT 1 FROM strategy_entry.strategy_attempts WHERE strategy_attempt_id=%s",
+            (attempt_id,),
+        ).fetchone()
+        assert missing is None
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_signals(
+                       signal_id,strategy_id,strategy_version,
+                       strategy_config_fingerprint,entry_plan_fingerprint,
+                       strategy_activation_id,symbol,direction,detected_at,
+                       fact_id,source_refs,payload
+                   ) VALUES(%s,%s,%s,%s,%s,%s,%s,'LONG',%s,%s,'[]'::jsonb,'{}'::jsonb)""",
+            (
+                signal_id,
+                identity["strategy_id"],
+                identity["strategy_version"],
+                identity["strategy_fp"],
+                identity["entry_fp"],
+                f"{prefix}-activation",
+                SYMBOL,
+                NOW,
+                f"{prefix}-fact-1",
+            ),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_attempts(
+                       strategy_attempt_id,signal_id,strategy_id,strategy_version,
+                       strategy_config_fingerprint,entry_plan_fingerprint,
+                       strategy_activation_id,created_at,payload
+                   ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'{}'::jsonb)""",
+            (
+                attempt_id,
+                signal_id,
+                identity["strategy_id"],
+                identity["strategy_version"],
+                identity["strategy_fp"],
+                identity["entry_fp"],
+                f"{prefix}-activation",
+                NOW,
+            ),
+        )
+
+    with psycopg.connect(DSN) as connection:
+        row = connection.execute(
+            """SELECT c.claim_state,r.state
+                 FROM runtime.exchange_position_slot_claims c
+                 JOIN runtime.capital_reservations r
+                   ON r.reservation_id=c.capital_reservation_id
+                WHERE c.strategy_attempt_id=%s""",
+            (attempt_id,),
+        ).fetchone()
+    assert row == ("CLAIMED", "RESERVED")
+
+
 def test_runtime_role_has_minimal_new_schema_privileges() -> None:
     assert DSN is not None
     expected = {

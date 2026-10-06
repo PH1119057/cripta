@@ -944,8 +944,16 @@ class UniversalEntryEngine:
                 reason = "required trading capacity is unknown"
             else:
                 capacity_id = capacity.capacity_snapshot_id
+                generation_prefix = "runtime.account_state_generations:"
+                generation_id = (
+                    capacity.source_ref.removeprefix(generation_prefix)
+                    if capacity.source_ref.startswith(generation_prefix)
+                    else None
+                )
                 age = (now - capacity.observed_at).total_seconds()
-                if age < 0 or (max_age is not None and age > max_age):
+                if generation_id is None and (
+                    age < 0 or (max_age is not None and age > max_age)
+                ):
                     code = EntryDecisionCode.STALE_OR_UNKNOWN_REQUIRED_STATE
                     reason = "required trading capacity is stale or from the future"
                 elif min_quality is not None and (
@@ -993,6 +1001,7 @@ class UniversalEntryEngine:
                                     requested_at=now,
                                     pre_dispatch_expires_at=now
                                     + timedelta(seconds=request_max_age_seconds),
+                                    account_state_generation_id=generation_id,
                                 )
                             )
                         except PositionModeStateUnavailable as exc:

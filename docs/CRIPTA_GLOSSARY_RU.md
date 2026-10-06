@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.5
-**Дата:** 2026-10-05
+**Версия:** 2.6
+**Дата:** 2026-10-06
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -351,6 +351,15 @@ exchange_position_slot_claim_id — immutable identity physical slot claim.
 **Position mode state** — причинный snapshot фактического Exchange position mode
 для exact exchange/account/product/instrument scope с positionIdx, freshness и
 provenance.
+
+**AccountStateGeneration** — атомарно используемое поколение private Exchange
+account state для real Entry admission. Состояния generation:
+COLLECTING -> COMPLETE | FAILED. COMPLETE связывает wallet/account type,
+positions, active orders, available capital и exact position-mode refs active
+real symbols. Current production admission использует generation identity, а
+не независимые wall-clock age checks его компонентов. Новый COLLECTING не
+инвалидирует предыдущий COMPLETE; новый terminal FAILED блокирует новые real
+entries до следующего COMPLETE.
 
 **One-way mode** — режим, где один symbol использует один directional slot.
 Для текущего утверждённого Bybit Unified linear contract ожидается

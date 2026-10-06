@@ -85,8 +85,14 @@ def test_unrelated_custom_touch_kind_remains_fail_closed() -> None:
     assert is_independent_touch(fact, PlanState(), entry_plan.touch_policy) is False
 
 
-def test_real_entry_freshness_policy_is_explicit_in_observer_unit() -> None:
-    source = (
+def test_real_entry_account_state_uses_generation_not_wall_clock_age() -> None:
+    unit = (
         ROOT / "operations/systemd/cripta-universal-entry-observer.service"
     ).read_text(encoding="utf-8")
-    assert "Environment=CRIPTA_REAL_ENTRY_ACCOUNT_STATE_MAX_AGE_SECONDS=15" in source
+    observer = (
+        ROOT / "operations/monitoring/universal_entry_shadow.py"
+    ).read_text(encoding="utf-8")
+    assert "CRIPTA_REAL_ENTRY_ACCOUNT_STATE_MAX_AGE_SECONDS" not in unit
+    assert "runtime.account_state_generations:" in observer
+    assert "_real_entry_account_state(" in observer
+    assert "fresh account wallet state is required" not in observer

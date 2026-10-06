@@ -8,6 +8,10 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.capital_reservation import (
     CapitalReservation,
     CapitalReservationRequest,
@@ -60,6 +64,7 @@ class EntryAdmissionRequest:
     capacity_available: Decimal
     requested_at: datetime
     pre_dispatch_expires_at: datetime
+    account_state_generation_id: str | None = None
 
     def __post_init__(self) -> None:
         for field in (
@@ -156,43 +161,85 @@ class PostgresEntryAdmissionPort:
                 (request.exchange_position_key,),
             )
 
-            mode = self._connection.execute(
-                """SELECT position_mode_state_ref,position_mode,position_idx,
-                          observed_at,received_at,fresh_until
-                     FROM runtime.position_mode_states
-                    WHERE account_ref=%s
-                      AND product_category='LINEAR'
-                      AND instrument=%s
-                    ORDER BY observed_at DESC,created_at DESC
-                    LIMIT 1""",
-                (request.account_ref, request.symbol),
-            ).fetchone()
-            if mode is None:
-                raise PositionModeStateUnavailable(
-                    f"position mode state missing for {request.account_ref}:{request.symbol}"
-                )
-            state_ref = str(mode[0])
-            position_mode = str(mode[1])
-            position_idx = None if mode[2] is None else int(str(mode[2]))
-            observed_at = mode[3]
-            received_at = mode[4]
-            fresh_until = mode[5]
-            if not all(
-                isinstance(value, datetime)
-                for value in (observed_at, received_at, fresh_until)
-            ):
-                raise PositionModeStateUnavailable("position mode timestamps are invalid")
-            if (
-                observed_at.tzinfo is None
-                or received_at.tzinfo is None
-                or fresh_until.tzinfo is None
-                or observed_at.astimezone(UTC) > now
-                or received_at.astimezone(UTC) > now
-                or fresh_until.astimezone(UTC) < now
-            ):
-                raise PositionModeStateUnavailable(
-                    f"position mode state stale/invalid: {state_ref}"
-                )
+            if request.account_state_generation_id:
+                try:
+                    generation = current_complete_account_state_generation(
+                        self._connection,
+                        account_ref=request.account_ref,
+                    )
+                except AccountStateGenerationUnavailable as exc:
+                    raise PositionModeStateUnavailable(str(exc)) from exc
+                if generation.generation_id != request.account_state_generation_id:
+                    raise PositionModeStateUnavailable(
+                        "account state generation changed before admission: "
+                        f"expected={request.account_state_generation_id} "
+                        f"actual={generation.generation_id}"
+                    )
+                if generation.available_balance != request.capacity_available:
+                    raise PositionModeStateUnavailable(
+                        "account state generation capital changed before admission"
+                    )
+                state_ref = generation.position_mode_refs.get(request.symbol, "")
+                if not state_ref:
+                    raise PositionModeStateUnavailable(
+                        "current account state generation has no position-mode proof for "
+                        f"{request.symbol}"
+                    )
+                mode = self._connection.execute(
+                    """SELECT position_mode,position_idx
+                         FROM runtime.position_mode_states
+                        WHERE position_mode_state_ref=%s
+                          AND account_ref=%s
+                          AND product_category='LINEAR'
+                          AND instrument=%s""",
+                    (state_ref, request.account_ref, request.symbol),
+                ).fetchone()
+                if mode is None:
+                    raise PositionModeStateUnavailable(
+                        f"generation position mode state missing: {state_ref}"
+                    )
+                position_mode = str(mode[0])
+                position_idx = None if mode[1] is None else int(str(mode[1]))
+            else:
+                # Compatibility path for historical/shadow/integration callers.
+                # Production real Entry must provide account_state_generation_id.
+                mode = self._connection.execute(
+                    """SELECT position_mode_state_ref,position_mode,position_idx,
+                              observed_at,received_at,fresh_until
+                         FROM runtime.position_mode_states
+                        WHERE account_ref=%s
+                          AND product_category='LINEAR'
+                          AND instrument=%s
+                        ORDER BY observed_at DESC,created_at DESC
+                        LIMIT 1""",
+                    (request.account_ref, request.symbol),
+                ).fetchone()
+                if mode is None:
+                    raise PositionModeStateUnavailable(
+                        f"position mode state missing for {request.account_ref}:{request.symbol}"
+                    )
+                state_ref = str(mode[0])
+                position_mode = str(mode[1])
+                position_idx = None if mode[2] is None else int(str(mode[2]))
+                observed_at = mode[3]
+                received_at = mode[4]
+                fresh_until = mode[5]
+                if not all(
+                    isinstance(value, datetime)
+                    for value in (observed_at, received_at, fresh_until)
+                ):
+                    raise PositionModeStateUnavailable("position mode timestamps are invalid")
+                if (
+                    observed_at.tzinfo is None
+                    or received_at.tzinfo is None
+                    or fresh_until.tzinfo is None
+                    or observed_at.astimezone(UTC) > now
+                    or received_at.astimezone(UTC) > now
+                    or fresh_until.astimezone(UTC) < now
+                ):
+                    raise PositionModeStateUnavailable(
+                        f"position mode state stale/invalid: {state_ref}"
+                    )
             if position_mode != "ONE_WAY" or position_idx != 0:
                 raise PositionModeMismatch(
                     state_ref=state_ref,

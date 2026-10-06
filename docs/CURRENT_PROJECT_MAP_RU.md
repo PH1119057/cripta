@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.4
-**Дата:** 2026-10-04
+**Версия:** 11.5
+**Дата:** 2026-10-06
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1594,3 +1594,33 @@ RUNTIME LIVENESS VERIFIED     = YES
 RUNTIME BEHAVIOR VERIFIED     = YES [UI hot-swap + gate/permission invariance]
 TRADING BEHAVIOR CHANGED      = NO
 ```
+
+# 24. Real Entry account-state generation repair — OWNER DECISION 2026-10-06
+
+OWNER DECISION:
+- current R1 MICRO_LIVE scope не расширять;
+- исправить non-deferrable slot-claim -> strategy_attempt FK, который ломал
+  единый outer admission transaction до записи StrategyAttempt;
+- заменить независимые real-entry wall-clock freshness gates
+  reconciliation/wallet/capacity на current COMPLETE AccountStateGeneration;
+- exact position-mode proof real Entry брать из того же generation;
+- StrategySignal / EntryExecutionRequest expiry оставить без изменения.
+
+SOURCE STATUS этого changeset до production deploy:
+IMPLEMENTATION IN PROGRESS / DEPLOYED NOT CLAIMED HERE.
+Runtime checkpoint после exact verified release обязан отдельно доказать
+generation progression, deferred FK, automatic StrategySignal ->
+EntryDecision -> EntryExecutionRequest path, gate/session identity и отсутствие
+scope expansion.
+
+
+BEFORE / AFTER CAPABILITY MATRIX:
+
+| CAPABILITY | BEFORE_OWNER | BEFORE_STATUS | AFTER_OWNER | AFTER_STATUS | REPLACEMENT_IMPLEMENTED | MIGRATION_REQUIRED | TEST_EVIDENCE |
+|---|---|---|---|---|---|---|---|
+| private account truth for real Entry | private runtime + Entry readiness | fragmented wallet/reconciliation/capacity clocks | private runtime AccountStateGeneration + Entry admission | one COMPLETE/FAILED generation contract | YES | YES | generation/reconciliation tests |
+| physical slot + capital admission | Entry admission | intended atomic transaction, broken by non-deferrable attempt FK | Entry admission | deferred FK validated at outer COMMIT, same referential integrity | YES | YES | migration + PostgreSQL integration gate |
+| StrategySignal/ExecutionRequest expiry | Strategy/Entry | 30s Strategy-owned request validity | Strategy/Entry | unchanged | N/A | NO | architecture regression tests |
+| position-mode proof for real Entry | private runtime + Entry admission | separate fresh_until clock | AccountStateGeneration + Entry admission | exact mode ref bound to current generation | YES | YES | generation/admission tests |
+
+No capability loses an owner; no trading-policy owner moves between top-level layers.

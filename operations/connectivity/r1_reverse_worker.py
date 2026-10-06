@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -13,6 +12,10 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.entry_admission import EntryAdmissionRequest, PostgresEntryAdmissionPort
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 
@@ -200,28 +203,21 @@ def _capacity(
     now: datetime,
     capital: Mapping[str, object],
 ) -> tuple[str, datetime, Decimal]:
-    row = connection.execute(
-        """SELECT capacity_snapshot_id,observed_at,available_for_new_trading,data_quality
-             FROM dispatcher_v2.trading_capacity_snapshots
-            WHERE observed_at <= %s
-            ORDER BY observed_at DESC LIMIT 1""",
-        (now,),
-    ).fetchone()
-    if row is None or row["available_for_new_trading"] is None:
-        raise RuntimeError("R1 reverse TradingCapacitySnapshot unavailable")
-    observed_at = row["observed_at"]
-    if not isinstance(observed_at, datetime):
-        raise RuntimeError("R1 reverse capacity timestamp invalid")
-    observed_at = observed_at.astimezone(UTC)
-    max_age = int(str(capital.get("capacity_max_age_seconds") or 0))
-    if max_age <= 0 or (now - observed_at).total_seconds() > max_age:
-        raise RuntimeError("R1 reverse TradingCapacitySnapshot stale")
-    if str(row["data_quality"]) != str(capital.get("capacity_min_quality") or ""):
-        raise RuntimeError("R1 reverse TradingCapacitySnapshot quality mismatch")
+    del now
+    try:
+        generation = current_complete_account_state_generation(
+            connection,
+            account_ref=ACCOUNT_REF,
+            acquire_account_lock=True,
+        )
+    except AccountStateGenerationUnavailable as exc:
+        raise RuntimeError(f"R1 reverse account state generation unavailable: {exc}") from exc
+    if str(capital.get("capacity_min_quality") or "") != "HIGH":
+        raise RuntimeError("R1 reverse requires HIGH generation-backed capital quality")
     return (
-        str(row["capacity_snapshot_id"]),
-        observed_at,
-        Decimal(str(row["available_for_new_trading"])),
+        generation.generation_id,
+        generation.completed_at,
+        generation.available_balance,
     )
 
 
@@ -323,6 +319,7 @@ def _create_open_request(
             capacity_available=capacity_available,
             requested_at=now,
             pre_dispatch_expires_at=now + timedelta(seconds=max_age),
+            account_state_generation_id=capacity_id,
         )
     )
 

@@ -13,12 +13,31 @@ def test_live_signed_reads_have_separate_window_from_mutations() -> None:
     assert 'f"{timestamp}{key}{SIGNED_RECV_WINDOW}{body}"' in SOURCE
 
 
-def test_periodic_position_mode_refresh_is_staggered() -> None:
-    assert (
-        "symbols = [symbol for symbol in symbols if symbol not in recent][:1]"
-        in SOURCE
-    )
-    assert "CRIPTA_POSITION_MODE_FRESHNESS_SECONDS" in SOURCE
+def test_periodic_reconciliation_builds_complete_generation_with_exact_modes() -> None:
+    reconcile = SOURCE[SOURCE.index("def reconcile("):]
+    assert "runtime.account_state_generations" in SOURCE
+    assert "force_refresh=True" in reconcile
+    assert "position_mode_refs=%s::jsonb" in reconcile
+    assert "state='COMPLETE'" in reconcile
+    assert "state='FAILED'" in reconcile
+    assert "CRIPTA_RECONCILIATION_MAX_AGE_MS" not in SOURCE
+
+
+def test_generation_counts_only_active_non_reduce_orders() -> None:
+    reconcile = SOURCE[SOURCE.index("def reconcile("):]
+    assert '"New", "PartiallyFilled", "Untriggered"' in reconcile
+    assert 'item.get("reduceOnly")' in reconcile
+    assert 'item.get("closeOnTrigger")' in reconcile
+    assert "len(active_order_list)" in reconcile
+
+
+def test_wallet_is_read_after_inventory_and_position_mode_proofs() -> None:
+    reconcile = SOURCE[SOURCE.index("def reconcile("):]
+    positions = reconcile.index('"/v5/position/list"')
+    orders = reconcile.index('"/v5/order/realtime"')
+    modes = reconcile.index("collect_position_mode_states(")
+    wallet = reconcile.index('"/v5/account/wallet-balance"')
+    assert positions < orders < modes < wallet
 
 
 def test_periodic_read_failure_keeps_private_ws_connected() -> None:

@@ -969,6 +969,32 @@ def test_capacity_freshness_threshold_is_plan_data() -> None:
     assert by_strategy["relaxed-age"].decision.code is EntryDecisionCode.ACCEPTED
 
 
+def test_generation_backed_real_capacity_is_not_rejected_by_wall_clock_age() -> None:
+    strict = make_card(
+        "generation-capacity",
+        capital={**capacity_policy("10", max_age_seconds=1), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
+    _, engine = setup_engine(strict)
+    port = AcceptingAdmissionPort()
+    capacity = TradingCapacitySnapshot(
+        "acctgen-test",
+        NOW - timedelta(hours=1),
+        Decimal("100"),
+        DataQuality.HIGH,
+        "runtime.account_state_generations:acctgen-test",
+    )
+    result = real_evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=port,
+    )
+    assert result[0].decision is not None
+    assert result[0].decision.code is EntryDecisionCode.ACCEPTED
+    assert port.captured[0].account_state_generation_id == "acctgen-test"
+
+
 def test_capacity_policy_requires_explicit_freshness_and_quality() -> None:
     card = make_card("bad-capital", capital={"require_capacity": True, "requested_amount": "1"})
     registry = ActivePlanRegistry()

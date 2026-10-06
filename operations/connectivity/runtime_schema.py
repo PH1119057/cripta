@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-09-20-slot-v1"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-06-account-generation-v1"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -15,6 +15,7 @@ REQUIRED_RELATIONS: tuple[str, ...] = (
     "control.live_arm_sessions",
     "monitoring.entry_geometry_handoffs",
     "monitoring.opportunities",
+    "runtime.account_state_generations",
     "runtime.connection_events",
     "runtime.entry_decision_events",
     "runtime.entry_decisions",

@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.2
-**Дата:** 2026-10-04
+**Версия:** 2.3
+**Дата:** 2026-10-06
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -599,6 +599,20 @@ required account / position-mode validation
 admission transaction. Unknown post-dispatch state не освобождает claim или
 reservation до reconciliation.
 
+OWNER DECISION 2026-10-06: required account/capital state real Entry берётся
+только из current AccountStateGeneration=COMPLETE. Generation объединяет
+wallet/account type, positions, active orders, available capital и exact
+position-mode refs active real symbols. Новый COLLECTING не портит предыдущий
+COMPLETE; новый terminal FAILED блокирует admission до следующего COMPLETE.
+
+Для generation-backed real Entry не применяются независимые секунды
+wallet_age, reconciliation_age или capacity_age. Поле
+capacity_max_age_seconds, присутствующее в historical/current StrategyCard
+для совместимости, не является real-admission gate при наличии
+AccountStateGeneration. StrategySignal / EntryExecutionRequest expiry остаётся
+отдельным Strategy-owned временным контрактом.
+
+
 Physical claim обязан иметь durable identity минимум:
 exchange_position_slot_claim_id, exchange_position_key, strategy_attempt_id,
 strategy_id/version, direction, claim_state, claimed_at, released_at,
@@ -609,14 +623,21 @@ ordering. Если exact ordering отсутствует, результат п�
 восстанавливается по ближайшим timestamps.
 
 Position-mode state является required account state. Fresh verification
-обязательна при real activation/re-arm, добавлении symbol, Entry admission
-после freshness expiry, recovery/reconnect без доказанной continuity и после
-обнаруженного Exchange configuration change.
+обязательна при real activation/re-arm, добавлении symbol, recovery/reconnect
+без доказанной continuity и после обнаруженного Exchange configuration change.
+Для каждого production real Entry exact mode proof берётся из current COMPLETE
+AccountStateGeneration.
 
 Текущий утверждённый contract:
 ONE_WAY + positionIdx=0. Unknown/stale -> STALE_OR_UNKNOWN_REQUIRED_STATE.
 Свежий, но несовместимый mode/positionIdx -> OPERATIONAL_SAFETY_BLOCKED с
 block_reason=EXCHANGE_POSITION_MODE_MISMATCH.
+
+Для production generation-backed admission fresh означает exact
+position-mode ref current COMPLETE AccountStateGeneration для данного symbol,
+а не отдельное истечение секундного fresh_until. fresh_until может сохраняться
+как provenance/compatibility для activation/recovery и historical контуров, но
+не является параллельным per-entry clock gate.
 
 ## 2.8 После fill
 
