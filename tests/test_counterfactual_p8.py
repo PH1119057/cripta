@@ -269,8 +269,8 @@ def test_observer_captures_counterfactual_only_for_real_execution_activation() -
     assert "build_insufficient_funds_candidate(" in block
     assert "counterfactual_store.record_candidate(candidate)" in block
     assert "evaluation.signal.strategy_activation_id" in block
-    assert "real_admission_required_for" in block
-    assert block.index("real_admission_required_for") < block.index(
+    assert "real_execution_selected_for" in block
+    assert block.index("real_execution_selected_for") < block.index(
         "build_insufficient_funds_candidate("
     )
     assert "paper.create_order(" in block

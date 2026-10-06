@@ -25,6 +25,7 @@ from .contracts import (
     EntryDecision,
     EntryDecisionCode,
     EntryEvaluation,
+    EntryExecutionIntent,
     EntryPlan,
     ExecutionRequest,
     FrozenPolicy,
@@ -32,7 +33,6 @@ from .contracts import (
     NotificationEvent,
     NotificationKind,
     ObjectiveContext,
-    PaperEntryIntent,
     SensorLink,
     SensorObservation,
     SensorRequirement,
@@ -84,6 +84,7 @@ class UniversalEntryEngine:
         account_ref: str | None = None,
         entry_admission_port: EntryAdmissionPort | None = None,
         real_admission_required_for: frozenset[str] = frozenset(),
+        real_admission_ready_for: frozenset[str] | None = None,
         exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
         admission_time: datetime | None = None,
@@ -241,7 +242,7 @@ class UniversalEntryEngine:
                     ),
                     None,
                 )
-                paper_intent = self._paper_intent(
+                execution_intent = self._execution_intent(
                     plan,
                     signal,
                     attempt,
@@ -249,6 +250,13 @@ class UniversalEntryEngine:
                 )
                 real_admission = (
                     plan.strategy_activation_id in real_admission_required_for
+                )
+                real_ready = (
+                    real_admission
+                    and (
+                        real_admission_ready_for is None
+                        or plan.strategy_activation_id in real_admission_ready_for
+                    )
                 )
                 decision: EntryDecision | None
                 request: ExecutionRequest | None
@@ -259,20 +267,29 @@ class UniversalEntryEngine:
                         if exchange_position_keys is None
                         else exchange_position_keys.get(signal.symbol)
                     )
+                    effective_readiness = technical_readiness
+                    effective_admission_port = entry_admission_port
+                    if not real_ready:
+                        effective_readiness = TechnicalReadiness(
+                            False,
+                            admission_time or fact_for_predicate.observed_at,
+                            "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                        )
+                        effective_admission_port = None
                     decision = self._decision(
                         plan,
                         signal,
                         attempt,
                         admission_time or fact_for_predicate.observed_at,
                         capacity=capacity,
-                        technical_readiness=technical_readiness,
+                        technical_readiness=effective_readiness,
                         account_ref=account_ref,
-                        entry_admission_port=entry_admission_port,
+                        entry_admission_port=effective_admission_port,
                         exchange_position_key=exchange_position_key,
                         policy_attempt_block=policy_attempt_block,
                     )
                     request = self._execution_request(
-                        paper_intent,
+                        execution_intent,
                         decision,
                     )
                     notifications = self._notifications(
@@ -290,7 +307,7 @@ class UniversalEntryEngine:
                         attempt,
                         decision,
                         request,
-                        paper_intent,
+                        execution_intent,
                         sensor_links,
                         context_links,
                         notifications,
@@ -1055,13 +1072,13 @@ class UniversalEntryEngine:
             position_mode_state_ref,
         )
 
-    def _paper_intent(
+    def _execution_intent(
         self,
         plan: EntryPlan,
         signal: StrategySignal,
         attempt: StrategyAttempt,
         signal_fact: MarketFactEnvelope,
-    ) -> PaperEntryIntent:
+    ) -> EntryExecutionIntent:
         payload = FrozenPolicy.from_mapping(
             {
                 "capital_policy": plan.capital_policy.to_dict(),
@@ -1086,7 +1103,7 @@ class UniversalEntryEngine:
             }
         )
         exit_plan = self._registry.exact_plan_pair(plan.strategy_activation_id)[1]
-        return PaperEntryIntent(
+        return EntryExecutionIntent(
             strategy_attempt_id=attempt.strategy_attempt_id,
             signal_id=signal.signal_id,
             strategy_id=signal.strategy_id,
@@ -1102,7 +1119,7 @@ class UniversalEntryEngine:
 
     def _execution_request(
         self,
-        intent: PaperEntryIntent,
+        intent: EntryExecutionIntent,
         decision: EntryDecision,
     ) -> ExecutionRequest | None:
         if decision.code is not EntryDecisionCode.ACCEPTED:

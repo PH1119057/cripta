@@ -270,6 +270,66 @@ def test_shadow_strategy_creates_signal_attempt_and_paper_intent_without_real_de
     assert item.paper_intent.entry_plan_fingerprint == item.signal.entry_plan_fingerprint
 
 
+def test_paper_and_real_share_exact_mode_neutral_execution_intent() -> None:
+    card = make_card(
+        "entry-parity",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
+    _, paper_engine = setup_engine(card)
+    paper_item = evaluate(paper_engine, fact(1))[0]
+
+    _, real_engine = setup_engine(card)
+    capacity = TradingCapacitySnapshot(
+        "cap-entry-parity",
+        NOW,
+        Decimal("10"),
+        DataQuality.HIGH,
+        "exchange:test",
+    )
+    real_item = real_evaluate(
+        real_engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=AcceptingAdmissionPort(),
+    )[0]
+
+    assert paper_item.execution_intent == real_item.execution_intent
+    assert paper_item.paper_intent is paper_item.execution_intent
+    assert real_item.execution_request is not None
+    assert real_item.execution_request.payload == real_item.execution_intent.payload
+
+
+def test_real_selected_but_not_arm_ready_blocks_without_admission_or_paper_semantics() -> None:
+    card = make_card(
+        "real-selected-blocked",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
+    _, engine = setup_engine(card)
+    capacity = TradingCapacitySnapshot(
+        "cap-real-selected-blocked",
+        NOW,
+        Decimal("10"),
+        DataQuality.HIGH,
+        "exchange:test",
+    )
+    port = AcceptingAdmissionPort()
+    item = real_evaluate(
+        engine,
+        fact(1),
+        capacity=capacity,
+        admission_port=port,
+        real_admission_ready_for=frozenset(),
+    )[0]
+
+    assert item.decision is not None
+    assert item.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+    assert item.decision.reason == "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
+    assert item.execution_request is None
+    assert port.captured == []
+
+
 def test_five_simultaneous_strategies_are_independent() -> None:
     cards = tuple(make_card(f"s{index}") for index in range(5))
     _, engine = setup_engine(*cards)

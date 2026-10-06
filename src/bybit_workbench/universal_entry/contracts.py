@@ -575,7 +575,7 @@ class EntryDecision:
 
 
 @dataclass(frozen=True, slots=True)
-class PaperEntryIntent:
+class EntryExecutionIntent:
     strategy_attempt_id: str
     signal_id: str
     strategy_id: str
@@ -587,6 +587,11 @@ class PaperEntryIntent:
     direction: TradeDirection
     observed_at: datetime
     payload: FrozenPolicy
+
+
+# Compatibility alias for callers written before PAPER/REAL intent ownership
+# was made mode-neutral. New code must use EntryExecutionIntent.
+PaperEntryIntent = EntryExecutionIntent
 
 
 @dataclass(frozen=True, slots=True)
@@ -636,7 +641,12 @@ class EntryEvaluation:
     attempt: StrategyAttempt
     decision: EntryDecision | None
     execution_request: ExecutionRequest | None
-    paper_intent: PaperEntryIntent
+    execution_intent: EntryExecutionIntent
     sensor_links: tuple[SensorLink, ...]
     context_links: tuple[ContextLink, ...]
     notifications: tuple[NotificationEvent, ...]
+
+    @property
+    def paper_intent(self) -> EntryExecutionIntent:
+        """Compatibility view; execution intent is no longer PAPER-owned."""
+        return self.execution_intent

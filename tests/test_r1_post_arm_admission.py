@@ -44,7 +44,7 @@ def test_real_entry_readiness_uses_admission_time_not_market_fact_time() -> None
     ).read_text(encoding="utf-8")
     start = observer.index("def _run_observer_epoch(")
     body = observer[start:]
-    assert "admission_time = datetime.now(UTC) if real_admission_required_for else fact.observed_at" in body
+    assert "datetime.now(UTC) if real_execution_selected_for else fact.observed_at" in body
     assert "observed_at=admission_time" in body
     assert "admission_time=admission_time" in body
 

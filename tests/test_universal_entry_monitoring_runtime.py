@@ -462,3 +462,35 @@ def test_observer_status_publishes_strategy_specific_monitor_rows() -> None:
         '"entry_embargo_until"',
     ):
         assert token in source
+
+
+def test_real_execution_selection_is_independent_from_mainnet_gate() -> None:
+    from types import SimpleNamespace
+
+    from operations.monitoring import universal_entry_shadow as observer
+
+    class PermissionConnection:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, statement: str):
+            self.statements.append(statement)
+            assert "control.execution_gates" not in statement
+            return Cursor(rows=[("r1_aptusdt", "1.0-micro-live", "fp-r1")])
+
+    bundle = SimpleNamespace(
+        activation=SimpleNamespace(activation_id="activation-r1"),
+        card=SimpleNamespace(
+            strategy_id="r1_aptusdt",
+            strategy_version="1.0-micro-live",
+            strategy_config_fingerprint="fp-r1",
+        ),
+    )
+    connection = PermissionConnection()
+
+    selected = observer._real_execution_selected_activation_ids(
+        connection, (bundle,)
+    )
+
+    assert selected == frozenset({"activation-r1"})
+    assert connection.statements
