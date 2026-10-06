@@ -46,11 +46,11 @@ from bybit_workbench.universal_entry import (
     MarketFactEnvelope,
     ObjectiveContext,
     TechnicalReadiness,
+    TradeDirection,
     TradingCapacitySnapshot,
     UniversalEntryEngine,
 )
 from bybit_workbench.universal_entry.fingerprint import fingerprint
-from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.oi30s_source import (
@@ -65,6 +65,7 @@ from bybit_workbench.universal_entry.oi30s_source import (
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
+from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
 from bybit_workbench.universal_entry.runtime_loader import load_active_strategy_bundles
 from bybit_workbench.universal_entry.shadow_runtime import (
     DurableFactJournal,
@@ -1189,7 +1190,6 @@ def _real_execution_activation_ids(
             WHERE enabled=true AND enabled_at IS NOT NULL"""
     ).fetchall()
     allowed = {tuple(str(value) for value in row) for row in rows}
-    current = datetime.now(UTC)
     ready: set[str] = set()
     for raw_bundle in bundles:
         bundle = cast(Any, raw_bundle)
@@ -1359,7 +1359,11 @@ def _maybe_record_reverse_transition(
     bundle: object,
 ) -> str | None:
     decision = getattr(evaluation, "decision", None)
-    if decision is None or decision.code is not EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT:
+    if (
+        decision is None
+        or decision.code
+        is not EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+    ):
         return None
     lifecycle = bundle.card.lifecycle_policy.to_dict()
     signal = evaluation.signal

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from bybit_workbench.universal_entry.contracts import (
+    EntryDecisionCode,
     EntryExecutionIntent,
     FrozenPolicy,
     TradeDirection,
@@ -12,6 +15,7 @@ from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
 from bybit_workbench.universal_entry.reverse_intent import (
     build_reverse_transition_intent,
 )
+from operations.monitoring import universal_entry_shadow as observer
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 10, 6, 14, 0, tzinfo=UTC)
@@ -97,3 +101,65 @@ def test_paper_and_real_reverse_adapters_use_common_reverse_intent() -> None:
     assert "reverse_intent.transition_payload().to_dict()" in observer
     assert 'request_payload["execution_override"] = "OPPOSITE_FLIP_TAKER"' not in worker
     assert "common intent execution_override mismatch" in worker
+
+
+class _Cursor:
+    def __init__(self, row=None):
+        self._row = row
+
+    def fetchone(self):
+        return self._row
+
+
+class _ReverseConnection:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, statement, parameters=()):
+        params = tuple(parameters)
+        self.calls.append((statement, params))
+        if "FROM runtime.position_ownership" in statement:
+            return _Cursor(("position-1", "Buy", "exit-plan-parity"))
+        return _Cursor()
+
+
+def test_real_observer_reverse_adapter_executes_common_intent_without_name_error() -> None:
+    card = build_r1_cards()[0]
+    signal = SimpleNamespace(
+        direction=TradeDirection.SHORT,
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        entry_plan_fingerprint="entry-plan-parity",
+        strategy_activation_id="activation-r1",
+        signal_id="signal-parity",
+        symbol=card.symbols[0],
+        detected_at=NOW,
+    )
+    evaluation = SimpleNamespace(
+        decision=SimpleNamespace(
+            code=EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+        ),
+        signal=signal,
+        attempt=SimpleNamespace(strategy_attempt_id="attempt-parity"),
+        execution_intent=_intent(TradeDirection.SHORT),
+    )
+    bundle = SimpleNamespace(card=card)
+    connection = _ReverseConnection()
+
+    transition_id = observer._maybe_record_reverse_transition(
+        connection,
+        evaluation,
+        bundle,
+    )
+
+    assert transition_id is not None
+    insert = next(
+        params
+        for statement, params in connection.calls
+        if "INSERT INTO strategy_entry.reverse_transitions" in statement
+    )
+    assert insert[11] == "LONG"
+    assert insert[12] == "SHORT"
+    payload = json.loads(str(insert[14]))
+    assert payload["execution_override"] == "OPPOSITE_FLIP_TAKER"
