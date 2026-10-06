@@ -140,10 +140,11 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         "pg_dump -Fc",
         "flock -n 9",
         "/srv/cripta/dashboard/universal_entry_source",
-        "< \"$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql\"",
-        "< \"$RUNTIME_ROOT/current/operations/sql/20261006_account_state_generation_v1.sql\"",
-        "< \"$RUNTIME_ROOT/current/operations/sql/20261003_market_observation_alert_v1.sql\"",
-        "< \"$RUNTIME_ROOT/current/operations/sql/20261004_r1_reverse_transitions.sql\"",
+        "operations/sql/20260920_slot_admission_v1.sql",
+        "operations/sql/20261006_account_state_generation_v1.sql",
+        "operations/sql/20261003_market_observation_alert_v1.sql",
+        "operations/sql/20261004_r1_reverse_transitions.sql",
+        '"$runtime_release/$migration"',
         "CRIPTA_RELEASE_COMMIT",
         "INSTALLED_COMMIT",
         "GATE=DISARMED",
@@ -155,9 +156,14 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
     assert "import sqlalchemy" in source
     assert "import bybit_workbench.dispatcher_v2" in source
     assert "systemctl start cripta-universal-entry-consumer.service" not in source
-    assert '"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" migrate' in source
-    assert '"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" validate' in source
-    assert source.index('"$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" migrate') < source.index("systemctl daemon-reload")
+    assert '"$runtime_release/operations/connectivity/runtime_schema.py" migrate' in source
+    assert '"$runtime_release/operations/connectivity/runtime_schema.py" validate' in source
+    migrate = source.index(
+        '"$runtime_release/operations/connectivity/runtime_schema.py" migrate'
+    )
+    cutover = source.index("cutover_started=1")
+    daemon_reload = source.index("systemctl daemon-reload", cutover)
+    assert migrate < daemon_reload
     assert (
         "-f /srv/cripta/runtime/current/operations/sql/"
         "20260920_slot_admission_v1.sql"
@@ -252,11 +258,13 @@ def test_verified_installer_validates_release_units_before_mutation() -> None:
         "research/server/cripta-download-expansion.service"
     ) in source
     preflight = source.index("UNIT_SOURCE_PREFLIGHT=PASS")
+    active_snapshot = source.index("declare -A was_active=()")
+    stop_marker = source.index("services_stopped=1")
     backup = source.index("pg_dump -Fc -d cripta")
-    stop_loop = source.index('for service in "${managed_services[@]}"; do')
+    migrate = source.index('for migration in "${migration_files[@]}"; do')
     switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
-    assert preflight < backup < stop_loop < switch
-    assert "unit source missing before mutation" in source[:backup]
+    assert preflight < active_snapshot < stop_marker < backup < migrate < switch
+    assert "unit source missing before mutation" in source[:active_snapshot]
 
 
 def test_verified_installer_checks_actual_runtime_and_tooling_baseline() -> None:
@@ -269,3 +277,61 @@ def test_verified_installer_checks_actual_runtime_and_tooling_baseline() -> None
     assert tooling_guard < backup < switch
     assert 'current_runtime="$(readlink -f "$RUNTIME_ROOT/current"' in source
     assert 'current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current"' in source
+
+def test_verified_installer_recovers_only_pristine_pre_cutover_failures() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+
+    assert "trap release_exit_handler EXIT" in source
+    assert "PRE_CUTOVER_SERVICE_RECOVERY=PASS" in source
+    assert "DEPLOY_RECOVERY=PRE_CUTOVER_BASELINE_RESTORED" in source
+    assert "DEPLOY_RECOVERY=MANUAL_REQUIRED_DB_OR_CUTOVER_MUTATION" in source
+    assert 'if [[ "$cutover_started" == "0" && "$db_mutation_steps" == "0" ]]' in source
+    assert "HARD_STOP=YES" in source
+
+    stop = source.index("services_stopped=1")
+    dump = source.index("pg_dump -Fc -d cripta")
+    first_migration = source.index('for migration in "${migration_files[@]}"; do')
+    cutover = source.index("cutover_started=1")
+    runtime_switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    state_commit = source.index(
+        'printf \'%s\\n\' "$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"'
+    )
+
+    assert stop < dump < first_migration < cutover < runtime_switch < state_commit
+    assert '"$runtime_release/$migration"' in source[first_migration:cutover]
+    assert "db_mutation_steps=$((db_mutation_steps + 1))" in source
+    assert "deploy_succeeded=1" in source
+    assert "trap - EXIT" in source
+
+
+def test_verified_installer_keeps_candidate_paths_until_db_validation_passes() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+
+    migrate = source.index(
+        '"$runtime_release/operations/connectivity/runtime_schema.py" migrate'
+    )
+    validate = source.index(
+        '"$runtime_release/operations/connectivity/runtime_schema.py" validate'
+    )
+    cutover = source.index("cutover_started=1")
+    runtime_switch = source.index('mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"')
+    unit_install = source.index(
+        'install -o root -g root -m 0644 "$source_unit" "/etc/systemd/system/$unit"'
+    )
+
+    assert migrate < validate < cutover < runtime_switch < unit_install
+
+
+def test_first_pre_cutover_migration_is_transactional_for_safe_recovery() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    first = (
+        ROOT / "operations" / "sql" / "20260920_slot_admission_v1.sql"
+    ).read_text(encoding="utf-8")
+
+    migration_list = source[
+        source.index("migration_files=("):
+        source.index('for migration in "${migration_files[@]}"; do')
+    ]
+    assert "operations/sql/20260920_slot_admission_v1.sql" in migration_list
+    assert first.lstrip().startswith("BEGIN;")
+    assert first.rstrip().endswith("COMMIT;")

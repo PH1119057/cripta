@@ -236,7 +236,6 @@ if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
     echo "reason=$CONTROL_REASON"
   } > "$backup/CONTROL_CHECKPOINT"
 fi
-runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
@@ -302,15 +301,112 @@ managed_services=(
 )
 
 declare -A was_active=()
+services_stopped=0
+db_mutation_steps=0
+cutover_started=0
+deploy_succeeded=0
+
+restore_pre_cutover_services() {
+  local recovery_failed=0
+  systemctl daemon-reload || recovery_failed=1
+  for service in "${managed_services[@]}"; do
+    if [[ "${was_active[$service]:-0}" == "1" ]]; then
+      systemctl start "$service" || recovery_failed=1
+    elif systemctl is-active --quiet "$service"; then
+      systemctl stop "$service" || recovery_failed=1
+    fi
+  done
+  for service in "${managed_services[@]}"; do
+    if [[ "${was_active[$service]:-0}" == "1" ]]; then
+      systemctl is-active --quiet "$service" || recovery_failed=1
+    else
+      systemctl is-active --quiet "$service" && recovery_failed=1
+    fi
+  done
+  if [[ "$recovery_failed" == "0" ]]; then
+    echo "PRE_CUTOVER_SERVICE_RECOVERY=PASS"
+  else
+    echo "PRE_CUTOVER_SERVICE_RECOVERY=FAIL" >&2
+  fi
+  return "$recovery_failed"
+}
+
+release_exit_handler() {
+  local rc=$?
+  if [[ "$deploy_succeeded" == "1" || "$services_stopped" == "0" ]]; then
+    return
+  fi
+  echo "DEPLOY_FAILED=YES" >&2
+  echo "FAILED_RELEASE_COMMIT=$RELEASE_COMMIT" >&2
+  echo "DB_MUTATION_STEPS_COMMITTED=$db_mutation_steps" >&2
+  echo "CUTOVER_STARTED=$cutover_started" >&2
+  if [[ "$cutover_started" == "0" && "$db_mutation_steps" == "0" ]]; then
+    if restore_pre_cutover_services; then
+      echo "DEPLOY_RECOVERY=PRE_CUTOVER_BASELINE_RESTORED" >&2
+    else
+      echo "HARD_STOP=YES" >&2
+      echo "DEPLOY_RECOVERY=PRE_CUTOVER_SERVICE_RESTORE_FAILED" >&2
+    fi
+  else
+    echo "HARD_STOP=YES" >&2
+    echo "DEPLOY_RECOVERY=MANUAL_REQUIRED_DB_OR_CUTOVER_MUTATION" >&2
+  fi
+  return "$rc"
+}
+
 for service in "${managed_services[@]}"; do
   if systemctl is-active --quiet "$service"; then
     was_active["$service"]=1
-    systemctl stop "$service"
   else
     was_active["$service"]=0
   fi
 done
 
+trap release_exit_handler EXIT
+services_stopped=1
+for service in "${managed_services[@]}"; do
+  if [[ "${was_active[$service]}" == "1" ]]; then
+    systemctl stop "$service"
+  fi
+done
+
+# The rollback dump must describe the quiesced pre-migration baseline.
+runuser -u postgres -- pg_dump -Fc -d cripta > "$backup/cripta_before.dump"
+
+migration_files=(
+  operations/sql/20260920_slot_admission_v1.sql
+  operations/sql/20261006_account_state_generation_v1.sql
+  operations/sql/20261006_observer_runtime_fault_v1.sql
+  operations/sql/20261003_market_observation_alert_v1.sql
+  operations/sql/20261004_r1_reverse_transitions.sql
+  operations/sql/20261004_r1_live_arm_waiver.sql
+)
+for migration in "${migration_files[@]}"; do
+  runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
+  db_mutation_steps=$((db_mutation_steps + 1))
+done
+
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/connectivity/runtime_schema.py" migrate
+db_mutation_steps=$((db_mutation_steps + 1))
+runuser -u cripta -- env \
+  PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
+  "$runtime_release/.venv/bin/python" \
+  "$runtime_release/operations/connectivity/runtime_schema.py" validate
+runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'
+UPDATE control.live_arm_sessions
+   SET state='CLOSED',
+       deactivated_at=clock_timestamp(),
+       updated_at=clock_timestamp()
+ WHERE state='ACTIVE';
+SQL
+db_mutation_steps=$((db_mutation_steps + 1))
+
+# Filesystem/unit cutover starts only after every DB migration and schema
+# validation succeeded against the candidate release.
+cutover_started=1
 mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"
 mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"
 
@@ -340,28 +436,6 @@ for unit in "${retired_units[@]}"; do
   rm -f "/etc/systemd/system/$unit"
 done
 
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20260920_slot_admission_v1.sql"
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261006_account_state_generation_v1.sql"
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261006_observer_runtime_fault_v1.sql"
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261003_market_observation_alert_v1.sql"
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261004_r1_reverse_transitions.sql"
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$RUNTIME_ROOT/current/operations/sql/20261004_r1_live_arm_waiver.sql"
-runuser -u cripta -- env \
-  PYTHONPATH="$RUNTIME_ROOT/current/src:$RUNTIME_ROOT/current/operations/connectivity:$RUNTIME_ROOT/current/research/server/connectivity:$RUNTIME_ROOT/current/.venv/lib/python3.12/site-packages" \
-  "$RUNTIME_ROOT/current/.venv/bin/python" \
-  "$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" migrate
-runuser -u cripta -- env \
-  PYTHONPATH="$RUNTIME_ROOT/current/src:$RUNTIME_ROOT/current/operations/connectivity:$RUNTIME_ROOT/current/research/server/connectivity:$RUNTIME_ROOT/current/.venv/lib/python3.12/site-packages" \
-  "$RUNTIME_ROOT/current/.venv/bin/python" \
-  "$RUNTIME_ROOT/current/operations/connectivity/runtime_schema.py" validate
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'
-UPDATE control.live_arm_sessions
-   SET state='CLOSED',
-       deactivated_at=clock_timestamp(),
-       updated_at=clock_timestamp()
- WHERE state='ACTIVE';
-SQL
-
 systemctl daemon-reload
 for service in "${managed_services[@]}"; do
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
@@ -387,6 +461,9 @@ chown root:cripta "$STATE_ROOT/LAST_BACKUP"
 chmod 0640 "$STATE_ROOT/LAST_BACKUP"
 
 prune_release_backups
+
+deploy_succeeded=1
+trap - EXIT
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
 echo "INSTALLED_COMMIT=$RELEASE_COMMIT"
