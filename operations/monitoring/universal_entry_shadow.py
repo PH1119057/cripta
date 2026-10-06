@@ -1560,6 +1560,7 @@ def _run_observer_epoch(
             tuple(oi_history),
             observed_at=observed,
         )
+        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
