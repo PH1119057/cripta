@@ -53,6 +53,11 @@ Owner-controlled real execution smoke-test is an explicit operator diagnostic,
 not Strategy behavior. Exact contract: `TRADING_CONTOUR §4.8`, architecture
 boundary: `ARCH §7.1`.
 
+PAPER/REAL is one Strategy/Entry/Exit lifecycle with mutually exclusive
+execution environments, not two trading implementations. Current contract:
+`ARCH §7.2`, `TRADING_CONTOUR §4.9`, `GLOSSARY §11`; real arm additionally
+requires `PAPER_REAL_DECISION_PARITY=PASS`.
+
 Dashboard presentation/read-model имеет отдельный verified release identity
 `DASHBOARD_UI_COMMIT` и не требует остановки trading runtime. Static assets и
 строго read-only projections/aggregations могут обновляться независимо; backend
