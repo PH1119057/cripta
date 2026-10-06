@@ -118,8 +118,9 @@ def test_explicit_resolve_only_closes_open_observer_fault_and_records_operator()
     assert "state='RESOLVED'" in statement
     assert "fault_code=%s" in statement
     assert "state='OPEN'" in statement
-    assert "last_resolution_reason" in statement
-    assert "last_resolved_by" in statement
+    assert "'last_resolution_reason',%s::text" in statement
+    assert "'last_resolved_by',%s::text" in statement
+    assert "'last_resolved_at',%s::text" in statement
     assert params[1] == "проверено владельцем"
     assert params[2] == "alex"
     assert params[-2] == "observer-fault-1"
