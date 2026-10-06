@@ -296,7 +296,7 @@ class PaperTradeRuntime:
         *,
         now: datetime,
     ) -> str | None:
-        intent = evaluation.paper_intent
+        intent = evaluation.execution_intent
         card = bundle.card
         activation = bundle.activation
         exit_plan = bundle.exit_plan

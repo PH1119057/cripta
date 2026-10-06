@@ -1146,6 +1146,33 @@ def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
     )
 
 
+def _real_execution_selected_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+) -> frozenset[str]:
+    """Return Strategy activations explicitly selected for REAL execution.
+
+    Selection is intentionally independent from mainnet/LIVE-arm readiness so
+    a blocked REAL path cannot silently fall back to PAPER.
+    """
+    rows = connection.execute(
+        """SELECT strategy_id,strategy_version,strategy_config_fingerprint
+             FROM strategy_entry.execution_permissions
+            WHERE enabled=true AND enabled_at IS NOT NULL"""
+    ).fetchall()
+    allowed = {tuple(str(value) for value in row) for row in rows}
+    return frozenset(
+        cast(Any, raw_bundle).activation.activation_id
+        for raw_bundle in bundles
+        if (
+            cast(Any, raw_bundle).card.strategy_id,
+            cast(Any, raw_bundle).card.strategy_version,
+            cast(Any, raw_bundle).card.strategy_config_fingerprint,
+        )
+        in allowed
+    )
+
+
 def _real_execution_activation_ids(
     connection: Any,
     bundles: tuple[object, ...],
@@ -1366,7 +1393,7 @@ def _maybe_record_reverse_transition(
             "to_direction": target,
         }
     )[:32]
-    paper_payload = evaluation.paper_intent.payload.to_dict()
+    paper_payload = evaluation.execution_intent.payload.to_dict()
     transition_payload = {
         "source": "universal_entry",
         "reason": "OPPOSITE_ENTRY_FORCED_FLIP",
@@ -1502,10 +1529,13 @@ def _run_observer_epoch(
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
     paper = PaperTradeRuntime(connection)
-    real_admission_required_for = _real_execution_activation_ids(connection, bundles)
+    real_execution_selected_for = _real_execution_selected_activation_ids(
+        connection, bundles
+    )
+    real_admission_ready_for = _real_execution_activation_ids(connection, bundles)
     entry_admission_port = (
         PostgresEntryAdmissionPort(connection)
-        if real_admission_required_for
+        if real_execution_selected_for
         else None
     )
     bundle_by_entry_plan = {
@@ -1866,17 +1896,26 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
-        admission_time = datetime.now(UTC) if real_admission_required_for else fact.observed_at
+        admission_time = (
+            datetime.now(UTC) if real_execution_selected_for else fact.observed_at
+        )
         evaluation_transaction = (
-            connection.transaction() if real_admission_required_for else nullcontext()
+            connection.transaction() if real_execution_selected_for else nullcontext()
         )
         with evaluation_transaction:
-            if real_admission_required_for:
+            if real_admission_ready_for:
                 readiness, admission_capacity = _real_entry_account_state(
                     connection,
                     symbol=fact.symbol,
                     observed_at=admission_time,
                 )
+            elif real_execution_selected_for:
+                readiness = TechnicalReadiness(
+                    False,
+                    admission_time,
+                    "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                )
+                admission_capacity = None
             else:
                 readiness = TechnicalReadiness(
                     True,
@@ -1891,7 +1930,8 @@ def _run_observer_epoch(
                 technical_readiness=readiness,
                 account_ref="BYBIT:UNIFIED",
                 entry_admission_port=entry_admission_port,
-                real_admission_required_for=real_admission_required_for,
+                real_admission_required_for=real_execution_selected_for,
+                real_admission_ready_for=real_admission_ready_for,
                 exchange_position_keys={
                     symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
                     for symbol in symbols
@@ -1916,7 +1956,7 @@ def _run_observer_epoch(
                 )
                 if (
                     evaluation.signal.strategy_activation_id
-                    in real_admission_required_for
+                    in real_execution_selected_for
                 ):
                     candidate = build_insufficient_funds_candidate(
                         evaluation,
@@ -1926,7 +1966,11 @@ def _run_observer_epoch(
                     )
                     if candidate is not None:
                         counterfactual_store.record_candidate(candidate)
-                paper.create_order(evaluation, bundle, now=fact.observed_at)
+                if (
+                    evaluation.signal.strategy_activation_id
+                    not in real_execution_selected_for
+                ):
+                    paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1
 
