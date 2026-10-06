@@ -4,12 +4,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC
 from enum import StrEnum
+from typing import Protocol
 
-from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
     ExitPlan,
     FrozenPolicy,
     MarketFactEnvelope,
+    TradeDirection,
 )
 from bybit_workbench.universal_entry.dsl import (
     PredicateNode,
@@ -42,6 +43,18 @@ class ExitTieBreak(StrEnum):
     FAIL_CLOSED = "FAIL_CLOSED"
 
 
+class ExitPositionContext(Protocol):
+    """Mode-neutral exact Strategy position lineage required by Exit decisions."""
+
+    strategy_position_id: str
+    strategy_id: str
+    strategy_version: str
+    strategy_config_fingerprint: str
+    exit_plan_fingerprint: str
+    symbol: str
+    direction: TradeDirection
+
+
 @dataclass(frozen=True, slots=True)
 class ExitRule:
     rule_id: str
@@ -58,7 +71,7 @@ class ExitPlanContractError(ValueError):
 
 
 def _evaluation_id(
-    position: StrategyPosition,
+    position: ExitPositionContext,
     plan: ExitPlan,
     observation: ExitObservation,
 ) -> str:
@@ -75,7 +88,7 @@ def _evaluation_id(
 
 
 def _blocked(
-    position: StrategyPosition,
+    position: ExitPositionContext,
     plan: ExitPlan,
     observation: ExitObservation,
     reason: str,
@@ -223,7 +236,7 @@ class UniversalExitEngine:
 
     def evaluate(
         self,
-        position: StrategyPosition,
+        position: ExitPositionContext,
         plan: ExitPlan,
         observation: ExitObservation,
         *,
