@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.8
+**Версия:** 3.9
 **Дата:** 2026-10-06
 **Статус:** канонический индекс документации
 
@@ -640,3 +640,26 @@ ARCH владеет atomic admission/generation invariant, TRADING_CONTOUR — �
 торговым применением, GLOSSARY — термином AccountStateGeneration. Эта ревизия
 не меняет active document topology, mandatory pre-read или Project Source set,
 поэтому README / AGENTS / Project Instructions topology update не требуется.
+# 23. PAPER / REAL execution-mode parity revision — OWNER DECISION 2026-10-06
+
+Owner-approved architecture revision establishes:
+- one active Strategy/Entry/Exit trading semantics for PAPER and REAL;
+- `StrategyActivation` is independent from real execution permission;
+- exactly one execution environment per `strategy_attempt`: PAPER XOR REAL;
+- no silent PAPER fallback after blocked REAL admission;
+- mode-neutral `EntryExecutionIntent` before adapter selection;
+- one exact ExitPlan / Universal Exit decision semantics for both environments;
+- mandatory `PAPER_REAL_DECISION_PARITY=PASS` before real arm.
+
+Synchronized current documents:
+- ARCH — execution-mode ownership and XOR invariant;
+- TRADING_CONTOUR — execution-mode flow and LIVE-arm parity gate;
+- GLOSSARY — canonical execution-mode/intent/parity terms;
+- MAP — current implementation gap, capability matrix and staged status;
+- README / AGENTS / Project Instructions template — bootstrap pointer kept in
+  sync per documentation maintenance rule.
+
+No current document is added/removed, no path/routing/base-pre-read changes,
+Project Source remains 11 files. This revision changes architecture canon only;
+implementation/deploy/runtime verification are separate later stages.
+
