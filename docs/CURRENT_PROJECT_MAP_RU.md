@@ -1685,4 +1685,3 @@ Implementation sequence is deliberately split:
 `4A CANON -> 4B ENTRY execution-mode/XOR -> 4C EXIT parity -> TEST -> GITHUB ->`
 `DEPLOY -> RUNTIME EVIDENCE`. REAL services stay stopped until the full repair
 sequence is complete.
-
