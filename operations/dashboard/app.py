@@ -86,6 +86,7 @@ SESSION_COOKIE = "cripta_session"
 PAPER_MAKER_FEE_RATE = 0.00020
 PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
+OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
 
 
 def _paper_entry_fee_rate(order_type: object) -> float:
@@ -2271,6 +2272,151 @@ def export_trading_table(table: str, period: str) -> dict[str, object]:
     }
 
 
+
+def observer_runtime_fault_state() -> dict[str, object]:
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            rows = connection.execute(
+                """SELECT fault_id,severity,detected_at,exact_ids,payload
+                     FROM runtime.lifecycle_faults
+                    WHERE fault_code=%s AND state='OPEN'
+                    ORDER BY detected_at DESC""",
+                (OBSERVER_RUNTIME_FAULT_CODE,),
+            ).fetchall()
+
+        items: list[dict[str, object]] = []
+        for fault_id, severity, detected_at, exact_ids, payload in rows:
+            exact = dict(exact_ids or {})
+            details = dict(payload or {})
+            detected = detected_at.astimezone(UTC).isoformat()
+            items.append(
+                {
+                    "fault_id": str(fault_id),
+                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                    "severity": str(severity),
+                    "detected_at": detected,
+                    "first_seen_at": str(details.get("first_seen_at") or detected),
+                    "last_seen_at": str(details.get("last_seen_at") or detected),
+                    "occurrence_count": int(details.get("occurrence_count") or 1),
+                    "error_type": str(details.get("error_type") or ""),
+                    "error_message": str(details.get("error_message") or ""),
+                    "service": str(
+                        details.get("service")
+                        or exact.get("service")
+                        or "cripta-universal-entry-observer.service"
+                    ),
+                    "source_commit": str(
+                        details.get("source_commit")
+                        or exact.get("source_commit")
+                        or ""
+                    ),
+                    "last_observer_epoch_id": details.get("last_observer_epoch_id"),
+                    "owner_resolution_required": bool(
+                        details.get("owner_resolution_required", True)
+                    ),
+                    "last_resolution_reason": details.get("last_resolution_reason"),
+                    "last_resolved_by": details.get("last_resolved_by"),
+                    "last_resolved_at": details.get("last_resolved_at"),
+                }
+            )
+    except (psycopg.Error, TypeError, ValueError) as exc:
+        return {
+            "state": "unavailable",
+            "count": 0,
+            "items": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    return {
+        "state": "red" if items else "clear",
+        "count": len(items),
+        "items": items,
+        "error": None,
+    }
+
+
+def merge_observer_fault_health(
+    health: dict[str, object],
+    observer_faults: dict[str, object],
+) -> dict[str, object]:
+    merged = dict(health)
+    issues = list(merged.get("issues") or [])
+    state = str(observer_faults.get("state") or "unavailable")
+    if state == "unavailable":
+        merged["state"] = "red"
+        issues.append(
+            {
+                "code": "OBSERVER_DURABLE_FAULT_READ_UNAVAILABLE",
+                "message": (
+                    "RED · durable observer fault journal unavailable: "
+                    + str(observer_faults.get("error") or "unknown error")
+                ),
+            }
+        )
+    elif int(observer_faults.get("count") or 0) > 0:
+        merged["state"] = "red"
+        issues.append(
+            {
+                "code": OBSERVER_RUNTIME_FAULT_CODE,
+                "message": (
+                    "RED · unresolved Universal Entry observer runtime faults: "
+                    + str(observer_faults.get("count"))
+                ),
+            }
+        )
+    merged["issues"] = issues
+    return merged
+
+
+def resolve_observer_runtime_fault(
+    connection: psycopg.Connection,
+    *,
+    fault_id: str,
+    reason: str,
+    operator: str,
+    resolved_at: datetime,
+) -> bool:
+    exact_fault_id = fault_id.strip()
+    exact_reason = reason.strip()
+    exact_operator = operator.strip()
+    if not exact_fault_id:
+        raise ValueError("fault_id обязателен")
+    if len(exact_fault_id) > 160:
+        raise ValueError("fault_id слишком длинный")
+    if not exact_reason:
+        raise ValueError("причина resolution обязательна")
+    if len(exact_reason) > 1000:
+        raise ValueError("причина resolution слишком длинная")
+    if not exact_operator:
+        raise ValueError("operator не определён")
+    current = resolved_at.astimezone(UTC)
+    row = connection.execute(
+        """UPDATE runtime.lifecycle_faults
+              SET state='RESOLVED',
+                  resolved_at=%s,
+                  payload=payload || jsonb_build_object(
+                      'last_resolution_reason',%s,
+                      'last_resolved_by',%s,
+                      'last_resolved_at',%s
+                  )
+            WHERE fault_id=%s
+              AND fault_code=%s
+              AND state='OPEN'
+            RETURNING fault_id""",
+        (
+            current,
+            exact_reason,
+            exact_operator,
+            current.isoformat(),
+            exact_fault_id,
+            OBSERVER_RUNTIME_FAULT_CODE,
+        ),
+    ).fetchone()
+    return row is not None
+
+
 def snapshot() -> dict[str, object]:
     global _cache
     now = time.monotonic()
@@ -2328,6 +2474,8 @@ def snapshot() -> dict[str, object]:
         if HEALTH_STATE.exists()
         else {"state": "unknown", "issues": []}
     )
+    observer_faults = observer_runtime_fault_state()
+    health = merge_observer_fault_health(health, observer_faults)
     entry_shadow = (
         json.loads(ENTRY_SHADOW_STATE.read_text(encoding="utf-8"))
         if ENTRY_SHADOW_STATE.exists()
@@ -2472,6 +2620,7 @@ def snapshot() -> dict[str, object]:
         "backup": backup,
         "private_runtime": private_runtime,
         "health": health,
+        "observer_faults": observer_faults,
         "entry_comparison": entry_comparison,
         "entry_shadow": entry_shadow,
         "services": {name: service_state(name) for name in ALLOWED_SERVICES},
@@ -3782,6 +3931,55 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             return
         if path in U6_STRATEGY_POST_PATHS:
             _u6_handle_post(self, path)
+            return
+        if path == "/api/observer-faults/resolve":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                fault_id = str(request.get("fault_id") or "")
+                reason = str(request.get("reason") or "")
+                operator = self.session_user() or "UNKNOWN"
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    resolved = resolve_observer_runtime_fault(
+                        connection,
+                        fault_id=fault_id,
+                        reason=reason,
+                        operator=operator,
+                        resolved_at=datetime.now(UTC),
+                    )
+                if not resolved:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "fault не найден или уже RESOLVED"},
+                            ensure_ascii=False,
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                _cache = None
+                self.send_body(
+                    200,
+                    json.dumps(
+                        {
+                            "fault_id": fault_id,
+                            "state": "RESOLVED",
+                            "resolved_by": operator,
+                        },
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
             return
         if path == "/api/lifecycle/fault-delivery/ack":
             try:

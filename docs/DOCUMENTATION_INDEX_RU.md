@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.10
+**Версия:** 3.11
 **Дата:** 2026-10-06
 **Статус:** канонический индекс документации
 
@@ -673,7 +673,7 @@ OWNER DECISION / implementation scope:
 - следующий успешный observer epoch/restart не имеет права молча resolve fault;
 - failure durable persistence запрещает продолжать normal retry-loop;
 - fault сам по себе не создаёт Entry/Exit/Exchange mutation.
-- Dashboard red rendering и explicit owner/operator resolve реализуются отдельным Stage 6B и этим changeset не объявляются IMPLEMENTED.
+- Stage 6B implementation scope: Dashboard получает global RED unresolved-fault banner на любой вкладке, durable-fault read-model принудительно переводит health в RED, а authenticated operator/owner может выполнить только explicit OPEN -> RESOLVED для UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR с обязательной причиной; торговые mutation права этим не добавляются.
 
 Synchronized current documents:
 - GLOSSARY — exact operational-fault token and semantics;
