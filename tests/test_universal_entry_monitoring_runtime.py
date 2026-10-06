@@ -7,7 +7,10 @@ from pathlib import Path
 import pytest
 
 from bybit_workbench.domain.models import Candle
-from bybit_workbench.universal_entry.market_watch import compute_l53_zone
+from bybit_workbench.universal_entry.market_watch import (
+    compute_l53_zone,
+    compute_r1_l53_stable_zone,
+)
 from bybit_workbench.universal_entry.paper_runtime import (
     PaperTradeRuntime,
     _crossed_limit,
@@ -116,6 +119,69 @@ def test_paper_bootstrap_rejects_incomplete_r1_history() -> None:
     runtime = PaperTradeRuntime(FakeConnection())
     with pytest.raises(RuntimeError, match="history seed incomplete"):
         runtime.bootstrap_l53_history("APTUSDT", _r1_l53_history()[:-1])
+
+
+def test_paper_restart_bootstrap_matches_continuous_r1_state() -> None:
+    history = _r1_l53_history()
+    position_row = (
+        "paper-pos-1",
+        "LONG",
+        {
+            "exit_policy": {
+                "local_zone_exit": {
+                    "enabled": True,
+                    "geometry": "L5-3",
+                }
+            }
+        },
+    )
+
+    continuous_connection = FakeConnection(position_rows=[position_row])
+    continuous = PaperTradeRuntime(continuous_connection)
+    for candle in history:
+        continuous.on_candle_closed(candle)
+
+    restarted_connection = FakeConnection(position_rows=[position_row])
+    restarted = PaperTradeRuntime(restarted_connection)
+    restarted.bootstrap_l53_history("APTUSDT", history)
+
+    continuous_history = tuple(continuous._l53_candles["APTUSDT"])
+    restarted_history = tuple(restarted._l53_candles["APTUSDT"])
+    assert restarted_history == continuous_history
+    assert compute_l53_zone(restarted_history) == compute_l53_zone(continuous_history)
+    assert compute_r1_l53_stable_zone(restarted_history) == compute_r1_l53_stable_zone(
+        continuous_history
+    )
+
+    continuous_events = [
+        params
+        for statement, params in continuous_connection.statements
+        if "INSERT INTO strategy_entry.paper_position_events" in statement
+    ]
+    restart_events = [
+        params
+        for statement, params in restarted_connection.statements
+        if "INSERT INTO strategy_entry.paper_position_events" in statement
+    ]
+    assert continuous_events
+    assert len(restart_events) == 1
+    assert restart_events[0][2] == "DYNAMIC_TP_MOVED"
+    assert restart_events[0][3] == continuous_events[-1][3]
+
+
+def test_production_observer_updates_paper_trade_before_signal_and_order() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    start = source.index("def _run_observer_epoch(")
+    end = source.index("\ndef _run_multi_strategy_observer", start)
+    scope = source[start:end]
+
+    public_trade_index = scope.index("paper.on_public_trade(")
+    evaluation_index = scope.index("evaluations = engine.process(")
+    paper_order_index = scope.index("paper.create_order(")
+
+    assert public_trade_index < evaluation_index < paper_order_index
 
 
 def test_directional_paper_economics_are_symmetric() -> None:
