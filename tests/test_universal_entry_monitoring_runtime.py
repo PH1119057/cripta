@@ -4,6 +4,10 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
+from bybit_workbench.domain.models import Candle
+from bybit_workbench.universal_entry.market_watch import compute_l53_zone
 from bybit_workbench.universal_entry.paper_runtime import (
     PaperTradeRuntime,
     _crossed_limit,
@@ -28,8 +32,9 @@ class Cursor:
 
 
 class FakeConnection:
-    def __init__(self, *, pending_rows=None):
+    def __init__(self, *, pending_rows=None, position_rows=None):
         self.pending_rows = [] if pending_rows is None else pending_rows
+        self.position_rows = [] if position_rows is None else position_rows
         self.statements: list[tuple[str, tuple[object, ...]]] = []
 
     def execute(self, statement: str, parameters=()):
@@ -37,7 +42,80 @@ class FakeConnection:
         self.statements.append((statement, params))
         if "FROM strategy_entry.paper_orders" in statement and "state='PENDING'" in statement:
             return Cursor(rows=self.pending_rows)
+        if "FROM strategy_entry.paper_positions" in statement and "state='OPEN'" in statement:
+            return Cursor(rows=self.position_rows)
         return Cursor()
+
+
+def _r1_l53_history(symbol: str = "APTUSDT") -> tuple[Candle, ...]:
+    rows: list[Candle] = []
+    start = NOW - timedelta(minutes=5 * 205)
+    for index in range(205):
+        opened_at = start + timedelta(minutes=5 * index)
+        low = Decimal("90") if index == 180 else Decimal("99")
+        high = Decimal("110") if index == 181 else Decimal("101")
+        rows.append(
+            Candle(
+                symbol=symbol,
+                timeframe="5",
+                opened_at=opened_at,
+                closed_at=opened_at + timedelta(minutes=5),
+                open=Decimal("100"),
+                high=high,
+                low=low,
+                close=Decimal("100"),
+                volume=Decimal("1"),
+                is_closed=True,
+            )
+        )
+    return tuple(rows)
+
+
+def test_paper_bootstrap_restores_dynamic_l53_target_immediately() -> None:
+    history = _r1_l53_history()
+    zone = compute_l53_zone(history)
+    assert zone is not None
+    connection = FakeConnection(
+        position_rows=[
+            (
+                "paper-pos-1",
+                "LONG",
+                {
+                    "exit_policy": {
+                        "local_zone_exit": {
+                            "enabled": True,
+                            "geometry": "L5-3",
+                        }
+                    }
+                },
+            )
+        ]
+    )
+    runtime = PaperTradeRuntime(connection)
+
+    runtime.bootstrap_l53_history("APTUSDT", history)
+
+    dynamic_update = next(
+        params
+        for statement, params in connection.statements
+        if "SET payload=%s::jsonb" in statement
+    )
+    assert f'"dynamic_take_profit_price":"{zone.resistance_bottom}"' in str(
+        dynamic_update[0]
+    )
+    event = next(
+        params
+        for statement, params in connection.statements
+        if "INSERT INTO strategy_entry.paper_position_events" in statement
+    )
+    assert event[2] == "DYNAMIC_TP_MOVED"
+    assert event[3] == zone.resistance_bottom
+
+
+def test_paper_bootstrap_rejects_incomplete_r1_history() -> None:
+    runtime = PaperTradeRuntime(FakeConnection())
+    with pytest.raises(RuntimeError, match="history seed incomplete"):
+        runtime.bootstrap_l53_history("APTUSDT", _r1_l53_history()[:-1])
 
 
 def test_directional_paper_economics_are_symmetric() -> None:
@@ -209,6 +287,7 @@ def test_multi_strategy_observer_creates_paper_trades_but_has_no_exchange_mutati
     assert "PaperTradeRuntime" in source
     assert "paper.create_order" in source
     assert '"trading_effect": "NONE"' in source
+    assert 'paper.bootstrap_l53_history(symbol, tuple(history["5"]))' in source
     scope = source[source.index("def _run_multi_strategy_observer") :]
     assert "runtime.trade_commands" not in scope
     assert "api_post(" not in scope
