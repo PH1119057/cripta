@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.6
+**Версия:** 2.7
 **Дата:** 2026-10-06
 **Статус:** верхний канонический архитектурный контракт
 
@@ -457,6 +457,61 @@ explicit diagnostic source marker, remain operator-triggered only and be
 excluded from Strategy performance semantics.
 
 Current exact limits are owned by TRADING_CONTOUR §4.8.
+
+## 7.2 PAPER / REAL execution-mode invariant — OWNER DECISION 2026-10-06
+
+`StrategyActivation` включает/выключает саму Strategy и её единый
+`Strategy -> Entry -> Exit` lifecycle. `PAPER` и `REAL` не являются двумя
+Strategy и не имеют права иметь две независимые реализации торговой policy.
+
+Для каждого `strategy_attempt` выбирается ровно одна execution environment:
+
+```text
+StrategyActivation=ON
+-> same StrategyCard / EntryPlan / ExitPlan
+-> same causal market facts/history
+-> same StrategySignal / strategy_attempt
+-> same mode-neutral EntryExecutionIntent
+-> exactly one selected execution environment:
+     PAPER  [real execution permission OFF]
+     XOR
+     REAL   [real execution permission ON + required real gates]
+```
+
+Одновременное создание PAPER-position и REAL mutation для одного и того же
+attempt запрещено. Переключение execution permission не меняет Strategy
+version, Entry formula, Exit formula, geometry, order policy или lifecycle
+policy.
+
+REAL имеет дополнительные operational-safety steps, которые не являются
+второй торговой логикой:
+
+```text
+AccountStateGeneration
+-> physical slot claim
+-> capital reservation
+-> real EntryDecision
+-> EntryExecutionRequest
+-> Exchange mutation / reconciliation
+```
+
+PAPER не имеет права подделывать `EntryDecision=ACCEPTED`, physical slot,
+capital reservation или Exchange acknowledgement. Он исполняет тот же
+mode-neutral intent через simulation adapter и сохраняет явный PAPER lineage.
+Если REAL выбран, но real admission blocked, запрещён silent fallback в PAPER:
+фиксируется real block reason, а псевдосделка для этого attempt не открывается.
+
+Exit policy также едина: PAPER и REAL обязаны исполнять один exact ExitPlan
+через один Universal Exit decision contract. PAPER adapter симулирует
+order/fill/fees, REAL adapter выполняет Exchange mutation/reconciliation.
+Отдельный `PaperTradeRuntime` не имеет права владеть альтернативным trading
+rule, которого нет в EntryPlan/ExitPlan.
+
+Перед real arm обязателен `PAPER_REAL_DECISION_PARITY=PASS`: на одинаковых
+причинных facts должны совпасть Strategy/Plan lineage, direction, Entry
+reference/order policy/validity, lifecycle transition и ExitDecision semantics.
+Разрешённые различия ограничены real-only account/admission/exchange facts,
+exchange/client IDs, фактическим fill/slippage/fees и reconciliation evidence.
 
 # 8. EXCHANGE
 
