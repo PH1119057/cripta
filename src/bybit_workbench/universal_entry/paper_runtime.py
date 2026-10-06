@@ -27,6 +27,7 @@ from .market_watch import (
     compute_r1_l53_stable_zone,
 )
 from .runtime_loader import ActiveStrategyBundle
+from .reverse_intent import build_reverse_transition_intent
 
 
 @dataclass(frozen=True, slots=True)
@@ -723,9 +724,19 @@ class PaperTradeRuntime:
             (intent.strategy_id, intent.strategy_version, intent.symbol),
         ).fetchone()
         forced_flip = False
+        reverse_intent = None
         if open_row is not None:
             current_direction = str(open_row[1])
             if current_direction == intent.direction.value:
+                return None
+            reverse_intent = build_reverse_transition_intent(
+                intent,
+                strategy_activation_id=activation.activation_id,
+                from_direction=TradeDirection(current_direction),
+                lifecycle_policy=card.lifecycle_policy.to_dict(),
+                capital_policy=card.capital_policy.to_dict(),
+            )
+            if reverse_intent is None:
                 return None
             old_entry = _decimal(open_row[2], "paper flip old entry", positive=True)
             old_qty = _decimal(open_row[3], "paper flip old quantity", positive=True)
@@ -765,10 +776,19 @@ class PaperTradeRuntime:
                 reference,
                 old_gross,
                 old_move,
-                {"next_direction": intent.direction.value, "execution_kind": "TAKER"},
+                {
+                    "reverse_intent_id": reverse_intent.reverse_intent_id,
+                    "reason": reverse_intent.reason,
+                    "from_direction": reverse_intent.from_direction.value,
+                    "to_direction": reverse_intent.to_direction.value,
+                    "close_execution": reverse_intent.close_execution,
+                    "open_execution": reverse_intent.open_execution,
+                    "execution_override": reverse_intent.execution_override,
+                    "execution_kind": "TAKER",
+                },
             )
             forced_flip = True
-            order_type = "MARKET"
+            order_type = reverse_intent.open_execution
             offset = Decimal("0")
             ttl = None
             lifetime_mode = None
@@ -778,6 +798,8 @@ class PaperTradeRuntime:
             payload["entry_time_in_force"] = None
             payload["entry_validity"] = None
             payload["execution_kind"] = "TAKER_FLIP"
+            payload["reverse_intent_id"] = reverse_intent.reverse_intent_id
+            payload["execution_override"] = reverse_intent.execution_override
 
         pending_row = self._connection.execute(
             """SELECT paper_order_id,direction

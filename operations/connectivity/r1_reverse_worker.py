@@ -247,7 +247,10 @@ def _create_open_request(
     request_payload = dict(
         _mapping(source_payload.get("entry_request_payload"), "reverse entry request payload")
     )
-    request_payload["execution_override"] = "OPPOSITE_FLIP_TAKER"
+    if str(request_payload.get("execution_override") or "") != "OPPOSITE_FLIP_TAKER":
+        raise RuntimeError("R1 reverse common intent execution_override mismatch")
+    if str(source_payload.get("execution_override") or "") != "OPPOSITE_FLIP_TAKER":
+        raise RuntimeError("R1 reverse transition execution_override mismatch")
 
     capital = _mapping(card.get("capital_policy"), "R1 capital_policy")
     requested_amount = Decimal(str(capital.get("requested_amount") or 0))

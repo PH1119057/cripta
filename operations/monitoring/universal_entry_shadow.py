@@ -50,6 +50,7 @@ from bybit_workbench.universal_entry import (
     UniversalEntryEngine,
 )
 from bybit_workbench.universal_entry.fingerprint import fingerprint
+from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.oi30s_source import (
@@ -1361,9 +1362,6 @@ def _maybe_record_reverse_transition(
     if decision is None or decision.code is not EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT:
         return None
     lifecycle = bundle.card.lifecycle_policy.to_dict()
-    reverse = lifecycle.get("reverse_on_opposite_signal")
-    if not isinstance(reverse, Mapping) or not bool(reverse.get("enabled", False)):
-        return None
     signal = evaluation.signal
     target = signal.direction.value
     expected_side = "Sell" if target == "LONG" else "Buy"
@@ -1385,23 +1383,25 @@ def _maybe_record_reverse_transition(
     ).fetchone()
     if row is None or str(row[1]) != expected_side:
         return None
+    from_direction = (
+        TradeDirection.LONG if str(row[1]) == "Buy" else TradeDirection.SHORT
+    )
+    reverse_intent = build_reverse_transition_intent(
+        evaluation.execution_intent,
+        strategy_activation_id=signal.strategy_activation_id,
+        from_direction=from_direction,
+        lifecycle_policy=lifecycle,
+        capital_policy=bundle.card.capital_policy.to_dict(),
+    )
+    if reverse_intent is None:
+        return None
     transition_id = "reverse-" + fingerprint(
         {
             "strategy_position_id": str(row[0]),
-            "strategy_attempt_id": evaluation.attempt.strategy_attempt_id,
-            "signal_id": signal.signal_id,
-            "to_direction": target,
+            "reverse_intent_id": reverse_intent.reverse_intent_id,
         }
     )[:32]
-    paper_payload = evaluation.execution_intent.payload.to_dict()
-    transition_payload = {
-        "source": "universal_entry",
-        "reason": "OPPOSITE_ENTRY_FORCED_FLIP",
-        "entry_request_payload": paper_payload,
-        "capital_policy": bundle.card.capital_policy.to_dict(),
-        "lifecycle_policy": lifecycle,
-        "execution_override": "OPPOSITE_FLIP_TAKER",
-    }
+    transition_payload = reverse_intent.transition_payload().to_dict()
     connection.execute(
         """INSERT INTO strategy_entry.reverse_transitions(
                reverse_transition_id,strategy_position_id,
@@ -1425,8 +1425,8 @@ def _maybe_record_reverse_transition(
             signal.signal_id,
             evaluation.attempt.strategy_attempt_id,
             signal.symbol,
-            "SHORT" if target == "LONG" else "LONG",
-            target,
+            reverse_intent.from_direction.value,
+            reverse_intent.to_direction.value,
             signal.detected_at,
             json.dumps(transition_payload, ensure_ascii=False, default=str),
         ),
