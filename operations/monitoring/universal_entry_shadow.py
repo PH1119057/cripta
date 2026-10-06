@@ -1775,9 +1775,241 @@ def _run_observer_epoch(
                                 None
                                 if lifecycle.last_resolution_at is None
                                 else lifecycle.last_resolution_at.isoformat()
-       
-…[sentinelx: truncated 10909 bytes]…
-tale:
+                            ),
+                            "entry_embargo_until": (
+                                None
+                                if lifecycle.entry_embargo_until is None
+                                else lifecycle.entry_embargo_until.isoformat()
+                            ),
+                            "updated_at": now.isoformat(),
+                        }
+                    )
+        return tuple(rows)
+
+    def refresh_inputs(fact_at: datetime) -> None:
+        nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
+        now_mono = time.monotonic()
+        if now_mono - last_inputs_refresh < 1.0:
+            return
+        global_context, coin_contexts, capacity = _observer_objective_inputs(
+            connection, symbols, fact_at
+        )
+        last_inputs_refresh = now_mono
+
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        nonlocal facts_received, evaluations_count, signals_count
+        if not deduper.accept(fact.fact_id):
+            return
+        if fact.event_kind == "PUBLIC_TRADE":
+            if cursor is None:
+                raise ContinuityNotProvable("observer PUBLIC_TRADE lacks exact cursor")
+            previous = trade_cursors.get(fact.symbol)
+            if previous is not None and cursor.seq < previous.seq:
+                raise ContinuityNotProvable(
+                    f"observer PUBLIC_TRADE sequence regressed for {fact.symbol}"
+                )
+            if previous is None or cursor.seq > previous.seq:
+                trade_current_seq_exec_ids[fact.symbol] = {cursor.exec_id}
+            else:
+                trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(cursor.exec_id)
+            trade_cursors[fact.symbol] = cursor
+            trade_proof_monotonic[fact.symbol] = time.monotonic()
+            trade_attrs = fact.attributes.to_dict()
+            last_trade_prices[fact.symbol] = Decimal(str(trade_attrs["price"]))
+            flow_minutes[fact.symbol].add(
+                fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+            )
+            cutoff = fact.observed_at - timedelta(minutes=10)
+            flow_minutes[fact.symbol] = {
+                minute for minute in flow_minutes[fact.symbol] if minute >= cutoff
+            }
+        elif fact.event_kind == "OPEN_INTEREST":
+            oi_seen.add(fact.symbol)
+        elif fact.event_kind == "CANDLE_CLOSED":
+            attrs = fact.attributes.to_dict()
+            timeframe = str(attrs.get("timeframe") or "")
+            boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            prior = closed_boundaries.get((fact.symbol, timeframe))
+            if prior is not None and boundary < prior:
+                raise ContinuityNotProvable(
+                    f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
+                )
+            closed_boundaries[(fact.symbol, timeframe)] = boundary
+            if timeframe == "5":
+                paper.on_candle_closed(
+                    Candle(
+                        symbol=fact.symbol,
+                        timeframe="5",
+                        opened_at=datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC),
+                        closed_at=boundary,
+                        open=Decimal(str(attrs["open"])),
+                        high=Decimal(str(attrs["high"])),
+                        low=Decimal(str(attrs["low"])),
+                        close=Decimal(str(attrs["close"])),
+                        volume=Decimal(str(attrs["volume"])),
+                        is_closed=True,
+                    )
+                )
+        refresh_inputs(fact.observed_at)
+        contexts: dict[str, ObjectiveContext] = {}
+        if global_context is not None and global_context.observed_at <= fact.observed_at:
+            contexts["dispatcher.global"] = global_context
+        coin = coin_contexts.get(fact.symbol)
+        if coin is not None and coin.observed_at <= fact.observed_at:
+            contexts["dispatcher.coin"] = coin
+        if fact.event_kind == "PUBLIC_TRADE":
+            attrs = fact.attributes.to_dict()
+            paper.on_public_trade(
+                symbol=fact.symbol,
+                price=Decimal(str(attrs["price"])),
+                observed_at=fact.observed_at,
+                contexts=contexts,
+            )
+        admission_time = datetime.now(UTC) if real_admission_required_for else fact.observed_at
+        evaluation_transaction = (
+            connection.transaction() if real_admission_required_for else nullcontext()
+        )
+        with evaluation_transaction:
+            if real_admission_required_for:
+                readiness, admission_capacity = _real_entry_account_state(
+                    connection,
+                    symbol=fact.symbol,
+                    observed_at=admission_time,
+                )
+            else:
+                readiness = TechnicalReadiness(
+                    True,
+                    fact.observed_at,
+                    "SHADOW observer causal transport is continuous",
+                )
+                admission_capacity = capacity
+            evaluations = engine.process(
+                fact,
+                contexts=contexts,
+                capacity=admission_capacity,
+                technical_readiness=readiness,
+                account_ref="BYBIT:UNIFIED",
+                entry_admission_port=entry_admission_port,
+                real_admission_required_for=real_admission_required_for,
+                exchange_position_keys={
+                    symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+                    for symbol in symbols
+                },
+                allow_new_signals=sensor_ready(fact.observed_at),
+                admission_time=admission_time,
+            )
+            facts_received += 1
+            for evaluation in evaluations:
+                store.record_evaluation(evaluation, provenance=provenance)
+                bundle = bundle_by_entry_plan.get(
+                    evaluation.signal.entry_plan_fingerprint
+                )
+                if bundle is None:
+                    raise RuntimeError(
+                        "observer exact Strategy/EntryPlan bundle is missing"
+                    )
+                _maybe_record_reverse_transition(
+                    connection,
+                    evaluation,
+                    bundle,
+                )
+                if (
+                    evaluation.signal.strategy_activation_id
+                    in real_admission_required_for
+                ):
+                    candidate = build_insufficient_funds_candidate(
+                        evaluation,
+                        entry_plan=bundle.entry_plan,
+                        exit_plan=bundle.exit_plan,
+                        captured_at=fact.observed_at,
+                    )
+                    if candidate is not None:
+                        counterfactual_store.record_candidate(candidate)
+                paper.create_order(evaluation, bundle, now=fact.observed_at)
+                evaluations_count += 1
+                signals_count += 1
+
+    try:
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "observer publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
+        oi_thread.start()
+        sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
+        buffered_messages = list(buffered)
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
+        next_status = 0.0
+        next_signature = 0.0
+        _observer_status(
+            state="WARMUP" if not sensor_ready(datetime.now(UTC)) else "RUNNING",
+            epoch_id=epoch_id,
+            active_bundles=bundles,
+            symbols=symbols,
+            warmup_until=warmup_until,
+            reason="causal seed complete",
+            sensor_status=sensor_status(datetime.now(UTC)),
+            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+        )
+        while not stopping():
+            now_mono = time.monotonic()
+            if now_mono >= next_signature:
+                latest_signature = _observer_light_signature(connection)
+                if latest_signature != current_signature:
+                    _observer_status(
+                        state="RELOADING",
+                        epoch_id=epoch_id,
+                        active_bundles=bundles,
+                        symbols=symbols,
+                        facts_received=facts_received,
+                        evaluations=evaluations_count,
+                        signals=signals_count,
+                        warmup_until=warmup_until,
+                        reason="StrategyActivation set changed",
+                        sensor_status=sensor_status(datetime.now(UTC)),
+                        strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                    )
+                    return "RELOAD"
+                next_signature = now_mono + 1.0
+            stale = tuple(
+                symbol
+                for symbol, cursor in trade_cursors.items()
+                if now_mono - trade_proof_monotonic.get(symbol, now_mono)
+                >= TRADE_SILENCE_AUDIT_SECONDS
+            )
+            if stale:
+                try:
+                    _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
+                except PublicTradeStreamBehind as audit_exc:
+                    cutoff_at = datetime.now(UTC)
+                    recovered = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=cutoff_at,
+                    )
+                    if not recovered:
+                        raise ContinuityNotProvable(
+                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
+                        ) from audit_exc
+                    for event in recovered:
+                        if event.symbol not in stale:
+                            continue
+                        process_fact(
+                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                proven_at = time.monotonic()
+                for symbol in stale:
                     trade_proof_monotonic[symbol] = proven_at
             while True:
                 try:
