@@ -1528,7 +1528,7 @@ def _run_observer_epoch(
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
-    paper = PaperTradeRuntime(connection)
+    paper = PaperTradeRuntime(connection, bundles=tuple(cast(Any, bundles)))
     real_execution_selected_for = _real_execution_selected_activation_ids(
         connection, bundles
     )

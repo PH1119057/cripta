@@ -3,21 +3,41 @@ from __future__ import annotations
 import json
 from collections import defaultdict, deque
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.universal_exit.contracts import (
+    ExitActionKind,
+    ExitEvaluationStatus,
+    ExitObservation,
+)
+from bybit_workbench.universal_exit.engine import UniversalExitEngine
+from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
 
 from .context_features import compare_context_value, extract_context_feature
-from .contracts import EntryEvaluation, ObjectiveContext, TradeDirection
+from .contracts import EntryEvaluation, FrozenPolicy, ObjectiveContext, TradeDirection
 from .fingerprint import canonical_json, fingerprint
 from .market_watch import (
+    GenericZone,
     compute_l53_zone,
     compute_r1_l53_stability_diagnostic,
     compute_r1_l53_stable_zone,
 )
 from .runtime_loader import ActiveStrategyBundle
+
+
+@dataclass(frozen=True, slots=True)
+class _PaperExitPositionContext:
+    strategy_position_id: str
+    strategy_id: str
+    strategy_version: str
+    strategy_config_fingerprint: str
+    exit_plan_fingerprint: str
+    symbol: str
+    direction: TradeDirection
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:
@@ -156,11 +176,21 @@ def _context_exit_triggered(
 class PaperTradeRuntime:
     """Real-market, zero-mutation Strategy simulation persisted in PostgreSQL."""
 
-    def __init__(self, connection: Any) -> None:
+    def __init__(
+        self,
+        connection: Any,
+        *,
+        bundles: tuple[ActiveStrategyBundle, ...] = (),
+    ) -> None:
         self._connection = connection
         self._l53_candles: dict[str, deque[Candle]] = defaultdict(
             lambda: deque(maxlen=260)
         )
+        self._last_trade_prices: dict[str, Decimal] = {}
+        self._exit_engine = UniversalExitEngine()
+        self._bundle_by_exact_identity = {
+            bundle.exact_identity: bundle for bundle in bundles
+        }
 
     def bootstrap_l53_history(
         self, symbol: str, candles: tuple[Candle, ...]
@@ -249,45 +279,258 @@ class PaperTradeRuntime:
         if zone is None:
             return
         rows = self._connection.execute(
-            """SELECT paper_position_id,direction,payload
+            """SELECT paper_position_id,direction,strategy_activation_id,
+                      strategy_id,strategy_version,strategy_config_fingerprint,
+                      entry_plan_fingerprint,exit_plan_fingerprint,payload
                  FROM strategy_entry.paper_positions
                 WHERE state='OPEN' AND leg_type='PRIMARY' AND symbol=%s""",
             (candle.symbol,),
         ).fetchall()
+        executable_price = self._last_trade_prices.get(candle.symbol, candle.close)
         for row in rows:
-            payload = dict(_mapping(row[2], "paper position payload"))
-            exit_policy = _mapping(payload.get("exit_policy"), "paper exit_policy")
-            local_zone = _mapping(exit_policy.get("local_zone_exit"), "paper local_zone_exit")
-            if not bool(local_zone.get("enabled", False)):
-                continue
-            if str(local_zone.get("geometry") or "") != "L5-3":
-                raise ValueError("paper local_zone_exit unsupported geometry")
-            direction = str(row[1])
-            target = (
-                zone.resistance_bottom
-                if direction == TradeDirection.LONG.value
-                else zone.support_top
+            self._reconcile_l53_exit(
+                paper_position_id=str(row[0]),
+                direction=str(row[1]),
+                strategy_activation_id=str(row[2]),
+                strategy_id=str(row[3]),
+                strategy_version=str(row[4]),
+                strategy_config_fingerprint=str(row[5]),
+                entry_plan_fingerprint=str(row[6]),
+                exit_plan_fingerprint=str(row[7]),
+                symbol=candle.symbol,
+                payload=dict(_mapping(row[8], "paper position payload")),
+                zone=zone,
+                observed_at=zone.observed_at,
+                executable_price=executable_price,
             )
-            previous = payload.get("dynamic_take_profit_price")
-            if previous is not None and Decimal(str(previous)) == target:
-                continue
-            payload["dynamic_take_profit_price"] = str(target)
-            payload["dynamic_take_profit_observed_at"] = zone.observed_at.isoformat()
-            self._connection.execute(
-                """UPDATE strategy_entry.paper_positions
-                      SET payload=%s::jsonb
-                    WHERE paper_position_id=%s AND state='OPEN'""",
-                (canonical_json(payload), str(row[0])),
+
+    def _exact_bundle(
+        self,
+        *,
+        strategy_activation_id: str,
+        strategy_id: str,
+        strategy_version: str,
+        strategy_config_fingerprint: str,
+        entry_plan_fingerprint: str,
+        exit_plan_fingerprint: str,
+    ) -> ActiveStrategyBundle:
+        key = (
+            strategy_activation_id,
+            strategy_id,
+            strategy_version,
+            strategy_config_fingerprint,
+            entry_plan_fingerprint,
+            exit_plan_fingerprint,
+        )
+        bundle = self._bundle_by_exact_identity.get(key)
+        if bundle is None:
+            raise RuntimeError("paper exact Strategy/Entry/Exit bundle is missing")
+        return bundle
+
+    def _close_primary_at_price(
+        self,
+        paper_position_id: str,
+        *,
+        price: Decimal,
+        observed_at: datetime,
+        reason: str,
+        event_payload: Mapping[str, object],
+    ) -> None:
+        row = self._connection.execute(
+            """SELECT direction,entry_price,quantity,best_price,mfe_pct,mae_pct
+                 FROM strategy_entry.paper_positions
+                WHERE paper_position_id=%s AND state='OPEN' AND leg_type='PRIMARY'""",
+            (paper_position_id,),
+        ).fetchone()
+        if row is None:
+            return
+        direction = str(row[0])
+        entry = _decimal(row[1], "paper exit entry", positive=True)
+        quantity = _decimal(row[2], "paper exit quantity", positive=True)
+        best = _decimal(row[3], "paper exit best", positive=True)
+        old_mfe = _decimal(row[4], "paper exit mfe")
+        old_mae = _decimal(row[5], "paper exit mae")
+        move = _directional_move(entry, price, direction)
+        gross = _pnl(quantity, entry, price, direction)
+        best = (
+            max(best, price)
+            if direction == TradeDirection.LONG.value
+            else min(best, price)
+        )
+        self._connection.execute(
+            """UPDATE strategy_entry.paper_positions
+                  SET state='CLOSED',closed_at=%s,exit_price=%s,exit_reason=%s,
+                      best_price=%s,mfe_pct=%s,mae_pct=%s,
+                      gross_pnl_usdt=%s,gross_return_pct=%s,
+                      updated_at=clock_timestamp()
+                WHERE paper_position_id=%s AND state='OPEN'""",
+            (
+                observed_at,
+                price,
+                reason,
+                best,
+                max(old_mfe, move),
+                min(old_mae, move),
+                gross,
+                move,
+                paper_position_id,
+            ),
+        )
+        self._event(
+            paper_position_id,
+            observed_at,
+            reason,
+            price,
+            gross,
+            move,
+            dict(event_payload),
+        )
+
+    def _reconcile_l53_exit(
+        self,
+        *,
+        paper_position_id: str,
+        direction: str,
+        strategy_activation_id: str,
+        strategy_id: str,
+        strategy_version: str,
+        strategy_config_fingerprint: str,
+        entry_plan_fingerprint: str,
+        exit_plan_fingerprint: str,
+        symbol: str,
+        payload: dict[str, object],
+        zone: GenericZone,
+        observed_at: datetime,
+        executable_price: Decimal,
+    ) -> None:
+        exit_policy = _mapping(payload.get("exit_policy"), "paper exit_policy")
+        local_zone = _mapping(exit_policy.get("local_zone_exit") or {}, "paper local_zone_exit")
+        if not bool(local_zone.get("enabled", False)):
+            return
+        if str(local_zone.get("geometry") or "") != "L5-3":
+            raise ValueError("paper local_zone_exit unsupported geometry")
+
+        bundle = self._exact_bundle(
+            strategy_activation_id=strategy_activation_id,
+            strategy_id=strategy_id,
+            strategy_version=strategy_version,
+            strategy_config_fingerprint=strategy_config_fingerprint,
+            entry_plan_fingerprint=entry_plan_fingerprint,
+            exit_plan_fingerprint=exit_plan_fingerprint,
+        )
+        trade_direction = TradeDirection(direction)
+        target_inner = (
+            zone.resistance_bottom
+            if trade_direction is TradeDirection.LONG
+            else zone.support_top
+        )
+        geometry = {
+            "spec": "L5-3",
+            "observed_at": zone.observed_at,
+            "range_high": str(zone.range_high),
+            "range_low": str(zone.range_low),
+            "atr": str(zone.atr),
+            "resistance_top": str(zone.resistance_top),
+            "resistance_bottom": str(zone.resistance_bottom),
+            "support_top": str(zone.support_top),
+            "support_bottom": str(zone.support_bottom),
+            "target_inner": str(target_inner),
+            "effective_lookback": zone.effective_lookback,
+        }
+        observation_id = "paper-exit-observation-" + fingerprint(
+            {
+                "paper_position_id": paper_position_id,
+                "exit_plan_fingerprint": exit_plan_fingerprint,
+                "geometry": geometry,
+                "observed_at": observed_at,
+            }
+        )[:32]
+        observation = ExitObservation(
+            observation_id=observation_id,
+            strategy_position_id=paper_position_id,
+            symbol=symbol,
+            event_at=zone.observed_at,
+            observed_at=observed_at,
+            received_at=observed_at,
+            event_kind="GEOMETRY_L5_3",
+            attributes=FrozenPolicy.from_mapping({"geometry": {"l5_3": geometry}}),
+            source_refs=(f"bybit:kline:5:{symbol}:{zone.observed_at.isoformat()}",),
+        )
+        context = _PaperExitPositionContext(
+            strategy_position_id=paper_position_id,
+            strategy_id=strategy_id,
+            strategy_version=strategy_version,
+            strategy_config_fingerprint=strategy_config_fingerprint,
+            exit_plan_fingerprint=exit_plan_fingerprint,
+            symbol=symbol,
+            direction=trade_direction,
+        )
+        evaluation = self._exit_engine.evaluate(context, bundle.exit_plan, observation)
+        if (
+            evaluation.status is not ExitEvaluationStatus.DECISION_CREATED
+            or evaluation.decision is None
+        ):
+            raise RuntimeError(
+                f"paper R1 Universal Exit decision unavailable: {evaluation.reason}"
             )
-            self._event(
-                str(row[0]),
-                zone.observed_at,
-                "DYNAMIC_TP_MOVED",
-                target,
-                None,
-                None,
-                {"geometry": "L5-3", "target_inner": str(target)},
+        decision = evaluation.decision
+        if decision.action_kind is not ExitActionKind.SET_TP:
+            raise RuntimeError(
+                f"paper R1 Universal Exit action unsupported: {decision.action_kind.value}"
             )
+        mutation = validate_exit_mutation(
+            decision.action_kind,
+            decision.requested_mutation.to_dict(),
+        )
+        target = _decimal(
+            mutation.get("take_profit_price"),
+            "paper Universal Exit target",
+            positive=True,
+        )
+        marketable = (
+            trade_direction is TradeDirection.LONG and target <= executable_price
+        ) or (
+            trade_direction is TradeDirection.SHORT and target >= executable_price
+        )
+        decision_evidence = {
+            "geometry": "L5-3",
+            "target_inner": str(target),
+            "exit_decision_id": decision.exit_decision_id,
+            "rule_id": decision.rule_id,
+            "action_kind": decision.action_kind.value,
+            "requested_mutation": mutation,
+        }
+        if marketable:
+            self._close_primary_at_price(
+                paper_position_id,
+                price=executable_price,
+                observed_at=observed_at,
+                reason="TARGET_REPRICE_MARKETABLE",
+                event_payload=decision_evidence,
+            )
+            return
+
+        previous = payload.get("dynamic_take_profit_price")
+        if previous is not None and Decimal(str(previous)) == target:
+            return
+        payload["dynamic_take_profit_price"] = str(target)
+        payload["dynamic_take_profit_observed_at"] = zone.observed_at.isoformat()
+        payload["dynamic_take_profit_exit_decision_id"] = decision.exit_decision_id
+        self._connection.execute(
+            """UPDATE strategy_entry.paper_positions
+                  SET payload=%s::jsonb,updated_at=clock_timestamp()
+                WHERE paper_position_id=%s AND state='OPEN'""",
+            (canonical_json(payload), paper_position_id),
+        )
+        self._event(
+            paper_position_id,
+            observed_at,
+            "DYNAMIC_TP_MOVED",
+            target,
+            None,
+            None,
+            decision_evidence,
+        )
 
     def create_order(
         self,
@@ -634,6 +877,7 @@ class PaperTradeRuntime:
         observed_at: datetime,
         contexts: Mapping[str, ObjectiveContext] | None = None,
     ) -> None:
+        self._last_trade_prices[symbol] = price
         self._fill_orders(symbol, price, observed_at)
         self._update_positions(symbol, price, observed_at, contexts or {})
 
@@ -699,6 +943,27 @@ class PaperTradeRuntime:
                 "execution_kind": dict(payload).get("execution_kind", "MAKER"),
             },
         )
+        exit_policy = _mapping(payload.get("exit_policy"), "paper exit_policy")
+        local_zone = _mapping(exit_policy.get("local_zone_exit") or {}, "paper local_zone_exit")
+        if bool(local_zone.get("enabled", False)):
+            zone = compute_l53_zone(tuple(self._l53_candles[str(row[9])]))
+            if zone is None:
+                raise RuntimeError("paper R1 L5-3 exit history unavailable at fill")
+            self._reconcile_l53_exit(
+                paper_position_id=position_id,
+                direction=str(row[10]),
+                strategy_activation_id=str(row[2]),
+                strategy_id=str(row[3]),
+                strategy_version=str(row[4]),
+                strategy_config_fingerprint=str(row[5]),
+                entry_plan_fingerprint=str(row[6]),
+                exit_plan_fingerprint=str(row[7]),
+                symbol=str(row[9]),
+                payload=dict(payload),
+                zone=zone,
+                observed_at=observed_at,
+                executable_price=fill_price,
+            )
 
     def _fill_orders(self, symbol: str, price: Decimal, observed_at: datetime) -> None:
         rows = self._connection.execute(

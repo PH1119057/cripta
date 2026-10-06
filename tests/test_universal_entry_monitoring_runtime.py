@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -7,15 +8,19 @@ from pathlib import Path
 import pytest
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.market_watch import (
     compute_l53_zone,
     compute_r1_l53_stable_zone,
 )
+from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.paper_runtime import (
     PaperTradeRuntime,
     _crossed_limit,
     _directional_move,
 )
+from bybit_workbench.universal_entry.r1_strategy import build_r1_cards
+from bybit_workbench.universal_entry.runtime_loader import ActiveStrategyBundle
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 9, 12, 3, 0, tzinfo=UTC)
@@ -35,9 +40,16 @@ class Cursor:
 
 
 class FakeConnection:
-    def __init__(self, *, pending_rows=None, position_rows=None):
+    def __init__(
+        self,
+        *,
+        pending_rows=None,
+        position_rows=None,
+        close_position_row=None,
+    ):
         self.pending_rows = [] if pending_rows is None else pending_rows
         self.position_rows = [] if position_rows is None else position_rows
+        self.close_position_row = close_position_row
         self.statements: list[tuple[str, tuple[object, ...]]] = []
 
     def execute(self, statement: str, parameters=()):
@@ -45,9 +57,55 @@ class FakeConnection:
         self.statements.append((statement, params))
         if "FROM strategy_entry.paper_orders" in statement and "state='PENDING'" in statement:
             return Cursor(rows=self.pending_rows)
+        if (
+            "FROM strategy_entry.paper_positions" in statement
+            and "paper_position_id=%s" in statement
+        ):
+            return Cursor(row=self.close_position_row)
         if "FROM strategy_entry.paper_positions" in statement and "state='OPEN'" in statement:
             return Cursor(rows=self.position_rows)
         return Cursor()
+
+
+def _r1_bundle(symbol: str = "APTUSDT") -> ActiveStrategyBundle:
+    card = next(card for card in build_r1_cards() if card.symbols == (symbol,))
+    activation = StrategyActivation(
+        activation_id=f"activation-{card.strategy_id}",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        enabled=True,
+        enabled_at=card.approved_at,
+        scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+        operator="test",
+        source="test",
+    )
+    entry_plan, exit_plan = materialize_plans(card, activation)
+    return ActiveStrategyBundle(
+        card=card,
+        activation=activation,
+        entry_plan=entry_plan,
+        exit_plan=exit_plan,
+        activation_updated_at=NOW,
+    )
+
+
+def _r1_position_row(
+    bundle: ActiveStrategyBundle,
+    *,
+    direction: str = "LONG",
+) -> tuple[object, ...]:
+    return (
+        "paper-pos-1",
+        direction,
+        bundle.activation.activation_id,
+        bundle.card.strategy_id,
+        bundle.card.strategy_version,
+        bundle.card.strategy_config_fingerprint,
+        bundle.entry_plan.entry_plan_fingerprint,
+        bundle.exit_plan.exit_plan_fingerprint,
+        {"exit_policy": bundle.exit_plan.exit_policy.to_dict()},
+    )
 
 
 def _r1_l53_history(symbol: str = "APTUSDT") -> tuple[Candle, ...]:
@@ -75,26 +133,12 @@ def _r1_l53_history(symbol: str = "APTUSDT") -> tuple[Candle, ...]:
 
 
 def test_paper_bootstrap_restores_dynamic_l53_target_immediately() -> None:
+    bundle = _r1_bundle()
     history = _r1_l53_history()
     zone = compute_l53_zone(history)
     assert zone is not None
-    connection = FakeConnection(
-        position_rows=[
-            (
-                "paper-pos-1",
-                "LONG",
-                {
-                    "exit_policy": {
-                        "local_zone_exit": {
-                            "enabled": True,
-                            "geometry": "L5-3",
-                        }
-                    }
-                },
-            )
-        ]
-    )
-    runtime = PaperTradeRuntime(connection)
+    connection = FakeConnection(position_rows=[_r1_position_row(bundle)])
+    runtime = PaperTradeRuntime(connection, bundles=(bundle,))
 
     runtime.bootstrap_l53_history("APTUSDT", history)
 
@@ -113,6 +157,47 @@ def test_paper_bootstrap_restores_dynamic_l53_target_immediately() -> None:
     )
     assert event[2] == "DYNAMIC_TP_MOVED"
     assert event[3] == zone.resistance_bottom
+    evidence = json.loads(str(event[6]))
+    assert evidence["rule_id"] == "r1_dynamic_opposite_inner_tp"
+    assert evidence["action_kind"] == "SET_TP"
+    assert evidence["requested_mutation"]["time_in_force"] == "POST_ONLY"
+
+
+def test_paper_universal_exit_marketability_closes_immediately() -> None:
+    bundle = _r1_bundle()
+    history = _r1_l53_history()
+    connection = FakeConnection(
+        position_rows=[_r1_position_row(bundle)],
+        close_position_row=(
+            "LONG",
+            Decimal("100"),
+            Decimal("0.1"),
+            Decimal("100"),
+            Decimal("0"),
+            Decimal("0"),
+        ),
+    )
+    runtime = PaperTradeRuntime(connection, bundles=(bundle,))
+    runtime._last_trade_prices["APTUSDT"] = Decimal("120")
+
+    runtime.bootstrap_l53_history("APTUSDT", history)
+
+    close = next(
+        params
+        for statement, params in connection.statements
+        if "SET state='CLOSED'" in statement
+    )
+    assert close[2] == "TARGET_REPRICE_MARKETABLE"
+    assert Decimal(str(close[1])) == Decimal("120")
+    event = next(
+        params
+        for statement, params in connection.statements
+        if "INSERT INTO strategy_entry.paper_position_events" in statement
+        and params[2] == "TARGET_REPRICE_MARKETABLE"
+    )
+    evidence = json.loads(str(event[6]))
+    assert evidence["rule_id"] == "r1_dynamic_opposite_inner_tp"
+    assert evidence["requested_mutation"]["marketable_action"] == "CLOSE_MARKET"
 
 
 def test_paper_bootstrap_rejects_incomplete_r1_history() -> None:
@@ -122,27 +207,17 @@ def test_paper_bootstrap_rejects_incomplete_r1_history() -> None:
 
 
 def test_paper_restart_bootstrap_matches_continuous_r1_state() -> None:
+    bundle = _r1_bundle()
     history = _r1_l53_history()
-    position_row = (
-        "paper-pos-1",
-        "LONG",
-        {
-            "exit_policy": {
-                "local_zone_exit": {
-                    "enabled": True,
-                    "geometry": "L5-3",
-                }
-            }
-        },
-    )
+    position_row = _r1_position_row(bundle)
 
     continuous_connection = FakeConnection(position_rows=[position_row])
-    continuous = PaperTradeRuntime(continuous_connection)
+    continuous = PaperTradeRuntime(continuous_connection, bundles=(bundle,))
     for candle in history:
         continuous.on_candle_closed(candle)
 
     restarted_connection = FakeConnection(position_rows=[position_row])
-    restarted = PaperTradeRuntime(restarted_connection)
+    restarted = PaperTradeRuntime(restarted_connection, bundles=(bundle,))
     restarted.bootstrap_l53_history("APTUSDT", history)
 
     continuous_history = tuple(continuous._l53_candles["APTUSDT"])
