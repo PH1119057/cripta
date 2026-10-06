@@ -12,7 +12,11 @@ from bybit_workbench.domain.models import Candle
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import EntryEvaluation, ObjectiveContext, TradeDirection
 from .fingerprint import canonical_json, fingerprint
-from .market_watch import compute_l53_zone, compute_r1_l53_stable_zone
+from .market_watch import (
+    compute_l53_zone,
+    compute_r1_l53_stability_diagnostic,
+    compute_r1_l53_stable_zone,
+)
 from .runtime_loader import ActiveStrategyBundle
 
 
@@ -157,6 +161,40 @@ class PaperTradeRuntime:
         self._l53_candles: dict[str, deque[Candle]] = defaultdict(
             lambda: deque(maxlen=260)
         )
+
+    def bootstrap_l53_history(
+        self, symbol: str, candles: tuple[Candle, ...]
+    ) -> None:
+        """Load causal 5m history and reconcile current PAPER R1 state immediately."""
+        rows = tuple(candles)
+        if not rows:
+            raise RuntimeError(f"paper L5-3 history seed missing {symbol}")
+
+        previous_closed_at: datetime | None = None
+        for candle in rows:
+            if candle.symbol != symbol:
+                raise ValueError("paper L5-3 seed symbol mismatch")
+            if candle.timeframe != "5" or not candle.is_closed:
+                raise ValueError("paper L5-3 seed requires closed 5m candles")
+            if previous_closed_at is not None and candle.closed_at <= previous_closed_at:
+                raise ValueError("paper L5-3 seed candle time regressed")
+            previous_closed_at = candle.closed_at
+
+        diagnostic = compute_r1_l53_stability_diagnostic(rows)
+        if diagnostic.available_states < diagnostic.required_states:
+            raise RuntimeError(
+                f"paper R1 L5-3 history seed incomplete {symbol}: "
+                f"{diagnostic.available_states}/{diagnostic.required_states} "
+                "stable states available"
+            )
+
+        history = self._l53_candles[symbol]
+        history.clear()
+        history.extend(rows[-260:-1])
+        # Reuse the normal closed-candle path for the newest historical state so
+        # restart immediately revalidates pending SIGNAL_VALIDITY orders and
+        # restores dynamic TP for already-open PAPER positions.
+        self.on_candle_closed(rows[-1])
 
     def on_candle_closed(self, candle: Candle) -> None:
         """Advance causal L5-3 Exit geometry from a closed 5m candle only."""
