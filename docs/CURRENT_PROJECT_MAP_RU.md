@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.5
+**Версия:** 11.6
 **Дата:** 2026-10-06
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1595,7 +1595,7 @@ RUNTIME BEHAVIOR VERIFIED     = YES [UI hot-swap + gate/permission invariance]
 TRADING BEHAVIOR CHANGED      = NO
 ```
 
-# 24. Real Entry account-state generation repair — OWNER DECISION 2026-10-06
+# 25. Real Entry account-state generation repair — OWNER DECISION 2026-10-06
 
 OWNER DECISION:
 - current R1 MICRO_LIVE scope не расширять;
@@ -1624,3 +1624,65 @@ BEFORE / AFTER CAPABILITY MATRIX:
 | position-mode proof for real Entry | private runtime + Entry admission | separate fresh_until clock | AccountStateGeneration + Entry admission | exact mode ref bound to current generation | YES | YES | generation/admission tests |
 
 No capability loses an owner; no trading-policy owner moves between top-level layers.
+# 26. PAPER / REAL execution-mode parity — OWNER DECISION / CHECKED HERE 2026-10-06
+
+OWNER DECISION:
+- `StrategyActivation` остаётся единым включателем Strategy;
+- при выключенном real execution Strategy продолжает работать через PAPER;
+- включение real execution выбирает REAL environment, а не другую
+  Strategy/Entry/Exit implementation;
+- для одного `strategy_attempt` запрещено одновременное PAPER + REAL execution;
+- PAPER и REAL должны совпадать по Strategy/Entry/Exit policy и lifecycle;
+- различаться разрешено только real-only admission/account/Exchange truth и
+  фактическим execution result;
+- real admission failure не даёт права silent fallback в PAPER.
+
+CHECKED HERE against exact loaded/source release
+`7a37b1976749d7d68c0be4d91b5167a6538ba0c1`:
+
+Current implementation ещё не удовлетворяет этому target полностью:
+- `UniversalEntryEngine` создаёт общий StrategySignal/strategy_attempt и
+  `PaperEntryIntent`, но при PAPER оставляет `EntryDecision` /
+  `EntryExecutionRequest` пустыми, а REAL идёт через отдельный admission branch;
+- observer вызывает `paper.create_order(...)` и для evaluation, которая может
+  одновременно иметь real admission/request, то есть execution environments
+  ещё не являются XOR;
+- PAPER R1 dynamic Exit сейчас живёт в `PaperTradeRuntime`, тогда как REAL
+  ExitDecision формирует `UniversalExitEngine`; exact ExitPlan один, но
+  decision implementation пока физически раздельна;
+- Stage 2 уже устранил restart-cold-history defect PAPER L5-3;
+- Stage 3 доказал continuous == restart/bootstrap geometry state и production
+  event order `public trade -> engine.process -> paper.create_order`.
+
+BEFORE / AFTER capability matrix:
+
+| CAPABILITY | BEFORE OWNER/PATH | TARGET OWNER/PATH | STATUS |
+|---|---|---|---|
+| Strategy/Entry trading meaning | StrategyCard + EntryPlan + UniversalEntryEngine | unchanged | CONSERVED |
+| mode-neutral Entry execution semantics | `PaperEntryIntent` used as shared payload but named/owned as PAPER detail | explicit `EntryExecutionIntent` before adapter selection | IMPLEMENTATION REQUIRED |
+| real admission / slot / capital safety | real Entry admission | unchanged, REAL-only operational barrier | CONSERVED |
+| PAPER execution | `PaperTradeRuntime` always invoked by observer | PAPER adapter only when real execution permission OFF | IMPLEMENTATION REQUIRED |
+| REAL execution | real EntryDecision/EntryExecutionRequest + consumers | REAL adapter only when real execution permission ON and gates PASS | CONSERVED / ROUTING CHANGE REQUIRED |
+| Exit decision | PAPER local runtime + REAL UniversalExitEngine | one UniversalExitEngine semantics, separate PAPER/REAL execution adapters | IMPLEMENTATION REQUIRED |
+| Exchange mutation | private runtime / real consumers | unchanged, REAL only | CONSERVED |
+
+Current stage status:
+
+```text
+CANON                         = YES
+OWNER_DECISION                = YES
+IMPLEMENTED                   = NO
+DEPLOYED                      = NO [Stage 4 target]
+PAPER_REAL_DECISION_PARITY    = NOT YET PROVED
+REAL_REARM                    = HARD_STOP
+mainnet gate                  = 0
+real execution permissions    = 0
+real Entry/Exit/reverse/private services = intentionally inactive
+PAPER observer                = active
+```
+
+Implementation sequence is deliberately split:
+`4A CANON -> 4B ENTRY execution-mode/XOR -> 4C EXIT parity -> TEST -> GITHUB ->`
+`DEPLOY -> RUNTIME EVIDENCE`. REAL services stay stopped until the full repair
+sequence is complete.
+
