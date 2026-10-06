@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.7
-**Дата:** 2026-10-03
+**Версия:** 1.8
+**Дата:** 2026-10-06
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -320,6 +320,14 @@ Deployment contract presentation/read-model layer:
   `cripta-dashboard.service`;
 - auth, control/mutation endpoints, Strategy/Entry/Exit/Execution semantics,
   gates/permissions/LIVE-arm и decision-affecting code не входят в этот scope;
+- status.json сервиса является только текущим liveness snapshot и не является
+  durable журналом ошибок;
+- caught Universal Entry observer exception, прерывающий observer epoch /
+  Strategy evaluation, обязан до retry зафиксировать durable operational fault,
+  canonical token которого определён в CRIPTA_GLOSSARY_RU*.md;
+- следующий успешный status refresh/restart не имеет права молча удалить или
+  resolve такой fault; Dashboard обязан показывать unresolved fault красным до
+  explicit operator/owner resolution;
 - exact Dashboard presentation/read-model bytes имеют отдельную
   `DASHBOARD_UI_COMMIT` identity.
 

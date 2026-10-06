@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.9
+**Версия:** 3.10
 **Дата:** 2026-10-06
 **Статус:** канонический индекс документации
 
@@ -662,3 +662,24 @@ Synchronized current documents:
 No current document is added/removed, no path/routing/base-pre-read changes,
 Project Source remains 11 files. This revision changes architecture canon only;
 implementation/deploy/runtime verification are separate later stages.
+
+# 24. Durable Universal Entry observer fault revision — 2026-10-06
+
+OWNER DECISION / implementation scope:
+- status.json остаётся только current liveness snapshot и не является durable error history;
+- caught Universal Entry observer runtime exception до retry обязан durable фиксироваться в existing runtime.lifecycle_faults;
+- canonical fault token owner — CRIPTA_GLOSSARY_RU*.md: UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR;
+- повтор одного exact fault агрегируется через stable fault identity, occurrence_count и last_seen_at;
+- следующий успешный observer epoch/restart не имеет права молча resolve fault;
+- failure durable persistence запрещает продолжать normal retry-loop;
+- fault сам по себе не создаёт Entry/Exit/Exchange mutation.
+- Dashboard red rendering и explicit owner/operator resolve реализуются отдельным Stage 6B и этим changeset не объявляются IMPLEMENTED.
+
+Synchronized current documents:
+- GLOSSARY — exact operational-fault token and semantics;
+- OBSERVATION_ANALYTICS — status-vs-durable-fault monitoring contract;
+- INDEX — revision ownership and documentation-gate record.
+
+No current document is added/removed, no path/routing/base-pre-read changes,
+Project Source remains 11 files. README / AGENTS / Project Instructions update
+не требуется. Trading Strategy/Entry/Exit semantics не меняются.

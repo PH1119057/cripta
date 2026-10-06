@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.7
+**Версия:** 2.8
 **Дата:** 2026-10-06
 **Статус:** обязательный канонический терминологический контракт
 
@@ -495,6 +495,14 @@ protection-failure contract, задающая, какое техническое
 `owner kill` — явный owner control, запрещающий/останавливающий mutation в
 заданном contract. Сам по себе не означает автоматический close уже открытой
 позиции.
+
+UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR — operational fault: Universal Entry
+observer поймал runtime exception, из-за которого текущий observer epoch /
+Strategy evaluation не может считаться успешно завершённым. Fault сохраняется
+durable независимо от перезаписываемого status.json; следующий успешный epoch
+не имеет права молча удалить/resolve эту запись. Повтор того же fault может
+агрегироваться через occurrence_count/last_seen_at. Закрытие требует явного
+operator/owner resolution; сам fault не создаёт Entry/Exit/Exchange mutation.
 
 **Critical fault delivery** — durable механизм доставки critical operational/
 lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
