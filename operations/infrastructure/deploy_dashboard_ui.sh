@@ -6,6 +6,7 @@ UI_COMMIT="${CRIPTA_DASHBOARD_UI_COMMIT:-}"
 UI_ROOT="${CRIPTA_DASHBOARD_UI_ROOT:-/srv/cripta/dashboard-ui}"
 RUNTIME_ROOT="${CRIPTA_RUNTIME_ROOT:-/srv/cripta/runtime}"
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
+VERIFY_ONLY="${CRIPTA_DASHBOARD_UI_VERIFY_ONLY:-0}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
@@ -13,6 +14,8 @@ sql_scalar() { runuser -u postgres -- psql -X -Atqc "$1" cripta; }
 
 [[ "$(id -u)" -eq 0 ]] || die "dashboard UI deploy must run as root"
 [[ "$UI_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_DASHBOARD_UI_COMMIT is invalid"
+[[ "$VERIFY_ONLY" == "0" || "$VERIFY_ONLY" == "1" ]] ||
+  die "CRIPTA_DASHBOARD_UI_VERIFY_ONLY must be 0 or 1"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
 
 exec 9>/run/lock/cripta-dashboard-ui-deploy.lock
@@ -51,6 +54,7 @@ as_repo_owner git -C "$SOURCE" show "$UI_COMMIT:operations/dashboard/app.py" > "
 python3 - "$tmp/old.html" "$tmp/new.html" "$tmp/old_app.py" "$tmp/new_app.py" <<'PY'
 from pathlib import Path
 import ast
+import difflib
 import re
 import sys
 
@@ -84,10 +88,21 @@ def protected_control_functions(text: str) -> dict[str, str]:
 if protected_control_functions(old_html) != protected_control_functions(new_html):
     raise SystemExit("Dashboard verifier failed: HTML control function changed")
 
-old_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old_html)))
-new_endpoints = sorted(set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new_html)))
-if old_endpoints != new_endpoints:
-    raise SystemExit("Dashboard verifier failed: API endpoint set changed")
+old_endpoints = set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old_html))
+new_endpoints = set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new_html))
+removed_endpoints = old_endpoints - new_endpoints
+added_endpoints = new_endpoints - old_endpoints
+allowed_added_endpoints = {"/api/observer-faults/resolve"}
+if removed_endpoints:
+    raise SystemExit(
+        "Dashboard verifier failed: API endpoint removed: "
+        + ",".join(sorted(removed_endpoints))
+    )
+if added_endpoints - allowed_added_endpoints:
+    raise SystemExit(
+        "Dashboard verifier failed: unauthorized API endpoint added: "
+        + ",".join(sorted(added_endpoints - allowed_added_endpoints))
+    )
 
 for token in ("Set-Cookie", "cripta_session"):
     if old_html.count(token) != new_html.count(token):
@@ -102,11 +117,16 @@ allowed_functions = {
     "strategy_paper_state",
     "_live_trading_state",
     "export_trading_table",
+    "observer_runtime_fault_state",
+    "merge_observer_fault_health",
+    "resolve_observer_runtime_fault",
+    "snapshot",
 }
 allowed_assignments = {
     "PAPER_MAKER_FEE_RATE",
     "PAPER_TAKER_FEE_RATE",
     "REAL_IMMEDIATE_CLOSE_FEE_RATE",
+    "OBSERVER_RUNTIME_FAULT_CODE",
 }
 forbidden_call_tokens = (
     "arm_r1_micro_live",
@@ -154,10 +174,94 @@ for kind, name in changed:
             src = ast.get_source_segment(new_app, node) or ""
             if any(token in src for token in forbidden_call_tokens):
                 raise SystemExit(f"Dashboard verifier failed: forbidden control call in {name}")
+            mutation_strings: list[str] = []
             for child in ast.walk(node):
-                if isinstance(child, ast.Constant) and isinstance(child.value, str):
-                    if mutation_sql.search(child.value):
-                        raise SystemExit(f"Dashboard verifier failed: mutation SQL in {name}")
+                if (
+                    isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                    and mutation_sql.search(child.value)
+                ):
+                    mutation_strings.append(child.value)
+            if name == "resolve_observer_runtime_fault":
+                if (
+                    "UPDATE runtime.lifecycle_faults" not in src
+                    or "state='RESOLVED'" not in src
+                    or "state='OPEN'" not in src
+                    or "fault_code=%s" not in src
+                ):
+                    raise SystemExit(
+                        "Dashboard verifier failed: observer fault resolution contract changed"
+                    )
+                if any(
+                    "UPDATE runtime.lifecycle_faults" not in value
+                    for value in mutation_strings
+                ):
+                    raise SystemExit(
+                        "Dashboard verifier failed: unauthorized mutation SQL in "
+                        "resolve_observer_runtime_fault"
+                    )
+            elif mutation_strings:
+                raise SystemExit(f"Dashboard verifier failed: mutation SQL in {name}")
+        continue
+    if kind == "ClassDef" and name == "Handler":
+        old_class = old_nodes[(kind, name)]
+        new_class = new_nodes[(kind, name)]
+        old_methods = {
+            child.name: child
+            for child in old_class.body
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        new_methods = {
+            child.name: child
+            for child in new_class.body
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        if set(old_methods) != set(new_methods):
+            raise SystemExit("Dashboard verifier failed: Handler method set changed")
+        changed_methods = [
+            method_name
+            for method_name in sorted(old_methods)
+            if ast.dump(old_methods[method_name], include_attributes=False)
+            != ast.dump(new_methods[method_name], include_attributes=False)
+        ]
+        if changed_methods != ["do_POST"]:
+            raise SystemExit(
+                "Dashboard verifier failed: unexpected Handler method change: "
+                + ",".join(changed_methods)
+            )
+        old_post = ast.get_source_segment(old_app, old_methods["do_POST"]) or ""
+        new_post = ast.get_source_segment(new_app, new_methods["do_POST"]) or ""
+        diff_lines = list(difflib.ndiff(old_post.splitlines(), new_post.splitlines()))
+        removed = [
+            line[2:]
+            for line in diff_lines
+            if line.startswith("- ") and line[2:].strip()
+        ]
+        added = "\n".join(
+            line[2:]
+            for line in diff_lines
+            if line.startswith("+ ") and line[2:].strip()
+        )
+        if removed:
+            raise SystemExit(
+                "Dashboard verifier failed: existing Handler.do_POST code removed"
+            )
+        if '/api/observer-faults/resolve' not in added:
+            raise SystemExit(
+                "Dashboard verifier failed: observer fault resolve endpoint missing"
+            )
+        forbidden_added = (
+            "/api/live/",
+            "runtime.trade_commands",
+            "execution_permissions",
+            "arm_r1_micro_live",
+            "disarm_r1_micro_live",
+            "set_execution_permission",
+        )
+        if any(token in added for token in forbidden_added):
+            raise SystemExit(
+                "Dashboard verifier failed: trading control added to Handler.do_POST"
+            )
         continue
     if kind == "assign" and name in allowed_assignments:
         continue
@@ -166,6 +270,13 @@ for kind, name in changed:
 print("DASHBOARD_PRESENTATION_READ_MODEL_SCOPE=PASS")
 print("APP_CHANGED_NODES=" + ",".join(f"{k}:{n}" for k,n in changed))
 PY
+
+if [[ "$VERIFY_ONLY" == "1" ]]; then
+  echo "DASHBOARD_UI_VERIFY_ONLY=PASS"
+  echo "DASHBOARD_UI_BASELINE_COMMIT=$previous_commit"
+  echo "DASHBOARD_UI_CANDIDATE_COMMIT=$UI_COMMIT"
+  exit 0
+fi
 
 # Capture trading-service identities before any Dashboard switch.
 trading_units=(
