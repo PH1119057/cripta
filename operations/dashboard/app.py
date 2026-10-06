@@ -2397,9 +2397,9 @@ def resolve_observer_runtime_fault(
               SET state='RESOLVED',
                   resolved_at=%s,
                   payload=payload || jsonb_build_object(
-                      'last_resolution_reason',%s,
-                      'last_resolved_by',%s,
-                      'last_resolved_at',%s
+                      'last_resolution_reason',%s::text,
+                      'last_resolved_by',%s::text,
+                      'last_resolved_at',%s::text
                   )
             WHERE fault_id=%s
               AND fault_code=%s
