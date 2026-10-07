@@ -90,7 +90,7 @@ OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
 R1_PARITY_ATTESTED_MODULE_SHA256 = {
     "operations/monitoring/universal_entry_shadow.py": "e50b9298fe0b3d91e5c650e38b4482c8fee7beadea48e9f03d10fcec05e25010",
     "src/bybit_workbench/universal_entry/engine.py": "3f703f4da5c4bfc69df324aab89c1767223ed639be48ac43d34f5bc8fa1adedf",
-    "src/bybit_workbench/universal_entry/paper_runtime.py": "a9dcdf57cccb527d148eb6bc4122af5396af0976875efd94855242e1aefb2767",
+    "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
     "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
     "src/bybit_workbench/universal_exit/engine.py": "d5da446f651fbddd88189c50a30f0591cd92b18b326c31f5271476101672cd36",
     "src/bybit_workbench/universal_exit/execution_bridge.py": "259d7c6972666e05b5d9c4ae3ee602e5f16440e28183ed87740365ca4299c2c2",
