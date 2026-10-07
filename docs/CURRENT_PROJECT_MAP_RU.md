@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.9
+**Версия:** 12.0
 **Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1904,3 +1904,71 @@ Safety action:
 
 Implementation/deploy/runtime evidence is recorded only after the corresponding
 Git/release/runtime steps complete.
+
+
+# 28. R1 1.1 post-arm first REAL order + cancellation-audit repair — CHECKED HERE 2026-10-07
+
+After the `c4c0a8ed8515699991215bcd91c7725941423273` Stage 7E deployment,
+owner-approved fresh pre-arm evidence initially failed closed because the
+independent Dashboard read-model bundle still carried the previous
+`PAPER_REAL_DECISION_PARITY` attestation. The canonical Dashboard scope verifier
+accepted only `_u6_prepare_r1_prearm_evidence` plus
+`R1_PARITY_ATTESTED_MODULE_SHA256`; the Dashboard bundle was then switched to
+the same exact `c4c0a8ed...` source while trading-service PIDs/restarts, gate and
+execution permissions remained unchanged.
+
+Fresh R1 `1.1-micro-live` pre-arm then returned `PREARM_READY` for all five
+owner-approved Strategy versions and owner re-arm created exactly five active
+release-bound LIVE-arm sessions. The first natural REAL attempt occurred on
+`DOTUSDT LONG` and proved:
+
+```text
+StrategyAttempt -> ACCEPTED
+-> physical slot claim + capital reservation
+-> REAL EntryExecutionRequest
+-> private trade command
+-> Bybit /v5/order/create retCode=0
+-> Exchange order acknowledgement
+```
+
+The opening command carried the corrected Exchange-side protection:
+- `stop_loss_enabled=true`, `stop_loss_pct=10.0`;
+- `take_profit_enabled=true`;
+- exact price-based `take_profit_price`;
+- `take_profit_reference_path=fact.r1_opposite_inner_target`.
+
+No fill occurred. While the PostOnly order was resting, causal L5-3 Entry
+geometry changed and runtime cancelled it under the actual
+`R1_EXACT_ENTRY_LEVEL_CHANGED` `SIGNAL_VALIDITY` reason. Reconciliation proved
+`Cancelled + zero fill`; capital reservation and physical slot claim were
+released, no real position remained and no lifecycle fault opened.
+
+FINDING:
+historical lifecycle release evidence mislabeled every confirmed zero-fill
+Entry cancellation as `LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL`, even when the
+actual Strategy lifetime mode was `SIGNAL_VALIDITY` and
+`entry_limit_ttl_seconds=null`. Trading behavior was correct; only causal audit
+classification was misleading.
+
+OWNER-APPROVED stabilization repair:
+- propagate the exact cancellation cause from private runtime into the
+  reservation lifecycle resolver;
+- use `ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual cause>` for reservation state
+  reason, slot release reason and `REQUEST_CANCELLED` event;
+- historical rows are not rewritten;
+- this changes audit truth only and does not change R1 Entry/Exit policy.
+
+Safety state before this repair/deploy:
+
+```text
+mainnet gate             = OFF
+R1 execution permissions = 0
+ACTIVE LIVE-arm sessions = 0
+real positions           = 0
+active Exchange orders   = 0
+```
+
+A new deploy requires a separate exact Git/runtime identity. Re-arm after that
+deploy is a separate owner action. Full `Entry -> fill -> protected position ->
+dynamic Exit -> close -> economics after fees` remains NOT YET RUNTIME BEHAVIOR
+VERIFIED.
