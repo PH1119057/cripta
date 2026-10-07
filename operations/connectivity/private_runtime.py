@@ -575,16 +575,11 @@ def protect_recovered_bot_positions(
             else json.loads(str(raw_entry_payload))
         )
         contract = initial_protection_contract(entry_payload)
-        actual_stop, _unused_target = calculate_initial_boundaries(
+        actual_stop, actual_target = resolve_initial_protection_boundaries(
             entry=actual_entry,
             side=str(position_row[0]),
             tick=tick,
-            stop_loss_pct=contract["stop_loss_pct"],
-            take_profit_pct=(
-                contract["take_profit_pct"]
-                if contract["take_profit_pct"] is not None
-                else Decimal("1")
-            ),
+            contract=contract,
         )
         protection_request: dict[str, object] = {
             "category": "linear",
@@ -595,21 +590,7 @@ def protect_recovered_bot_positions(
             "slTriggerBy": str(contract["trigger_by"]),
             "slOrderType": "Market",
         }
-        if contract["take_profit_enabled"]:
-            if contract["take_profit_pct"] is not None:
-                _stop, actual_target = calculate_initial_boundaries(
-                    entry=actual_entry,
-                    side=str(position_row[0]),
-                    tick=tick,
-                    stop_loss_pct=contract["stop_loss_pct"],
-                    take_profit_pct=contract["take_profit_pct"],
-                )
-            else:
-                actual_target = quantize(
-                    contract["take_profit_price"],
-                    tick,
-                    upward=str(position_row[0]) == "Buy",
-                )
+        if actual_target is not None:
             protection_request.update(
                 {
                     "takeProfit": str(actual_target),
@@ -1170,6 +1151,49 @@ def initial_protection_contract(payload: dict[str, object]) -> dict[str, object]
     }
 
 
+def resolve_initial_protection_boundaries(
+    *,
+    entry: Decimal,
+    side: str,
+    tick: Decimal,
+    contract: dict[str, object],
+) -> tuple[Decimal, Decimal | None]:
+    """Resolve Strategy-owned Entry-time SL and optional exact TP price."""
+    stop_loss_pct = contract["stop_loss_pct"]
+    target_pct = contract["take_profit_pct"]
+    target_price = contract["take_profit_price"]
+    if not isinstance(stop_loss_pct, Decimal):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_STOP_INVALID")
+    if target_pct is not None and not isinstance(target_pct, Decimal):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_PERCENT_INVALID")
+    if target_price is not None and not isinstance(target_price, Decimal):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_PRICE_INVALID")
+    stop, _unused = calculate_initial_boundaries(
+        entry=entry,
+        side=side,
+        tick=tick,
+        stop_loss_pct=stop_loss_pct,
+        take_profit_pct=target_pct if target_pct is not None else Decimal("1"),
+    )
+    if not bool(contract["take_profit_enabled"]):
+        return stop, None
+    if target_pct is not None:
+        _stop, target = calculate_initial_boundaries(
+            entry=entry,
+            side=side,
+            tick=tick,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=target_pct,
+        )
+    else:
+        if target_price is None:
+            raise RuntimeError("ENTRY_INITIAL_PROTECTION_TARGET_MISSING")
+        target = quantize(target_price, tick, upward=side == "Buy")
+    if (side == "Buy" and target <= entry) or (side == "Sell" and target >= entry):
+        raise RuntimeError("ENTRY_INITIAL_PROTECTION_TARGET_WRONG_SIDE")
+    return stop, target
+
+
 def record_protection_or_owner_event(
     connection: psycopg.Connection,
     command_id: str,
@@ -1690,37 +1714,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise RuntimeError("Bybit did not return actual average entry price")
             contract = initial_protection_contract(payload)
             trigger_by = str(contract["trigger_by"])
-            stop, _unused_target = calculate_initial_boundaries(
+            stop, target = resolve_initial_protection_boundaries(
                 entry=actual_entry,
                 side=side,
                 tick=tick,
-                stop_loss_pct=contract["stop_loss_pct"],
-                take_profit_pct=(
-                    contract["take_profit_pct"]
-                    if contract["take_profit_pct"] is not None
-                    else Decimal("1")
-                ),
+                contract=contract,
             )
-            target = None
-            if contract["take_profit_enabled"]:
-                if contract["take_profit_pct"] is not None:
-                    _stop, target = calculate_initial_boundaries(
-                        entry=actual_entry,
-                        side=side,
-                        tick=tick,
-                        stop_loss_pct=contract["stop_loss_pct"],
-                        take_profit_pct=contract["take_profit_pct"],
-                    )
-                else:
-                    target = quantize(
-                        contract["take_profit_price"],
-                        tick,
-                        upward=side == "Buy",
-                    )
-                    if (side == "Buy" and target <= actual_entry) or (
-                        side == "Sell" and target >= actual_entry
-                    ):
-                        raise RuntimeError("ENTRY_INITIAL_PROTECTION_TARGET_WRONG_SIDE")
         if (side=="Buy" and stop >= mark) or (side=="Sell" and stop <= mark): raise RuntimeError("calculated stop is already beyond current price")
         stop_request: dict[str, object] = {"category":"linear","symbol":symbol,"positionIdx":int(position.get("positionIdx") or 0),"tpslMode":"Full","stopLoss":str(stop),"slTriggerBy":trigger_by,"slOrderType":"Market"}
         if kind == "initial_protection":
@@ -1842,17 +1841,35 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
         api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
         contract = initial_protection_contract(payload)
-        stop,target=calculate_initial_boundaries(
+        stop, target = resolve_initial_protection_boundaries(
             entry=price,
             side=side,
             tick=tick,
-            stop_loss_pct=contract["stop_loss_pct"],
-            take_profit_pct=contract["take_profit_pct"],
+            contract=contract,
         )
-        # V36: Entry submits server-side initial SL/TP atomically with the entry order.
-        # Post-fill reconciliation may only re-anchor the same strategy-owned contract
-        # to the actual average fill; it is never the first protection mutation.
-        order={"category":"linear","symbol":symbol,"side":side,"orderType":"Market" if offset == 0 else "Limit","qty":str(qty),"positionIdx":0,"orderLinkId":command_id[:36],"tpslMode":str(contract["tpsl_mode"]),"stopLoss":str(stop),"takeProfit":str(target),"slTriggerBy":str(contract["trigger_by"]),"tpTriggerBy":str(contract["trigger_by"]),"slOrderType":"Market","tpOrderType":"Market"}
+        # Entry submits server-side initial protection atomically with the order.
+        # R1 carries catastrophic SL plus exact causal opposite-inner TP.
+        order: dict[str, object] = {
+            "category": "linear",
+            "symbol": symbol,
+            "side": side,
+            "orderType": "Market" if offset == 0 else "Limit",
+            "qty": str(qty),
+            "positionIdx": 0,
+            "orderLinkId": command_id[:36],
+            "tpslMode": str(contract["tpsl_mode"]),
+            "stopLoss": str(stop),
+            "slTriggerBy": str(contract["trigger_by"]),
+            "slOrderType": "Market",
+        }
+        if target is not None:
+            order.update(
+                {
+                    "takeProfit": str(target),
+                    "tpTriggerBy": str(contract["trigger_by"]),
+                    "tpOrderType": "Market",
+                }
+            )
         if offset > 0:
             entry_time_in_force = str(payload.get("entry_time_in_force") or "GTC").upper()
             if entry_time_in_force == "POST_ONLY":
@@ -1906,24 +1923,30 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
-            actual_stop, actual_target = calculate_initial_boundaries(
+            actual_stop, actual_target = resolve_initial_protection_boundaries(
                 entry=actual_entry,
                 side=side,
                 tick=tick,
-                stop_loss_pct=contract["stop_loss_pct"],
-                take_profit_pct=contract["take_profit_pct"],
+                contract=contract,
             )
+            protection_request: dict[str, object] = {
+                "category": "linear", "symbol": symbol,
+                "positionIdx": int(filled_position.get("positionIdx") or 0),
+                "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
+                "slTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
+            }
+            if actual_target is not None:
+                protection_request.update(
+                    {
+                        "takeProfit": str(actual_target),
+                        "tpTriggerBy": str(contract["trigger_by"]),
+                        "tpOrderType": "Market",
+                    }
+                )
             try:
                 protection = api_post(
                     "/v5/position/trading-stop",
-                    {
-                        "category": "linear", "symbol": symbol,
-                        "positionIdx": int(filled_position.get("positionIdx") or 0),
-                        "tpslMode": str(contract["tpsl_mode"]), "stopLoss": str(actual_stop),
-                        "takeProfit": str(actual_target), "slTriggerBy": str(contract["trigger_by"]),
-                        "tpTriggerBy": str(contract["trigger_by"]), "slOrderType": "Market",
-                        "tpOrderType": "Market",
-                    },
+                    protection_request,
                     key,
                     secret,
                 )
@@ -1953,7 +1976,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     ) from exc
                 verified_stop = Decimal(str(verified_position.get("stopLoss") or 0))
                 verified_target = Decimal(str(verified_position.get("takeProfit") or 0))
-                if verified_stop != actual_stop or verified_target != actual_target:
+                if verified_stop != actual_stop or (
+                    actual_target is not None and verified_target != actual_target
+                ):
                     raise RuntimeError(
                         "entry protection not-modified verification mismatch "
                         f"requested_stop={actual_stop} actual_stop={verified_stop} "
@@ -1967,7 +1992,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 }
             result["actualProtection"] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
-                "takeProfit": str(actual_target), "exchange": protection.get("retMsg"),
+                "takeProfit": None if actual_target is None else str(actual_target),
+                "exchange": protection.get("retMsg"),
             }
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
