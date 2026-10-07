@@ -71,6 +71,15 @@ def _as_datetime(value: object, label: str) -> datetime:
     return value.astimezone(UTC)
 
 
+_TERMINAL_ENTRY_REQUEST_STATES = frozenset(
+    {
+        "REQUEST_CANCELLED",
+        "REQUEST_EXPIRED",
+        "REQUEST_TERMINAL",
+    }
+)
+
+
 _MANAGED_FAULT_CODES = frozenset(
     {
         "PLAN_PAIR_INCOMPLETE",
@@ -964,17 +973,29 @@ class LifecycleSupervisor:
 
         entry_requests = self._connection.execute(
             """SELECT r.execution_request_id,r.strategy_attempt_id,
-                      c.pre_dispatch_expires_at,d.state,d.reason
+                      c.pre_dispatch_expires_at,d.state,d.reason,
+                      latest_request_state.state AS request_state
                  FROM strategy_entry.execution_requests r
                  LEFT JOIN runtime.capital_reservations c
                    ON c.reservation_id=r.capital_reservation_id
                  LEFT JOIN strategy_entry.execution_dispatches d
-                   ON d.execution_request_id=r.execution_request_id"""
+                   ON d.execution_request_id=r.execution_request_id
+                 LEFT JOIN LATERAL (
+                     SELECT e.state
+                       FROM strategy_entry.execution_request_state_events e
+                      WHERE e.execution_request_id=r.execution_request_id
+                      ORDER BY e.occurred_at DESC,e.created_at DESC,
+                               e.request_state_event_id DESC
+                      LIMIT 1
+                 ) latest_request_state ON true"""
         ).fetchall()
         for row in entry_requests:
-            blocked = str(row["state"] or "") == "BLOCKED"
+            request_state = str(row["request_state"] or "")
+            terminal_request = request_state in _TERMINAL_ENTRY_REQUEST_STATES
+            blocked = str(row["state"] or "") == "BLOCKED" and not terminal_request
             expired = (
                 row["state"] is None
+                and not terminal_request
                 and row["pre_dispatch_expires_at"] is not None
                 and _as_datetime(
                     row["pre_dispatch_expires_at"],

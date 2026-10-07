@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from bybit_workbench.lifecycle_supervisor import LifecycleSupervisorPolicy
+from bybit_workbench.lifecycle_supervisor import LifecycleSupervisor, LifecycleSupervisorPolicy
 
 ROOT = Path(__file__).resolve().parents[1]
 SUPERVISOR = (ROOT / "src/bybit_workbench/lifecycle_supervisor.py").read_text(encoding="utf-8")
@@ -85,3 +86,56 @@ def test_supervisor_manages_every_v1_lifecycle_fault_code() -> None:
         "CAPITAL_RESERVATION_STUCK",
     ):
         assert f'"{code}"' in SUPERVISOR
+
+
+class _LifecycleCursor:
+    def __init__(self, rows):
+        self._rows = rows
+
+    @property
+    def rowcount(self):
+        return len(self._rows)
+
+    def fetchall(self):
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+
+class _EntryRequestFaultConnection:
+    def __init__(self, request_state):
+        self.request_state = request_state
+
+    def execute(self, statement, parameters=()):
+        if (
+            "FROM strategy_entry.execution_requests r" in statement
+            and "latest_request_state.state AS request_state" in statement
+        ):
+            return _LifecycleCursor(
+                [
+                    {
+                        "execution_request_id": "request-test",
+                        "strategy_attempt_id": "attempt-test",
+                        "pre_dispatch_expires_at": datetime.now(UTC) + timedelta(minutes=1),
+                        "state": "BLOCKED",
+                        "reason": "LIVE_ARM_NOT_READY",
+                        "request_state": self.request_state,
+                    }
+                ]
+            )
+        return _LifecycleCursor([])
+
+
+def test_terminal_cancelled_entry_request_is_not_active_not_dispatched_fault() -> None:
+    supervisor = LifecycleSupervisor(_EntryRequestFaultConnection("REQUEST_CANCELLED"))
+    faults = supervisor._detect_faults(datetime.now(UTC))
+    assert not any(item.code == "ENTRY_REQUEST_NOT_DISPATCHED" for item in faults)
+
+
+def test_blocked_entry_request_without_terminal_state_remains_fault() -> None:
+    supervisor = LifecycleSupervisor(_EntryRequestFaultConnection(None))
+    faults = supervisor._detect_faults(datetime.now(UTC))
+    matches = [item for item in faults if item.code == "ENTRY_REQUEST_NOT_DISPATCHED"]
+    assert len(matches) == 1
+    assert matches[0].scope_key == "request-test"
