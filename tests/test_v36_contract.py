@@ -69,11 +69,11 @@ def test_protection_math_has_no_strategy_defaults() -> None:
 
 def test_entry_order_contains_initial_server_protection() -> None:
     text = (ROOT / "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert '"stopLoss":str(stop)' in text
-    assert '"takeProfit":str(target)' in text
+    assert '"stopLoss": str(stop)' in text
+    assert '"takeProfit": str(target)' in text
     assert "initial_protection_contract(payload)" in text
-    assert '"slOrderType":"Market"' in text
-    assert '"tpOrderType":"Market"' in text
+    assert '"slOrderType": "Market"' in text
+    assert '"tpOrderType": "Market"' in text
 
 
 def test_executor_no_longer_decides_break_even_or_trailing() -> None:
