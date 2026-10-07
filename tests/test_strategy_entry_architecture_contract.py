@@ -116,6 +116,7 @@ def test_current_map_mirrors_every_live_arm_gate_name() -> None:
         "SOURCE_LIVE_IDENTITY",
         "TESTS",
         "LIVE_EQUIVALENCE",
+        "PAPER_REAL_DECISION_PARITY",
         "EXCHANGE_ACCOUNT_IDENTITY",
         "POSITION_MODE_FRESH",
         "POSITION_IDX_EXPECTED",

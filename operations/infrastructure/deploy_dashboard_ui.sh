@@ -120,6 +120,8 @@ allowed_functions = {
     "observer_runtime_fault_state",
     "merge_observer_fault_health",
     "resolve_observer_runtime_fault",
+    "_r1_paper_real_parity_attestation",
+    "_u6_prepare_r1_prearm_evidence",
     "snapshot",
 }
 allowed_assignments = {
@@ -127,6 +129,7 @@ allowed_assignments = {
     "PAPER_TAKER_FEE_RATE",
     "REAL_IMMEDIATE_CLOSE_FEE_RATE",
     "OBSERVER_RUNTIME_FAULT_CODE",
+    "R1_PARITY_ATTESTED_MODULE_SHA256",
 }
 forbidden_call_tokens = (
     "arm_r1_micro_live",
@@ -199,6 +202,19 @@ for kind, name in changed:
                     raise SystemExit(
                         "Dashboard verifier failed: unauthorized mutation SQL in "
                         "resolve_observer_runtime_fault"
+                    )
+            elif name == "_u6_prepare_r1_prearm_evidence":
+                if any(
+                    "INSERT INTO control.live_arm_evidence" not in value
+                    for value in mutation_strings
+                ):
+                    raise SystemExit(
+                        "Dashboard verifier failed: unauthorized mutation SQL in "
+                        "_u6_prepare_r1_prearm_evidence"
+                    )
+                if "PAPER_REAL_DECISION_PARITY" not in src:
+                    raise SystemExit(
+                        "Dashboard verifier failed: parity evidence missing from prearm"
                     )
             elif mutation_strings:
                 raise SystemExit(f"Dashboard verifier failed: mutation SQL in {name}")
