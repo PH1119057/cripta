@@ -38,8 +38,8 @@ def main() -> int:
     args = parser.parse_args()
 
     cards = build_r1_cards(
-        approved_at=datetime(2026, 10, 4, tzinfo=UTC),
-        approved_source="owner-r1-micro-live-2026-10-04",
+        approved_at=datetime(2026, 10, 7, tzinfo=UTC),
+        approved_source="owner-r1-initial-opposite-tp-2026-10-07",
     )
     ready = observer_ready()
     if args.activate_monitoring and not ready:
