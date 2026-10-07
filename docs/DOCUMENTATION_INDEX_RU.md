@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.13
+**Версия:** 3.14
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -744,3 +744,33 @@ Documentation ownership:
 Publication semantics: этот documentation commit изменит
 `REMOTE_HEAD/SOURCE_HEAD`, но не application `INSTALLED_COMMIT/LOADED_COMMIT`;
 MAP фиксирует pre-publication application checkpoint отдельно по INDEX §17.5.
+
+# 27. R1 Entry-time opposite-inner protection clarification — OWNER DECISION 2026-10-07
+
+Owner clarified the existing R1 safety intent and approved a new immutable R1
+Strategy version `1.1-micro-live` rather than mutating
+`1.0-micro-live` in place.
+
+Canonical result:
+- initial catastrophic SL remains `-10.0%`;
+- initial TP is mandatory at Entry and is an exact price, not a percentage;
+- LONG initial TP = current 5m L5-3 `resistance_bottom`;
+- SHORT initial TP = current 5m L5-3 `support_top`;
+- causal reference = `fact.r1_opposite_inner_target`;
+- both SL and TP must be Exchange-resident from opening-order submission so
+  server/network loss after fill does not leave the position without the
+  Strategy-owned emergency exit envelope;
+- post-Entry dynamic TP replacement remains owned by Universal Exit;
+- immutable Strategy history is preserved by a new R1 Strategy version.
+
+Document ownership:
+- exact trading contract: `TRADING_CONTOUR` Protection and activation boundary;
+- term semantics: `CRIPTA_GLOSSARY`;
+- implementation/runtime status: `CURRENT_PROJECT_MAP`;
+- INDEX records the revision only.
+
+No current document is added/removed. Paths, mandatory pre-read, routing and
+Project Source file count remain unchanged. README / AGENTS / Project
+Instructions/bootstrap are synchronized with the new current R1 protection
+pointer in this documentation cycle.
+
