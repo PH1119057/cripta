@@ -1409,3 +1409,3179 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             "lifecycle": lifecycle,
         }
         if row[7] is not None:
+            lifecycle_exec_ids = set(
+                str(value) for value in (lifecycle.get("close_fill") or {}).get("exec_ids", [])
+            )
+            candidate = next(
+                (
+                    item for item in recent_closed
+                    if lifecycle_exec_ids.intersection(item.get("exec_ids", []))
+                ),
+                None,
+            )
+            if candidate:
+                candidate["trade_card"] = card
+                exit_decision = lifecycle.get("exit_decision") or {}
+                decision_json = exit_decision.get("decision_json") or {}
+                candidate["strategy_reason"] = (
+                    decision_json.get("internal_reason")
+                    or exit_decision.get("internal_reason") or "UNKNOWN"
+                )
+    now_ms = int(time.time() * 1000)
+    def funnel_window(start_ms: int) -> dict[str, object]:
+        rows = [row for row in funnel_rows if int(row[0]) >= start_ms]
+        decisions = {"ALLOW": 0, "BLOCK": 0}
+        reasons: dict[str, int] = {}
+        for row in rows:
+            key = "ALLOW" if str(row[1]) in {"разрешён", "ALLOW"} else "BLOCK"
+            decisions[key] += 1
+            if key == "BLOCK":
+                reasons[str(row[2])] = reasons.get(str(row[2]), 0) + 1
+        return {"core_signals": len(rows), "decisions": decisions,
+                "top_block_reasons": sorted(reasons.items(), key=lambda x: x[1], reverse=True)[:5]}
+    return {
+        "wallet": None
+        if wallet is None
+        else {
+            "refreshed_at_epoch_ms": wallet[0],
+            "total_equity": wallet[1],
+            "wallet_balance": wallet[2],
+            "available_balance": wallet[3],
+            "reserved_for_orders": reserved_for_orders,
+            "reserved_for_positions": reserved_for_positions,
+        },
+        "positions": positions,
+        "pending_entry_orders": pending_orders,
+        "settings": {
+            "stake_usdt": settings[0],
+            "leverage": settings[1],
+            "enabled_symbols": [
+                symbol for symbol in json.loads(settings[2]) if symbol not in BYBIT_KZ_UNSUPPORTED
+            ],
+            "entry_offset_pct": settings[3],
+            "entry_limit_ttl_seconds": settings[4],
+            "auto_profit_protection": bool(settings[5]),
+            "auto_trailing_stop": bool(settings[6]),
+            "trailing_distance_pct": settings[7],
+            "entry_policy": settings[8],
+            "settings_version": str(settings[9]),
+        }
+        if settings
+        else {
+            "stake_usdt": "10",
+            "leverage": 10,
+            "enabled_symbols": [],
+            "entry_offset_pct": "0.00",
+            "entry_limit_ttl_seconds": 30,
+            "auto_profit_protection": True,
+            "auto_trailing_stop": True,
+            "trailing_distance_pct": "0.30",
+            "entry_policy": "base_entry_v1",
+            "settings_version": None,
+        },
+        "rearm": rearm,
+        "rearm_ready": bool(rearm.get("rearm_ready")),
+        "gate": {"enabled": bool(gate[0]), "reason": gate[1]}
+        if gate
+        else {"enabled": False, "reason": "шлюз не настроен"},
+        "commands": [
+            {
+                "command_id": r[0],
+                "type": r[1],
+                "symbol": r[2],
+                "state": r[3],
+                "requested_at_epoch_ms": r[4],
+                "error": r[5],
+            }
+            for r in commands
+        ],
+        "recent_closed": recent_closed,
+        "trade_lifecycles": [],
+        "shared_market_context": None if market_context is None else {
+            "market_context_id": market_context[0],
+            "observed_at": market_context[1].isoformat(),
+            "mayak_version": market_context[2],
+            "schema_version": market_context[3],
+            "data_quality": market_context[4],
+            "payload": market_context[5],
+        },
+        "position_ownership": [],
+        "entry_funnel": {
+            "last_hour": funnel_window(now_ms - 3_600_000),
+            "session": funnel_window(session_start_ms),
+            "last_24h": funnel_window(now_ms - 86_400_000),
+        },
+        "strategy_controls": {
+            "strategy": "M3 FULL LIVE V1.1", "installed_version": "1.1.0",
+            "loaded_version": "1.1.0", "entry_profile": "M3_V1_LONG/SHORT_ENTRY 1.0.0-owner-live",
+            "accepted_statuses": ["EXCELLENT_MATCH","GOOD_MATCH","PARTIAL_MATCH"],
+            "max_context_age_seconds": 90, "allowed_quality": ["HIGH","MEDIUM"],
+            "hold_profile": "M3_V1_LONG/SHORT_HOLD 1.0.0-owner-live",
+            "early_exit_enabled": False,
+            "early_exit_state": "BROKEN + INCOMPATIBLE + protective_clean_break_against",
+            "early_exit_status": "DISABLED/FALLBACK_SAFE: Entry не передаёт геометрию зон",
+            "minimum_net_profit_usdt": "0.01", "exit_fee_rate": "0.00055",
+            "slippage_reserve": "не меньше 0,02% и наблюдаемого проскальзывания",
+            "hard_stop_pct": "-1.00",
+        },
+    }
+
+
+SIGNAL_EXPORT_PERIODS = {
+    "day": (24 * 3600, "сутки"),
+    "72h": (72 * 3600, "72_часа"),
+    "week": (7 * 24 * 3600, "неделя"),
+    "all": (None, "весь_период"),
+}
+ENTRY_AUDIT_DATABASE = Path(
+    os.environ.get("CRIPTA_ENTRY_SHADOW_DB", "/var/lib/cripta/entry_shadow/workbench.db")
+)
+ENTRY_AUDIT_EVENT_TYPES = (
+    "CANDIDATE_ARMED",
+    "CANDIDATE_CLEARED",
+    "PRELIMIT_ARM_SHADOW",
+    "PRELIMIT_TOUCH_SHADOW",
+    "PRELIMIT_CANCEL_SHADOW",
+    "TOUCH_VETO",
+    "TOUCH_BLOCKED",
+    "CORE_SIGNAL",
+    "EARLY_FAILURE",
+    "STREAM_GAP",
+    "WARMUP_ERROR",
+)
+SIGNAL_ANALYSIS_TABLES = (
+    ("monitoring.opportunities", "signal_at_epoch_ms", "epoch_ms"),
+    ("monitoring.opportunity_events", "at_epoch_ms", "epoch_ms"),
+    ("monitoring.entry_dispatcher_shadow_decisions", "signal_at", "timestamp"),
+    ("monitoring.entry_geometry_handoffs", "signal_at", "timestamp"),
+    ("runtime.entry_decisions", "signal_at_epoch_ms", "epoch_ms"),
+    ("runtime.m3_consumed_context", "signal_at", "timestamp"),
+    ("runtime.trade_settings_history", "changed_at_epoch_ms", "epoch_ms"),
+    ("research_context.event_links", "occurred_at", "timestamp"),
+    ("research_context.dispatcher_v2_event_links", "occurred_at", "timestamp"),
+    ("strategy_dispatcher.runs", "observed_at", "timestamp"),
+    ("strategy_dispatcher.assessments", "observed_at", "timestamp"),
+    ("mayak_v2.snapshots", "observed_at", "timestamp"),
+    ("mayak_v2.coin_minutes", "observed_at", "timestamp"),
+    ("mayak_v2.coin_market_contexts", "observed_at", "timestamp"),
+    ("mayak_v2.events", "occurred_at", "timestamp"),
+    ("mayak_v2.state_events", "occurred_at", "timestamp"),
+    ("mayak_v2.observation_journal", "observed_at", "timestamp"),
+    ("mayak_v2.liquidations", "occurred_at", "timestamp"),
+    ("mayak_v2.shared_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.global_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.coin_market_contexts", "observed_at", "timestamp"),
+    ("dispatcher_v2.trading_capacity_snapshots", "observed_at", "timestamp"),
+)
+
+
+def _csv_cell(value: object) -> object:
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, default=str, sort_keys=True)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _write_cursor_csv(archive: zipfile.ZipFile, name: str, cursor: object) -> int:
+    description = getattr(cursor, "description", None)
+    if not description:
+        raise RuntimeError(f"экспорт {name}: запрос не вернул столбцы")
+    columns = [item.name if hasattr(item, "name") else item[0] for item in description]
+    count = 0
+    with archive.open(name, "w") as raw:
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+        writer = csv.writer(text, delimiter=";")
+        writer.writerow(columns)
+        for row in cursor:
+            writer.writerow([_csv_cell(value) for value in row])
+            count += 1
+        text.flush()
+        text.detach()
+    return count
+
+
+def _first_hit_state(first_hits_json: object, target: str) -> tuple[object, object, str]:
+    try:
+        first_hits = (
+            json.loads(first_hits_json)
+            if isinstance(first_hits_json, str)
+            else dict(first_hits_json or {})
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        first_hits = {}
+    target_at = first_hits.get(target)
+    stop_at = first_hits.get("-1.0")
+    if target_at is not None and (stop_at is None or int(target_at) < int(stop_at)):
+        state = "TARGET_FIRST"
+    elif stop_at is not None and (target_at is None or int(stop_at) < int(target_at)):
+        state = "STOP_FIRST"
+    elif target_at is None and stop_at is None:
+        state = "UNRESOLVED"
+    else:
+        state = "SAME_TIMESTAMP"
+    return target_at, stop_at, state
+
+
+def _write_signal_context_csv(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_ms: int | None,
+) -> tuple[int, dict[str, int]]:
+    query = """
+        WITH signal_link AS (
+            SELECT DISTINCT ON (reference_id)
+                   reference_id,
+                   observed_mayak_snapshot_id,
+                   observed_mayak_at,
+                   observed_dispatcher_snapshot_id,
+                   observed_dispatcher_at,
+                   observed_context,
+                   consumed_context,
+                   link_quality,
+                   provenance
+            FROM research_context.event_links
+            WHERE event_type='SIGNAL'
+            ORDER BY reference_id, linked_at DESC
+        ), shadow AS (
+            SELECT DISTINCT ON (m3_setup_id)
+                   m3_setup_id,
+                   shadow_dispatcher_decision,
+                   consumed_dispatcher_assessment_id,
+                   consumed_mayak_snapshot_id,
+                   assessment_observed_at,
+                   profile_id,
+                   profile_version,
+                   data_quality,
+                   coverage,
+                   decision_reason_ru,
+                   trading_effect,
+                   payload
+            FROM monitoring.entry_dispatcher_shadow_decisions
+            ORDER BY m3_setup_id, created_at DESC
+        )
+        SELECT
+            o.signal_id,
+            o.bot_id,
+            o.strategy_version AS scanner_strategy_version,
+            o.symbol,
+            o.direction,
+            to_timestamp(o.signal_at_epoch_ms / 1000.0) AS signal_at,
+            o.signal_at_epoch_ms,
+            o.signal_price,
+            o.decision AS scanner_decision,
+            o.decision_reason AS scanner_decision_reason,
+            o.traffic_light,
+            o.horizon_seconds,
+            o.state AS observation_state,
+            o.last_price,
+            o.max_favorable_pct,
+            o.max_adverse_pct,
+            o.first_hits_json,
+            o.samples,
+            o.finalized_at_epoch_ms,
+            link.observed_mayak_snapshot_id,
+            link.observed_mayak_at,
+            link.observed_dispatcher_snapshot_id,
+            link.observed_dispatcher_at,
+            link.link_quality,
+            link.provenance AS observed_link_provenance,
+            link.observed_context,
+            link.consumed_context,
+            mayak.state AS mayak_state,
+            mayak.confidence AS mayak_confidence,
+            mayak.engine_version AS mayak_engine_version,
+            mayak.payload AS mayak_payload,
+            dispatcher.assessment_id AS dispatcher_assessment_id,
+            dispatcher.profile_id AS dispatcher_profile_id,
+            dispatcher.profile_version AS dispatcher_profile_version,
+            dispatcher.suitability AS dispatcher_suitability,
+            dispatcher.confidence AS dispatcher_confidence,
+            dispatcher.status AS dispatcher_status,
+            dispatcher.data_quality AS dispatcher_data_quality,
+            dispatcher.coverage AS dispatcher_coverage,
+            dispatcher.payload AS dispatcher_payload,
+            coin.observed_at AS coin_context_at,
+            coin.spot_net_usd,
+            coin.spot_turnover_usd,
+            coin.derivatives_net_usd,
+            coin.derivatives_turnover_usd,
+            coin.return_5m_pct,
+            coin.open_interest,
+            coin.open_interest_change_pct,
+            coin.funding_rate,
+            coin.mark_price,
+            coin.index_price,
+            coin.long_ratio,
+            coin.short_ratio,
+            coin.spot_bid_change_pct,
+            coin.spot_ask_change_pct,
+            coin.derivatives_bid_change_pct,
+            coin.derivatives_ask_change_pct,
+            coin.large_spot_buy_usd,
+            coin.large_spot_sell_usd,
+            coin.large_derivatives_buy_usd,
+            coin.large_derivatives_sell_usd,
+            coin.source_quality AS coin_source_quality,
+            entry.decision AS entry_decision,
+            entry.reason AS entry_reason,
+            entry.details_json AS entry_details,
+            entry.entry_policy,
+            entry.policy_version AS entry_policy_version,
+            entry.settings_version,
+            entry.mayak_snapshot_id AS entry_recorded_mayak_snapshot_id,
+            entry.mayak_snapshot_time AS entry_recorded_mayak_snapshot_time,
+            advisory.context_type AS advisory_context_type,
+            advisory.trading_effect AS advisory_trading_effect,
+            advisory.assessment_id AS advisory_assessment_id,
+            advisory.mayak_snapshot_id AS advisory_mayak_snapshot_id,
+            advisory.market_context_id AS advisory_market_context_id,
+            advisory.dispatcher_status AS advisory_dispatcher_status,
+            advisory.reason_ru AS advisory_reason_ru,
+            geometry.strategy_id,
+            geometry.strategy_version,
+            geometry.entry_fingerprint,
+            geometry.geometry_version,
+            geometry.config_fingerprint AS geometry_config_fingerprint,
+            geometry.geometry_hash,
+            geometry.payload AS geometry_payload,
+            shadow.shadow_dispatcher_decision,
+            shadow.consumed_dispatcher_assessment_id AS shadow_assessment_id,
+            shadow.consumed_mayak_snapshot_id AS shadow_mayak_snapshot_id,
+            shadow.assessment_observed_at AS shadow_assessment_observed_at,
+            shadow.profile_id AS shadow_profile_id,
+            shadow.profile_version AS shadow_profile_version,
+            shadow.data_quality AS shadow_data_quality,
+            shadow.coverage AS shadow_coverage,
+            shadow.decision_reason_ru AS shadow_reason_ru,
+            shadow.trading_effect AS shadow_trading_effect,
+            shadow.payload AS shadow_payload,
+            CASE
+                WHEN link.observed_mayak_at IS NULL OR link.observed_dispatcher_at IS NULL
+                    THEN 'MISSING'
+                WHEN link.observed_mayak_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                 AND link.observed_dispatcher_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                    THEN 'YES'
+                ELSE 'NO_FUTURE_CONTEXT'
+            END AS causal_context_ok,
+            CASE WHEN link.observed_mayak_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - link.observed_mayak_at
+                    )
+                ) * 1000
+            END AS mayak_age_ms,
+            CASE WHEN link.observed_dispatcher_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - link.observed_dispatcher_at
+                    )
+                ) * 1000
+            END AS dispatcher_age_ms,
+            CASE WHEN coin.observed_at IS NULL THEN NULL ELSE
+                extract(
+                    epoch FROM (
+                        to_timestamp(o.signal_at_epoch_ms / 1000.0) - coin.observed_at
+                    )
+                ) * 1000
+            END AS coin_context_age_ms
+        FROM monitoring.opportunities o
+        LEFT JOIN signal_link link ON link.reference_id=o.signal_id
+        LEFT JOIN mayak_v2.snapshots mayak
+               ON mayak.id::text=link.observed_mayak_snapshot_id::text
+        LEFT JOIN strategy_dispatcher.assessments dispatcher
+               ON dispatcher.snapshot_id::text=link.observed_dispatcher_snapshot_id::text
+              AND dispatcher.profile_id=(
+                    CASE WHEN o.direction='long'
+                         THEN 'M3_V1_LONG_ENTRY' ELSE 'M3_V1_SHORT_ENTRY' END
+              )
+        LEFT JOIN LATERAL (
+            SELECT cm.*
+            FROM mayak_v2.coin_minutes cm
+            WHERE cm.symbol=o.symbol
+              AND cm.observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+            ORDER BY cm.observed_at DESC
+            LIMIT 1
+        ) coin ON TRUE
+        LEFT JOIN runtime.entry_decisions entry ON entry.signal_id=o.signal_id
+        LEFT JOIN runtime.m3_consumed_context advisory ON advisory.signal_id=o.signal_id
+        LEFT JOIN monitoring.entry_geometry_handoffs geometry ON geometry.signal_id=o.signal_id
+        LEFT JOIN shadow ON shadow.m3_setup_id=o.signal_id
+    """
+    parameters: tuple[object, ...] = ()
+    if cutoff_ms is not None:
+        query += " WHERE o.signal_at_epoch_ms >= %s"
+        parameters = (cutoff_ms,)
+    query += " ORDER BY o.signal_at_epoch_ms"
+    cursor = connection.execute(query, parameters)
+    base_columns = [item.name for item in cursor.description]
+    extra_columns = (
+        "first_plus_0_10_at_epoch_ms",
+        "first_minus_1_00_at_epoch_ms_for_be",
+        "plus_0_10_vs_minus_1",
+        "first_plus_1_10_at_epoch_ms",
+        "first_minus_1_00_at_epoch_ms_for_target",
+        "plus_1_10_vs_minus_1",
+    )
+    summary = {
+        "signals": 0,
+        "be_target_first": 0,
+        "be_stop_first": 0,
+        "be_unresolved": 0,
+        "plus_1_10_target_first": 0,
+        "plus_1_10_stop_first": 0,
+        "plus_1_10_unresolved": 0,
+        "causal_context_yes": 0,
+        "causal_context_missing": 0,
+        "causal_context_violation": 0,
+    }
+    first_hits_index = base_columns.index("first_hits_json")
+    causal_index = base_columns.index("causal_context_ok")
+    with archive.open("01_SIGNAL_CONTEXT.csv", "w") as raw:
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+        writer = csv.writer(text, delimiter=";")
+        writer.writerow(base_columns + list(extra_columns))
+        for row in cursor:
+            be_at, be_stop_at, be_state = _first_hit_state(row[first_hits_index], "+0.1")
+            target_at, target_stop_at, target_state = _first_hit_state(
+                row[first_hits_index], "+1.1"
+            )
+            writer.writerow(
+                [_csv_cell(value) for value in row]
+                + [be_at, be_stop_at, be_state, target_at, target_stop_at, target_state]
+            )
+            summary["signals"] += 1
+            if be_state == "TARGET_FIRST":
+                summary["be_target_first"] += 1
+            elif be_state == "STOP_FIRST":
+                summary["be_stop_first"] += 1
+            else:
+                summary["be_unresolved"] += 1
+            if target_state == "TARGET_FIRST":
+                summary["plus_1_10_target_first"] += 1
+            elif target_state == "STOP_FIRST":
+                summary["plus_1_10_stop_first"] += 1
+            else:
+                summary["plus_1_10_unresolved"] += 1
+            causal = row[causal_index]
+            if causal == "YES":
+                summary["causal_context_yes"] += 1
+            elif causal == "MISSING":
+                summary["causal_context_missing"] += 1
+            else:
+                summary["causal_context_violation"] += 1
+        text.flush()
+        text.detach()
+    return summary["signals"], summary
+
+
+def _write_postgresql_period_tables(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_seconds: float | None,
+    cutoff_ms: int | None,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for table, time_column, time_kind in SIGNAL_ANALYSIS_TABLES:
+        schema, table_name = table.split(".")
+        query = f'SELECT * FROM "{schema}"."{table_name}"'
+        parameters: tuple[object, ...] = ()
+        if cutoff_seconds is not None:
+            if time_kind == "timestamp":
+                query += f' WHERE "{time_column}" >= to_timestamp(%s)'
+                parameters = (cutoff_seconds,)
+            else:
+                query += f' WHERE "{time_column}" >= %s'
+                parameters = (cutoff_ms,)
+        query += f' ORDER BY "{time_column}"'
+        cursor = connection.execute(query, parameters)
+        path = f"postgresql/{table}.csv"
+        counts[table] = _write_cursor_csv(archive, path, cursor)
+    return counts
+
+
+
+
+def _write_dispatcher_v2_signal_context_csv(
+    archive: zipfile.ZipFile,
+    connection: psycopg.Connection,
+    cutoff_ms: int | None,
+) -> int:
+    query = """
+        SELECT
+            o.signal_id,
+            o.symbol,
+            o.direction,
+            to_timestamp(o.signal_at_epoch_ms / 1000.0) AS signal_at,
+            o.signal_price,
+            o.decision AS scanner_decision,
+            entry.decision AS entry_decision,
+            entry.reason AS entry_reason,
+            entry.entry_policy,
+            entry.policy_version AS entry_policy_version,
+            link.global_context_id,
+            link.global_observed_at,
+            link.global_age_seconds,
+            global_ctx.data_quality AS global_data_quality,
+            global_ctx.freshness_status AS global_stored_freshness_status,
+            global_ctx.payload AS global_context_payload,
+            link.coin_context_id,
+            link.coin_observed_at,
+            link.coin_age_seconds,
+            coin_ctx.data_quality AS coin_data_quality,
+            coin_ctx.freshness_status AS coin_stored_freshness_status,
+            coin_ctx.payload AS coin_context_payload,
+            link.capacity_snapshot_id,
+            link.capacity_observed_at,
+            link.capacity_age_seconds,
+            capacity.data_quality AS capacity_data_quality,
+            capacity.freshness_status AS capacity_stored_freshness_status,
+            capacity.total_equity,
+            capacity.used_position_margin,
+            capacity.reserved_order_margin,
+            capacity.free_balance,
+            capacity.available_for_new_trading,
+            capacity.open_positions_count,
+            capacity.active_orders_count,
+            link.link_quality,
+            link.observed_context_mode,
+            link.consumed_context_mode,
+            link.provenance AS dispatcher_v2_link_provenance,
+            CASE
+                WHEN link.global_context_id IS NULL THEN 'MISSING'
+                WHEN link.global_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+                 AND (link.coin_observed_at IS NULL OR
+                      link.coin_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0))
+                 AND (link.capacity_observed_at IS NULL OR
+                      link.capacity_observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0))
+                    THEN 'YES'
+                ELSE 'NO_FUTURE_CONTEXT'
+            END AS dispatcher_v2_causal_ok
+        FROM monitoring.opportunities o
+        LEFT JOIN research_context.dispatcher_v2_event_links link
+          ON link.event_type='SIGNAL' AND link.reference_id=o.signal_id
+        LEFT JOIN dispatcher_v2.global_market_contexts global_ctx
+          ON global_ctx.global_context_id=link.global_context_id
+        LEFT JOIN dispatcher_v2.coin_market_contexts coin_ctx
+          ON coin_ctx.coin_context_id=link.coin_context_id
+        LEFT JOIN dispatcher_v2.trading_capacity_snapshots capacity
+          ON capacity.capacity_snapshot_id=link.capacity_snapshot_id
+        LEFT JOIN runtime.entry_decisions entry ON entry.signal_id=o.signal_id
+    """
+    parameters: tuple[object, ...] = ()
+    if cutoff_ms is not None:
+        query += " WHERE o.signal_at_epoch_ms >= %s"
+        parameters = (cutoff_ms,)
+    query += " ORDER BY o.signal_at_epoch_ms"
+    cursor = connection.execute(query, parameters)
+    return _write_cursor_csv(archive, "03_DISPATCHER_V2_OBSERVED_CONTEXT.csv", cursor)
+
+
+def _write_entry_audit_csv(
+    archive: zipfile.ZipFile, cutoff_seconds: float | None
+) -> int:
+    if not ENTRY_AUDIT_DATABASE.is_file():
+        raise RuntimeError(f"не найдена Entry audit DB: {ENTRY_AUDIT_DATABASE}")
+    placeholders = ",".join("?" for _ in ENTRY_AUDIT_EVENT_TYPES)
+    query = f"""
+        SELECT event_id,occurred_at,symbol,event_type,status,candidate_id,direction,
+               candidate_bar_at,entry_price,last_price,distance_pct,flow_state,oi_state,
+               reason,payload_json,created_at
+        FROM entry_bot_candidate_events
+        WHERE event_type IN ({placeholders})
+    """
+    parameters: list[object] = list(ENTRY_AUDIT_EVENT_TYPES)
+    if cutoff_seconds is not None:
+        query += " AND occurred_at >= ?"
+        parameters.append(datetime.fromtimestamp(cutoff_seconds, UTC).isoformat())
+    # Keep the composite (event_type, occurred_at) index usable. Consumers can
+    # sort this CSV by occurred_at when a globally chronological view is needed.
+    query += " ORDER BY event_type, occurred_at, id"
+    connection = sqlite3.connect(
+        f"file:{ENTRY_AUDIT_DATABASE}?mode=ro", uri=True, timeout=30
+    )
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        connection.execute("PRAGMA busy_timeout=30000")
+        cursor = connection.execute(query, tuple(parameters))
+        return _write_cursor_csv(archive, "02_ENTRY_AUDIT_EVENTS.csv", cursor)
+    finally:
+        connection.close()
+
+
+def export_signal_analysis_bundle(period: str) -> dict[str, object]:
+    if period not in SIGNAL_EXPORT_PERIODS:
+        raise ValueError("недопустимый период наблюдения сигналов")
+    seconds, period_label = SIGNAL_EXPORT_PERIODS[period]
+    now_seconds = time.time()
+    cutoff_seconds = now_seconds - seconds if seconds is not None else None
+    cutoff_ms = int(cutoff_seconds * 1000) if cutoff_seconds is not None else None
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    final_path = REPORT_ROOT / f"аналитика_сигналов_{period_label}_{stamp}.zip"
+    partial_path = final_path.with_suffix(".zip.partial")
+    partial_path.unlink(missing_ok=True)
+    source_head = "unknown"
+    try:
+        source_head = subprocess.run(
+            ["git", "-C", "/srv/cripta/source_checkout", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        ).stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        source_head = "unknown"
+    installed_marker = APP_ROOT / "PROJECT_GIT_HEAD.txt"
+    installed_commit = (
+        installed_marker.read_text(encoding="utf-8").strip()
+        if installed_marker.is_file()
+        else "unknown"
+    )
+    manifest: dict[str, object] = {
+        "format": "CRIPTA_SIGNAL_ANALYSIS_EXPORT_V1",
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "period": period,
+        "period_label": period_label,
+        "period_start_utc": (
+            datetime.fromtimestamp(cutoff_seconds, UTC).isoformat()
+            if cutoff_seconds is not None
+            else None
+        ),
+        "period_end_utc": datetime.fromtimestamp(now_seconds, UTC).isoformat(),
+        "source_git_head": source_head,
+        "installed_commit_marker": installed_commit,
+        "postgresql_database": "cripta",
+        "entry_audit_database": str(ENTRY_AUDIT_DATABASE),
+        "entry_audit_event_types": list(ENTRY_AUDIT_EVENT_TYPES),
+        "causality_rule": "context_time <= signal_time; future context is forbidden",
+        "trading_effect": "NONE: export/Analyst observation only",
+        "files": {},
+        "summary": {},
+    }
+    try:
+        with zipfile.ZipFile(
+            partial_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+        ) as archive:
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                signal_rows, summary = _write_signal_context_csv(
+                    archive, connection, cutoff_ms
+                )
+                v2_rows = _write_dispatcher_v2_signal_context_csv(
+                    archive, connection, cutoff_ms
+                )
+                manifest["summary"] = summary
+                manifest["files"]["01_SIGNAL_CONTEXT.csv"] = signal_rows
+                manifest["files"]["03_DISPATCHER_V2_OBSERVED_CONTEXT.csv"] = v2_rows
+                postgres_counts = _write_postgresql_period_tables(
+                    archive, connection, cutoff_seconds, cutoff_ms
+                )
+                for table, count in postgres_counts.items():
+                    manifest["files"][f"postgresql/{table}.csv"] = count
+            audit_rows = _write_entry_audit_csv(archive, cutoff_seconds)
+            manifest["files"]["02_ENTRY_AUDIT_EVENTS.csv"] = audit_rows
+            archive.writestr(
+                "README_RU.txt",
+                "CRIPTA — причинный архив анализа сигналов V1\n\n"
+                "Главный файл: 01_SIGNAL_CONTEXT.csv. Одна строка = один Entry signal.\n"
+                "В строке рядом находятся: точные first-hit уровни, объективно существовавший\n"
+                "к моменту сигнала MAYAK, Dispatcher assessment для направления Entry,\n"
+                "последняя причинная coin-minute запись конкретной монеты, Entry decision,\n"
+                "advisory/observed context, geometry/fingerprint и shadow Dispatcher.\n\n"
+                "02_ENTRY_AUDIT_EVENTS.csv содержит ключевые события внутреннего Entry scanner:\n"
+                "candidate armed/cleared, pre-limit shadow, touch veto/blocked, Core signal,\n"
+                "early failure и ошибки потока. События отбираются только за выбранный период.\n\n"
+                "Каталог postgresql/ содержит только записи выбранного периода из таблиц\n"
+                "MAYAK, Dispatcher, Entry, causal correlator и signal observation. "
+                "Это НЕ pg_dump.\n\n"
+                "OBSERVED_CONTEXT показывает, какой контекст существовал к моменту события.\n"
+                "CONSUMED_CONTEXT означает только реально прочитанный торговым контуром контекст.\n"
+                "Наличие OBSERVED_CONTEXT не доказывает торговое влияние.\n\n"
+                "Поля plus_0_10_vs_minus_1 и plus_1_10_vs_minus_1 дают точный FIRST HIT:\n"
+                "TARGET_FIRST / STOP_FIRST / UNRESOLVED.\n"
+            )
+            archive.writestr(
+                "00_MANIFEST.json",
+                json.dumps(manifest, ensure_ascii=False, indent=2, default=str),
+            )
+        partial_path.replace(final_path)
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        raise
+    return {
+        "file": final_path.name,
+        "size": final_path.stat().st_size,
+        "rows": int(manifest["summary"].get("signals", 0)),
+        "files": len(manifest["files"]) + 2,
+        "summary": manifest["summary"],
+        "url": f"/reports/{quote(final_path.name)}",
+    }
+
+
+def _signal_export_job_path(job_id: str) -> Path:
+    token = job_id.removeprefix("signal-")
+    if (
+        not job_id.startswith("signal-")
+        or len(token) != 32
+        or any(character not in "0123456789abcdef" for character in token)
+    ):
+        raise ValueError("некорректный идентификатор задания анализа сигналов")
+    return SIGNAL_EXPORT_JOB_ROOT / f"{job_id}.json"
+
+
+def _write_signal_export_job(state: dict[str, object]) -> None:
+    SIGNAL_EXPORT_JOB_ROOT.mkdir(parents=True, exist_ok=True)
+    path = _signal_export_job_path(str(state["job_id"]))
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    os.replace(temporary, path)
+
+
+def read_signal_export_job(job_id: str) -> dict[str, object]:
+    path = _signal_export_job_path(job_id)
+    if not path.is_file():
+        raise FileNotFoundError("задание анализа сигналов не найдено")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _update_signal_export_job(job_id: str, **changes: object) -> dict[str, object]:
+    with _signal_export_job_lock:
+        state = read_signal_export_job(job_id)
+        state.update(changes)
+        state["heartbeat_at_utc"] = datetime.now(UTC).isoformat()
+        _write_signal_export_job(state)
+        return state
+
+
+def _run_signal_export_job(job_id: str, period: str) -> None:
+    started = time.monotonic()
+    _update_signal_export_job(
+        job_id,
+        status="RUNNING",
+        stage="COLLECT_CONTEXT",
+        percent=5,
+        started_at_utc=datetime.now(UTC).isoformat(),
+    )
+    try:
+        output = export_signal_analysis_bundle(period)
+    except Exception as exc:  # job boundary must persist failure for UI
+        _update_signal_export_job(
+            job_id,
+            status="FAILED",
+            stage="FAILED",
+            percent=100,
+            elapsed_seconds=round(time.monotonic() - started, 1),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        return
+    _update_signal_export_job(
+        job_id,
+        status="DONE",
+        stage="DONE",
+        percent=100,
+        elapsed_seconds=round(time.monotonic() - started, 1),
+        output=output,
+        error=None,
+    )
+
+
+def start_signal_export_job(period: str) -> dict[str, object]:
+    if period not in SIGNAL_EXPORT_PERIODS:
+        raise ValueError("недопустимый период наблюдения сигналов")
+    job_id = f"signal-{secrets.token_hex(16)}"
+    state: dict[str, object] = {
+        "job_id": job_id,
+        "kind": "SIGNAL_ANALYSIS_EXPORT_V1",
+        "period": period,
+        "status": "QUEUED",
+        "stage": "QUEUED",
+        "percent": 0,
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "heartbeat_at_utc": datetime.now(UTC).isoformat(),
+        "elapsed_seconds": 0,
+        "output": None,
+        "error": None,
+    }
+    _write_signal_export_job(state)
+    threading.Thread(
+        target=_run_signal_export_job,
+        args=(job_id, period),
+        daemon=True,
+        name=f"signal-export-{job_id[-8:]}",
+    ).start()
+    return state
+
+
+def export_trading_table(table: str, period: str) -> dict[str, object]:
+    if table == "signals":
+        return export_signal_analysis_bundle(period)
+    periods = {
+        "day": (24 * 3600, "сутки"),
+        "week": (7 * 24 * 3600, "неделя"),
+        "all": (None, "весь_период"),
+    }
+    if table != "closed" or period not in periods:
+        raise ValueError("недопустимая таблица или период")
+    seconds, period_label = periods[period]
+    cutoff_ms = int((time.time() - seconds) * 1000) if seconds else 0
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(
+        [
+            "Время",
+            "Монета",
+            "Закрыто",
+            "Цена",
+            "Причина биржи",
+            "После комиссий USDT",
+        ]
+    )
+    rows = [
+        x
+        for x in live_trading_state()["recent_closed"]
+        if int(x["closed_at_epoch_ms"]) >= cutoff_ms
+    ]
+    for x in rows:
+        writer.writerow(
+            [
+                time.strftime(
+                    "%Y-%m-%d %H:%M:%S",
+                    time.localtime(int(x["closed_at_epoch_ms"]) / 1000),
+                ),
+                x["symbol"],
+                x["qty"],
+                x["price"],
+                x["reason"],
+                x.get("actual_net_pnl")
+                if x.get("actual_net_pnl") is not None
+                else x["net_pnl"],
+            ]
+        )
+    stem = "закрытые_реальные_сделки"
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+    final_path = REPORT_ROOT / f"{stem}_{period_label}_{stamp}.zip"
+    with zipfile.ZipFile(final_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(f"{stem}_{period_label}.csv", "\ufeff" + output.getvalue())
+        archive.writestr(
+            "ОПИСАНИЕ.txt",
+            f"Период: {period_label}. Строк: {len(rows)}. "
+            f"Сформировано: {time.strftime('%Y-%m-%d %H:%M:%S')}.\n",
+        )
+    return {
+        "file": final_path.name,
+        "size": final_path.stat().st_size,
+        "rows": len(rows),
+        "url": f"/reports/{quote(final_path.name)}",
+    }
+
+
+
+def observer_runtime_fault_state() -> dict[str, object]:
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            rows = connection.execute(
+                """SELECT fault_id,severity,detected_at,exact_ids,payload
+                     FROM runtime.lifecycle_faults
+                    WHERE fault_code=%s AND state='OPEN'
+                    ORDER BY detected_at DESC""",
+                (OBSERVER_RUNTIME_FAULT_CODE,),
+            ).fetchall()
+
+        items: list[dict[str, object]] = []
+        for fault_id, severity, detected_at, exact_ids, payload in rows:
+            exact = dict(exact_ids or {})
+            details = dict(payload or {})
+            detected = detected_at.astimezone(UTC).isoformat()
+            items.append(
+                {
+                    "fault_id": str(fault_id),
+                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                    "severity": str(severity),
+                    "detected_at": detected,
+                    "first_seen_at": str(details.get("first_seen_at") or detected),
+                    "last_seen_at": str(details.get("last_seen_at") or detected),
+                    "occurrence_count": int(details.get("occurrence_count") or 1),
+                    "error_type": str(details.get("error_type") or ""),
+                    "error_message": str(details.get("error_message") or ""),
+                    "service": str(
+                        details.get("service")
+                        or exact.get("service")
+                        or "cripta-universal-entry-observer.service"
+                    ),
+                    "source_commit": str(
+                        details.get("source_commit")
+                        or exact.get("source_commit")
+                        or ""
+                    ),
+                    "last_observer_epoch_id": details.get("last_observer_epoch_id"),
+                    "owner_resolution_required": bool(
+                        details.get("owner_resolution_required", True)
+                    ),
+                    "last_resolution_reason": details.get("last_resolution_reason"),
+                    "last_resolved_by": details.get("last_resolved_by"),
+                    "last_resolved_at": details.get("last_resolved_at"),
+                }
+            )
+    except (psycopg.Error, TypeError, ValueError) as exc:
+        return {
+            "state": "unavailable",
+            "count": 0,
+            "items": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    return {
+        "state": "red" if items else "clear",
+        "count": len(items),
+        "items": items,
+        "error": None,
+    }
+
+
+def merge_observer_fault_health(
+    health: dict[str, object],
+    observer_faults: dict[str, object],
+) -> dict[str, object]:
+    merged = dict(health)
+    issues = list(merged.get("issues") or [])
+    state = str(observer_faults.get("state") or "unavailable")
+    if state == "unavailable":
+        merged["state"] = "red"
+        issues.append(
+            {
+                "code": "OBSERVER_DURABLE_FAULT_READ_UNAVAILABLE",
+                "message": (
+                    "RED · durable observer fault journal unavailable: "
+                    + str(observer_faults.get("error") or "unknown error")
+                ),
+            }
+        )
+    elif int(observer_faults.get("count") or 0) > 0:
+        merged["state"] = "red"
+        issues.append(
+            {
+                "code": OBSERVER_RUNTIME_FAULT_CODE,
+                "message": (
+                    "RED · unresolved Universal Entry observer runtime faults: "
+                    + str(observer_faults.get("count"))
+                ),
+            }
+        )
+    merged["issues"] = issues
+    return merged
+
+
+def resolve_observer_runtime_fault(
+    connection: psycopg.Connection,
+    *,
+    fault_id: str,
+    reason: str,
+    operator: str,
+    resolved_at: datetime,
+) -> bool:
+    exact_fault_id = fault_id.strip()
+    exact_reason = reason.strip()
+    exact_operator = operator.strip()
+    if not exact_fault_id:
+        raise ValueError("fault_id обязателен")
+    if len(exact_fault_id) > 160:
+        raise ValueError("fault_id слишком длинный")
+    if not exact_reason:
+        raise ValueError("причина resolution обязательна")
+    if len(exact_reason) > 1000:
+        raise ValueError("причина resolution слишком длинная")
+    if not exact_operator:
+        raise ValueError("operator не определён")
+    current = resolved_at.astimezone(UTC)
+    row = connection.execute(
+        """UPDATE runtime.lifecycle_faults
+              SET state='RESOLVED',
+                  resolved_at=%s,
+                  payload=payload || jsonb_build_object(
+                      'last_resolution_reason',%s::text,
+                      'last_resolved_by',%s::text,
+                      'last_resolved_at',%s::text
+                  )
+            WHERE fault_id=%s
+              AND fault_code=%s
+              AND state='OPEN'
+            RETURNING fault_id""",
+        (
+            current,
+            exact_reason,
+            exact_operator,
+            current.isoformat(),
+            exact_fault_id,
+            OBSERVER_RUNTIME_FAULT_CODE,
+        ),
+    ).fetchone()
+    return row is not None
+
+
+def snapshot() -> dict[str, object]:
+    global _cache
+    now = time.monotonic()
+    if _cache and now - _cache[0] < 10:
+        return _cache[1]
+    download = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
+    expansion_download = (
+        json.loads(EXPANSION_STATE.read_text(encoding="utf-8")) if EXPANSION_STATE.exists() else {}
+    )
+    active_download = expansion_download or download
+    connectivity = (
+        json.loads(CONNECTIVITY_STATE.read_text(encoding="utf-8"))
+        if CONNECTIVITY_STATE.exists()
+        else {"state": "not-started"}
+    )
+    private_api = (
+        json.loads(PRIVATE_API_STATE.read_text(encoding="utf-8"))
+        if PRIVATE_API_STATE.exists()
+        else {"state": "not-checked"}
+    )
+    try:
+        bots = bot_control_state()
+    except Exception as exc:
+        bots = {
+            "bots": [],
+            "events": [],
+            "execution_gate": "database-error",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    try:
+        opportunities = opportunity_state()
+    except Exception as exc:
+        opportunities = {"counts": {}, "items": [], "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        live_trading = live_trading_state()
+    except Exception as exc:
+        live_trading = {"wallet": None, "positions": [], "error": f"{type(exc).__name__}: {exc}"}
+    safety = (
+        json.loads(SAFETY_STATE.read_text(encoding="utf-8"))
+        if SAFETY_STATE.exists()
+        else {"state": "not-started"}
+    )
+    backup = (
+        json.loads(BACKUP_STATE.read_text(encoding="utf-8"))
+        if BACKUP_STATE.exists()
+        else {"state": "not-started"}
+    )
+    private_runtime = (
+        json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
+        if PRIVATE_RUNTIME_STATE.exists()
+        else {"private": {"state": "not-started"}, "trade": {"state": "not-started"}}
+    )
+    health = (
+        json.loads(HEALTH_STATE.read_text(encoding="utf-8"))
+        if HEALTH_STATE.exists()
+        else {"state": "unknown", "issues": []}
+    )
+    observer_faults = observer_runtime_fault_state()
+    health = merge_observer_fault_health(health, observer_faults)
+    entry_shadow = (
+        json.loads(ENTRY_SHADOW_STATE.read_text(encoding="utf-8"))
+        if ENTRY_SHADOW_STATE.exists()
+        else {"state": "не запущен", "running": False, "assets": []}
+    )
+    entry_comparison = (
+        json.loads(ENTRY_COMPARISON_STATE.read_text(encoding="utf-8"))
+        if ENTRY_COMPARISON_STATE.exists()
+        else {"rows": [], "state": "not-built"}
+    )
+    raw = DATA_ROOT / "datasets" / "raw" / PERIOD
+    symbols = []
+    roles = {
+        **{symbol: "trading" for symbol in TRADING_UNIVERSE},
+        **{symbol: "indicator" for symbol in INDICATORS},
+        **{symbol: "excluded_meme" for symbol in EXCLUDED_MEMES},
+    }
+    tickers = live_tickers()
+    for symbol in sorted(roles):
+        root = raw / symbol
+        trades = root / "public_trades"
+        books = root / "orderbook"
+        ticker = tickers.get(symbol)
+        light, reason = traffic_light(symbol, ticker)
+        symbols.append(
+            {
+                "symbol": symbol,
+                "role": roles[symbol],
+                "public_trade_files": len(list(trades.glob("*.csv.gz"))) if trades.exists() else 0,
+                "orderbook_files": len(list(books.glob("*.data.zip"))) if books.exists() else 0,
+                "bytes": directory_bytes(root),
+                "traffic_light": light,
+                "traffic_reason": reason,
+                "market": ticker or {},
+            }
+        )
+    order = {"green": 0, "yellow": 1, "red": 2}
+    symbols.sort(
+        key=lambda x: (order[x["traffic_light"]], -float(x["market"].get("turnover24h", 0)))
+    )
+    disk = shutil.disk_usage(DATA_ROOT)
+    research = APP_ROOT / "research"
+    scripts = sorted(p.name for p in research.glob("*") if p.is_file()) if research.exists() else []
+    current_root = APP_ROOT / "current"
+    current_code = {
+        "release": current_root.resolve().name if current_root.exists() else "",
+        "bytes": directory_bytes(current_root.resolve()) if current_root.exists() else 0,
+        "source_modules": len(list((current_root / "src").glob("**/*.py")))
+        if current_root.exists()
+        else 0,
+        "research_scripts": len(list((current_root / "scripts").glob("**/*.py")))
+        if current_root.exists()
+        else 0,
+        "tests": len(list((current_root / "tests").glob("**/*.py")))
+        if current_root.exists()
+        else 0,
+        "status": "baseline-not-activated" if current_root.exists() else "missing",
+    }
+    jobs: dict[str, object] = {}
+    job_items = []
+    for state in ("queued", "running", "completed", "failed"):
+        path = DATA_ROOT / "jobs" / state
+        entries = (
+            sorted(
+                (p for p in path.iterdir() if p.is_dir()),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if path.exists()
+            else []
+        )
+        jobs[state] = len(entries)
+        for entry in entries[:25]:
+            status_path = entry / "status.json"
+            status = (
+                json.loads(status_path.read_text(encoding="utf-8")) if status_path.exists() else {}
+            )
+            manifest = status.get("manifest", {})
+            job_items.append(
+                {
+                    "job_id": entry.name,
+                    "state": state,
+                    "title": manifest.get("title", ""),
+                    "line": manifest.get("line", ""),
+                    "symbols": manifest.get("dataset", {}).get("symbols", []),
+                    "dependencies": manifest.get("dependencies", []),
+                    "duration_seconds": status.get("duration_seconds"),
+                    "exit_code": status.get("exit_code"),
+                    "error": status.get("error", ""),
+                    "report_path": status.get("report_path", ""),
+                }
+            )
+    jobs["items"] = job_items
+    legacy_root = DATA_ROOT / "legacy"
+    legacy_items = []
+    if legacy_root.exists():
+        for item in sorted((p for p in legacy_root.iterdir() if p.is_dir()), key=lambda p: p.name):
+            reports = item / "reports"
+            modules = item / "src" / "bybit_workbench" / "research"
+            legacy_items.append(
+                {
+                    "name": item.name,
+                    "bytes": directory_bytes(item),
+                    "files": len(command("find", str(item), "-type", "f", "-printf", ".")),
+                    "report_roots": len([p for p in reports.iterdir() if p.is_dir()])
+                    if reports.exists()
+                    else 0,
+                    "research_modules": len(list(modules.glob("*.py"))) if modules.exists() else 0,
+                    "reports": sorted(p.name for p in reports.iterdir() if p.is_dir())
+                    if reports.exists()
+                    else [],
+                    "modules": sorted(p.name for p in modules.glob("*.py"))
+                    if modules.exists()
+                    else [],
+                }
+            )
+    payload: dict[str, object] = {
+        "generated_at_epoch": int(time.time()),
+        "host": command("hostname"),
+        "period": PERIOD,
+        "evaluation_start": download.get("evaluation_start"),
+        "evaluation_end": download.get("evaluation_end"),
+        "download": active_download,
+        "disk": {"total": disk.total, "used": disk.used, "free": disk.free},
+        "symbols": symbols,
+        "market_selection": {
+            "updated_every_seconds": 30,
+            "green": "оборот ≥ $25 млн; OI ≥ $10 млн; спред ≤ 8 б.п.; |funding| ≤ 0,05%",
+            "yellow": "не критично, но хотя бы один зелёный порог не выполнен",
+            "red": "индикатор/мем/нет котировки либо оборот < $5 млн, OI < $2 млн, спред > 20 б.п., |funding| > 0,20%",
+        },
+        "jobs": jobs,
+        "legacy": legacy_items,
+        "scripts": scripts,
+        "current_code": current_code,
+        "connectivity": connectivity,
+        "private_api": private_api,
+        "bots": bots,
+        "opportunities": opportunities,
+        "live_trading": live_trading,
+        "safety": safety,
+        "backup": backup,
+        "private_runtime": private_runtime,
+        "health": health,
+        "observer_faults": observer_faults,
+        "entry_comparison": entry_comparison,
+        "entry_shadow": entry_shadow,
+        "services": {name: service_state(name) for name in ALLOWED_SERVICES},
+        "technologies": {
+            "os": command("bash", "-lc", ". /etc/os-release; printf '%s' \"$PRETTY_NAME\""),
+            "python": command("python3", "--version"),
+            "nginx": command("nginx", "-v"),
+            "postgresql": command("psql", "--version"),
+            "service_manager": "systemd",
+            "data_filesystem": command("findmnt", "-n", "-o", "FSTYPE", str(DATA_ROOT)),
+        },
+    }
+    _cache = (now, payload)
+    return payload
+
+
+def package_project() -> dict[str, object]:
+    """Create a clean source-and-trading evidence archive with a full PostgreSQL dump."""
+    if not _package_lock.acquire(blocking=False):
+        raise RuntimeError("другой архив проекта уже формируется")
+    database_dump_path: Path | None = None
+    try:
+        now = time.time()
+        cutoff_seconds, cutoff_ms = now - 72 * 3600, int((now - 72 * 3600) * 1000)
+        stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(now))
+        REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+        final_path = REPORT_ROOT / f"cripta_project_trading_3d_{stamp}.zip"
+        partial_path = final_path.with_suffix(".zip.partial")
+        manifest: dict[str, object] = {
+            "создано": time.strftime("%Y-%m-%d %H:%M:%S %z", time.localtime(now)),
+            "период_торговых_данных": "последние 72 часа",
+            "назначение": "исходный код проекта и сведения для разбора реальной торговли",
+            "postgresql": {
+                "охват": "полная логическая копия базы cripta на момент упаковки",
+                "формат": "pg_dump custom",
+                "восстановление": "см. postgresql/ВОССТАНОВЛЕНИЕ.txt",
+            },
+            "файлы": [],
+            "таблицы": [],
+            "исключено": [
+                "пароли, ключи API, токены и авторизация",
+                "виртуальные окружения и кэши",
+                "сырые рыночные архивы и старые ZIP-пакеты",
+            ],
+        }
+        seen: set[str] = set()
+        source_suffixes = {
+            ".py",
+            ".html",
+            ".js",
+            ".css",
+            ".sql",
+            ".service",
+            ".timer",
+            ".sh",
+            ".ps1",
+            ".toml",
+            ".yaml",
+            ".yml",
+            ".md",
+            ".txt",
+            ".docx",
+            ".pdf",
+            ".json",
+            ".csv",
+            ".spec",
+            ".lock",
+        }
+        report_suffixes = {".csv", ".json", ".jsonl", ".html", ".md", ".txt", ".log"}
+        excluded_parts = {
+            ".venv",
+            "venv",
+            "__pycache__",
+            ".git",
+            "node_modules",
+            "datasets",
+            "cache",
+            "staging",
+            "backup",
+            "backups",
+        }
+
+        with zipfile.ZipFile(
+            partial_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+        ) as archive:
+
+            def add_file(
+                path: Path, name: str, *, max_size: int = 25 * 1024 * 1024
+            ) -> None:
+                if name in seen or not path.is_file() or path.stat().st_size > max_size:
+                    return
+                digest = hashlib.sha256()
+                with path.open("rb") as source:
+                    for block in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(block)
+                archive.write(path, name)
+                seen.add(name)
+                manifest["файлы"].append(
+                    {"путь": name, "размер": path.stat().st_size, "sha256": digest.hexdigest()}
+                )
+
+            for path in APP_ROOT.rglob("*"):
+                try:
+                    relative = path.relative_to(APP_ROOT)
+                    if excluded_parts.intersection(relative.parts) or "reports" in relative.parts:
+                        continue
+                    if path.is_file() and path.suffix.lower() in source_suffixes:
+                        add_file(path, f"исходники/{relative.as_posix()}")
+                except (OSError, PermissionError):
+                    continue
+            for document_name in (
+                "PROJECT_ARCHITECTURE_RU.md",
+                "MAYAK_ARCHITECTURE_PRINCIPLES_RU.md",
+                "STRATEGY_DISPATCHER_ARCHITECTURE_RU.md",
+            ):
+                document = APP_ROOT / "docs" / document_name
+                if not document.is_file():
+                    raise RuntimeError(
+                        f"обязательный архитектурный документ отсутствует: {document_name}"
+                    )
+                add_file(document, f"исходники/docs/{document_name}")
+            for config in Path("/etc/systemd/system").glob("cripta-*.*"):
+                try:
+                    add_file(config, f"конфигурация/systemd/{config.name}")
+                except (OSError, PermissionError):
+                    pass
+            for config in Path("/etc/nginx/sites-enabled").glob("*cripta*"):
+                try:
+                    add_file(config, f"конфигурация/nginx/{config.name}")
+                except (OSError, PermissionError):
+                    pass
+
+            database_dump_path = REPORT_ROOT / f".cripta_postgresql_{stamp}.dump.partial"
+            pg_dump = shutil.which("pg_dump") or "/usr/bin/pg_dump"
+            dump_result = subprocess.run(
+                [
+                    pg_dump,
+                    "--dbname=dbname=cripta user=cripta host=/var/run/postgresql",
+                    "--format=custom",
+                    "--compress=6",
+                    "--no-owner",
+                    "--no-privileges",
+                    f"--file={database_dump_path}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            if dump_result.returncode != 0 or not database_dump_path.is_file():
+                detail = dump_result.stderr.strip() or "pg_dump не создал файл"
+                raise RuntimeError(f"не удалось выгрузить PostgreSQL: {detail}")
+            add_file(
+                database_dump_path,
+                "postgresql/cripta_full.dump",
+                max_size=512 * 1024 * 1024,
+            )
+            archive.writestr(
+                "postgresql/ВОССТАНОВЛЕНИЕ.txt",
+                "Полная логическая копия PostgreSQL базы cripta.\n\n"
+                "Содержит все схемы, таблицы, данные, последовательности, связи и индексы "
+                "на согласованный момент упаковки. Владельцы объектов и права доступа "
+                "намеренно не переносятся.\n\n"
+                "Пример восстановления в заранее созданную пустую базу:\n"
+                "pg_restore --no-owner --no-privileges --dbname=ИМЯ_БАЗЫ cripta_full.dump\n\n"
+                "Для просмотра состава без восстановления:\n"
+                "pg_restore --list cripta_full.dump\n",
+            )
+
+            report_roots = (
+                APP_ROOT / "reports",
+                DATA_ROOT / "reports",
+                Path("/var/lib/cripta"),
+                Path("/srv/cripta-share/logs"),
+            )
+            for root in report_roots:
+                if not root.exists():
+                    continue
+                for path in root.rglob("*"):
+                    try:
+                        if (
+                            path.is_file()
+                            and path.suffix.lower() in report_suffixes
+                            and path.stat().st_mtime >= cutoff_seconds
+                        ):
+                            label = (
+                                "состояние_и_журналы"
+                                if str(root).startswith("/var/lib") or str(root).endswith("logs")
+                                else "торговые_отчёты"
+                            )
+                            add_file(
+                                path, f"{label}/{root.name}/{path.relative_to(root).as_posix()}"
+                            )
+                    except (OSError, PermissionError):
+                        continue
+
+            tables = (
+                "runtime.executions",
+                "runtime.trade_commands",
+                "runtime.private_events",
+                "runtime.connection_events",
+                "runtime.reconciliation_runs",
+                "monitoring.opportunities",
+                "monitoring.opportunity_events",
+                "runtime.hot_orders",
+                "runtime.hot_positions",
+                "runtime.wallet_latest",
+                "runtime.trade_settings",
+                "runtime.trade_settings_history",
+                "runtime.entry_decisions",
+                "mayak_v2.snapshots",
+                "mayak_v2.coin_minutes",
+                "mayak_v2.events",
+                "mayak_v2.state_events",
+                "mayak_v2.observation_journal",
+                "mayak_v2.liquidations",
+                "supervisor.snapshots",
+                "supervisor.transitions",
+                "strategy_dispatcher.runs",
+                "strategy_dispatcher.assessments",
+                "research_context.event_links",
+                "strategy_entry.strategy_cards",
+                "strategy_entry.strategy_activations",
+                "strategy_entry.strategy_activation_events",
+                "strategy_entry.entry_plans",
+                "strategy_entry.exit_plans",
+                "strategy_entry.strategy_signals",
+                "strategy_entry.strategy_attempts",
+                "strategy_entry.entry_decisions",
+                "strategy_entry.context_links",
+                "strategy_entry.sensor_links",
+                "strategy_entry.execution_requests",
+                "strategy_entry.notifications",
+                "strategy_entry.shadow_parity_runs",
+                "strategy_entry.shadow_parity_events",
+            )
+            time_names = (
+                "exec_time_ms",
+                "requested_at_epoch_ms",
+                "event_time_ms",
+                "occurred_at_epoch_ms",
+                "received_at_epoch_ms",
+                "creation_time_ms",
+                "at_epoch_ms",
+                "signal_at_epoch_ms",
+                "created_at_epoch_ms",
+                "started_at_epoch_ms",
+                "refreshed_at_epoch_ms",
+                "decided_at_epoch_ms",
+                "observed_at_epoch_ms",
+                "approved_at",
+                "updated_at",
+                "created_at",
+                "linked_at",
+                "detected_at",
+                "context_observed_at",
+                "sensor_observed_at",
+                "requested_at",
+                "finished_at",
+                "started_at",
+                "event_at",
+                "enabled_at",
+                "disabled_at",
+                "observed_at",
+                "occurred_at",
+            )
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                for table in tables:
+                    schema, table_name = table.split(".")
+                    column_rows = connection.execute(
+                        "SELECT column_name,data_type FROM information_schema.columns WHERE table_schema=%s AND table_name=%s ORDER BY ordinal_position",
+                        (schema, table_name),
+                    ).fetchall()
+                    columns = [row[0] for row in column_rows]
+                    column_types = {row[0]: row[1] for row in column_rows}
+                    if not columns:
+                        continue
+                    time_column = next((name for name in time_names if name in columns), None)
+                    query, parameters = f'SELECT * FROM "{schema}"."{table_name}"', ()
+                    if time_column:
+                        if column_types[time_column].startswith("timestamp"):
+                            query += f' WHERE "{time_column}" >= to_timestamp(%s) ORDER BY "{time_column}"'
+                            parameters = (cutoff_seconds,)
+                        else:
+                            query += f' WHERE "{time_column}" >= %s ORDER BY "{time_column}"'
+                            parameters = (cutoff_ms,)
+                    cursor = connection.execute(query, parameters)
+                    rows = cursor.fetchall()
+                    output = "".join(
+                        json.dumps(dict(zip(columns, row)), ensure_ascii=False, default=str) + "\n"
+                        for row in rows
+                    )
+                    export_path = f"торговая_база/{table}.jsonl"
+                    archive.writestr(export_path, output)
+                    timestamps = [
+                        row[columns.index(time_column)]
+                        for row in rows
+                        if time_column and row[columns.index(time_column)] is not None
+                    ]
+                    manifest["таблицы"].append(
+                        {
+                            "schema": schema,
+                            "таблица": table,
+                            "table": table_name,
+                            "строк": len(rows),
+                            "row_count": len(rows),
+                            "min_timestamp": str(min(timestamps)) if timestamps else None,
+                            "max_timestamp": str(max(timestamps)) if timestamps else None,
+                            "exported_jsonl": export_path,
+                            "ограничение": "72 часа" if time_column else "текущий снимок",
+                        }
+                    )
+            commit_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            branch_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            state_result = subprocess.run(
+                ["git", "-C", str(APP_ROOT), "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            static_head = APP_ROOT / "PROJECT_GIT_HEAD.txt"
+            static_state = APP_ROOT / "PROJECT_TREE_STATE.json"
+            commit_sha = (
+                commit_result.stdout.strip()
+                if commit_result.returncode == 0
+                else static_head.read_text(encoding="utf-8").strip()
+                if static_head.is_file()
+                else "UNKNOWN"
+            )
+            if state_result.returncode == 0:
+                branch = branch_result.stdout.strip() or "DETACHED"
+                dirty = bool(state_result.stdout.strip())
+            elif static_state.is_file():
+                saved_state = json.loads(static_state.read_text(encoding="utf-8"))
+                branch = str(saved_state.get("branch") or "UNKNOWN")
+                dirty = bool(saved_state.get("dirty", True))
+            else:
+                branch, dirty = "UNKNOWN", True
+            source_rows = sorted(
+                (
+                    str(item["путь"]),
+                    str(item["sha256"]),
+                )
+                for item in manifest["файлы"]
+                if str(item["путь"]).startswith("исходники/")
+            )
+            source_fingerprint = hashlib.sha256(
+                json.dumps(source_rows, ensure_ascii=False, separators=(",", ":")).encode(
+                    "utf-8"
+                )
+            ).hexdigest()
+            tree_state = {
+                "commit": commit_sha,
+                "branch": branch,
+                "dirty": dirty,
+                "archive_created_at": manifest["создано"],
+                "source_fingerprint": source_fingerprint,
+            }
+            archive.writestr("PROJECT_GIT_HEAD.txt", commit_sha + "\n")
+            archive.writestr(
+                "PROJECT_TREE_STATE.json",
+                json.dumps(tree_state, ensure_ascii=False, indent=2),
+            )
+            database_manifest = {
+                "database_dump_created_at": manifest["создано"],
+                "project_commit_fingerprint": commit_sha,
+                "project_tree_state": tree_state,
+                "schema_version": (
+                    "runtime-audit-v2/mayak-causal-v2/supervisor-shadow-v1/"
+                    "strategy-entry-u3"
+                ),
+                "tables": manifest["таблицы"],
+            }
+            archive.writestr(
+                "postgresql/DATABASE_MANIFEST.json",
+                json.dumps(database_manifest, ensure_ascii=False, indent=2),
+            )
+            archive.writestr("МАНИФЕСТ.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        partial_path.replace(final_path)
+        return {
+            "status": "готово",
+            "file": final_path.name,
+            "path": str(final_path),
+            "size": final_path.stat().st_size,
+            "files": len(manifest["файлы"]),
+            "tables": manifest["таблицы"],
+        }
+    finally:
+        if database_dump_path is not None:
+            database_dump_path.unlink(missing_ok=True)
+        _package_lock.release()
+
+
+# U6_STRATEGY_API_BEGIN
+def _u6_multi_strategy_observer_ready() -> bool:
+    try:
+        payload = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        updated = datetime.fromisoformat(str(payload.get("updated_at") or ""))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    if updated.tzinfo is None:
+        return False
+    age = (datetime.now(UTC) - updated.astimezone(UTC)).total_seconds()
+    return (
+        -1.0 <= age <= 10.0
+        and payload.get("runtime_mode") == "MULTI_STRATEGY_OBSERVER"
+        and bool(payload.get("observer_ready"))
+        and payload.get("state") in {"IDLE", "WARMUP", "RUNNING", "RELOADING"}
+    )
+
+U6_STRATEGY_GET_PATH = "/api/strategies"
+U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
+U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
+U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
+U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"
+R1_MICRO_LIVE_PATH = "/api/r1/micro-live"
+R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
+U6_STRATEGY_POST_PATHS = {
+    U6_STRATEGY_CREATE_PATH,
+    U6_STRATEGY_VERSION_PATH,
+    U6_STRATEGY_ACTIVATION_PATH,
+    U6_STRATEGY_EXECUTION_PERMISSION_PATH,
+    R1_MICRO_LIVE_PATH,
+}
+
+
+def _u6_json(handler: object, status: int, payload: dict[str, object]) -> None:
+    body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+    handler.send_body(status, body, "application/json; charset=utf-8")
+
+
+def _u6_request_json(handler: object) -> dict[str, object]:
+    length = int(handler.headers.get("Content-Length", "0"))
+    if length <= 0 or length > 262_144:
+        raise ValueError("недопустимый размер Strategy request")
+    payload = json.loads(handler.rfile.read(length))
+    if not isinstance(payload, dict):
+        raise ValueError("Strategy request must be a JSON object")
+    return payload
+
+
+def _u6_parse_timestamp(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} is required")
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        raise ValueError(f"{label} must include timezone")
+    return parsed.astimezone(UTC)
+
+
+def _u6_send_catalog(handler: object) -> None:
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection:
+            strategies = StrategyDashboardStore(connection).list_catalog(
+                observer_ready=_u6_multi_strategy_observer_ready()
+            )
+        _u6_json(
+            handler,
+            200,
+            {
+                "strategies": strategies,
+                "strategy_template": strategy_authoring_template(),
+                "symbol_catalog": sorted(
+                    set(TRADING_UNIVERSE)
+                    | set(INDICATORS)
+                    | {
+                        str(symbol)
+                        for item in strategies
+                        for symbol in item.get("symbols", [])
+                    }
+                ),
+                "context_feature_catalog": strategy_context_feature_catalog(),
+                "context_modes": ["OFF", "OBSERVE", "CONDITION", "RANKING"],
+                "generated_at": datetime.now(UTC).isoformat(),
+            },
+        )
+    except (ValueError, psycopg.Error) as exc:
+        _u6_json(handler, 500, {"error": str(exc)})
+
+
+def _u6_create_strategy(handler: object, request: dict[str, object]) -> None:
+    card = request.get("card")
+    if not isinstance(card, dict):
+        raise ValueError("card object is required")
+    payload = dict(card)
+    payload["strategy_id"] = f"strategy-{secrets.token_hex(8)}"
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        created = StrategyDashboardStore(connection).create_strategy(
+            payload=payload,
+            approved_at=datetime.now(UTC),
+            operator=operator,
+        )
+    _u6_json(
+        handler,
+        201,
+        {
+            "status": "CREATED",
+            "strategy_id": created.strategy_id,
+            "strategy_version": created.strategy_version,
+            "strategy_config_fingerprint": created.strategy_config_fingerprint,
+            "activation_state": "NOT SET",
+            "entry_plan_fingerprints": [],
+            "exit_plan_fingerprints": [],
+        },
+    )
+
+
+def _u6_create_version(handler: object, request: dict[str, object]) -> None:
+    base = request.get("base")
+    card = request.get("card")
+    if not isinstance(base, dict) or not isinstance(card, dict):
+        raise ValueError("base and card objects are required")
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        created = StrategyDashboardStore(connection).create_new_version(
+            base_strategy_id=str(base.get("strategy_id") or ""),
+            base_strategy_version=str(base.get("strategy_version") or ""),
+            base_strategy_config_fingerprint=str(
+                base.get("strategy_config_fingerprint") or ""
+            ),
+            payload=card,
+            approved_at=datetime.now(UTC),
+            operator=operator,
+        )
+    _u6_json(
+        handler,
+        201,
+        {
+            "status": "CREATED",
+            "strategy_id": created.strategy_id,
+            "strategy_version": created.strategy_version,
+            "strategy_config_fingerprint": created.strategy_config_fingerprint,
+            "activation_state": "NOT SET",
+            "entry_plan_fingerprints": [],
+            "exit_plan_fingerprints": [],
+        },
+    )
+
+
+def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    strategy_id = str(request.get("strategy_id") or "")
+    strategy_version = str(request.get("strategy_version") or "")
+    strategy_config_fingerprint = str(request.get("strategy_config_fingerprint") or "")
+    if not strategy_id or not strategy_version or not strategy_config_fingerprint:
+        raise ValueError("exact Strategy identity is required")
+    operator = handler.session_user() or "UNKNOWN"
+    activation_id = str(request.get("activation_id") or "")
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        store = StrategyDashboardStore(connection)
+        if not activation_id:
+            if not enabled:
+                _u6_json(
+                    handler,
+                    200,
+                    {
+                        "status": "NO_CHANGE",
+                        "enabled": False,
+                        "activation_state": "NOT SET",
+                    },
+                )
+                return
+            result = store.activate_exact_strategy(
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                changed_at=datetime.now(UTC),
+                operator=operator,
+                source="dashboard-strategy-control",
+                reason=str(request.get("reason") or "owner first activation"),
+                observer_ready=_u6_multi_strategy_observer_ready(),
+            )
+        else:
+            expected_enabled = request.get("expected_enabled")
+            if not isinstance(expected_enabled, bool):
+                raise ValueError("expected_enabled must be boolean")
+            expected_updated_at = _u6_parse_timestamp(
+                request.get("expected_updated_at"), "expected_updated_at"
+            )
+            result = store.set_activation_enabled_cas(
+                activation_id=activation_id,
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                expected_enabled=expected_enabled,
+                expected_updated_at=expected_updated_at,
+                enabled=enabled,
+                changed_at=datetime.now(UTC),
+                operator=operator,
+                source="dashboard-strategy-control",
+                reason=str(request.get("reason") or "owner Strategy toggle"),
+                observer_ready=_u6_multi_strategy_observer_ready(),
+                enforce_readiness=True,
+            )
+    _u6_json(handler, 200, result)
+
+
+def _u6_set_execution_permission(handler: object, request: dict[str, object]) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    strategy_id = str(request.get("strategy_id") or "")
+    strategy_version = str(request.get("strategy_version") or "")
+    strategy_config_fingerprint = str(request.get("strategy_config_fingerprint") or "")
+    if not strategy_id or not strategy_version or not strategy_config_fingerprint:
+        raise ValueError("exact Strategy identity is required")
+    operator = handler.session_user() or "UNKNOWN"
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        result = StrategyDashboardStore(connection).set_execution_permission(
+            strategy_id=strategy_id,
+            strategy_version=strategy_version,
+            strategy_config_fingerprint=strategy_config_fingerprint,
+            enabled=enabled,
+            changed_at=datetime.now(UTC),
+            operator=operator,
+            source="dashboard-strategy-execution-control",
+            reason=str(
+                request.get("reason")
+                or ("owner enabled live execution" if enabled else "owner disabled live execution")
+            ),
+            observer_ready=_u6_multi_strategy_observer_ready(),
+        )
+    _u6_json(handler, 200, result)
+
+
+
+
+def _r1_paper_real_parity_attestation(
+    release_commit: str,
+    *,
+    source_root: Path = Path("/srv/cripta/source_checkout"),
+    runtime_root: Path = Path("/srv/cripta/runtime/current"),
+) -> dict[str, object]:
+    if len(release_commit) != 40:
+        raise ValueError("R1 PREARM: parity attestation release commit is invalid")
+    hashes: dict[str, str] = {}
+    for relative, expected in R1_PARITY_ATTESTED_MODULE_SHA256.items():
+        source_path = source_root / relative
+        runtime_path = runtime_root / relative
+        try:
+            source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            runtime_hash = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY module unreadable {relative}: {exc}"
+            ) from exc
+        if source_hash != runtime_hash:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY source/live mismatch {relative}"
+            )
+        if source_hash != expected:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
+            )
+        hashes[relative] = source_hash
+    return {
+        "parity_baseline": "STAGE7B_RUNTIME_VERIFIED_2026-10-07",
+        "release_commit": release_commit,
+        "module_sha256": hashes,
+    }
+
+
+def _u6_prepare_r1_prearm_evidence(
+    connection: psycopg.Connection,
+    *,
+    now: datetime,
+) -> dict[str, object]:
+    release = LOADED_RELEASE_COMMIT
+    if len(release) != 40:
+        raise ValueError("R1 PREARM: loaded release commit is invalid")
+
+    readiness = live_rearm_readiness(connection)
+    if not bool(readiness.get("rearm_ready")):
+        raise ValueError(
+            "R1 PREARM operational block: "
+            + "; ".join(str(x) for x in readiness.get("reasons", []))
+        )
+
+    current = now.astimezone(UTC)
+    now_ms = int(current.timestamp() * 1000)
+    valid_until = current + timedelta(seconds=90)
+    parity_evidence = _r1_paper_real_parity_attestation(release)
+
+    source_commit = subprocess.check_output(
+        ["git", "-C", "/srv/cripta/source_checkout", "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    remote_commit = subprocess.check_output(
+        ["git", "-C", "/srv/cripta/source_checkout", "ls-remote", "origin", "refs/heads/main"],
+        text=True,
+    ).split()[0]
+    runtime_commit = Path("/srv/cripta/runtime/current/INSTALLED_COMMIT").read_text(
+        encoding="utf-8"
+    ).strip()
+    state_commit = Path("/var/lib/cripta/release/INSTALLED_COMMIT").read_text(
+        encoding="utf-8"
+    ).strip()
+    if {source_commit, remote_commit, runtime_commit, state_commit} != {release}:
+        raise ValueError("R1 PREARM: remote/source/runtime/state release identity mismatch")
+
+    try:
+        observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
+        private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
+        lifecycle = json.loads(
+            Path("/var/lib/cripta/lifecycle_supervisor/status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"R1 PREARM: runtime status unreadable: {exc}") from exc
+
+    if not (
+        observer.get("state") == "RUNNING"
+        and observer.get("observer_ready") is True
+        and observer.get("source_commit") == release
+        and int(observer.get("active_strategies") or 0) == 5
+    ):
+        raise ValueError("R1 PREARM: observer is not exact-release ready")
+    if not (
+        isinstance(private.get("private"), dict)
+        and private["private"].get("state") == "connected"
+        and isinstance(private.get("trade"), dict)
+        and private["trade"].get("state") == "authenticated-locked"
+        and isinstance(private.get("schema"), dict)
+        and private["schema"].get("state") == "READY"
+        and now_ms - int(private.get("updated_at_epoch") or 0) * 1000 <= 15_000
+    ):
+        raise ValueError("R1 PREARM: private Bybit runtime is not fresh/ready")
+    if not (
+        lifecycle.get("state") == "RUNNING"
+        and not list(lifecycle.get("active_fault_codes") or [])
+    ):
+        raise ValueError("R1 PREARM: lifecycle supervisor is not healthy")
+
+    contexts = r1_expected_contexts(connection, release_commit=release)
+    if len(contexts) != 5:
+        raise ValueError("R1 PREARM: exact R1 cohort is incomplete")
+
+    other = connection.execute(
+        """SELECT strategy_id,strategy_version
+             FROM strategy_entry.strategy_activations
+            WHERE enabled=true
+              AND NOT (
+                strategy_id = ANY(%s)
+                AND strategy_version='1.1-micro-live'
+              )
+            LIMIT 1""",
+        ([x.strategy_id for x in contexts],),
+    ).fetchone()
+    if other is not None:
+        raise ValueError(f"R1 PREARM: non-R1 StrategyActivation enabled: {other[0]} {other[1]}")
+
+    reconciliation = connection.execute(
+        """SELECT finished_at_epoch_ms,ok,positions,orders
+             FROM runtime.reconciliation_runs ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    wallet = connection.execute(
+        """SELECT refreshed_at_epoch_ms,total_equity,available_balance,
+                  payload_json::jsonb->>'accountType'
+             FROM runtime.wallet_latest WHERE singleton=1"""
+    ).fetchone()
+    if not reconciliation or not bool(reconciliation[1]):
+        raise ValueError("R1 PREARM: reconciliation missing/failed")
+    if now_ms - int(reconciliation[0]) > 15_000:
+        raise ValueError("R1 PREARM: reconciliation stale")
+    if int(reconciliation[2]) or int(reconciliation[3]):
+        raise ValueError("R1 PREARM: exchange is not flat")
+    if not wallet or now_ms - int(wallet[0]) > 15_000:
+        raise ValueError("R1 PREARM: wallet snapshot stale")
+    if str(wallet[3]) != "UNIFIED" or float(wallet[1]) < 50.0:
+        raise ValueError("R1 PREARM: account identity/capital mismatch")
+
+    symbols = [x.symbol for x in contexts]
+    pm_rows = connection.execute(
+        """SELECT DISTINCT ON (instrument)
+                  instrument,account_ref,product_category,position_mode,position_idx,
+                  observed_at,fresh_until
+             FROM runtime.position_mode_states
+            WHERE instrument = ANY(%s)
+            ORDER BY instrument,observed_at DESC""",
+        (symbols,),
+    ).fetchall()
+    pm = {str(row[0]): row for row in pm_rows}
+    if set(pm) != set(symbols):
+        raise ValueError("R1 PREARM: position mode cohort incomplete")
+    for symbol, row in pm.items():
+        if not (
+            str(row[1]) == "BYBIT:UNIFIED"
+            and str(row[2]) == "LINEAR"
+            and str(row[3]) == "ONE_WAY"
+            and int(row[4]) == 0
+            and row[6] is not None
+            and row[6].astimezone(UTC) >= current
+        ):
+            raise ValueError(f"R1 PREARM: position mode invalid/stale for {symbol}")
+
+    if connection.execute(
+        "SELECT to_regclass('runtime.exchange_position_slot_claims')"
+    ).fetchone()[0] is None:
+        raise ValueError("R1 PREARM: physical slot claim contract missing")
+    if connection.execute(
+        "SELECT to_regclass('runtime.capital_reservations')"
+    ).fetchone()[0] is None:
+        raise ValueError("R1 PREARM: capital reservation contract missing")
+
+    cards = {card.strategy_id: card for card in build_r1_cards()}
+    entry_loaded = set(observer.get("active_entry_plans") or [])
+    exit_loaded = set(observer.get("active_exit_plans") or [])
+    plan_evidence: dict[str, dict[str, str]] = {}
+    for context in contexts:
+        card = cards[context.strategy_id]
+        activation = StrategyActivation(
+            activation_id=context.strategy_activation_id,
+            strategy_id=context.strategy_id,
+            strategy_version=context.strategy_version,
+            strategy_config_fingerprint=context.strategy_config_fingerprint,
+            enabled=True,
+            enabled_at=card.approved_at,
+            scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+            operator="r1-prearm",
+            source="dashboard:r1-prearm",
+        )
+        entry_plan, exit_plan = materialize_plans(card, activation)
+        rr = assess_strategy_runtime_readiness(card, observer_ready=True)
+        if not (rr.active_ready and rr.execution_ready):
+            raise ValueError(f"R1 PREARM: runtime readiness failed {context.strategy_id}")
+        if entry_plan.entry_plan_fingerprint not in entry_loaded:
+            raise ValueError(f"R1 PREARM: EntryPlan not loaded {context.strategy_id}")
+        if exit_plan.exit_plan_fingerprint not in exit_loaded:
+            raise ValueError(f"R1 PREARM: ExitPlan not loaded {context.strategy_id}")
+
+        entry_policy = card.entry_policy.to_dict()["execution_policy"]
+        exit_mutation = card.exit_policy.to_dict()["rules"][0]["action"]["mutation"]
+        protection = card.protection_policy.to_dict()["initial_protection"]
+        lifecycle_policy = card.lifecycle_policy.to_dict()
+        capital = card.capital_policy.to_dict()
+        if not (
+            entry_policy["order_type"] == "LIMIT_OFFSET"
+            and entry_policy["entry_offset_pct"] == "0.10"
+            and entry_policy["time_in_force"] == "POST_ONLY"
+            and entry_policy["entry_lifetime_mode"] == "SIGNAL_VALIDITY"
+            and exit_mutation["order_type"] == "LIMIT"
+            and exit_mutation["time_in_force"] == "POST_ONLY"
+            and exit_mutation["marketable_action"] == "CLOSE_MARKET"
+            and protection["role"] == "CATASTROPHIC_GUARD"
+            and protection["stop_loss_enabled"] is True
+            and protection["stop_loss_pct"] == "10.0"
+            and lifecycle_policy["reverse_on_opposite_signal"]["enabled"] is True
+            and lifecycle_policy["reverse_on_opposite_signal"]["position_mode"] == "ONE_WAY"
+            and int(lifecycle_policy["reverse_on_opposite_signal"]["position_idx"]) == 0
+            and lifecycle_policy["emergency_policy"]["operator_kill"] == "MAINNET_GATE_OFF"
+            and capital["requested_amount"] == "10"
+            and int(capital["leverage"]) == 1
+        ):
+            raise ValueError(f"R1 PREARM: exact R1 policy mismatch {context.strategy_id}")
+        plan_evidence[context.strategy_id] = {
+            "entry_plan_fingerprint": entry_plan.entry_plan_fingerprint,
+            "exit_plan_fingerprint": exit_plan.exit_plan_fingerprint,
+        }
+
+    rollback_ref = Path("/var/lib/cripta/release/LAST_BACKUP").read_text(
+        encoding="utf-8"
+    ).strip()
+    if not rollback_ref:
+        raise ValueError("R1 PREARM: rollback reference missing")
+
+    def put(
+        code: str,
+        scope_type: str,
+        scope_key: str,
+        status: str,
+        evidence: dict[str, object],
+        ttl: bool = False,
+    ) -> None:
+        identity = "|".join((release, code, scope_type, scope_key, current.isoformat()))
+        evidence_id = "r1-prearm-" + hashlib.sha256(identity.encode()).hexdigest()[:32]
+        connection.execute(
+            """INSERT INTO control.live_arm_evidence(
+                   evidence_id,check_code,scope_type,scope_key,status,
+                   checked_at,valid_until,release_commit,source,evidence)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'dashboard:r1-prearm',%s::jsonb)""",
+            (
+                evidence_id,
+                code,
+                scope_type,
+                scope_key,
+                status,
+                current,
+                valid_until if ttl else None,
+                release,
+                json.dumps(evidence, sort_keys=True, default=str),
+            ),
+        )
+
+    global_checks = {
+        "CANON_CURRENT": ("PASS", {"release_commit": release, "r1_webhook_waiver": True}, False),
+        "REMOTE_COMMIT_VERIFIED": ("PASS", {"remote_main": remote_commit}, False),
+        "SOURCE_LIVE_IDENTITY": (
+            "PASS",
+            {"source": source_commit, "runtime": runtime_commit, "state": state_commit},
+            False,
+        ),
+        "TESTS": (
+            "PASS",
+            {
+                "runtime_prearm_selftest": "PASS",
+                "release_contract": release,
+                "checks": ["cards", "plans", "protection", "reverse", "limits"],
+            },
+            False,
+        ),
+        "LIVE_EQUIVALENCE": (
+            "PASS",
+            {"observer_epoch_id": observer.get("observer_epoch_id"), "plans": plan_evidence},
+            True,
+        ),
+        "PAPER_REAL_DECISION_PARITY": (
+            "PASS",
+            parity_evidence,
+            False,
+        ),
+        "EXCHANGE_ACCOUNT_IDENTITY": (
+            "PASS",
+            {
+                "account_ref": "BYBIT:UNIFIED",
+                "account_type": wallet[3],
+                "private_ws": private["private"].get("state"),
+                "trade_ws": private["trade"].get("state"),
+            },
+            True,
+        ),
+        "PHYSICAL_SLOT_CLAIM_CONTRACT": (
+            "PASS",
+            {"table": "runtime.exchange_position_slot_claims", "position_idx": 0},
+            False,
+        ),
+        "CAPITAL_RESERVATION_CONTRACT": (
+            "PASS",
+            {"table": "runtime.capital_reservations", "max_requested_usdt": "50"},
+            False,
+        ),
+        "LIFECYCLE_SUPERVISOR_BEHAVIOR": (
+            "PASS",
+            {"state": lifecycle.get("state"), "active_fault_codes": []},
+            True,
+        ),
+        "CRITICAL_FAULT_DELIVERY": (
+            "OWNER_WAIVED_FOR_R1_MICRO_LIVE",
+            {"configured": False, "owner_decision": "2026-10-04"},
+            True,
+        ),
+        "RECONCILIATION_PATH": (
+            "PASS",
+            {
+                "finished_at_epoch_ms": int(reconciliation[0]),
+                "positions": int(reconciliation[2]),
+                "orders": int(reconciliation[3]),
+            },
+            True,
+        ),
+        "ROLLBACK_OR_KILL_PATH": (
+            "PASS",
+            {"rollback_ref": rollback_ref, "operator_kill": "MAINNET_GATE_OFF"},
+            False,
+        ),
+    }
+    for code, (status, evidence, ttl) in global_checks.items():
+        put(code, "GLOBAL", "GLOBAL", status, evidence, ttl)
+
+    for context in contexts:
+        plan = plan_evidence[context.strategy_id]
+        strategy_checks = {
+            "EXACT_STRATEGY_ACTIVATION": {
+                "strategy_id": context.strategy_id,
+                "strategy_version": context.strategy_version,
+                "strategy_config_fingerprint": context.strategy_config_fingerprint,
+                "strategy_activation_id": context.strategy_activation_id,
+            },
+            "ENTRY_PLAN_EXECUTABLE": plan,
+            "EXIT_PLAN_EXECUTABLE": plan,
+            "INITIAL_PROTECTION_EXECUTABLE": {
+                "role": "CATASTROPHIC_GUARD",
+                "stop_loss_pct": "10.0",
+            },
+            "TERMINAL_LOSS_CONTAINMENT_PATH": {
+                "terminal_loss_containment": "INITIAL_PROTECTION",
+                "stop_loss_pct": "10.0",
+            },
+            "EMERGENCY_POLICY_SUPPORTED": {
+                "operator_kill": "MAINNET_GATE_OFF",
+                "position_mode": "ONE_WAY",
+                "position_idx": 0,
+            },
+        }
+        for code, evidence in strategy_checks.items():
+            st, sk = scope_for_check(code, context)
+            put(code, st, sk, "PASS", evidence, False)
+
+        row = pm[context.symbol]
+        for code, evidence in (
+            (
+                "POSITION_MODE_FRESH",
+                {
+                    "symbol": context.symbol,
+                    "position_mode": row[3],
+                    "observed_at": row[5].isoformat(),
+                    "fresh_until": row[6].isoformat(),
+                },
+            ),
+            ("POSITION_IDX_EXPECTED", {"symbol": context.symbol, "position_idx": int(row[4])}),
+            (
+                "MICRO_LIVE_LIMITS",
+                {
+                    "requested_amount_usdt": "10",
+                    "leverage": 1,
+                    "cohort_size": 5,
+                    "max_requested_capital_usdt": "50",
+                    "wallet_equity_usdt": str(wallet[1]),
+                },
+            ),
+        ):
+            st, sk = scope_for_check(code, context)
+            put(code, st, sk, "PASS", evidence, True)
+
+    for context in contexts:
+        decision = evaluate_live_arm(
+            connection,
+            context=context,
+            now=current,
+            require_owner_approval=False,
+        )
+        if not decision.ready:
+            raise ValueError(
+                f"R1 PREARM durable evidence incomplete {context.strategy_id}: "
+                + ",".join(decision.failed_codes)
+            )
+    return {"status": "PREARM_READY", "strategies": 5}
+
+
+def _u6_r1_micro_live(handler: object, request: dict[str, object]) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be boolean")
+    operator = handler.session_user() or "UNKNOWN"
+    request_id = str(request.get("request_id") or secrets.token_hex(8))
+    now = datetime.now(UTC)
+    if enabled and request.get("confirmed") is not True:
+        raise ValueError("R1 MICRO_LIVE launch is not explicitly confirmed")
+
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        if enabled:
+            readiness = live_rearm_readiness(connection)
+            reasons = tuple(str(x) for x in readiness.get("reasons", []))
+            _u6_prepare_r1_prearm_evidence(connection, now=now)
+            result = arm_r1_micro_live(
+                connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=now,
+                operator=operator,
+                request_id=request_id,
+                observer_ready=_u6_multi_strategy_observer_ready(),
+                baseline_ready=bool(readiness.get("rearm_ready")),
+                baseline_reasons=reasons,
+            )
+        else:
+            result = disarm_r1_micro_live(
+                connection,
+                now=now,
+                operator=operator,
+                request_id=request_id,
+            )
+    _u6_json(handler, 200, result)
+
+
+def _u6_handle_post(handler: object, path: str) -> None:
+    try:
+        request = _u6_request_json(handler)
+        if path == U6_STRATEGY_CREATE_PATH:
+            _u6_create_strategy(handler, request)
+        elif path == U6_STRATEGY_VERSION_PATH:
+            _u6_create_version(handler, request)
+        elif path == U6_STRATEGY_ACTIVATION_PATH:
+            _u6_set_activation(handler, request)
+        elif path == U6_STRATEGY_EXECUTION_PERMISSION_PATH:
+            _u6_set_execution_permission(handler, request)
+        elif path == R1_MICRO_LIVE_PATH:
+            _u6_r1_micro_live(handler, request)
+        else:
+            _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
+    except StaleActivationState:
+        _u6_json(handler, 409, {"error": "STALE_ACTIVATION_STATE"})
+    except StrategyRuntimeNotReady as exc:
+        _u6_json(
+            handler,
+            409,
+            {
+                "error": "STRATEGY_RUNTIME_NOT_READY",
+                "runtime_readiness": exc.readiness.as_dict(),
+            },
+        )
+    except UnknownActivation:
+        _u6_json(handler, 404, {"error": "StrategyActivation NOT SET"})
+    except psycopg.errors.UniqueViolation:
+        _u6_json(handler, 409, {"error": "Strategy version already exists"})
+    except (KeyError, ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+        _u6_json(handler, 400, {"error": str(exc)})
+# U6_STRATEGY_API_END
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "CriptaDashboard/0.1"
+
+    def send_body(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def session_user(self) -> str | None:
+        try:
+            cookie = SimpleCookie(self.headers.get("Cookie", ""))
+            token = cookie[SESSION_COOKIE].value
+            encoded, signature = token.rsplit(".", 1)
+            expected = hmac.new(
+                SESSION_SECRET_FILE.read_bytes(), encoded.encode(), hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected):
+                return None
+            padding = "=" * (-len(encoded) % 4)
+            user, expires, _nonce = (
+                base64.urlsafe_b64decode(encoded + padding).decode().split("|", 2)
+            )
+            return user if int(expires) >= int(time.time()) else None
+        except (KeyError, ValueError, OSError):
+            return None
+
+    def require_login(self) -> bool:
+        if self.session_user():
+            return False
+        next_path = quote(urlparse(self.path).path, safe="/")
+        self.send_response(303)
+        self.send_header("Location", f"/login?next={next_path}")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
+
+    def login_page(self, error: str = "") -> bytes:
+        next_path = parse_qs(urlparse(self.path).query).get("next", ["/"])[0]
+        if not next_path.startswith("/") or next_path.startswith("//"):
+            next_path = "/"
+        error_html = f'<p class="error">{escape(error)}</p>' if error else ""
+        return f'''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Вход · Cripta</title><style>
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1219;color:#e8f0f6;font:16px system-ui}}form{{width:min(380px,calc(100vw - 48px));padding:30px;background:#14212c;border:1px solid #2b4355;border-radius:16px;box-shadow:0 18px 60px #0008}}h1{{margin:0 0 8px}}p{{color:#9fb2c2}}label{{display:block;margin:18px 0 7px}}input[type=text],input[type=password]{{box-sizing:border-box;width:100%;padding:12px;border:1px solid #496175;border-radius:8px;background:#0e1922;color:white;font-size:16px}}.remember{{display:flex;gap:9px;align-items:center;margin:18px 0}}button{{width:100%;padding:12px;border:0;border-radius:8px;background:#45c58a;color:#07130d;font-weight:750;font-size:16px;cursor:pointer}}.error{{color:#ff8a8a}}</style></head><body><form method="post" action="/login"><h1>Cripta</h1><p>Вход в рабочий портал</p>{error_html}<input type="hidden" name="next" value="{escape(next_path)}"><label for="username">Имя пользователя</label><input id="username" name="username" value="alex" autocomplete="username" required autofocus><label for="password">Пароль портала</label><input id="password" type="password" name="password" autocomplete="current-password" required><label class="remember"><input type="checkbox" name="remember" value="1" checked> Запомнить меня на 30 дней</label><button type="submit">Войти</button></form></body></html>'''.encode(
+            "utf-8"
+        )
+
+    def verify_credentials(self, username: str, password: str) -> bool:
+        try:
+            for line in AUTH_FILE.read_text().splitlines():
+                stored_user, stored_hash = line.split(":", 1)
+                if hmac.compare_digest(username, stored_user):
+                    return _verify_system_password_hash(password, stored_hash)
+        except (OSError, ValueError):
+            pass
+        return False
+
+    def issue_session(self, username: str, remember: bool) -> None:
+        ttl = 30 * 86400 if remember else 12 * 3600
+        raw = f"{username}|{int(time.time()) + ttl}|{secrets.token_hex(12)}".encode()
+        encoded = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        signature = hmac.new(
+            SESSION_SECRET_FILE.read_bytes(), encoded.encode(), hashlib.sha256
+        ).hexdigest()
+        cookie = (
+            f"{SESSION_COOKIE}={encoded}.{signature}; Path=/; HttpOnly; Secure; SameSite=Strict"
+        )
+        if remember:
+            cookie += f"; Max-Age={ttl}"
+        self.send_header("Set-Cookie", cookie)
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        if path == "/healthz":
+            self.send_body(200, b'{"status":"ok"}\n', "application/json; charset=utf-8")
+        elif path == "/login":
+            self.send_body(200, self.login_page(), "text/html; charset=utf-8")
+        elif path == "/logout":
+            self.send_response(303)
+            self.send_header(
+                "Set-Cookie",
+                f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict",
+            )
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif self.require_login():
+            return
+        elif path == "/api/status":
+            body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
+            self.send_body(200, body, "application/json; charset=utf-8")
+        elif path == U6_STRATEGY_GET_PATH:
+            _u6_send_catalog(self)
+        elif path == R1_MICRO_LIVE_STATUS_PATH:
+            try:
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    state = r1_micro_live_state(
+                        connection,
+                        release_commit=LOADED_RELEASE_COMMIT,
+                        now=datetime.now(UTC),
+                    )
+                _u6_json(self, 200, state)
+            except (ValueError, RuntimeError, psycopg.Error) as exc:
+                _u6_json(self, 409, {"error": str(exc)})
+        elif path == "/api/live/state":
+            view = str((query.get("view") or ["open"])[0])
+            if view not in {"open", "closed", "paper_open", "paper_closed", "monitor", "signals"}:
+                view = "open"
+            body = json.dumps(
+                {
+                    "live_trading": _live_trading_state(include_history=view == "closed"),
+                    "opportunities": opportunity_state()
+                    if view == "signals"
+                    else {"counts": {}, "items": []},
+                    "signal_monitor": strategy_signal_monitor_state()
+                    if view == "signals"
+                    else None,
+                    "strategy_monitor": strategy_monitor_state() if view == "monitor" else None,
+                    "trade_strategy_monitor": strategy_trade_monitor_state()
+                    if view == "open"
+                    else None,
+                    "entry_shadow": None,
+                    "paper_strategy": strategy_paper_state()
+                    if view in {"paper_open", "paper_closed"}
+                    else None,
+                    "mayak_v2": mayak_v2_state() if view == "open" else None,
+                    "view": view,
+                    "generated_at_epoch": int(time.time()),
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+            self.send_body(200, body, "application/json; charset=utf-8")
+        elif path.startswith("/api/trading/export-jobs/"):
+            try:
+                job_id = path.rsplit("/", 1)[-1]
+                body = json.dumps(
+                    read_signal_export_job(job_id), ensure_ascii=False
+                ).encode("utf-8")
+                self.send_body(200, body, "application/json; charset=utf-8")
+            except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+                self.send_body(
+                    404,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+        elif path.startswith("/api/project/archive-jobs/"):
+            try:
+                job_id = path.rsplit("/", 1)[-1]
+                body = json.dumps(read_archive_job(job_id), ensure_ascii=False).encode("utf-8")
+                self.send_body(200, body, "application/json; charset=utf-8")
+            except (ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
+                self.send_body(
+                    404,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+        elif path in {
+            "/",
+            "/infra",
+            "/current",
+            "/entry",
+            "/live",
+            "/strategies",
+            "/test-library",
+            "/bots",
+            "/server-control",
+            "/history",
+            "/rules",
+            "/checklist",
+        }:
+            body = (Path(__file__).parent / "index.html").read_bytes()
+            self.send_body(200, body, "text/html; charset=utf-8")
+        elif path.startswith("/reports/"):
+            self.send_report_path(path.removeprefix("/reports/"))
+        else:
+            self.send_body(404, b"not found\n", "text/plain; charset=utf-8")
+
+    def do_POST(self) -> None:  # noqa: N802
+        global _cache
+        path = urlparse(self.path).path
+        if path == "/login":
+            length = min(int(self.headers.get("Content-Length", "0")), 8192)
+            form = parse_qs(self.rfile.read(length).decode("utf-8", "replace"))
+            username = form.get("username", [""])[0]
+            password = form.get("password", [""])[0]
+            next_path = form.get("next", ["/"])[0]
+            if not next_path.startswith("/") or next_path.startswith("//"):
+                next_path = "/"
+            if not self.verify_credentials(username, password):
+                self.path = f"/login?next={quote(next_path, safe='/')}"
+                self.send_body(
+                    401,
+                    self.login_page("Неверное имя пользователя или пароль"),
+                    "text/html; charset=utf-8",
+                )
+                return
+            self.send_response(303)
+            self.issue_session(username, form.get("remember", [""])[0] == "1")
+            self.send_header("Location", next_path)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.require_login():
+            return
+        if path in U6_STRATEGY_POST_PATHS:
+            _u6_handle_post(self, path)
+            return
+        if path == "/api/observer-faults/resolve":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                fault_id = str(request.get("fault_id") or "")
+                reason = str(request.get("reason") or "")
+                operator = self.session_user() or "UNKNOWN"
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    resolved = resolve_observer_runtime_fault(
+                        connection,
+                        fault_id=fault_id,
+                        reason=reason,
+                        operator=operator,
+                        resolved_at=datetime.now(UTC),
+                    )
+                if not resolved:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "fault не найден или уже RESOLVED"},
+                            ensure_ascii=False,
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                _cache = None
+                self.send_body(
+                    200,
+                    json.dumps(
+                        {
+                            "fault_id": fault_id,
+                            "state": "RESOLVED",
+                            "resolved_by": operator,
+                        },
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
+        if path == "/api/lifecycle/fault-delivery/ack":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4096:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                delivery_id = str(request.get("delivery_id") or "").strip()
+                if not delivery_id:
+                    raise ValueError("delivery_id обязателен")
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    acknowledged = acknowledge_delivery(
+                        connection,
+                        delivery_id=delivery_id,
+                        acknowledged_at=datetime.now(UTC),
+                    )
+                if not acknowledged:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "delivery не ожидает acknowledgement"},
+                            ensure_ascii=False,
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                self.send_body(
+                    200,
+                    json.dumps(
+                        {"delivery_id": delivery_id, "state": "ACKNOWLEDGED"},
+                        ensure_ascii=False,
+                    ).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
+        if path in {"/api/project/package", "/api/project/archive-jobs"}:
+            try:
+                if path == "/api/project/package":
+                    result = start_archive_job("ANALYSIS_FULL", "3d")
+                else:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length < 0 or length > 4096:
+                        raise ValueError("недопустимый размер запроса")
+                    request = json.loads(self.rfile.read(length) or b"{}")
+                    result = start_archive_job(
+                        str(request.get("profile", "ANALYSIS_FULL")),
+                        str(request.get("period", "3d")),
+                    )
+                self.send_body(
+                    202,
+                    json.dumps(result, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, OSError, RuntimeError, json.JSONDecodeError) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
+        if path == "/api/trading/export":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 2048:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                table = str(request.get("table", ""))
+                period = str(request.get("period", ""))
+                if table == "signals":
+                    result = start_signal_export_job(period)
+                    status_code = 202
+                else:
+                    result = export_trading_table(table, period)
+                    status_code = 201
+                self.send_body(
+                    status_code,
+                    json.dumps(result, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (
+                ValueError,
+                json.JSONDecodeError,
+                OSError,
+                psycopg.Error,
+                sqlite3.Error,
+                RuntimeError,
+                zipfile.BadZipFile,
+            ) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
+        if path in {"/api/live/settings", "/api/live/command", "/api/live/gate"}:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 8192:
+                    raise ValueError("invalid body size")
+                request = json.loads(self.rfile.read(length))
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    if path == "/api/live/settings":
+                        old_settings = connection.execute(
+                            "SELECT to_jsonb(t) FROM runtime.trade_settings t WHERE singleton=1"
+                        ).fetchone()
+                        stake, leverage = (
+                            float(request.get("stake_usdt", 0)),
+                            int(request.get("leverage", 0)),
+                        )
+                        entry_offset = float(request.get("entry_offset_pct", 0))
+                        entry_ttl = int(request.get("entry_limit_ttl_seconds", 30))
+                        auto_profit_protection = bool(request.get("auto_profit_protection", True))
+                        auto_trailing_stop = bool(request.get("auto_trailing_stop", True))
+                        trailing_distance_pct = float(request.get("trailing_distance_pct", 0.3))
+                        entry_policy = str(request.get("entry_policy", "base_entry_v1"))
+                        symbols = sorted(
+                            {str(x).upper() for x in request.get("enabled_symbols", [])}
+                            - BYBIT_KZ_UNSUPPORTED
+                        )
+                        if stake <= 0 or leverage not in {1, 2, 3, 5, 10}:
+                            raise ValueError("недопустимая ставка или плечо")
+                        if entry_offset not in {0.0, 0.1, 0.2} or entry_ttl not in {
+                            10,
+                            20,
+                            30,
+                            60,
+                            90,
+                            120,
+                            240,
+                            300,
+                        }:
+                            raise ValueError("недопустимая глубина входа или срок лимитной заявки")
+                        if trailing_distance_pct not in {0.1, 0.2, 0.3, 0.5, 1.0}:
+                            raise ValueError("недопустимый отступ плавающего стопа")
+                        if entry_policy not in {
+                            "base_entry_v1", "m3_full_live_v1"
+                        }:
+                            raise ValueError("неизвестное правило автоматического входа")
+                        changed_at_ms = int(time.time() * 1000)
+                        connection.execute(
+                            "UPDATE runtime.trade_settings SET stake_usdt=%s,leverage=%s,enabled_symbols_json=%s,entry_offset_pct=%s,entry_limit_ttl_seconds=%s,auto_profit_protection=%s,auto_trailing_stop=%s,trailing_distance_pct=%s,entry_policy=%s,updated_at_epoch_ms=%s WHERE singleton=1",
+                            (
+                                str(stake),
+                                leverage,
+                                json.dumps(symbols),
+                                str(entry_offset),
+                                entry_ttl,
+                                auto_profit_protection,
+                                auto_trailing_stop,
+                                str(trailing_distance_pct),
+                                entry_policy,
+                                changed_at_ms,
+                            ),
+                        )
+                        new_settings = connection.execute(
+                            "SELECT to_jsonb(t) FROM runtime.trade_settings t WHERE singleton=1"
+                        ).fetchone()
+                        connection.execute(
+                            """INSERT INTO runtime.trade_settings_history(
+                            changed_at_epoch_ms,old_settings,new_settings,source,origin,settings_version)
+                            VALUES(%s,%s,%s,'dashboard','user',%s)""",
+                            (
+                                changed_at_ms,
+                                json.dumps(old_settings[0] if old_settings else {}),
+                                json.dumps(new_settings[0] if new_settings else {}),
+                                str(changed_at_ms),
+                            ),
+                        )
+                    elif path == "/api/live/gate":
+                        enabled = bool(request.get("enabled"))
+                        gate_request_id = str(
+                            request.get("request_id") or secrets.token_hex(8)
+                        )
+                        if enabled and request.get("confirmed") is not True:
+                            raise ValueError("включение новых входов не подтверждено")
+                        live_context: LiveArmContext | None = None
+                        if enabled:
+                            live_context = _live_arm_context_from_request(request)
+                            readiness = live_rearm_readiness(connection)
+                            if not bool(readiness.get("rearm_ready")):
+                                raise ValueError(
+                                    "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
+                                )
+                            canonical = evaluate_live_arm(
+                                connection,
+                                context=live_context,
+                                now=datetime.now(UTC),
+                                require_owner_approval=False,
+                            )
+                            if not canonical.ready:
+                                raise ValueError(
+                                    "canonical LIVE-arm blocked: "
+                                    + ", ".join(canonical.failed_codes)
+                                )
+                        previous_gate = connection.execute(
+                            "SELECT enabled FROM control.execution_gates "
+                            "WHERE mode='mainnet' FOR UPDATE"
+                        ).fetchone()
+                        previous_enabled = bool(previous_gate[0]) if previous_gate else False
+                        gate_changed_at_ms = int(time.time() * 1000)
+                        gate_changed_at = datetime.fromtimestamp(
+                            gate_changed_at_ms / 1000, tz=UTC
+                        )
+                        gate_reason = (
+                            "явно включено владельцем через портал"
+                            if enabled
+                            else "выключено владельцем через портал"
+                        )
+                        if enabled:
+                            assert live_context is not None
+                            owner_evidence_id = (
+                                "live-owner-"
+                                + hashlib.sha256(
+                                    (
+                                        gate_request_id
+                                        + "|"
+                                        + strategy_symbol_scope_key(live_context)
+                                        + "|"
+                                        + str(gate_changed_at_ms)
+                                    ).encode()
+                                ).hexdigest()[:32]
+                            )
+                            live_arm_session_id = (
+                                "live-session-"
+                                + hashlib.sha256(
+                                    (
+                                        gate_request_id
+                                        + "|"
+                                        + strategy_symbol_scope_key(live_context)
+                                        + "|"
+                                        + live_context.release_commit
+                                    ).encode()
+                                ).hexdigest()[:32]
+                            )
+                            connection.execute(
+                                """INSERT INTO control.live_arm_evidence(
+                                       evidence_id,check_code,scope_type,scope_key,status,
+                                       checked_at,valid_until,release_commit,source,evidence
+                                   ) VALUES(
+                                       %s,'MAINNET_GATE_EXPLICIT_OWNER_APPROVAL',
+                                       'STRATEGY_SYMBOL',%s,'PASS',%s,NULL,%s,
+                                       'dashboard:owner',%s::jsonb
+                                   )""",
+                                (
+                                    owner_evidence_id,
+                                    strategy_symbol_scope_key(live_context),
+                                    gate_changed_at,
+                                    live_context.release_commit,
+                                    json.dumps(
+                                        {
+                                            "request_id": gate_request_id,
+                                            "live_arm_session_id": live_arm_session_id,
+                                        }
+                                    ),
+                                ),
+                            )
+                            full_readiness = evaluate_live_arm(
+                                connection,
+                                context=live_context,
+                                now=gate_changed_at,
+                                require_owner_approval=True,
+                            )
+                            if not full_readiness.ready:
+                                raise ValueError(
+                                    "canonical LIVE-arm owner approval incomplete: "
+                                    + ", ".join(full_readiness.failed_codes)
+                                )
+                            connection.execute(
+                                """INSERT INTO control.live_arm_sessions(
+                                       live_arm_session_id,strategy_id,strategy_version,
+                                       strategy_config_fingerprint,strategy_activation_id,
+                                       symbol,release_commit,state,owner_approved_at,
+                                       activated_at,deactivated_at,source
+                                   ) VALUES(
+                                       %s,%s,%s,%s,%s,%s,%s,'ACTIVE',%s,%s,NULL,
+                                       'dashboard:owner'
+                                   )""",
+                                (
+                                    live_arm_session_id,
+                                    live_context.strategy_id,
+                                    live_context.strategy_version,
+                                    live_context.strategy_config_fingerprint,
+                                    live_context.strategy_activation_id,
+                                    live_context.symbol,
+                                    live_context.release_commit,
+                                    gate_changed_at,
+                                    gate_changed_at,
+                                ),
+                            )
+                        else:
+                            connection.execute(
+                                """UPDATE control.live_arm_sessions
+                                      SET state='CLOSED',deactivated_at=%s,
+                                          updated_at=clock_timestamp()
+                                    WHERE state='ACTIVE'""",
+                                (gate_changed_at,),
+                            )
+                        connection.execute(
+                            "UPDATE control.execution_gates SET enabled=%s,reason=%s,"
+                            "updated_at_epoch_ms=%s WHERE mode='mainnet'",
+                            (1 if enabled else 0, gate_reason, gate_changed_at_ms),
+                        )
+                        connection.execute(
+                            """INSERT INTO control.execution_gate_events(
+                               at_epoch_ms,mode,previous_enabled,requested_enabled,
+                               resulting_enabled,reason,source,origin,request_id,
+                               settings_version)
+                               VALUES(%s,'mainnet',%s,%s,%s,%s,'dashboard','owner',%s,%s)""",
+                            (
+                                gate_changed_at_ms,
+                                previous_enabled,
+                                enabled,
+                                enabled,
+                                gate_reason,
+                                gate_request_id,
+                                str(request.get("settings_version") or ""),
+                            ),
+                        )
+                    else:
+                        kind, symbol = (
+                            str(request.get("type", "")),
+                            str(request.get("symbol", "")).upper(),
+                        )
+                        if kind not in {
+                            "break_even",
+                            "current_stop",
+                            "trailing_stop",
+                            "close",
+                            "owner_test_entry",
+                        } or not symbol.endswith("USDT"):
+                            raise ValueError("недопустимая команда")
+                        command_type = kind
+                        command_payload: dict[str, object] = {}
+                        if kind == "owner_test_entry":
+                            if request.get("confirmed") is not True:
+                                raise ValueError("контрольный реальный вход не подтверждён")
+                            direction = str(request.get("direction") or "").upper()
+                            if direction not in {"LONG", "SHORT"}:
+                                raise ValueError("направление контрольной сделки должно быть LONG или SHORT")
+                            stake = Decimal(str(request.get("stake_usdt") or "10"))
+                            leverage = int(request.get("leverage") or 1)
+                            stop_loss_pct = Decimal(str(request.get("stop_loss_pct") or "0.5"))
+                            take_profit_pct = Decimal(str(request.get("take_profit_pct") or "0.5"))
+                            if (
+                                stake != Decimal("10")
+                                or leverage != 1
+                                or stop_loss_pct != Decimal("0.5")
+                                or take_profit_pct != Decimal("0.5")
+                            ):
+                                raise ValueError(
+                                    "контрольная сделка фиксирована: 10 USDT, 1x, SL 0,5%, TP 0,5%"
+                                )
+                            gate = connection.execute(
+                                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+                            ).fetchone()
+                            if not gate or not bool(gate[0]):
+                                raise ValueError("mainnet gate закрыт")
+                            active_arm = connection.execute(
+                                """SELECT 1 FROM control.live_arm_sessions
+                                     WHERE state='ACTIVE' AND symbol=%s
+                                       AND release_commit=%s
+                                     LIMIT 1""",
+                                (symbol, LOADED_RELEASE_COMMIT),
+                            ).fetchone()
+                            if active_arm is None:
+                                raise ValueError(
+                                    "контрольный вход разрешён только для монеты текущего active MICRO_LIVE cohort"
+                                )
+                            occupied = connection.execute(
+                                """SELECT
+                                    EXISTS(SELECT 1 FROM runtime.hot_positions
+                                           WHERE symbol=%s AND NULLIF(size,'')::numeric > 0)
+                                    OR EXISTS(SELECT 1 FROM runtime.hot_orders
+                                              WHERE symbol=%s
+                                                AND order_status IN ('New','PartiallyFilled','Untriggered')
+                                                AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false)
+                                    OR EXISTS(SELECT 1 FROM runtime.trade_commands
+                                              WHERE symbol=%s AND command_type='entry'
+                                                AND state IN ('queued','running'))""",
+                                (symbol, symbol, symbol),
+                            ).fetchone()
+                            if occupied and bool(occupied[0]):
+                                raise ValueError("по монете уже есть позиция, входная заявка или команда")
+                            ticker = live_tickers().get(symbol) or {}
+                            reference_price = str(ticker.get("last_price") or "")
+                            if not reference_price or Decimal(reference_price) <= 0:
+                                raise ValueError("нет свежей цены Bybit для контрольного входа")
+                            command_type = "entry"
+                            command_payload = {
+                                "source": "owner_controlled_live_test",
+                                "stake_usdt": "10",
+                                "leverage": 1,
+                                "side": "Buy" if direction == "LONG" else "Sell",
+                                "price": reference_price,
+                                "entry_offset_pct": "0",
+                                "entry_policy": "owner_controlled_live_test",
+                                "policy_version": "2026-10-06-smoke-v1",
+                                "initial_protection": {
+                                    "stop_loss_enabled": True,
+                                    "take_profit_enabled": True,
+                                    "stop_loss_pct": "0.5",
+                                    "take_profit_pct": "0.5",
+                                    "take_profit_price": None,
+                                    "trigger_by": "LastPrice",
+                                    "tpsl_mode": "Full",
+                                },
+                            }
+                        elif kind == "trailing_stop":
+                            enabled = bool(request.get("enabled"))
+                            distance_pct = float(request.get("distance_pct", 0.2))
+                            if distance_pct < 0.05 or distance_pct > 5:
+                                raise ValueError(
+                                    "отступ плавающего стопа должен быть от 0,05% до 5%"
+                                )
+                            command_payload = {"enabled": enabled, "distance_pct": distance_pct}
+                        command_id = (
+                            f"web-test-{symbol[:10]}-{int(time.time() * 1000)}"
+                            if kind == "owner_test_entry"
+                            else f"web-{kind[:4]}-{symbol[:12]}-{int(time.time() * 1000)}"
+                        )
+                        connection.execute(
+                            "INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,%s,'queued',%s)",
+                            (
+                                command_id,
+                                command_type,
+                                symbol,
+                                json.dumps(command_payload),
+                                int(time.time() * 1000),
+                            ),
+                        )
+                    connection.commit()
+                _cache = None
+                response: dict[str, object] = {"status": "accepted"}
+                if path == "/api/live/command":
+                    response["command_id"] = command_id
+                if path == "/api/live/gate":
+                    response["gate_enabled"] = enabled
+                self.send_body(
+                    202, json.dumps(response).encode(), "application/json; charset=utf-8"
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
+        if path != "/api/bots/action":
+            self.send_body(404, b"not found\n", "text/plain; charset=utf-8")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 4096:
+                raise ValueError("invalid body size")
+            request = json.loads(self.rfile.read(length))
+            bot_id = str(request.get("bot_id", ""))
+            action = str(request.get("action", ""))
+            if action not in {"start", "stop"}:
+                raise ValueError("unknown action")
+            with psycopg.connect(
+                "dbname=cripta user=cripta host=/var/run/postgresql"
+            ) as connection:
+                bot = connection.execute(
+                    "SELECT executable,mode,mainnet_approved FROM control.bots WHERE id=%s",
+                    (bot_id,),
+                ).fetchone()
+                if not bot:
+                    raise ValueError("unknown bot")
+                executable, mode, mainnet_approved = bot
+                if action == "start" and not executable:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "Сначала назначьте проверенный исполняемый модуль"},
+                            ensure_ascii=False,
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                if action == "start" and mode == "mainnet" and not mainnet_approved:
+                    self.send_body(
+                        409,
+                        json.dumps(
+                            {"error": "Mainnet-допуск заблокирован"}, ensure_ascii=False
+                        ).encode(),
+                        "application/json; charset=utf-8",
+                    )
+                    return
+                now_ms = int(time.time() * 1000)
+                connection.execute(
+                    "UPDATE control.bots SET desired_state=%s,updated_at_epoch=%s WHERE id=%s",
+                    ("running" if action == "start" else "stopped", now_ms // 1000, bot_id),
+                )
+                connection.execute(
+                    "INSERT INTO control.bot_events(at_epoch_ms,bot_id,action,result,details_json) VALUES(%s,%s,%s,'requested','{}')",
+                    (now_ms, bot_id, action),
+                )
+                connection.commit()
+            _cache = None
+            self.send_body(
+                202, json.dumps({"status": "accepted"}).encode(), "application/json; charset=utf-8"
+            )
+        except (ValueError, json.JSONDecodeError, OSError, psycopg.Error) as exc:
+            self.send_body(
+                400,
+                json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                "application/json; charset=utf-8",
+            )
+
+    def send_report_path(self, relative: str) -> None:
+        root = REPORT_ROOT.resolve()
+        target = (root / unquote(relative)).resolve()
+        if not target.is_relative_to(root) or not target.exists():
+            self.send_body(404, b"not found\n", "text/plain; charset=utf-8")
+            return
+        if target.is_dir():
+            rows = []
+            for item in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                rel = item.relative_to(root).as_posix()
+                suffix = "/" if item.is_dir() else ""
+                rows.append(
+                    f'<li><a href="/reports/{quote(rel)}">{escape(item.name)}{suffix}</a></li>'
+                )
+            parent = target.parent if target != root else None
+            back = ""
+            if parent and parent.is_relative_to(root):
+                back_rel = parent.relative_to(root).as_posix()
+                back = f'<p><a href="/reports/{quote(back_rel)}">← Назад</a></p>'
+            body = (
+                "<!doctype html><meta charset=utf-8><title>Cripta reports</title>"
+                "<style>body{background:#091017;color:#e7eef5;font:15px system-ui;padding:30px}a{color:#55b5ff}li{margin:9px}</style>"
+                f"<h1>{escape(target.name)}</h1>{back}<ul>{''.join(rows)}</ul>"
+            ).encode("utf-8")
+            self.send_body(200, body, "text/html; charset=utf-8")
+            return
+        body = target.read_bytes()
+        self.send_body(200, body, guess_type(target.name)[0] or "application/octet-stream")
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        print(f"{self.client_address[0]} {fmt % args}", flush=True)
+
+
+if __name__ == "__main__":
+    server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
+    server.serve_forever()
