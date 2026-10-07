@@ -380,6 +380,7 @@ migration_files=(
   operations/sql/20261003_market_observation_alert_v1.sql
   operations/sql/20261004_r1_reverse_transitions.sql
   operations/sql/20261004_r1_live_arm_waiver.sql
+  operations/sql/20261007_live_arm_parity_gate.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
