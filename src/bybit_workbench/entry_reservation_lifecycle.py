@@ -338,3 +338,7 @@ def resolve_cancelled_entry_reservation_after_reconcile(
         command_id=command_id,
         reason=(
             f"CANCEL_NOT_PROVEN_ZERO_FILL:status={order_status}:"
+            f"cumExecQty={cumulative_fill}"
+        ),
+        mutation_ambiguous=True,
+    )
