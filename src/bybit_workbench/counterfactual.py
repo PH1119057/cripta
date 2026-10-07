@@ -221,14 +221,16 @@ def build_admission_counterfactual_candidate(
     if decision is None:
         return None
     allowed = {
-        EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS:
-            NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS,
-        EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT:
-            NotificationKind.EXCHANGE_POSITION_OWNERSHIP_CONFLICT,
+        EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS,
+        EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT,
     }
-    expected_notice_kind = allowed.get(decision.code)
-    if expected_notice_kind is None:
+    if decision.code not in allowed:
         return None
+    expected_notice_kind = (
+        NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS
+        if decision.code is EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS
+        else None
+    )
     if evaluation.execution_request is not None:
         raise RuntimeError("blocked admission counterfactual cannot have ExecutionRequest")
     if decision.capital_reservation_id is not None:
@@ -285,16 +287,16 @@ def build_admission_counterfactual_candidate(
     amount_currency_raw = str(capital.get("amount_currency") or "").strip().upper()
     amount_currency = amount_currency_raw or None
 
-    notices = tuple(
-        notice
-        for notice in evaluation.notifications
-        if notice.kind is expected_notice_kind
-    )
-    if len(notices) != 1:
-        raise RuntimeError("admission counterfactual requires exact block notification")
-    notice = notices[0]
-    if notice.requested_amount is not None and notice.requested_amount != requested_amount:
-        raise RuntimeError("counterfactual requested amount differs from EntryPlan")
+    notice = None
+    if expected_notice_kind is not None:
+        notices = tuple(
+            item for item in evaluation.notifications if item.kind is expected_notice_kind
+        )
+        if len(notices) != 1:
+            raise RuntimeError("admission counterfactual requires exact block notification")
+        notice = notices[0]
+        if notice.requested_amount is not None and notice.requested_amount != requested_amount:
+            raise RuntimeError("counterfactual requested amount differs from EntryPlan")
 
     captured = captured_at.astimezone(UTC)
     candidate_id = (
@@ -326,18 +328,22 @@ def build_admission_counterfactual_candidate(
         requested_amount=requested_amount,
         amount_currency=amount_currency,
         capacity_snapshot_id=decision.capacity_snapshot_id,
-        reported_available_amount=notice.available_amount,
+        reported_available_amount=None if notice is None else notice.available_amount,
         decision_code=decision.code,
         decision_reason=decision.reason,
         evidence=FrozenPolicy.from_mapping(
             {
-                "notification_id": notice.notification_id,
-                "notification_reason": notice.reason,
+                "notification_id": None if notice is None else notice.notification_id,
+                "notification_reason": None if notice is None else notice.reason,
                 "reported_requested_amount": (
-                    None if notice.requested_amount is None else str(notice.requested_amount)
+                    None
+                    if notice is None or notice.requested_amount is None
+                    else str(notice.requested_amount)
                 ),
                 "reported_available_amount": (
-                    None if notice.available_amount is None else str(notice.available_amount)
+                    None
+                    if notice is None or notice.available_amount is None
+                    else str(notice.available_amount)
                 ),
                 "counterfactual_block_reason": decision.code.value,
                 "source": "universal_entry_admission_counterfactual",

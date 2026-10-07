@@ -61,13 +61,13 @@ def test_r1_prearm_writes_all_required_pre_owner_evidence() -> None:
     assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in source
 
 
-def test_r1_parity_attestation_matches_stage7b_verified_modules() -> None:
+def test_r1_parity_attestation_matches_verified_modules() -> None:
     evidence = app._r1_paper_real_parity_attestation(
         "a" * 40,
         source_root=ROOT,
         runtime_root=ROOT,
     )
-    assert evidence["parity_baseline"] == "STAGE7B_RUNTIME_VERIFIED_2026-10-07"
+    assert evidence["parity_baseline"] == "R1_TERMINAL_RELEASE_PARITY_VERIFIED_2026-10-08"
     assert evidence["module_sha256"] == app.R1_PARITY_ATTESTED_MODULE_SHA256
 
 

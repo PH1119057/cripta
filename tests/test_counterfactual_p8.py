@@ -23,6 +23,7 @@ from tests.test_universal_entry_architecture import (
     NOW,
     AcceptingAdmissionPort,
     RejectingCapitalAdmissionPort,
+    RejectingSlotAdmissionPort,
     capacity_policy,
     fact,
     make_card,
@@ -116,6 +117,49 @@ def test_atomic_reservation_race_also_creates_counterfactual_candidate() -> None
     assert candidate is not None
     assert candidate.reported_available_amount == Decimal("10")
     assert "atomic capital reservation failed" in candidate.decision_reason
+
+
+def test_ownership_conflict_counterfactual_needs_no_operational_notification() -> None:
+    card = make_card(
+        "p8-slot-conflict",
+        capital={**capacity_policy("10"), "amount_currency": "USDT"},
+        execution={"max_request_age_seconds": 30},
+    )
+    registry, engine = setup_engine(card)
+    evaluation = real_evaluate(
+        engine,
+        fact(20),
+        capacity=TradingCapacitySnapshot(
+            "p8-slot-capacity",
+            NOW,
+            Decimal("20"),
+            DataQuality.HIGH,
+            "exchange:test",
+        ),
+        admission_port=RejectingSlotAdmissionPort(),
+    )[0]
+    entry_plan, exit_plan = registry.exact_plan_pair("act-0")
+
+    assert evaluation.decision is not None
+    assert (
+        evaluation.decision.code
+        is EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+    )
+    assert evaluation.notifications == ()
+
+    candidate = build_insufficient_funds_candidate(
+        evaluation,
+        entry_plan=entry_plan,
+        exit_plan=exit_plan,
+        captured_at=NOW,
+    )
+    assert candidate is not None
+    assert (
+        candidate.decision_code
+        is EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+    )
+    assert candidate.reported_available_amount is None
+    assert '"notification_id":null' in candidate.evidence.payload_json
 
 
 def test_non_counterfactual_accepted_decision_never_becomes_counterfactual() -> None:

@@ -126,3 +126,18 @@ def test_live_dashboard_request_does_not_run_schema_ddl() -> None:
     live_state = source.split("def live_trading_state()", 1)[1].split("def ", 1)[0]
     assert "ALTER TABLE" not in live_state
     assert "CREATE TABLE" not in live_state
+
+
+def test_terminal_private_order_reconciles_universal_entry_before_slot_can_stick() -> None:
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    handle = source.split("def handle_private(", 1)[1].split("def private_loop(", 1)[0]
+    terminal = handle.split('elif topic.startswith("order"):', 1)[1].split(
+        'elif topic.startswith("execution"):', 1
+    )[0]
+
+    history = terminal.index("upsert_exchange_order_history(connection, item, now)")
+    delete = terminal.index("DELETE FROM runtime.hot_orders")
+    release = terminal.index("resolve_cancelled_entry_reservation_after_reconcile(")
+    assert history < delete < release
+    assert 'if order_status in {"Cancelled", "Rejected", "Deactivated"}:' in terminal
+    assert 'cancel_reason=f"BYBIT:{raw_cause}"' in terminal

@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.18
-**Дата:** 2026-10-07
+**Версия:** 3.19
+**Дата:** 2026-10-08
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -914,3 +914,34 @@ RESEARCH_COMPUTE_RULES_RU         2.1
 No current document/path, mandatory pre-read, routing or Project Source
 membership changed. README / AGENTS / Project Instructions/bootstrap topology
 therefore requires no revision in this cycle.
+
+# 32. R1 terminal Entry cancellation lifecycle implementation sync — 2026-10-08
+
+This maintenance cycle records an implementation repair; it does not change
+Strategy/Entry/Exit trading policy or token ownership.
+
+Current documentation changes:
+- CURRENT_PROJECT_MAP 12.4 — records the ARBUSDT PostOnly zero-fill stale-slot
+  incident, the notification/storage mismatch, implementation repair, exact test
+  evidence and the pre-publication DISARMED checkpoint;
+- DOCUMENTATION_INDEX 3.19 — records this maintenance cycle and current Project
+  Source version set.
+
+Current Project Source version set after this cycle:
+```text
+CHATGPT_INTERACTION_RULES_RU      1.9
+CRIPTA_ASSISTANT_WORK_RULES_RU    3.5
+CRIPTA_ARCHITECTURE_RULES_RU      2.8
+DOCUMENTATION_INDEX_RU            3.19
+CRIPTA_GLOSSARY_RU                3.1
+CURRENT_PROJECT_MAP_RU            12.4
+SECURITY                          1.3
+TRADING_CONTOUR_RU                2.6
+OBSERVATION_ANALYTICS_RU          1.9
+DEVELOPMENT_RELEASE_RULES_RU      1.9
+RESEARCH_COMPUTE_RULES_RU         2.1
+```
+
+No current document/path, mandatory pre-read, routed reading or Project Source
+membership changed. Therefore README / AGENTS / Project Instructions bootstrap
+topology requires no revision in this cycle.

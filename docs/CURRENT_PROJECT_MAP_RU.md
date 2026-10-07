@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.3
-**Дата:** 2026-10-07
+**Версия:** 12.4
+**Дата:** 2026-10-08
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -2138,3 +2138,77 @@ LIVE remains deliberately DISARMED. Re-arm requires a fresh exact-release
 readiness cycle and separate owner approval. Full
 `Entry -> fill -> Exchange protection -> dynamic Exit -> close -> economics
 after fees` behavior is still NOT YET VERIFIED.
+
+# 32. R1 terminal Entry cancellation lifecycle repair — CHECKED HERE 2026-10-08
+
+Pre-publication production finding on exact loaded release
+`c5f3fc99fc894c5eddb40a53f87e8ea3ac6e999a`: after owner-approved R1 re-arm,
+an `ARBUSDT LONG` PostOnly Entry was acknowledged by Bybit and then reached
+`orderStatus=Cancelled` with `rejectReason=EC_PostOnlyWillTakeLiquidity`,
+`cumExecQty=0` and no execution/position. Exchange was therefore flat, but the
+Universal Entry CapitalReservation remained `PENDING_EXCHANGE_REFLECTION` and
+the physical slot claim remained `CLAIMED`.
+
+The stale claim caused subsequent ARBUSDT attempts to receive the canonical
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` EntryDecision. A second implementation
+defect then converted that normal fail-closed outcome into an observer runtime
+error: `NotificationKind` still exposed
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT`, while the current
+`strategy_entry.notifications.kind` storage CHECK intentionally does not allow
+that token. Repeated attempts therefore produced durable
+`UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR / CheckViolation` faults.
+
+Canonical classification was already correct and is unchanged:
+`EXCHANGE_POSITION_OWNERSHIP_CONFLICT` is an EntryDecision outcome, not a
+lifecycle fault or operational notification kind. Analyst counterfactual
+capture remains allowed for that decision.
+
+Implementation repair prepared in an isolated worktree:
+- terminal private Bybit order events are persisted to
+  `runtime.exchange_order_history` before removal from `runtime.hot_orders`;
+- `Cancelled / Rejected / Deactivated` Universal Entry terminal events are fed
+  through the existing reservation reconciliation helper;
+- exact `Cancelled + cumExecQty=0 + no execution` releases both reservation and
+  slot with `ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual Exchange cause>`;
+- partial/uncertain terminal outcomes remain fail-closed in reconciliation;
+- `EXCHANGE_POSITION_OWNERSHIP_CONFLICT` is removed from `NotificationKind` and
+  is no longer written to `strategy_entry.notifications`;
+- Analyst counterfactual for ownership conflict is built directly from the
+  canonical EntryDecision and exact Strategy/plan lineage;
+- PAPER/REAL parity attestation is re-bound only after the updated deterministic
+  Entry/Exit/reverse contour passed.
+
+Pre-publication test evidence:
+```text
+targeted ownership/counterfactual/lifecycle/schema = 92 PASS
+R1 Entry/Exit/reverse parity contour               = 161 PASS
+post-attestation targeted gate                     = 50 PASS
+disposable PostgreSQL exact zero-fill/partial gate = 3 PASS
+full pytest                                        = 1623 PASS / 68 SKIP
+pre-existing Dashboard/U6 baseline failures        = 7
+NEW_TEST_FAILURES                                   = 0
+Ruff NEW_DIAGNOSTICS                               = 0
+mypy baseline diagnostics                          = patch diagnostics
+```
+
+Two broader disposable-DB tests outside this repair reported environment/test-
+harness findings only: one historical LIVE-arm seed does not satisfy the current
+parity gate; one privilege test is invalid on a schema clone intentionally owned
+by `cripta`. Neither changes the exact three lifecycle regression results above.
+
+Safety state during authoring:
+```text
+mainnet gate              = OFF
+R1 execution permissions  = 0
+ACTIVE LIVE-arm sessions  = 0
+real positions            = 0
+active Exchange orders    = 0
+stale ARBUSDT slot        = still present pending post-deploy cleanup
+observer CheckViolation faults = still open pending post-deploy cleanup
+```
+
+`DEPLOYED` and post-repair `RUNTIME BEHAVIOR VERIFIED` are NOT claimed by this
+pre-publication checkpoint. The approved completion path is exact GitHub
+publication -> verified deploy while DISARMED -> deterministic stale-slot/fault
+cleanup using Exchange-flat evidence -> fresh readiness -> explicit owner-
+approved re-arm.

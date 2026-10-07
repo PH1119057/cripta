@@ -1166,9 +1166,6 @@ class UniversalEntryEngine:
             EntryDecisionCode.INSUFFICIENT_AVAILABLE_FUNDS: (
                 NotificationKind.INSUFFICIENT_AVAILABLE_FUNDS
             ),
-            EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT: (
-                NotificationKind.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
-            ),
             EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED: (
                 NotificationKind.OPERATIONAL_SAFETY_BLOCKED
             ),

@@ -321,6 +321,7 @@ def _seed(
         "slot_claim_id": slot_claim_id,
         "position_mode_state_ref": position_mode_state_ref,
         "request_id": request_id,
+        "execution_request_id": request_id,
         "command_id": command_id,
         "symbol": symbol,
     }
@@ -668,6 +669,64 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
             (ids["execution_request_id"],),
         ).fetchone()
         assert request_event == (expected_reason,)
+
+
+def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> None:
+    assert DSN is not None
+    prefix = "zero-fill-preack-" + uuid4().hex[:10]
+    with psycopg.connect(DSN) as connection:
+        ids = _seed(
+            connection,
+            prefix,
+            symbol="ARBUSDT",
+            reservation_state="DISPATCHED",
+            expires_at=NOW + timedelta(seconds=30),
+            dispatched=True,
+            command=True,
+        )
+        order_id = f"{prefix}-order"
+        connection.execute(
+            """INSERT INTO runtime.exchange_order_history(
+                   order_id,order_link_id,symbol,side,order_status,
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+            (
+                order_id,
+                ids["command_id"][:36],
+                ids["symbol"],
+                json.dumps(
+                    {
+                        "cumExecQty": "0",
+                        "rejectReason": "EC_PostOnlyWillTakeLiquidity",
+                    }
+                ),
+            ),
+        )
+        state = resolve_cancelled_entry_reservation_after_reconcile(
+            connection,
+            command_id=ids["command_id"],
+            exchange_order_id=order_id,
+            cancel_reason="BYBIT:EC_PostOnlyWillTakeLiquidity",
+        )
+        assert state == "RELEASED"
+        expected_reason = (
+            "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:"
+            "BYBIT:EC_PostOnlyWillTakeLiquidity"
+        )
+        stored = connection.execute(
+            """SELECT state,state_reason
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        assert stored == ("RELEASED", expected_reason)
+        claim = connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone()
+        assert claim == ("RELEASED", expected_reason)
 
 
 def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None:

@@ -3292,8 +3292,33 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
             else:
                 upsert_position(connection, item, now)
         elif topic.startswith("order"):
-            if item.get("orderStatus") in {"Filled", "Cancelled", "Rejected", "Deactivated"}:
-                connection.execute("DELETE FROM runtime.hot_orders WHERE order_id=%s", (item.get("orderId", ""),))
+            order_status = str(item.get("orderStatus") or "")
+            if order_status in {"Filled", "Cancelled", "Rejected", "Deactivated"}:
+                # Preserve the exact terminal Exchange event before removing it
+                # from the current-order projection. This lets Universal Entry
+                # deterministically release a no-fill reservation/slot even
+                # when Bybit cancels PostOnly itself rather than our strategy
+                # cancellation worker initiating the cancel.
+                upsert_exchange_order_history(connection, item, now)
+                connection.execute(
+                    "DELETE FROM runtime.hot_orders WHERE order_id=%s",
+                    (item.get("orderId", ""),),
+                )
+                if order_status in {"Cancelled", "Rejected", "Deactivated"}:
+                    order_link_id = str(item.get("orderLinkId") or "")
+                    order_id = str(item.get("orderId") or "")
+                    if order_link_id and order_id:
+                        raw_cause = str(
+                            item.get("rejectReason")
+                            or item.get("cancelType")
+                            or "Cancelled"
+                        ).strip()
+                        resolve_cancelled_entry_reservation_after_reconcile(
+                            connection,
+                            command_id=order_link_id,
+                            exchange_order_id=order_id,
+                            cancel_reason=f"BYBIT:{raw_cause}",
+                        )
             else:
                 upsert_order(connection, item, now)
         elif topic.startswith("execution"):
