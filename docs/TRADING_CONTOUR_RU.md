@@ -1048,3 +1048,4 @@ client/exchange order IDs, fill/execution IDs, strategy_position_id,
 Exit claim/heartbeat и final close/economics refs.
 
 Entry/Exit/Execution не должны молча подменять потерянный handoff новой
+торговой логикой.
