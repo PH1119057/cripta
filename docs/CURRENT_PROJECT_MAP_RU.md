@@ -1384,4 +1384,491 @@ Implemented/deployed:
 - mutable `mayak_v2.market_observation_alert_deliveries`;
 - canonical alert classes:
   `REGIME_CHANGE`, `MARKET_WIDE_STRESS`, `SYNCHRONIZATION_SPIKE`,
-  `
+  `LIQUIDATION_CASCADE`, `DATA_QUALITY_DEGRADATION`, `SOURCE_OUTAGE`;
+- delivery lifecycle:
+  `PENDING -> DELIVERED -> ACKNOWLEDGED` with retry and
+  `ESCALATION_REQUIRED`;
+- `owner_notifiable=false` by default;
+- provenance requires `trading_command=false`;
+- alert facts are immutable; delivery rows have no DELETE privilege for
+  runtime actor `cripta`.
+
+Controlled DB behavior, CHECKED HERE:
+- runtime actor / DB current_user = `cripta`;
+- controlled `SOURCE_OUTAGE` alert completed
+  `PENDING -> DELIVERED -> ACKNOWLEDGED`;
+- scenario ran in one transaction and was rolled back;
+- post-rollback production alert rows = 0;
+- post-rollback production delivery rows = 0.
+
+Runtime/liveness after deploy:
+- MAYAK, Dispatcher V2 and Lifecycle Supervisor active;
+- checked service restart counts = 0;
+- execution permissions/open positions/hot positions/pending commands/
+  pending orders = 0;
+- no automatic market alert trigger was enabled.
+
+Current observation-contour status:
+
+~~~text
+MarketRegimeEvidence 1w/2w/4w     = KEEP / UTILITY_NOT_CONFIRMED
+persistent MarketRegime             = IMPLEMENTATION PENDING
+MarketRegimeEpisode                 = IMPLEMENTATION PENDING
+durable MarketObservationAlert infra= IMPLEMENTED / DEPLOYED / CONTROLLED VERIFIED
+automatic alert generation          = NOT IMPLEMENTED / POLICY NOT APPROVED
+Dispatcher persistent-regime enrich = BLOCKED BY UTILITY_NOT_CONFIRMED
+CoinMarketRating formula             = OWNER DECISION REQUIRED
+Strategy use of this regime evidence = FORBIDDEN BY CURRENT OWNER DECISION
+modern exact replay contour          = TERM/BOUNDARY NOT CANONICALLY DEFINED
+~~~
+
+No trading behavior or Exchange state was changed.
+
+## 22.3 Observation Replay Contour boundary — OWNER DECISION 2026-10-03
+
+OWNER DECISION:
+
+~~~text
+MODERN EXACT REPLAY = FULL OBSERVATION CONTOUR
+MAYAK
+-> DISPATCHER
+-> QUALITY / CONTINUITY
+-> MarketObservationAlert STAGE
+-> STOP BEFORE STRATEGY / TRADING
+~~~
+
+Exact boundary:
+- production `LiveMayakEngine` semantics are reused by replay;
+- production Dispatcher V2 builders are reused by replay;
+- quality/continuity remain explicit causal evidence;
+- alert stage is part of replay;
+- current automatic alert-generation policy = `NO_POLICY`;
+- no alert threshold, severity threshold, regime winner, CoinMarketRating,
+  Strategy suitability or Strategy context policy is inferred;
+- explicit historical MarketObservationAlert facts may be replayed;
+- account/trading-capacity state is outside the mandatory market replay unless
+  supplied as a separate causal technical input;
+- Strategy/Entry/Exit/Execution/Exchange mutation are outside this contour.
+
+Current implementation status at this owner decision:
+
+~~~text
+CausalMayakReplay / same LiveMayakEngine = IMPLEMENTED
+Dispatcher V2 production builders        = IMPLEMENTED
+quality/continuity in MAYAK/Dispatcher    = IMPLEMENTED
+durable MarketObservationAlert infra      = IMPLEMENTED / DEPLOYED
+full composed Observation Replay Contour  = IMPLEMENTATION PENDING
+automatic alert generation                = NO_POLICY / NOT APPROVED
+~~~
+
+## 22.4 Observation Replay Contour implementation — CHECKED HERE 2026-10-03
+
+Pre-publication implementation/runtime checkpoint:
+
+~~~text
+REMOTE_HEAD      = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+SOURCE_HEAD      = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+INSTALLED_COMMIT = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+LOADED_COMMIT    = dd0416bb7844dfc1de26f1fc88ab749ca4f26bd4
+MAINNET_GATE     = DISARMED
+~~~
+
+IMPLEMENTED / DEPLOYED:
+- `ObservationContourReplay` composes the complete strategy-agnostic replay
+  boundary selected in §22.3;
+- MAYAK uses existing `CausalMayakReplay` and the same `LiveMayakEngine`;
+- MAYAK live persistence and replay share exact pure source-record builders for
+  `shared_market_contexts` / `coin_market_contexts`;
+- minute continuity uses one shared `MinuteContinuityTracker` in live Collector
+  and replay;
+- replay loads the exact production `dispatcher_v2` package from the installed
+  release and calls its production builders/serialization instead of copying
+  formulas;
+- quality/coverage/freshness and `trading_effect=NONE` are preserved;
+- alert stage is always present with `NO_POLICY`; automatic generated alerts
+  remain empty until a separate owner-approved alert-generation policy exists;
+- explicit causal historical MarketObservationAlert facts use the same pure
+  alert builder/content hash as durable live alert creation;
+- Strategy/Entry/Exit/Execution/Exchange mutation are absent from replay.
+
+TEST / RUNTIME EVIDENCE:
+
+~~~text
+targeted observation/replay suite = 24 passed
+full pytest                        = 1499 passed / 64 skipped / 0 failed
+Ruff changed code                  = PASS
+mypy new/shared modules            = PASS
+runtime ObservationReplay E2E      = PASS
+runtime dispatcher package         = exact installed production package
+alert policy                       = NO_POLICY
+automatic generated alerts         = 0
+3-minute replay continuity gap     = 2 missing snapshots [expected]
+~~~
+
+Post-deploy liveness:
+- `cripta-mayak-v2.service` active, `NRestarts=0`;
+- `cripta-dispatcher-v2.service` active, `NRestarts=0`;
+- `cripta-lifecycle-supervisor.service` active, `NRestarts=0`;
+- latest live MAYAK continuity retained `last_gap_minutes=1` after deploy;
+- execution permissions/open positions/hot positions/pending commands/
+  pending orders = 0;
+- mainnet remained disarmed.
+
+Observation-contour roadmap after this checkpoint:
+
+~~~text
+R10 multi-horizon evidence           = DONE / UTILITY_NOT_CONFIRMED
+R11 durable alert infrastructure     = DONE / DEPLOYED / CONTROLLED VERIFIED
+R12 Dispatcher persistent-regime use = BLOCKED BY UTILITY_NOT_CONFIRMED
+R13 CoinMarketRating                  = OWNER DECISION REQUIRED / FORMULA ABSENT
+R14 Strategy regime-context use       = FORBIDDEN BY CURRENT OWNER DECISION
+R15 Observation Replay Contour        = DONE / DEPLOYED / RUNTIME BEHAVIOR VERIFIED
+~~~
+
+No trading behavior or Exchange state was changed by R15.
+
+
+# 24. Dashboard UI release separation — owner decision 2026-10-05
+
+OWNER DECISION:
+
+```text
+presentation-only Dashboard UI
+!= trading/application runtime
+```
+
+Target physical/release identity:
+
+```text
+DASHBOARD_UI_ROOT   = /srv/cripta/dashboard-ui
+DASHBOARD_UI_COMMIT = exact verified Git commit for current presentation asset
+```
+
+Presentation-only HTML/CSS/read-model rendering may be deployed while
+`mainnet gate=OPEN` and Strategy `Execution ON`, provided the UI-only verifier
+proves that API/auth/control/mutation and decision/execution-affecting semantics
+did not change.
+
+Such deploy:
+- must not stop/restart Entry, Exit, private runtime, observer, lifecycle or
+  other trading services;
+- must not modify StrategyActivation, execution permissions or LIVE-arm;
+- should not restart Dashboard itself when the static asset is read per request;
+- records independent UI commit/hash evidence.
+
+Current implementation migration from runtime-owned
+`operations/dashboard/index.html` to the separate UI rail is part of the same
+owner-approved change.
+
+CHECKED HERE 2026-10-05 after first UI-only deploy:
+
+```text
+pre-publication SOURCE/REMOTE snapshot = 45e38252c786c093ebcb41ccce4091018ff20bb0
+INSTALLED_COMMIT                       = ee7bf29cb5249151a90fc3ee8eeb1fdf2684a8b0
+LOADED_COMMIT                          = ee7bf29cb5249151a90fc3ee8eeb1fdf2684a8b0
+DASHBOARD_UI_COMMIT                    = 45e38252c786c093ebcb41ccce4091018ff20bb0
+DASHBOARD_UI_ROOT                      = /srv/cripta/dashboard-ui
+OPERATIONAL_DELTA_COMMIT               = 45e38252c786c093ebcb41ccce4091018ff20bb0
+AFFECTED_OPERATIONAL_PATH              = /usr/local/sbin/cripta-deploy-dashboard-ui
+```
+
+Runtime evidence:
+- presentation-only verifier: `PASS`;
+- UI source/live SHA256 equal:
+  `152cdd213a3ea1c32e865d930c87d6fa9dceb4d3fd854565c017ee94aa1fae61`;
+- `mainnet gate` remained `1`;
+- enabled execution permissions remained `5`;
+- enabled StrategyActivation count remained `5`;
+- active exact LIVE-arm sessions remained `5`;
+- Universal Entry observer/consumer, private runtime, Universal Exit consumer,
+  Lifecycle Supervisor and Dashboard kept the same PIDs with `NRestarts=0`;
+- no trading service and no Dashboard service was restarted.
+
+Status:
+
+```text
+CANON                         = YES
+IMPLEMENTED                   = YES
+DEPLOYED                      = YES
+RUNTIME LIVENESS VERIFIED     = YES
+RUNTIME BEHAVIOR VERIFIED     = YES [UI hot-swap + gate/permission invariance]
+TRADING BEHAVIOR CHANGED      = NO
+```
+
+# 25. Real Entry account-state generation repair — OWNER DECISION 2026-10-06
+
+OWNER DECISION:
+- current R1 MICRO_LIVE scope не расширять;
+- исправить non-deferrable slot-claim -> strategy_attempt FK, который ломал
+  единый outer admission transaction до записи StrategyAttempt;
+- заменить независимые real-entry wall-clock freshness gates
+  reconciliation/wallet/capacity на current COMPLETE AccountStateGeneration;
+- exact position-mode proof real Entry брать из того же generation;
+- StrategySignal / EntryExecutionRequest expiry оставить без изменения.
+
+SOURCE STATUS этого changeset до production deploy:
+IMPLEMENTATION IN PROGRESS / DEPLOYED NOT CLAIMED HERE.
+Runtime checkpoint после exact verified release обязан отдельно доказать
+generation progression, deferred FK, automatic StrategySignal ->
+EntryDecision -> EntryExecutionRequest path, gate/session identity и отсутствие
+scope expansion.
+
+
+BEFORE / AFTER CAPABILITY MATRIX:
+
+| CAPABILITY | BEFORE_OWNER | BEFORE_STATUS | AFTER_OWNER | AFTER_STATUS | REPLACEMENT_IMPLEMENTED | MIGRATION_REQUIRED | TEST_EVIDENCE |
+|---|---|---|---|---|---|---|---|
+| private account truth for real Entry | private runtime + Entry readiness | fragmented wallet/reconciliation/capacity clocks | private runtime AccountStateGeneration + Entry admission | one COMPLETE/FAILED generation contract | YES | YES | generation/reconciliation tests |
+| physical slot + capital admission | Entry admission | intended atomic transaction, broken by non-deferrable attempt FK | Entry admission | deferred FK validated at outer COMMIT, same referential integrity | YES | YES | migration + PostgreSQL integration gate |
+| StrategySignal/ExecutionRequest expiry | Strategy/Entry | 30s Strategy-owned request validity | Strategy/Entry | unchanged | N/A | NO | architecture regression tests |
+| position-mode proof for real Entry | private runtime + Entry admission | separate fresh_until clock | AccountStateGeneration + Entry admission | exact mode ref bound to current generation | YES | YES | generation/admission tests |
+
+No capability loses an owner; no trading-policy owner moves between top-level layers.
+# 26. PAPER / REAL execution-mode parity — OWNER DECISION / CHECKED HERE 2026-10-07
+
+OWNER DECISION:
+- `StrategyActivation` остаётся единым включателем Strategy;
+- при выключенном real execution Strategy продолжает работать через PAPER;
+- включение real execution выбирает REAL environment, а не другую
+  Strategy/Entry/Exit implementation;
+- для одного `strategy_attempt` запрещено одновременное PAPER + REAL execution;
+- PAPER и REAL должны совпадать по Strategy/Entry/Exit policy и lifecycle;
+- различаться разрешено только real-only admission/account/Exchange truth и
+  фактическим execution result;
+- real admission failure не даёт права silent fallback в PAPER.
+
+## 26.1 Historical checkpoint — CHECKED HERE 2026-10-06
+
+Historical source/loaded release:
+`7a37b1976749d7d68c0be4d91b5167a6538ba0c1`.
+
+На этом checkpoint target ещё не был реализован полностью:
+- mode-neutral Entry payload ещё оставался физически привязан к PAPER naming;
+- PAPER и REAL routing ещё не были доказаны как XOR;
+- PAPER dynamic Exit и REAL ExitDecision физически расходились по decision path;
+- restart-cold-history уже был исправлен, но full execution-mode parity ещё не
+  была доказана.
+
+Historical status:
+
+```text
+CANON                         = YES
+OWNER_DECISION                = YES
+IMPLEMENTED                   = NO
+DEPLOYED                      = NO [Stage 4 target]
+PAPER_REAL_DECISION_PARITY    = NOT YET PROVED
+REAL_REARM                    = HARD_STOP
+```
+
+Этот блок сохраняется как historical evidence и не описывает current runtime.
+
+## 26.2 Current parity checkpoint — CHECKED HERE 2026-10-07
+
+Pre-publication source/runtime checkpoint:
+`d6769ea574385dd4c1c7cbdd9e813b2509a2f44f`.
+
+По INDEX §17.5 этот SHA является dated pre-publication snapshot: сам
+documentation commit неизбежно изменит `REMOTE_HEAD/SOURCE_HEAD`, поэтому после
+публикации exact release identity проверяется отдельно operational evidence.
+
+Stage 4B / Stage 7B evidence:
+
+- Entry:
+  - `EntryExecutionIntent` является mode-neutral payload;
+  - PAPER и REAL получают один exact Strategy/attempt/signal/EntryPlan/ExitPlan
+    lineage;
+  - REAL `ExecutionRequest` копирует payload `EntryExecutionIntent` без
+    result-affecting policy rewrite;
+  - observer выбирает PAPER XOR REAL; real admission failure не создаёт PAPER
+    fallback.
+- Exit:
+  - PAPER `PaperTradeRuntime` вызывает тот же `UniversalExitEngine`, что и
+    REAL path;
+  - requested mutation проходит тот же `validate_exit_mutation`;
+  - live PAPER `DYNAMIC_TP_MOVED` events несут exact
+    `exit_decision_id / rule_id / action_kind / requested_mutation`.
+- Reverse:
+  - PAPER adapter и REAL observer/worker используют общий immutable
+    `ReverseTransitionIntent`;
+  - current R1 contract:
+    `OPPOSITE_ENTRY_FORCED_FLIP -> MARKET close + MARKET open -> ONE_WAY /
+    positionIdx=0 -> OPPOSITE_FLIP_TAKER`;
+  - live opposite-entry flip во время Stage 7B soak не случился, поэтому
+    рыночное occurrence не объявляется; parity доказана deterministic
+    production-function evidence + adapter tests.
+- Restart / causal continuity:
+  - controlled restart PAPER Entry observer + Exit shadow сохранил три exact
+    `paper_position_id`, direction и dynamic target state;
+  - post-restart observer вернулся в `observer_ready=true`, history-ready
+    state и продолжил causal market stream;
+  - на следующей закрытой 5m свече ARB/DOT/INJ получили новые
+    `DYNAMIC_TP_MOVED` с новыми ExitDecision IDs и тем же validated mutation
+    contract;
+  - unresolved `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` = 0.
+- Tests:
+  - exact current production parity gate: `113 PASS`;
+  - full current repository suite: `1598 PASS / 65 SKIP`;
+  - remaining 9 failures — тот же pre-existing Dashboard/U6 baseline, новых
+    Stage 7 parity failures нет.
+- Identity:
+  - relevant Entry/Exit/reverse production modules byte-for-byte совпадали между
+    source и loaded runtime на pre-publication checkpoint.
+
+Current capability matrix:
+
+| CAPABILITY | CURRENT OWNER/PATH | STATUS |
+|---|---|---|
+| Strategy/Entry trading meaning | StrategyCard + EntryPlan + UniversalEntryEngine | CONSERVED / VERIFIED |
+| mode-neutral Entry execution semantics | `EntryExecutionIntent` before adapter selection | IMPLEMENTED / VERIFIED |
+| real admission / slot / capital safety | REAL-only admission barrier | CONSERVED / VERIFIED CONTRACT |
+| PAPER execution | PAPER adapter only when real execution permission OFF | IMPLEMENTED / VERIFIED |
+| REAL execution | REAL adapter only when permission ON + admission/gates PASS | IMPLEMENTED / VERIFIED CONTRACT |
+| Exit decision | one ExitPlan + UniversalExitEngine semantics for PAPER/REAL | IMPLEMENTED / RUNTIME VERIFIED |
+| Reverse decision | common `ReverseTransitionIntent`, separate execution adapters | IMPLEMENTED / VERIFIED |
+| Exchange mutation | private runtime / REAL consumers only | CONSERVED; not exercised by Stage 7B |
+
+Current parity status at this checkpoint:
+
+```text
+CANON                         = YES
+OWNER_DECISION                = YES
+IMPLEMENTED                   = YES
+DEPLOYED                      = YES
+RUNTIME_LIVENESS_VERIFIED     = YES
+RUNTIME_BEHAVIOR_VERIFIED     = YES
+PAPER_REAL_DECISION_PARITY    = PASS
+
+mainnet gate                  = 0
+real execution permissions    = 0
+real Entry/Exit/reverse/private services = intentionally inactive
+PAPER observer                = active
+PAPER Exit shadow             = active
+```
+
+`PAPER_REAL_DECISION_PARITY=PASS` закрывает только decision/policy parity gate.
+Он **не** означает автоматический LIVE/MICRO_LIVE re-arm. Перед real arm
+обязателен новый fresh check полного `TRADING_CONTOUR §4.7` checklist,
+включая Exchange/account/mode/slot/capital/protection/reconciliation gates и
+explicit owner approval. Любой `UNKNOWN/STALE/FAIL` остаётся fail-closed.
+
+## 26.3 Stage 7D post-arm consumer stabilization — CHECKED HERE 2026-10-07
+
+Этот раздел supersedes §26.2 **только для current R1 MICRO_LIVE runtime status**.
+§26.2 сохраняется как historical parity/pre-rearm checkpoint.
+
+После owner-approved Stage 7C re-arm был обнаружен production finding: post-arm
+Universal Entry consumer повторно вызывал `evaluate_live_arm()` для каждого
+REAL `EntryExecutionRequest`. Pre-arm TTL evidence имел
+`valid_until = arm time + 90s`, а exact release-bound LIVE-arm session
+продолжала оставаться ACTIVE. После TTL три `APTUSDT SHORT` REAL attempts на
+release `e7f86a815569d872107b56b5802434572377cbc3` создали три
+`EntryExecutionRequest`, но consumer завершил их `REQUEST_CANCELLED` с
+`LIVE_ARM_NOT_READY` до Exchange mutation. PAPER fallback, trade command,
+fill, position, pending order и open lifecycle fault не возникли; admission
+resources были fail-closed освобождены.
+
+Root cause: observer уже исполнял current contract — short-lived durable
+LIVE-arm evidence использовался как pre-arm authorization, а после arm REAL
+selection требовал exact active release-bound `live_arm_session` и текущую
+per-entry technical readiness. Entry consumer дополнительно переоценивал тот же
+expiring pre-arm evidence, поэтому корректная ACTIVE session становилась
+unusable через 90 секунд.
+
+Stage 7D repair:
+
+~~~text
+commit = bf3e31fdbb9a3b930518ee62dfa612454284d851
+scope  = operations/connectivity/universal_entry_consumer.py
+       + tests/test_r1_post_arm_admission.py
+~~~
+
+Consumer после repair:
+- exact `LiveArmContext` всё ещё обязан соответствовать loaded release;
+- exact ACTIVE release-bound LIVE-arm session обязательна;
+- `_admission_pre_dispatch_status()` выполняется **до** session check и
+  продолжает fail-closed проверять reservation/slot lineage, request-bound
+  position-mode state/freshness, `ONE_WAY / positionIdx=0`, newer incompatible
+  mode, ownership, hot position, pending Entry command и pending Exchange order;
+- expired pre-arm evidence после уже успешного arm больше не является post-arm
+  request gate;
+- отсутствие ACTIVE session остаётся blocking.
+
+Test evidence:
+
+~~~text
+py_compile changed files                           = PASS
+Ruff changed files                                 = PASS
+scoped release suite                               = 107 passed / 12 skipped
+full pytest                                        = 1605 passed / 67 skipped
+known pre-existing Dashboard/U6 baseline failures = 9
+NEW_TEST_FAILURES                                  = 0
+mypy baseline diagnostics                          = 6
+NEW_MYPY_DIAGNOSTICS                               = 0
+~~~
+
+Exact application deploy checkpoint before this documentation publication:
+
+~~~text
+REMOTE_HEAD         = bf3e31fdbb9a3b930518ee62dfa612454284d851
+SOURCE_HEAD         = bf3e31fdbb9a3b930518ee62dfa612454284d851
+INSTALLED_COMMIT    = bf3e31fdbb9a3b930518ee62dfa612454284d851
+LOADED_COMMIT       = bf3e31fdbb9a3b930518ee62dfa612454284d851
+RESEARCH_TOOLING    = bf3e31fdbb9a3b930518ee62dfa612454284d851
+DASHBOARD_UI_COMMIT = ed39c77b8985bdabd5552d37ebf0b5e2964118c2
+~~~
+
+Canonical installer verified exact GitHub release/tree/payload, created a
+quiesced PostgreSQL rollback backup, replayed migrations/schema validation and
+proved source/live consumer SHA256 equality. Critical restarted services were
+stable with `NRestarts=0`. Installer left `GATE=DISARMED`, execution
+permissions=0 and active LIVE-arm sessions=0 before explicit re-arm.
+
+Explicit owner-approved R1 re-arm on the same application release then passed:
+
+~~~text
+pre-arm readiness                      = PASS
+R1 StrategyActivation                  = 5/5 enabled
+mainnet gate                           = ON
+REAL execution permissions             = 5/5
+ACTIVE release-bound LIVE-arm sessions = 5/5
+requested_amount                       = 10 USDT per Strategy
+leverage                               = 1x
+cohort                                 = APT / INJ / DOT / LTC / ARB
+open lifecycle faults                  = 0
+hot positions / hot orders             = 0 / 0
+~~~
+
+Post-TTL runtime behavior verification:
+- re-arm occurred at `2026-10-07 08:39:15 UTC`;
+- last TTL-bound pre-arm evidence expired at `08:40:45 UTC`;
+- after expiry all 20 TTL-bound evidence rows were expired;
+- loaded Stage 7D Entry consumer returned post-arm readiness `TRUE` for all
+  5/5 exact R1 contexts using their ACTIVE release-bound sessions;
+- observer independently returned `REAL_SELECTED=5 / REAL_READY=5 / MATCH=True`;
+- private runtime remained connected, trade runtime `authenticated-locked`,
+  current AccountStateGeneration continued producing COMPLETE flat-account
+  generations.
+
+Status boundary:
+
+~~~text
+STAGE7D_POST_ARM_SESSION_CONTRACT         = RUNTIME BEHAVIOR VERIFIED
+R1_MICRO_LIVE                             = ARMED
+RUNTIME_LIVENESS                          = VERIFIED
+FIRST_POST_FIX_STRATEGY_ATTEMPT           = NOT YET OCCURRED at this checkpoint
+FIRST_POST_FIX_EXCHANGE_MUTATION          = NOT YET OCCURRED
+FULL REAL ENTRY/FILL/PROTECTION/EXIT CYCLE = NOT YET RUNTIME BEHAVIOR VERIFIED
+~~~
+
+Отсутствие post-fix StrategySignal/attempt на этом checkpoint не является
+ошибкой и не заменяется искусственным replay старых отменённых attempts.
+Следующий естественный R1 signal должен проверяться causal end-to-end:
+`StrategySignal -> attempt -> EntryExecutionRequest -> dispatch -> trade_command
+-> Exchange order/fill -> initial protection -> ExitDecision/close ->
+final economics`.
+
+После публикации именно этой documentation revision `REMOTE_HEAD/SOURCE_HEAD`
+неизбежно изменятся на documentation commit, тогда как application
+`INSTALLED_COMMIT/LOADED_COMMIT` останутся `bf3e31f...` до следующего
+application deploy. Это ожидаемая INDEX §17.5 time semantics и не должно
+маскироваться под новый loaded release.
