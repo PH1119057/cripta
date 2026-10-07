@@ -11,11 +11,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from bybit_workbench.live_arm_readiness import (
-    LiveArmContext,
-    active_live_arm_session,
-    evaluate_live_arm,
-)
+from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
@@ -663,16 +659,14 @@ def _live_arm_ready(
         )
     except ValueError as exc:
         return False, (f"LIVE_ARM_CONTEXT_INVALID:{exc}",)
-    decision = evaluate_live_arm(
-        connection,
-        context=context,
-        now=now,
-        require_owner_approval=True,
-    )
-    failed = list(decision.failed_codes)
+    # Durable LIVE-arm evidence is the pre-arm authorization contract. Once
+    # an exact release-bound arm session exists, per-request safety is enforced
+    # by _admission_pre_dispatch_status() and the request's admission lineage.
+    # Re-evaluating short-lived pre-arm evidence here would make an otherwise
+    # valid active session self-expire after arm.
     if active_live_arm_session(connection, context=context) is None:
-        failed.append("ACTIVE_LIVE_ARM_SESSION")
-    return not failed, tuple(failed)
+        return False, ("ACTIVE_LIVE_ARM_SESSION",)
+    return True, ()
 
 
 def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None) -> str:
