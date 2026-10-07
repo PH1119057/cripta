@@ -6,7 +6,7 @@ from typing import Final
 from .contracts import StrategyCard
 from .dashboard_control import card_from_editable
 
-R1_VERSION: Final = "1.0-micro-live"
+R1_VERSION: Final = "1.1-micro-live"
 R1_SYMBOLS: Final = (
     "APTUSDT",
     "INJUSDT",
@@ -33,7 +33,8 @@ def r1_strategy_payload(symbol: str) -> dict[str, object]:
         "strategy_version": R1_VERSION,
         "name": f"R1 · {symbol} · LONG+SHORT · MICRO_LIVE",
         "description": (
-            "Owner-approved R1 2026-10-04. Per-symbol bidirectional ping-pong; "
+            "Owner-approved R1 with Entry protection clarification 2026-10-07. "
+            "Per-symbol bidirectional ping-pong; "
             "Owner-approved MICRO_LIVE candidate; activation and execution remain "
             "fail-closed until explicit arm."
         ),
@@ -168,7 +169,8 @@ def r1_strategy_payload(symbol: str) -> dict[str, object]:
                 "role": "CATASTROPHIC_GUARD",
                 "stop_loss_enabled": True,
                 "stop_loss_pct": "10.0",
-                "take_profit_enabled": False,
+                "take_profit_enabled": True,
+                "take_profit_reference_path": "fact.r1_opposite_inner_target",
                 "trigger_by": "LastPrice",
                 "tpsl_mode": "Full",
             }
@@ -227,7 +229,7 @@ def r1_strategy_payload(symbol: str) -> dict[str, object]:
 def build_r1_cards(
     *,
     approved_at: datetime | None = None,
-    approved_source: str = "owner-r1-2026-10-04",
+    approved_source: str = "owner-r1-initial-opposite-tp-2026-10-07",
 ) -> tuple[StrategyCard, ...]:
     when = (approved_at or datetime.now(UTC)).astimezone(UTC)
     return tuple(
