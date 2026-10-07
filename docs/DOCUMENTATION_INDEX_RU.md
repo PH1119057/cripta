@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.15
+**Версия:** 3.16
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -800,3 +800,42 @@ Project Source remains exactly the 11 current `docs/` files. After publication,
 the owner should replace the Project Source copies from the exact current
 GitHub `main`; GitHub remains authority until that manual UI synchronization is
 confirmed.
+
+
+# 29. Final Project Source synchronization checkpoint — 2026-10-07
+
+This documentation cycle closes the R1 cancellation-audit stabilization record
+and prepares one exact 11-file Project Source bundle.
+
+Current document versions after this cycle:
+
+```text
+CHATGPT_INTERACTION_RULES_RU      1.9
+CRIPTA_ASSISTANT_WORK_RULES_RU    3.5
+CRIPTA_ARCHITECTURE_RULES_RU      2.7
+DOCUMENTATION_INDEX_RU            3.16
+CRIPTA_GLOSSARY_RU                3.0
+CURRENT_PROJECT_MAP_RU            12.1
+SECURITY                          1.3
+TRADING_CONTOUR_RU                2.6
+OBSERVATION_ANALYTICS_RU          1.8
+DEVELOPMENT_RELEASE_RULES_RU      1.9
+RESEARCH_COMPUTE_RULES_RU         2.1
+```
+
+Changes in this final documentation reconciliation:
+- GLOSSARY defines `ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual cause>` as an
+  audit/release reason and preserves `REQUEST_CANCELLED` as the request state;
+- MAP records the deployed `cb364c...` repair, post-deploy DISARMED safety
+  snapshot and still-open full REAL fill/protection/Exit behavior verification;
+- INDEX records the exact Project Source version set.
+
+No current document/path, mandatory pre-read, routing, root bootstrap or Project
+Source membership changed. Therefore README, AGENTS and Project Instructions
+template require no new topology revision in this cycle.
+
+Project Source manual synchronization rule:
+replace all 11 existing Project Source documents from the same final GitHub
+`main` snapshot; do not mix old and new individual copies. GitHub
+`PH1119057/cripta:main` remains authority until the owner confirms the UI
+upload.

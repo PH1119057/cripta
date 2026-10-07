@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.9
+**Версия:** 3.0
 **Дата:** 2026-10-07
 **Статус:** обязательный канонический терминологический контракт
 
@@ -139,6 +139,15 @@ physical slot claim и capital reservation.
 
 EntryDecision.EXPIRED/CANCELLED и request-state
 REQUEST_EXPIRED/REQUEST_CANCELLED — разные сущности.
+
+**ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual cause>** — causal audit/release
+reason после Exchange reconciliation, доказавшей `Cancelled + zero fill` для
+уже отправленного Entry order. Суффикс сохраняет фактическую Strategy-owned
+причину отмены, например `R1_EXACT_ENTRY_LEVEL_CHANGED`. Это не новый
+EntryDecision token и не новый EntryExecutionRequest state: request остаётся
+`REQUEST_CANCELLED`. Историческое
+`LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL` сохраняется как legacy evidence старых
+событий и не используется для новых non-TTL cancellations.
 
 # 4. Геометрия
 
