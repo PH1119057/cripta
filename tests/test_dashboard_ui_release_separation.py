@@ -59,3 +59,12 @@ def test_ui_deploy_has_non_mutating_verify_only_mode() -> None:
     verify_index = UI_DEPLOY.index("DASHBOARD_UI_VERIFY_ONLY=PASS")
     switch_index = UI_DEPLOY.index('mv -Tf "$next_ui" "$UI_ROOT/current"')
     assert verify_index < switch_index
+
+
+def test_ui_verifier_allows_only_stage7c_parity_prearm_extension() -> None:
+    assert '"_r1_paper_real_parity_attestation"' in UI_DEPLOY
+    assert '"_u6_prepare_r1_prearm_evidence"' in UI_DEPLOY
+    assert '"R1_PARITY_ATTESTED_MODULE_SHA256"' in UI_DEPLOY
+    assert 'name == "_u6_prepare_r1_prearm_evidence"' in UI_DEPLOY
+    assert '"INSERT INTO control.live_arm_evidence" not in value' in UI_DEPLOY
+    assert "parity evidence missing from prearm" in UI_DEPLOY

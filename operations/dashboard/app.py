@@ -87,6 +87,14 @@ PAPER_MAKER_FEE_RATE = 0.00020
 PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
 OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
+R1_PARITY_ATTESTED_MODULE_SHA256 = {
+    "operations/monitoring/universal_entry_shadow.py": "e50b9298fe0b3d91e5c650e38b4482c8fee7beadea48e9f03d10fcec05e25010",
+    "src/bybit_workbench/universal_entry/engine.py": "3f703f4da5c4bfc69df324aab89c1767223ed639be48ac43d34f5bc8fa1adedf",
+    "src/bybit_workbench/universal_entry/paper_runtime.py": "a9dcdf57cccb527d148eb6bc4122af5396af0976875efd94855242e1aefb2767",
+    "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
+    "src/bybit_workbench/universal_exit/engine.py": "d5da446f651fbddd88189c50a30f0591cd92b18b326c31f5271476101672cd36",
+    "src/bybit_workbench/universal_exit/execution_bridge.py": "259d7c6972666e05b5d9c4ae3ee602e5f16440e28183ed87740365ca4299c2c2",
+}
 
 
 def _paper_entry_fee_rate(order_type: object) -> float:
@@ -3275,6 +3283,42 @@ def _u6_set_execution_permission(handler: object, request: dict[str, object]) ->
 
 
 
+
+def _r1_paper_real_parity_attestation(
+    release_commit: str,
+    *,
+    source_root: Path = Path("/srv/cripta/source_checkout"),
+    runtime_root: Path = Path("/srv/cripta/runtime/current"),
+) -> dict[str, object]:
+    if len(release_commit) != 40:
+        raise ValueError("R1 PREARM: parity attestation release commit is invalid")
+    hashes: dict[str, str] = {}
+    for relative, expected in R1_PARITY_ATTESTED_MODULE_SHA256.items():
+        source_path = source_root / relative
+        runtime_path = runtime_root / relative
+        try:
+            source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            runtime_hash = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY module unreadable {relative}: {exc}"
+            ) from exc
+        if source_hash != runtime_hash:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY source/live mismatch {relative}"
+            )
+        if source_hash != expected:
+            raise ValueError(
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
+            )
+        hashes[relative] = source_hash
+    return {
+        "parity_baseline": "STAGE7B_RUNTIME_VERIFIED_2026-10-07",
+        "release_commit": release_commit,
+        "module_sha256": hashes,
+    }
+
+
 def _u6_prepare_r1_prearm_evidence(
     connection: psycopg.Connection,
     *,
@@ -3294,6 +3338,7 @@ def _u6_prepare_r1_prearm_evidence(
     current = now.astimezone(UTC)
     now_ms = int(current.timestamp() * 1000)
     valid_until = current + timedelta(seconds=90)
+    parity_evidence = _r1_paper_real_parity_attestation(release)
 
     source_commit = subprocess.check_output(
         ["git", "-C", "/srv/cripta/source_checkout", "rev-parse", "HEAD"],
@@ -3527,6 +3572,11 @@ def _u6_prepare_r1_prearm_evidence(
             "PASS",
             {"observer_epoch_id": observer.get("observer_epoch_id"), "plans": plan_evidence},
             True,
+        ),
+        "PAPER_REAL_DECISION_PARITY": (
+            "PASS",
+            parity_evidence,
+            False,
         ),
         "EXCHANGE_ACCOUNT_IDENTITY": (
             "PASS",
