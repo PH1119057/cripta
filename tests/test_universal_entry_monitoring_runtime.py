@@ -551,13 +551,13 @@ def test_real_execution_selection_is_independent_from_mainnet_gate() -> None:
         def execute(self, statement: str):
             self.statements.append(statement)
             assert "control.execution_gates" not in statement
-            return Cursor(rows=[("r1_aptusdt", "1.0-micro-live", "fp-r1")])
+            return Cursor(rows=[("r1_aptusdt", "1.1-micro-live", "fp-r1")])
 
     bundle = SimpleNamespace(
         activation=SimpleNamespace(activation_id="activation-r1"),
         card=SimpleNamespace(
             strategy_id="r1_aptusdt",
-            strategy_version="1.0-micro-live",
+            strategy_version="1.1-micro-live",
             strategy_config_fingerprint="fp-r1",
         ),
     )
