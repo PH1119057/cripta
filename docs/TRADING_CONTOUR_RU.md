@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.4
-**Дата:** 2026-10-06
+**Версия:** 2.5
+**Дата:** 2026-10-07
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -438,6 +438,42 @@ purpose = terminal safety only; not normal R1 Exit optimization
 This `-10%` guard is not research evidence of optimal Exit. It is the
 owner-approved terminal loss-containment path required for MICRO_LIVE and must
 not alter dynamic opposite-inner TP, PostOnly Entry, or ping-pong semantics.
+
+OWNER DECISION 2026-10-07 clarifies mandatory **Entry-time exchange
+protection** for R1. At every real R1 Entry, Execution must submit protection
+with the opening order itself:
+
+```text
+initial SL = catastrophic stop at -10.0% from the Entry execution anchor
+initial TP = exact price of the opposite current L5-3 inner boundary
+
+LONG  initial TP = current 5m L5-3 resistance_bottom
+SHORT initial TP = current 5m L5-3 support_top
+source fact      = fact.r1_opposite_inner_target
+```
+
+The initial TP is **not** a fixed `+N%` target. It is the causal
+opposite-inner price calculated from the same current working L5-3 geometry
+that produced the Entry signal. Its purpose at Entry is exchange-resident
+autonomous protection: if CRIPTA loses server/network/runtime immediately
+after fill, Bybit must already hold both the catastrophic SL and the
+opposite-zone TP.
+
+After fill/reconciliation:
+- the catastrophic SL is re-anchored to the actual average fill when required;
+- the Entry-time TP keeps the exact causal opposite-inner target price until an
+  Exit decision replaces it;
+- Universal Exit remains the owner of subsequent dynamic TP updates and may
+  replace the resting TP on every causal L5-3 geometry change;
+- if the opposite target is reached before a pending PostOnly Entry fills, the
+  pending Entry is invalidated by the existing exact signal-validity contract.
+
+This clarification does not create a fixed percentage TP, does not make the
+catastrophic stop a normal Exit rule, and does not transfer dynamic Exit
+ownership to Entry/Execution.
+
+Current corrected immutable R1 Strategy version for this contract =
+`1.1-micro-live`; historical `1.0-micro-live` cards remain immutable evidence.
 
 OWNER DECISION 2026-10-04 replaces the previous DEMO prerequisite. Current R1
 rollout is:
