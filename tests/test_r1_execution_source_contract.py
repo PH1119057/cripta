@@ -31,3 +31,43 @@ def test_private_runtime_position_mode_freshness_window() -> None:
     source = (ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf").read_text(encoding="utf-8")
     assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
     assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
+
+
+def test_r1_initial_entry_protection_uses_exact_opposite_inner_target() -> None:
+    strategy = (ROOT / "src/bybit_workbench/universal_entry/r1_strategy.py").read_text(
+        encoding="utf-8"
+    )
+    runtime = (ROOT / "operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"take_profit_enabled": True' in strategy
+    assert '"take_profit_reference_path": "fact.r1_opposite_inner_target"' in strategy
+    assert "resolve_initial_protection_boundaries(" in runtime
+    assert 'if target is not None:' in runtime
+    assert '"takeProfit": str(target)' in runtime
+    assert 'take_profit_pct=contract["take_profit_pct"]' not in runtime
+
+
+def test_r1_initial_tp_is_price_based_not_fixed_percent() -> None:
+    strategy = (ROOT / "src/bybit_workbench/universal_entry/r1_strategy.py").read_text(
+        encoding="utf-8"
+    )
+    protection = strategy.split('"protection_policy": {', 1)[1].split(
+        '"lifecycle_policy": {', 1
+    )[0]
+    assert '"take_profit_reference_path": "fact.r1_opposite_inner_target"' in protection
+    assert '"take_profit_pct"' not in protection
+
+
+def test_r1_version_install_migrates_superseded_monitoring_only_while_disarmed() -> None:
+    source = (
+        ROOT / "operations/implementation/install_r1_cards.py"
+    ).read_text(encoding="utf-8")
+    first_gate_check = source.index("DISARMED_INSTALL_INVARIANT: mainnet gate is open")
+    first_card_write = source.index("entry_store.insert_strategy_card(card)")
+    assert first_gate_check < first_card_write
+    assert "MONITOR_SUPERSEDED" in source
+    assert "entry_store.set_activation_enabled(" in source
+    assert "enabled=False" in source
+    assert "strategy_version=%s" in source
+    assert "strategy_config_fingerprint=%s" in source
