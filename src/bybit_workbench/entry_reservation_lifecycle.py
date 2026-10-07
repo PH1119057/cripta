@@ -225,6 +225,7 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     *,
     command_id: str,
     exchange_order_id: str,
+    cancel_reason: str = "UNSPECIFIED",
 ) -> str | None:
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
@@ -290,6 +291,10 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     ).fetchone()
     order_status = str(history[0])
     if order_status == "Cancelled" and cumulative_fill == 0 and execution is None:
+        zero_fill_reason = (
+            "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:"
+            + (cancel_reason.strip() or "UNSPECIFIED")
+        )[:500]
         if state not in {"DISPATCHED", "PENDING_EXCHANGE_REFLECTION"}:
             return finalize_failed_entry_command_reservation(
                 connection,
@@ -300,10 +305,10 @@ def resolve_cancelled_entry_reservation_after_reconcile(
         updated = connection.execute(
             """UPDATE runtime.capital_reservations
                   SET state='RELEASED',
-                      state_reason='LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL'
+                      state_reason=%s
                 WHERE reservation_id=%s
                   AND state IN ('DISPATCHED','PENDING_EXCHANGE_REFLECTION')""",
-            (reservation_id,),
+            (zero_fill_reason, reservation_id),
         )
         if updated.rowcount != 1:
             raise RuntimeError("zero-fill cancel reservation release race")
@@ -311,11 +316,11 @@ def resolve_cancelled_entry_reservation_after_reconcile(
             """UPDATE runtime.exchange_position_slot_claims
                   SET claim_state='RELEASED',
                       released_at=clock_timestamp(),
-                      release_reason='LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL',
+                      release_reason=%s,
                       updated_at=clock_timestamp()
                 WHERE exchange_position_slot_claim_id=%s
                   AND claim_state='CLAIMED'""",
-            (slot_claim_id,),
+            (zero_fill_reason, slot_claim_id),
         )
         if claim.rowcount != 1:
             raise RuntimeError("zero-fill cancel slot-claim release race")
@@ -324,7 +329,7 @@ def resolve_cancelled_entry_reservation_after_reconcile(
             execution_request_id=execution_request_id,
             state="REQUEST_CANCELLED",
             occurred_at=datetime.now(UTC),
-            reason="LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL",
+            reason=zero_fill_reason,
         )
         return "RELEASED"
 
@@ -333,7 +338,3 @@ def resolve_cancelled_entry_reservation_after_reconcile(
         command_id=command_id,
         reason=(
             f"CANCEL_NOT_PROVEN_ZERO_FILL:status={order_status}:"
-            f"cumExecQty={cumulative_fill}"
-        ),
-        mutation_ambiguous=True,
-    )
