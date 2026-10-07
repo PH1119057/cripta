@@ -26,8 +26,8 @@ from .market_watch import (
     compute_r1_l53_stability_diagnostic,
     compute_r1_l53_stable_zone,
 )
-from .runtime_loader import ActiveStrategyBundle
 from .reverse_intent import build_reverse_transition_intent
+from .runtime_loader import ActiveStrategyBundle, load_strategy_bundle_exact_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,7 +325,18 @@ class PaperTradeRuntime:
         )
         bundle = self._bundle_by_exact_identity.get(key)
         if bundle is None:
-            raise RuntimeError("paper exact Strategy/Entry/Exit bundle is missing")
+            bundle = load_strategy_bundle_exact_identity(
+                self._connection,
+                activation_id=strategy_activation_id,
+                strategy_id=strategy_id,
+                strategy_version=strategy_version,
+                strategy_config_fingerprint=strategy_config_fingerprint,
+                entry_plan_fingerprint=entry_plan_fingerprint,
+                exit_plan_fingerprint=exit_plan_fingerprint,
+            )
+            if bundle is None:
+                raise RuntimeError("paper exact Strategy/Entry/Exit bundle is missing")
+            self._bundle_by_exact_identity[key] = bundle
         return bundle
 
     def _close_primary_at_price(
