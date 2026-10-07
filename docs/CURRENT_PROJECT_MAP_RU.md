@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.0
+**Версия:** 12.1
 **Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1972,3 +1972,56 @@ A new deploy requires a separate exact Git/runtime identity. Re-arm after that
 deploy is a separate owner action. Full `Entry -> fill -> protected position ->
 dynamic Exit -> close -> economics after fees` remains NOT YET RUNTIME BEHAVIOR
 VERIFIED.
+
+
+# 29. R1 causal cancellation repair deployed — pre-publication CHECKED HERE 2026-10-07
+
+The stabilization repair described in §28 was published and deployed as exact
+application release:
+
+```text
+APPLICATION_RELEASE = cb364c2944a13dffc68067c0a3c13c5f58999efc
+SOURCE_HEAD         = cb364c2944a13dffc68067c0a3c13c5f58999efc
+INSTALLED_COMMIT    = cb364c2944a13dffc68067c0a3c13c5f58999efc
+LOADED_COMMIT       = cb364c2944a13dffc68067c0a3c13c5f58999efc
+TOOLING_COMMIT      = cb364c2944a13dffc68067c0a3c13c5f58999efc
+```
+
+Installer/package identity, exact release payload, runtime/schema preflights and
+`DEPLOY_EXACT_VERIFIED_COMMIT` all passed. Loaded code now propagates the actual
+Strategy cancellation cause into
+`ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual cause>`. Historical evidence is not
+rewritten. The new value has implementation/test/deploy evidence; a natural
+post-deploy zero-fill event carrying it has not yet occurred.
+
+Post-deploy safety snapshot:
+
+```text
+mainnet gate             = OFF
+R1 execution permissions = 0
+ACTIVE LIVE-arm sessions = 0
+real positions           = 0
+active Exchange orders   = 0
+open lifecycle faults    = 0
+```
+
+The earlier R1 `1.1-micro-live` evidence remains valid: the first natural REAL
+order reached Bybit with initial SL `-10%` and price-based opposite-inner TP,
+then was cancelled under `R1_EXACT_ENTRY_LEVEL_CHANGED` before fill.
+
+Current status:
+```text
+R1 1.1 implementation                  = IMPLEMENTED
+causal zero-fill audit repair           = DEPLOYED
+runtime liveness after repair            = VERIFIED
+new audit reason natural runtime event   = NOT YET OBSERVED
+full REAL fill/protection/Exit cycle      = NOT YET RUNTIME BEHAVIOR VERIFIED
+LIVE                                     = DISARMED
+```
+
+This is explicitly a pre-publication checkpoint. Publishing this documentation
+revision necessarily advances GitHub/source identity beyond `cb364c...`.
+Before any subsequent real-arm, the final documentation commit must itself be
+synchronized/deployed so REMOTE/SOURCE/INSTALLED/LOADED identity is exact; that
+final equality is verified externally rather than self-referenced by an SHA in
+this document.
