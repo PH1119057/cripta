@@ -20,9 +20,21 @@ def test_strategy_table_shows_capital_leverage_and_actual_gate_state() -> None:
     assert "global gate:" in HTML
 
 
-def test_open_subpage_contains_strategy_control_and_positions() -> None:
-    assert "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection" in HTML
-    assert "open:[strategyTradeControlSection,openTradesSection]" in HTML
+def test_open_subpage_contains_only_real_open_positions() -> None:
+    assert "open:[openTradesSection]" in HTML
+    assert (
+        "control:[strategyTradeControlSection,ownerTestEntrySection]"
+        in HTML
+    )
+    assert "monitor:[coinMonitorSection]" in HTML
+
+
+def test_operational_strategy_table_excludes_inactive_historical_versions() -> None:
+    block = HTML.split("function tradeStrategyRowsVisible()", 1)[1].split(
+        "function tradeStrategyMonitorHtml", 1
+    )[0]
+    assert "return active||permission;" in block
+    assert "startsWith('r1_')" not in block
 
 
 def test_strategy_page_no_longer_duplicates_r1_batch_button() -> None:

@@ -62,7 +62,7 @@
     </article>
   </section>
   <section id="liveDesk" class="grid panel">
-    <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button></div>
+    <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор Strategy</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button></div>
     <div id="tradeOperatorBar" class="trade-operator-bar">
       <div class="trade-operator-grid">
         <div class="trade-operator-metric"><span class="muted">Общий баланс</span><span id="tradeEquity" class="value">—</span><small id="tradeBalanceDetail" class="live-detail">account snapshot</small></div>
@@ -483,11 +483,11 @@ async function exportTradingTable(table,selectId,statusId){const status=document
 function installExportControl(title,table,prefix){const heading=[...document.querySelectorAll('#liveDesk h2')].find(x=>x.childNodes[0]?.textContent.trim()===title);if(!heading||document.getElementById(prefix+'ExportPeriod'))return;const box=document.createElement('small');box.style.marginLeft='12px';const periods=table==='signals'?'<option value="day">сутки</option><option value="72h">72 часа</option><option value="week">неделя</option><option value="all">весь период</option>':'<option value="day">за сутки</option><option value="week">за неделю</option><option value="all">за весь период</option>';const label=table==='signals'?'Скачать аналитический ZIP':'Скачать ZIP';box.innerHTML=`<select id="${prefix}ExportPeriod">${periods}</select> <button class="action" type="button" onclick="exportTradingTable('${table}','${prefix}ExportPeriod','${prefix}ExportStatus')">${label}</button> <span id="${prefix}ExportStatus" class="muted"></span>`;heading.appendChild(box)}
 installExportControl('Независимое наблюдение за сигналами','signals','signals');installExportControl('Завершённые сделки Bybit','closed','closed');
 tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,ownerTestEntrySection,openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection);
-const tradePages={open:[strategyTradeControlSection,ownerTestEntrySection,openTradesSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],signals:[signalObservationSection]};
+const tradePages={open:[openTradesSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],control:[strategyTradeControlSection,ownerTestEntrySection],signals:[signalObservationSection]};
 let livePollTimer=null;
 function activePanelName(){return document.querySelector('main > .panel.active')?.id||'infra'}
 function activeTradePage(){return tradeSubnav.querySelector('button.active')?.dataset.tradePage||'open'}
-function livePollDelay(){if(document.hidden)return 30000;if(activePanelName()!=='liveDesk')return 15000;return {open:1000,paper_open:2000,paper_closed:5000,monitor:2000,closed:10000,signals:5000}[activeTradePage()]||5000}
+function livePollDelay(){if(document.hidden)return 30000;if(activePanelName()!=='liveDesk')return 15000;return {open:1000,paper_open:2000,paper_closed:5000,monitor:2000,control:2000,closed:10000,signals:5000}[activeTradePage()]||5000}
 function scheduleLivePoll(delayMs=0){clearTimeout(livePollTimer);livePollTimer=setTimeout(async()=>{try{await refreshEntryShadow()}catch(e){liveStateLoaded=false;updateOperatorConnection();tradeCommandStatus.textContent=`Ошибка обновления live-state · ${e.message}`}finally{scheduleLivePoll(livePollDelay())}},delayMs)}
 function selectTradeSubpage(name){const selected=tradePages[name]?name:'open';for(const child of [...liveDesk.children])if(child!==tradeSubnav&&child!==tradeOperatorBar)child.classList.toggle('trade-subpage-hidden',!tradePages[selected].includes(child));for(const button of tradeSubnav.querySelectorAll('button'))button.classList.toggle('active',button.dataset.tradePage===selected);localStorage.setItem('cripta-trade-subpage',selected);scheduleLivePoll(0);window.scrollTo({top:liveDesk.offsetTop,left:window.scrollX,behavior:'instant'})}
 tradeSubnav.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>selectTradeSubpage(button.dataset.tradePage)));
@@ -586,8 +586,7 @@ function processAudio(_d){}
     const rows=all.filter(item=>{
       const active=(item.activations||[]).some(a=>a.enabled);
       const permission=Boolean(item.execution_permission);
-      const r1=String(item.strategy_id||'').startsWith('r1_');
-      return r1||active||permission;
+      return active||permission;
     });
     return rows.length?rows:all.filter(item=>Boolean(item.runtime_readiness?.monitor_ready)).slice(0,20);
   }
