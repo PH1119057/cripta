@@ -2092,6 +2092,7 @@ def _cancel_entry_limit(
             connection,
             command_id=command_id,
             exchange_order_id=order_id,
+            cancel_reason=reason,
         )
         connection.commit()
         if reservation_state == "RECONCILIATION_REQUIRED":
