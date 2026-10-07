@@ -538,3 +538,59 @@ def test_owner_strategy_supported_subset_materializes_and_reaches_existing_execu
     assert prepared.payload["strategy_id"] == card.strategy_id
     assert prepared.payload["strategy_version"] == card.strategy_version
     assert prepared.payload["signal_id"] == "owner-signal"
+
+def test_price_based_initial_protection_resolves_exact_signal_target() -> None:
+    request = _request()
+    payload = request.payload.to_dict()
+    signal_fact = dict(payload["signal_fact"])
+    attrs = dict(signal_fact["attributes"])
+    attrs["r1_opposite_inner_target"] = "8.25"
+    signal_fact["attributes"] = attrs
+    payload["signal_fact"] = signal_fact
+    request = ExecutionRequest(
+        execution_request_id=request.execution_request_id,
+        strategy_attempt_id=request.strategy_attempt_id,
+        entry_decision_id=request.entry_decision_id,
+        signal_id=request.signal_id,
+        strategy_id=request.strategy_id,
+        strategy_version=request.strategy_version,
+        strategy_config_fingerprint=request.strategy_config_fingerprint,
+        entry_plan_fingerprint=request.entry_plan_fingerprint,
+        symbol=request.symbol,
+        direction=request.direction,
+        requested_at=request.requested_at,
+        payload=FrozenPolicy.from_mapping(payload),
+        exit_plan_fingerprint=request.exit_plan_fingerprint,
+        capital_reservation_id=request.capital_reservation_id,
+        exchange_position_slot_claim_id=request.exchange_position_slot_claim_id,
+        position_mode_state_ref=request.position_mode_state_ref,
+    )
+    bundle = _bundle()
+    exit_plan = dict(bundle.exit_plan)
+    protection_policy = dict(exit_plan["protection_policy"])
+    protection_policy["initial_protection"] = {
+        "stop_loss_enabled": True,
+        "stop_loss_pct": "10.0",
+        "take_profit_enabled": True,
+        "take_profit_reference_path": "fact.r1_opposite_inner_target",
+        "trigger_by": "LastPrice",
+        "tpsl_mode": "Full",
+    }
+    exit_plan["protection_policy"] = protection_policy
+    prepared = prepare_runtime_entry_command(
+        request,
+        BridgePolicyBundle(
+            bundle.strategy_card,
+            bundle.entry_plan,
+            exit_plan,
+            bundle.activation,
+        ),
+        now=NOW + timedelta(seconds=1),
+    )
+    initial = prepared.payload["initial_protection"]
+    assert initial["stop_loss_pct"] == "10.0"
+    assert initial["take_profit_enabled"] is True
+    assert initial["take_profit_price"] == "8.25"
+    assert initial["take_profit_reference_path"] == "fact.r1_opposite_inner_target"
+    assert "take_profit_pct" not in initial
+
