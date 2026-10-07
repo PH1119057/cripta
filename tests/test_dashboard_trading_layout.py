@@ -8,7 +8,7 @@ def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
         "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,ownerTestEntrySection,"
         "openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,"
-        "coinMonitorSection,signalObservationSection)"
+        "coinMonitorSection,signalObservationSection,bybitLogSection)"
     ) in SOURCE
     assert 'id="tradeSubnav" class="trade-subnav"' in SOURCE
     for section_id in (
@@ -20,6 +20,7 @@ def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
         "strategyPaperClosedSection",
         "coinMonitorSection",
         "signalObservationSection",
+        "bybitLogSection",
     ):
         assert f'id="{section_id}"' in SOURCE
 
@@ -124,3 +125,16 @@ def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:
     assert "WHERE a.link_status='EXACT'" in APP_SOURCE
     assert "if has_exact_exit_table:" in APP_SOURCE
     assert '"UNKNOWN": "точный механизм не доказан"' in APP_SOURCE
+
+
+def test_bybit_entry_log_is_last_trade_subpage_and_is_read_only_history() -> None:
+    assert 'data-trade-page="bybit_log">Лог Bybit</button>' in SOURCE
+    assert "bybit_log:[bybitLogSection]" in SOURCE
+    assert 'id="bybitLogRows"' in SOURCE
+    assert "function renderBybitEntryLog(rows)" in SOURCE
+    assert "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:" in SOURCE
+    assert "x.type!=='entry'||(x.state==='failed'" in SOURCE
+    assert '"bybit_entry_log": [' in APP_SOURCE
+    assert "runtime.exchange_order_history" in APP_SOURCE
+    assert "strategy_entry.execution_request_state_events" in APP_SOURCE
+    assert "runtime.executions" in APP_SOURCE

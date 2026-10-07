@@ -1131,6 +1131,59 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         commands = connection.execute(
             "SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20"
         ).fetchall()
+        bybit_entry_log_rows = connection.execute(
+            """SELECT c.command_id,c.symbol,
+                c.payload_json::jsonb->>'side',
+                c.payload_json::jsonb->>'strategy_id',
+                c.payload_json::jsonb->>'strategy_version',
+                c.payload_json::jsonb->>'price',
+                c.payload_json::jsonb->'initial_protection'->>'stop_loss_pct',
+                c.payload_json::jsonb->'initial_protection'->>'take_profit_price',
+                c.state,c.requested_at_epoch_ms,c.error,
+                c.result_json::jsonb->'result'->>'orderId',
+                e.state,e.reason,e.occurred_at,
+                h.order_status,h.updated_at_epoch_ms,
+                h.payload_json::jsonb->>'cumExecQty',
+                h.payload_json::jsonb->>'price',
+                h.payload_json::jsonb->>'stopLoss',
+                h.payload_json::jsonb->>'takeProfit',
+                COALESCE(x.fill_count,0),
+                COALESCE(x.fill_qty,0),
+                x.avg_fill_price
+            FROM runtime.trade_commands c
+            LEFT JOIN LATERAL (
+                SELECT state,reason,occurred_at
+                FROM strategy_entry.execution_request_state_events
+                WHERE execution_request_id =
+                      c.payload_json::jsonb->>'execution_request_id'
+                ORDER BY occurred_at DESC
+                LIMIT 1
+            ) e ON true
+            LEFT JOIN LATERAL (
+                SELECT order_status,updated_at_epoch_ms,payload_json
+                FROM runtime.exchange_order_history
+                WHERE order_id =
+                      c.result_json::jsonb->'result'->>'orderId'
+                ORDER BY updated_at_epoch_ms DESC
+                LIMIT 1
+            ) h ON true
+            LEFT JOIN LATERAL (
+                SELECT count(*) AS fill_count,
+                       COALESCE(sum(exec_qty::numeric),0) AS fill_qty,
+                       CASE
+                           WHEN sum(exec_qty::numeric) > 0
+                           THEN sum(exec_qty::numeric * exec_price::numeric)
+                                / sum(exec_qty::numeric)
+                           ELSE NULL
+                       END AS avg_fill_price
+                FROM runtime.executions
+                WHERE order_id =
+                      c.result_json::jsonb->'result'->>'orderId'
+            ) x ON true
+            WHERE c.command_type='entry'
+            ORDER BY c.requested_at_epoch_ms DESC
+            LIMIT 100"""
+        ).fetchall()
         supervisor_rows = []
         if connection.execute("SELECT to_regclass('supervisor.snapshots')").fetchone()[0]:
             supervisor_rows = connection.execute("""SELECT DISTINCT ON (symbol)
@@ -1494,6 +1547,35 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "error": r[5],
             }
             for r in commands
+        ],
+        "bybit_entry_log": [
+            {
+                "command_id": r[0],
+                "symbol": r[1],
+                "side": r[2],
+                "strategy_id": r[3],
+                "strategy_version": r[4],
+                "requested_price": r[5],
+                "stop_loss_pct": r[6],
+                "requested_take_profit": r[7],
+                "command_state": r[8],
+                "requested_at_epoch_ms": r[9],
+                "command_error": r[10],
+                "order_id": r[11],
+                "request_state": r[12],
+                "request_reason": r[13],
+                "request_event_at": None if r[14] is None else r[14].isoformat(),
+                "order_status": r[15],
+                "order_updated_at_epoch_ms": r[16],
+                "cum_exec_qty": r[17],
+                "exchange_price": r[18],
+                "exchange_stop_loss": r[19],
+                "exchange_take_profit": r[20],
+                "fill_count": int(r[21] or 0),
+                "fill_qty": str(r[22] or 0),
+                "avg_fill_price": None if r[23] is None else str(r[23]),
+            }
+            for r in bybit_entry_log_rows
         ],
         "recent_closed": recent_closed,
         "trade_lifecycles": [],
