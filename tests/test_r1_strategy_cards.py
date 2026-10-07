@@ -48,7 +48,8 @@ def test_r1_micro_live_card_is_policy_execution_ready() -> None:
         assert initial["role"] == "CATASTROPHIC_GUARD"
         assert initial["stop_loss_enabled"] is True
         assert Decimal(initial["stop_loss_pct"]) == Decimal("10.0")
-        assert initial["take_profit_enabled"] is False
+        assert initial["take_profit_enabled"] is True
+        assert initial["take_profit_reference_path"] == "fact.r1_opposite_inner_target"
         emergency = card.lifecycle_policy.to_dict()["emergency_policy"]
         assert emergency["enabled"] is True
         assert emergency["terminal_loss_containment"] == "INITIAL_PROTECTION"
