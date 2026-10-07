@@ -241,6 +241,85 @@ def strategy_card_from_storage(
     return card
 
 
+def load_strategy_bundle_exact_identity(
+    connection: RuntimeConnectionLike,
+    *,
+    activation_id: str,
+    strategy_id: str,
+    strategy_version: str,
+    strategy_config_fingerprint: str,
+    entry_plan_fingerprint: str,
+    exit_plan_fingerprint: str,
+) -> ActiveStrategyBundle | None:
+    rows = connection.execute(
+        """SELECT
+               a.activation_id,a.strategy_id,a.strategy_version,
+               a.strategy_config_fingerprint,a.enabled,a.enabled_at,a.disabled_at,
+               a.scope,a.operator,a.source,a.updated_at,
+               c.card_json,c.approved_at,c.approved_source,
+               ep.entry_plan_fingerprint,xp.exit_plan_fingerprint
+           FROM strategy_entry.strategy_activations a
+           JOIN strategy_entry.strategy_cards c
+             ON c.strategy_id=a.strategy_id
+            AND c.strategy_version=a.strategy_version
+            AND c.strategy_config_fingerprint=a.strategy_config_fingerprint
+           JOIN strategy_entry.entry_plans ep
+             ON ep.strategy_id=a.strategy_id
+            AND ep.strategy_version=a.strategy_version
+            AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
+            AND ep.entry_plan_fingerprint=%s
+           JOIN strategy_entry.exit_plans xp
+             ON xp.strategy_id=a.strategy_id
+            AND xp.strategy_version=a.strategy_version
+            AND xp.strategy_config_fingerprint=a.strategy_config_fingerprint
+            AND xp.exit_plan_fingerprint=%s
+          WHERE a.activation_id=%s
+            AND a.strategy_id=%s
+            AND a.strategy_version=%s
+            AND a.strategy_config_fingerprint=%s""",
+        (
+            entry_plan_fingerprint,
+            exit_plan_fingerprint,
+            activation_id,
+            strategy_id,
+            strategy_version,
+            strategy_config_fingerprint,
+        ),
+    ).fetchall()
+    if not rows:
+        return None
+    if len(rows) != 1:
+        raise RuntimeError("exact Strategy bundle is ambiguous")
+    row = rows[0]
+    card = strategy_card_from_storage(
+        row[11], approved_at=row[12], approved_source=row[13]
+    )
+    activation = StrategyActivation(
+        activation_id=str(row[0]),
+        strategy_id=str(row[1]),
+        strategy_version=str(row[2]),
+        strategy_config_fingerprint=str(row[3]),
+        enabled=bool(row[4]),
+        enabled_at=_aware(row[5], "enabled_at"),
+        disabled_at=None if row[6] is None else _aware(row[6], "disabled_at"),
+        scope=FrozenPolicy.from_mapping(_mapping(row[7], "activation.scope")),
+        operator=str(row[8]),
+        source=str(row[9]),
+    )
+    entry_plan, exit_plan = materialize_plans(card, activation)
+    if entry_plan.entry_plan_fingerprint != str(row[14]):
+        raise RuntimeError("exact Strategy bundle EntryPlan fingerprint mismatch")
+    if exit_plan.exit_plan_fingerprint != str(row[15]):
+        raise RuntimeError("exact Strategy bundle ExitPlan fingerprint mismatch")
+    return ActiveStrategyBundle(
+        card,
+        activation,
+        entry_plan,
+        exit_plan,
+        _aware(row[10], "activation.updated_at"),
+    )
+
+
 def load_active_strategy_bundles(
     connection: RuntimeConnectionLike,
 ) -> tuple[ActiveStrategyBundle, ...]:
