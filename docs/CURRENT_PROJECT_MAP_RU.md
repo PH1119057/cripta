@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.8
+**Версия:** 11.9
 **Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -1872,3 +1872,35 @@ final economics`.
 `INSTALLED_COMMIT/LOADED_COMMIT` останутся `bf3e31f...` до следующего
 application deploy. Это ожидаемая INDEX §17.5 time semantics и не должно
 маскироваться под новый loaded release.
+
+# 27. R1 Entry-time protection clarification / repair — OWNER DECISION 2026-10-07
+
+OWNER DECISION:
+- preserve catastrophic initial SL `-10.0%`;
+- restore mandatory Entry-time TP as exact price of the causal opposite current
+  5m L5-3 inner boundary (`LONG -> resistance_bottom`,
+  `SHORT -> support_top`);
+- initial TP is not a fixed percentage;
+- both protection levels must be submitted to Bybit with the opening order;
+- subsequent dynamic TP replacement remains Universal Exit-owned;
+- immutable `1.0-micro-live` cards are not edited in place; corrected
+  immutable version = `1.1-micro-live`.
+
+FINDING before repair:
+- current `1.0-micro-live` cards carried `take_profit_enabled=false`;
+- market watch nevertheless produced `r1_opposite_inner_target`;
+- REAL execution bridge already supported a price reference, but the active R1
+  card did not request it;
+- private runtime assumed `take_profit_pct` during opening-order protection and
+  raised `TypeError: '<=' not supported between instances of 'NoneType' and
+  'int'` before `/v5/order/create`;
+- five post-Stage-7D REAL attempts reached private runtime and terminated
+  pre-order with this same error; no real fill/position resulted.
+
+Safety action:
+- R1 MICRO_LIVE was explicitly DISARMED before repair work;
+- re-arm is not part of patch/deploy and requires a separate explicit owner
+  approval after exact release/readiness evidence.
+
+Implementation/deploy/runtime evidence is recorded only after the corresponding
+Git/release/runtime steps complete.
