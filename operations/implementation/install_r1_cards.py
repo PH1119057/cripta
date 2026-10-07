@@ -38,14 +38,28 @@ def main() -> int:
     args = parser.parse_args()
 
     cards = build_r1_cards(
-        approved_at=datetime(2026, 10, 4, tzinfo=UTC),
-        approved_source="owner-r1-micro-live-2026-10-04",
+        approved_at=datetime(2026, 10, 7, tzinfo=UTC),
+        approved_source="owner-r1-initial-opposite-tp-2026-10-07",
     )
     ready = observer_ready()
     if args.activate_monitoring and not ready:
         raise SystemExit("R1_MONITOR_ACTIVATION_BLOCKED: observer is not fresh/ready")
 
     with psycopg.connect(DB_DSN) as connection:
+        enabled_permissions = connection.execute(
+            """SELECT strategy_id FROM strategy_entry.execution_permissions
+                WHERE enabled=true"""
+        ).fetchall()
+        if enabled_permissions:
+            raise RuntimeError(
+                "DISARMED_INSTALL_INVARIANT: enabled execution permissions exist"
+            )
+        gate = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        if gate is not None and bool(gate[0]):
+            raise RuntimeError("DISARMED_INSTALL_INVARIANT: mainnet gate is open")
+
         entry_store = StrategyEntryStore(connection)
         dashboard = StrategyDashboardStore(connection)
         for card in cards:
@@ -73,6 +87,39 @@ def main() -> int:
                 )
 
             if args.activate_monitoring:
+                superseded = connection.execute(
+                    """SELECT activation_id,strategy_version,strategy_config_fingerprint
+                         FROM strategy_entry.strategy_activations
+                        WHERE strategy_id=%s AND enabled=true
+                          AND NOT (
+                              strategy_version=%s
+                              AND strategy_config_fingerprint=%s
+                          )
+                        ORDER BY created_at,activation_id
+                        FOR UPDATE""",
+                    (
+                        card.strategy_id,
+                        card.strategy_version,
+                        card.strategy_config_fingerprint,
+                    ),
+                ).fetchall()
+                for activation_id, old_version, old_fingerprint in superseded:
+                    entry_store.set_activation_enabled(
+                        str(activation_id),
+                        enabled=False,
+                        changed_at=datetime.now(UTC),
+                        operator="owner-approved-prearm",
+                        source="r1-install-cards",
+                        reason=(
+                            "superseded immutable R1 Strategy version "
+                            f"{old_version} -> {card.strategy_version}"
+                        ),
+                    )
+                    print(
+                        "MONITOR_SUPERSEDED "
+                        f"{card.strategy_id} {old_version} {old_fingerprint}"
+                    )
+
                 activation = connection.execute(
                     """SELECT activation_id,enabled
                          FROM strategy_entry.strategy_activations
