@@ -60,3 +60,15 @@ def test_worker_releases_only_pre_ack_failures_and_escalates_post_ack() -> None:
     assert "mutation_ambiguous=False" in block
     assert 'reservation_state == "RECONCILIATION_REQUIRED"' in block
     assert "post-ack Entry failure requires reconciliation" in block
+
+
+def test_zero_fill_cancel_preserves_actual_strategy_cause() -> None:
+    helper = PRIVATE.index("def _cancel_entry_limit(")
+    helper_end = PRIVATE.index("def cancel_expired_entry_limits(", helper)
+    helper_block = PRIVATE[helper:helper_end]
+    assert "cancel_reason=reason" in helper_block
+    lifecycle = (
+        ROOT / "src/bybit_workbench/entry_reservation_lifecycle.py"
+    ).read_text(encoding="utf-8")
+    assert "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:" in lifecycle
+    assert "LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL" not in lifecycle
