@@ -101,7 +101,7 @@ def test_real_entry_consumer_accepts_exact_active_session_without_prearm_recheck
         _ActiveSessionOnlyConnection(),
         {
             "strategy_id": "r1_aptusdt",
-            "strategy_version": "1.0-micro-live",
+            "strategy_version": "1.1-micro-live",
             "strategy_config_fingerprint": "cfg",
             "activation_id": "activation",
             "symbol": "APTUSDT",
