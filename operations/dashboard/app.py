@@ -3401,7 +3401,7 @@ def _u6_prepare_r1_prearm_evidence(
             WHERE enabled=true
               AND NOT (
                 strategy_id = ANY(%s)
-                AND strategy_version='1.0-micro-live'
+                AND strategy_version='1.1-micro-live'
               )
             LIMIT 1""",
         ([x.strategy_id for x in contexts],),

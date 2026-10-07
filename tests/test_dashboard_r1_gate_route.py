@@ -15,4 +15,4 @@ def test_trade_gate_routes_exact_r1_cohort_to_r1_micro_live_endpoint() -> None:
     ):
         assert strategy_id in source
     assert "endpoint=r1?'/api/r1/micro-live':'/api/live/gate'" in source
-    assert "String(item.strategy_version||'')==='1.0-micro-live'" in source
+    assert "String(item.strategy_version||'')==='1.1-micro-live'" in source

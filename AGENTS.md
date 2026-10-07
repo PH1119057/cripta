@@ -47,6 +47,11 @@ Owner-controlled real execution smoke-test — explicit operator-only diagnostic
 not StrategySignal/EntryDecision semantics. Exact current contract:
 TRADING_CONTOUR §4.8; architecture boundary: ARCH §7.1.
 
+Current R1 Entry-time exchange protection contract: catastrophic SL `-10%` +
+price-based TP at the causal opposite current L5-3 inner boundary; subsequent TP
+replacement belongs to Universal Exit. Exact owner document:
+`docs/TRADING_CONTOUR_RU.md` Protection and activation boundary.
+
 PAPER/REAL mode must not fork Strategy/Entry/Exit semantics. One attempt selects
 exactly one execution environment; read current contract in ARCH §7.2,
 TRADING_CONTOUR §4.9 and GLOSSARY §11. Do not infer behavior from historical

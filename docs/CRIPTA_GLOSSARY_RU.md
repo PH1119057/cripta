@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 2.8
-**Дата:** 2026-10-06
+**Версия:** 2.9
+**Дата:** 2026-10-07
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -38,9 +38,16 @@ StrategyCard.
 defaults и не отдельный скрытый runtime-конфиг.
 
 **Базовая защитная рамка / initial protection** — Strategy-owned защита,
-передаваемая в Execution при открытии позиции. Она может включать hard stop и
-верхнюю защитную границу/TP. Наличие такой рамки не означает, что динамический
-Exit уже исследован или утверждён.
+передаваемая в Execution при открытии позиции и, когда Strategy этого требует,
+устанавливаемая на Exchange вместе с opening order. Она может включать hard
+stop и TP как fixed percent либо exact Strategy-owned price/fact reference.
+Наличие такой рамки не передаёт Entry/Execution ownership последующей
+динамической Exit policy.
+
+Для current R1 initial protection состоит из catastrophic SL `-10%` и
+price-based TP на `fact.r1_opposite_inner_target`:
+LONG -> current L5-3 `resistance_bottom`, SHORT -> current L5-3 `support_top`.
+После Entry последующее изменение TP принадлежит Universal Exit.
 
 **Экспериментальная Strategy version** — owner-approved immutable снимок
 Strategy Candidate/Draft для конкретного воспроизводимого теста/shadow/
