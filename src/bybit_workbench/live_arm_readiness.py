@@ -59,7 +59,7 @@ _R1_MICRO_LIVE_STRATEGY_IDS = {
     "r1_ltcusdt",
     "r1_arbusdt",
 }
-_R1_MICRO_LIVE_VERSION = "1.0-micro-live"
+_R1_MICRO_LIVE_VERSION = "1.1-micro-live"
 
 
 class CursorLike(Protocol):
