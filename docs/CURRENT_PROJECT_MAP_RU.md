@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 11.6
-**Дата:** 2026-10-06
+**Версия:** 11.7
+**Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1624,7 +1624,7 @@ BEFORE / AFTER CAPABILITY MATRIX:
 | position-mode proof for real Entry | private runtime + Entry admission | separate fresh_until clock | AccountStateGeneration + Entry admission | exact mode ref bound to current generation | YES | YES | generation/admission tests |
 
 No capability loses an owner; no trading-policy owner moves between top-level layers.
-# 26. PAPER / REAL execution-mode parity — OWNER DECISION / CHECKED HERE 2026-10-06
+# 26. PAPER / REAL execution-mode parity — OWNER DECISION / CHECKED HERE 2026-10-07
 
 OWNER DECISION:
 - `StrategyActivation` остаётся единым включателем Strategy;
@@ -1637,36 +1637,19 @@ OWNER DECISION:
   фактическим execution result;
 - real admission failure не даёт права silent fallback в PAPER.
 
-CHECKED HERE against exact loaded/source release
-`7a37b1976749d7d68c0be4d91b5167a6538ba0c1`:
+## 26.1 Historical checkpoint — CHECKED HERE 2026-10-06
 
-Current implementation ещё не удовлетворяет этому target полностью:
-- `UniversalEntryEngine` создаёт общий StrategySignal/strategy_attempt и
-  `PaperEntryIntent`, но при PAPER оставляет `EntryDecision` /
-  `EntryExecutionRequest` пустыми, а REAL идёт через отдельный admission branch;
-- observer вызывает `paper.create_order(...)` и для evaluation, которая может
-  одновременно иметь real admission/request, то есть execution environments
-  ещё не являются XOR;
-- PAPER R1 dynamic Exit сейчас живёт в `PaperTradeRuntime`, тогда как REAL
-  ExitDecision формирует `UniversalExitEngine`; exact ExitPlan один, но
-  decision implementation пока физически раздельна;
-- Stage 2 уже устранил restart-cold-history defect PAPER L5-3;
-- Stage 3 доказал continuous == restart/bootstrap geometry state и production
-  event order `public trade -> engine.process -> paper.create_order`.
+Historical source/loaded release:
+`7a37b1976749d7d68c0be4d91b5167a6538ba0c1`.
 
-BEFORE / AFTER capability matrix:
+На этом checkpoint target ещё не был реализован полностью:
+- mode-neutral Entry payload ещё оставался физически привязан к PAPER naming;
+- PAPER и REAL routing ещё не были доказаны как XOR;
+- PAPER dynamic Exit и REAL ExitDecision физически расходились по decision path;
+- restart-cold-history уже был исправлен, но full execution-mode parity ещё не
+  была доказана.
 
-| CAPABILITY | BEFORE OWNER/PATH | TARGET OWNER/PATH | STATUS |
-|---|---|---|---|
-| Strategy/Entry trading meaning | StrategyCard + EntryPlan + UniversalEntryEngine | unchanged | CONSERVED |
-| mode-neutral Entry execution semantics | `PaperEntryIntent` used as shared payload but named/owned as PAPER detail | explicit `EntryExecutionIntent` before adapter selection | IMPLEMENTATION REQUIRED |
-| real admission / slot / capital safety | real Entry admission | unchanged, REAL-only operational barrier | CONSERVED |
-| PAPER execution | `PaperTradeRuntime` always invoked by observer | PAPER adapter only when real execution permission OFF | IMPLEMENTATION REQUIRED |
-| REAL execution | real EntryDecision/EntryExecutionRequest + consumers | REAL adapter only when real execution permission ON and gates PASS | CONSERVED / ROUTING CHANGE REQUIRED |
-| Exit decision | PAPER local runtime + REAL UniversalExitEngine | one UniversalExitEngine semantics, separate PAPER/REAL execution adapters | IMPLEMENTATION REQUIRED |
-| Exchange mutation | private runtime / real consumers | unchanged, REAL only | CONSERVED |
-
-Current stage status:
+Historical status:
 
 ```text
 CANON                         = YES
@@ -1675,13 +1658,95 @@ IMPLEMENTED                   = NO
 DEPLOYED                      = NO [Stage 4 target]
 PAPER_REAL_DECISION_PARITY    = NOT YET PROVED
 REAL_REARM                    = HARD_STOP
+```
+
+Этот блок сохраняется как historical evidence и не описывает current runtime.
+
+## 26.2 Current parity checkpoint — CHECKED HERE 2026-10-07
+
+Pre-publication source/runtime checkpoint:
+`d6769ea574385dd4c1c7cbdd9e813b2509a2f44f`.
+
+По INDEX §17.5 этот SHA является dated pre-publication snapshot: сам
+documentation commit неизбежно изменит `REMOTE_HEAD/SOURCE_HEAD`, поэтому после
+публикации exact release identity проверяется отдельно operational evidence.
+
+Stage 4B / Stage 7B evidence:
+
+- Entry:
+  - `EntryExecutionIntent` является mode-neutral payload;
+  - PAPER и REAL получают один exact Strategy/attempt/signal/EntryPlan/ExitPlan
+    lineage;
+  - REAL `ExecutionRequest` копирует payload `EntryExecutionIntent` без
+    result-affecting policy rewrite;
+  - observer выбирает PAPER XOR REAL; real admission failure не создаёт PAPER
+    fallback.
+- Exit:
+  - PAPER `PaperTradeRuntime` вызывает тот же `UniversalExitEngine`, что и
+    REAL path;
+  - requested mutation проходит тот же `validate_exit_mutation`;
+  - live PAPER `DYNAMIC_TP_MOVED` events несут exact
+    `exit_decision_id / rule_id / action_kind / requested_mutation`.
+- Reverse:
+  - PAPER adapter и REAL observer/worker используют общий immutable
+    `ReverseTransitionIntent`;
+  - current R1 contract:
+    `OPPOSITE_ENTRY_FORCED_FLIP -> MARKET close + MARKET open -> ONE_WAY /
+    positionIdx=0 -> OPPOSITE_FLIP_TAKER`;
+  - live opposite-entry flip во время Stage 7B soak не случился, поэтому
+    рыночное occurrence не объявляется; parity доказана deterministic
+    production-function evidence + adapter tests.
+- Restart / causal continuity:
+  - controlled restart PAPER Entry observer + Exit shadow сохранил три exact
+    `paper_position_id`, direction и dynamic target state;
+  - post-restart observer вернулся в `observer_ready=true`, history-ready
+    state и продолжил causal market stream;
+  - на следующей закрытой 5m свече ARB/DOT/INJ получили новые
+    `DYNAMIC_TP_MOVED` с новыми ExitDecision IDs и тем же validated mutation
+    contract;
+  - unresolved `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` = 0.
+- Tests:
+  - exact current production parity gate: `113 PASS`;
+  - full current repository suite: `1598 PASS / 65 SKIP`;
+  - remaining 9 failures — тот же pre-existing Dashboard/U6 baseline, новых
+    Stage 7 parity failures нет.
+- Identity:
+  - relevant Entry/Exit/reverse production modules byte-for-byte совпадали между
+    source и loaded runtime на pre-publication checkpoint.
+
+Current capability matrix:
+
+| CAPABILITY | CURRENT OWNER/PATH | STATUS |
+|---|---|---|
+| Strategy/Entry trading meaning | StrategyCard + EntryPlan + UniversalEntryEngine | CONSERVED / VERIFIED |
+| mode-neutral Entry execution semantics | `EntryExecutionIntent` before adapter selection | IMPLEMENTED / VERIFIED |
+| real admission / slot / capital safety | REAL-only admission barrier | CONSERVED / VERIFIED CONTRACT |
+| PAPER execution | PAPER adapter only when real execution permission OFF | IMPLEMENTED / VERIFIED |
+| REAL execution | REAL adapter only when permission ON + admission/gates PASS | IMPLEMENTED / VERIFIED CONTRACT |
+| Exit decision | one ExitPlan + UniversalExitEngine semantics for PAPER/REAL | IMPLEMENTED / RUNTIME VERIFIED |
+| Reverse decision | common `ReverseTransitionIntent`, separate execution adapters | IMPLEMENTED / VERIFIED |
+| Exchange mutation | private runtime / REAL consumers only | CONSERVED; not exercised by Stage 7B |
+
+Current parity status at this checkpoint:
+
+```text
+CANON                         = YES
+OWNER_DECISION                = YES
+IMPLEMENTED                   = YES
+DEPLOYED                      = YES
+RUNTIME_LIVENESS_VERIFIED     = YES
+RUNTIME_BEHAVIOR_VERIFIED     = YES
+PAPER_REAL_DECISION_PARITY    = PASS
+
 mainnet gate                  = 0
 real execution permissions    = 0
 real Entry/Exit/reverse/private services = intentionally inactive
 PAPER observer                = active
+PAPER Exit shadow             = active
 ```
 
-Implementation sequence is deliberately split:
-`4A CANON -> 4B ENTRY execution-mode/XOR -> 4C EXIT parity -> TEST -> GITHUB ->`
-`DEPLOY -> RUNTIME EVIDENCE`. REAL services stay stopped until the full repair
-sequence is complete.
+`PAPER_REAL_DECISION_PARITY=PASS` закрывает только decision/policy parity gate.
+Он **не** означает автоматический LIVE/MICRO_LIVE re-arm. Перед real arm
+обязателен новый fresh check полного `TRADING_CONTOUR §4.7` checklist,
+включая Exchange/account/mode/slot/capital/protection/reconciliation gates и
+explicit owner approval. Любой `UNKNOWN/STALE/FAIL` остаётся fail-closed.

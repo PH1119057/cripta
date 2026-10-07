@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.11
-**Дата:** 2026-10-06
+**Версия:** 3.12
+**Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -683,3 +683,29 @@ Synchronized current documents:
 No current document is added/removed, no path/routing/base-pre-read changes,
 Project Source remains 11 files. README / AGENTS / Project Instructions update
 не требуется. Trading Strategy/Entry/Exit semantics не меняются.
+
+# 25. Stage 7 parity closure / documentation reconciliation — 2026-10-07
+
+CHECKED HERE after Stage 7A/7B stabilization:
+
+- `CURRENT_PROJECT_MAP §26` stale Stage 4 implementation status is reconciled
+  without changing Strategy/Entry/Exit trading semantics;
+- historical checkpoint `7a37b197...` remains explicitly historical;
+- current pre-publication checkpoint `d6769ea...` records
+  `IMPLEMENTED=YES / DEPLOYED=YES / RUNTIME_*_VERIFIED=YES /
+  PAPER_REAL_DECISION_PARITY=PASS`;
+- current evidence records shared mode-neutral Entry intent, one Universal Exit
+  decision semantics, common reverse intent, restart continuity and live PAPER
+  causal ExitDecision updates;
+- absence of a live opposite-entry forced flip during Stage 7B soak is preserved
+  as an evidence boundary rather than silently promoted to runtime occurrence;
+- `PAPER_REAL_DECISION_PARITY=PASS` is explicitly separated from the full
+  `TRADING_CONTOUR §4.7` LIVE-arm readiness checklist.
+
+No current document is added or removed. Paths, mandatory pre-read, routing,
+Project Source set and UI bootstrap text are unchanged, so README / AGENTS /
+Project Instructions template update is not required.
+
+This revision is documentation/status reconciliation only. Any subsequent
+MICRO_LIVE re-arm is a separate operational action requiring fresh complete
+readiness evidence and explicit owner approval.
