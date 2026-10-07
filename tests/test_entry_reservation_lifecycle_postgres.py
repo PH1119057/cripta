@@ -638,8 +638,36 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
             connection,
             command_id=ids["command_id"],
             exchange_order_id=order_id,
+            cancel_reason="R1_EXACT_ENTRY_LEVEL_CHANGED",
         )
         assert state == "RELEASED"
+        expected_reason = (
+            "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:R1_EXACT_ENTRY_LEVEL_CHANGED"
+        )
+        stored = connection.execute(
+            """SELECT state,state_reason
+                 FROM runtime.capital_reservations
+                WHERE reservation_id=%s""",
+            (ids["reservation_id"],),
+        ).fetchone()
+        assert stored == ("RELEASED", expected_reason)
+        claim = connection.execute(
+            """SELECT claim_state,release_reason
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_slot_claim_id=%s""",
+            (ids["slot_claim_id"],),
+        ).fetchone()
+        assert claim == ("RELEASED", expected_reason)
+        request_event = connection.execute(
+            """SELECT reason
+                 FROM strategy_entry.execution_request_state_events
+                WHERE execution_request_id=%s
+                  AND state='REQUEST_CANCELLED'
+                ORDER BY occurred_at DESC
+                LIMIT 1""",
+            (ids["execution_request_id"],),
+        ).fetchone()
+        assert request_event == (expected_reason,)
 
 
 def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None:
