@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.5
+**Версия:** 2.6
 **Дата:** 2026-10-07
 **Статус:** активный канонический контракт торгового контура
 
@@ -368,6 +368,13 @@ superseded. Existing generic implementation requirement
 `entry_limit_ttl_seconds > 0` therefore cannot be silently reused for R1;
 implementation must support signal-validity lifetime without inventing an
 untested timeout. No timeout-to-taker fallback is allowed.
+
+Cancellation audit must preserve the actual Strategy-owned cause. In particular,
+an R1 `SIGNAL_VALIDITY` cancellation such as `R1_EXACT_ENTRY_LEVEL_CHANGED`,
+`R1_SIGNAL_RULE_INVALIDATED` or `R1_OPPOSITE_TARGET_REACHED_BEFORE_FILL` must
+not be recorded as a TTL expiration. Once Exchange reconciliation proves
+`Cancelled + zero fill`, reservation/slot/request release evidence uses the
+generic zero-fill cancellation class plus the exact causal reason.
 
 R1 ExitPlan:
 
@@ -1041,4 +1048,3 @@ client/exchange order IDs, fill/execution IDs, strategy_position_id,
 Exit claim/heartbeat и final close/economics refs.
 
 Entry/Exit/Execution не должны молча подменять потерянный handoff новой
-торговой логикой.
