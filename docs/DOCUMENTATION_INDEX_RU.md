@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.14
+**Версия:** 3.15
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -773,3 +773,30 @@ No current document is added/removed. Paths, mandatory pre-read, routing and
 Project Source file count remain unchanged. README / AGENTS / Project
 Instructions/bootstrap are synchronized with the new current R1 protection
 pointer in this documentation cycle.
+
+
+# 28. R1 causal Entry-cancellation audit + current checkpoint — 2026-10-07
+
+Current documentation cycle records:
+- R1 `1.1-micro-live` first natural REAL order reached Bybit with both
+  Exchange-side initial SL `-10%` and price-based opposite-inner TP;
+- the order was cancelled with zero fill because
+  `R1_EXACT_ENTRY_LEVEL_CHANGED`, not because of numeric TTL;
+- legacy `LIMIT_TTL_CANCEL_CONFIRMED_ZERO_FILL` audit wording is replaced for
+  new events by `ENTRY_CANCEL_CONFIRMED_ZERO_FILL:<actual cause>`;
+- historical rows remain immutable;
+- full REAL fill/protection/Exit cycle is still not behavior-verified.
+
+Synchronized current documents:
+- TRADING_CONTOUR — causal cancellation/audit requirement;
+- CURRENT_PROJECT_MAP — dated R1 re-arm/order evidence and stabilization state;
+- DOCUMENTATION_INDEX — this revision record.
+
+No current document, path, mandatory pre-read, routing or Project Source set
+changes. Therefore README / AGENTS / Project Instructions/bootstrap topology
+does not require another content revision in this cycle.
+
+Project Source remains exactly the 11 current `docs/` files. After publication,
+the owner should replace the Project Source copies from the exact current
+GitHub `main`; GitHub remains authority until that manual UI synchronization is
+confirmed.
