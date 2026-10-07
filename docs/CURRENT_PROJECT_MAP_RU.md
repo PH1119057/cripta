@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.1
+**Версия:** 12.2
 **Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2025,3 +2025,61 @@ Before any subsequent real-arm, the final documentation commit must itself be
 synchronized/deployed so REMOTE/SOURCE/INSTALLED/LOADED identity is exact; that
 final equality is verified externally rather than self-referenced by an SHA in
 this document.
+
+
+# 30. Bybit time-calibration recurrence + operator alarm — CHECKED HERE 2026-10-07
+
+Incident evidence before repair:
+
+```text
+host NTP                  = enabled / synchronized
+mainnet gate              = OFF
+gate reason               = restart: owner re-arm required
+real positions            = 0
+active Exchange orders    = 0
+open CRITICAL fault       = ENTRY_EXECUTION_AMBIGUOUS
+private runtime restart   = 1
+```
+
+The triggering Entry attempt was blocked before any Exchange mutation because
+a single fresh midpoint observation reported approximately `502.5 ms` host
+vs Bybit offset while the old mutation limit was `500 ms`. The old
+`UnsafeBybitClock` class inherited `ExchangeMutationBarrier`, therefore a
+pre-send clock refusal was incorrectly classified as ambiguous, disarmed Entry
+and terminated the private runtime.
+
+A separate earlier Bybit mutation was rejected with explicit `retCode=10002`
+because the signed request timestamp drifted outside the Exchange receive
+window. This exposed the class-wide defect: the old V32 implementation checked
+Bybit offset before POST but then still signed the POST with uncorrected host
+wall-clock time.
+
+OWNER DECISION / canonical repair:
+- authenticated mutation timestamp derives from fresh Bybit Time Calibration;
+- local wall-clock offset is diagnostic, not the signed mutation authority;
+- current 500 ms safety intent is preserved as midpoint uncertainty: accepted
+  time-probe RTT must be <= 1000 ms;
+- up to three read-only time probes may be used to obtain a sufficiently sharp
+  calibration before any POST;
+- POST itself is never automatically retried;
+- timestamp-rejected signed GET may perform its existing safe retry using fresh
+  calibration;
+- private WebSocket authentication also uses Bybit-calibrated time;
+- a failed pre-mutation calibration follows
+  `PRE_MUTATION_SAFETY_BLOCK`, disarms Entry and does not create an ambiguous
+  mutation or force process restart;
+- only true post-send uncertainty uses `EXCHANGE_MUTATION_BARRIER`.
+
+Operator UX repair in the same changeset:
+- routine accepted/unfilled Entry orders remain in `Лог Bybit`;
+- gate `OPEN -> OFF` and new open `CRITICAL` lifecycle fault queue one alarm
+  sound if Dashboard audio is enabled;
+- alerting works independently of which trading subpage is selected.
+
+This changes transport safety and operator visibility only. Trading policy,
+R1 Strategy version, Entry/Exit geometry, initial SL/TP, stake and leverage are
+unchanged.
+
+At authoring time LIVE remains DISARMED and the existing
+`ENTRY_EXECUTION_AMBIGUOUS` fault remains open. Patch/deploy must not re-arm
+LIVE as a side effect.

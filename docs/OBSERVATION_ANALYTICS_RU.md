@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.8
-**Дата:** 2026-10-06
+**Версия:** 1.9
+**Дата:** 2026-10-07
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -579,3 +579,30 @@ Analyst могут расширять видимость системы, но н
 
 Наблюдение, классификация, рейтинг, корреляция и статистическая полезность сами
 по себе не создают право открыть, закрыть или изменить позицию.
+
+
+# 6. Operator-visible critical state delivery
+
+OWNER DECISION 2026-10-07: Dashboard sound delivery must distinguish routine
+execution noise from operator-relevant safety transitions.
+
+When Dashboard sound is enabled, exactly one alarm event is queued for a single
+poll cycle if either condition becomes newly true:
+
+- global mainnet new-Entry gate transitions `OPEN -> OFF`;
+- a previously unseen open `CRITICAL` row appears in
+  `runtime.lifecycle_faults`.
+
+The alarm applies regardless of the currently selected trading subpage. Seen
+critical fault IDs and the previous gate state are kept in browser-local state
+only to suppress repeated sound for the same unchanged incident; PostgreSQL
+remains the durable fault/state authority.
+
+Routine PostOnly Entry order acknowledgement, waiting for fill, ordinary
+zero-fill cancellation and other Bybit Entry-attempt noise belong to the
+dedicated Bybit log/read-model and must not masquerade as an opened trade or a
+critical audible alarm.
+
+Browser audio policy still applies: if audio playback has not yet been unlocked
+by a user gesture, the existing Dashboard sound queue holds the alarm until
+playback becomes available.

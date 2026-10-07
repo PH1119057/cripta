@@ -102,21 +102,27 @@ def test_safety_observer_midpoint_clock_contract() -> None:
     assert 'SIGNED_RECV_WINDOW = "5000"' in source
     assert "SIGNED_IO_TIMEOUT_SECONDS = 3.0" in source
     assert "clock_started_ns = time.time_ns()" in source
-    assert "clock_finished_ns = time.time_ns()" in source
-    assert "clock_midpoint_ms = (clock_started_ns + clock_finished_ns) / 2_000_000" in source
-    assert '"clock_offset_ms": int(server_ms - clock_midpoint_ms)' in source
+    assert "monotonic_started_ns = time.monotonic_ns()" in source
+    assert "build_bybit_time_calibration(" in source
+    assert "calibration.now_ms()" in source
+    assert '"clock_offset_ms": int(calibration.offset_ms)' in source
 
 
 def test_mutating_post_clock_and_transport_contract() -> None:
     source = text(PRIVATE)
     assert 'SIGNED_RECV_WINDOW = "5000"' in source
     assert "SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0" in source
-    assert "MUTATION_CLOCK_MAX_ABS_OFFSET_MS = 500.0" in source
+    assert "BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0" in source
+    assert "BYBIT_TIME_PROBE_ATTEMPTS = 3" in source
     assert "MUTATION_CLOCK_CACHE_SECONDS" not in source
-    assert "fresh midpoint clock observation" in source
-    assert "class UnsafeBybitClock(ExchangeMutationBarrier)" in source
+    assert "def fresh_bybit_time_calibration()" in source
+    assert "build_bybit_time_calibration(" in source
+    assert "timestamp = str(calibration.now_ms())" in source
+    assert "class UnsafeBybitClock(PreMutationSafetyBlock)" in source
     assert "class AmbiguousBybitMutation(ExchangeMutationBarrier)" in source
     assert "def assert_mutation_clock_safe()" in source
+    assert "UNSAFE_BYBIT_TIME_PROBE_RTT" in source
+    assert "UNSAFE_BYBIT_CLOCK_OFFSET" not in source
     assert "timeout=SIGNED_MUTATION_TIMEOUT_SECONDS" in source
     assert 'recv_window = "10000"' not in source
 
@@ -140,16 +146,29 @@ def test_post_is_never_retried_and_barrier_restarts_runtime() -> None:
     assert "os._exit(75)" in barrier
 
 
-def test_command_worker_keeps_ambiguous_command_unresolved() -> None:
+def test_command_worker_separates_pre_mutation_and_ambiguous_outcomes() -> None:
     source = text(PRIVATE)
     start = source.index("def command_worker_loop(")
     end = source.index("\ndef command_loop(", start)
     worker = source[start:end]
-    assert worker.index("except ExchangeMutationBarrier as exc:") < worker.index(
-        "except Exception as exc:"
-    )
-    assert "handle_exchange_mutation_barrier(" in worker
-    assert "SET state='failed'" in worker
+    execute_at = worker.index("execute_command(connection, key, secret, row)")
+    execute_chain = worker[execute_at:]
+    assert execute_chain.index(
+        "except PreMutationSafetyBlock as exc:"
+    ) < execute_chain.index("except ExchangeMutationBarrier as exc:")
+    assert execute_chain.index(
+        "except ExchangeMutationBarrier as exc:"
+    ) < execute_chain.index("except Exception as exc:")
+    assert "handle_pre_mutation_safety_block(" in execute_chain
+    assert "handle_exchange_mutation_barrier(" in execute_chain
+
+    pre_start = source.index("def handle_pre_mutation_safety_block(")
+    pre_end = source.index("\ndef handle_exchange_mutation_barrier(", pre_start)
+    pre = source[pre_start:pre_end]
+    assert "mutation_ambiguous=False" in pre
+    assert "disarm_new_entries(connection" in pre
+    assert '"restart_required": False' in pre
+    assert "os._exit" not in pre
 
 
 def test_market_fill_and_post_reconcile_use_barrier() -> None:
@@ -198,3 +217,19 @@ def test_readiness_blocks_unresolved_entry_mutation() -> None:
     body = source[start:end]
     assert "EXCHANGE_MUTATION_BARRIER:%" in body
     assert 'return False, "AMBIGUOUS_EXCHANGE_MUTATION"' in body
+
+
+def test_pending_entry_cancel_pre_mutation_block_disarms_without_restart() -> None:
+    source = text(PRIVATE)
+    start = source.index("def command_worker_loop(")
+    end = source.index("\ndef command_loop(", start)
+    worker = source[start:end]
+    cleanup_at = worker.index(
+        "cancel_expired_entry_limits(connection, key, secret, now_ms)"
+    )
+    cleanup = worker[cleanup_at:worker.index("pickup_window_ms", cleanup_at)]
+    assert "except PreMutationSafetyBlock as exc:" in cleanup
+    assert "handle_pre_mutation_safety_block(connection, None, exc)" in cleanup
+    assert cleanup.index("except PreMutationSafetyBlock as exc:") < cleanup.index(
+        "except ExchangeMutationBarrier as exc:"
+    )

@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.7
-**Дата:** 2026-10-06
+**Версия:** 2.8
+**Дата:** 2026-10-07
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -723,3 +723,52 @@ OWNER_DECISION_REQUIRED=YES
 Особенно это относится к границам MAYAK -> Dispatcher -> Strategy: запрет
 Strategy-specific semantics в MAYAK/Dispatcher не отменяет обязанность exact
 Strategy владеть своей интерпретацией объективного market context.
+
+# 14. Exchange-time calibration for authenticated Bybit transport
+
+OWNER DECISION 2026-10-07: authenticated Exchange transport must not depend on
+raw host wall-clock being numerically close to Bybit at every mutation.
+
+For every mutating Bybit POST:
+
+1. obtain a fresh public Bybit server-time observation;
+2. bind that observation to a local monotonic midpoint;
+3. derive the signed request timestamp from the Bybit server-time anchor plus
+   monotonic elapsed time;
+4. keep the existing signed `recvWindow` contract;
+5. never retry a mutating POST automatically.
+
+Host NTP remains required operational hygiene and clock-offset telemetry, but a
+correctable host-vs-Bybit wall-clock offset is not itself an ambiguous mutation
+and must not by itself terminate the private runtime.
+
+The safety boundary applies to uncertainty, not to a correctable offset. If
+fresh exchange-time evidence cannot be established, or the probe round-trip is
+too wide for the approved uncertainty budget after bounded read-only retries,
+the mutation is blocked before send and new Entry is disarmed fail-closed.
+
+A pre-mutation safety block and an ambiguous post-send mutation are physically
+different states:
+
+```text
+PRE_MUTATION_SAFETY_BLOCK
+  mutation_sent = NO
+  outcome_ambiguous = NO
+  new Entry = DISARMED
+  runtime restart = NOT REQUIRED
+
+EXCHANGE_MUTATION_BARRIER
+  mutation_sent = POSSIBLE / UNKNOWN
+  outcome_ambiguous = YES
+  reconciliation = REQUIRED
+  new Entry = DISARMED
+  private runtime restart/recovery = REQUIRED
+```
+
+Authenticated GET may retry only under its existing read-safe contract; an
+explicit timestamp rejection may use a fresh Bybit-time calibration for that
+read retry. WebSocket authentication uses the same exchange-time basis.
+
+This contract changes transport safety only. It does not change Strategy,
+Entry geometry, Entry lifetime, Exit, initial protection, stake, leverage or
+any trading threshold.

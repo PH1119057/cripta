@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.0
+**Версия:** 3.1
 **Дата:** 2026-10-07
 **Статус:** обязательный канонический терминологический контракт
 
@@ -695,3 +695,27 @@ result-affecting source bytes/provenance, достаточный для восп
 **ARCHIVE contour / ARCHIVE_ROOT** — historical/offload storage
 `/data/cripta/script_archive`. Архив не является current source, runtime или
 research execution root.
+
+# 18. Exchange-time / operator-alert terms
+
+**Bybit Time Calibration** — fresh observation of Bybit public server time
+bound to a local monotonic midpoint. It is used to construct authenticated
+Bybit timestamps without requiring the host wall clock to be numerically equal
+to Bybit. Host-vs-Bybit offset remains diagnostic telemetry.
+
+**PRE_MUTATION_SAFETY_BLOCK** — deterministic refusal before an Exchange
+mutation is sent because a required execution-safety prerequisite cannot be
+proved. It is not an ambiguous Exchange mutation. For Entry it releases the
+pre-exchange reservation/slot through the non-ambiguous failure path and may
+disarm new Entry.
+
+**EXCHANGE_MUTATION_BARRIER** — state in which a mutating Exchange request may
+have been sent but exact exchange outcome is not yet deterministic locally.
+Requires fail-closed reconciliation/recovery and must never be used merely for
+a pre-send clock/calibration refusal.
+
+**Operational audible alert** — Dashboard notification emitted for an
+operator-relevant state transition such as mainnet Entry gate `OPEN -> OFF`
+or appearance of a new open `CRITICAL` lifecycle fault. Routine accepted
+PostOnly Entry orders and normal zero-fill cancellations are not operational
+audible alerts.

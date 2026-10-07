@@ -39,6 +39,10 @@ from bybit_workbench.account_state_generation import (
     current_complete_account_state_generation,
 )
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
+from bybit_workbench.exchange.bybit.time_calibration import (
+    BybitTimeCalibration,
+    build_bybit_time_calibration,
+)
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
 from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
 
@@ -78,19 +82,24 @@ SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
 SIGNED_MUTATION_TIMEOUT_SECONDS = 3.0
-MUTATION_CLOCK_MAX_ABS_OFFSET_MS = 500.0
+BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0
+BYBIT_TIME_PROBE_ATTEMPTS = 3
 PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
 PRIVATE_RECONNECT_RECOVERED_REASON = (
     "private WS reconnect recovered: verified R1 arm restored"
 )
 
 
+class PreMutationSafetyBlock(RuntimeError):
+    """A safety prerequisite failed before any exchange mutation was sent."""
+
+
 class ExchangeMutationBarrier(RuntimeError):
     """Mutation outcome or immediate post-mutation truth is uncertain."""
 
 
-class UnsafeBybitClock(ExchangeMutationBarrier):
-    """Local/Bybit clock evidence is outside the mutation safety limit."""
+class UnsafeBybitClock(PreMutationSafetyBlock):
+    """Fresh Bybit-time calibration could not be established safely."""
 
 
 class AmbiguousBybitMutation(ExchangeMutationBarrier):
@@ -118,8 +127,14 @@ def api_get(
     query = urllib.parse.urlencode(sorted(params.items()))
     started = time.perf_counter()
     last_timestamp_ms = 0
+    calibration: BybitTimeCalibration | None = None
     for attempt in range(2):
-        timestamp_ms = max(int(time.time() * 1000), last_timestamp_ms + 1)
+        candidate_ms = (
+            int(time.time() * 1000)
+            if calibration is None
+            else calibration.now_ms()
+        )
+        timestamp_ms = max(candidate_ms, last_timestamp_ms + 1)
         last_timestamp_ms = timestamp_ms
         timestamp = str(timestamp_ms)
         signature = hmac.new(
@@ -155,6 +170,13 @@ def api_get(
             )
         code = int(payload.get("retCode", -1))
         if code == 10002 and attempt == 0:
+            try:
+                calibration = fresh_bybit_time_calibration()
+            except Exception as exc:
+                raise ExchangeReadUnavailable(
+                    "Bybit signed GET timestamp recovery could not calibrate "
+                    f"exchange time: {type(exc).__name__}:{exc}"
+                ) from exc
             continue
         return payload, (time.perf_counter() - started) * 1000
 
@@ -836,13 +858,25 @@ def connection_event(connection: psycopg.Connection, channel: str, event: str, *
 
 
 def auth(ws: websocket.WebSocket, key: str, secret: str) -> None:
-    expires = int(time.time() * 1000) + 10_000
-    signature = hmac.new(secret.encode(), f"GET/realtime{expires}".encode(), hashlib.sha256).hexdigest()
-    ws.send(json.dumps({"op": "auth", "args": [key, expires, signature]}, separators=(",", ":")))
+    calibration = fresh_bybit_time_calibration()
+    expires = calibration.now_ms() + 10_000
+    signature = hmac.new(
+        secret.encode(),
+        f"GET/realtime{expires}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    ws.send(
+        json.dumps(
+            {"op": "auth", "args": [key, expires, signature]},
+            separators=(",", ":"),
+        )
+    )
     response = json.loads(ws.recv())
     success = response.get("success") is True or response.get("retCode") in (0, 20001)
     if not success:
-        raise RuntimeError(f"websocket auth failed: {response.get('retMsg') or response.get('ret_msg')}")
+        raise RuntimeError(
+            f"websocket auth failed: {response.get('retMsg') or response.get('ret_msg')}"
+        )
 
 
 def _server_time_ms(payload: dict[str, object]) -> float:
@@ -861,28 +895,59 @@ def _server_time_ms(payload: dict[str, object]) -> float:
     raise RuntimeError("Bybit time response has no server timestamp")
 
 
-def mutation_clock_offset_ms() -> float:
-    """Return a fresh midpoint clock observation for this mutation attempt."""
-    started_ns = time.time_ns()
-    payload, _ = api_get("/v5/market/time", {})
-    finished_ns = time.time_ns()
-    if int(payload.get("retCode", -1)) != 0:
-        raise RuntimeError(
-            f"Bybit clock probe rejected: {payload.get('retMsg')}"
+def fresh_bybit_time_calibration() -> BybitTimeCalibration:
+    """Calibrate signed timestamps to Bybit itself, not to the host wall clock."""
+
+    observations: list[BybitTimeCalibration] = []
+    errors: list[str] = []
+    for attempt in range(1, BYBIT_TIME_PROBE_ATTEMPTS + 1):
+        wall_started_ns = time.time_ns()
+        monotonic_started_ns = time.monotonic_ns()
+        try:
+            payload, _ = api_get("/v5/market/time", {})
+        except Exception as exc:
+            errors.append(f"{attempt}:{type(exc).__name__}:{exc}")
+            continue
+        wall_finished_ns = time.time_ns()
+        monotonic_finished_ns = time.monotonic_ns()
+
+        if int(payload.get("retCode", -1)) != 0:
+            errors.append(
+                f"{attempt}:retCode={payload.get('retCode')}:{payload.get('retMsg')}"
+            )
+            continue
+
+        calibration = build_bybit_time_calibration(
+            server_time_ms=_server_time_ms(payload),
+            wall_started_ns=wall_started_ns,
+            wall_finished_ns=wall_finished_ns,
+            monotonic_started_ns=monotonic_started_ns,
+            monotonic_finished_ns=monotonic_finished_ns,
         )
-    midpoint_ms = (started_ns + finished_ns) / 2_000_000
-    return _server_time_ms(payload) - midpoint_ms
+        observations.append(calibration)
+        if calibration.round_trip_ms <= BYBIT_TIME_PROBE_MAX_RTT_MS:
+            return calibration
 
-
-def assert_mutation_clock_safe() -> float:
-    offset_ms = mutation_clock_offset_ms()
-    if abs(offset_ms) > MUTATION_CLOCK_MAX_ABS_OFFSET_MS:
+    if observations:
+        best = min(observations, key=lambda item: item.round_trip_ms)
         raise UnsafeBybitClock(
-            "UNSAFE_BYBIT_CLOCK_OFFSET "
-            f"offset_ms={offset_ms:.1f} "
-            f"limit_ms={MUTATION_CLOCK_MAX_ABS_OFFSET_MS:.1f}"
+            "UNSAFE_BYBIT_TIME_PROBE_RTT "
+            f"best_rtt_ms={best.round_trip_ms:.1f} "
+            f"limit_ms={BYBIT_TIME_PROBE_MAX_RTT_MS:.1f} "
+            f"offset_ms={best.offset_ms:.1f} "
+            f"attempts={BYBIT_TIME_PROBE_ATTEMPTS}"
         )
-    return offset_ms
+
+    raise UnsafeBybitClock(
+        "BYBIT_TIME_CALIBRATION_UNAVAILABLE "
+        + (";".join(errors[-BYBIT_TIME_PROBE_ATTEMPTS:]) or "no observations")
+    )
+
+
+def assert_mutation_clock_safe() -> BybitTimeCalibration:
+    """Return fresh exchange-time evidence before a mutation is constructed."""
+
+    return fresh_bybit_time_calibration()
 
 
 def _explicit_http_payload(
@@ -919,9 +984,9 @@ def api_post(
     accepted_codes: tuple[int, ...] = (),
 ) -> dict[str, object]:
     """One signed mutation attempt. Never retry a POST with uncertain outcome."""
-    assert_mutation_clock_safe()
+    calibration = assert_mutation_clock_safe()
     body = json.dumps(params, separators=(",", ":"), ensure_ascii=False)
-    timestamp = str(int(time.time() * 1000))
+    timestamp = str(calibration.now_ms())
     signature = hmac.new(
         secret.encode(),
         f"{timestamp}{key}{SIGNED_RECV_WINDOW}{body}".encode(),
@@ -965,6 +1030,41 @@ def api_post(
             f"non-object Bybit POST response path={path}"
         )
     return _validate_post_payload(path, payload, accepted_codes)
+
+
+def handle_pre_mutation_safety_block(
+    connection: psycopg.Connection,
+    command_id: str | None,
+    exc: BaseException,
+) -> None:
+    """Fail closed without claiming ambiguity when no mutation was sent."""
+
+    error = f"PRE_MUTATION_SAFETY_BLOCK:{type(exc).__name__}:{exc}"
+    connection.rollback()
+    if command_id is not None:
+        finalize_failed_entry_command_reservation(
+            connection,
+            command_id=command_id,
+            reason=error,
+            mutation_ambiguous=False,
+        )
+        connection.execute(
+            """UPDATE runtime.trade_commands
+               SET state='failed',finished_at_epoch_ms=%s,error=%s
+               WHERE command_id=%s""",
+            (int(time.time() * 1000), error, command_id),
+        )
+        connection.commit()
+    disarm_new_entries(connection, error[:500])
+    atomic_status(
+        "command",
+        {
+            "state": "blocked",
+            "error": error,
+            "mutation_sent": False,
+            "restart_required": False,
+        },
+    )
 
 
 def handle_exchange_mutation_barrier(
@@ -2187,6 +2287,8 @@ def command_worker_loop(key: str, secret: str) -> None:
             if time.monotonic() >= next_limit_cleanup:
                 try:
                     cancel_expired_entry_limits(connection, key, secret, now_ms)
+                except PreMutationSafetyBlock as exc:
+                    handle_pre_mutation_safety_block(connection, None, exc)
                 except ExchangeMutationBarrier as exc:
                     handle_exchange_mutation_barrier(
                         connection, key, secret, None, exc
@@ -2458,6 +2560,8 @@ def command_worker_loop(key: str, secret: str) -> None:
         connection.commit()
         try:
             execute_command(connection, key, secret, row)
+        except PreMutationSafetyBlock as exc:
+            handle_pre_mutation_safety_block(connection, command_id, exc)
         except ExchangeMutationBarrier as exc:
             handle_exchange_mutation_barrier(
                 connection, key, secret, command_id, exc

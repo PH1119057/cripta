@@ -138,3 +138,13 @@ def test_bybit_entry_log_is_last_trade_subpage_and_is_read_only_history() -> Non
     assert "runtime.exchange_order_history" in APP_SOURCE
     assert "strategy_entry.execution_request_state_events" in APP_SOURCE
     assert "runtime.executions" in APP_SOURCE
+
+
+def test_operational_alarm_sounds_for_gate_close_and_new_critical_fault() -> None:
+    assert "cripta-last-mainnet-gate" in SOURCE
+    assert "cripta-seen-critical-faults" in SOURCE
+    assert "previousGate==='1'&&!currentGateOpen" in SOURCE
+    assert "newCritical=criticalFaults.filter" in SOURCE
+    assert "queuedSound('alarm')" in SOURCE
+    assert '"critical_faults": [' in APP_SOURCE
+    assert "WHERE state='OPEN' AND severity='CRITICAL'" in APP_SOURCE

@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.16
+**Версия:** 3.17
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -839,3 +839,42 @@ replace all 11 existing Project Source documents from the same final GitHub
 `main` snapshot; do not mix old and new individual copies. GitHub
 `PH1119057/cripta:main` remains authority until the owner confirms the UI
 upload.
+
+
+# 30. Bybit time-calibration + operational audible alert cycle — 2026-10-07
+
+OWNER DECISION closes the recurring class of host/Bybit timestamp incidents by
+making fresh Bybit Time Calibration the signed mutation time authority while
+preserving fail-closed transport semantics and the no-retry mutating POST
+contract.
+
+Current docs revised in this cycle:
+- ARCHITECTURE 2.8 — exchange-time calibrated authenticated transport and exact
+  pre-mutation vs ambiguous mutation boundary;
+- GLOSSARY 3.1 — Bybit Time Calibration,
+  `PRE_MUTATION_SAFETY_BLOCK`, `EXCHANGE_MUTATION_BARRIER`, operational
+  audible alert;
+- OBSERVATION_ANALYTICS 1.9 — one audible alarm for gate `OPEN -> OFF` and
+  newly observed CRITICAL lifecycle fault;
+- CURRENT_PROJECT_MAP 12.2 — dated incident evidence and repair scope;
+- DOCUMENTATION_INDEX 3.17 — this revision record.
+
+Current Project Source version set after this documentation cycle:
+
+```text
+CHATGPT_INTERACTION_RULES_RU      1.9
+CRIPTA_ASSISTANT_WORK_RULES_RU    3.5
+CRIPTA_ARCHITECTURE_RULES_RU      2.8
+DOCUMENTATION_INDEX_RU            3.17
+CRIPTA_GLOSSARY_RU                3.1
+CURRENT_PROJECT_MAP_RU            12.2
+SECURITY                          1.3
+TRADING_CONTOUR_RU                2.6
+OBSERVATION_ANALYTICS_RU          1.9
+DEVELOPMENT_RELEASE_RULES_RU      1.9
+RESEARCH_COMPUTE_RULES_RU         2.1
+```
+
+Document set, paths, mandatory pre-read, routing and Project Source count remain
+unchanged. Therefore README / AGENTS / Project Instructions/bootstrap topology
+does not require a revision in this cycle.

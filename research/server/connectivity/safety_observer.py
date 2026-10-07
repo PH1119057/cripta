@@ -12,6 +12,11 @@ from pathlib import Path
 
 import psycopg
 
+from bybit_workbench.exchange.bybit.time_calibration import (
+    BybitTimeCalibration,
+    build_bybit_time_calibration,
+)
+
 BASE_URL = os.environ.get("BYBIT_REST", "https://api.bybit.kz")
 ROOT = Path(os.environ.get("CRIPTA_SAFETY_ROOT", "/var/lib/cripta/safety"))
 LATEST_PATH = ROOT / "latest.json"
@@ -33,6 +38,7 @@ def api_get(
     params: dict[str, str],
     key: str = "",
     secret: str = "",
+    calibration: BybitTimeCalibration | None = None,
 ) -> tuple[dict[str, object], float]:
     """Read-only Bybit GET. Retry once only for explicit timestamp rejection."""
     query = urllib.parse.urlencode(sorted(params.items()))
@@ -43,7 +49,12 @@ def api_get(
     for attempt in range(attempts):
         headers = {"User-Agent": "cripta-safety-observer/1"}
         if key:
-            timestamp_ms = max(int(time.time() * 1000), last_timestamp_ms + 1)
+            candidate_ms = (
+                int(time.time() * 1000)
+                if calibration is None
+                else calibration.now_ms()
+            )
+            timestamp_ms = max(candidate_ms, last_timestamp_ms + 1)
             last_timestamp_ms = timestamp_ms
             timestamp = str(timestamp_ms)
             signature = hmac.new(
@@ -124,23 +135,38 @@ def collect(connection: psycopg.Connection, key: str, secret: str) -> None:
     age = public_stream_age(now_ms)
     try:
         clock_started_ns = time.time_ns()
+        monotonic_started_ns = time.monotonic_ns()
         server, server_latency = api_get("/v5/market/time", {})
         clock_finished_ns = time.time_ns()
+        monotonic_finished_ns = time.monotonic_ns()
         now_ms = clock_finished_ns // 1_000_000
         age = public_stream_age(now_ms)
-        clock_midpoint_ms = (clock_started_ns + clock_finished_ns) / 2_000_000
+        server_ms = int(
+            server.get("time")
+            or int((server.get("result") or {}).get("timeNano", "0"))
+            // 1_000_000
+        )
+        calibration = build_bybit_time_calibration(
+            server_time_ms=server_ms,
+            wall_started_ns=clock_started_ns,
+            wall_finished_ns=clock_finished_ns,
+            monotonic_started_ns=monotonic_started_ns,
+            monotonic_finished_ns=monotonic_finished_ns,
+        )
 
         wallet, wallet_latency = api_get(
             "/v5/account/wallet-balance",
             {"accountType": "UNIFIED"},
             key,
             secret,
+            calibration,
         )
         positions, positions_latency = api_get(
             "/v5/position/list",
             {"category": "linear", "settleCoin": "USDT", "limit": "200"},
             key,
             secret,
+            calibration,
         )
         orders, orders_latency = api_get(
             "/v5/order/realtime",
@@ -152,6 +178,7 @@ def collect(connection: psycopg.Connection, key: str, secret: str) -> None:
             },
             key,
             secret,
+            calibration,
         )
         payloads = (server, wallet, positions, orders)
         if any(item.get("retCode") != 0 for item in payloads):
@@ -163,11 +190,6 @@ def collect(connection: psycopg.Connection, key: str, secret: str) -> None:
                 )
             )
 
-        server_ms = int(
-            server.get("time")
-            or int((server.get("result") or {}).get("timeNano", "0"))
-            // 1_000_000
-        )
         account = ((wallet.get("result") or {}).get("list") or [{}])[0]
         position_list = (positions.get("result") or {}).get("list") or []
         order_list = (orders.get("result") or {}).get("list") or []
@@ -190,7 +212,7 @@ def collect(connection: psycopg.Connection, key: str, secret: str) -> None:
         latest = {
             "state": "healthy",
             "checked_at_epoch": now_ms // 1000,
-            "clock_offset_ms": int(server_ms - clock_midpoint_ms),
+            "clock_offset_ms": int(calibration.offset_ms),
             "rest_latency_ms": round(latency, 2),
             "public_stream_age_ms": age,
             "total_equity": account.get("totalEquity"),

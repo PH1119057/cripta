@@ -1131,6 +1131,13 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         commands = connection.execute(
             "SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20"
         ).fetchall()
+        critical_fault_rows = connection.execute(
+            """SELECT fault_id,fault_code,severity,detected_at,payload
+               FROM runtime.lifecycle_faults
+               WHERE state='OPEN' AND severity='CRITICAL'
+               ORDER BY detected_at DESC
+               LIMIT 20"""
+        ).fetchall()
         bybit_entry_log_rows = connection.execute(
             """SELECT c.command_id,c.symbol,
                 c.payload_json::jsonb->>'side',
@@ -1547,6 +1554,16 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "error": r[5],
             }
             for r in commands
+        ],
+        "critical_faults": [
+            {
+                "fault_id": r[0],
+                "fault_code": r[1],
+                "severity": r[2],
+                "detected_at": r[3].isoformat(),
+                "payload": r[4],
+            }
+            for r in critical_fault_rows
         ],
         "bybit_entry_log": [
             {
