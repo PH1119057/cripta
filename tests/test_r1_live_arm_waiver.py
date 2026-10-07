@@ -60,7 +60,7 @@ def _rows(context: LiveArmContext):
 def test_r1_micro_live_accepts_only_scoped_owner_webhook_waiver() -> None:
     context = LiveArmContext(
         strategy_id="r1_aptusdt",
-        strategy_version="1.0-micro-live",
+        strategy_version="1.1-micro-live",
         strategy_config_fingerprint="fp",
         strategy_activation_id="activation",
         symbol="APTUSDT",
