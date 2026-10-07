@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.12
+**Версия:** 3.13
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -709,3 +709,38 @@ Project Instructions template update is not required.
 This revision is documentation/status reconciliation only. Any subsequent
 MICRO_LIVE re-arm is a separate operational action requiring fresh complete
 readiness evidence and explicit owner approval.
+
+# 26. Stage 7D post-arm consumer stabilization / runtime checkpoint — 2026-10-07
+
+CHECKED HERE:
+- production finding после первого Stage 7C arm: REAL Entry consumer повторно
+  применял expiring pre-arm LIVE evidence к уже ACTIVE release-bound session и
+  после 90 секунд отменил 3 APT REAL `EntryExecutionRequest` до Exchange mutation;
+- fail-closed safety сработала: PAPER fallback, trade command, fill, position,
+  pending order и open lifecycle fault не возникли;
+- implementation commit
+  `bf3e31fdbb9a3b930518ee62dfa612454284d851` устраняет только post-arm
+  re-evaluation expiring pre-arm evidence в Entry consumer;
+- exact active session и per-request operational safety/admission checks
+  сохранены;
+- scoped suite `107 passed / 12 skipped`, Ruff PASS,
+  `NEW_TEST_FAILURES=0`, `NEW_MYPY_DIAGNOSTICS=0`;
+- exact verified release deployed, затем отдельно owner-approved прежний R1
+  cohort повторно armed: 5 Strategy, 5 execution permissions, 5 active sessions,
+  10 USDT/Strategy, leverage 1x;
+- после фактического expiry всех TTL-bound pre-arm rows loaded consumer остаётся
+  ready 5/5, observer показывает `REAL_SELECTED=5 / REAL_READY=5 / MATCH=True`;
+- первый естественный post-fix REAL Entry/fill/protection/exit cycle на этом
+  checkpoint ещё не произошёл и не объявляется RUNTIME BEHAVIOR VERIFIED.
+
+Documentation ownership:
+- `CURRENT_PROJECT_MAP §26.3` владеет dated operational evidence этого repair;
+- ARCH/TRADING/GLOSSARY не меняются: Stage 7D исправляет implementation
+  divergence с уже действующим pre-arm/session + per-entry safety contract;
+- topology, paths, mandatory pre-read, routing и Project Source set не
+  меняются, поэтому README / AGENTS / Project Instructions template update не
+  требуется.
+
+Publication semantics: этот documentation commit изменит
+`REMOTE_HEAD/SOURCE_HEAD`, но не application `INSTALLED_COMMIT/LOADED_COMMIT`;
+MAP фиксирует pre-publication application checkpoint отдельно по INDEX §17.5.
