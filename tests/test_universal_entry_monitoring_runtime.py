@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import bybit_workbench.universal_entry.paper_runtime as paper_runtime_module
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.market_watch import (
@@ -569,3 +570,54 @@ def test_real_execution_selection_is_independent_from_mainnet_gate() -> None:
 
     assert selected == frozenset({"activation-r1"})
     assert connection.statements
+
+
+def test_paper_runtime_lazy_loads_disabled_historical_exact_bundle(monkeypatch) -> None:
+    expected_key = (
+        "old-activation",
+        "r1_dotusdt",
+        "1.0-micro-live",
+        "old-card-fp",
+        "old-entry-fp",
+        "old-exit-fp",
+    )
+
+    class HistoricalBundle:
+        exact_identity = expected_key
+
+    loaded = HistoricalBundle()
+    calls: list[dict[str, str]] = []
+
+    def fake_load(_connection, **kwargs):
+        calls.append({key: str(value) for key, value in kwargs.items()})
+        return loaded
+
+    monkeypatch.setattr(
+        paper_runtime_module,
+        "load_strategy_bundle_exact_identity",
+        fake_load,
+    )
+    runtime = PaperTradeRuntime(FakeConnection())
+
+    first = runtime._exact_bundle(
+        strategy_activation_id=expected_key[0],
+        strategy_id=expected_key[1],
+        strategy_version=expected_key[2],
+        strategy_config_fingerprint=expected_key[3],
+        entry_plan_fingerprint=expected_key[4],
+        exit_plan_fingerprint=expected_key[5],
+    )
+    second = runtime._exact_bundle(
+        strategy_activation_id=expected_key[0],
+        strategy_id=expected_key[1],
+        strategy_version=expected_key[2],
+        strategy_config_fingerprint=expected_key[3],
+        entry_plan_fingerprint=expected_key[4],
+        exit_plan_fingerprint=expected_key[5],
+    )
+
+    assert first is loaded
+    assert second is loaded
+    assert len(calls) == 1
+    assert calls[0]["activation_id"] == "old-activation"
+    assert calls[0]["strategy_version"] == "1.0-micro-live"
