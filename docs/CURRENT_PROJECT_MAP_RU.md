@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.2
+**Версия:** 12.3
 **Дата:** 2026-10-07
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2083,3 +2083,58 @@ unchanged.
 At authoring time LIVE remains DISARMED and the existing
 `ENTRY_EXECUTION_AMBIGUOUS` fault remains open. Patch/deploy must not re-arm
 LIVE as a side effect.
+
+# 31. Bybit time-calibration deployment + safety-observer import repair — CHECKED HERE 2026-10-07
+
+The canonical time-calibration changeset was published and deployed after exact
+tests. Targeted clock/alarm/governance gate: `60/60 PASS`. Full pytest:
+`1622 PASS / 65 SKIP / 7 exact baseline FAIL / NEW_FAILURES=0`.
+
+Deployment finding:
+the first `7b2eebc...` runtime cutover exposed a packaging/import defect in
+`cripta-safety-observer.service`. The service executes
+`research/server/connectivity/safety_observer.py` directly and does not receive
+the application `PYTHONPATH`; therefore the newly shared
+`bybit_workbench.exchange.bybit.time_calibration` module was not importable.
+The repair makes the observer derive its own exact release root from
+`__file__` and prepend only that release's `src/` directory before importing
+the shared calibration module. A regression test executes the observer script
+without `PYTHONPATH`, matching systemd import semantics.
+
+Post-repair verified state before any new real-arm:
+
+```text
+GitHub/source/runtime/tooling/state/dashboard = exact release composition
+mainnet gate                                = OFF
+R1 execution permissions                    = 0
+ACTIVE LIVE-arm sessions                    = 0
+real positions                              = 0
+active Exchange orders                      = 0
+open lifecycle faults                       = 0
+private runtime                             = connected / authenticated-locked
+universal observer                          = RUNNING / observer_ready=true
+```
+
+The old clock incident's `ENTRY_EXECUTION_AMBIGUOUS` was reclassified only
+after exact evidence proved that no Exchange mutation had been sent:
+the command had no Exchange result/order id, no execution/order-history record,
+and Exchange was flat. Its CapitalReservation and physical slot claim were
+transitioned from `RECONCILIATION_REQUIRED` to `RELEASED` with reason
+`PRE_MUTATION_CLOCK_BLOCK_RECLASSIFIED_NO_EXCHANGE_MUTATION:<release>`;
+Lifecycle Supervisor then resolved the CRITICAL fault.
+
+Five read-only post-deploy Bybit Time Calibration samples succeeded with
+acceptable probe RTT and produced Exchange-calibrated timestamps even while the
+diagnostic host-vs-Bybit offset varied materially. No new clock/timestamp error
+was observed in private-runtime journal during this checkpoint.
+
+Dashboard operational alert contract is loaded in the same exact release:
+- one alarm on mainnet gate transition `OPEN -> OFF`;
+- one alarm for each newly observed open CRITICAL lifecycle fault;
+- routine accepted/unfilled Entry orders remain only in `Лог Bybit`;
+- browser audio must already be enabled/unlocked by the operator.
+
+LIVE remains deliberately DISARMED. Re-arm requires a fresh exact-release
+readiness cycle and separate owner approval. Full
+`Entry -> fill -> Exchange protection -> dynamic Exit -> close -> economics
+after fees` behavior is still NOT YET VERIFIED.

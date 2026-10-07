@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -25,6 +27,27 @@ def load_safety(monkeypatch: Any) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_safety_observer_bootstraps_release_src_without_pythonpath(
+    tmp_path: Path,
+) -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    code = (
+        "import runpy,sys,types;"
+        "sys.modules['psycopg']=types.ModuleType('psycopg');"
+        "runpy.run_path(sys.argv[1],run_name='service_import_probe')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(SAFETY)],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 class FakeResponse:

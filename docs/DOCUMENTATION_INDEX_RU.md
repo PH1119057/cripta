@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.17
+**Версия:** 3.18
 **Дата:** 2026-10-07
 **Статус:** канонический индекс документации
 
@@ -878,3 +878,39 @@ RESEARCH_COMPUTE_RULES_RU         2.1
 Document set, paths, mandatory pre-read, routing and Project Source count remain
 unchanged. Therefore README / AGENTS / Project Instructions/bootstrap topology
 does not require a revision in this cycle.
+
+# 31. Bybit time-calibration deployment verification + safety-observer packaging repair — 2026-10-07
+
+Post-publication/runtime verification of the time-calibration cycle found one
+implementation packaging defect: `cripta-safety-observer.service` executes the
+safety observer directly without application `PYTHONPATH`, so the shared
+`bybit_workbench.exchange.bybit.time_calibration` import failed after the first
+deployment. The repair is implementation-only and does not change the canonical
+Bybit Time Calibration or operational alarm semantics established in cycle 30.
+
+Current documentation changes in this repair cycle:
+- CURRENT_PROJECT_MAP 12.3 — records deployed calibration/alarm evidence, exact
+  false-ambiguity cleanup, the safety-observer import finding and final
+  DISARMED runtime state;
+- DOCUMENTATION_INDEX 3.18 — records this maintenance cycle and current Project
+  Source version set.
+
+Current Project Source version set after this cycle:
+
+```text
+CHATGPT_INTERACTION_RULES_RU      1.9
+CRIPTA_ASSISTANT_WORK_RULES_RU    3.5
+CRIPTA_ARCHITECTURE_RULES_RU      2.8
+DOCUMENTATION_INDEX_RU            3.18
+CRIPTA_GLOSSARY_RU                3.1
+CURRENT_PROJECT_MAP_RU            12.3
+SECURITY                          1.3
+TRADING_CONTOUR_RU                2.6
+OBSERVATION_ANALYTICS_RU          1.9
+DEVELOPMENT_RELEASE_RULES_RU      1.9
+RESEARCH_COMPUTE_RULES_RU         2.1
+```
+
+No current document/path, mandatory pre-read, routing or Project Source
+membership changed. README / AGENTS / Project Instructions/bootstrap topology
+therefore requires no revision in this cycle.

@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import signal
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -12,7 +13,12 @@ from pathlib import Path
 
 import psycopg
 
-from bybit_workbench.exchange.bybit.time_calibration import (
+_RELEASE_ROOT = Path(__file__).resolve().parents[3]
+_SOURCE_ROOT = _RELEASE_ROOT / "src"
+if str(_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SOURCE_ROOT))
+
+from bybit_workbench.exchange.bybit.time_calibration import (  # noqa: E402
     BybitTimeCalibration,
     build_bybit_time_calibration,
 )
