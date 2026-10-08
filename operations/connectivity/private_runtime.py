@@ -1834,7 +1834,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         payload=payload,
     )
     positions, _ = api_get("/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret)
-    position = next((p for p in position_rows if Decimal(str(p.get("size") or 0)) > 0), None)
+    position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
     instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
     tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
