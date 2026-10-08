@@ -25,6 +25,11 @@
 </style>
 </head>
 <body><main>
+  <div id="releaseArmCriticalBanner" role="alert" aria-live="assertive" hidden style="position:sticky;top:0;z-index:1000;background:#65151d;color:#fff;border:2px solid #ff6774;border-radius:9px;padding:14px 18px;margin:8px 0 12px;box-shadow:0 4px 20px #0009">
+    <strong>CRITICAL — новые REAL Entry не готовы</strong>
+    <div id="releaseArmCriticalDetails" style="margin-top:6px;line-height:1.5"></div>
+    <small>Существующие позиции и их Exit должны продолжать сопровождаться. Это уведомление не зависит от звука и не закрывается вручную.</small>
+  </div>
   <header><div><div class="muted">SERVER RESEARCH CONTROL PLANE</div><h1>Cripta · инфраструктура</h1></div><div id="stamp" class="muted">загрузка…</div></header>
   <nav aria-label="Разделы"><button class="tab active" data-panel="liveDesk">Торговля</button><div class="menu-group"><button class="tab menu-label" type="button">Настройки ▾</button><div class="menu-items"><button class="tab" data-panel="entry">Настройки входа</button><button class="tab" data-panel="strategies">Стратегии входа и выхода</button><button class="tab" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="serverControl">Ресурсы сервера</button></div></div><div class="menu-group"><button class="tab menu-label" type="button">Статистика и исследования ▾</button><div class="menu-items"><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="testLibrary">Библиотека тестов</button><button class="tab" data-panel="bots">Торговые боты</button></div></div><button class="tab" data-panel="history">История исследований</button><button class="tab" data-panel="rules">Правила проекта</button><button class="tab" data-panel="checklist">Чек-лист</button><a class="tab" href="/logout">Выйти</a></nav>
   <section id="observerFaultBanner" class="durable-fault-banner" hidden aria-live="assertive">
@@ -691,7 +696,25 @@ function renderBybitEntryLog(rows){
     return `<tr><td>${new Date(Number(x.requested_at_epoch_ms||0)).toLocaleString('ru-RU')}</td><td><b>${safe(x.symbol)}</b></td><td><small>${safe(x.strategy_id||'—')}<br>${safe(x.strategy_version||'—')}</small></td><td>${side}</td><td>${safe(orderPrice||'—')}</td><td><small>${safe(x.order_id||'—')}</small></td><td><b class="${cls}">${status}</b><br><small class="muted">${safe(x.order_status||x.request_state||x.command_state||'—')}</small></td><td>${safe(fillText)}</td><td>SL ${safe(sl)}<br>TP ${safe(tp)}</td><td><small>${safe(reason)}</small></td></tr>`
   }).join(''):'<tr><td colspan="10" class="muted">Реальных Entry-заявок пока нет.</td></tr>';
 }
+function renderReleaseArmCritical(lt){
+  const banner=document.getElementById('releaseArmCriticalBanner');
+  const details=document.getElementById('releaseArmCriticalDetails');
+  const state=lt?.release_arm_health;
+  if(!state){banner.hidden=true;return}
+  const mismatch=state.mismatched_sessions||[];
+  const notReady=Number(state.recent_not_arm_ready||0);
+  const critical=Boolean(state.gate_open)&&(mismatch.length>0||notReady>0||!state.loaded_commit);
+  banner.hidden=!critical;
+  if(!critical)return;
+  const names=mismatch.map(x=>safe(x.symbol)+' ('+safe(String(x.session_release_commit||'').slice(0,12))+')').join(', ');
+  details.innerHTML='Шлюз открыт, но допуск REAL Entry не подтверждён для загруженного release <b>'+
+    safe(String(state.loaded_commit||'UNKNOWN').slice(0,12))+'</b>. '+
+    (names?'Несовпадающие LIVE-arm sessions: '+names+'. ':'')+
+    (notReady?'Отказов REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY за 30 минут: '+notReady+'. ':'')+
+    'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
+}
 function renderLiveState(d){
+  renderReleaseArmCritical(d.live_trading);
   for(const p of d.live_trading?.positions||[]){p.exchange_mark_price=p.mark_price;p.exchange_unrealised_pnl=p.unrealised_pnl;p.mark_price=p.executable_close_price||p.mark_price}
   if(d.trade_strategy_monitor)tradeStrategyMonitorData=d.trade_strategy_monitor;const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;renderTradeStrategyControl();
   const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm');soundStatus.textContent='ТРЕВОГА · '+operationalAlarms.join(' · ')}
