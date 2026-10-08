@@ -2183,17 +2183,10 @@ def _r1_signal_validity(
     # floating inner boundary (range +/- ATR200 * 0.5). Recomputing ATR200
     # changes that boundary even when all structural extrema remain intact.
     # Keep the submitted PostOnly limit unchanged while structure persists.
-    recent = closed[-(36 + 6 - 1):]
-    extrema = [
-        (
-            min(item.low for item in recent[offset:offset + 36]),
-            max(item.high for item in recent[offset:offset + 36]),
-        )
-        for offset in range(6)
-    ]
-    if len(set(extrema)) != 1:
+    zone = compute_r1_l53_stable_zone(closed[-history_limit:])
+    if zone is None:
         return False, "R1_SIGNAL_RULE_INVALIDATED"
-    current_low, current_high = extrema[-1]
+    current_low, current_high = zone.range_low, zone.range_high
     if current_low != original_low or current_high != original_high:
         return False, "R1_EXACT_ENTRY_LEVEL_CHANGED"
     return True, "R1_SIGNAL_STILL_VALID"
