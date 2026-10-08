@@ -1232,3 +1232,23 @@ CANON / DEVELOPMENT RULE
 Это process rule не изменяет trading policy и не ослабляет fail-closed
 release/LIVE gates.
 
+
+
+## 35. Installer и торговая независимость — OWNER DECISION 2026-10-08
+
+Installer имеет только release/backup/schema/service ответственность; наличие любых
+Exchange positions/orders, StrategyPosition и queued/running trading commands
+не запрещает deploy и не разрешает installer исполнять, исправлять или удалять
+торговые команды. Gate, execution permissions, live-arm sessions installer
+не открывает, не закрывает и не модифицирует.
+
+После переключения и запуска штатный private-runtime reconciliation получает
+актуальные позиции, ордера и protection **от Bybit к БД**. Никакого replay
+локального снимка на Bybit. Installer только наблюдает успешную свежую сверку
+и сообщает об отсутствии evidence как operational finding без вмешательства
+в торговые объекты. Сохранение transactional delivery/идемпотентности
+незавершённых команд — обязанность Execution/Lifecycle.
+
+Любой release по-прежнему требует exact Git commit, backup/rollback,
+совместимых DB migrations, import/runtime/schema tests и сохранения owner-arm
+state; сервисы нельзя считать защищёнными только потому, что они active.
