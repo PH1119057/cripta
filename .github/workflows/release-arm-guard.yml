@@ -7,6 +7,11 @@ on:
       - "tests/test_live_release_alert.py"
       - "tests/test_release_arm_safety.py"
       - "tests/test_release_arm_postgres.py"
+      - "tests/test_release_arm_deploy_contract.py"
+      - "operations/dashboard/index.html"
+      - "operations/dashboard/app.py"
+      - "operations/connectivity/universal_entry_consumer.py"
+      - "operations/infrastructure/cripta-apply-incoming"
       - "operations/sql/20261009_release_arm_incidents.sql"
       - ".github/workflows/release-arm-guard.yml"
   pull_request:
@@ -16,6 +21,11 @@ on:
       - "tests/test_live_release_alert.py"
       - "tests/test_release_arm_safety.py"
       - "tests/test_release_arm_postgres.py"
+      - "tests/test_release_arm_deploy_contract.py"
+      - "operations/dashboard/index.html"
+      - "operations/dashboard/app.py"
+      - "operations/connectivity/universal_entry_consumer.py"
+      - "operations/infrastructure/cripta-apply-incoming"
       - "operations/sql/20261009_release_arm_incidents.sql"
       - ".github/workflows/release-arm-guard.yml"
 jobs:
@@ -44,9 +54,17 @@ jobs:
           uv sync --locked --all-extras --python 3.12
       - name: Exact new-code lint
         run: |
-          .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py
+          .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py tests/test_release_arm_deploy_contract.py
       - name: Release-arm regression and disposable PostgreSQL
         env:
           TEST_RELEASE_ARM_PG_DSN: host=localhost port=5432 dbname=postgres user=postgres password=synthetic_test_password
         run: |
-          .venv/bin/python -m pytest -q tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py
+          .venv/bin/python -m pytest -q tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py tests/test_release_arm_deploy_contract.py
+      - name: Python and release bash syntax
+        run: |
+          .venv/bin/python -m py_compile operations/dashboard/app.py operations/connectivity/universal_entry_consumer.py src/bybit_workbench/release_arm_safety.py
+          bash -n operations/infrastructure/cripta-apply-incoming operations/infrastructure/install_verified_release.sh
+      - name: Dashboard JavaScript syntax
+        run: |
+          .venv/bin/python -c "from pathlib import Path; s=Path('operations/dashboard/index.html').read_text(); Path('/tmp/release-dashboard.js').write_text(s.split('<script>',1)[1].split('</script>',1)[0])"
+          node --check /tmp/release-dashboard.js
