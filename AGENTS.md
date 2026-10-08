@@ -127,3 +127,7 @@ bootstrap является documentation defect.
 Exact ChatGPT UI Project Instructions template:
 `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt`.
 Это derived bootstrap artifact, не Project Source и не отдельный authority.
+
+## Recovery implementation route
+
+Recovery/reconnect tasks require ARCH + TRADING_CONTOUR + GLOSSARY + DEVELOPMENT_RELEASE pre-read. Must verify idempotent Exchange-to-DB state projection, paginated snapshots, exact historical execution IDs, 60-position restart/recovery tests and no replay of uncertain Exchange mutations. Do not confuse canonical approval with deployed implementation.
