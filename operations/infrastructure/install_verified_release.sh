@@ -457,7 +457,7 @@ if [[ "${was_active[cripta-private-runtime.service]:-0}" == "1" ]]; then
   sync_started_ms="$(( $(date -u +%s) * 1000 ))"
   sync_verified=0
   for attempt in {1..30}; do
-    successful_ms="$(sql_scalar "SELECT coalesce((SELECT finished_at_epoch_ms FROM runtime.reconciliation_runs WHERE ok=true ORDER BY id DESC LIMIT 1),0)")"
+    successful_ms="$(sql_scalar "SELECT coalesce((SELECT finished_at_epoch_ms FROM runtime.reconciliation_runs WHERE ok=1 ORDER BY id DESC LIMIT 1),0)")"
     if [[ "$successful_ms" =~ ^[0-9]+$ ]] && (( successful_ms >= sync_started_ms )); then
       sync_verified=1
       break
