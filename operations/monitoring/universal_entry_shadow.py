@@ -2044,7 +2044,10 @@ def _run_observer_epoch(
                         evaluation,
                         entry_plan=bundle.entry_plan,
                         exit_plan=bundle.exit_plan,
-                        captured_at=fact.observed_at,
+                        # Capture time is a persistence event, not the earlier
+                        # market-fact timestamp. Preserve decision lineage and
+                        # never put capture before its EntryDecision.
+                        captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
                     )
                     if candidate is not None:
                         counterfactual_store.record_candidate(candidate)
