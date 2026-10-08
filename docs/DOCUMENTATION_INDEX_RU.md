@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.19
+**Версия:** 3.20
 **Дата:** 2026-10-08
 **Статус:** канонический индекс документации
 
@@ -945,3 +945,34 @@ RESEARCH_COMPUTE_RULES_RU         2.1
 No current document/path, mandatory pre-read, routed reading or Project Source
 membership changed. Therefore README / AGENTS / Project Instructions bootstrap
 topology requires no revision in this cycle.
+
+
+# 33. R1 false Entry cancellation implementation maintenance — 2026-10-08
+
+Owner-requested stabilization of current R1 implementation, not a Strategy
+policy/version revision. `CURRENT_PROJECT_MAP_RU.md` 12.5 §33 records exact
+INJUSDT forensic evidence, causal ATR200 history-parity repair, durable
+cancel-intent reconciliation, isolated tests and deliberately un-deployed
+safety status.
+
+Current-doc version set for this isolated documentation changeset:
+
+```text
+CHATGPT_INTERACTION_RULES_RU      1.9
+CRIPTA_ASSISTANT_WORK_RULES_RU    3.5
+CRIPTA_ARCHITECTURE_RULES_RU      2.8
+DOCUMENTATION_INDEX_RU            3.20
+CRIPTA_GLOSSARY_RU                3.1
+CURRENT_PROJECT_MAP_RU            12.5
+SECURITY                          1.3
+TRADING_CONTOUR_RU                2.6
+OBSERVATION_ANALYTICS_RU          1.9
+DEVELOPMENT_RELEASE_RULES_RU      1.9
+RESEARCH_COMPUTE_RULES_RU         2.1
+```
+
+The 11 current documents, paths, mandatory base pre-read and routed pre-read
+are unchanged. Root README / AGENTS and Project Instructions do not require
+topology or bootstrap changes in this maintenance cycle. This branch has not
+been merged to authoritative GitHub `main`, and no deploy/runtime rights
+follow from this documentation.
