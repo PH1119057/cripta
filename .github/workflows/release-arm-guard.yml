@@ -44,7 +44,7 @@ jobs:
           uv sync --locked --all-extras --python 3.12
       - name: Exact new-code lint
         run: |
-          .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py
+          .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py
       - name: Release-arm regression and disposable PostgreSQL
         env:
           TEST_RELEASE_ARM_PG_DSN: host=localhost port=5432 dbname=postgres user=postgres password=synthetic_test_password
