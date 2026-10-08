@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.21
+**Версия:** 3.22
 **Дата:** 2026-10-08
 **Статус:** канонический индекс документации
 
@@ -986,3 +986,11 @@ TradingContour §1.10 / §1.10.2 уточнены: исходная структ
 capture timestamp не меняет Strategy policy. Production installer / LIVE-arm
 contracts остаются обязательными; открытые Exchange позиции и pending runtime
 commands не могут обходиться как якобы несвязанные с runtime.
+
+
+## 35. Release installation separated from trading inventory — 2026-10-08
+
+Owner decision: positions/orders/queued trading commands no longer gate install.
+DEVELOPMENT_RELEASE §35 owns the canonical release procedure; installer
+preserves trading controls and observes Exchange-to-DB reconciliation via
+private runtime. This changes release responsibility, not Strategy Entry/Exit.
