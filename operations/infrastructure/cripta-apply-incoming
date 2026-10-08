@@ -271,6 +271,46 @@ PY
 
   [[ ! -e "$stage/server/cripta-apply-incoming" ]]     || die "package attempts persistent runner self-update; blocked"
 
+  # Separate owner-approved release control-plane step, BEFORE installer.
+  # Inhibit only NEW REAL Entry. Existing positions/orders and Exit remain owned
+  # by Execution/Lifecycle, never by this runner or the installer.
+  if [[ "$installed_baseline" != "$release_commit" ]]; then
+    runuser -u cripta -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'RELEASE_ENTRY_SQL'
+BEGIN;
+DO $release_entry_guard$
+DECLARE
+    was_open boolean;
+    now_ms bigint := (extract(epoch FROM clock_timestamp())*1000)::bigint;
+BEGIN
+    SELECT enabled INTO was_open
+      FROM control.execution_gates
+     WHERE mode='mainnet' FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'mainnet gate missing: cannot inhibit new REAL Entry';
+    END IF;
+    IF was_open THEN
+        UPDATE control.execution_gates
+           SET enabled=0,
+               reason='RELEASE_UPDATE_ENTRY_INHIBIT',
+               updated_at_epoch_ms=now_ms
+         WHERE mode='mainnet';
+        INSERT INTO control.execution_gate_events(
+            at_epoch_ms,mode,previous_enabled,requested_enabled,
+            resulting_enabled,reason,source,origin,request_id,
+            settings_version)
+        VALUES(now_ms,'mainnet',true,false,false,
+            'RELEASE_UPDATE_ENTRY_INHIBIT',
+            'release-entry-control','owner-approved-release',
+            'release-control-'||now_ms::text,NULL);
+    END IF;
+END
+$release_entry_guard$;
+COMMIT;
+RELEASE_ENTRY_SQL
+    echo "NEW_REAL_ENTRY_RELEASE_INHIBIT=PASS"
+    echo "EXISTING_POSITIONS_AND_EXIT=UNTOUCHED"
+  fi
+
   echo "=== PACKAGE INSTALLER START ==="
   CRIPTA_RELEASE_COMMIT="$release_commit"   CRIPTA_EXPECTED_BASELINE_COMMIT="$expected_baseline_commit"   CRIPTA_RELEASE_TREE_SHA="$release_tree_sha"   CRIPTA_PACKAGE_STAGE="$stage"     bash "$stage/install.sh"
   echo "=== PACKAGE INSTALLER PASS ==="
