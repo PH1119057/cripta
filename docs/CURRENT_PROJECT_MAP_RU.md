@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.4
+**Версия:** 12.5
 **Дата:** 2026-10-08
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2207,3 +2207,69 @@ pre-publication checkpoint. The approved completion path is exact GitHub
 publication -> verified deploy while DISARMED -> deterministic stale-slot/fault
 cleanup using Exchange-flat evidence -> fresh readiness -> explicit owner-
 approved re-arm.
+
+
+# 33. R1 pending Entry ATR parity / causal cancel-intent repair — CHECKED HERE 2026-10-08
+
+FINDING on exact production release `5448939da34d1219abd938043b2601e8296bc560`:
+- natural INJUSDT SHORT signal at `2026-10-08 07:22:58.945 UTC` was ACCEPTED, dispatched and acknowledged by Bybit (retCode=0);
+- zero-fill Entry was cancelled at `07:23:16 UTC` without a 5m closed-candle structural transition;
+- observer's rolling R1 history had 207 closed 5m bars and ATR200
+  `0.03140903399481686819609375`; private REST validity used up to 239 closed
+  bars from a 240-kline response and got another ATR200 seed;
+- both computations preserved `range_low=7.227` and `range_high=7.45`,
+  but exact inner Entry differed and caused false `R1_EXACT_ENTRY_LEVEL_CHANGED`;
+- the terminal WebSocket event resolved the reservation/slot as
+  `ENTRY_CANCEL_CONFIRMED_ZERO_FILL:BYBIT:EC_PerCancelRequest`, losing
+  the originating Strategy cause because of the async cancel/reconcile race.
+
+Prepared in isolated GitHub branch
+`fix/r1-entry-atr-cancel-20261008` (not current `main`):
+
+1. Entry command now carries the exact observer-derived closed-candle
+   `history_limit` from the immutable R1 watch policy (207 for current R1);
+   private validity computes Wilder ATR on that same trailing history window,
+   and fails closed if required history is absent.
+2. `runtime.entry_cancel_intents` records exact Strategy cancel intent and
+   commits it before the Bybit cancel request. Terminal private WS resolution
+   uses that durable reason if present, otherwise the actual `BYBIT:*` cause.
+3. New idempotent `20261008_r1_entry_cancel_intents.sql` migration is
+   registered in the canonical exact-release installer.
+4. R1 Entry/Exit/initial protection/offset/SL/TP/ping-pong Strategy policy
+   and immutable StrategyCards are unchanged.
+
+Isolated test evidence:
+- causal ATR REST/observer regression and fail-closed tests PASS;
+- direct cancel-intent-before-Exchange mutation test PASS;
+- targeted R1/bridge/private-runtime suite: `51 PASS`;
+- full suite: `1629 PASS / 68 SKIP / 7 existing Dashboard/U6 baseline FAIL`;
+- Ruff `src tests`: `25` diagnostics, equal to current `main`;
+- patched legacy operations/tests Ruff diagnostics: `94`, equal to `main`;
+- mypy 1.19.1: `46` diagnostics, equal to `main` in isolated reduced dependency environment;
+- standalone disposable PostgreSQL migration parse/create/grant PASS;
+  disposable test DB cleaned afterward;
+- exact production deployment, full PostgreSQL lifecycle behavior,
+  post-deploy loaded runtime and natural new order: NOT CHECKED HERE.
+
+Safety/deployment status at this checkpoint:
+
+```text
+BRANCH_PATCH_IMPLEMENTED      = YES
+PATCH_TESTED_IN_ISOLATION     = YES (with baseline caveats)
+REMOTE_MAIN_UPDATED           = NO
+INSTALLED_COMMIT_UPDATED      = NO
+LOADED_COMMIT_UPDATED         = NO
+RUNTIME_BEHAVIOR_VERIFIED     = NO
+MAINNET_GATE                  = ON [read-only check]
+EXCHANGE_HOT_POSITIONS        = 0  [read-only check]
+EXCHANGE_HOT_ORDERS           = 0  [read-only check]
+OPEN_LIFECYCLE_FAULTS         = 0  [read-only check]
+DEPLOY                         = BLOCKED while armed
+RE_ARM                         = FORBIDDEN without separate owner approval
+```
+
+The owner requested stabilization; no new trading Strategy version is
+authorized, and no code is promoted to `main` or deployed while the live
+gate remains armed. Complete release only under the canonical disarm ->
+exact commit/test/package/backup/deploy/runtime evidence chain, with no
+automatic real re-arm.
