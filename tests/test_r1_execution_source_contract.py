@@ -71,3 +71,51 @@ def test_r1_version_install_migrates_superseded_monitoring_only_while_disarmed()
     assert "enabled=False" in source
     assert "strategy_version=%s" in source
     assert "strategy_config_fingerprint=%s" in source
+
+
+def test_r1_signal_validity_uses_exact_observer_history_window() -> None:
+    bridge = (ROOT / "src/bybit_workbench/universal_entry/execution_bridge.py").read_text(
+        encoding="utf-8"
+    )
+    runtime = (ROOT / "operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'from .market_watch import _derived_history_limit' in bridge
+    assert '"history_limit": (' in bridge
+    assert 'entry_policy.get("watch_policy")' in bridge
+    assert 'history_limit_raw = validity.get("history_limit")' in runtime
+    assert 'closed[-history_limit:]' in runtime
+    assert 'R1 validity lacks full causal ATR history' in runtime
+
+
+def test_strategy_cancel_intent_is_durable_before_bybit_cancel_and_ws_release() -> None:
+    runtime = (ROOT / "operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    cancel = runtime.split("def _cancel_entry_limit(", 1)[1].split(
+        "def cancel_expired_entry_limits(", 1
+    )[0]
+    assert "INSERT INTO runtime.entry_cancel_intents" in cancel
+    assert cancel.index("INSERT INTO runtime.entry_cancel_intents") < cancel.index(
+        '"/v5/order/cancel"'
+    )
+    assert cancel.index("connection.commit()") < cancel.index('"/v5/order/cancel"')
+    handler = runtime.split("def handle_private(", 1)[1].split(
+        "def private_loop(", 1
+    )[0]
+    assert "FROM runtime.entry_cancel_intents" in handler
+    assert handler.index("FROM runtime.entry_cancel_intents") < handler.index(
+        "resolve_cancelled_entry_reservation_after_reconcile("
+    )
+
+
+def test_r1_cancel_intent_migration_is_registered_and_scoped() -> None:
+    migration = (
+        ROOT / "operations/sql/20261008_r1_entry_cancel_intents.sql"
+    ).read_text(encoding="utf-8")
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS runtime.entry_cancel_intents" in migration
+    assert "GRANT SELECT, INSERT ON runtime.entry_cancel_intents TO cripta" in migration
+    assert "20261008_r1_entry_cancel_intents.sql" in installer
