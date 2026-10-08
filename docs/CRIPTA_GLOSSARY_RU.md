@@ -719,3 +719,13 @@ operator-relevant state transition such as mainnet Entry gate `OPEN -> OFF`
 or appearance of a new open `CRITICAL` lifecycle fault. Routine accepted
 PostOnly Entry orders and normal zero-fill cancellations are not operational
 audible alerts.
+
+## 31. Recovery terminology — OWNER DECISION 2026-10-08
+
+**Exchange-authoritative current state** — fresh complete authenticated account inventory of open positions/orders and protection, independent of historical fills.
+
+**Recovery epoch** — idempotent per-connector and per-account reconciliation with complete pagination, before/after delta, exchange evidence IDs and operator notification.
+
+**HISTORICAL_OUTCOME_UNKNOWN** — verified absent current exposure but insufficient exchange execution evidence to reconstruct exact exit and net result after fees. The alert and accounting work persist without automatically blocking unrelated Entries.
+
+**Scoped mutation ambiguity** — uncertain sent/possibly sent Exchange command whose restriction applies only to its proven affected identity/slot/account. Empty current exposure does not prove the command was never filled.

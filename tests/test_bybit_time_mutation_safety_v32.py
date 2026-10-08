@@ -207,16 +207,16 @@ def test_startup_recovery_order_and_exact_fill_protection() -> None:
     end = source.index("\ndef record_entry_decision(", start)
     body = source[start:end]
     ordered = (
-        'disarm_new_entries(connection, "restart: owner re-arm required")',
         'reconcile(connection, key, secret, "startup_preflight")',
         "refresh_recent_executions(connection, key, secret)",
-        "cancel_bot_owned_pending_entry_orders(connection, key, secret)",
-        "refresh_recent_executions(connection, key, secret)",
+        'reconcile(connection, key, secret, "startup_after_execution_backfill")',
         "protect_recovered_bot_positions(connection, key, secret)",
         "resolve_prestart_entry_commands(connection)",
         "resolve_prestart_non_entry_running_commands(connection)",
-        'reconcile(connection, key, secret, "startup_post_cancel")',
+        'reconcile(connection, key, secret, "startup_post_recovery")',
     )
+    assert "disarm_new_entries(" not in body
+    assert "cancel_bot_owned_pending_entry_orders(" not in body
     cursor = 0
     for marker in ordered:
         position = body.index(marker, cursor)
