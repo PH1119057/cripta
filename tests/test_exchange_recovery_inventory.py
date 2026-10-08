@@ -28,3 +28,9 @@ def test_rejected_page_is_not_flat_account(monkeypatch):
         {"retCode": 10001, "retMsg": "bad"}, 0))
     with pytest.raises(runtime.ExchangeReadUnavailable):
         runtime._complete_exchange_inventory("/v5/position/list", {}, "k", "s")
+
+
+def test_reconcile_uses_complete_position_page_list():
+    source = __import__("inspect").getsource(runtime.reconcile)
+    assert "p for p in position_rows" in source
+    assert 'positions.get("result")' not in source

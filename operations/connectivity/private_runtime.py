@@ -3385,7 +3385,7 @@ def reconcile(
         )
 
         position_list = [
-            p for p in ((positions.get("result") or {}).get("list") or [])
+            p for p in position_rows
             if float(p.get("size") or 0) != 0
         ]
         active_order_list = [
