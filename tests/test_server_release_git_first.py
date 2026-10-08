@@ -128,15 +128,12 @@ def test_persistent_runner_enforces_git_identity_before_installer() -> None:
     )
 
 
-def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> None:
+def test_verified_installer_is_fail_closed_for_release_integrity_not_inventory() -> None:
     source = INSTALLER.read_text(encoding="utf-8")
     for token in (
-        "mainnet gate must be disarmed before deploy",
-        "real Strategy execution permissions must be zero before deploy",
-        "open/reconciliation StrategyPosition exists",
-        "Exchange hot position exists",
-        "pending runtime trade command exists",
-        "pending Exchange order exists",
+        "TRADING_STATE_INFORMATIONAL",
+        "POST_DEPLOY_RECONCILIATION_OWNER",
+        "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION",
         "pg_dump -Fc",
         "flock -n 9",
         "/srv/cripta/dashboard/universal_entry_source",
@@ -147,7 +144,7 @@ def test_verified_installer_is_fail_closed_and_preserves_disarmed_state() -> Non
         '"$runtime_release/$migration"',
         "CRIPTA_RELEASE_COMMIT",
         "INSTALLED_COMMIT",
-        "GATE=DISARMED",
+        "GATE=$gate_after",
     ):
         assert token in source
     assert "production/src/bybit_workbench/dispatcher_v2" in source
