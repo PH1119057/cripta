@@ -116,3 +116,46 @@ def test_pending_r1_order_fails_closed_if_exact_atr_history_missing(
         match="lacks full causal ATR history",
     ):
         private_runtime._r1_signal_validity(payload, "INJUSDT")
+
+
+def test_cancel_intent_is_committed_before_exchange_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    class FakeConnection:
+        def execute(self, sql: str, *args: object) -> None:
+            assert "INSERT INTO runtime.entry_cancel_intents" in sql
+            events.append("persist_intent")
+
+        def commit(self) -> None:
+            events.append("commit_intent")
+
+    def fake_post(*args: object, **kwargs: object) -> dict[str, object]:
+        assert events == ["persist_intent", "commit_intent"]
+        events.append("exchange_cancel")
+        return {"retCode": 0}
+
+    monkeypatch.setattr(private_runtime, "api_post", fake_post)
+    monkeypatch.setattr(
+        private_runtime, "reconcile",
+        lambda *_args, **_kwargs: events.append("reconcile")
+    )
+    monkeypatch.setattr(
+        private_runtime,
+        "resolve_cancelled_entry_reservation_after_reconcile",
+        lambda *_args, **_kwargs: "RELEASED",
+    )
+    private_runtime._cancel_entry_limit(
+        FakeConnection(),  # type: ignore[arg-type]
+        "unused-key", "unused-secret",
+        order_id="test-order", symbol="INJUSDT",
+        command_id="ue-test", reason="R1_EXACT_ENTRY_LEVEL_CHANGED",
+    )
+    assert events == [
+        "persist_intent",
+        "commit_intent",
+        "exchange_cancel",
+        "reconcile",
+        "commit_intent",
+    ]
