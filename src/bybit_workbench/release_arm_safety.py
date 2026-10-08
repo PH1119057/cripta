@@ -6,6 +6,7 @@ The installer never invokes this as an implicit mutation.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -24,7 +25,7 @@ def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
         "SELECT enabled FROM control.execution_gates "
         "WHERE mode='mainnet' FOR UPDATE"
     ).fetchone()
-    gate_open = bool(gate and gate[0])
+    gate_open = bool(gate and (gate['enabled'] if isinstance(gate, Mapping) else gate[0]))
     sessions = connection.execute(
         """SELECT strategy_id,strategy_version,symbol,release_commit
              FROM control.live_arm_sessions
@@ -35,13 +36,24 @@ def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
              FROM strategy_entry.execution_permissions
             WHERE enabled=true ORDER BY strategy_id,strategy_version"""
     ).fetchall()
-    session_scopes = {(str(r[0]), str(r[1])) for r in sessions}
-    permitted_scopes = {(str(r[0]), str(r[1])) for r in permissions}
-    stale = [
-        {"strategy_id": str(r[0]), "strategy_version": str(r[1]),
-         "symbol": str(r[2]), "session_release_commit": str(r[3])}
+    def field(row: Any, index: int, key: str) -> Any:
+        return row[key] if isinstance(row, Mapping) else row[index]
+
+    session_scopes = {
+        (str(field(r, 0, "strategy_id")), str(field(r, 1, "strategy_version")))
         for r in sessions
-        if not loaded_commit or str(r[3]) != loaded_commit
+    }
+    permitted_scopes = {
+        (str(field(r, 0, "strategy_id")), str(field(r, 1, "strategy_version")))
+        for r in permissions
+    }
+    stale = [
+        {"strategy_id": str(field(r, 0, "strategy_id")),
+         "strategy_version": str(field(r, 1, "strategy_version")),
+         "symbol": str(field(r, 2, "symbol")),
+         "session_release_commit": str(field(r, 3, "release_commit"))}
+        for r in sessions
+        if not loaded_commit or str(field(r, 3, "release_commit")) != loaded_commit
     ]
     missing_scopes = sorted(permitted_scopes - session_scopes)
     invalid = bool(stale) or (

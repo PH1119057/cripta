@@ -92,3 +92,42 @@ def test_recovery_closes_earlier_incident_not_opens_new_position():
     writes = "\n".join(_writes(c))
     assert "UPDATE control.release_arm_incidents" in writes
     assert "INSERT INTO control.release_arm_incidents" not in writes
+
+
+def test_real_consumer_psycopg_dict_row_matches_off_gate_without_crash():
+    class DictConnection(_Connection):
+        def execute(self, sql, params=None):
+            self.statements.append((sql, params))
+            if "SELECT enabled FROM control.execution_gates" in sql:
+                return _Result([{"enabled": False}])
+            if "FROM control.live_arm_sessions" in sql:
+                return _Result([])
+            if "FROM strategy_entry.execution_permissions" in sql:
+                return _Result([])
+            return _Result([])
+
+    c = DictConnection(gate=False)
+    assert check_release_arm_invariant(c, loaded_commit="b" * 40) is False
+    assert "UPDATE control.execution_gates" not in "\\n".join(_writes(c))
+
+
+def test_real_consumer_psycopg_dict_row_detects_stale_session():
+    class DictConnection(_Connection):
+        def execute(self, sql, params=None):
+            self.statements.append((sql, params))
+            if "SELECT enabled FROM control.execution_gates" in sql:
+                return _Result([{"enabled": True}])
+            if "FROM control.live_arm_sessions" in sql:
+                return _Result([
+                    {"strategy_id": "r1_injusdt", "strategy_version": "1.1",
+                     "symbol": "INJUSDT", "release_commit": "a" * 40}
+                ])
+            if "FROM strategy_entry.execution_permissions" in sql:
+                return _Result([
+                    {"strategy_id": "r1_injusdt", "strategy_version": "1.1"}
+                ])
+            return _Result([])
+
+    c = DictConnection()
+    assert check_release_arm_invariant(c, loaded_commit="b" * 40) is False
+    assert "UPDATE control.execution_gates" in "\\n".join(_writes(c))
