@@ -78,6 +78,34 @@ jobs:
           echo "FULL_PYTEST_RC=$rc"
           tail -n 130 /tmp/release-full-pytest.log
           exit "$rc"
+      - name: Full-test baseline delta (no newly failing test IDs)
+        run: |
+          git worktree add --detach /tmp/cripta-base 57c4639c1de1df86e0f6ffd4de024e8821ca535e
+          (
+            cd /tmp/cripta-base
+            uv sync --locked --all-extras --python 3.12
+            uv pip install --python .venv/bin/python "psycopg[binary]==3.1.17"
+            set +e
+            .venv/bin/python -m pytest -q --tb=short > /tmp/cripta-base-pytest.log 2>&1
+            echo "BASE_PYTEST_RC=$?"
+          )
+          sed -n 's/^FAILED \([^ ]*\).*/\1/p' /tmp/cripta-base-pytest.log | sort > /tmp/base-failed-ids.txt
+          sed -n 's/^FAILED \([^ ]*\).*/\1/p' /tmp/release-full-pytest.log | sort > /tmp/head-failed-ids.txt
+          sed -n 's/^ERROR \([^ ]*\).*/\1/p' /tmp/cripta-base-pytest.log | sort >> /tmp/base-failed-ids.txt
+          sed -n 's/^ERROR \([^ ]*\).*/\1/p' /tmp/release-full-pytest.log | sort >> /tmp/head-failed-ids.txt
+          sort -u -o /tmp/base-failed-ids.txt /tmp/base-failed-ids.txt
+          sort -u -o /tmp/head-failed-ids.txt /tmp/head-failed-ids.txt
+          echo "BASE_FAILURE_IDS:"
+          cat /tmp/base-failed-ids.txt
+          echo "HEAD_FAILURE_IDS:"
+          cat /tmp/head-failed-ids.txt
+          comm -13 /tmp/base-failed-ids.txt /tmp/head-failed-ids.txt > /tmp/new-failed-ids.txt
+          if [ -s /tmp/new-failed-ids.txt ]; then
+            echo "NEW_TEST_FAILURES_DETECTED"
+            cat /tmp/new-failed-ids.txt
+            exit 1
+          fi
+          echo "NEW_TEST_FAILURES=0"
       - name: Python and release bash syntax
         run: |
           .venv/bin/python -m py_compile operations/dashboard/app.py operations/connectivity/universal_entry_consumer.py src/bybit_workbench/release_arm_safety.py
