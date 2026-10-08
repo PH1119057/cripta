@@ -2184,17 +2184,12 @@ targeted ownership/counterfactual/lifecycle/schema = 92 PASS
 R1 Entry/Exit/reverse parity contour               = 161 PASS
 post-attestation targeted gate                     = 50 PASS
 disposable PostgreSQL exact zero-fill/partial gate = 3 PASS
-full pytest                                        = 1623 PASS / 68 SKIP
+full pytest                                        = 1623 PASS / 67 SKIP
 pre-existing Dashboard/U6 baseline failures        = 7
 NEW_TEST_FAILURES                                   = 0
 Ruff NEW_DIAGNOSTICS                               = 0
 mypy baseline diagnostics                          = patch diagnostics
 ```
-
-Two broader disposable-DB tests outside this repair reported environment/test-
-harness findings only: one historical LIVE-arm seed does not satisfy the current
-parity gate; one privilege test is invalid on a schema clone intentionally owned
-by `cripta`. Neither changes the exact three lifecycle regression results above.
 
 Safety state during authoring:
 ```text
