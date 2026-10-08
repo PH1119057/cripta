@@ -1067,3 +1067,7 @@ ATR200 используется в расчёте ширины зоны; отд�
 исходные cancellation semantics. Никаких tolerance thresholds не вводится.
 Это восстановление первоначального operator intent, не автоматическое разрешение
 нового LIVE-arm; старые immutable event/evidence записи не переписываются.
+
+## 6. Normal restart recovery — OWNER DECISION 2026-10-08
+
+Execution/Lifecycle reconciles fresh complete Exchange snapshots with durable Entry/Exit lineage, orders, execution IDs and capital reservations. Preserve local trade history; restore exact results after fees where exchange evidence suffices. If current exposure is absent but exit evidence incomplete, mark historical outcome UNKNOWN rather than inventing P&L or holding all independent Strategies hostage. Restrict unresolved mutation only within its exact affected scope. No queue replay or automatic LIVE-arm from restart alone.
