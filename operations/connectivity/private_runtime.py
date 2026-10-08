@@ -46,6 +46,8 @@ from bybit_workbench.exchange.bybit.time_calibration import (
 from bybit_workbench.universal_entry.market_watch import compute_r1_l53_stable_zone
 from bybit_workbench.universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_SYMBOLS, R1_VERSION
 
+from bybit_workbench.exchange_recovery import prove_orphan_closed_cycle
+
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
     mark_entry_order_acknowledged,
@@ -2959,6 +2961,211 @@ def reconcile_position_ownership(
         )
 
 
+def _exchange_execution_evidence(row: tuple[object, ...]) -> dict[str, object]:
+    """Normalized locally persisted Bybit execution (read-only evidence)."""
+    raw = row[8]
+    try:
+        body = raw if isinstance(raw, dict) else json.loads(str(raw or "{}"))
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    body.update({
+        "execId": str(row[0]),
+        "orderId": str(row[1]),
+        "orderLinkId": str(row[2] or ""),
+        "symbol": str(row[3]),
+        "side": str(row[4]),
+        "execQty": str(row[5]),
+        "execPrice": str(row[6]),
+        "execFee": str(row[7]),
+        "execTime": int(row[9]),
+    })
+    return body
+
+
+def reconcile_orphan_closed_entry_cycles(
+    connection: psycopg.Connection, *, generation_id: str, now_ms: int
+) -> int:
+    """Resolve exact historical closed fills without inventing a StrategyPosition.
+
+    Scope is the configured Bybit account; all other connectors require their
+    own exact inventory + execution evidence provider before this can apply.
+    Idempotence is anchored on reservation_id and execId; no Exchange POST.
+    """
+    candidates = connection.execute(
+        """SELECT c.reservation_id,c.account_ref,c.strategy_attempt_id,
+                  c.exchange_commitment_ref,s.exchange_position_slot_claim_id,
+                  s.symbol,s.direction,s.position_idx,s.claim_state,
+                  h.payload_json,h.order_link_id
+             FROM runtime.capital_reservations c
+             JOIN runtime.exchange_position_slot_claims s
+               ON s.capital_reservation_id=c.reservation_id
+              AND s.account_ref=c.account_ref
+             JOIN runtime.exchange_order_history h
+               ON h.order_id=c.exchange_commitment_ref
+              AND h.symbol=s.symbol
+            WHERE c.account_ref=%s
+              AND c.state='RECONCILIATION_REQUIRED'
+              AND c.strategy_position_id IS NULL
+              AND s.claim_state='RECONCILIATION_REQUIRED'
+              AND h.order_status='Filled'
+            FOR UPDATE OF c,s""",
+        (ACCOUNT_REF,),
+    ).fetchall()
+    recovered = 0
+    for (
+        reservation_id, account_ref, attempt_id, entry_order_id, slot_id,
+        symbol, direction, position_idx, slot_state, raw_order, entry_command_id,
+    ) in candidates:
+        if str(direction) not in {"LONG", "SHORT"}:
+            continue
+        expected_side = "Buy" if str(direction) == "LONG" else "Sell"
+        order = raw_order if isinstance(raw_order, dict) else json.loads(str(raw_order))
+        if (
+            not isinstance(order, dict)
+            or str(order.get("orderId") or "") != str(entry_order_id)
+            or str(order.get("side") or "") != expected_side
+        ):
+            continue
+        # A separately bound StrategyPosition is owned by normal reconciliation.
+        if connection.execute(
+            """SELECT 1 FROM runtime.position_ownership
+               WHERE entry_command_id=%s LIMIT 1""",
+            (str(entry_command_id),),
+        ).fetchone():
+            continue
+        entry_rows = connection.execute(
+            """SELECT exec_id,order_id,order_link_id,symbol,side,
+                      exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
+               FROM runtime.executions WHERE order_id=%s
+               ORDER BY exec_time_ms,exec_id""",
+            (str(entry_order_id),),
+        ).fetchall()
+        if not entry_rows:
+            continue
+        entry_evidence = [_exchange_execution_evidence(tuple(row)) for row in entry_rows]
+        started_ms = min(int(item["execTime"]) for item in entry_evidence)
+        # Bybit default execution history is bounded. Do not claim proof for
+        # ancient entries beyond the supported current exchange query range.
+        if now_ms - started_ms > 6 * 24 * 3600 * 1000 or started_ms > now_ms:
+            continue
+        all_rows = connection.execute(
+            """SELECT exec_id,order_id,order_link_id,symbol,side,
+                      exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
+               FROM runtime.executions
+               WHERE symbol=%s AND exec_time_ms >= %s
+               ORDER BY exec_time_ms,exec_id""",
+            (str(symbol), started_ms),
+        ).fetchall()
+        all_evidence = [_exchange_execution_evidence(tuple(row)) for row in all_rows]
+        last_entry_ms = max(int(item["execTime"]) for item in entry_evidence)
+        if any(
+            int(item["execTime"]) <= last_entry_ms
+            and str(item["orderId"]) != str(entry_order_id)
+            and str(item.get("execType") or "Trade") == "Trade"
+            for item in all_evidence
+        ):
+            continue
+        orders = connection.execute(
+            """SELECT order_id,payload_json FROM runtime.exchange_order_history
+               WHERE symbol=%s AND updated_at_epoch_ms >= %s""",
+            (str(symbol), started_ms),
+        ).fetchall()
+        terminal: dict[str, dict[str, object]] = {}
+        for order_key, body in orders:
+            if isinstance(body, dict):
+                terminal[str(order_key)] = body
+            else:
+                try:
+                    parsed = json.loads(str(body))
+                except ValueError:
+                    continue
+                if isinstance(parsed, dict):
+                    terminal[str(order_key)] = parsed
+        proof = prove_orphan_closed_cycle(
+            entry_order=order,
+            entry_executions=entry_evidence,
+            subsequent_executions=all_evidence,
+            terminal_orders=terminal,
+        )
+        if proof is None or proof.symbol != str(symbol):
+            continue
+        evidence = {
+            "source": "EXACT_BYBIT_EXECUTION_HISTORY",
+            "generation_id": generation_id,
+            "entry_order_id": proof.entry_order_id,
+            "entry_execution_ids": proof.entry_execution_ids,
+            "exit_order_ids": proof.exit_order_ids,
+            "exit_execution_ids": proof.exit_execution_ids,
+            "closed_at_epoch_ms": proof.closed_ms,
+            "account_ref": str(account_ref),
+            "position_idx": int(position_idx),
+            "funding": None,
+        }
+        cursor = connection.execute(
+            """INSERT INTO runtime.recovered_closed_entry_cycles(
+                 reservation_id,account_ref,strategy_attempt_id,symbol,side,
+                 entry_order_id,entry_execution_ids,exit_order_ids,
+                 exit_execution_ids,actual_qty,entry_vwap,exit_vwap,
+                 entry_fee_actual,exit_fee_actual,gross_pnl,net_without_funding,
+                 evidence)
+               VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,
+                      %s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+               ON CONFLICT(reservation_id) DO NOTHING""",
+            (
+                str(reservation_id),str(account_ref),str(attempt_id),
+                proof.symbol,proof.side,proof.entry_order_id,
+                json.dumps(proof.entry_execution_ids),
+                json.dumps(proof.exit_order_ids),
+                json.dumps(proof.exit_execution_ids),
+                proof.quantity,proof.entry_vwap,proof.exit_vwap,
+                proof.entry_fee,proof.exit_fee,proof.gross_pnl,
+                proof.net_without_funding,json.dumps(evidence),
+            ),
+        )
+        if cursor.rowcount != 1:
+            continue
+        update = connection.execute(
+            """UPDATE runtime.capital_reservations
+                 SET state='RELEASED',state_reason='EXACT_CLOSED_EXCHANGE_RECOVERY',
+                     updated_at=clock_timestamp()
+               WHERE reservation_id=%s AND state='RECONCILIATION_REQUIRED'
+                 AND strategy_position_id IS NULL""",
+            (str(reservation_id),),
+        )
+        if update.rowcount != 1:
+            raise RuntimeError("orphan recovered reservation transition race")
+        update = connection.execute(
+            """UPDATE runtime.exchange_position_slot_claims
+                 SET claim_state='RELEASED',released_at=clock_timestamp(),
+                     updated_at=clock_timestamp(),
+                     release_reason='EXACT_CLOSED_EXCHANGE_RECOVERY'
+               WHERE exchange_position_slot_claim_id=%s
+                 AND capital_reservation_id=%s
+                 AND claim_state='RECONCILIATION_REQUIRED'""",
+            (str(slot_id),str(reservation_id)),
+        )
+        if update.rowcount != 1:
+            raise RuntimeError("orphan recovered slot transition race")
+        connection.execute(
+            """UPDATE runtime.lifecycle_faults
+                  SET state='RESOLVED',resolved_at=clock_timestamp(),
+                      payload=payload || jsonb_build_object(
+                        'last_resolution_reason',
+                        'EXACT_CLOSED_EXCHANGE_RECOVERY',
+                        'last_resolved_by','lifecycle_reconciliation',
+                        'recovery_reservation_id',%s::text,
+                        'recovery_generation_id',%s::text)
+                WHERE fault_code='ENTRY_EXECUTION_AMBIGUOUS'
+                  AND state='OPEN'
+                  AND exact_ids->>'reservation_id'=%s""",
+            (str(reservation_id),generation_id,str(reservation_id)),
+        )
+        recovered += 1
+    return recovered
+
+
 def collect_position_mode_states(
     connection: psycopg.Connection,
     key: str,
@@ -3260,6 +3467,9 @@ def reconcile(
                 upsert_exchange_order_history(connection, item, now)
             upsert_wallet(connection, account, now)
             reconcile_position_ownership(connection, position_list, now, order_history)
+            reconcile_orphan_closed_entry_cycles(
+                connection, generation_id=generation_id, now_ms=now
+            )
             connection.execute(
                 """UPDATE runtime.account_state_generations
                       SET state='COMPLETE',
