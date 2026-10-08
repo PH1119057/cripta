@@ -468,13 +468,11 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
 def refresh_recent_executions(
     connection: psycopg.Connection, key: str, secret: str
 ) -> None:
-    response, _ = api_get(
+    items = _complete_exchange_inventory(
         "/v5/execution/list", {"category": "linear", "limit": "100"}, key, secret
     )
-    if response.get("retCode") != 0:
-        raise RuntimeError("exchange rejected startup execution recovery")
     now = int(time.time() * 1000)
-    for item in ((response.get("result") or {}).get("list") or []):
+    for item in items:
         connection.execute(
             """INSERT INTO runtime.executions(
                 exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
