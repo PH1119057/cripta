@@ -658,6 +658,7 @@ def protect_recovered_bot_positions(
 
 
 def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
+    """Resolve pre-restart Entry intents from exact Exchange evidence, no POST."""
     rows = connection.execute(
         """SELECT command_id,state FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
@@ -666,10 +667,46 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
     ).fetchall()
     now_ms = int(time.time() * 1000)
     for command_id, _state in rows:
+        # A previously sent but not yet filled PostOnly order remains live.
+        open_orders = connection.execute(
+            """SELECT order_id FROM runtime.hot_orders
+               WHERE order_link_id=%s AND order_status IN
+                   ('New','PartiallyFilled','Untriggered')""",
+            (str(command_id)[:36],),
+        ).fetchall()
+        if len(open_orders) > 1:
+            raise ExchangeMutationBarrier(
+                f"multiple Exchange orders for recovered Entry {command_id}"
+            )
+        if open_orders:
+            exact_order_id = str(open_orders[0][0])
+            mark_entry_order_acknowledged(
+                connection,
+                command_id=str(command_id),
+                exchange_order_id=exact_order_id,
+                acknowledged_at=datetime.now(UTC),
+            )
+            connection.execute(
+                """UPDATE runtime.trade_commands
+                   SET state='completed',finished_at_epoch_ms=%s,
+                       result_json=%s::jsonb,
+                       error='RESTART_RECOVERED_PENDING_EXCHANGE_ORDER'
+                   WHERE command_id=%s""",
+                (
+                    now_ms,
+                    json.dumps({"retCode": 0, "result": {
+                        "orderId": exact_order_id,
+                        "orderLinkId": str(command_id)[:36],
+                    }, "recovery": "EXCHANGE_ORDER_OPEN"}),
+                    command_id,
+                ),
+            )
+            continue
+
         execution = connection.execute(
             """SELECT 1 FROM runtime.executions
                WHERE order_link_id=%s LIMIT 1""",
-            (command_id,),
+            (str(command_id)[:36],),
         ).fetchone()
         if execution:
             connection.execute(
@@ -679,14 +716,36 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
                    WHERE command_id=%s""",
                 (now_ms, command_id),
             )
-        else:
-            connection.execute(
-                """UPDATE runtime.trade_commands
-                   SET state='failed',finished_at_epoch_ms=%s,
-                       error='RESTART_DISARMED: no exact execution evidence'
-                   WHERE command_id=%s""",
-                (now_ms, command_id),
+            continue
+
+        history = connection.execute(
+            """SELECT order_id FROM runtime.exchange_order_history
+               WHERE order_link_id=%s AND order_status IN
+                   ('Cancelled','Rejected','Deactivated')
+               ORDER BY updated_at_epoch_ms DESC LIMIT 1""",
+            (str(command_id)[:36],),
+        ).fetchone()
+        if history:
+            resolve_cancelled_entry_reservation_after_reconcile(
+                connection,
+                command_id=str(command_id),
+                exchange_order_id=str(history[0]),
+                cancel_reason="STARTUP_EXCHANGE_TERMINAL_HISTORY",
             )
+        else:
+            finalize_failed_entry_command_reservation(
+                connection,
+                command_id=str(command_id),
+                reason="RESTART_NO_EXACT_EXCHANGE_OUTCOME",
+                mutation_ambiguous=True,
+            )
+        connection.execute(
+            """UPDATE runtime.trade_commands
+               SET state='failed',finished_at_epoch_ms=%s,
+                   error='RESTART_SCOPED_RECONCILIATION: no exact active order/fill'
+               WHERE command_id=%s""",
+            (now_ms, command_id),
+        )
     connection.commit()
 
 
