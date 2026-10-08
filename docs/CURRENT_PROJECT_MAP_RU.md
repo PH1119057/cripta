@@ -2296,3 +2296,26 @@ zero pending commands, disabled Strategy execution permissions, or disarmed
 mainnet gate. Installer does not close active live-arm sessions and observes
 post-start private runtime reconciliation (Exchange -> DB). Full production
 installation remains **NOT DEPLOYED** pending exact release verification.
+
+## 36. Release-bound LIVE-arm mismatch and missing operator banner — OWNER DECISION 2026-10-09
+
+CHECKED HERE (pre-implementation forensic): production checkpoint showed loaded
+application release `78ac93a1fa67c5ab6842cd6552ae1547c5ba2aea` but five
+ACTIVE LIVE-arm sessions bound to
+`1c78c722f38c78d27b16822480daa48839853e39`, while mainnet gate
+was OPEN. R1 Entry decisions repeatedly returned
+`REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY`. Systemd services were active,
+but this was not real Entry readiness. The existing Dashboard alarm was wired
+to gate OPEN->OFF and newly opened CRITICAL lifecycle faults, not to
+release-bound consumer admission mismatch; therefore neither visual persistent
+release CRITICAL nor an audible gate-transition alarm was generated.
+
+Owner-approved repair semantics: see DEVELOPMENT_RELEASE §46. Inhibit new REAL
+Entry during application release switch, without denying deployment for any
+positions/orders/queued commands; preserve Exit and Bybit-to-DB reconciliation.
+After release change, reject stale-session Entry until fresh owner-approved
+exact-release arm. Add durable independent admission-health CRITICAL and
+persistent red portal banner, not sound-only and not dependent on new signals.
+
+This is a dated decision/evidence checkpoint, **not** proof of implementation,
+Git publication to main, deployment or successful runtime behavior.
