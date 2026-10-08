@@ -22,6 +22,7 @@ import zipfile
 import psycopg
 
 from bybit_workbench.fault_delivery import acknowledge_delivery
+from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
@@ -1131,6 +1132,30 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         commands = connection.execute(
             "SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20"
         ).fetchall()
+        # Read-only fail-closed projection of durable gate/session state.
+        release_arm_rows = connection.execute(
+            """SELECT strategy_id, symbol, release_commit
+                 FROM control.live_arm_sessions
+                WHERE state='ACTIVE'
+                ORDER BY strategy_id, symbol"""
+        ).fetchall()
+        gate_release_row = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        recent_not_ready_rows = connection.execute(
+            """SELECT count(*), max(decided_at)
+                 FROM strategy_entry.entry_decisions
+                WHERE reason='REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY'
+                  AND decided_at >= now() - interval '30 minutes'"""
+        ).fetchone()
+        release_incident_rows = connection.execute(
+            """SELECT incident_id,release_commit,reason,affected,
+                      detected_at,last_checked_at
+                 FROM control.release_arm_incidents
+                WHERE state='OPEN'
+                ORDER BY detected_at DESC
+                LIMIT 20"""
+        ).fetchall()
         critical_fault_rows = connection.execute(
             """SELECT fault_id,fault_code,severity,detected_at,payload
                FROM runtime.lifecycle_faults
@@ -1603,6 +1628,27 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for r in commands
         ],
+        "release_arm_incidents": [
+            {
+                "incident_id": r[0],
+                "release_commit": r[1],
+                "reason": r[2],
+                "affected": r[3],
+                "detected_at": r[4].isoformat(),
+                "last_checked_at": r[5].isoformat(),
+            }
+            for r in release_incident_rows
+        ],
+        "release_arm_health": project_release_arm_health(
+            loaded_commit=LOADED_RELEASE_COMMIT,
+            gate_open=bool(gate_release_row and gate_release_row[0]),
+            sessions=[(str(r[0]), str(r[1]), str(r[2])) for r in release_arm_rows],
+            recent_not_arm_ready=int(recent_not_ready_rows[0] or 0),
+            last_not_arm_ready_at=(
+                recent_not_ready_rows[1].isoformat()
+                if recent_not_ready_rows[1] else None
+            ),
+        ),
         "critical_faults": [
             {
                 "fault_id": r[0],

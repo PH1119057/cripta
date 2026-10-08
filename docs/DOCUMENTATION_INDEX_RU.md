@@ -1002,3 +1002,16 @@ ARCH §46, TRADING_CONTOUR §6, GLOSSARY §31 and DEVELOPMENT_RELEASE §45 joint
 ## 18. Closed-trade reporting canonical owner (2026-10-08)
 
 `CRIPTA_ARCHITECTURE_RULES_RU_V1.md §47` is the single canonical owner of operator closed-trade inclusion, provenance, deduplication, Strategy attribution isolation and closing notifications. `TRADING_CONTOUR`, `OBSERVATION_ANALYTICS` and Dashboard/runtime implementation must reference this boundary, not maintain independent versions of inclusion policy. Reporting-only revisions do not assign Strategy ownership and must not change Entry/Exit/Execution behavior.
+
+## 19. Release-bound REAL Entry safety / persistent operator CRITICAL (2026-10-09)
+
+OWNER DECISION: `DEVELOPMENT_RELEASE_RULES_RU.md §46` owns the release-transition
+Entry-admission and operator alert contract. `§44` installer independence
+remains unchanged: open Exchange positions/orders, pending commands and
+pre-existing protection/Exit cannot block deploy. A separate control plane
+inhibits only *new REAL Entry* across application release changes and requires
+new exact-release owner arm. Incompatible LIVE-arm readiness while mainnet
+appears enabled must produce durable CRITICAL plus red top-of-screen Dashboard
+banner, independent of audio and active trading signals. See current forensic
+checkpoint `CURRENT_PROJECT_MAP_RU.md §36`. Canon decision is not an
+implementation/deploy/runtime verification claim.
