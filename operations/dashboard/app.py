@@ -1366,6 +1366,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
                 "mark_price": ticker.get("mark_price") or ticker.get("last_price") or raw.get("markPrice"),
                 "entry_fee_basis": "ACTUAL" if ownership is not None else "ESTIMATED_TAKER",
+                "bybit_position_im": raw.get("positionIM"),
                 "stop_loss": raw.get("stopLoss"),
                 "last_price": ticker.get("last_price"),
                 "executable_close_price": executable_price

@@ -21,3 +21,9 @@ def test_current_price_and_taker_net_display_without_exchange_unrealised_pnl():
     assert "pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close)" in html
     assert "p.bybit_unrealised_pnl" not in html
     assert "pnl/actualMargin*100" in html
+
+def test_margin_denominator_prefers_bybit_actual_position_margin():
+    app = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    assert '"bybit_position_im": raw.get("positionIM")' in app
+    assert "actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null" in html
