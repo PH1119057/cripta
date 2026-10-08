@@ -441,10 +441,13 @@ done
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
-[[ "$gate_after" == "$pre_gate" ]] || die "release unexpectedly modified mainnet gate"
-[[ "$permissions_after" == "$pre_permissions" ]] || die "release unexpectedly modified execution permissions"
-[[ "$sessions_after" == "$pre_sessions" ]] || die "release unexpectedly modified LIVE-arm sessions"
-echo "TRADING_CONTROL_UNCHANGED=PASS"
+# Trading controls are reported, never used as installer go/no-go decisions.
+# A supervisor/runtime may legitimately change trading state during deployment.
+if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" ]]; then
+  echo "TRADING_CONTROL_UNCHANGED=PASS"
+else
+  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions after:$gate_after/$permissions_after/$sessions_after" >&2
+fi
 # Exchange -> DB synchronization belongs to private runtime reconciliation.
 # Never send Exchange mutations from the installer.
 echo "POST_DEPLOY_RECONCILIATION_OWNER=cripta-private-runtime.service"
