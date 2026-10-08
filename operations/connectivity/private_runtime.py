@@ -3807,13 +3807,13 @@ def main() -> None:
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
     bootstrap = db("cripta-private-bootstrap")
-    disarm_new_entries(
-        bootstrap,
-        "restart: schema validation pending; owner re-arm required",
-    )
     try:
         validate_runtime_schema_contract(bootstrap)
     except Exception as exc:
+        disarm_new_entries(
+            bootstrap,
+            "restart: schema validation failed; owner re-arm required",
+        )
         atomic_status(
             "schema",
             {
