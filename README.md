@@ -111,3 +111,7 @@ contract — в `docs/DEVELOPMENT_RELEASE_RULES_RU.md §5.1 и §19.1–19.4`.
 capability вместе с неправильным owner. Если replacement owner/contract/
 implementation не доказаны, действует ARCHITECTURE_CAPABILITY_GAP=YES +
 HARD_STOP=YES. Exact contract: META §15, WORK §4.3, ARCH §13.
+
+## Routine restart recovery
+
+The canonical recovery requirements are defined in ARCH, TRADING_CONTOUR, GLOSSARY, DEVELOPMENT_RELEASE and DOCUMENTATION_INDEX. Exchange snapshots are authoritative for current positions, while durable local history must be preserved. A canonical decision is not deployed implementation.
