@@ -33,6 +33,14 @@ def project_release_arm_health(
         "recent_not_arm_ready": recent_not_arm_ready,
         "last_not_arm_ready_at": last_not_arm_ready_at,
         "critical": bool(
-            mismatched or (gate_open and (recent_not_arm_ready > 0 or not loaded_commit or not sessions))
+            mismatched
+            or (
+                gate_open
+                and (
+                    recent_not_arm_ready > 0
+                    or not loaded_commit
+                    or not sessions
+                )
+            )
         ),
     }
