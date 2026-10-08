@@ -709,16 +709,19 @@ def startup_live_safety(
     key: str,
     secret: str,
 ) -> None:
-    """Synchronously fail-close Entry and restore exchange truth before workers."""
-    disarm_new_entries(connection, "restart: owner re-arm required")
+    """Recover Exchange truth before workers without changing owner LIVE intent.
+
+    No Entry or cancellation is submitted from this recovery stage solely
+    because a process restarted. Previously armed status remains untouched.
+    Missing protection is handled by the existing dedicated protection owner.
+    """
     reconcile(connection, key, secret, "startup_preflight")
     refresh_recent_executions(connection, key, secret)
-    cancel_bot_owned_pending_entry_orders(connection, key, secret)
-    refresh_recent_executions(connection, key, secret)
+    reconcile(connection, key, secret, "startup_after_execution_backfill")
     protect_recovered_bot_positions(connection, key, secret)
     resolve_prestart_entry_commands(connection)
     resolve_prestart_non_entry_running_commands(connection)
-    reconcile(connection, key, secret, "startup_post_cancel")
+    reconcile(connection, key, secret, "startup_post_recovery")
 
 def record_entry_decision(
     connection: psycopg.Connection,
