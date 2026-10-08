@@ -33,7 +33,8 @@ def test_installer_does_not_mutate_trading_gate_or_live_arm_sessions() -> None:
 def test_post_release_observes_exchange_to_database_reconciliation() -> None:
     script = INSTALLER.read_text(encoding="utf-8")
     assert 'POST_DEPLOY_RECONCILIATION_OWNER=cripta-private-runtime.service' in script
-    assert 'FROM runtime.reconciliation_runs WHERE ok=true' in script
+    assert 'FROM runtime.reconciliation_runs WHERE ok=1' in script
+    assert 'FROM runtime.reconciliation_runs WHERE ok=true' not in script
     assert 'POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS' in script
     assert 'POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_VERIFIED' in script
     assert '/v5/order/create' not in script
