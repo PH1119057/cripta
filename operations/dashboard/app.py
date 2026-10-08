@@ -1342,10 +1342,18 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             if row[2] == "Buy"
             else (entry_price - executable_value) * position_size
         ) if entry_price > 0 and executable_value > 0 and position_size > 0 else None
+        # Conservative immediate taker-exit estimate for every position,
+        # including manual and owner-control positions without Strategy ownership.
+        # A missing verified entry fee uses the taker fee estimate instead.
+        entry_fee = (
+            float(ownership["entry_fee_actual"])
+            if ownership is not None
+            else entry_price * position_size * REAL_IMMEDIATE_CLOSE_FEE_RATE
+        )
         net_to_close = None
-        if gross_to_close is not None and ownership is not None:
+        if gross_to_close is not None:
             exit_fee_estimate = executable_value * position_size * REAL_IMMEDIATE_CLOSE_FEE_RATE
-            net_to_close = gross_to_close - float(ownership["entry_fee_actual"]) - exit_fee_estimate
+            net_to_close = gross_to_close - entry_fee - exit_fee_estimate
         positions.append(
             {
                 "symbol": row[0],
@@ -1356,7 +1364,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "leverage": row[5],
                 "refreshed_at_epoch_ms": row[6],
                 "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
-                "mark_price": raw.get("markPrice"),
+                "mark_price": ticker.get("mark_price") or ticker.get("last_price") or raw.get("markPrice"),
+                "entry_fee_basis": "ACTUAL" if ownership is not None else "ESTIMATED_TAKER",
+                "bybit_position_im": raw.get("positionIM"),
                 "stop_loss": raw.get("stopLoss"),
                 "last_price": ticker.get("last_price"),
                 "executable_close_price": executable_price
