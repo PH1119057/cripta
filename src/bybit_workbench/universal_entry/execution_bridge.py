@@ -472,6 +472,12 @@ def prepare_runtime_entry_command(
         protection["take_profit_reference_path"] = take_profit_reference_path
     elif take_profit is not None:
         protection["take_profit_pct"] = str(take_profit)
+    # Freeze the structural extrema which qualified the signal. ATR200 is a
+    # zone-width input, not a reason to cancel a resting PostOnly Entry.
+    r1_structure: dict[str, object] | None = None
+    if str(execution_policy.get("entry_validity_operator") or "") == "R1_EXACT_SIGNAL":
+        signal_geometry = _mapping(signal_attributes.get("geometry"), "R1 signal geometry")
+        r1_structure = _mapping(signal_geometry.get("5"), "R1 5m signal geometry")
     payload: dict[str, object] = {
         "source": "universal_entry",
         "execution_request_id": request.execution_request_id,
@@ -510,6 +516,12 @@ def prepare_runtime_entry_command(
                 "operator": str(execution_policy.get("entry_validity_operator") or ""),
                 "signal_entry_price": str(reference_price),
                 "signal_target_price": signal_attributes.get("r1_opposite_inner_target"),
+                "signal_structure_low": (
+                    None if r1_structure is None else str(r1_structure["range_low"])
+                ),
+                "signal_structure_high": (
+                    None if r1_structure is None else str(r1_structure["range_high"])
+                ),
                 "history_limit": (
                     _derived_history_limit(
                         _mapping(
