@@ -1234,7 +1234,7 @@ release/LIVE gates.
 
 
 
-## 35. Installer и торговая независимость — OWNER DECISION 2026-10-08
+## 44. Installer и торговая независимость — OWNER DECISION 2026-10-08
 
 Installer имеет только release/backup/schema/service ответственность; наличие любых
 Exchange positions/orders, StrategyPosition и queued/running trading commands
