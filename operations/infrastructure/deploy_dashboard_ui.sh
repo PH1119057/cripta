@@ -170,7 +170,20 @@ for key in sorted(all_keys):
     if a is None or b is None or ast.dump(a, include_attributes=False) != ast.dump(b, include_attributes=False):
         changed.append(key)
 
+approved_release_read_model_import = ast.dump(
+    ast.parse(
+        "from bybit_workbench.live_release_alert import project_release_arm_health"
+    ).body[0],
+    include_attributes=False,
+)
 for kind, name in changed:
+    if (
+        kind == "import"
+        and name == approved_release_read_model_import
+        and (kind, name) in new_nodes
+    ):
+        # Exact pure read-model import; no control/Exchange mutation is permitted.
+        continue
     if kind in {"FunctionDef", "AsyncFunctionDef"} and name in allowed_functions:
         node = new_nodes.get((kind, name))
         if node is not None:
