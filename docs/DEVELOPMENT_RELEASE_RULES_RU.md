@@ -1256,3 +1256,50 @@ state; сервисы нельзя считать защищёнными тол�
 ## 45. Routine restart recovery contract — OWNER DECISION 2026-10-08
 
 Installer installs exact verified software, regardless of positions/orders, without Exchange mutations. Restarted Execution/Lifecycle must reconcile current Exchange-to-DB inventory, paging all results, and historical order/execution events, then record a recovery epoch; installer only observes recovery. Tests must cover 60 concurrent positions, opens/closes during downtime, pagination, delayed WS events, duplicate recovery, two independent connectors, ambiguous pending mutations and partial Exchange read. Never infer an empty account from an incomplete snapshot.
+
+## 46. Release-bound REAL Entry admission and operator CRITICAL — OWNER DECISION 2026-10-09
+
+This section supplements §44 and §45. Existing Exchange positions/orders,
+StrategyPosition, pending execution commands, Exit and reconciliation **never**
+block the installer. Installer remains release/backup/schema/service-only and
+does not mutate mainnet gate, execution permissions, LIVE-arm sessions or trading
+objects as an implicit side effect.
+
+For an application/trading runtime release transition, the independent owner-
+authorized control plane must inhibit **new REAL Entry admission** before
+switching LOADED_COMMIT. The inhibition must not interrupt existing Exchange
+protection, Exit, position supervision, private-runtime reconciliation, or
+resolution of pending/ambiguous commands. It must not manufacture an Exchange
+mutation or relabel an open position as a deployment blocker.
+
+Once LOADED_COMMIT changes, release-bound LIVE-arm sessions from a different
+application commit are **not transferable**. Reopening new REAL Entry requires
+exact-release readiness evidence and a **new explicit OWNER ARM**, never silent
+installer re-arm. No prior owner approval or boolean mainnet gate alone
+authorizes Entry against a mismatched release.
+
+A persistent control-plane health invariant must independently check:
+- global mainnet gate and active Strategy/Execution permission;
+- exact installed/loaded application release identity;
+- release-bound ACTIVE LIVE-arm sessions for all effective REAL Strategy scopes;
+- the actual consumer's REAL Entry admission readiness (including explicit
+  `REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY` rejection).
+
+On mismatch, failure or unavailable prerequisite with new REAL Entry ostensibly
+enabled, fail closed for **new** Entry and emit durable operator CRITICAL with
+stable identity, actual reason, release/session IDs, affected symbols, detection
+time and recovery state. It must not wait for a new trading signal or require
+that a normal EntryDecision be recategorized as a lifecycle fault.
+
+The authenticated portal must show a conspicuous **red top-of-screen banner**
+while the CRITICAL remains active, irrespective of audio setting, tab, reload,
+browser session or acknowledgement. Acknowledgement records operator awareness,
+not fault resolution. Banner resolves only after independent fresh recovery
+evidence; it must state plainly that existing positions and Exit continue.
+Audio is supplemental and subject to browser policy.
+
+Release tests must cover: open position + pending order + deploy, commit
+mismatch with gate ON, silent/no-signal periods, stale/not-ready admission,
+durable CRITICAL creation/deduplication/recovery, banner after refresh with
+sound disabled, failed/incomplete reconciliation and preserved Exit. Never
+claim release readiness merely because systemd reports services active.
