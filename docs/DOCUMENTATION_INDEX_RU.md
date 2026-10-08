@@ -998,3 +998,7 @@ private runtime. This changes release responsibility, not Strategy Entry/Exit.
 ## 36. Exchange-authoritative routine restart recovery — OWNER DECISION 2026-10-08
 
 ARCH §46, TRADING_CONTOUR §6, GLOSSARY §31 and DEVELOPMENT_RELEASE §45 jointly define the new recovery objective: full account-specific Exchange snapshots, paginated order and execution retrieval, idempotent lifecycle reconstruction and scoped historical uncertainty. This decision does not authorize guessing exit P&L or repeating mutating Exchange requests. Implementation/test/deploy status must remain separate from canon.
+
+## 18. Closed-trade reporting canonical owner (2026-10-08)
+
+`CRIPTA_ARCHITECTURE_RULES_RU_V1.md §47` is the single canonical owner of operator closed-trade inclusion, provenance, deduplication, Strategy attribution isolation and closing notifications. `TRADING_CONTOUR`, `OBSERVATION_ANALYTICS` and Dashboard/runtime implementation must reference this boundary, not maintain independent versions of inclusion policy. Reporting-only revisions do not assign Strategy ownership and must not change Entry/Exit/Execution behavior.

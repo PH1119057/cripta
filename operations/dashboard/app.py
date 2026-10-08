@@ -1214,6 +1214,34 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 ORDER BY a.closed_at DESC LIMIT %s""",
                 (1000 if include_history else 20,),
             ).fetchall()
+        # Exchange-evidenced closures without StrategyPosition ownership.
+        recovered_closed_rows = connection.execute(
+            """SELECT reservation_id,symbol,side,actual_qty,exit_vwap,
+                      entry_fee_actual,exit_fee_actual,gross_pnl,
+                      net_without_funding,evidence,recovered_at
+               FROM runtime.recovered_closed_entry_cycles
+               ORDER BY recovered_at DESC LIMIT %s""",
+            (1000 if include_history else 40,),
+        ).fetchall()
+        control_entry_rows = connection.execute(
+            """SELECT c.command_id,c.symbol,c.payload_json,e.order_id,e.exec_id,
+                      e.side,e.exec_qty,e.exec_price,e.exec_fee,e.exec_time_ms
+               FROM runtime.trade_commands c
+               JOIN runtime.executions e
+                 ON e.order_id = c.result_json::jsonb->'result'->>'orderId'
+               WHERE c.command_type='entry' AND c.state='completed'
+                 AND c.payload_json::jsonb->>'source'='owner_controlled_live_test'
+               ORDER BY e.exec_time_ms DESC LIMIT %s""",
+            (1000 if include_history else 40,),
+        ).fetchall()
+        control_exit_rows = connection.execute(
+            """SELECT e.symbol,e.order_id,e.exec_id,e.side,e.exec_qty,
+                      e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json
+               FROM runtime.executions e
+               WHERE (e.payload_json::jsonb->>'closedSize')::numeric > 0
+               ORDER BY e.exec_time_ms DESC LIMIT %s""",
+            (3000 if include_history else 120,),
+        ).fetchall()
         execution_rows = []
         if include_history and not has_exact_exit_table:
             execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
@@ -1452,6 +1480,16 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for row in exact_exit_rows
         ]
+    from bybit_workbench.closed_trade_reporting import (
+        merge_evidenced_closed_trades,
+        owner_controlled_closed_cycles,
+        recovered_closed_cycles,
+    )
+    recent_closed = merge_evidenced_closed_trades(
+        recent_closed,
+        recovered_closed_cycles(recovered_closed_rows),
+        owner_controlled_closed_cycles(control_entry_rows, control_exit_rows),
+    )
     for row in lifecycle_rows:
         lifecycle = row[12] if isinstance(row[12], dict) else json.loads(row[12])
         card = {
