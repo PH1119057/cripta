@@ -1252,3 +1252,7 @@ Exchange positions/orders, StrategyPosition и queued/running trading commands
 Любой release по-прежнему требует exact Git commit, backup/rollback,
 совместимых DB migrations, import/runtime/schema tests и сохранения owner-arm
 state; сервисы нельзя считать защищёнными только потому, что они active.
+
+## 45. Routine restart recovery contract — OWNER DECISION 2026-10-08
+
+Installer installs exact verified software, regardless of positions/orders, without Exchange mutations. Restarted Execution/Lifecycle must reconcile current Exchange-to-DB inventory, paging all results, and historical order/execution events, then record a recovery epoch; installer only observes recovery. Tests must cover 60 concurrent positions, opens/closes during downtime, pagination, delayed WS events, duplicate recovery, two independent connectors, ambiguous pending mutations and partial Exchange read. Never infer an empty account from an incomplete snapshot.
