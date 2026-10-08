@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.20
+**Версия:** 3.21
 **Дата:** 2026-10-08
 **Статус:** канонический индекс документации
 
@@ -976,3 +976,13 @@ are unchanged. Root README / AGENTS and Project Instructions do not require
 topology or bootstrap changes in this maintenance cycle. This branch has not
 been merged to authoritative GitHub `main`, and no deploy/runtime rights
 follow from this documentation.
+
+
+## 34. R1 structural pending Entry restoration — OWNER DECISION 2026-10-08
+
+TradingContour §1.10 / §1.10.2 уточнены: исходная структура L5-3,
+а не изменение ATR200-only вычисленной внутренней границы, определяет
+действительность resting R1 PostOnly Entry. Исправление Observer counterfactual
+capture timestamp не меняет Strategy policy. Production installer / LIVE-arm
+contracts остаются обязательными; открытые Exchange позиции и pending runtime
+commands не могут обходиться как якобы несвязанные с runtime.
