@@ -4535,11 +4535,20 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             if not gate or not bool(gate[0]):
                                 raise ValueError("mainnet gate закрыт")
                             active_arm = connection.execute(
-                                """SELECT 1 FROM control.live_arm_sessions
-                                     WHERE state='ACTIVE' AND symbol=%s
-                                       AND release_commit=%s
-                                     LIMIT 1""",
-                                (symbol, LOADED_RELEASE_COMMIT),
+                                """SELECT 1 FROM control.live_arm_sessions arm
+                                   JOIN strategy_entry.strategy_activations act
+                                     ON act.activation_id=arm.strategy_activation_id
+                                    AND act.strategy_id=arm.strategy_id
+                                    AND act.strategy_version=arm.strategy_version
+                                    AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                   JOIN strategy_entry.execution_permissions perm
+                                     ON perm.strategy_id=arm.strategy_id
+                                    AND perm.strategy_version=arm.strategy_version
+                                    AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                   WHERE arm.state='ACTIVE' AND arm.symbol=%s
+                                     AND act.enabled=true AND perm.enabled=true
+                                   LIMIT 1""",
+                                (symbol,),
                             ).fetchone()
                             if active_arm is None:
                                 raise ValueError(
