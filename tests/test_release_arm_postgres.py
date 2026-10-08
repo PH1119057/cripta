@@ -119,8 +119,8 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
             "WHERE mode='mainnet'"
         )
     runner = Path("operations/infrastructure/cripta-apply-incoming").read_text()
-    release_sql = runner.split("<<'RELEASE_ENTRY_SQL'\\n", 1)[1].split(
-        "\\nRELEASE_ENTRY_SQL", 1
+    release_sql = runner.split("<<'RELEASE_ENTRY_SQL'\n", 1)[1].split(
+        "\nRELEASE_ENTRY_SQL", 1
     )[0]
     with psycopg.connect(
         "host=localhost port=5432 dbname=postgres user=cripta "
