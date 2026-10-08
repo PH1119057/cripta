@@ -2194,6 +2194,17 @@ def _cancel_entry_limit(
     command_id: str,
     reason: str,
 ) -> None:
+    # Persist the exact Strategy cancellation intent before sending /v5/order/cancel.
+    # The private order WebSocket can deliver a terminal event before this thread
+    # finishes its own reconcile, and must not replace the Strategy cause with
+    # the generic Exchange cancelType=EC_PerCancelRequest.
+    connection.execute(
+        """INSERT INTO runtime.entry_cancel_intents(order_id,command_id,reason)
+           VALUES(%s,%s,%s)
+           ON CONFLICT(order_id,command_id) DO NOTHING""",
+        (order_id, command_id, reason),
+    )
+    connection.commit()
     api_post(
         "/v5/order/cancel",
         {"category": "linear", "symbol": symbol, "orderId": order_id},
@@ -3328,11 +3339,21 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
                             or item.get("cancelType")
                             or "Cancelled"
                         ).strip()
+                        intent = connection.execute(
+                            """SELECT reason
+                                 FROM runtime.entry_cancel_intents
+                                WHERE order_id=%s AND command_id=%s""",
+                            (order_id, order_link_id),
+                        ).fetchone()
+                        cancel_reason = (
+                            str(intent[0]) if intent is not None
+                            else f"BYBIT:{raw_cause}"
+                        )
                         resolve_cancelled_entry_reservation_after_reconcile(
                             connection,
                             command_id=order_link_id,
                             exchange_order_id=order_id,
-                            cancel_reason=f"BYBIT:{raw_cause}",
+                            cancel_reason=cancel_reason,
                         )
             else:
                 upsert_order(connection, item, now)
