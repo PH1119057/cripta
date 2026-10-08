@@ -27,20 +27,19 @@ def test_account_generation_forces_exact_position_mode_probe_every_cycle() -> No
     assert "position_mode_refs" in body
     assert "runtime.account_state_generations" in body
 
-def test_reconnect_auto_restore_is_scoped_to_exact_flat_owner_armed_r1() -> None:
+def test_reconnect_auto_restore_verifies_exact_owner_arm_and_complete_inventory() -> None:
     text = source()
     start = text.index("def restore_r1_gate_after_verified_reconnect(")
     end = text.index("\ndef entry_runtime_readiness(", start)
     body = text[start:end]
     for token in (
-        "if hot_positions or hot_orders:",
         "control.live_arm_sessions",
         "state='ACTIVE'",
         "strategy_entry.execution_permissions",
         "strategy_entry.strategy_activations",
         'str(reconciliation[2]) != "reconnect"',
-        "int(reconciliation[4]) != 0",
-        "int(reconciliation[5]) != 0",
+        "int(reconciliation[4]) != hot_positions",
+        "int(reconciliation[5]) != hot_orders",
         "runtime.position_mode_states",
         'str(row[1]) != "ONE_WAY"',
         "PRIVATE_RECONNECT_RECOVERED_REASON",
@@ -49,6 +48,10 @@ def test_reconnect_auto_restore_is_scoped_to_exact_flat_owner_armed_r1() -> None
         assert token in body
 
 
-def test_process_restart_still_requires_explicit_owner_rearm() -> None:
+def test_process_restart_preserves_authorized_gate_and_resting_orders() -> None:
     text = source()
-    assert 'disarm_new_entries(connection, "restart: owner re-arm required")' in text
+    body = text.split('def startup_live_safety(', 1)[1].split('def record_entry_decision(', 1)[0]
+    assert 'disarm_new_entries(connection' not in body
+    assert 'cancel_bot_owned_pending_entry_orders(' not in body
+    assert 'refresh_recent_executions(connection, key, secret)' in body
+    assert 'resolve_prestart_entry_commands(connection)' in body
