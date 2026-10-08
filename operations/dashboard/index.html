@@ -703,7 +703,8 @@ function renderReleaseArmCritical(lt){
   if(!state){banner.hidden=true;return}
   const mismatch=state.mismatched_sessions||[];
   const notReady=Number(state.recent_not_arm_ready||0);
-  const critical=Boolean(state.critical);
+  const incidents=lt.release_arm_incidents||[];
+  const critical=Boolean(state.critical)||incidents.length>0;
   banner.hidden=!critical;
   if(!critical)return;
   const names=mismatch.map(x=>safe(x.symbol)+' ('+safe(String(x.session_release_commit||'').slice(0,12))+')').join(', ');
@@ -711,6 +712,8 @@ function renderReleaseArmCritical(lt){
     safe(String(state.loaded_commit||'UNKNOWN').slice(0,12))+'</b>. '+
     (names?'Несовпадающие LIVE-arm sessions: '+names+'. ':'')+
     (notReady?'Отказов REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY за 30 минут: '+notReady+'. ':'')+
+    (incidents.length?'Открытый серверный CRITICAL: '+safe(incidents[0].reason)+
+       ', обнаружен '+safe(incidents[0].detected_at)+'. ':'')+
     'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
 }
 function renderLiveState(d){
