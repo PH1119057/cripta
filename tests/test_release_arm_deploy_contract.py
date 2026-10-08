@@ -38,4 +38,4 @@ def test_release_runner_inhibits_entry_before_installer_without_flat_gate():
     )
     assert "20261009_release_arm_incidents.sql" in installer
     assert "TRADING_STATE_INFORMATIONAL=" in installer
-    assert "positions/orders" in installer
+    assert "Release installation is independent of all Exchange" in installer
