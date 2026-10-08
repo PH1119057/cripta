@@ -1,8 +1,8 @@
 """Run the actual independent Dashboard UI-only scope verifier in isolation."""
-from pathlib import Path
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def test_dashboard_read_model_scope_accepts_only_approved_alert_changes(tmp_path):
@@ -26,7 +26,10 @@ def test_dashboard_read_model_scope_accepts_only_approved_alert_changes(tmp_path
     deployer = Path(
         "operations/infrastructure/deploy_dashboard_ui.sh"
     ).read_text(encoding="utf-8")
-    prefix = 'python3 - "$tmp/old.html" "$tmp/new.html" "$tmp/old_app.py" "$tmp/new_app.py" <<\'PY\'\n'
+    prefix = (
+        'python3 - "$tmp/old.html" "$tmp/new.html" "$tmp/old_app.py" '
+        '"$tmp/new_app.py" <<\'PY\'\\n'
+    )
     script = deployer.split(prefix, 1)[1].split("\nPY\n", 1)[0]
     p = subprocess.run(
         [sys.executable, "-c", script, str(old_html), str(new_html),
