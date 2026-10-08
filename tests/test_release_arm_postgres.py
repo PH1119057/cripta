@@ -110,3 +110,33 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
         assert admin.execute(
             "SELECT count(*) FROM runtime.hot_orders"
         ).fetchone() == (1,)
+
+    # The independent pre-deploy control-plane SQL must be valid under the
+    # actual constrained cripta role; installer is not the gate writer.
+    with psycopg.connect(admin_dsn) as admin:
+        admin.execute(
+            "UPDATE control.execution_gates SET enabled=true "
+            "WHERE mode='mainnet'"
+        )
+    runner = Path("operations/infrastructure/cripta-apply-incoming").read_text()
+    release_sql = runner.split("<<'RELEASE_ENTRY_SQL'\\n", 1)[1].split(
+        "\\nRELEASE_ENTRY_SQL", 1
+    )[0]
+    with psycopg.connect(
+        "host=localhost port=5432 dbname=postgres user=cripta "
+        "password=synthetic_test_password"
+    ) as runtime:
+        runtime.execute(release_sql)
+    with psycopg.connect(admin_dsn) as admin:
+        assert admin.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone() == (False,)
+        assert admin.execute(
+            "SELECT count(*) FROM control.execution_gate_events"
+        ).fetchone() == (2,)
+        assert admin.execute(
+            "SELECT count(*) FROM runtime.hot_positions"
+        ).fetchone() == (1,)
+        assert admin.execute(
+            "SELECT count(*) FROM runtime.hot_orders"
+        ).fetchone() == (1,)
