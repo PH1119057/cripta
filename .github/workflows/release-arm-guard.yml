@@ -52,6 +52,8 @@ jobs:
         run: |
           python -m pip install uv==0.11.33
           uv sync --locked --all-extras --python 3.12
+          # Disposable PostgreSQL test dependency, pinned to current runtime ABI.
+          uv pip install --python .venv/bin/python "psycopg[binary]==3.1.17"
       - name: Exact new-code lint
         run: |
           .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py tests/test_release_arm_deploy_contract.py
