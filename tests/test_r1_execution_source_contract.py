@@ -71,3 +71,18 @@ def test_r1_version_install_migrates_superseded_monitoring_only_while_disarmed()
     assert "enabled=False" in source
     assert "strategy_version=%s" in source
     assert "strategy_config_fingerprint=%s" in source
+
+
+def test_r1_signal_validity_uses_exact_observer_history_window() -> None:
+    bridge = (ROOT / "src/bybit_workbench/universal_entry/execution_bridge.py").read_text(
+        encoding="utf-8"
+    )
+    runtime = (ROOT / "operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'from .market_watch import _derived_history_limit' in bridge
+    assert '"history_limit": (' in bridge
+    assert 'entry_policy.get("watch_policy")' in bridge
+    assert 'history_limit_raw = validity.get("history_limit")' in runtime
+    assert 'closed[-history_limit:]' in runtime
+    assert 'R1 validity lacks full causal ATR history' in runtime
