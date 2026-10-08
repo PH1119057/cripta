@@ -261,9 +261,10 @@ def restore_r1_gate_after_verified_reconnect(
     hot_positions: int,
     hot_orders: int,
 ) -> bool:
-    """Restore only an already owner-armed flat R1 cohort after verified reconnect."""
-    if hot_positions or hot_orders:
-        return False
+    """Restore an already owner-armed R1 cohort after a complete fresh snapshot.
+
+    Existing Exchange positions and orders do not veto unrelated strategies.
+    """
 
     gate = connection.execute(
         "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet' FOR UPDATE"
@@ -336,8 +337,8 @@ def restore_r1_gate_after_verified_reconnect(
         or int(reconciliation[0]) < reconnect_started_ms
         or str(reconciliation[2]) != "reconnect"
         or not bool(reconciliation[3])
-        or int(reconciliation[4]) != 0
-        or int(reconciliation[5]) != 0
+        or int(reconciliation[4]) != hot_positions
+        or int(reconciliation[5]) != hot_orders
     ):
         connection.rollback()
         return False
