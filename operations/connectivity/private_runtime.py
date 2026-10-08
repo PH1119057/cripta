@@ -2160,7 +2160,22 @@ def _r1_signal_validity(
         interval="5",
         observed_at=datetime.now(UTC),
     )
-    zone = compute_r1_l53_stable_zone(candles)
+    # Wilder ATR depends on its seed/history length. Revalidate with exactly
+    # the same causal closed-candle window used by the Entry observer.
+    # Do not compare a 240-kline REST ATR to the observer's bounded ATR.
+    history_limit_raw = validity.get("history_limit")
+    if history_limit_raw is None:
+        raise ExchangeMutationBarrier("R1 validity lacks exact observer history_limit")
+    try:
+        history_limit = int(history_limit_raw)
+    except (TypeError, ValueError) as exc:
+        raise ExchangeMutationBarrier("R1 validity history_limit is invalid") from exc
+    if history_limit < 205 or history_limit > 240:
+        raise ExchangeMutationBarrier("R1 validity history_limit outside supported window")
+    closed = tuple(item for item in candles if item.is_closed and item.timeframe == "5")
+    if len(closed) < history_limit:
+        raise ExchangeMutationBarrier("R1 validity lacks full causal ATR history")
+    zone = compute_r1_l53_stable_zone(closed[-history_limit:])
     if zone is None:
         return False, "R1_SIGNAL_RULE_INVALIDATED"
     current_entry = zone.support_top if side == "Buy" else zone.resistance_bottom
