@@ -6,6 +6,8 @@ on:
       - "src/bybit_workbench/release_arm_safety.py"
       - "tests/test_live_release_alert.py"
       - "tests/test_release_arm_safety.py"
+      - "tests/test_release_arm_postgres.py"
+      - "operations/sql/20261009_release_arm_incidents.sql"
       - ".github/workflows/release-arm-guard.yml"
   pull_request:
     paths:
@@ -13,10 +15,24 @@ on:
       - "src/bybit_workbench/release_arm_safety.py"
       - "tests/test_live_release_alert.py"
       - "tests/test_release_arm_safety.py"
+      - "tests/test_release_arm_postgres.py"
+      - "operations/sql/20261009_release_arm_incidents.sql"
       - ".github/workflows/release-arm-guard.yml"
 jobs:
   targeted:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: synthetic_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +45,8 @@ jobs:
       - name: Exact new-code lint
         run: |
           .venv/bin/python -m ruff check src/bybit_workbench/live_release_alert.py src/bybit_workbench/release_arm_safety.py tests/test_live_release_alert.py tests/test_release_arm_safety.py
-      - name: Release-arm regression
+      - name: Release-arm regression and disposable PostgreSQL
+        env:
+          TEST_RELEASE_ARM_PG_DSN: host=localhost port=5432 dbname=postgres user=postgres password=synthetic_test_password
         run: |
-          .venv/bin/python -m pytest -q tests/test_live_release_alert.py tests/test_release_arm_safety.py
+          .venv/bin/python -m pytest -q tests/test_live_release_alert.py tests/test_release_arm_safety.py tests/test_release_arm_postgres.py
