@@ -1771,7 +1771,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         payload=payload,
     )
     positions, _ = api_get("/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret)
-    position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
+    position = next((p for p in position_rows if Decimal(str(p.get("size") or 0)) > 0), None)
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
     instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
     tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
@@ -3049,6 +3049,47 @@ def _begin_account_state_generation(
         )
 
 
+def _complete_exchange_inventory(
+    endpoint: str,
+    base_params: dict[str, str],
+    key: str,
+    secret: str,
+    *,
+    max_pages: int = 100,
+) -> list[dict[str, object]]:
+    """Collect every authenticated Exchange page; never treat truncation as flat."""
+    all_items: list[dict[str, object]] = []
+    seen_cursors: set[str] = set()
+    cursor = ""
+    for _ in range(max_pages):
+        params = dict(base_params)
+        if cursor:
+            params["cursor"] = cursor
+        payload, _ = api_get(endpoint, params, key, secret)
+        if int(payload.get("retCode", -1)) != 0:
+            raise ExchangeReadUnavailable(
+                f"{endpoint} rejected: retCode={payload.get('retCode')} "
+                f"retMsg={payload.get('retMsg')}"
+            )
+        result = payload.get("result") or {}
+        if not isinstance(result, dict):
+            raise ExchangeReadUnavailable(f"{endpoint} invalid result payload")
+        items = result.get("list")
+        if not isinstance(items, list):
+            raise ExchangeReadUnavailable(f"{endpoint} missing inventory list")
+        if any(not isinstance(item, dict) for item in items):
+            raise ExchangeReadUnavailable(f"{endpoint} invalid inventory item")
+        all_items.extend(items)
+        next_cursor = str(result.get("nextPageCursor") or "")
+        if not next_cursor:
+            return all_items
+        if next_cursor == cursor or next_cursor in seen_cursors:
+            raise ExchangeReadUnavailable(f"{endpoint} repeated pagination cursor")
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    raise ExchangeReadUnavailable(f"{endpoint} inventory exceeded {max_pages} pages")
+
+
 def reconcile(
     connection: psycopg.Connection, key: str, secret: str, reason: str
 ) -> tuple[int, int]:
@@ -3064,35 +3105,21 @@ def reconcile(
         # Inventory first, exact position-mode proofs next, wallet last. The
         # generation is admitted only as one COMPLETE unit; component ages are
         # never compared independently for real Entry.
-        positions, _ = api_get(
+        position_rows = _complete_exchange_inventory(
             "/v5/position/list",
             {"category": "linear", "settleCoin": "USDT", "limit": "200"},
-            key,
-            secret,
+            key, secret,
         )
-        orders, _ = api_get(
+        order_list = _complete_exchange_inventory(
             "/v5/order/realtime",
             {"category": "linear", "settleCoin": "USDT", "openOnly": "0", "limit": "50"},
-            key,
-            secret,
+            key, secret,
         )
-        rejected = [
-            (name, payload)
-            for name, payload in (("positions", positions), ("orders", orders))
-            if int(payload.get("retCode", -1)) != 0
-        ]
-        if rejected:
-            detail = "; ".join(
-                f"{name}:retCode={payload.get('retCode')} retMsg={payload.get('retMsg')}"
-                for name, payload in rejected
-            )
-            raise ExchangeReadUnavailable(f"reconciliation read rejected: {detail}")
 
         position_list = [
             p for p in ((positions.get("result") or {}).get("list") or [])
             if float(p.get("size") or 0) != 0
         ]
-        order_list = (orders.get("result") or {}).get("list") or []
         active_order_list = [
             item
             for item in order_list
@@ -3129,19 +3156,11 @@ def reconcile(
 
         order_history: list[dict[str, object]] = []
         if fetch_history:
-            order_history_response, _ = api_get(
+            order_history = _complete_exchange_inventory(
                 "/v5/order/history",
                 {"category": "linear", "settleCoin": "USDT", "limit": "200"},
-                key,
-                secret,
+                key, secret,
             )
-            if int(order_history_response.get("retCode", -1)) != 0:
-                raise ExchangeReadUnavailable(
-                    "order-history reconciliation rejected: "
-                    f"retCode={order_history_response.get('retCode')} "
-                    f"retMsg={order_history_response.get('retMsg')}"
-                )
-            order_history = (order_history_response.get("result") or {}).get("list") or []
 
         wallet, _ = api_get(
             "/v5/account/wallet-balance",
