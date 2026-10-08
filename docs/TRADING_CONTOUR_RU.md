@@ -256,7 +256,7 @@ ENTRY EXECUTION
     SHORT = Entry * (1 + 0.0010)
   PostOnly must fail/cancel rather than cross as taker
   no time-based taker fallback
-  pending Entry is cancelled/skipped when its exact signal level changes, R1 rule becomes invalid, the opposite target is reached before fill, or an opposite qualified signal supersedes it
+  pending Entry is cancelled/skipped when its six-state L5-3 structural extrema change, R1 structural rule becomes invalid, the opposite target is reached before fill, or an opposite qualified signal supersedes it; ATR200-only inner-boundary drift does not cancel the resting order
 
 OCCUPANCY / PING-PONG
   same-symbol ONE_WAY ownership remains mandatory
@@ -361,10 +361,12 @@ SHORT limit = confirmed Entry * 1.001
 ```
 
 Для R1 **numeric time TTL не является исследованным торговым правилом**.
-Pending Entry живёт только пока exact R1 signal остаётся действительным и
-должен быть отменён при любом из условий из §1.10: exact signal level changed,
-R1 invalidated, opposite target reached before fill, opposite qualified signal
-superseded. Existing generic implementation requirement
+Pending Entry живёт только пока структурный R1 signal остаётся действительным и
+должен быть отменён при любом из условий из §1.10: six-state L5-3 structural extrema changed,
+R1 structural rule invalidated, opposite target reached before fill, opposite qualified signal
+superseded. ATR200 влияет на ширину зоны, но не является самостоятельным сигналом отмены.
+Сдвиг внутренней вычисленной границы из-за ATR200 не переставляет уже отправленный
+PostOnly LIMIT: сохраняются начальная цена и структурные экстремумы сигнала. Existing generic implementation requirement
 `entry_limit_ttl_seconds > 0` therefore cannot be silently reused for R1;
 implementation must support signal-validity lifetime without inventing an
 untested timeout. No timeout-to-taker fallback is allowed.
@@ -1049,3 +1051,19 @@ Exit claim/heartbeat и final close/economics refs.
 
 Entry/Exit/Execution не должны молча подменять потерянный handoff новой
 торговой логикой.
+
+## 1.10.2 R1 resting Entry — восстановление структурной семантики (OWNER DECISION 2026-10-08)
+
+R1 Entry определяется квалифицированной структурой L5-3. При создании PostOnly
+LIMIT фиксируются `range_low`, `range_high` текущей подтверждённой зоны,
+исходная limit-цена и шесть стабильных состояний. В течение ожидания Entry
+перепроверяет current stable zone из достаточного причинного окна, сравнивает
+её структурные экстремумы с исходными и проверяет остальные исходные условия.
+Чистый пересчёт ATR200 без изменения структурных экстремумов не создаёт
+`R1_EXACT_ENTRY_LEVEL_CHANGED`, не отменяет и не переставляет лимит.
+ATR200 используется в расчёте ширины зоны; отдельного ATR-сигнала отмены нет.
+Изменение structural extrema, потеря стабильности/правила диапазона,
+противоположная цель до fill и superseding opposite signal сохраняют свои
+исходные cancellation semantics. Никаких tolerance thresholds не вводится.
+Это восстановление первоначального operator intent, не автоматическое разрешение
+нового LIVE-arm; старые immutable event/evidence записи не переписываются.
