@@ -1,4 +1,4 @@
-"""Regression: R1 pending-order validity must reuse observer ATR seed window."""
+"""Regression: ATR width drift must never cancel unchanged R1 L5-3 structure."""
 from __future__ import annotations
 
 import io
@@ -92,8 +92,15 @@ def test_pending_r1_order_survives_identical_closed_geometry_despite_atr_seed(
             "signal_entry_price": str(observer_zone.resistance_bottom),
             "signal_target_price": str(observer_zone.support_top),
             "history_limit": 207,
+            "signal_structure_low": str(observer_zone.range_low),
+            "signal_structure_high": str(observer_zone.range_high),
         },
     }
+    assert private_runtime._r1_signal_validity(payload, "INJUSDT") == (
+        True, "R1_SIGNAL_STILL_VALID"
+    )
+    # Even a moved ATR-derived entry boundary must NOT invalidate structure.
+    payload["entry_validity"]["signal_entry_price"] = "7.499999999"
     assert private_runtime._r1_signal_validity(payload, "INJUSDT") == (
         True, "R1_SIGNAL_STILL_VALID"
     )
@@ -110,6 +117,8 @@ def test_pending_r1_order_fails_closed_if_exact_atr_history_missing(
             "signal_entry_price": "7.4",
             "signal_target_price": "7.2",
             "history_limit": 207,
+            "signal_structure_low": "7.20",
+            "signal_structure_high": "7.50",
         },
     }
     with pytest.raises(
@@ -117,6 +126,38 @@ def test_pending_r1_order_fails_closed_if_exact_atr_history_missing(
         match="lacks full causal ATR history",
     ):
         private_runtime._r1_signal_validity(payload, "INJUSDT")
+
+
+
+def test_pending_r1_order_cancels_on_real_structural_extremum_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = _rest_rows()
+    candles = map_rest_klines(
+        rows, symbol="INJUSDT", interval="5", observed_at=CHECKPOINT
+    )
+    zone = compute_r1_l53_stable_zone(tuple(c for c in candles if c.is_closed)[-207:])
+    assert zone is not None
+    # Replace one stable-window upper extremum with a new, larger extreme.
+    modified_rows = [list(row) for row in rows]
+    for row in modified_rows:
+        if row[2] == "7.50":
+            row[2] = "7.52"
+    _install_fake_market(monkeypatch, modified_rows)
+    payload = {
+        "side": "Sell",
+        "entry_validity": {
+            "operator": "R1_EXACT_SIGNAL",
+            "signal_entry_price": str(zone.resistance_bottom),
+            "signal_target_price": str(zone.support_top),
+            "history_limit": 207,
+            "signal_structure_low": str(zone.range_low),
+            "signal_structure_high": str(zone.range_high),
+        },
+    }
+    assert private_runtime._r1_signal_validity(payload, "INJUSDT") == (
+        False, "R1_EXACT_ENTRY_LEVEL_CHANGED"
+    )
 
 
 def test_cancel_intent_is_committed_before_exchange_cancel(

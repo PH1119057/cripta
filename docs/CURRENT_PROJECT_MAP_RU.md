@@ -2273,3 +2273,26 @@ authorized, and no code is promoted to `main` or deployed while the live
 gate remains armed. Complete release only under the canonical disarm ->
 exact commit/test/package/backup/deploy/runtime evidence chain, with no
 automatic real re-arm.
+
+
+## 34. R1 Observer timestamp / Entry structural-lifetime repair (2026-10-08)
+
+OWNER DECISION: восстановить исходный структурный критерий valid resting R1 Entry;
+ATR200 отвечает за ширину зоны, но не является отдельным условием отмены.
+В отдельной ветке `fix/r1-observer-capture-structural-entry-20261008`
+исправлено время counterfactual capture и сравнение frozen L5-3 structural extrema.
+Первичные регрессионные tests: 28 PASS в изолированном checkout;
+production runtime по этому changeset **NOT DEPLOYED**.
+При проверке серверного preflight наблюдались биржевая позиция (1),
+условные ордера (2), queued commands (3), execution permissions ON (5),
+mainnet gate OFF. Это blocker штатного installer; все pending operational
+объекты должны быть сверены независимо от заявления о ручном управлении.
+
+
+## 35. Prepared release-rail independence (2026-10-08)
+
+Isolated PR #50 branch prepares an installer that does not require flat Bybit,
+zero pending commands, disabled Strategy execution permissions, or disarmed
+mainnet gate. Installer does not close active live-arm sessions and observes
+post-start private runtime reconciliation (Exchange -> DB). Full production
+installation remains **NOT DEPLOYED** pending exact release verification.

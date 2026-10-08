@@ -2123,8 +2123,12 @@ def _r1_signal_validity(
         raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY payload has invalid side")
     original_entry = Decimal(str(validity.get("signal_entry_price") or 0))
     original_target = Decimal(str(validity.get("signal_target_price") or 0))
+    original_low = Decimal(str(validity.get("signal_structure_low") or 0))
+    original_high = Decimal(str(validity.get("signal_structure_high") or 0))
     if original_entry <= 0 or original_target <= 0:
         raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY prices are invalid")
+    if original_low <= 0 or original_high <= original_low:
+        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY structural bounds are invalid")
 
     ticker, _ = api_get(
         "/v5/market/tickers",
@@ -2175,11 +2179,15 @@ def _r1_signal_validity(
     closed = tuple(item for item in candles if item.is_closed and item.timeframe == "5")
     if len(closed) < history_limit:
         raise ExchangeMutationBarrier("R1 validity lacks full causal ATR history")
+    # A resting Entry is tied to its six-state L5-3 structure, NOT to the
+    # floating inner boundary (range +/- ATR200 * 0.5). Recomputing ATR200
+    # changes that boundary even when all structural extrema remain intact.
+    # Keep the submitted PostOnly limit unchanged while structure persists.
     zone = compute_r1_l53_stable_zone(closed[-history_limit:])
     if zone is None:
         return False, "R1_SIGNAL_RULE_INVALIDATED"
-    current_entry = zone.support_top if side == "Buy" else zone.resistance_bottom
-    if current_entry != original_entry:
+    current_low, current_high = zone.range_low, zone.range_high
+    if current_low != original_low or current_high != original_high:
         return False, "R1_EXACT_ENTRY_LEVEL_CHANGED"
     return True, "R1_SIGNAL_STILL_VALID"
 

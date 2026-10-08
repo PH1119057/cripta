@@ -84,7 +84,9 @@ def test_r1_signal_validity_uses_exact_observer_history_window() -> None:
     assert '"history_limit": (' in bridge
     assert 'entry_policy.get("watch_policy")' in bridge
     assert 'history_limit_raw = validity.get("history_limit")' in runtime
-    assert 'closed[-history_limit:]' in runtime
+    assert 'signal_structure_low' in bridge and 'signal_structure_high' in bridge
+    assert 'current_low != original_low or current_high != original_high' in runtime
+    assert 'current_entry != original_entry' not in runtime
     assert 'R1 validity lacks full causal ATR history' in runtime
 
 
@@ -119,3 +121,11 @@ def test_r1_cancel_intent_migration_is_registered_and_scoped() -> None:
     assert "CREATE TABLE IF NOT EXISTS runtime.entry_cancel_intents" in migration
     assert "GRANT SELECT, INSERT ON runtime.entry_cancel_intents TO cripta" in migration
     assert "20261008_r1_entry_cancel_intents.sql" in installer
+
+
+def test_counterfactual_capture_timestamp_is_not_earlier_than_decision() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'captured_at=max(datetime.now(UTC), evaluation.decision.decided_at)' in source
+    assert 'captured_at=fact.observed_at' not in source

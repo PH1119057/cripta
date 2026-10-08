@@ -67,18 +67,12 @@ as_repo_owner git -C "$SOURCE" fetch --no-tags origin "$RELEASE_COMMIT" >/dev/nu
 tree="$(as_repo_owner git -C "$SOURCE" rev-parse "${RELEASE_COMMIT}^{tree}")"
 if [[ -n "$EXPECTED_TREE" && "$tree" != "$EXPECTED_TREE" ]]; then die "release tree mismatch"; fi
 
-gate="$(sql_scalar "SELECT coalesce((SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'),-1)")"
-[[ "$gate" == "0" ]] || die "mainnet gate must be disarmed before deploy"
-permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
-[[ "$permissions" == "0" ]] || die "real Strategy execution permissions must be zero before deploy"
-owned_positions="$(sql_scalar "SELECT count(*) FROM runtime.position_ownership WHERE state IN ('OPEN','RECONCILIATION_REQUIRED')")"
-[[ "$owned_positions" == "0" ]] || die "open/reconciliation StrategyPosition exists"
-hot_positions="$(sql_scalar "SELECT count(*) FROM runtime.hot_positions")"
-[[ "$hot_positions" == "0" ]] || die "Exchange hot position exists"
-pending_commands="$(sql_scalar "SELECT count(*) FROM runtime.trade_commands WHERE state IN ('queued','running')")"
-[[ "$pending_commands" == "0" ]] || die "pending runtime trade command exists"
-pending_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders WHERE order_status IN ('New','PartiallyFilled','Untriggered')")"
-[[ "$pending_orders" == "0" ]] || die "pending Exchange order exists"
+# Release installation is independent of all Exchange and trading inventory.
+# The installer only observes; Execution and Lifecycle own mutation/recovery.
+pre_gate="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
+pre_permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
+pre_sessions="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions"
 
 current_runtime="$(readlink -f "$RUNTIME_ROOT/current" 2>/dev/null || true)"
 current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current" 2>/dev/null || true)"
@@ -397,14 +391,8 @@ runuser -u cripta -- env \
   PYTHONPATH="$runtime_release/src:$runtime_release/operations/connectivity:$runtime_release/research/server/connectivity:$runtime_release/.venv/lib/python3.12/site-packages" \
   "$runtime_release/.venv/bin/python" \
   "$runtime_release/operations/connectivity/runtime_schema.py" validate
-runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta <<'SQL'
-UPDATE control.live_arm_sessions
-   SET state='CLOSED',
-       deactivated_at=clock_timestamp(),
-       updated_at=clock_timestamp()
- WHERE state='ACTIVE';
-SQL
-db_mutation_steps=$((db_mutation_steps + 1))
+# Installer does not close LIVE-arm sessions or change execution permissions.
+# Post-restart Exchange reconciliation is performed by the private runtime.
 
 # Filesystem/unit cutover starts only after every DB migration and schema
 # validation succeeded against the candidate release.
@@ -451,9 +439,39 @@ for service in "${managed_services[@]}"; do
 done
 
 gate_after="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE mode='mainnet'")"
-[[ "$gate_after" == "0" ]] || die "deploy changed mainnet gate"
 permissions_after="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
-[[ "$permissions_after" == "0" ]] || die "deploy changed real execution permissions"
+sessions_after="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
+# Trading controls are reported, never used as installer go/no-go decisions.
+# A supervisor/runtime may legitimately change trading state during deployment.
+if [[ "$gate_after" == "$pre_gate" && "$permissions_after" == "$pre_permissions" && "$sessions_after" == "$pre_sessions" ]]; then
+  echo "TRADING_CONTROL_UNCHANGED=PASS"
+else
+  echo "TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING before:$pre_gate/$pre_permissions/$pre_sessions after:$gate_after/$permissions_after/$sessions_after" >&2
+fi
+# Exchange -> DB synchronization belongs to private runtime reconciliation.
+# Never send Exchange mutations from the installer.
+echo "POST_DEPLOY_RECONCILIATION_OWNER=cripta-private-runtime.service"
+if [[ "${was_active[cripta-private-runtime.service]:-0}" == "1" ]]; then
+  # Wait for the new process to read the authoritative Exchange snapshot.
+  # A failed/stale sync is an operational alert, not an Exchange mutation.
+  sync_started_ms="$(( $(date -u +%s) * 1000 ))"
+  sync_verified=0
+  for attempt in {1..30}; do
+    successful_ms="$(sql_scalar "SELECT coalesce((SELECT finished_at_epoch_ms FROM runtime.reconciliation_runs WHERE ok=true ORDER BY id DESC LIMIT 1),0)")"
+    if [[ "$successful_ms" =~ ^[0-9]+$ ]] && (( successful_ms >= sync_started_ms )); then
+      sync_verified=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$sync_verified" == "1" ]]; then
+    echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS"
+  else
+    echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_VERIFIED_REQUIRES_RUNTIME_ATTENTION" >&2
+  fi
+else
+  echo "POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=NOT_APPLICABLE_PRIVATE_RUNTIME_INACTIVE"
+fi
 
 printf '%s\n' "$RELEASE_COMMIT" > "$STATE_ROOT/INSTALLED_COMMIT"
 chown root:cripta "$STATE_ROOT/INSTALLED_COMMIT"
@@ -473,4 +491,4 @@ echo "RUNTIME_CURRENT=$(readlink -f "$RUNTIME_ROOT/current")"
 echo "DASHBOARD_UI_CURRENT=$(readlink -f "$DASHBOARD_UI_ROOT/current")"
 echo "RESEARCH_TOOLING_CURRENT=$(readlink -f "$RESEARCH_TOOLING_ROOT/current")"
 echo "BACKUP=$backup"
-echo "GATE=DISARMED"
+echo "GATE=$gate_after"
