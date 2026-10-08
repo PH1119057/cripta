@@ -772,3 +772,11 @@ read retry. WebSocket authentication uses the same exchange-time basis.
 This contract changes transport safety only. It does not change Strategy,
 Entry geometry, Entry lifetime, Exit, initial protection, stake, leverage or
 any trading threshold.
+
+## 46. Exchange-authoritative recovery — OWNER DECISION 2026-10-08
+
+Server restart, deploy, resize and reconnect are normal operational events. Every configured Exchange account connector must obtain a fresh, complete, authenticated and paginated position/order/protection inventory on recovery. Exchange current state supersedes the stale local *current-state projection*, never the durable execution history.
+
+Execution/Lifecycle uses Exchange orderId, orderLinkId and execId to correlate and reconstruct executions, closures, fees and verified P&L. Persist idempotent recovery epochs and before/after deltas. Absence from a complete inventory proves no current position, not no historical fills; missing exit accounting remains UNKNOWN and cannot be invented. New unowned positions are observed without guessed Strategy ownership. An incomplete or unavailable Exchange snapshot must not be treated as an empty account.
+
+Unknown historical outcomes and ordinary closures during downtime must not create permanent global Entry hard stops. Isolate unresolved sent-mutation ambiguity to affected account, symbol, slot, reservation and request; no duplicate Exchange mutation or guessed release of resource ownership. A successful recovery never automatically opens the global LIVE gate. Repeated recovery must be idempotent; distinct connectors are isolated.
