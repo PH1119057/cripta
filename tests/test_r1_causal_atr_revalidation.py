@@ -117,6 +117,8 @@ def test_pending_r1_order_fails_closed_if_exact_atr_history_missing(
             "signal_entry_price": "7.4",
             "signal_target_price": "7.2",
             "history_limit": 207,
+            "signal_structure_low": "7.20",
+            "signal_structure_high": "7.50",
         },
     }
     with pytest.raises(
