@@ -25,6 +25,7 @@ def test_installer_does_not_mutate_trading_gate_or_live_arm_sessions() -> None:
     assert "UPDATE control.execution_gates" not in script
     assert "UPDATE strategy_entry.execution_permissions" not in script
     assert 'TRADING_CONTROL_UNCHANGED=PASS' in script
+    assert 'TRADING_CONTROL_CHANGED_EXTERNALLY=WARNING' in script
     assert 'gate_after" == "$pre_gate' in script
     assert 'sessions_after" == "$pre_sessions' in script
 
