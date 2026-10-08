@@ -22,6 +22,7 @@ import zipfile
 import psycopg
 
 from bybit_workbench.fault_delivery import acknowledge_delivery
+from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
@@ -1619,25 +1620,16 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for r in commands
         ],
-        "release_arm_health": {
-            "loaded_commit": LOADED_RELEASE_COMMIT,
-            "gate_open": bool(gate_release_row and gate_release_row[0]),
-            "active_sessions": len(release_arm_rows),
-            "mismatched_sessions": [
-                {
-                    "strategy_id": str(r[0]),
-                    "symbol": str(r[1]),
-                    "session_release_commit": str(r[2]),
-                }
-                for r in release_arm_rows
-                if not LOADED_RELEASE_COMMIT or str(r[2]) != LOADED_RELEASE_COMMIT
-            ],
-            "recent_not_arm_ready": int(recent_not_ready_rows[0] or 0),
-            "last_not_arm_ready_at": (
+        "release_arm_health": project_release_arm_health(
+            loaded_commit=LOADED_RELEASE_COMMIT,
+            gate_open=bool(gate_release_row and gate_release_row[0]),
+            sessions=[(str(r[0]), str(r[1]), str(r[2])) for r in release_arm_rows],
+            recent_not_arm_ready=int(recent_not_ready_rows[0] or 0),
+            last_not_arm_ready_at=(
                 recent_not_ready_rows[1].isoformat()
                 if recent_not_ready_rows[1] else None
             ),
-        },
+        ),
         "critical_faults": [
             {
                 "fault_id": r[0],
