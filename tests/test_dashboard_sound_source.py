@@ -1,9 +1,11 @@
 from pathlib import Path
 
 
-def test_sound_events_survive_reload_and_suspended_audio_context() -> None:
+def test_sound_events_have_bounded_queue_and_suspended_audio_recovery() -> None:
     source = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
-    assert "pendingSounds.push(kind)" in source
+    assert "pendingSounds.push({kind,at:Date.now()})" in source
+    assert "SOUND_MAX_LATENCY_MS=5000" in source
+    assert "expirePendingSounds()" in source
     assert "flushSounds()" in source
     assert "cripta-last-close-ms" in source
     assert "cripta-open-position-keys" in source

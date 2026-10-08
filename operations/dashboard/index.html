@@ -78,6 +78,7 @@
       </div>
       <div class="trade-audio-row">
         <button id="enableSound" class="action" type="button">Включить звук</button>
+        <button id="testSound" class="action" type="button">Проверить звук</button>
         <label>Открытие<select id="entrySoundChoice"><option value="rise">дзынь-дынь-дынь</option><option value="bell">три колокольчика</option><option value="beep">три сигнала</option></select></label>
         <label>Закрытие в плюс<select id="profitSoundChoice"><option value="quack">один кряк</option><option value="bell">колокольчик</option><option value="rise">победный сигнал</option></select></label>
         <label>Закрытие в минус<select id="lossSoundChoice"><option value="triple_quack">три кряка</option><option value="alarm">низкая тревога</option><option value="beep">три сигнала</option></select></label>
@@ -454,7 +455,7 @@ async function pollArchiveJob(jobId){localStorage.setItem('cripta-archive-job',j
 async function packageProject(){const period=archivePeriod.value,profile=archiveProfile.value;if(period==='all'&&!confirm('Архив за весь период может быть большим и выполняться долго. Продолжить?'))return;packageProjectButton.disabled=true;packageProjectProgress.value=0;packageProjectStatus.textContent='Ставлю серверное задание в очередь…';try{const r=await fetch('/api/project/archive-jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile,period})}),out=await r.json();if(!r.ok)throw new Error(out.error||'Не удалось запустить архив');pollArchiveJob(out.job_id)}catch(e){packageProjectStatus.textContent=`Ошибка: ${e.message}`;packageProjectButton.disabled=false}}
 packageProjectButton.addEventListener('click',packageProject);
 const rememberedArchiveJob=localStorage.getItem('cripta-archive-job');if(rememberedArchiveJob)pollArchiveJob(rememberedArchiveJob);
-let soundEnabled=localStorage.getItem('cripta-sound')==='1',audioContext=null,lastSignals=new Set(),lastStages=new Map(),lastOpenPositions=null,lastClosedExecutions=null,liveGateOpen=false,rearmReady=false,liveStateLoaded=false,trailingChoices=new Map(),gateChanging=false,liveStateInFlight=null,pendingSounds=[],expandedPositions=new Set(),expandedClosedTrades=new Set(),lastLiveSuccessAt=0,lastWalletRefreshMs=0;
+let soundEnabled=localStorage.getItem('cripta-sound')==='1',audioContext=null,lastSignals=new Set(),lastStages=new Map(),lastOpenPositions=null,lastClosedExecutions=null,liveGateOpen=false,rearmReady=false,liveStateLoaded=false,trailingChoices=new Map(),gateChanging=false,liveStateInFlight=null,pendingSounds=[],missedSoundCount=0,expandedPositions=new Set(),expandedClosedTrades=new Set(),lastLiveSuccessAt=0,lastWalletRefreshMs=0;
 const tradeSubnav=document.getElementById('tradeSubnav'),tradeOperatorBar=document.getElementById('tradeOperatorBar'),openTradesSection=document.getElementById('openTradesSection'),closedTradesSection=document.getElementById('closedTradesSection'),strategyPaperOpenSection=document.getElementById('strategyPaperOpenSection'),strategyPaperClosedSection=document.getElementById('strategyPaperClosedSection'),coinMonitorSection=document.getElementById('coinMonitorSection'),signalObservationSection=document.getElementById('signalObservationSection'),bybitLogSection=document.getElementById('bybitLogSection'),bybitLogRows=document.getElementById('bybitLogRows');
 const tradeEquity=document.getElementById('tradeEquity'),tradeInUse=document.getElementById('tradeInUse'),tradeInUseDetail=document.getElementById('tradeInUseDetail'),tradeAvailable=document.getElementById('tradeAvailable'),tradeBalanceDetail=document.getElementById('tradeBalanceDetail'),livePositions=document.getElementById('livePositions'),operatorConnection=document.getElementById('operatorConnection'),liveFreshness=document.getElementById('liveFreshness'),tradeGateButton=document.getElementById('tradeGateButton'),tradeGateNotice=document.getElementById('tradeGateNotice'),tradeOperationStatus=document.getElementById('tradeOperationStatus'),tradeGateReasons=document.getElementById('tradeGateReasons'),tradeCommandStatus=document.getElementById('tradeCommandStatus'),enableSound=document.getElementById('enableSound'),entrySoundChoice=document.getElementById('entrySoundChoice'),profitSoundChoice=document.getElementById('profitSoundChoice'),lossSoundChoice=document.getElementById('lossSoundChoice'),soundStatus=document.getElementById('soundStatus');
 entrySoundChoice.value=localStorage.getItem('cripta-entry-sound')||'rise';profitSoundChoice.value=localStorage.getItem('cripta-profit-sound')||'quack';lossSoundChoice.value=localStorage.getItem('cripta-loss-sound')||'triple_quack';
@@ -462,8 +463,39 @@ entryNearThreshold.value=localStorage.getItem('cripta-entry-near-threshold')||'1
 enableSound.textContent=soundEnabled?'Звук включён':'Включить звук';soundStatus.textContent=soundEnabled?'настройка сохранена постоянно':'звук выключен';
 function tone(frequency,duration,delay=0,endFrequency=null){if(!soundEnabled||!audioContext||audioContext.state!=='running')return;setTimeout(()=>{try{const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.frequency.setValueAtTime(frequency,audioContext.currentTime);if(endFrequency)osc.frequency.exponentialRampToValueAtTime(endFrequency,audioContext.currentTime+duration);gain.gain.setValueAtTime(.16,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);osc.connect(gain).connect(audioContext.destination);osc.start();osc.stop(audioContext.currentTime+duration)}catch(_e){}},delay)}
 function playSound(kind){if(kind==='rise'){tone(520,.16,0,760);tone(700,.16,220,980);tone(900,.24,440,1260)}else if(kind==='bell'){tone(1040,.35);tone(1320,.35,230);tone(1560,.45,460)}else if(kind==='beep'){tone(780,.18);tone(780,.18,260);tone(780,.25,520)}else if(kind==='quack'){tone(520,.12,0,210);tone(310,.16,100,170)}else if(kind==='triple_quack'){for(let i=0;i<3;i++){tone(520,.12,i*330,210);tone(310,.16,i*330+100,170)}}else if(kind==='alarm'){tone(330,.28);tone(260,.35,340);tone(190,.5,740)}}
-function queuedSound(kind){if(!soundEnabled)return;if(audioContext?.state==='running')playSound(kind);else{pendingSounds.push(kind);soundStatus.textContent=`ожидается действие на странице · звуков в очереди: ${pendingSounds.length}`}}
-function flushSounds(){if(!soundEnabled||audioContext?.state!=='running'||!pendingSounds.length)return;const queue=pendingSounds.splice(0);queue.forEach((kind,index)=>setTimeout(()=>playSound(kind),index*1200))}
+// No replay of stale trading alarms after browser unlock or tab restoration.
+const SOUND_MAX_LATENCY_MS=5000,SOUND_PENDING_LIMIT=8;
+function soundQueueStatus(){
+  const waiting=pendingSounds.length;
+  soundStatus.textContent=waiting
+    ? `звук заблокирован браузером · ожидают до 5 с: ${waiting} · пропущено: ${missedSoundCount}`
+    : missedSoundCount
+      ? `звук ${audioContext?.state==='running'?'готов':'ожидает активации'} · пропущено устаревших: ${missedSoundCount}`
+      : audioContext?.state==='running'?'звук готов':'звук ожидает активации на странице';
+}
+function expirePendingSounds(){
+  const now=Date.now(),before=pendingSounds.length;
+  pendingSounds=pendingSounds.filter(item=>now-item.at<=SOUND_MAX_LATENCY_MS);
+  missedSoundCount+=before-pendingSounds.length;
+}
+function queuedSound(kind){
+  if(!soundEnabled)return;
+  expirePendingSounds();
+  if(audioContext?.state==='running'){playSound(kind);soundQueueStatus();return}
+  if(pendingSounds.length>=SOUND_PENDING_LIMIT){pendingSounds.shift();missedSoundCount++}
+  pendingSounds.push({kind,at:Date.now()});
+  soundQueueStatus();
+  // A suspended audio context may resume without another click. Try now,
+  // but never flush old events later as though they just happened.
+  if(audioContext&&audioContext.state!=='running')audioContext.resume().then(flushSounds).catch(soundQueueStatus);
+}
+function flushSounds(){
+  expirePendingSounds();
+  if(!soundEnabled||audioContext?.state!=='running'){soundQueueStatus();return}
+  const queue=pendingSounds.splice(0);
+  queue.forEach(item=>playSound(item.kind));
+  soundQueueStatus();
+}
 function entrySound(){queuedSound(entrySoundChoice.value)}
 function stageSound(stage){if(stage==='+1.1'){tone(1040,.18);tone(1320,.3,220)}else if(stage==='-1.0'){tone(330,.28);tone(260,.4,340)}else if(stage==='-1.1'){tone(250,.25);tone(190,.5,300)}}
 function exitSound(profit){queuedSound(profit?profitSoundChoice.value:lossSoundChoice.value)}
@@ -474,6 +506,7 @@ function toggleClosedTradeCard(key){expandedClosedTrades.has(key)?expandedClosed
 function installPositionCards(){const rows=[...positionRows.querySelectorAll(':scope > tr')];for(const p of window.currentPositions||[]){const row=rows.find(x=>x.querySelector('a')?.textContent.trim()===p.symbol);if(!row)continue;row.querySelector('td small.muted')?.remove();const open=expandedPositions.has(p.symbol),buttonCell=document.createElement('td');buttonCell.innerHTML=`<button id="position-toggle-${p.symbol}" class="row-toggle" type="button" aria-expanded="${open}" aria-controls="position-card-${p.symbol}" onclick="togglePositionCard('${p.symbol}')">${open?'▼':'▶'}</button>`;row.prepend(buttonCell);const cardRow=document.createElement('tr');cardRow.id=`position-card-${p.symbol}`;cardRow.className='position-card-row';cardRow.hidden=!open;cardRow.innerHTML=`<td colspan="12" class="position-card-cell">${positionCard(p)}</td>`;row.after(cardRow)}}
 async function unlockSound(test=false){if(!soundEnabled)return;audioContext=audioContext||new AudioContext();await audioContext.resume();enableSound.textContent='Звук включён';soundStatus.textContent=audioContext.state==='running'?'настройка сохранена постоянно':'ожидается первое действие на странице';if(test&&audioContext.state==='running')playSound('bell');flushSounds()}
 async function restoreSound(){if(!soundEnabled)return;try{await unlockSound(false)}catch(_e){}if(!audioContext||audioContext.state!=='running'){const resume=()=>unlockSound(false);addEventListener('pointerdown',resume,{once:true,capture:true});addEventListener('keydown',resume,{once:true,capture:true})}}
+document.getElementById('testSound').addEventListener('click',async()=>{if(!soundEnabled){soundEnabled=true;localStorage.setItem('cripta-sound','1')}try{await unlockSound(true)}catch(_e){soundStatus.textContent='звук заблокирован · повтори проверку'}});
 enableSound.addEventListener('click',async()=>{if(soundEnabled){soundEnabled=false;localStorage.setItem('cripta-sound','0');if(audioContext)await audioContext.suspend();enableSound.textContent='Включить звук';soundStatus.textContent='звук выключен'}else{soundEnabled=true;localStorage.setItem('cripta-sound','1');await unlockSound(true)}});restoreSound();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&soundEnabled)unlockSound(false).catch(()=>{})});
 for(const [node,key] of [[entrySoundChoice,'cripta-entry-sound'],[profitSoundChoice,'cripta-profit-sound'],[lossSoundChoice,'cripta-loss-sound']])node.addEventListener('change',async()=>{localStorage.setItem(key,node.value);if(!audioContext||audioContext.state!=='running')await unlockSound();playSound(node.value)});
