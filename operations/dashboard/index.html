@@ -703,11 +703,11 @@ function renderReleaseArmCritical(lt){
   if(!state){banner.hidden=true;return}
   const mismatch=state.mismatched_sessions||[];
   const notReady=Number(state.recent_not_arm_ready||0);
-  const critical=Boolean(state.gate_open)&&(mismatch.length>0||notReady>0||!state.loaded_commit);
+  const critical=Boolean(state.critical);
   banner.hidden=!critical;
   if(!critical)return;
   const names=mismatch.map(x=>safe(x.symbol)+' ('+safe(String(x.session_release_commit||'').slice(0,12))+')').join(', ');
-  details.innerHTML='Шлюз открыт, но допуск REAL Entry не подтверждён для загруженного release <b>'+
+  details.innerHTML='Допуск REAL Entry не подтверждён для загруженного release <b>'+
     safe(String(state.loaded_commit||'UNKNOWN').slice(0,12))+'</b>. '+
     (names?'Несовпадающие LIVE-arm sessions: '+names+'. ':'')+
     (notReady?'Отказов REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY за 30 минут: '+notReady+'. ':'')+
