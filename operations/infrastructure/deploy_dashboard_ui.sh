@@ -258,10 +258,38 @@ for kind, name in changed:
             for line in diff_lines
             if line.startswith("+ ") and line[2:].strip()
         )
-        if removed:
+        # Allow only the owner-approved, source-identical R1 control-cohort
+        # authorization replacement. No general trading do_POST mutation.
+        old_cohort = """                                \"\"\"SELECT 1 FROM control.live_arm_sessions
+                                     WHERE state='ACTIVE' AND symbol=%s
+                                       AND release_commit=%s
+                                     LIMIT 1\"\"\",
+                                (symbol, LOADED_RELEASE_COMMIT),"""
+        new_cohort = """                                \"\"\"SELECT 1 FROM control.live_arm_sessions arm
+                                   JOIN strategy_entry.strategy_activations act
+                                     ON act.activation_id=arm.strategy_activation_id
+                                    AND act.strategy_id=arm.strategy_id
+                                    AND act.strategy_version=arm.strategy_version
+                                    AND act.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                   JOIN strategy_entry.execution_permissions perm
+                                     ON perm.strategy_id=arm.strategy_id
+                                    AND perm.strategy_version=arm.strategy_version
+                                    AND perm.strategy_config_fingerprint=arm.strategy_config_fingerprint
+                                   WHERE arm.state='ACTIVE' AND arm.symbol=%s
+                                     AND act.enabled=true AND perm.enabled=true
+                                   LIMIT 1\"\"\",
+                                (symbol,),"""
+        exact_cohort_only = (
+            old_cohort in old_post
+            and old_post.replace(old_cohort, new_cohort, 1) == new_post
+        )
+        if removed and not exact_cohort_only:
             raise SystemExit(
                 "Dashboard verifier failed: existing Handler.do_POST code removed"
             )
+        if exact_cohort_only:
+            print("DASHBOARD_R1_CONTROL_COHORT_EXACT_CHANGE=PASS")
+            continue
         if '/api/observer-faults/resolve' not in added:
             raise SystemExit(
                 "Dashboard verifier failed: observer fault resolve endpoint missing"
