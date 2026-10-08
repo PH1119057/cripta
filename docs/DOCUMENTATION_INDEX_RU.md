@@ -991,6 +991,6 @@ commands не могут обходиться как якобы несвязан
 ## 35. Release installation separated from trading inventory — 2026-10-08
 
 Owner decision: positions/orders/queued trading commands no longer gate install.
-DEVELOPMENT_RELEASE §35 owns the canonical release procedure; installer
+DEVELOPMENT_RELEASE §44 owns the canonical release procedure; installer
 preserves trading controls and observes Exchange-to-DB reconciliation via
 private runtime. This changes release responsibility, not Strategy Entry/Exit.
