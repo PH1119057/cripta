@@ -9,6 +9,7 @@ from enum import StrEnum
 
 from .contracts import ExecutionRequest, TradeDirection
 from .fingerprint import canonical_json, fingerprint
+from .market_watch import _derived_history_limit
 
 
 class ExecutionBridgeBlockCode(StrEnum):
@@ -509,6 +510,17 @@ def prepare_runtime_entry_command(
                 "operator": str(execution_policy.get("entry_validity_operator") or ""),
                 "signal_entry_price": str(reference_price),
                 "signal_target_price": signal_attributes.get("r1_opposite_inner_target"),
+                "history_limit": (
+                    _derived_history_limit(
+                        _mapping(
+                            entry_policy.get("watch_policy"),
+                            "StrategyCard.entry_policy.watch_policy",
+                        )
+                    )
+                    if str(execution_policy.get("entry_validity_operator") or "")
+                    == "R1_EXACT_SIGNAL"
+                    else None
+                ),
             }
         ),
         "entry_policy": "universal_entry",
