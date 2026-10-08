@@ -12,6 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
+from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
@@ -894,6 +895,11 @@ def main() -> int:
     signal.signal(signal.SIGINT, _stop)
     with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:
         while running:
+            # Independent no-signal safety guard; never touches open positions/Exit.
+            check_release_arm_invariant(
+                connection, loaded_commit=LOADED_RELEASE_COMMIT
+            )
+            connection.commit()
             result = run_once(connection)
             if not result.startswith("DISPATCHED") and not result.startswith("BLOCKED"):
                 connection.commit()
