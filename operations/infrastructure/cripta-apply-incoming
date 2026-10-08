@@ -290,7 +290,7 @@ BEGIN
     END IF;
     IF was_open THEN
         UPDATE control.execution_gates
-           SET enabled=0,
+           SET enabled=false,
                reason='RELEASE_UPDATE_ENTRY_INHIBIT',
                updated_at_epoch_ms=now_ms
          WHERE mode='mainnet';
