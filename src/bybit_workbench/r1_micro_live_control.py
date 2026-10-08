@@ -208,6 +208,25 @@ def arm(
                 + ",".join(pre.failed_codes)
             )
 
+    # Owner explicitly re-armed after the global gate was closed. Retire
+    # previous ACTIVE sessions for the same exact cohort transactionally;
+    # a deployment/restart must never close them on its own.
+    # No execution permission or Exchange object is modified here.
+    connection.execute(
+        """UPDATE control.live_arm_sessions
+              SET state='CLOSED',deactivated_at=%s,updated_at=clock_timestamp()
+            WHERE state='ACTIVE'
+              AND (strategy_id,strategy_version,strategy_config_fingerprint,
+                   strategy_activation_id,symbol) IN (
+                  SELECT strategy_id,strategy_version,strategy_config_fingerprint,
+                         strategy_activation_id,symbol
+                    FROM strategy_entry.strategy_activations
+                   WHERE enabled=true AND strategy_version=%s
+                     AND strategy_id = ANY(%s)
+              )""",
+        (current, R1_VERSION, list(R1_STRATEGY_IDS.values())),
+    )
+
     store = StrategyDashboardStore(connection)
     for context in contexts:
         store.set_execution_permission(
