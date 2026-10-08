@@ -140,4 +140,6 @@ def test_terminal_private_order_reconciles_universal_entry_before_slot_can_stick
     release = terminal.index("resolve_cancelled_entry_reservation_after_reconcile(")
     assert history < delete < release
     assert 'if order_status in {"Cancelled", "Rejected", "Deactivated"}:' in terminal
-    assert 'cancel_reason=f"BYBIT:{raw_cause}"' in terminal
+    assert 'FROM runtime.entry_cancel_intents' in terminal
+    assert 'else f"BYBIT:{raw_cause}"' in terminal
+    assert 'cancel_reason=cancel_reason' in terminal
