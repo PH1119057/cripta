@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.22
+**Версия:** 3.23
 **Дата:** 2026-10-08
 **Статус:** канонический индекс документации
 
@@ -994,3 +994,7 @@ Owner decision: positions/orders/queued trading commands no longer gate install.
 DEVELOPMENT_RELEASE §44 owns the canonical release procedure; installer
 preserves trading controls and observes Exchange-to-DB reconciliation via
 private runtime. This changes release responsibility, not Strategy Entry/Exit.
+
+## 36. Exchange-authoritative routine restart recovery — OWNER DECISION 2026-10-08
+
+ARCH §46, TRADING_CONTOUR §6, GLOSSARY §31 and DEVELOPMENT_RELEASE §45 jointly define the new recovery objective: full account-specific Exchange snapshots, paginated order and execution retrieval, idempotent lifecycle reconstruction and scoped historical uncertainty. This decision does not authorize guessing exit P&L or repeating mutating Exchange requests. Implementation/test/deploy status must remain separate from canon.
