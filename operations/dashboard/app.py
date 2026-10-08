@@ -1356,7 +1356,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "leverage": row[5],
                 "refreshed_at_epoch_ms": row[6],
                 "break_even_price": raw.get("breakEvenPrice") or raw.get("avgPrice"),
-                "mark_price": raw.get("markPrice"),
+                "mark_price": ticker.get("mark_price") or raw.get("markPrice"),
+                "bybit_unrealised_pnl": raw.get("unrealisedPnl"),
+                "bybit_position_im": raw.get("positionIM"),
                 "stop_loss": raw.get("stopLoss"),
                 "last_price": ticker.get("last_price"),
                 "executable_close_price": executable_price
