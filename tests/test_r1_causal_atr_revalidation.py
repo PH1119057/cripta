@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "operations/connectivity"))
 sys.path.insert(0, str(ROOT / "research/server/connectivity"))
+sys.path.insert(0, str(ROOT / "operations/connectivity"))
 
 import private_runtime  # noqa: E402
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines  # noqa: E402
@@ -32,8 +32,8 @@ def _rest_rows() -> list[list[str]]:
             [
                 str(int(opened.timestamp() * 1000)),
                 "7.35",
-                "7.65" if early else "7.50",
-                "7.10" if early else "7.20",
+                "7.65" if early else ("7.50" if i == 225 else "7.37"),
+                "7.10" if early else ("7.20" if i == 220 else "7.33"),
                 "7.35",
                 "100",
             ]
