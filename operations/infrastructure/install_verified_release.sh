@@ -292,6 +292,7 @@ managed_services=(
   cripta-universal-entry-consumer.service
   cripta-universal-entry-observer.service
   cripta-universal-exit-shadow.service
+  cripta-universal-exit-consumer.service
 )
 
 declare -A was_active=()
