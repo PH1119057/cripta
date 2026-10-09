@@ -3615,8 +3615,9 @@ def _u6_prepare_r1_prearm_evidence(
         raise ValueError("R1 PREARM: reconciliation missing/failed")
     if now_ms - int(reconciliation[0]) > 15_000:
         raise ValueError("R1 PREARM: reconciliation stale")
-    if int(reconciliation[2]) or int(reconciliation[3]):
-        raise ValueError("R1 PREARM: exchange is not flat")
+    # Existing Exchange positions/orders belong to their established lifecycle.
+    # Re-arm authorizes NEW Entry only; readiness must not require a flat account.
+    # Per-entry slot ownership, capital reservations and risk remain enforced.
     if not wallet or now_ms - int(wallet[0]) > 15_000:
         raise ValueError("R1 PREARM: wallet snapshot stale")
     if str(wallet[3]) != "UNIFIED" or float(wallet[1]) < 50.0:

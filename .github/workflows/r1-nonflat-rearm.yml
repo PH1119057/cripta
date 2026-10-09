@@ -1,0 +1,31 @@
+name: r1-nonflat-rearm
+on:
+  push:
+    paths:
+      - "operations/dashboard/app.py"
+      - "docs/TRADING_CONTOUR_RU.md"
+      - "docs/DOCUMENTATION_INDEX_RU.md"
+      - "tests/test_r1_nonflat_rearm.py"
+      - ".github/workflows/r1-nonflat-rearm.yml"
+  pull_request:
+    paths:
+      - "operations/dashboard/app.py"
+      - "docs/TRADING_CONTOUR_RU.md"
+      - "docs/DOCUMENTATION_INDEX_RU.md"
+      - "tests/test_r1_nonflat_rearm.py"
+      - ".github/workflows/r1-nonflat-rearm.yml"
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test tool
+        run: python -m pip install pytest ruff
+      - name: Syntax and contract
+        run: |
+          python -m py_compile operations/dashboard/app.py
+          python -m ruff check tests/test_r1_nonflat_rearm.py
+          python -m pytest -q tests/test_r1_nonflat_rearm.py

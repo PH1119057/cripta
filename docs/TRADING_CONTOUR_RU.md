@@ -1071,3 +1071,18 @@ ATR200 используется в расчёте ширины зоны; отд�
 ## 6. Normal restart recovery — OWNER DECISION 2026-10-08
 
 Execution/Lifecycle reconciles fresh complete Exchange snapshots with durable Entry/Exit lineage, orders, execution IDs and capital reservations. Preserve local trade history; restore exact results after fees where exchange evidence suffices. If current exposure is absent but exit evidence incomplete, mark historical outcome UNKNOWN rather than inventing P&L or holding all independent Strategies hostage. Restrict unresolved mutation only within its exact affected scope. No queue replay or automatic LIVE-arm from restart alone.
+
+## 4.10 Owner decision 2026-10-09 — R1 re-arm without flat Exchange inventory
+
+For the current exact R1 MICRO_LIVE cohort, re-arm authorizes **future NEW Entry** only.
+Existing Exchange positions, protective orders and lifecycle commands are not
+an independent veto on new-entry re-arm, and must never be closed/cancelled
+to satisfy a flat-account precondition. The PREARM check `exchange is not flat`
+is removed. Existing position and order state is still retrieved authoritatively,
+with fresh successful Exchange reconciliation, authenticated Bybit connection,
+account identity/capital, exact release and strategy activation, position mode,
+Entry/Exit plan loading and live infrastructure checks retained.
+Individual new Entry requests still enforce physical slot ownership, exposure,
+capital reservation, idempotence and initial protection. Existing Exit/position
+supervision remains independent; unresolved safety faults are not waived by
+this policy. No LIVE re-arm is a side effect of deploy.
