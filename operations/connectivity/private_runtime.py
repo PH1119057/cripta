@@ -1460,6 +1460,25 @@ def _step_aligned(value: Decimal, step: Decimal, label: str) -> Decimal:
     return value
 
 
+def _normalize_dynamic_tp(
+    value: Decimal, tick: Decimal, *, position_side: str
+) -> Decimal:
+    """Round toward the executable market, never beyond the raw TP objective.
+
+    A LONG closes by selling: floor; a SHORT closes by buying: ceiling.
+    Exchange specification is fetched from Bybit for the exact symbol.
+    """
+    if not value.is_finite() or not tick.is_finite() or value <= 0 or tick <= 0:
+        raise RuntimeError("dynamic TP price/tick must be finite and positive")
+    if position_side not in {"Buy", "Sell"}:
+        raise RuntimeError("dynamic TP position side unsupported")
+    rounding = ROUND_FLOOR if position_side == "Buy" else ROUND_CEILING
+    normalized = (value / tick).to_integral_value(rounding=rounding) * tick
+    if normalized <= 0:
+        raise RuntimeError("dynamic TP normalized price must be positive")
+    return normalized
+
+
 def _universal_exit_position(
     connection: psycopg.Connection,
     *,
@@ -1627,8 +1646,9 @@ def _execute_universal_exit_command(
         )
 
     if action_kind is ExitActionKind.SET_TP:
-        target = _step_aligned(
-            Decimal(str(mutation["take_profit_price"])), tick, "take_profit_price"
+        target = _normalize_dynamic_tp(
+            Decimal(str(mutation["take_profit_price"])), tick,
+            position_side=str(position["side"]),
         )
         if str(mutation["order_type"]).upper() == "MARKET":
             return api_post(

@@ -1025,3 +1025,13 @@ for NEW Entry authorization; retain all fresh connectivity, reconciliation,
 account/capital, strategy/version, position mode, physical-slot, protection and
 per-entry risk checks. This does not authorize closing current positions,
 automatic re-arm, or bypass of actual execution/Exit safety faults.
+
+## 21. R1 dynamic Exit structural TP + exchange tick — 2026-10-09
+
+OWNER DECISION: TRADING_CONTOUR §4.11 is the canonical owner of R1 L5-3
+dynamic TP update eligibility, retention of opposite INNER ATR200 boundary,
+and separate Exchange-normalized TP execution. ATR-only variations cannot
+retrigger TP; actual opposite range-extremum changes (including rolling candle
+outfall) must trigger reevaluation. Bybit instrument steps are authoritative;
+source geometry stays exact. Implementation is separately tested/deployed,
+and no automatic LIVE arm follows release.

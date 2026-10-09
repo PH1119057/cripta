@@ -1086,3 +1086,33 @@ Individual new Entry requests still enforce physical slot ownership, exposure,
 capital reservation, idempotence and initial protection. Existing Exit/position
 supervision remains independent; unresolved safety faults are not waived by
 this policy. No LIVE re-arm is a side effect of deploy.
+
+## 4.11 Owner decision 2026-10-09 — R1 dynamic L5-3 Exit TP structural changes and Exchange price steps
+
+Only a structural change of the **opposite working-range extremum** qualifies a
+new R1 dynamic SET_TP Exit decision: `range_high` for LONG and `range_low`
+for SHORT. A standalone ATR200 change with unchanged applicable extremum
+does not trigger a new TP decision. The unchanged rolling 36 CLOSED 5m candles
+remain authoritative; when an old candle leaves the rolling window and
+changes the relevant extremum, that is a genuine structural change and must
+be processed. No hysteresis threshold, time cooldown or candle-outfall
+exclusion is introduced. Neither Entry policy nor L5-3 geometry is changed.
+
+When a genuine structural change occurs, the TP objective continues to use
+the original opposite zone **INNER** boundary: LONG `range_high - 0.5 * ATR200`;
+SHORT `range_low + 0.5 * ATR200`. The ATR value is the one current at that
+structural event, not an independently actionable trigger.
+
+The precise Strategy geometry remains unrounded. Exchange Execution must
+fetch the exact instrument's current `priceFilter.tickSize` and
+`lotSizeFilter.qtyStep` from Bybit instrument metadata, fail closed if
+invalid/missing, and normalize only the executable TP price. For a LONG
+position's sell TP the floor tick is used; for a SHORT position's buy TP the
+ceiling tick is used (toward the market, never further than the objective).
+The calculated objective, normalized price and Exchange-acknowledged order
+state must remain distinguishable in lineage; an unchanged confirmed
+effective price/quantity must not cause a redundant Bybit amendment/order.
+
+This decision concerns existing R1 dynamic SET_TP only. Stop Loss rounding,
+other Strategies, changes to Entry rules, new trailing/threshold policy,
+and proactive LIVE re-arm are not authorized by this section.
