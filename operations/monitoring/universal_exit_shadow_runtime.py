@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -205,6 +206,28 @@ def _evaluate_claimed_positions(
         try:
             position, plan = load_exit_binding(connection, strategy_position_id=position_id)
             observation = _fetch_l53_observation(position, plan, now=now)
+            # Existing ATR200 still determines the INNER target at a structural
+            # change, but its movement alone cannot emit another SET_TP.
+            # Compare only the relevant opposite working-range extremum.
+            geometry = observation.attributes.to_dict()["geometry"]["l5_3"]
+            structural_field = (
+                "range_high" if position.direction is TradeDirection.LONG
+                else "range_low"
+            )
+            previous = connection.execute(
+                """SELECT attributes->'geometry'->'l5_3'->>%s AS boundary
+                     FROM strategy_exit.exit_observations
+                    WHERE strategy_position_id=%s
+                      AND event_kind='GEOMETRY_L5_3'
+                    ORDER BY observed_at DESC, observation_id DESC LIMIT 1""",
+                (structural_field, position_id),
+            ).fetchone()
+            if previous is not None:
+                if previous["boundary"] is None:
+                    raise RuntimeError("previous L5-3 structural boundary missing")
+                if Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field])):
+                    # No new geometry event needed: current range is unchanged.
+                    continue
             prior_rows = connection.execute(
                 """SELECT rule_id FROM strategy_exit.exit_decisions
                      WHERE strategy_position_id=%s AND repeat_policy='ONCE_PER_POSITION'""",
