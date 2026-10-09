@@ -22,7 +22,7 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
         admin.execute("CREATE SCHEMA runtime")
         admin.execute(
             """CREATE TABLE control.execution_gates(
-                mode text primary key,enabled boolean not null,reason text,
+                mode text primary key,enabled smallint not null,reason text,
                 updated_at_epoch_ms bigint)"""
         )
         admin.execute(
@@ -51,7 +51,7 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
         admin.execute("INSERT INTO runtime.hot_orders VALUES('LTCUSDT')")
         admin.execute(
             """INSERT INTO control.execution_gates VALUES(
-                'mainnet',true,'owner approved',0)"""
+                'mainnet',1,'owner approved',0)"""
         )
         admin.execute(
             """INSERT INTO control.live_arm_sessions VALUES(
@@ -97,7 +97,7 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
     with psycopg.connect(admin_dsn) as admin:
         assert admin.execute(
             "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-        ).fetchone() == (False,)
+        ).fetchone() == (0,)
         assert admin.execute(
             "SELECT count(*) FROM control.execution_gate_events"
         ).fetchone() == (1,)
@@ -115,7 +115,7 @@ def test_release_arm_migration_and_gate_invariant_with_open_exchange_inventory()
     # actual constrained cripta role; installer is not the gate writer.
     with psycopg.connect(admin_dsn) as admin:
         admin.execute(
-            "UPDATE control.execution_gates SET enabled=true "
+            "UPDATE control.execution_gates SET enabled=1 "
             "WHERE mode='mainnet'"
         )
     runner = Path("operations/infrastructure/cripta-apply-incoming").read_text()
