@@ -47,9 +47,9 @@
     @media(min-width:1250px){
       main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,64fr) minmax(0,18fr);column-gap:12px;align-items:start}
       main:has(#liveDesk.active)>:not(.panel):not(.workspace-rail){grid-column:1/-1;min-width:0}
-      main:has(#liveDesk.active)>#marketWorkspaceRail{display:flex;grid-column:1;grid-row:4}
-      main:has(#liveDesk.active)>#liveDesk{grid-column:2;grid-row:4;min-width:0}
-      main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3;grid-row:4}
+      main:has(#liveDesk.active)>#marketWorkspaceRail{display:flex;grid-column:1}
+      main:has(#liveDesk.active)>#liveDesk{grid-column:2;min-width:0}
+      main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3}
       main:has(#liveDesk.active) #liveDesk .core-trading-table{min-width:0}
       main:has(#liveDesk.active) #liveDesk .closed-scroll,main:has(#liveDesk.active) #liveDesk .table-scroll{max-width:100%;overflow-x:auto}
       main:has(#liveDesk.active) #liveDesk .trade-operator-grid{min-width:0}
@@ -934,7 +934,7 @@ function railRender(){
     const raw=x.actual_net_pnl??x.net_pnl;
     const net=raw==null?null:Number(raw),valid=net!==null&&Number.isFinite(net);
     let cls='',kind='PnL неизвестен';
-    if(valid){sum+=net;withPnl++;if(net>0){wins++;cls='win';kind='Плюс'}else if(railHardStopTrade(x)){hard++;cls='hard-stop';kind='Hard-stop'}else if(net<0){soft++;cls='soft-loss';kind='Минус до hard-stop'}else{kind='Ноль'}}
+    if(valid){sum+=net;withPnl++;if(net>0){wins++;cls='win';kind='Плюс'}else if(railHardStopTrade(x)){hard++;cls='hard-stop';kind='Hard-stop'}else if(net<0){soft++;cls='soft-loss';kind='Минус · без признака hard-stop'}else{kind='Ноль'}}
     else unknown++;
     const stamp=new Date(Number(x.closed_at_epoch_ms)).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     return '<div class="rail-trade '+cls+'"><div class="rail-trade-top"><b>'+railSafe(x.symbol||'—')+'</b><b>'+(valid?railMoney(net):'—')+'</b></div><small>'+railSafe(stamp)+' · '+railSafe(kind)+'</small></div>';
@@ -947,7 +947,7 @@ function railRender(){
   document.getElementById('railHardStop').textContent=hard;
   document.getElementById('railClosedList').innerHTML=html||'<p class="rail-muted">За выбранный период закрытых сделок нет.</p>';
   const note=unknown?' · PnL неизвестен: '+unknown:'';
-  document.getElementById('railDataStatus').textContent='Данные Bybit · '+recent.length+' исполнений'+note+'; hard-stop только по подтверждённой причине';
+  document.getElementById('railDataStatus').textContent='Данные Bybit · '+recent.length+' исполнений'+note+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
 }
 document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('click',()=>{
   railPeriod=b.dataset.railPeriod;
