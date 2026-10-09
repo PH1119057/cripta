@@ -279,7 +279,7 @@ PY
 BEGIN;
 DO $release_entry_guard$
 DECLARE
-    was_open boolean;
+    was_open smallint;
     now_ms bigint := (extract(epoch FROM clock_timestamp())*1000)::bigint;
 BEGIN
     SELECT enabled INTO was_open
@@ -288,9 +288,9 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'mainnet gate missing: cannot inhibit new REAL Entry';
     END IF;
-    IF was_open THEN
+    IF was_open = 1 THEN
         UPDATE control.execution_gates
-           SET enabled=false,
+           SET enabled=0,
                reason='RELEASE_UPDATE_ENTRY_INHIBIT',
                updated_at_epoch_ms=now_ms
          WHERE mode='mainnet';
