@@ -1,0 +1,32 @@
+name: exit-recovery-timeout
+on:
+  push:
+    paths:
+      - "operations/connectivity/universal_exit_consumer.py"
+      - "tests/test_exit_idle_transaction_timeout.py"
+      - ".github/workflows/exit-recovery-timeout.yml"
+  pull_request:
+    paths:
+      - "operations/connectivity/universal_exit_consumer.py"
+      - "tests/test_exit_idle_transaction_timeout.py"
+      - ".github/workflows/exit-recovery-timeout.yml"
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked project dependencies
+        run: |
+          python -m pip install uv==0.11.33
+          uv sync --locked --all-extras --python 3.12
+          uv pip install --python .venv/bin/python "psycopg[binary]==3.1.17"
+      - name: Exact lint and syntax
+        run: |
+          .venv/bin/python -m ruff check operations/connectivity/universal_exit_consumer.py tests/test_exit_idle_transaction_timeout.py
+          .venv/bin/python -m py_compile operations/connectivity/universal_exit_consumer.py
+      - name: Exit crash-recovery regression
+        run: |
+          .venv/bin/python -m pytest -q tests/test_exit_idle_transaction_timeout.py tests/test_universal_exit_execution_runtime_p6.py
