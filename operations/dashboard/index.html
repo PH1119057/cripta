@@ -22,6 +22,39 @@
 
 .trade-operator-bar{grid-column:1/-1;position:sticky;top:104px;z-index:80;padding:12px 14px;border:1px solid #355169;border-radius:11px;background:rgba(9,19,27,.985);box-shadow:0 10px 24px #050b10cc}.trade-operator-grid{display:grid;grid-template-columns:repeat(5,minmax(125px,1fr));gap:8px}.trade-operator-metric{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#0b151e}.trade-operator-metric .value{display:block;font-size:18px;font-weight:800;margin-top:2px}.trade-gate-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.trade-gate-reasons{flex:1;min-width:320px}.trade-gate-reasons ul{margin:4px 0 0;padding-left:20px}.trade-audio-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px}.trade-audio-row label{display:grid;gap:3px;color:var(--muted);font-size:11px}.trade-audio-row select{padding:6px;border:1px solid var(--line);border-radius:6px;background:#071018;color:var(--text)}.owner-test-grid{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;align-items:end}.owner-test-grid label{display:grid;gap:4px;color:var(--muted)}.owner-test-grid select,.owner-test-grid input{padding:8px;border:1px solid var(--line);border-radius:7px;background:#071018;color:var(--text)}.owner-test-fixed{font-weight:800;color:var(--text)}.operator-link-ok{color:var(--ok)}.operator-link-warn{color:var(--warn)}.operator-link-bad{color:#ff7b7b}@media(max-width:900px){.trade-operator-grid{grid-template-columns:repeat(2,minmax(125px,1fr))}}
 .durable-fault-banner{display:block;margin:0 0 18px;padding:14px 16px;border:2px solid #ef5b5b;border-radius:12px;background:#40181dcc;box-shadow:0 0 0 1px #ef5b5b33,0 10px 28px #0007}.durable-fault-banner[hidden]{display:none!important}.durable-fault-banner h2{margin:0 0 8px;color:#ff9b9b;font-size:18px}.durable-fault-summary{font-weight:800;color:#ffd0d0;margin-bottom:10px}.durable-fault-item{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #8c4141}.durable-fault-item:first-child{border-top:0}.durable-fault-meta{font-size:12px;color:#f0b8b8;overflow-wrap:anywhere}.durable-fault-error{font-weight:750;color:#fff;margin:3px 0}.durable-fault-unavailable{color:#ffb7b7;font-weight:800}@media(max-width:760px){.durable-fault-item{grid-template-columns:1fr}}
+
+    /* Symmetric three-column trading workspace; each rail owns its scroll area. */
+    .workspace-rail{display:none;min-width:0;align-self:start;position:sticky;top:72px;height:calc(100vh - 88px);overflow:hidden;background:#101d28;border:1px solid var(--line);border-radius:12px;padding:14px;flex-direction:column;gap:12px}
+    .workspace-rail h2{margin:0;font-size:16px}
+    .workspace-rail .rail-scroll{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1;overscroll-behavior:contain}
+    .workspace-rail .rail-muted{font-size:12px;color:var(--muted)}
+    .workspace-rail .rail-placeholder{border:1px dashed #3d566a;border-radius:9px;padding:14px 10px;color:var(--muted);min-height:70px}
+    .workspace-rail .rail-pnl{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+    .workspace-rail .rail-periods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+    .workspace-rail .rail-periods button{padding:8px 2px;min-width:0;white-space:nowrap;background:#182936;border:1px solid var(--line);border-radius:7px;color:var(--text);cursor:pointer;font:inherit;font-size:12px}
+    .workspace-rail .rail-periods button.active{background:var(--accent);color:#071018;font-weight:800}
+    .rail-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    .rail-stat{min-width:0;padding:8px;border:1px solid var(--line);border-radius:8px;background:#0b151e}
+    .rail-stat b{display:block;font-variant-numeric:tabular-nums;font-size:17px}
+    .rail-trade{min-width:0;border-left:4px solid #8496a5;border-bottom:1px solid var(--line);padding:9px 8px;margin:0 0 4px;background:#0d1923}
+    .rail-trade.win{border-left-color:var(--ok);background:#0d251d}
+    .rail-trade.soft-loss{border-left-color:var(--warn);background:#292113}
+    .rail-trade.hard-stop{border-left-color:#ff626b;background:#30191d}
+    .rail-trade .rail-trade-top{display:flex;justify-content:space-between;gap:6px;font-variant-numeric:tabular-nums}
+    .rail-trade .rail-trade-top b{min-width:0;overflow-wrap:anywhere}
+    .rail-trade small{display:block;color:var(--muted);overflow-wrap:anywhere}
+    .workspace-rail .rail-unknown{color:var(--muted)}
+    @media(min-width:1250px){
+      main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,64fr) minmax(0,18fr);column-gap:12px;align-items:start}
+      main:has(#liveDesk.active)>:not(.panel):not(.workspace-rail){grid-column:1/-1;min-width:0}
+      main:has(#liveDesk.active)>#marketWorkspaceRail{display:flex;grid-column:1}
+      main:has(#liveDesk.active)>#liveDesk{grid-column:2;min-width:0}
+      main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3}
+      main:has(#liveDesk.active) #liveDesk .core-trading-table{min-width:0}
+      main:has(#liveDesk.active) #liveDesk .closed-scroll,main:has(#liveDesk.active) #liveDesk .table-scroll{max-width:100%;overflow-x:auto}
+      main:has(#liveDesk.active) #liveDesk .trade-operator-grid{min-width:0}
+    }
+    @media(max-width:1249px){.workspace-rail{display:none!important}}
 </style>
 </head>
 <body><main>
@@ -66,7 +99,16 @@
       <div class="table-scroll"><table class="entry-table" style="min-width:900px"><thead><tr><th>Монета</th><th>Условие входа</th><th>Совпадений зон</th><th>Входов</th><th>+1,10%</th><th>−1,00%</th><th>Не завершились</th><th>Точность</th><th>Статус</th></tr></thead><tbody id="entryRows"></tbody></table></div>
     </article>
   </section>
-  <section id="liveDesk" class="grid panel">
+  
+  <aside id="marketWorkspaceRail" class="workspace-rail" aria-label="Рыночные индикаторы">
+    <h2>Рынок</h2>
+    <div class="rail-muted">Место для индикаторов. Наполняем постепенно.</div>
+    <div class="rail-scroll">
+      <div class="rail-placeholder">Индикатор рынка · ожидает подключения</div>
+      <div class="rail-placeholder" style="margin-top:10px">Следующий индикатор</div>
+    </div>
+  </aside>
+<section id="liveDesk" class="grid panel">
     <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор Strategy</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button><button type="button" data-trade-page="bybit_log">Лог Bybit</button></div>
     <div id="tradeOperatorBar" class="trade-operator-bar">
       <div class="trade-operator-grid">
@@ -111,6 +153,28 @@
     <article id="closedTradesSection" class="card full core-trading-table"><h2>Завершённые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Сверху видны сделки за сегодня. Более старые записи находятся ниже во внутренней прокрутке; вся страница из-за них не растягивается. Нажмите строку, чтобы раскрыть причинную карточку.</div><div class="closed-scroll"><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина стратегии</th><th>Причина биржи</th><th>После комиссий</th></tr></thead><tbody id="realClosedRows"></tbody></table></div></article>
     <article id="bybitLogSection" class="card full core-trading-table"><h2>Лог Bybit · попытки входа</h2><div class="muted" style="margin-bottom:10px">Технический журнал реальных Entry-заявок. Принятая Bybit лимитная заявка ещё не является открытой сделкой. Здесь видно, ждала ли она fill, была ли отменена без исполнения и по какой причинной причине.</div><div class="closed-scroll"><table style="min-width:1450px"><thead><tr><th>Время</th><th>Монета</th><th>Strategy</th><th>Направление</th><th>Limit</th><th>Bybit order</th><th>Статус</th><th>Fill</th><th>SL / TP</th><th>Причина / итог</th></tr></thead><tbody id="bybitLogRows"><tr><td colspan="10" class="muted">Загрузка журнала Bybit…</td></tr></tbody></table></div></article>
   </section>
+  <aside id="closedWorkspaceRail" class="workspace-rail" aria-label="Завершённые сделки и результат">
+    <h2>Завершённые сделки</h2>
+    <div class="rail-periods" role="group" aria-label="Скользящий период статистики">
+      <button type="button" data-rail-period="day">24 часа</button>
+      <button type="button" data-rail-period="week">7 дней</button>
+      <button type="button" data-rail-period="month">30 дней</button>
+    </div>
+    <div id="railWindow" class="rail-muted">Последние 24 часа от текущего момента</div>
+    <div class="rail-stat">
+      <span class="rail-muted">PnL после комиссий</span>
+      <div id="railPnl" class="rail-pnl">—</div>
+    </div>
+    <div class="rail-stat-grid">
+      <div class="rail-stat"><small class="rail-muted">Закрыто</small><b id="railCount">—</b></div>
+      <div class="rail-stat"><small class="rail-muted">В плюс</small><b id="railWins" class="ok">—</b></div>
+      <div class="rail-stat"><small class="rail-muted">Минус до hard-stop</small><b id="railSoftLoss" class="warn">—</b></div>
+      <div class="rail-stat"><small class="rail-muted">Hard-stop</small><b id="railHardStop" class="loss">—</b></div>
+    </div>
+    <div id="railDataStatus" class="rail-muted" role="status">Загрузка завершённых сделок…</div>
+    <div id="railClosedList" class="rail-scroll" aria-label="Закрытые сделки выбранного периода"></div>
+  </aside>
+
   <section id="strategies" class="grid panel">
     <article class="card full" id="universalStrategyControl">
       <h2>Universal Strategy Control</h2>
@@ -846,4 +910,67 @@ async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});c
   legacyRows.innerHTML=d.legacy.length?d.legacy.map(x=>`<tr><td><b>${x.name}</b></td><td>${size(x.bytes)}</td><td>${x.files}</td><td>${x.report_roots}</td><td>${x.research_modules}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">История ещё не перенесена</td></tr>';
   legacyCatalog.innerHTML=d.legacy.map(x=>`<details><summary>Показать содержимое ${x.name}</summary><h3>Наборы отчётов (${x.reports.length})</h3><div class="catalog">${x.reports.map(n=>`<span class="item">${n}</span>`).join('')}</div><h3>Исследовательские модули (${x.modules.length})</h3><div class="catalog">${x.modules.map(n=>`<span class="item">${n}</span>`).join('')}</div></details>`).join('');
 } loadStrategies().catch(()=>{});refresh().catch(e=>stamp.textContent='ошибка: '+e);scheduleLivePoll(0);document.addEventListener('visibilitychange',()=>scheduleLivePoll(document.hidden?livePollDelay():0));setInterval(()=>refresh().catch(()=>{}),60000);
+
+/* Right rail is a presentation-only view of already evidenced Bybit closures. */
+const railPeriodKey='cripta-workspace-closed-period-v1';
+const railPeriods={day:{ms:86400000,label:'24 часа'},week:{ms:7*86400000,label:'7 дней'},month:{ms:30*86400000,label:'30 дней'}};
+let railPeriod='day',railClosedCache=[],railClosedFetched=false,railRefreshBusy=false;
+try{const persisted=localStorage.getItem(railPeriodKey);if(Object.hasOwn(railPeriods,persisted))railPeriod=persisted}catch(_e){}
+function railSafe(v){const x=document.createElement('span');x.textContent=String(v??'');return x.innerHTML}
+function railMoney(v){return(v>0?'+':'')+v.toFixed(4)+' USDT'}
+function railHardStopTrade(x){
+  // 'StopLoss' alone is NOT proof of the original maximum hard-stop.
+  const code=String(x.strategy_reason||'')+' '+String(x.reason||'')+' '+String(x.trade_card?.close_reason||'');
+  return /(?:HARD[_ -]?STOP|HARD_SL|MAX[_ -]?LOSS)/i.test(code);
+}
+function railRender(){
+  const period=railPeriods[railPeriod],cutoff=Date.now()-period.ms;
+  document.querySelectorAll('[data-rail-period]').forEach(b=>{const active=b.dataset.railPeriod===railPeriod;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
+  document.getElementById('railWindow').textContent='Последние '+period.label+' · скользящий период';
+  if(!railClosedFetched)return;
+  const recent=railClosedCache.filter(x=>Number(x.closed_at_epoch_ms||0)>=cutoff&&Number(x.closed_at_epoch_ms||0)<=Date.now()+60000);
+  let sum=0,withPnl=0,wins=0,soft=0,hard=0,unknown=0;
+  const html=recent.map(x=>{
+    const raw=x.actual_net_pnl??x.net_pnl;
+    const net=raw==null?null:Number(raw),valid=net!==null&&Number.isFinite(net);
+    let cls='',kind='PnL неизвестен';
+    if(valid){sum+=net;withPnl++;if(net>0){wins++;cls='win';kind='Плюс'}else if(railHardStopTrade(x)){hard++;cls='hard-stop';kind='Hard-stop'}else if(net<0){soft++;cls='soft-loss';kind='Минус · без признака hard-stop'}else{kind='Ноль'}}
+    else unknown++;
+    const stamp=new Date(Number(x.closed_at_epoch_ms)).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return '<div class="rail-trade '+cls+'"><div class="rail-trade-top"><b>'+railSafe(x.symbol||'—')+'</b><b>'+(valid?railMoney(net):'—')+'</b></div><small>'+railSafe(stamp)+' · '+railSafe(kind)+'</small></div>';
+  }).join('');
+  document.getElementById('railPnl').textContent=withPnl?railMoney(sum):'—';
+  document.getElementById('railPnl').className='rail-pnl '+(sum>0?'ok':sum<0?'loss':'');
+  document.getElementById('railCount').textContent=recent.length;
+  document.getElementById('railWins').textContent=wins;
+  document.getElementById('railSoftLoss').textContent=soft;
+  document.getElementById('railHardStop').textContent=hard;
+  document.getElementById('railClosedList').innerHTML=html||'<p class="rail-muted">За выбранный период закрытых сделок нет.</p>';
+  const note=unknown?' · PnL неизвестен: '+unknown:'';
+  document.getElementById('railDataStatus').textContent='Данные Bybit · '+recent.length+' исполнений'+note+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
+}
+document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('click',()=>{
+  railPeriod=b.dataset.railPeriod;
+  try{localStorage.setItem(railPeriodKey,railPeriod)}catch(_e){}
+  railRender();
+}));
+async function railRefresh(){
+  if(railRefreshBusy||document.hidden||!document.getElementById('liveDesk').classList.contains('active'))return;
+  railRefreshBusy=true;
+  try{
+    const resp=await fetch('/api/live/state?view=closed',{cache:'no-store'});
+    if(!resp.ok)throw Error('HTTP '+resp.status);
+    const out=await resp.json();
+    const closed=out.live_trading?.recent_closed;
+    if(!Array.isArray(closed))throw Error('Нет данных завершённых сделок');
+    railClosedCache=closed;
+    railClosedFetched=true;
+    railRender();
+  }catch(e){document.getElementById('railDataStatus').textContent='История временно недоступна: '+String(e.message||e)}
+  finally{railRefreshBusy=false}
+}
+railRender();
+railRefresh();
+setInterval(railRefresh,60000);
+
 </script></body></html>
