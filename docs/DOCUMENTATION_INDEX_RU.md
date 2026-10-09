@@ -1015,3 +1015,13 @@ appears enabled must produce durable CRITICAL plus red top-of-screen Dashboard
 banner, independent of audio and active trading signals. See current forensic
 checkpoint `CURRENT_PROJECT_MAP_RU.md §36`. Canon decision is not an
 implementation/deploy/runtime verification claim.
+
+## 20. Non-flat R1 re-arm decision — 2026-10-09
+
+OWNER DECISION: TRADING_CONTOUR §4.7.1 is the canonical owner of the distinction
+between initial Entry admission and release re-arm with existing protected
+positions/orders. The previous R1 PREARM flat-account rejection is invalid
+for NEW Entry authorization; retain all fresh connectivity, reconciliation,
+account/capital, strategy/version, position mode, physical-slot, protection and
+per-entry risk checks. This does not authorize closing current positions,
+automatic re-arm, or bypass of actual execution/Exit safety faults.
