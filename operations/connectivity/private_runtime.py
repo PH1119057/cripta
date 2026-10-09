@@ -1468,7 +1468,7 @@ def _normalize_dynamic_tp(
     A LONG closes by selling: floor; a SHORT closes by buying: ceiling.
     Exchange specification is fetched from Bybit for the exact symbol.
     """
-    if value <= 0 or not value.is_finite() or tick <= 0 or not tick.is_finite():
+    if not value.is_finite() or not tick.is_finite() or value <= 0 or tick <= 0:
         raise RuntimeError("dynamic TP price/tick must be finite and positive")
     if position_side not in {"Buy", "Sell"}:
         raise RuntimeError("dynamic TP position side unsupported")
