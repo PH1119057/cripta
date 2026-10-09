@@ -236,7 +236,12 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     engine = UniversalExitEngine()
-    connection = psycopg.connect(\n        DB_DSN,\n        autocommit=True,\n        row_factory=dict_row,\n        options="-c idle_in_transaction_session_timeout=120000",\n    )
+    connection = psycopg.connect(
+        DB_DSN,
+        autocommit=True,
+        row_factory=dict_row,
+        options="-c idle_in_transaction_session_timeout=120000",
+    )
     try:
         while running:
             now = datetime.now(UTC)
