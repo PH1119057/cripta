@@ -1,6 +1,6 @@
 """R1 Exit: extrema gate, ATR independence, and Bybit tick normalization."""
 import ast
-from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from pathlib import Path
 
 
@@ -10,7 +10,10 @@ def test_shadow_decision_requires_opposite_range_change():
     assert '"range_high" if position.direction is TradeDirection.LONG' in source
     assert 'else "range_low"' in source
     assert "strategy_exit.exit_observations" in source
-    assert 'Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field]))' in source
+    assert (
+        'Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field]))'
+        in source
+    )
     assert "continue" in source
     assert 'target_inner' in source
     assert '"atr": str(zone.atr)' in source
