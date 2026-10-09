@@ -81,8 +81,8 @@ def check_release_arm_invariant(connection: Any, *, loaded_commit: str,
         if gate_open:
             connection.execute(
                 """UPDATE control.execution_gates
-                      SET enabled=false,reason=%s,updated_at_epoch_ms=%s
-                    WHERE mode='mainnet' AND enabled=true""",
+                      SET enabled=0,reason=%s,updated_at_epoch_ms=%s
+                    WHERE mode='mainnet' AND enabled=1""",
                 (reason, int(instant.timestamp() * 1000)),
             )
             connection.execute(
