@@ -1,0 +1,31 @@
+name: release-managed-exit-consumer
+on:
+  push:
+    paths:
+      - "operations/infrastructure/install_verified_release.sh"
+      - "tests/test_release_managed_exit_consumer.py"
+      - ".github/workflows/release-managed-exit-consumer.yml"
+  pull_request:
+    paths:
+      - "operations/infrastructure/install_verified_release.sh"
+      - "tests/test_release_managed_exit_consumer.py"
+      - ".github/workflows/release-managed-exit-consumer.yml"
+jobs:
+  verified:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked environment
+        run: |
+          python -m pip install uv==0.11.33
+          uv sync --locked --all-extras --python 3.12
+      - name: Installer shell syntax and test lint
+        run: |
+          bash -n operations/infrastructure/install_verified_release.sh
+          .venv/bin/python -m ruff check tests/test_release_managed_exit_consumer.py
+      - name: Installer service-lifecycle contract
+        run: |
+          .venv/bin/python -m pytest -q tests/test_release_managed_exit_consumer.py
