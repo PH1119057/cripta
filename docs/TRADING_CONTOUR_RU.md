@@ -1072,7 +1072,7 @@ ATR200 используется в расчёте ширины зоны; отд�
 
 Execution/Lifecycle reconciles fresh complete Exchange snapshots with durable Entry/Exit lineage, orders, execution IDs and capital reservations. Preserve local trade history; restore exact results after fees where exchange evidence suffices. If current exposure is absent but exit evidence incomplete, mark historical outcome UNKNOWN rather than inventing P&L or holding all independent Strategies hostage. Restrict unresolved mutation only within its exact affected scope. No queue replay or automatic LIVE-arm from restart alone.
 
-## 4.7.1 Owner decision 2026-10-09 — R1 re-arm without flat Exchange inventory
+## 4.10 Owner decision 2026-10-09 — R1 re-arm without flat Exchange inventory
 
 For the current exact R1 MICRO_LIVE cohort, re-arm authorizes **future NEW Entry** only.
 Existing Exchange positions, protective orders and lifecycle commands are not
