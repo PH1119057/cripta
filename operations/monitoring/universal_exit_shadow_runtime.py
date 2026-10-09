@@ -236,7 +236,12 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     engine = UniversalExitEngine()
-    connection = psycopg.connect(DB_DSN, autocommit=False, row_factory=dict_row)
+    connection = psycopg.connect(
+        DB_DSN,
+        autocommit=True,
+        row_factory=dict_row,
+        options="-c idle_in_transaction_session_timeout=120000",
+    )
     try:
         while running:
             now = datetime.now(UTC)
@@ -246,12 +251,13 @@ def main() -> int:
                     now=now,
                     consumer_instance_id=CONSUMER_ID,
                 )
-            recorded_count, evaluation_blocks = _evaluate_claimed_positions(
-                connection,
-                engine,
-                cycle.claimed_positions,
-                now=now,
-            )
+            with connection.transaction():
+                recorded_count, evaluation_blocks = _evaluate_claimed_positions(
+                    connection,
+                    engine,
+                    cycle.claimed_positions,
+                    now=now,
+                )
             all_blocks = cycle.blocked_positions + evaluation_blocks
             _status(
                 {
