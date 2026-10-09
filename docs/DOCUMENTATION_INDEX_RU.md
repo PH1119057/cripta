@@ -1018,7 +1018,7 @@ implementation/deploy/runtime verification claim.
 
 ## 20. Non-flat R1 re-arm decision — 2026-10-09
 
-OWNER DECISION: TRADING_CONTOUR §4.7.1 is the canonical owner of the distinction
+OWNER DECISION: TRADING_CONTOUR §4.10 is the canonical owner of the distinction
 between initial Entry admission and release re-arm with existing protected
 positions/orders. The previous R1 PREARM flat-account rejection is invalid
 for NEW Entry authorization; retain all fresh connectivity, reconciliation,
