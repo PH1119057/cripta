@@ -207,7 +207,16 @@ def main() -> int:
     signal.signal(signal.SIGINT, _stop)
     if CONSUMER_ARM != "ENABLED":
         raise SystemExit("Universal Exit mainnet consumer is explicitly disabled")
-    connection = psycopg.connect(DB_DSN, autocommit=False, row_factory=dict_row)
+    # A leaked idle transaction must never hold position-ownership row locks
+    # indefinitely after PostgreSQL / private-runtime recovery. PostgreSQL
+    # rolls such a transaction back; systemd's on-failure restart reconnects.
+    # This does not touch Exchange orders, open positions or Entry permissions.
+    connection = psycopg.connect(
+        DB_DSN,
+        autocommit=False,
+        row_factory=dict_row,
+        options="-c idle_in_transaction_session_timeout=120000",
+    )
     try:
         while running:
             run_once(connection)
