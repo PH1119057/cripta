@@ -853,6 +853,7 @@ function renderReleaseArmCritical(lt){
 function renderMiniLogFeed(lt){
   const host=document.getElementById('liveSystemEventFeed');
   if(!host)return;
+  const refusals=lt.entry_refusals||{};
   const commands=Array.isArray(lt.commands)?lt.commands:[];
   const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[];
   const groups=new Map();
@@ -876,9 +877,15 @@ function renderMiniLogFeed(lt){
     const reason=String(x.reason||'неподтверждённая готовность');
     add('release:'+String(x.incident_id||reason),time,true,'Release: '+reason,'Affected: '+JSON.stringify(x.affected??'—')+' · release '+String(x.release_commit||'—'));
   }
+  for(const x of (Array.isArray(refusals.items)?refusals.items:[])){
+    const symbol=String(x.symbol||'—'),code=String(x.decision_code||'UNKNOWN'),reason=String(x.reason||'причина не указана');
+    const t=Date.parse(x.decided_at||'');
+    add('entry:'+symbol+':'+code+':'+reason,Number.isFinite(t)?t:0,true,symbol+' · отказ Entry · '+code+' · '+reason,'EntryDecision '+String(x.entry_decision_id||'—')+' · signal '+String(x.signal_id||'—'));
+  }
+  if(refusals.truncated)add('entry:truncated',Date.now(),true,'EntryDecision · показаны не все отказы','За 24 часа более 500 записей. Требуется полный журнал решений.');
   const entries=[...groups.values()].sort((a,b)=>Number(b.bad)-Number(a.bad)||b.t-a.t);
   const warnings=entries.slice(0,12).map(x=>{
-    const count=x.count>1?' · '+x.count+' событий':'';
+    const count=x.count>1?' · '+x.count+' случаев':'';
     const details=x.details.sort((a,b)=>b.t-a.t).map(d=>'<div class="mini-log-detail-row">'+safe(d.detail)+' <span class="muted">'+(d.t?new Date(d.t).toLocaleString('ru-RU'):'время неизвестно')+'</span></div>').join('');
     return '<details class="console-event '+(x.bad?'console-critical':'')+'"><summary><span class="event-dot '+(x.bad?'bad-dot':'ok-dot')+'"></span><span>'+safe(x.title+count)+'</span></summary><div class="console-event-detail">'+details+'</div></details>';
   }).join('');
