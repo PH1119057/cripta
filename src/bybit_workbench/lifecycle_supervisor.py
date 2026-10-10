@@ -1247,6 +1247,13 @@ class LifecycleSupervisor:
                 )
                 age = (now - last_seen).total_seconds()
                 if age < 0:
+                    # Recheck against a fresh DB clock: the claim may have been
+                    # updated after the supervisor epoch timestamp was captured.
+                    db_clock = self._connection.execute(
+                        "SELECT clock_timestamp() AS observed_at"
+                    ).fetchone()["observed_at"]
+                    age = (db_clock - last_seen).total_seconds()
+                if age < 0:
                     claim_reason = "Exit Engine claim heartbeat is from the future"
                 elif age > self._policy.exit_owner_max_age_seconds:
                     claim_reason = "Exit Engine claim heartbeat is stale"
