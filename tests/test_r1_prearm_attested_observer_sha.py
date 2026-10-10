@@ -15,7 +15,7 @@ def test_attested_observer_sha_matches_current_source() -> None:
     assignment = next(
         n for n in tree.body
         if isinstance(n, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "R1_PARITY_ATTESTED_MODULE_SHA256" for t in n.targets)
+        and any(\n            isinstance(t, ast.Name) and t.id == "R1_PARITY_ATTESTED_MODULE_SHA256"\n            for t in n.targets\n        )
     )
     hashes = ast.literal_eval(assignment.value)
     assert hashes["operations/monitoring/universal_entry_shadow.py"] == hashlib.sha256(
