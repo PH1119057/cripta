@@ -348,6 +348,28 @@ handoff/invariants, включая:
 - POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION;
 - потерянный/неподтверждённый required handoff/reconciliation.
 
+Owner decision 2026-10-11 — exchange protection и Exit Engine ownership являются
+**разными независимыми состояниями**, не заменяют друг друга:
+- фактическая позиция, принятые биржей TP и Hard Stop подтверждаются
+  read-only Exchange/account evidence для exact account + symbol + positionIdx;
+  отсутствие свежего account evidence = UNKNOWN, не «защищена»;
+- Exit Engine claim, last_seen heartbeat, active consumer и exact ExitPlan
+  подтверждаются собственными operational evidence, независимо от TP/SL;
+- потеря подтверждённого сопровождения открытой StrategyPosition остаётся
+  CRITICAL / POSITION_WITHOUT_EXIT_OWNER и блокирует **новые** Entry по
+  operational-safety contract даже при биржевом TP/SL;
+- биржевой TP/SL не даёт права считать Exit Engine работоспособным, а healthy
+  heartbeat не доказывает наличия актуального TP/SL на бирже;
+- Dashboard обязан дать устойчивый красный приоритетный сигнал о потере
+  сопровождения (без прокрутки консоли), exact position_id/symbol, причину,
+  observed_at и recoverability; отдельное состояние биржевой защиты:
+  VERIFIED / NOT_VERIFIED / UNKNOWN. UI refresh не очищает durable fault;
+- repeat incidents группируются для восприятия, но все исходные
+  события/отказы EntryDecision остаются доступными для аудита;
+- восстановление требует доказанного active exact claim / heartbeat
+  и штатного reconciliation. Нет обхода критического Entry gate,
+  тихого auto-resolve, auto-close или изменения Strategy TP/Hard Stop.
+
 EXCHANGE_POSITION_OWNERSHIP_CONFLICT не является critical lifecycle fault:
 это штатный fail-closed EntryDecision outcome до real request.
 
