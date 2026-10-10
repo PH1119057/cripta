@@ -1,0 +1,26 @@
+name: r1-prearm-parity-attestation
+on:
+  push:
+    paths:
+      - operations/dashboard/app.py
+      - tests/test_r1_prearm_attested_observer_sha.py
+      - .github/workflows/r1-prearm-parity-attestation.yml
+  pull_request:
+    paths:
+      - operations/dashboard/app.py
+      - tests/test_r1_prearm_attested_observer_sha.py
+      - .github/workflows/r1-prearm-parity-attestation.yml
+jobs:
+  attestation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check attested bytes and observer cleanup
+        run: |
+          python -m pip install pytest ruff
+          python -m compileall -q operations/dashboard/app.py
+          python -m ruff check tests/test_r1_prearm_attested_observer_sha.py
+          python -m pytest -q tests/test_r1_prearm_attested_observer_sha.py
