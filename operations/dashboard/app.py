@@ -1156,6 +1156,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 ORDER BY detected_at DESC
                 LIMIT 20"""
         ).fetchall()
+        # Dashboard-only projection of durable EntryDecision refusals (no policy evaluation).
+        entry_refusal_rows = connection.execute(
+            """SELECT s.symbol,d.decision_code,d.reason,d.decided_at,
+                      d.entry_decision_id,s.signal_id
+                 FROM strategy_entry.entry_decisions d
+                 JOIN strategy_entry.strategy_signals s ON s.signal_id=d.signal_id
+                WHERE d.decision_code <> 'ACCEPTED'
+                  AND d.decided_at >= now() - interval '24 hours'
+                ORDER BY d.decided_at DESC
+                LIMIT 501"""
+        ).fetchall()
         critical_fault_rows = connection.execute(
             """SELECT fault_id,fault_code,severity,detected_at,payload
                FROM runtime.lifecycle_faults
@@ -1649,6 +1660,21 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 if recent_not_ready_rows[1] else None
             ),
         ),
+        "entry_refusals": {
+            "window_hours": 24,
+            "truncated": len(entry_refusal_rows) > 500,
+            "items": [
+                {
+                    "symbol": str(r[0]),
+                    "decision_code": str(r[1]),
+                    "reason": str(r[2] or ""),
+                    "decided_at": r[3].isoformat(),
+                    "entry_decision_id": str(r[4]),
+                    "signal_id": str(r[5]),
+                }
+                for r in entry_refusal_rows[:500]
+            ],
+        },
         "critical_faults": [
             {
                 "fault_id": r[0],
