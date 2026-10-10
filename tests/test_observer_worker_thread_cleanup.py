@@ -21,7 +21,7 @@ def test_worker_cleanup_only_joins_started_threads() -> None:
             in function_text
         )
         assert (
-            "if trade_mirror_thread.ident is not None:\n            trade_mirror_thread.join(timeout=2.0)"
+            ("if trade_mirror_thread.ident is not None:"\n             + "\n            trade_mirror_thread.join(timeout=2.0)")
             in function_text
         )
 
