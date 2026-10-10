@@ -26,7 +26,7 @@
     /* Symmetric three-column trading workspace; each rail owns its scroll area. */
     .workspace-rail{display:none;min-width:0;align-self:start;position:sticky;top:72px;height:calc(100vh - 88px);overflow:hidden;background:#101d28;border:1px solid var(--line);border-radius:12px;padding:14px;flex-direction:column;gap:12px}
     .workspace-rail h2{margin:0;font-size:16px}
-    .workspace-rail .rail-scroll{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1;overscroll-behavior:contain}
+    .workspace-rail .rail-scroll{display:block;overflow-y:scroll;overflow-x:hidden;min-height:0;flex:1 1 0;overscroll-behavior:contain;scrollbar-width:thin}
     .workspace-rail .rail-muted{font-size:12px;color:var(--muted)}
     .workspace-rail .rail-placeholder{border:1px dashed #3d566a;border-radius:9px;padding:14px 10px;color:var(--muted);min-height:70px}
     .workspace-rail .rail-pnl{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -85,7 +85,7 @@
       body:has(#liveDesk.active){overflow:hidden}
       main:has(#liveDesk.active){height:calc(100vh - 32px);max-height:calc(100vh - 32px);overflow:hidden;align-content:start;row-gap:8px}
       main:has(#liveDesk.active)>nav{grid-column:1/-1;position:relative;top:auto;max-width:100%;margin:0}
-      main:has(#liveDesk.active)>#marketWorkspaceRail,main:has(#liveDesk.active)>#closedWorkspaceRail{height:calc(100vh - 118px);top:auto;position:relative}
+      main:has(#liveDesk.active)>#marketWorkspaceRail,main:has(#liveDesk.active)>#closedWorkspaceRail{height:calc(100vh - 118px);max-height:calc(100vh - 118px);min-height:0;top:auto;position:relative}
       main:has(#liveDesk.active)>#liveDesk{height:calc(100vh - 118px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;align-content:start;min-height:0}
       main:has(#liveDesk.active)>#releaseArmCriticalBanner:not([hidden]){position:fixed!important;top:48px;left:2%;right:2%;width:auto;max-height:24vh;overflow-y:auto;z-index:1200}
     }
@@ -885,6 +885,19 @@ function renderMiniLogFeed(lt){
     add('entry:'+symbol+':'+code+':'+reason,Number.isFinite(t)?t:0,true,symbol+' · отказ Entry · '+code+' · '+reason,'EntryDecision '+String(x.entry_decision_id||'—')+' · signal '+String(x.signal_id||'—'));
   }
   if(refusals.truncated)add('entry:truncated',Date.now(),true,'EntryDecision · показаны не все отказы','За 24 часа более 500 записей. Требуется полный журнал решений.');
+  // A decision refusal is immutable history, not an active fault. Only
+  // presently OPEN lifecycle faults and release incidents may appear critical.
+  const activeFaults=new Set((Array.isArray(lt.critical_faults)?lt.critical_faults:[]).map(x=>String(x.fault_code||'')));
+  for(const group of groups.values()){
+    if(group.title.includes('отказ Entry')){
+      const code=group.title.includes('POSITION_WITHOUT_EXIT_OWNER')?'POSITION_WITHOUT_EXIT_OWNER':'';
+      group.bad=Boolean(code&&activeFaults.has(code));
+      if(!group.bad)group.title='История · '+group.title;
+    }else if(group.title.startsWith('Ошибка команды Bybit')){
+      group.bad=false;
+      group.title='История · '+group.title;
+    }
+  }
   const entries=[...groups.values()].sort((a,b)=>Number(b.bad)-Number(a.bad)||b.t-a.t);
   const warnings=entries.slice(0,12).map(x=>{
     const count=x.count>1?' · '+x.count+' случаев':'';
