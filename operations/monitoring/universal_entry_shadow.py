@@ -2220,9 +2220,11 @@ def _run_observer_epoch(
         return "STOP"
     finally:
         oi_stop.set()
-        oi_thread.join(timeout=2.0)
+        if oi_thread.ident is not None:
+            oi_thread.join(timeout=2.0)
         trade_mirror_stop.set()
-        trade_mirror_thread.join(timeout=2.0)
+        if trade_mirror_thread.ident is not None:
+            trade_mirror_thread.join(timeout=2.0)
         if sock is not None:
             with suppress(Exception):
                 sock.close()
@@ -3195,11 +3197,11 @@ def _run_parity_main() -> None:
     finally:
         if oi_stop_event is not None:
             oi_stop_event.set()
-        if oi_thread is not None:
+        if oi_thread is not None and oi_thread.ident is not None:
             oi_thread.join(timeout=2.0)
         if trade_mirror_stop is not None:
             trade_mirror_stop.set()
-        if trade_mirror_thread is not None:
+        if trade_mirror_thread is not None and trade_mirror_thread.ident is not None:
             trade_mirror_thread.join(timeout=2.0)
         if sock is not None:
             with suppress(Exception):
