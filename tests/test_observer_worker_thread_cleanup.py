@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 SOURCE = Path("operations/monitoring/universal_entry_shadow.py")
 
 
