@@ -109,6 +109,7 @@
     #infraSoundSettings .trade-audio-row{margin-top:0}
     #liveDesk .trade-operator-bar{position:relative;top:auto}
     @media(max-width:680px){.operator-console{grid-template-columns:1fr}.console-event-list{max-height:155px}}
+.rail-trade-result{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:2px}.rail-trade-result .rail-move{font-size:10px;line-height:1.1;font-variant-numeric:tabular-nums}.console-event summary{cursor:pointer}
 </style>
 </head>
 <body><main>
@@ -185,7 +186,7 @@
               <div id="observerFaultSummary" class="durable-fault-summary">—</div>
               <div id="observerFaultItems"></div>
             </section>
-            <div id="liveCriticalEventList" aria-live="polite"></div>
+            <div id="liveCriticalEventList" aria-live="polite"></div><div id="liveSystemEventFeed"></div>
             <div id="gateEventMessage" class="console-event-note muted">Состояние шлюза загружается…</div>
           </div>
         </section>
@@ -847,6 +848,23 @@ function renderReleaseArmCritical(lt){
        ', обнаружен '+safe(incidents[0].detected_at)+'. ':'')+
     'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
 }
+function renderMiniLogFeed(lt){
+  const host=document.getElementById('liveSystemEventFeed');
+  if(!host)return;
+  const commands=Array.isArray(lt.commands)?lt.commands.slice(0,8):[];
+  const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents.slice(0,5):[];
+  const items=[];
+  for(const c of commands){
+    const state=String(c.state||'UNKNOWN'),failed=/FAIL|ERROR|REJECT|DENIED|TIMEOUT/i.test(state);
+    items.push({t:Number(c.requested_at_epoch_ms||0),bad:failed,title:(failed?'Команда не выполнена':'Команда Bybit')+' · '+String(c.symbol||'—')+' · '+String(c.type||'—')+' · '+state,detail:String(c.error||'ID '+(c.command_id||'—'))});
+  }
+  for(const x of incidents){
+    const t=Date.parse(x.detected_at||'');
+    items.push({t:Number.isFinite(t)?t:0,bad:true,title:'Release: '+String(x.reason||'неподтверждённая готовность'),detail:'Affected: '+JSON.stringify(x.affected??'—')+' · release '+String(x.release_commit||'—')});
+  }
+  items.sort((a,b)=>b.t-a.t);
+  host.innerHTML=items.slice(0,12).map(x=>'<details class="console-event '+(x.bad?'console-critical':'')+'"><summary><span class="event-dot '+(x.bad?'bad-dot':'ok-dot')+'"></span><span>'+safe(x.title)+'</span></summary><div class="console-event-detail">'+safe(x.detail)+'<div class="muted">'+(x.t?new Date(x.t).toLocaleString('ru-RU'):'время неизвестно')+'</div></div></details>').join('')||'<div class="console-event-note muted">Новых команд или release-инцидентов нет</div>';
+}
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
   const faults=Array.isArray(lt.critical_faults)?lt.critical_faults:[];
@@ -863,7 +881,7 @@ function renderLiveState(d){
   const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm')}
   liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;
   if(!gateChanging){tradeGateButton.textContent=liveGateOpen?'Запретить новые входы':'Разрешить новые входы';tradeGateButton.classList.toggle('danger',!liveGateOpen);tradeGateButton.disabled=!liveGateOpen&&!rearmReady;setOperationStatus(tradeOperationStatus,liveGateOpen?'success':rearmReady?'warn':'error',liveGateOpen?'Глобальный допуск новых реальных входов открыт':rearmReady?'Новые реальные входы запрещены · hard stop отсутствует':'Новые реальные входы запрещены · действует operational hard stop')}
-  document.getElementById('gateEventMessage').textContent=liveGateOpen?'Шлюз открыт · новые реальные входы разрешены при готовности Strategy':'Шлюз закрыт · новые реальные входы запрещены';renderLiveCriticalEvents(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
+  document.getElementById('gateEventMessage').textContent=liveGateOpen?'Шлюз открыт · новые реальные входы разрешены при готовности Strategy':'Шлюз закрыт · новые реальные входы запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Защитить чистую прибыль</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
@@ -1013,7 +1031,7 @@ function railRender(){
     if(valid){sum+=net;withPnl++;if(net>0){wins++;cls='win';kind='Плюс'}else if(railHardStopTrade(x)){hard++;cls='hard-stop';kind='Hard-stop'}else if(net<0){soft++;cls='soft-loss';kind='Минус · без признака hard-stop'}else{kind='Ноль'}}
     else unknown++;
     const stamp=new Date(Number(x.closed_at_epoch_ms)).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    return '<div class="rail-trade '+cls+'"><div class="rail-trade-top"><b>'+railSafe(x.symbol||'—')+'</b><b>'+(valid?railMoney(net):'—')+'</b></div><small>'+railSafe(stamp)+' · '+railSafe(kind)+'</small></div>';
+    const pct=x.gross_move_pct==null?null:Number(x.gross_move_pct),pctOk=pct!==null&&Number.isFinite(pct);const pctText=pctOk?(pct>0?'+':'')+pct.toFixed(3)+'%':'—';return '<div class="rail-trade '+cls+'"><div class="rail-trade-top"><b>'+railSafe(x.symbol||'—')+'</b><div class="rail-trade-result"><b>'+(valid?railMoney(net):'—')+'</b><small class="rail-move '+(pctOk?(pct>0?'ok':pct<0?'loss':''):'')+'">'+railSafe(pctText)+'</small></div></div><small>'+railSafe(stamp)+' · '+railSafe(kind)+'</small></div>';
   }).join('');
   document.getElementById('railPnl').textContent=withPnl?railMoney(sum):'—';
   document.getElementById('railPnl').className='rail-pnl '+(sum>0?'ok':sum<0?'loss':'');
