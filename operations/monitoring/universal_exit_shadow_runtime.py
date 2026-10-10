@@ -98,27 +98,40 @@ def claim_cycle(
     claimed: list[str] = []
     blocked: list[tuple[str, str]] = []
     for position_id in _position_ids(connection):
-        try:
-            position, plan = load_exit_binding(
-                connection,
-                strategy_position_id=position_id,
-            )
-            if position.exit_plan_fingerprint != plan.exit_plan_fingerprint:
-                raise RuntimeError("Universal Exit exact binding mismatch")
-            claim_exit_position(
-                connection,
-                strategy_position_id=position_id,
-                consumer_instance_id=consumer_instance_id,
-                claimed_at=current,
-                payload={
-                    "runtime": "universal_exit_shadow",
-                    "mode": "DECISION_ONLY_NO_EXECUTION",
-                },
-            )
-        except (KeyError, RuntimeError, ValueError) as exc:
-            blocked.append((position_id, f"{type(exc).__name__}: {exc}"))
-            continue
-        claimed.append(position_id)
+        # Each exact claim owns its own short transaction in claim_exit_position.
+        # Never retain FOR UPDATE locks over the entire set of open positions:
+        # entry-fill materialization concurrently upserts position_ownership.
+        for attempt in range(3):
+            try:
+                position, plan = load_exit_binding(
+                    connection,
+                    strategy_position_id=position_id,
+                )
+                if position.exit_plan_fingerprint != plan.exit_plan_fingerprint:
+                    raise RuntimeError("Universal Exit exact binding mismatch")
+                claim_exit_position(
+                    connection,
+                    strategy_position_id=position_id,
+                    consumer_instance_id=consumer_instance_id,
+                    claimed_at=current,
+                    payload={
+                        "runtime": "universal_exit_shadow",
+                        "mode": "DECISION_ONLY_NO_EXECUTION",
+                    },
+                )
+            except psycopg.errors.DeadlockDetected as exc:
+                # PostgreSQL rolled back the exact claim transaction. Retry
+                # boundedly; exhaustion remains a blocked, not a healthy claim.
+                if attempt == 2:
+                    blocked.append((position_id, f"{type(exc).__name__}: {exc}"))
+                else:
+                    time.sleep(0.05 * (attempt + 1))
+                continue
+            except (KeyError, RuntimeError, ValueError) as exc:
+                blocked.append((position_id, f"{type(exc).__name__}: {exc}"))
+                break
+            claimed.append(position_id)
+            break
     return ClaimCycleResult(tuple(claimed), tuple(blocked))
 
 
@@ -268,12 +281,13 @@ def main() -> int:
     try:
         while running:
             now = datetime.now(UTC)
-            with connection.transaction():
-                cycle = claim_cycle(
-                    connection,
-                    now=now,
-                    consumer_instance_id=CONSUMER_ID,
-                )
+            # claim_cycle commits each exact position independently, avoiding
+            # cross-position lock retention against Entry fill materialization.
+            cycle = claim_cycle(
+                connection,
+                now=now,
+                consumer_instance_id=CONSUMER_ID,
+            )
             with connection.transaction():
                 recorded_count, evaluation_blocks = _evaluate_claimed_positions(
                     connection,
