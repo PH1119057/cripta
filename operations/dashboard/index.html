@@ -89,6 +89,26 @@
       main:has(#liveDesk.active)>#liveDesk{height:calc(100vh - 118px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;align-content:start;min-height:0}
       main:has(#liveDesk.active)>#releaseArmCriticalBanner:not([hidden]){position:fixed!important;top:48px;left:2%;right:2%;width:auto;max-height:24vh;overflow-y:auto;z-index:1200}
     }
+    /* Operator console: events on the left, gateway control on the right. */
+    .operator-console{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,1fr);gap:10px;margin-top:9px;border-top:1px solid var(--line);padding-top:9px;min-width:0}
+    .console-events,.console-gate{min-width:0;background:#0b151e;border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:7px}
+    .console-header{display:flex;flex-direction:column;gap:2px}.console-header>b{font-size:12px}.console-header small{font-size:10px;color:var(--muted)}
+    .console-event-list{max-height:190px;overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-right:3px}
+    .console-event{margin:3px 0;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:#101d28}
+    .console-event summary{display:flex;gap:6px;align-items:center;color:var(--text);font-size:11px;line-height:1.3;font-weight:500;overflow-wrap:anywhere}
+    .console-event summary::marker{color:var(--accent)}.console-event .trade-command-alert{padding:0;border:0;background:none;font-size:11px;font-weight:550}
+    .console-event p,.console-event-detail{font-size:11px;margin:7px 0 2px;overflow-wrap:anywhere}
+    .event-dot{width:7px;height:7px;border-radius:50%;flex:none}.ok-dot{background:var(--ok)}.bad-dot{background:#ff7070}
+    .console-critical{border-color:#873f46;background:#30191e}.console-critical summary{color:#ffc2c2}
+    .console-event-note{font-size:10px;padding:4px 2px}
+    .console-gate #tradeGateButton{align-self:flex-start;font-size:12px;font-weight:700;padding:8px 13px}
+    .console-gate .operation-status{font-size:11px;margin:0;padding:6px 8px;font-weight:600}
+    .console-gate .observer-lock{font-size:11px;padding:6px 8px}
+    .console-gate-reasons,.console-release-status{font-size:10px;line-height:1.3;overflow-wrap:anywhere}
+    .console-gate-reasons ul{margin:3px 0;padding-left:17px}
+    #infraSoundSettings .trade-audio-row{margin-top:0}
+    #liveDesk .trade-operator-bar{position:relative;top:auto}
+    @media(max-width:680px){.operator-console{grid-template-columns:1fr}.console-event-list{max-height:155px}}
 </style>
 </head>
 <body><main>
@@ -112,6 +132,16 @@
     <article class="card full"><h2>Резервное копирование</h2><table><thead><tr><th>Состояние</th><th>Последний снимок UTC</th><th>Состав</th><th>Тяжёлые datasets</th><th>Следующий запуск</th></tr></thead><tbody id="backup"></tbody></table></article>
     <article class="card full"><h2>Операционный список монет</h2><div id="selectionRules" class="muted" style="margin-bottom:12px"></div><table><thead><tr><th>Сегодня</th><th>Монета</th><th>Роль</th><th>Оборот 24ч</th><th>Спред</th><th>Open interest</th><th>Funding</th><th>Trades</th><th>Orderbook</th><th>Данные</th></tr></thead><tbody id="symbols"></tbody></table></article>
     <article class="card"><h2>Службы</h2><div id="services"></div><h2 style="margin-top:20px">Технологии</h2><div id="tech" class="muted"></div></article>
+    <article class="card full" id="infraSoundSettings"><h2>Звуковые уведомления</h2>
+      <div class="trade-audio-row">
+        <button id="enableSound" class="action" type="button">Включить звук</button>
+        <button id="testSound" class="action" type="button">Проверить звук</button>
+        <label>Открытие<select id="entrySoundChoice"><option value="rise">дзынь-дынь-дынь</option><option value="bell">три колокольчика</option><option value="beep">три сигнала</option></select></label>
+        <label>Закрытие в плюс<select id="profitSoundChoice"><option value="quack">один кряк</option><option value="bell">колокольчик</option><option value="rise">победный сигнал</option></select></label>
+        <label>Закрытие в минус<select id="lossSoundChoice"><option value="triple_quack">три кряка</option><option value="alarm">низкая тревога</option><option value="beep">три сигнала</option></select></label>
+        <span id="soundStatus" class="muted"></span>
+      </div>
+    </article>
   </section>
   <section id="current" class="grid panel">
     <article class="card full"><h2>Актуальная кодовая база</h2><table><thead><tr><th>Релиз</th><th>Статус</th><th>Объём</th><th>Модули src</th><th>Скрипты</th><th>Тесты</th></tr></thead><tbody id="currentCode"></tbody></table><div class="muted" style="margin-top:10px">Сохранена как воспроизводимая основа, но не активирована как стратегия и не запускает торговлю.</div></article>
@@ -131,27 +161,9 @@
   </section>
   
   <aside id="marketWorkspaceRail" class="workspace-rail" aria-label="Рыночные индикаторы">
-    <h2>Состояние системы</h2>
-    <div class="rail-muted">Важные события · ошибки и команды Bybit</div>
-    <div class="rail-scroll">
-      <section class="rail-health-card" aria-label="Последняя команда Bybit">
-        <b>Последняя команда</b>
-        <span id="tradeCommandStatus" class="trade-command-alert neutral">Команд ещё не было</span>
-      </section>
-      <section class="rail-health-card" aria-label="Операционный статус">
-        <b>Операционный статус</b>
-        <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
-      </section>
-      <section id="observerFaultBanner" class="durable-fault-banner rail-faults" hidden aria-live="polite">
-        <h2>Ошибки Entry Observer</h2>
-        <div id="observerFaultSummary" class="durable-fault-summary">—</div>
-        <div id="observerFaultItems"></div>
-      </section>
-      <details class="rail-market-future">
-        <summary>Будущие индикаторы рынка</summary>
-        <div class="rail-placeholder">Индикаторы добавим позднее</div>
-      </details>
-    </div>
+    <h2>Сигналы рынка</h2>
+    <div class="rail-muted">Мониторинг рынка · место для будущих сигналов</div>
+    <div class="rail-scroll"><div class="rail-placeholder">Рыночные сигналы пока не настроены</div></div>
   </aside>
 <section id="liveDesk" class="grid panel">
     <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор Strategy</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button><button type="button" data-trade-page="bybit_log">Лог Bybit</button></div>
@@ -163,17 +175,28 @@
         <div class="trade-operator-metric"><span class="muted">Открытые сделки</span><span id="livePositions" class="value">—</span><small class="live-detail">реальные позиции Bybit</small></div>
         <div class="trade-operator-metric"><span class="muted">Связь / свежесть</span><span id="operatorConnection" class="value">—</span><small id="liveFreshness" class="live-detail">ожидание live-state</small></div>
       </div>
-      <div class="trade-gate-row compact-gate">
-        <div class="trade-gate-reasons"><div id="tradeGateNotice" class="observer-lock"><b>Новые реальные входы запрещены.</b></div><div id="tradeGateReasons" class="muted" style="margin-top:5px"></div></div>
-        <button id="tradeGateButton" class="action danger" type="button">Разрешить новые входы</button>
-      </div>
-      <div class="trade-audio-row">
-        <button id="enableSound" class="action" type="button">Включить звук</button>
-        <button id="testSound" class="action" type="button">Проверить звук</button>
-        <label>Открытие<select id="entrySoundChoice"><option value="rise">дзынь-дынь-дынь</option><option value="bell">три колокольчика</option><option value="beep">три сигнала</option></select></label>
-        <label>Закрытие в плюс<select id="profitSoundChoice"><option value="quack">один кряк</option><option value="bell">колокольчик</option><option value="rise">победный сигнал</option></select></label>
-        <label>Закрытие в минус<select id="lossSoundChoice"><option value="triple_quack">три кряка</option><option value="alarm">низкая тревога</option><option value="beep">три сигнала</option></select></label>
-        <span id="soundStatus" class="muted"></span>
+      <div class="operator-console" aria-label="Системные события и управление торговым шлюзом">
+        <section class="console-events" aria-label="События системы">
+          <div class="console-header"><b>События системы</b><small>Последние важные действия и ошибки</small></div>
+          <div class="console-event-list">
+            <details class="console-event"><summary><span class="event-dot ok-dot"></span><span id="tradeCommandStatus" class="trade-command-alert neutral">Команд ещё не было</span></summary><p class="muted">Состояние последней команды, отправленной Bybit. Подробный журнал находится в разделе «Лог Bybit».</p></details>
+            <section id="observerFaultBanner" class="durable-fault-banner rail-faults" hidden aria-live="polite">
+              <h2>Ошибки Entry Observer</h2>
+              <div id="observerFaultSummary" class="durable-fault-summary">—</div>
+              <div id="observerFaultItems"></div>
+            </section>
+            <div id="liveCriticalEventList" aria-live="polite"></div>
+            <div id="gateEventMessage" class="console-event-note muted">Состояние шлюза загружается…</div>
+          </div>
+        </section>
+        <section class="console-gate" aria-label="Управление шлюзом">
+          <div class="console-header"><b>Торговый шлюз</b><small>Глобальное разрешение новых входов</small></div>
+          <button id="tradeGateButton" class="action danger" type="button">Разрешить новые входы</button>
+          <div id="tradeOperationStatus" class="operation-status" aria-live="polite">Проверяю operational hard stops…</div>
+          <div id="tradeGateNotice" class="observer-lock"><b>Новые реальные входы запрещены.</b></div>
+          <div id="tradeGateReasons" class="muted console-gate-reasons"></div>
+          <div id="gatewayReleaseStatus" class="muted console-release-status">Проверка версии и готовности…</div>
+        </section>
       </div>
     </div>
     <article id="strategyTradeControlSection" class="card full core-trading-table"><h2>Стратегии реальной торговли</h2><div id="tradeStrategySummary" class="muted" style="margin-bottom:10px">Загрузка Strategy…</div><div class="table-scroll"><table style="min-width:1420px"><thead><tr><th>Стратегия</th><th>Монеты</th><th>Направление</th><th>Сумма</th><th>Плечо</th><th>Мониторинг</th><th>Execution</th><th>Фактически торгует</th><th>Сейчас / до Entry</th><th>Открыто</th><th>Управление</th></tr></thead><tbody id="tradeStrategyRows"><tr><td colspan="11" class="muted">Загрузка Strategy…</td></tr></tbody></table></div><div class="muted" style="margin-top:8px">Разрешение конкретной Strategy не обходит глобальный mainnet gate. Открытая позиция продолжает свой ExitPlan даже после запрета новых входов.</div></article>
@@ -824,14 +847,23 @@ function renderReleaseArmCritical(lt){
        ', обнаружен '+safe(incidents[0].detected_at)+'. ':'')+
     'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
 }
+function renderLiveCriticalEvents(lt){
+  const area=document.getElementById('liveCriticalEventList');
+  const faults=Array.isArray(lt.critical_faults)?lt.critical_faults:[];
+  area.innerHTML=faults.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(x.fault_code||'CRITICAL')+'</b></summary><div class="console-event-detail">'+safe(x.message||x.reason||'Критическое событие lifecycle')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
+  const release=lt.release_arm_health||{};
+  const mismatches=Array.isArray(release.mismatched_sessions)?release.mismatched_sessions:[];
+  const note=document.getElementById('gatewayReleaseStatus');
+  note.textContent=release.critical||mismatches.length?'Проверка release: несоответствие / требуется вмешательство · '+mismatches.length+' несовпадающих сессий':release.loaded_commit?'Загруженный release: '+String(release.loaded_commit).slice(0,12)+' · '+(lt.rearm_ready?'готовность подтверждена':'готовность к открытию не подтверждена'):'Версия шлюза: нет подтверждённых данных';
+}
 function renderLiveState(d){
   renderReleaseArmCritical(d.live_trading);
   for(const p of d.live_trading?.positions||[]){p.exchange_mark_price=p.mark_price;p.exchange_unrealised_pnl=p.unrealised_pnl;p.mark_price=p.executable_close_price||p.mark_price}
   if(d.trade_strategy_monitor)tradeStrategyMonitorData=d.trade_strategy_monitor;const lt=d.live_trading||{wallet:null,positions:[]},wallet=lt.wallet,positions=lt.positions||[],num=v=>v==null||v===''?'—':Number(v).toFixed(2)+' USDT';window.currentPositions=positions;renderTradeStrategyControl();
-  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm');soundStatus.textContent='ТРЕВОГА · '+operationalAlarms.join(' · ')}
+  const currentGateOpen=!!lt.gate?.enabled,previousGate=localStorage.getItem('cripta-last-mainnet-gate'),criticalFaults=lt.critical_faults||[];let operationalAlarms=[];if(previousGate==='1'&&!currentGateOpen)operationalAlarms.push('торговый шлюз закрыт'+(lt.gate?.reason?' · '+String(lt.gate.reason):''));localStorage.setItem('cripta-last-mainnet-gate',currentGateOpen?'1':'0');let seenFaultIds=[];try{seenFaultIds=JSON.parse(localStorage.getItem('cripta-seen-critical-faults')||'[]')}catch(_e){seenFaultIds=[]}const seenFaultSet=new Set(seenFaultIds),newCritical=criticalFaults.filter(x=>!seenFaultSet.has(x.fault_id));if(newCritical.length)operationalAlarms.push('CRITICAL '+newCritical.map(x=>x.fault_code).join(', '));localStorage.setItem('cripta-seen-critical-faults',JSON.stringify(criticalFaults.map(x=>x.fault_id)));if(operationalAlarms.length){queuedSound('alarm')}
   liveGateOpen=currentGateOpen;rearmReady=!!lt.rearm_ready;liveStateLoaded=true;lastWalletRefreshMs=wallet?Number(wallet.refreshed_at_epoch_ms||0):0;
   if(!gateChanging){tradeGateButton.textContent=liveGateOpen?'Запретить новые входы':'Разрешить новые входы';tradeGateButton.classList.toggle('danger',!liveGateOpen);tradeGateButton.disabled=!liveGateOpen&&!rearmReady;setOperationStatus(tradeOperationStatus,liveGateOpen?'success':rearmReady?'warn':'error',liveGateOpen?'Глобальный допуск новых реальных входов открыт':rearmReady?'Новые реальные входы запрещены · hard stop отсутствует':'Новые реальные входы запрещены · действует operational hard stop')}
-  tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
+  document.getElementById('gateEventMessage').textContent=liveGateOpen?'Шлюз открыт · новые реальные входы разрешены при готовности Strategy':'Шлюз закрыт · новые реальные входы запрещены';renderLiveCriticalEvents(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Защитить чистую прибыль</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
