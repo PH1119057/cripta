@@ -110,6 +110,7 @@
     #liveDesk .trade-operator-bar{position:relative;top:auto}
     @media(max-width:680px){.operator-console{grid-template-columns:1fr}.console-event-list{max-height:155px}}
 .rail-trade-result{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:2px}.rail-trade-result .rail-move{font-size:10px;line-height:1.1;font-variant-numeric:tabular-nums}.console-event summary{cursor:pointer}
+.mini-log-detail-row{padding:5px 0;border-bottom:1px solid var(--line);font-size:10px;overflow-wrap:anywhere}.mini-log-detail-row:last-child{border-bottom:0}
 </style>
 </head>
 <body><main>
@@ -851,19 +852,32 @@ function renderReleaseArmCritical(lt){
 function renderMiniLogFeed(lt){
   const host=document.getElementById('liveSystemEventFeed');
   if(!host)return;
-  const commands=Array.isArray(lt.commands)?lt.commands.slice(0,8):[];
-  const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents.slice(0,5):[];
-  const items=[];
+  const commands=Array.isArray(lt.commands)?lt.commands:[];
+  const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[];
+  const groups=new Map();
+  function add(key,t,bad,title,detail){
+    const old=groups.get(key);
+    if(old){old.count++;old.t=Math.max(old.t,t);old.details.push({t,detail});return;}
+    groups.set(key,{t,bad,title,count:1,details:[{t,detail}]});
+  }
   for(const c of commands){
     const state=String(c.state||'UNKNOWN'),failed=/FAIL|ERROR|REJECT|DENIED|TIMEOUT/i.test(state);
-    items.push({t:Number(c.requested_at_epoch_ms||0),bad:failed,title:(failed?'Команда не выполнена':'Команда Bybit')+' · '+String(c.symbol||'—')+' · '+String(c.type||'—')+' · '+state,detail:String(c.error||'ID '+(c.command_id||'—'))});
+    const symbol=String(c.symbol||'—'),kind=String(c.type||'—');
+    const title=(failed?'Ошибка команды Bybit':'Команда Bybit')+' · '+symbol+' · '+kind+' · '+state;
+    // Group only equivalent outcomes; different symbols, command types and failures stay separate.
+    add('bybit:'+symbol+':'+kind+':'+state,Number(c.requested_at_epoch_ms||0),failed,title,String(c.error||'ID '+(c.command_id||'—')));
   }
   for(const x of incidents){
-    const t=Date.parse(x.detected_at||'');
-    items.push({t:Number.isFinite(t)?t:0,bad:true,title:'Release: '+String(x.reason||'неподтверждённая готовность'),detail:'Affected: '+JSON.stringify(x.affected??'—')+' · release '+String(x.release_commit||'—')});
+    const t=Date.parse(x.detected_at||''),time=Number.isFinite(t)?t:0;
+    const reason=String(x.reason||'неподтверждённая готовность');
+    add('release:'+String(x.incident_id||reason),time,true,'Release: '+reason,'Affected: '+JSON.stringify(x.affected??'—')+' · release '+String(x.release_commit||'—'));
   }
-  items.sort((a,b)=>b.t-a.t);
-  host.innerHTML=items.slice(0,12).map(x=>'<details class="console-event '+(x.bad?'console-critical':'')+'"><summary><span class="event-dot '+(x.bad?'bad-dot':'ok-dot')+'"></span><span>'+safe(x.title)+'</span></summary><div class="console-event-detail">'+safe(x.detail)+'<div class="muted">'+(x.t?new Date(x.t).toLocaleString('ru-RU'):'время неизвестно')+'</div></div></details>').join('')||'<div class="console-event-note muted">Новых команд или release-инцидентов нет</div>';
+  const entries=[...groups.values()].sort((a,b)=>Number(b.bad)-Number(a.bad)||b.t-a.t);
+  host.innerHTML=entries.slice(0,12).map(x=>{
+    const count=x.count>1?' · '+x.count+' событий':'';
+    const details=x.details.sort((a,b)=>b.t-a.t).map(d=>'<div class="mini-log-detail-row">'+safe(d.detail)+' <span class="muted">'+(d.t?new Date(d.t).toLocaleString('ru-RU'):'время неизвестно')+'</span></div>').join('');
+    return '<details class="console-event '+(x.bad?'console-critical':'')+'"><summary><span class="event-dot '+(x.bad?'bad-dot':'ok-dot')+'"></span><span>'+safe(x.title+count)+'</span></summary><div class="console-event-detail">'+details+'</div></details>';
+  }).join('')||'<div class="console-event-note muted">Новых команд или release-инцидентов нет</div>';
 }
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
