@@ -67,11 +67,14 @@ def test_exit_shadow_runtime_marks_claims_stale_on_shutdown() -> None:
 
 
 def test_long_running_shadow_cycles_close_each_database_transaction() -> None:
+    assert "cycle = claim_cycle(" in EXIT_RUNTIME
     assert (
         "with connection.transaction():\n"
         "                cycle = claim_cycle("
-        in EXIT_RUNTIME
+        not in EXIT_RUNTIME
     )
+    assert "except psycopg.errors.DeadlockDetected as exc:" in EXIT_RUNTIME
+    assert "for attempt in range(3):" in EXIT_RUNTIME
     assert (
         "with connection.transaction():\n"
         "                mark_exit_claims_stale("
