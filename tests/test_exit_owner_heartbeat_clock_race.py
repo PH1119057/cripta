@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 
 def test_future_heartbeat_requires_fresh_database_clock_confirmation() -> None:
