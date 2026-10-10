@@ -26,7 +26,7 @@
     /* Symmetric three-column trading workspace; each rail owns its scroll area. */
     .workspace-rail{display:none;min-width:0;align-self:start;position:sticky;top:72px;height:calc(100vh - 88px);overflow:hidden;background:#101d28;border:1px solid var(--line);border-radius:12px;padding:14px;flex-direction:column;gap:12px}
     .workspace-rail h2{margin:0;font-size:16px}
-    .workspace-rail .rail-scroll{display:block;overflow-y:scroll;overflow-x:hidden;min-height:0;flex:1 1 0;overscroll-behavior:contain;scrollbar-width:thin}
+    .workspace-rail .rail-scroll{display:block;overflow-y:scroll;overflow-x:hidden;min-height:0;flex:1 1 0;overscroll-behavior:contain;scrollbar-width:thin}#closedWorkspaceRail #railClosedList{flex:0 1 auto;max-height:340px;min-height:0;overflow-y:scroll;scrollbar-gutter:stable}
     .workspace-rail .rail-muted{font-size:12px;color:var(--muted)}
     .workspace-rail .rail-placeholder{border:1px dashed #3d566a;border-radius:9px;padding:14px 10px;color:var(--muted);min-height:70px}
     .workspace-rail .rail-pnl{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -184,7 +184,7 @@
           <div class="console-header"><b>События системы</b><small>Последние важные действия и ошибки</small></div>
           <div id="exitOwnerCriticalBanner" class="console-owner-danger" hidden aria-live="assertive"></div>
           <div class="console-event-list">
-            <details class="console-event"><summary><span class="event-dot ok-dot"></span><span id="tradeCommandStatus" class="trade-command-alert neutral">Команд ещё не было</span></summary><p class="muted">Состояние последней команды, отправленной Bybit. Подробный журнал находится в разделе «Лог Bybit».</p></details>
+            <span id="tradeCommandStatus" hidden></span>
             <section id="observerFaultBanner" class="durable-fault-banner rail-faults" hidden aria-live="polite">
               <h2>Ошибки Entry Observer</h2>
               <div id="observerFaultSummary" class="durable-fault-summary">—</div>
@@ -853,60 +853,14 @@ function renderReleaseArmCritical(lt){
     'Новые реальные входы требуют проверки и отдельного разрешения владельца.';
 }
 function renderMiniLogFeed(lt){
+  // This is an operational attention queue, NOT a trade/decision/command log.
+  // Historical denials, terminal orders and closed positions belong to Log Bybit.
   const host=document.getElementById('liveSystemEventFeed');
   if(!host)return;
-  const refusals=lt.entry_refusals||{};
-  const commands=Array.isArray(lt.commands)?lt.commands:[];
   const incidents=Array.isArray(lt.release_arm_incidents)?lt.release_arm_incidents:[];
-  const groups=new Map();
-  const routine=[];
-  function add(key,t,bad,title,detail){
-    const old=groups.get(key);
-    if(old){old.count++;old.t=Math.max(old.t,t);old.details.push({t,detail});return;}
-    groups.set(key,{t,bad,title,count:1,details:[{t,detail}]});
-  }
-  for(const c of commands){
-    const state=String(c.state||'UNKNOWN'),failed=/FAIL|ERROR|REJECT|DENIED|TIMEOUT/i.test(state);
-    const symbol=String(c.symbol||'—'),kind=String(c.type||'—');
-    const title=(failed?'Ошибка команды Bybit':'Команда Bybit')+' · '+symbol+' · '+kind+' · '+state;
-    // Group only equivalent outcomes; different symbols, command types and failures stay separate.
-    const at=Number(c.requested_at_epoch_ms||0),detail=String(c.error||'ID '+(c.command_id||'—'));
-    if(!failed&&/^(completed|success|accepted|done)$/i.test(state))routine.push({t:at,title,detail});
-    else add('bybit:'+symbol+':'+kind+':'+state,at,failed,title,detail);
-  }
-  for(const x of incidents){
-    const t=Date.parse(x.detected_at||''),time=Number.isFinite(t)?t:0;
-    const reason=String(x.reason||'неподтверждённая готовность');
-    add('release:'+String(x.incident_id||reason),time,true,'Release: '+reason,'Affected: '+JSON.stringify(x.affected??'—')+' · release '+String(x.release_commit||'—'));
-  }
-  for(const x of (Array.isArray(refusals.items)?refusals.items:[])){
-    const symbol=String(x.symbol||'—'),code=String(x.decision_code||'UNKNOWN'),reason=String(x.reason||'причина не указана');
-    const t=Date.parse(x.decided_at||'');
-    add('entry:'+symbol+':'+code+':'+reason,Number.isFinite(t)?t:0,true,symbol+' · отказ Entry · '+code+' · '+reason,'EntryDecision '+String(x.entry_decision_id||'—')+' · signal '+String(x.signal_id||'—'));
-  }
-  if(refusals.truncated)add('entry:truncated',Date.now(),true,'EntryDecision · показаны не все отказы','За 24 часа более 500 записей. Требуется полный журнал решений.');
-  // A decision refusal is immutable history, not an active fault. Only
-  // presently OPEN lifecycle faults and release incidents may appear critical.
-  const activeFaults=new Set((Array.isArray(lt.critical_faults)?lt.critical_faults:[]).map(x=>String(x.fault_code||'')));
-  for(const group of groups.values()){
-    if(group.title.includes('отказ Entry')){
-      const code=group.title.includes('POSITION_WITHOUT_EXIT_OWNER')?'POSITION_WITHOUT_EXIT_OWNER':'';
-      group.bad=Boolean(code&&activeFaults.has(code));
-      if(!group.bad)group.title='История · '+group.title;
-    }else if(group.title.startsWith('Ошибка команды Bybit')){
-      group.bad=false;
-      group.title='История · '+group.title;
-    }
-  }
-  const entries=[...groups.values()].sort((a,b)=>Number(b.bad)-Number(a.bad)||b.t-a.t);
-  const warnings=entries.slice(0,12).map(x=>{
-    const count=x.count>1?' · '+x.count+' случаев':'';
-    const details=x.details.sort((a,b)=>b.t-a.t).map(d=>'<div class="mini-log-detail-row">'+safe(d.detail)+' <span class="muted">'+(d.t?new Date(d.t).toLocaleString('ru-RU'):'время неизвестно')+'</span></div>').join('');
-    return '<details class="console-event '+(x.bad?'console-critical':'')+'"><summary><span class="event-dot '+(x.bad?'bad-dot':'ok-dot')+'"></span><span>'+safe(x.title+count)+'</span></summary><div class="console-event-detail">'+details+'</div></details>';
-  }).join('');
-  const routineDetail=routine.sort((a,b)=>b.t-a.t).map(x=>'<div class="mini-log-detail-row">'+safe(x.title)+' · '+safe(x.detail)+' <span class="muted">'+(x.t?new Date(x.t).toLocaleString('ru-RU'):'время неизвестно')+'</span></div>').join('');
-  const routineNode=routine.length?'<details class="console-event console-routine"><summary><span class="event-dot ok-dot"></span><span>Штатные команды Bybit · '+routine.length+' событий</span></summary><div class="console-event-detail">'+routineDetail+'</div></details>':'';
-  host.innerHTML=warnings+routineNode||'<div class="console-event-note muted">Новых команд или release-инцидентов нет</div>';
+  host.innerHTML=incidents.length?incidents.map(x=>
+    '<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>Открытая проблема релиза · '+safe(x.reason||'проверка LIVE')+'</b></summary><div class="console-event-detail">'+safe(x.detected_at||'')+' · '+safe(x.incident_id||'—')+'</div></details>'
+  ).join(''):'<div class="console-event-note muted">Нет открытых событий, требующих вмешательства</div>';
 }
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
