@@ -112,7 +112,7 @@
 .rail-trade-result{display:flex;flex-direction:column;align-items:flex-end;text-align:right;gap:2px}.rail-trade-result .rail-move{font-size:10px;line-height:1.1;font-variant-numeric:tabular-nums}.console-event summary{cursor:pointer}
 .mini-log-detail-row{padding:5px 0;border-bottom:1px solid var(--line);font-size:10px;overflow-wrap:anywhere}.mini-log-detail-row:last-child{border-bottom:0}
 .console-routine{opacity:.72}.console-routine summary{font-size:10px}.console-event-list .console-critical{opacity:1}
-.console-owner-danger{margin:4px 7px 7px;padding:9px 10px;background:#451c23;border:2px solid #ff6677;border-radius:8px;color:#ffe8e9;font-size:11px;line-height:1.4}.console-owner-danger strong{display:block;font-size:12px;color:#ff8893;margin-bottom:4px}.console-owner-danger summary{cursor:pointer;color:#ffc7ce}.console-owner-danger[hidden]{display:none}
+.console-owner-danger{margin:4px 7px 7px;padding:9px 10px;background:#451c23;border:2px solid #ff6677;border-radius:8px;color:#ffe8e9;font-size:11px;line-height:1.4}.console-owner-danger strong{display:block;font-size:12px;color:#ff8893;margin-bottom:4px}.console-owner-danger summary{cursor:pointer;color:#ffc7ce}.console-owner-danger[hidden]{display:none}#gatewayEmergencyBanner{font-weight:750;font-size:12px;border-width:3px}
 </style>
 </head>
 <body><main>
@@ -182,6 +182,7 @@
       <div class="operator-console" aria-label="Системные события и управление торговым шлюзом">
         <section class="console-events" aria-label="События системы">
           <div class="console-header"><b>События системы</b><small>Последние важные действия и ошибки</small></div>
+          <div id="gatewayEmergencyBanner" class="console-owner-danger" hidden role="alert" aria-live="assertive"></div>
           <div id="exitOwnerCriticalBanner" class="console-owner-danger" hidden aria-live="assertive"></div>
           <div class="console-event-list">
             <span id="tradeCommandStatus" hidden></span>
@@ -865,6 +866,8 @@ function renderMiniLogFeed(lt){
 function renderLiveCriticalEvents(lt){
   const area=document.getElementById('liveCriticalEventList');
   const faults=Array.isArray(lt.critical_faults)?lt.critical_faults:[];
+  const gate=lt.gate||{},gateReason=String(gate.reason||'');
+  const emergencyClosed=!gate.enabled&&/EXCHANGE_MUTATION_BARRIER|RELEASE_BOUND_LIVE_ARM_NOT_READY|OPERATIONAL_SAFETY|SAFETY_|CRITICAL/i.test(gateReason);
   const ownerFaults=faults.filter(x=>x.fault_code==='POSITION_WITHOUT_EXIT_OWNER');
   const banner=document.getElementById('exitOwnerCriticalBanner');
   if(banner){
@@ -878,6 +881,11 @@ function renderLiveCriticalEvents(lt){
         +'<details><summary>Причина и время</summary><div>'+safe(reason)+' · '+safe(at)
         +' · ID '+safe(latest.fault_id||'—')+'</div></details>';
     }else banner.textContent='';
+  }
+  const gatewayEmergency=document.getElementById('gatewayEmergencyBanner');
+  if(gatewayEmergency){
+    gatewayEmergency.hidden=!emergencyClosed;
+    gatewayEmergency.textContent=emergencyClosed?'⛔ АВАРИЙНО ЗАКРЫТ ТОРГОВЫЙ ШЛЮЗ · Новые входы запрещены · '+gateReason:'';
   }
   area.innerHTML=faults.map(x=>'<details class="console-event console-critical"><summary><span class="event-dot bad-dot"></span><b>'+safe(x.fault_code||'CRITICAL')+'</b></summary><div class="console-event-detail">'+safe(x.message||x.reason||'Критическое событие lifecycle')+'<div class="muted">ID: '+safe(x.fault_id||'—')+'</div></div></details>').join('');
   const release=lt.release_arm_health||{};
