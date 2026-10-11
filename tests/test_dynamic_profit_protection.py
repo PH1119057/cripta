@@ -9,6 +9,7 @@ from protection_math import (  # noqa: E402
     EXIT_TAKER_FEE_RATE,
     MIN_PROTECTED_PROFIT_USDT,
     calculate_initial_boundaries,
+    calculate_operator_break_even_plan,
     calculate_protection_plan,
     trailing_start_preserves_protection,
 )
@@ -58,3 +59,27 @@ def test_xrp_initial_boundaries_use_actual_fill_not_limit_price() -> None:
     )
     assert stop == Decimal("1.4708")
     assert target == Decimal("1.4126")
+
+
+def test_operator_break_even_is_near_entry_and_does_not_lock_current_profit() -> None:
+    plan = calculate_operator_break_even_plan(
+        entry=Decimal("0.9403"),
+        qty=Decimal("10.63"),
+        entry_fee=Decimal("0.003794093529288514869110762970"),
+        side="Sell",
+        tick=Decimal("0.0001"),
+    )
+    assert plan["stop"] == Decimal("0.9392")
+    assert plan["activation"] == Decimal("0.9391")
+    assert plan["minimum_net_profit"] == Decimal("0")
+    move_pct = (Decimal("0.9403") - plan["stop"]) / Decimal("0.9403") * Decimal("100")
+    assert move_pct < Decimal("0.13")
+
+
+def test_operator_break_even_uses_base_reserve_not_observed_worst_slippage() -> None:
+    plan = calculate_operator_break_even_plan(
+        entry=Decimal("0.9403"), qty=Decimal("10.63"),
+        entry_fee=Decimal("0.003794093529288514869110762970"),
+        side="Sell", tick=Decimal("0.0001"),
+    )
+    assert plan["slippage"] == Decimal("0.00018806")
