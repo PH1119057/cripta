@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.23
-**Дата:** 2026-10-08
+**Версия:** 3.24
+**Дата:** 2026-10-11
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1035,3 +1035,21 @@ retrigger TP; actual opposite range-extremum changes (including rolling candle
 outfall) must trigger reevaluation. Bybit instrument steps are authoritative;
 source geometry stays exact. Implementation is separately tested/deployed,
 and no automatic LIVE arm follows release.
+
+
+# 34. Owner/operator break-even semantics — 2026-10-11
+
+OWNER DECISION 2026-10-11:
+- Dashboard owner command `break_even` is named «Безубыток»;
+- purpose is fee-aware near-Entry zero-net protection, not locking current PnL;
+- current R1 manual calculation uses actual remaining Entry fee + expected taker
+  Exit fee + base technical reserve `max(tick, entry*0.0002)`;
+- `minimum_net_profit=0`; current unrealized profit, separate `+0.01 USDT` floor
+  and observed worst historical slippage are excluded from this manual command;
+- automatic Strategy break-even/trailing remain Strategy-owned and are not
+  silently changed by this owner control-plane contract.
+
+Canonical ownership: TRADING_CONTOUR §4.8.1 owns the exact operator command
+contract; GLOSSARY owns the term distinction. This revision does not alter the
+active document set, mandatory pre-read, routing or Project Source count, so
+README / AGENTS / Project Instructions topology update is not required.
