@@ -119,6 +119,27 @@ def mark_entry_order_acknowledged(
         (exchange_order_id, acknowledged_at.astimezone(UTC), reservation_id),
     )
     if updated.rowcount != 1:
+        # A concurrent reconciliation may have proved the exact order cancelled
+        # without a fill while the acknowledgement was in flight.
+        latest = connection.execute(
+            """SELECT state,state_reason FROM runtime.capital_reservations
+               WHERE reservation_id=%s""", (reservation_id,)
+        ).fetchone()
+        if latest is not None and str(latest[0]) == "RELEASED" and str(latest[1] or "").startswith("ENTRY_CANCEL_CONFIRMED_ZERO_FILL:"):
+            order = connection.execute(
+                """SELECT order_status,payload_json::jsonb->>'cumExecQty'
+                   FROM runtime.exchange_order_history
+                   WHERE order_id=%s AND order_link_id=%s
+                   ORDER BY updated_at_epoch_ms DESC LIMIT 1""",
+                (exchange_order_id, command_id[:36]),
+            ).fetchone()
+            execution = connection.execute(
+                """SELECT 1 FROM runtime.executions
+                   WHERE order_id=%s OR order_link_id=%s LIMIT 1""",
+                (exchange_order_id, command_id[:36]),
+            ).fetchone()
+            if order is not None and str(order[0]) == "Cancelled" and Decimal(str(order[1] or "0")) == 0 and execution is None:
+                return "RELEASED"
         raise RuntimeError("entry order acknowledgement reservation race")
     claim = connection.execute(
         """UPDATE runtime.exchange_position_slot_claims
