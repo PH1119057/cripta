@@ -3573,8 +3573,17 @@ def _u6_prepare_r1_prearm_evidence(
     state_commit = Path("/var/lib/cripta/release/INSTALLED_COMMIT").read_text(
         encoding="utf-8"
     ).strip()
-    if {source_commit, remote_commit, runtime_commit, state_commit} != {release}:
+    if remote_commit != source_commit or runtime_commit != release or state_commit != release:
         raise ValueError("R1 PREARM: remote/source/runtime/state release identity mismatch")
+    # Dashboard presentation/docs can advance main independently of the loaded
+    # trading release. Any trading-runtime or uncontrolled source delta fails closed.
+    delta = subprocess.check_output(
+        ["git", "-C", "/srv/cripta/source_checkout", "diff", "--name-only",
+         release, source_commit], text=True,
+    ).splitlines()
+    allowed_prefixes = ("docs/", "tests/", "operations/dashboard/")
+    if any(not path.startswith(allowed_prefixes) for path in delta):
+        raise ValueError("R1 PREARM: trading runtime source differs from loaded release")
 
     try:
         observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
