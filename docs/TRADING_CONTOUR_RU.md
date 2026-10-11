@@ -644,6 +644,9 @@ required account / position-mode validation
 admission transaction. Unknown post-dispatch state не освобождает claim или
 reservation до reconciliation.
 
+OWNER DECISION 2026-10-11: Acknowledgement and cancellation may race for the exact same Exchange order. Terminal RELEASED is valid only with durable exchange evidence: matching orderId, Cancelled with cumulative fill zero, no actual executions, and exact cancellation lineage. Unknown/partial outcomes remain RECONCILIATION_REQUIRED and fail-closed. This does not authorize repeating a mutation or changing the Entry policy.
+
+
 OWNER DECISION 2026-10-06: required account/capital state real Entry берётся
 только из current AccountStateGeneration=COMPLETE. Generation объединяет
 wallet/account type, positions, active orders, available capital и exact
