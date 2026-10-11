@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.6
-**Дата:** 2026-10-07
+**Версия:** 2.7
+**Дата:** 2026-10-11
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -993,6 +993,48 @@ The smoke-test is an operator control-plane command. It MUST NOT:
 Its purpose is only to prove the downstream Exchange mutation/fill/protection
 path under explicit owner control. Any later use as Strategy behavior requires
 normal Strategy canon/versioning.
+
+### 4.8.1 Owner/operator `break_even` = «Безубыток» — OWNER DECISION 2026-10-11
+
+Authenticated Dashboard command `break_even` для уже открытой REAL-позиции —
+явная owner/operator control-plane protection action. Она не является новым
+Strategy Exit rule и не меняет R1 Entry/ExitPlan автоматически.
+
+Operator-facing label = **«Безубыток»**. Семантика команды:
+
+```text
+purpose = сохранить позицию открытой, но перенести stop на прибыльную сторону
+          максимально близко к Entry так, чтобы покрыть ordinary close costs
+NOT = защита текущего unrealized PnL
+NOT = trailing / фиксация процента от текущей прибыли
+```
+
+Current R1 MICRO_LIVE calculation uses exact actual remaining Entry fee, expected
+taker Exit fee and only base technical slippage reserve:
+
+```text
+base_slippage_price = max(tick_size, entry_price * 0.0002)
+slippage_reserve    = base_slippage_price * remaining_qty
+minimum_net_profit  = 0 USDT
+stop                = fee-aware zero-net boundary, rounded by tick
+                      toward the profitable side
+activation          = one tick further into profit than stop
+```
+
+The owner `break_even` calculation MUST NOT include:
+- current unrealized profit / current mark-to-entry profit;
+- a separate `+0.01 USDT` protected-profit floor;
+- recent/worst observed trigger-to-fill slippage history;
+- trailing distance or any percentage of current PnL.
+
+Therefore `+0.12…+0.13% from Entry` may be a normal current result for a
+~10 USDT R1 position under the present fee/tick conditions, but this range is
+**not** a hard-coded Strategy/global percentage. The exact stop is recalculated
+from actual fee/qty/tick economics for each position. Exchange gap/slippage can
+still produce a worse actual fill; this operator command is ordinary fee-aware
+break-even, not a worst-case profit guarantee.
+
+A resulting manual protection mutation is attributed as `OWNER_MODIFIED_STOP`.
 
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 

@@ -115,7 +115,8 @@ def test_open_trade_table_has_explicit_strategy_column_and_operator_actions() ->
     ]
     assert "<th>Стратегия</th>" in open_section
     assert "<th>Состояние</th>" in open_section
-    assert "Защитить чистую прибыль" in SOURCE
+    assert "Безубыток" in SOURCE
+    assert "Защитить чистую прибыль" not in SOURCE
     assert "Стоп −0,20%" in SOURCE
     assert "Закрыть" in SOURCE
 

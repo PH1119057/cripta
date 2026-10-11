@@ -25,6 +25,7 @@ from exact_close import (
 from position_cycle import stable_cycle_ids
 from protection_math import (
     calculate_initial_boundaries,
+    calculate_operator_break_even_plan,
     calculate_protection_plan,
     trailing_start_preserves_protection,
 )
@@ -1257,6 +1258,23 @@ def protection_plan(
     )
 
 
+def operator_break_even_plan(
+    connection: psycopg.Connection,
+    symbol: str,
+    position: dict[str, object],
+    tick: Decimal,
+) -> dict[str, Decimal]:
+    side = str(position["side"])
+    entry = Decimal(str(position.get("avgPrice") or 0))
+    qty = Decimal(str(position.get("size") or 0))
+    if entry <= 0 or qty <= 0:
+        raise RuntimeError("position has no valid entry or size")
+    entry_fee = remaining_entry_fee(connection, symbol, side)
+    return calculate_operator_break_even_plan(
+        entry=entry, qty=qty, entry_fee=entry_fee, side=side, tick=tick,
+    )
+
+
 def account_available_usdt(account: dict[str, object]) -> Decimal:
     direct = str(account.get("totalAvailableBalance") or "")
     if direct:
@@ -1885,7 +1903,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         mark = executable_close_price(symbol, side)
         trigger_by = "LastPrice"
         if kind == "break_even":
-            plan = protection_plan(connection, symbol, position, tick)
+            plan = operator_break_even_plan(connection, symbol, position, tick)
             stop, activation = plan["stop"], plan["activation"]
             if (side == "Buy" and mark < activation) or (side == "Sell" and mark > activation):
                 raise RuntimeError(f"price has not reached calculated protection activation {activation}")
