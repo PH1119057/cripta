@@ -1303,3 +1303,48 @@ mismatch with gate ON, silent/no-signal periods, stale/not-ready admission,
 durable CRITICAL creation/deduplication/recovery, banner after refresh with
 sound disabled, failed/incomplete reconciliation and preserved Exit. Never
 claim release readiness merely because systemd reports services active.
+
+
+## 47. Parallel development and serialized production deploy — OWNER DECISION 2026-10-11
+
+Parallel development, independent feature branches, tests, review and publication
+of nonconflicting changes are allowed. GitHub `PH1119057/cripta:main` remains
+the sole source authority; a developer must verify the current remote base and
+reconcile concurrent upstream changes before publishing. Never force-push over
+another contributor's work or silently overwrite an intervening changeset.
+Conflicting modifications require explicit integration and applicable tests;
+a later commit must include already accepted changes rather than implicitly
+reverting them.
+
+**Publishing source is not deploying production.** Documentation-only changes
+may be published while another release is being prepared, provided they do not
+silently change active canon, mandatory routing, release content or LIVE rights.
+Such publication changes `REMOTE_HEAD` / `SOURCE_HEAD` and must not be
+misrepresented as a new `INSTALLED_COMMIT` or `LOADED_COMMIT`.
+
+Production deploy is a **single-writer operation** across all contributors,
+operator sessions, automations and deploy entrypoints targeting the same
+production environment. Before any filesystem, database schema, service or
+release-pointer mutation, the installer must acquire one effective exclusive
+cross-process deploy lock. The lock covers preparation-dependent state
+validation, installation, migrations, service restart, post-deploy verification
+and final completion/rollback. A second deploy must fail closed or wait visibly;
+it may not interleave with the first. Lock ownership, release SHA and lifecycle
+must be auditable. Stale/abandoned lock handling requires verified owner/process
+and state evidence, not blind removal. Lock correctness must be tested across
+two independent concurrent deploy invocations and failure/rollback paths.
+
+Each installation pins an exact GitHub-verified release composition. Immediately
+before acquiring mutation rights it rechecks `REMOTE_HEAD`, `SOURCE_HEAD`,
+expected baseline, `INSTALLED_COMMIT`, active operational deltas and any
+in-progress release; if assumptions changed, stop and require a fresh
+integration/release plan. Changes published after a release SHA was selected
+do not silently enter that release. Concurrent documentation updates do not
+justify bypassing exact application release composition checks.
+
+A deployment lock is **not** a trading lock and does not itself alter the
+mainnet gate, LIVE-arm, existing positions, protective orders or Exit owner.
+The §44–§46 separation and explicit owner re-arm rules remain mandatory.
+Until the effective lock rail and its concurrency tests are verified, report
+`DEPLOY_SERIALIZATION=NOT_VERIFIED` and do not claim concurrent deployment
+safety merely from this documentation decision.
