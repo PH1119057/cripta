@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import signal
@@ -12,6 +13,8 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
+from bybit_workbench.exchange.bybit.protection_supervisor_bridge import account_protection_verdicts
 from bybit_workbench.fault_delivery import process_due_deliveries
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
@@ -98,14 +101,44 @@ def build_policy() -> LifecycleSupervisorPolicy:
     )
 
 
+def _account_positions(connection: psycopg.Connection[Any]) -> list[dict[str, Any]]:
+    with connection.transaction():
+        return list(connection.execute(
+            """SELECT position_id,symbol,side,position_idx,actual_avg_fill,
+                      entry_command_id,fill_at
+                 FROM runtime.position_ownership
+                WHERE state='OPEN'
+                ORDER BY position_id"""
+        ).fetchall())
+
+
+def _independent_exchange_snapshot(symbols: tuple[str, ...]) -> dict[str, object]:
+    # Always perform an authenticated account-identity GET, even while flat.
+    # Otherwise a freshly deployed Supervisor could look healthy without ever
+    # proving that its credential delivery or Bybit account read path works.
+    directory = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    if not directory:
+        raise RuntimeError("Supervisor read credential is not mounted")
+    credential = json.loads(
+        (Path(directory) / "bybit-mainnet").read_text(encoding="utf-8")
+    )
+    return asyncio.run(direct_account_snapshot(
+        symbols,
+        api_key=str(credential["api_key"]),
+        api_secret=str(credential["api_secret"]),
+        base_url=os.environ.get("BYBIT_REST", "https://api.bybit.kz"),
+    ))
+
+
 def scan_once(
     connection: psycopg.Connection[Any],
     *,
     now: datetime,
     policy: LifecycleSupervisorPolicy,
+    protection: dict[str, dict[str, object]] | None = None,
 ) -> LifecycleScanResult:
     with connection.transaction():
-        return LifecycleSupervisor(connection, policy=policy).scan(
+        return LifecycleSupervisor(connection, policy=policy, exchange_protection=protection).scan(
             now=now.astimezone(UTC)
         )
 
@@ -128,10 +161,43 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     connection = psycopg.connect(DB_DSN, autocommit=False, row_factory=dict_row)
+    next_read = 0.0
+    last_scope: tuple[str, ...] = ()
+    account: dict[str, object] | None = None
+    read_error = ""
     try:
         while running:
             now = datetime.now(UTC)
-            result = scan_once(connection, now=now, policy=policy)
+            positions = _account_positions(connection)
+            symbols = tuple(sorted({str(p["symbol"]) for p in positions}))
+            if symbols != last_scope or time.monotonic() >= next_read:
+                try:
+                    account = _independent_exchange_snapshot(symbols)
+                    read_error = ""
+                except Exception as exc:
+                    account = None
+                    read_error = type(exc).__name__
+                last_scope = symbols
+                next_read = time.monotonic() + 10.0
+            with connection.transaction():
+                protection = account_protection_verdicts(
+                    connection, positions=positions, account_evidence=account,
+                    now=now,
+                )
+            account_read_complete = bool(
+                account and account.get("complete") is True
+            )
+            account_observed_at = (
+                str(account.get("observed_at"))
+                if account_read_complete else None
+            )
+            account_identity_present = bool(
+                account_read_complete
+                and str(account.get("account_user_id") or "").strip()
+            )
+            result = scan_once(
+                connection, now=now, policy=policy, protection=protection,
+            )
             with connection.transaction():
                 delivery = process_due_deliveries(
                     connection,
@@ -157,6 +223,14 @@ def main() -> int:
                         "delivered": delivery.delivered,
                         "escalated": delivery.escalated,
                         "pending_or_unacknowledged": delivery.pending,
+                    },
+                    "protection_audit": {
+                        "account_read_error": read_error,
+                        "account_read_complete": account_read_complete,
+                        "account_observed_at": account_observed_at,
+                        "account_identity_present": account_identity_present,
+                        "positions_checked": len(protection),
+                        "states": {k: v["state"] for k, v in protection.items()},
                     },
                     "trading_rights": "NONE",
                 }

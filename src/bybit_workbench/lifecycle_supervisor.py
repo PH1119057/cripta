@@ -108,9 +108,12 @@ class LifecycleSupervisor:
         connection: ConnectionLike,
         *,
         policy: LifecycleSupervisorPolicy | None = None,
+        exchange_protection: Mapping[str, Mapping[str, object]] | None = None,
     ) -> None:
         self._connection = connection
         self._policy = policy or LifecycleSupervisorPolicy()
+        # Production passes independently read account evidence each scan.
+        self._exchange_protection = exchange_protection
 
     def scan(self, *, now: datetime) -> LifecycleScanResult:
         current = now.astimezone(UTC)
@@ -1216,7 +1219,22 @@ class LifecycleSupervisor:
                     )
                 )
 
-            if row["initial_protection_confirmed_at"] is None:
+            if self._exchange_protection is None:
+                # Backward-compatible test/inert scan; production supplies direct
+                # authenticated account evidence rather than trusting this marker.
+                protection_state = "UNKNOWN"
+                protection_reason = "independent Exchange account protection evidence not supplied"
+            else:
+                observed = self._exchange_protection.get(position_id)
+                protection_state = (
+                    str(observed.get("state") or "UNKNOWN")
+                    if isinstance(observed, Mapping) else "UNKNOWN"
+                )
+                protection_reason = (
+                    str(observed.get("reason") or "direct account audit is missing")
+                    if isinstance(observed, Mapping) else "direct account audit is missing"
+                )
+            if protection_state != "VERIFIED":
                 faults.append(
                     FaultCondition(
                         "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
@@ -1227,7 +1245,15 @@ class LifecycleSupervisor:
                             "strategy_position_id": position_id,
                             "exit_plan_fingerprint": row["exit_plan_fingerprint"],
                         },
-                        {"reason": "Exchange-confirmed initial protection is absent"},
+                        {
+                            "reason": protection_reason,
+                            "protection_state": protection_state,
+                            "evidence_source": (
+                                "BYBIT_AUTHENTICATED_ACCOUNT_GET"
+                                if self._exchange_protection is not None
+                                else "LEGACY_DB_MARKER"
+                            ),
+                        },
                     )
                 )
 

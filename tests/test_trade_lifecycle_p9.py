@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import psycopg
 
-from operations.monitoring.universal_exit_shadow_runtime import claim_cycle
-
 from bybit_workbench.lifecycle_supervisor import LifecycleSupervisorPolicy
+from operations.monitoring.universal_exit_shadow_runtime import claim_cycle
 
 ROOT = Path(__file__).resolve().parents[1]
 EXIT_RUNTIME = (ROOT / "operations/monitoring/universal_exit_shadow_runtime.py").read_text(
@@ -86,10 +86,34 @@ def test_long_running_shadow_cycles_close_each_database_transaction() -> None:
         "                mark_exit_claims_stale("
         in EXIT_RUNTIME
     )
-    assert (
-        "with connection.transaction():\n"
-        "        return LifecycleSupervisor(connection, policy=policy).scan("
-        in LIFECYCLE_RUNTIME
+    # LifecycleScan retains its database transaction even when independent
+    # Exchange protection evidence is supplied to the Supervisor.
+    import ast
+
+    runtime_ast = ast.parse(LIFECYCLE_RUNTIME)
+    scan = next(
+        node
+        for node in runtime_ast.body
+        if isinstance(node, ast.FunctionDef) and node.name == "scan_once"
+    )
+    transactions = [
+        node
+        for node in ast.walk(scan)
+        if isinstance(node, ast.With)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and ast.unparse(item.context_expr.func) == "connection.transaction"
+            for item in node.items
+        )
+    ]
+    assert any(
+        any(
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == "scan"
+            for inner in ast.walk(transaction)
+        )
+        for transaction in transactions
     )
 
 
@@ -98,14 +122,25 @@ def test_exit_claim_deadlock_retry_is_bounded_and_recovers() -> None:
     position = SimpleNamespace(exit_plan_fingerprint="fp")
     plan = SimpleNamespace(exit_plan_fingerprint="fp")
     with (
-        patch("operations.monitoring.universal_exit_shadow_runtime._position_ids", return_value=ids),
-        patch("operations.monitoring.universal_exit_shadow_runtime.load_exit_binding", return_value=(position, plan)),
-        patch("operations.monitoring.universal_exit_shadow_runtime.claim_exit_position",
-              side_effect=[psycopg.errors.DeadlockDetected("deadlock"), "claim-id"]) as claim,
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime._position_ids",
+            return_value=ids,
+        ),
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime.load_exit_binding",
+            return_value=(position, plan),
+        ),
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime.claim_exit_position",
+            side_effect=[psycopg.errors.DeadlockDetected("deadlock"), "claim-id"],
+        ) as claim,
         patch("operations.monitoring.universal_exit_shadow_runtime.time.sleep") as sleep,
     ):
-        from datetime import UTC, datetime
-        result = claim_cycle(object(), now=datetime(2026, 10, 11, tzinfo=UTC), consumer_instance_id="test")
+        result = claim_cycle(
+            object(),
+            now=datetime(2026, 10, 11, tzinfo=UTC),
+            consumer_instance_id="test",
+        )
     assert result.claimed_positions == ids
     assert not result.blocked_positions
     assert claim.call_count == 2
@@ -116,14 +151,25 @@ def test_exit_claim_persistent_deadlock_stays_blocked() -> None:
     position = SimpleNamespace(exit_plan_fingerprint="fp")
     plan = SimpleNamespace(exit_plan_fingerprint="fp")
     with (
-        patch("operations.monitoring.universal_exit_shadow_runtime._position_ids", return_value=("pos-a",)),
-        patch("operations.monitoring.universal_exit_shadow_runtime.load_exit_binding", return_value=(position, plan)),
-        patch("operations.monitoring.universal_exit_shadow_runtime.claim_exit_position",
-              side_effect=psycopg.errors.DeadlockDetected("deadlock")) as claim,
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime._position_ids",
+            return_value=("pos-a",),
+        ),
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime.load_exit_binding",
+            return_value=(position, plan),
+        ),
+        patch(
+            "operations.monitoring.universal_exit_shadow_runtime.claim_exit_position",
+            side_effect=psycopg.errors.DeadlockDetected("deadlock"),
+        ) as claim,
         patch("operations.monitoring.universal_exit_shadow_runtime.time.sleep") as sleep,
     ):
-        from datetime import UTC, datetime
-        result = claim_cycle(object(), now=datetime(2026, 10, 11, tzinfo=UTC), consumer_instance_id="test")
+        result = claim_cycle(
+            object(),
+            now=datetime(2026, 10, 11, tzinfo=UTC),
+            consumer_instance_id="test",
+        )
     assert not result.claimed_positions
     assert result.blocked_positions[0][0] == "pos-a"
     assert "DeadlockDetected" in result.blocked_positions[0][1]

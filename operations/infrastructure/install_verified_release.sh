@@ -379,6 +379,7 @@ migration_files=(
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
   operations/sql/20261009_release_arm_incidents.sql
+  operations/sql/20261012_effective_protection_evidence_v1.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
