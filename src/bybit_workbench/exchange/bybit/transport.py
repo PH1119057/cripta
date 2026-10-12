@@ -69,7 +69,8 @@ class LifecycleAccountReadTransport:
     amend, close or other Exchange mutation method exists in this class.
     """
 
-    _ALLOWED = frozenset({"/v5/position/list", "/v5/order/realtime"})
+    _PRIVATE = frozenset({"/v5/position/list", "/v5/order/realtime"})
+    _PUBLIC = frozenset({"/v5/market/instruments-info"})
 
     def __init__(self, *, api_key: str, api_secret: str,
                  base_url: str = "https://api.bybit.kz",
@@ -84,12 +85,12 @@ class LifecycleAccountReadTransport:
 
     async def get(self, endpoint: str, params: Mapping[str, Any],
                   *, authenticated: bool) -> Mapping[str, Any]:
-        if endpoint not in self._ALLOWED or not authenticated:
+        if (authenticated and endpoint not in self._PRIVATE) or (not authenticated and endpoint not in self._PUBLIC):
             raise ValueError("Lifecycle read transport endpoint is not permitted")
         await self._limiter.acquire()
-        return await asyncio.to_thread(self._get_blocking, endpoint, params)
+        return await asyncio.to_thread(self._get_blocking, endpoint, params, authenticated)
 
-    def _get_blocking(self, endpoint: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
+    def _get_blocking(self, endpoint: str, params: Mapping[str, Any], authenticated: bool) -> Mapping[str, Any]:
         import hashlib
         import hmac
         import json
@@ -105,15 +106,17 @@ class LifecycleAccountReadTransport:
             f"{timestamp}{self._key}{window}{query}".encode(),
             hashlib.sha256,
         ).hexdigest()
-        request = urllib.request.Request(
-            f"{self._base_url}{endpoint}?{query}",
-            headers={
+        headers = {"User-Agent": "cripta-lifecycle-readonly/1"}
+        if authenticated:
+            headers.update({
                 "X-BAPI-API-KEY": self._key,
                 "X-BAPI-TIMESTAMP": timestamp,
                 "X-BAPI-RECV-WINDOW": window,
                 "X-BAPI-SIGN": signature,
-                "User-Agent": "cripta-lifecycle-readonly/1",
-            },
+            })
+        request = urllib.request.Request(
+            f"{self._base_url}{endpoint}?{query}",
+            headers=headers,
             method="GET",
         )
         with urllib.request.urlopen(request, timeout=self._timeout) as response:
