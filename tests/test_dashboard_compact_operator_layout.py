@@ -17,13 +17,18 @@ def test_health_controls_are_singletons_in_new_locations() -> None:
         "stamp",
     ):
         assert HTML.count(f'id="{item}"') == 1
-    left = HTML.split('id="marketWorkspaceRail"', 1)[1].split("</aside>", 1)[0]
-    assert 'id="observerFaultBanner"' in left
-    assert 'id="tradeCommandStatus"' in left
-    assert 'id="tradeOperationStatus"' in left
-    center = HTML.split('id="liveDesk"', 1)[1].split('id="closedWorkspaceRail"', 1)[0]
-    assert 'id="tradeGateButton"' in center
-    assert 'id="tradeCommandStatus"' not in center
+    market_rail = HTML.split('id="marketWorkspaceRail"', 1)[1].split("</aside>", 1)[0]
+    trading_workspace = HTML.split('id="liveDesk"', 1)[1].split(
+        'id="closedWorkspaceRail"', 1
+    )[0]
+    for item in (
+        "observerFaultBanner",
+        "tradeCommandStatus",
+        "tradeOperationStatus",
+        "tradeGateButton",
+    ):
+        assert f'id="{item}"' in trading_workspace
+        assert f'id="{item}"' not in market_rail
 
 
 def test_floating_release_alert_remains_non_dismissible() -> None:
