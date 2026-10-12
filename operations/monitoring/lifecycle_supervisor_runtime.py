@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import asyncio
 import signal
 import time
 import urllib.request
@@ -14,7 +13,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.fault_delivery import process_due_deliveries
-from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
@@ -89,37 +87,6 @@ def _owner_alert_sender(payload: dict[str, object]) -> None:
             raise RuntimeError(f"owner alert webhook returned HTTP {status}")
 
 
-def _direct_exchange_protection(connection: psycopg.Connection[Any], now: datetime) -> dict[str, dict[str, object]]:
-    """Read account truth independently; no Exchange mutation capability."""
-    from decimal import Decimal
-    from bybit_workbench.exchange.bybit.protection_evidence import evaluate_protection
-    from bybit_workbench.exchange.bybit.protection_intent import expected_protection
-
-    positions = connection.execute(
-        "SELECT position_id,symbol,side,position_idx,actual_avg_fill,entry_command_id,fill_at "
-        "FROM runtime.position_ownership WHERE bot_instance_id='universal-entry' AND state='OPEN'"
-    ).fetchall()
-    if not positions:
-        return {}
-    result = {str(p["position_id"]): {"state":"UNKNOWN", "reason":"independent exchange audit pending"} for p in positions}
-    directory = os.environ.get("CREDENTIALS_DIRECTORY", "")
-    if not directory:
-        return result
-    try:
-        credentials = json.loads((Path(directory) / "bybit-mainnet").read_text(encoding="utf-8"))
-        snapshot = asyncio.run(direct_account_snapshot(
-            tuple(sorted({str(p["symbol"]) for p in positions})),
-            api_key=str(credentials["api_key"]),
-            api_secret=str(credentials["api_secret"]),
-            base_url=os.environ.get("BYBIT_REST", "https://api.bybit.kz"),
-        ))
-    except Exception:
-        return result
-    # Exact approved effective prices are not yet reconstructable for all
-    # live Exit mutation paths. Fail closed UNKNOWN, never claim VERIFIED.
-    return result
-
-
 def build_policy() -> LifecycleSupervisorPolicy:
     return LifecycleSupervisorPolicy(
         exchange_state_max_age_seconds=_optional_positive_int(
@@ -138,7 +105,7 @@ def scan_once(
     policy: LifecycleSupervisorPolicy,
 ) -> LifecycleScanResult:
     with connection.transaction():
-        return LifecycleSupervisor(connection, policy=policy, exchange_protection=_direct_exchange_protection(connection, now)).scan(
+        return LifecycleSupervisor(connection, policy=policy).scan(
             now=now.astimezone(UTC)
         )
 
