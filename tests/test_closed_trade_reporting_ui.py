@@ -17,4 +17,8 @@ def test_dashboard_closed_table_reads_operator_ledger_and_does_not_assign_strate
     assert "recovered_closed_cycles(recovered_closed_rows)" in app
     assert "owner_controlled_closed_cycles(control_entry_rows, control_exit_rows)" in app
     assert "merge_evidenced_closed_trades(" in app
-    assert "strategy_id" not in app[app.index("recovered_closed_rows = connection.execute"):app.index("control_entry_rows = connection.execute")]
+    block = app[
+        app.index("recovered_closed_rows = connection.execute"):
+        app.index("control_entry_rows = connection.execute")
+    ]
+    assert "strategy_id" not in block
