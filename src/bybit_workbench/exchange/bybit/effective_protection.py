@@ -6,6 +6,7 @@ This module is pure and cannot send Exchange mutations or alter a trading gate.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Mapping
@@ -59,13 +60,18 @@ def effective_protection_from_account(
     account_ref: str,
     account_evidence: Mapping[str, object] | None,
     observed_at: datetime,
+    strategy_position_id: str | None = None,
 ) -> EffectiveProtectionEvidence:
     """Interpret complete signed-read inventory, never a mutation ACK.
 
-    VERIFIED means the exact open position and SL + at least one effective TP
-    surface are present, not yet that their levels match the current ExitPlan.
+    OBSERVED_PRESENT means SL and a TP surface appear in fresh account data.
+    It never proves equivalence with the current approved ExitPlan.
     The separate approval comparator must establish exact economic equivalence.
     """
+    expected_maker_prefix = (
+        "utp" + hashlib.sha256(strategy_position_id.encode()).hexdigest()[:12] + "-"
+        if strategy_position_id else None
+    )
     reason = "independent Exchange account read incomplete"
     state = "UNKNOWN"
     stop = None
@@ -100,7 +106,8 @@ def effective_protection_from_account(
                         and str(order.get("positionIdx")) == str(position_idx)
                         and order.get("reduceOnly") is True
                         and order.get("orderStatus") in {"New", "PartiallyFilled"}
-                        and str(order.get("orderLinkId") or "").startswith("utp")
+                        and expected_maker_prefix is not None
+                        and str(order.get("orderLinkId") or "").startswith(expected_maker_prefix)
                         and _positive(order.get("price")) is not None
                         and _positive(order.get("leavesQty") or order.get("qty")) is not None
                         and order.get("orderId")
