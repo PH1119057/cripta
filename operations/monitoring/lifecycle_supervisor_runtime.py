@@ -107,7 +107,7 @@ def _account_positions(connection: psycopg.Connection[Any]) -> list[dict[str, An
             """SELECT position_id,symbol,side,position_idx,actual_avg_fill,
                       entry_command_id,fill_at
                  FROM runtime.position_ownership
-                WHERE state='OPEN' AND bot_instance_id='universal-entry'
+                WHERE state='OPEN'
                 ORDER BY position_id"""
         ).fetchall())
 
