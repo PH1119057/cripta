@@ -129,7 +129,6 @@ def _independent_exchange_snapshot(symbols: tuple[str, ...]) -> dict[str, object
         symbols,
         api_key=str(credential["api_key"]),
         api_secret=str(credential["api_secret"]),
-        expected_user_id=str(credential.get("approved_user_id") or ""),
         base_url=os.environ.get("BYBIT_REST", "https://api.bybit.kz"),
     ))
 
