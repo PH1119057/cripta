@@ -1,10 +1,11 @@
 """Operator-only closed-trade projection. Never writes Strategy metrics or ownership."""
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 
-def recovered_closed_cycles(rows):
+def recovered_closed_cycles(rows: Sequence[Sequence[object]]) -> list[dict[str, object]]:
     result = []
     for r in rows:
         (
@@ -33,7 +34,9 @@ def recovered_closed_cycles(rows):
     return result
 
 
-def owner_controlled_closed_cycles(entry_rows, exit_rows):
+def owner_controlled_closed_cycles(
+    entry_rows: Sequence[Sequence[object]], exit_rows: Sequence[Sequence[object]]
+) -> list[dict[str, object]]:
     """Admit only isolated exact-quantity closes, never guessed partial cycles."""
     entries = []
     for row in entry_rows:
@@ -82,9 +85,13 @@ def owner_controlled_closed_cycles(entry_rows, exit_rows):
     return result
 
 
-def merge_evidenced_closed_trades(standard, recovered, control):
+def merge_evidenced_closed_trades(
+    standard: Sequence[Mapping[str, object]],
+    recovered: Sequence[Mapping[str, object]],
+    control: Sequence[Mapping[str, object]],
+) -> list[dict[str, object]]:
     """Dedupe by actual exit execIds; never assign a guessed Strategy identity."""
-    seen = set()
+    seen: set[str] = set()
     out = []
     for item in [*standard,*recovered,*control]:
         ids = set(str(x) for x in item.get("exec_ids", []) if x)
