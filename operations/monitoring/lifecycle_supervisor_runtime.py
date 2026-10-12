@@ -113,12 +113,9 @@ def _account_positions(connection: psycopg.Connection[Any]) -> list[dict[str, An
 
 
 def _independent_exchange_snapshot(symbols: tuple[str, ...]) -> dict[str, object]:
-    if not symbols:
-        return {
-            "complete": True, "account_ref": "BYBIT:UNIFIED",
-            "observed_at": datetime.now(UTC).isoformat(),
-            "symbols": {},
-        }
+    # Always perform an authenticated account-identity GET, even while flat.
+    # Otherwise a freshly deployed Supervisor could look healthy without ever
+    # proving that its credential delivery or Bybit account read path works.
     directory = os.environ.get("CREDENTIALS_DIRECTORY", "")
     if not directory:
         raise RuntimeError("Supervisor read credential is not mounted")
