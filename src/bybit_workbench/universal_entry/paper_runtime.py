@@ -1140,11 +1140,15 @@ class PaperTradeRuntime:
                 )
         if stop_pct is not None and move <= -stop_pct:
             reason = "HARD_STOP"
-        elif tp_pct is not None and move >= tp_pct:
-            reason = "TAKE_PROFIT"
-        elif tp_price is not None and (
-            (direction == TradeDirection.LONG.value and price >= tp_price)
-            or (direction == TradeDirection.SHORT.value and price <= tp_price)
+        elif (
+            (tp_pct is not None and move >= tp_pct)
+            or (
+                tp_price is not None
+                and (
+                    (direction == TradeDirection.LONG.value and price >= tp_price)
+                    or (direction == TradeDirection.SHORT.value and price <= tp_price)
+                )
+            )
         ):
             reason = "TAKE_PROFIT"
 
