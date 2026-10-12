@@ -2292,7 +2292,16 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
-    connection.execute("UPDATE runtime.trade_commands SET state='completed',finished_at_epoch_ms=%s,result_json=%s WHERE command_id=%s",(int(time.time()*1000),json.dumps(result,ensure_ascii=False),command_id))
+    connection.execute(
+        """UPDATE runtime.trade_commands
+           SET state='completed',finished_at_epoch_ms=%s,result_json=%s
+           WHERE command_id=%s""",
+        (
+            int(time.time() * 1000),
+            json.dumps(result, ensure_ascii=False),
+            command_id,
+        ),
+    )
     connection.commit()
     # Audit is separate from the mutation outcome. A failed audit must never
     # trigger retry of an already acknowledged Exchange mutation.
