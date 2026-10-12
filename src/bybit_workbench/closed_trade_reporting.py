@@ -42,7 +42,7 @@ def owner_controlled_closed_cycles(entry_rows, exit_rows):
                         str(side),Decimal(str(qty)),Decimal(str(price)),
                         Decimal(str(fee)),int(when)))
     result = []
-    for command,symbol,order_id,exec_id,side,qty,price,fee,when in entries:
+    for command,symbol,_order_id,_exec_id,side,qty,price,fee,when in entries:
         if qty <= 0:
             continue
         # No subsequent same-symbol opening before this close may be assigned
