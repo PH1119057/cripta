@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Mapping
+from collections.abc import Mapping
 
 
 def _decimal(value: object) -> Decimal:
@@ -57,7 +57,7 @@ def evaluate_protection(
     matches = [
         p for p in positions
         if isinstance(p, Mapping) and p.get("symbol") == symbol
-        and int(str(p.get("positionIdx") if p.get("positionIdx") is not None else "-1")) == position_idx
+        and str(p.get("positionIdx", "-1")) == str(position_idx)
         and _decimal(p.get("size")) > 0
     ]
     if len(matches) != 1:
@@ -83,11 +83,14 @@ def evaluate_protection(
             o for o in orders
             if isinstance(o, Mapping) and o.get("symbol") == symbol
             and str(o.get("orderLinkId") or "").startswith(prefix)
-            and (expected_tp_order_id is None or str(o.get("orderId") or "") == expected_tp_order_id)
+            and (
+                expected_tp_order_id is None
+                or str(o.get("orderId") or "") == expected_tp_order_id
+            )
             and o.get("orderStatus") in {"New", "PartiallyFilled"}
             and str(o.get("side")) == expected_side
             and o.get("reduceOnly") is True
-            and int(str(o.get("positionIdx") if o.get("positionIdx") is not None else "-1")) == position_idx
+            and str(o.get("positionIdx", "-1")) == str(position_idx)
             and _decimal(o.get("leavesQty") or o.get("qty")) > 0
             and abs(_decimal(o.get("price")) - expected_tp) <= tick
         ]
