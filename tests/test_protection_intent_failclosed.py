@@ -6,6 +6,7 @@ from bybit_workbench.exchange.bybit.protection_intent import (
     ProtectionIntentUnavailable,
     expected_protection,
     accepted_maker_tp_order_id,
+    verify_approved_exchange_protection,
 )
 
 
@@ -115,3 +116,52 @@ def test_idempotent_maker_tp_response_preserves_exchange_identity():
     assert accepted_maker_tp_order_id(
         position_id="position-A", completed_commands=[command],
     ) == "original-123"
+
+
+def test_full_approved_protection_verdict_requires_live_exact_maker_order():
+    from datetime import datetime, UTC
+    now = datetime(2026, 10, 12, tzinfo=UTC)
+    prefix = "utp" + hashlib.sha256(b"position-A").hexdigest()[:12] + "-"
+    command = {
+        "command_type": "strategy_exit",
+        "payload": {"strategy_position_id": "position-A",
+                    "action_kind": "SET_TP",
+                    "requested_mutation": {"order_type": "LIMIT",
+                                            "marketable_action": "CLOSE_MARKET",
+                                            "take_profit_price": "115"}},
+        "result": {"retCode": 0, "result": {
+            "orderId": "maker-1", "orderLinkId": prefix + "1"}},
+    }
+    snapshot = {
+        "complete": True, "account_ref": "BYBIT:UNIFIED",
+        "observed_at": now.isoformat(),
+        "symbols": {"APTUSDT": {
+            "positions": [{"symbol": "APTUSDT", "side": "Buy",
+                           "size": "1", "positionIdx": 0,
+                           "stopLoss": "90", "takeProfit": "0"}],
+            "orders": [{"symbol": "APTUSDT", "side": "Sell",
+                        "positionIdx": 0, "orderLinkId": prefix + "1",
+                        "orderId": "maker-1", "reduceOnly": True,
+                        "orderStatus": "New", "leavesQty": "1", "price": "115"}],
+        }},
+    }
+    args = dict(
+        account_evidence=snapshot, position_id="position-A",
+        entry_command_id="entry-A", symbol="APTUSDT", position_idx=0,
+        side="Buy", entry_price="100", tick="0.01",
+        entry_payload={"initial_protection": {
+            "stop_loss_pct": "10", "take_profit_price": "110"}},
+        completed_commands=[command], now=now,
+    )
+    assert verify_approved_exchange_protection(**args)[0] == "VERIFIED"
+    wrong_order = {**snapshot, "symbols": {"APTUSDT": {
+        **snapshot["symbols"]["APTUSDT"],
+        "orders": [{**snapshot["symbols"]["APTUSDT"]["orders"][0],
+                    "orderId": "maker-OTHER"}],
+    }}}
+    assert verify_approved_exchange_protection(
+        **{**args, "account_evidence": wrong_order}
+    )[0] == "NOT_VERIFIED"
+    assert verify_approved_exchange_protection(
+        **{**args, "account_evidence": None}
+    )[0] == "UNKNOWN"
