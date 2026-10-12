@@ -1,6 +1,8 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 import pytest
+
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "operations/connectivity"),
                 str(Path(__file__).resolve().parents[1] / "research/server/connectivity")]
 import private_runtime as runtime
