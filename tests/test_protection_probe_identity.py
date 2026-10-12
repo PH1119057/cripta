@@ -7,7 +7,7 @@ import pytest
 from bybit_workbench.exchange.bybit import protection_probe
 
 
-def test_identity_mismatch_blocks_account_protection(monkeypatch):
+def test_authenticated_user_identity_comes_from_existing_key(monkeypatch):
     class FakeReader:
         def __init__(self, **kwargs):
             pass
@@ -15,27 +15,32 @@ def test_identity_mismatch_blocks_account_protection(monkeypatch):
         async def get(self, endpoint, params, *, authenticated):
             assert endpoint == "/v5/user/query-api"
             assert authenticated
-            return {"retCode": 0, "result": {"userID": "other-account"}}
+            return {"retCode": 0, "result": {"userID": "existing-account"}}
 
     monkeypatch.setattr(protection_probe, "LifecycleAccountReadTransport", FakeReader)
-    with pytest.raises(RuntimeError, match="does not match"):
-        asyncio.run(protection_probe.direct_account_snapshot(
-            ("APTUSDT",), api_key="fixture", api_secret="fixture",
-            expected_user_id="approved-account",
-        ))
+    monkeypatch.setattr(
+        protection_probe, "_symbol_snapshot",
+        lambda *args: asyncio.sleep(
+            0, result=("APTUSDT", {"positions": [], "orders": [], "tick": "0.01"})
+        ),
+    )
+    account = asyncio.run(protection_probe.direct_account_snapshot(
+        ("APTUSDT",), api_key="fixture", api_secret="fixture",
+    ))
+    assert account["account_user_id"] == "existing-account"
+    assert account["complete"] is True
 
 
-def test_missing_approved_identity_blocks_even_valid_key(monkeypatch):
+def test_missing_authenticated_identity_fails_closed(monkeypatch):
     class FakeReader:
         def __init__(self, **kwargs):
             pass
 
         async def get(self, endpoint, params, *, authenticated):
-            return {"retCode": 0, "result": {"userID": "live-identity"}}
+            return {"retCode": 0, "result": {}}
 
     monkeypatch.setattr(protection_probe, "LifecycleAccountReadTransport", FakeReader)
-    with pytest.raises(RuntimeError, match="does not match"):
+    with pytest.raises(RuntimeError, match="userID unavailable"):
         asyncio.run(protection_probe.direct_account_snapshot(
             ("APTUSDT",), api_key="fixture", api_secret="fixture",
-            expected_user_id="",
         ))
