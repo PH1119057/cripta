@@ -370,6 +370,31 @@ Owner decision 2026-10-11 — exchange protection и Exit Engine ownership яв�
   и штатного reconciliation. Нет обхода критического Entry gate,
   тихого auto-resolve, auto-close или изменения Strategy TP/Hard Stop.
 
+Owner decision 2026-10-12 — временная credential model для independent
+Supervisor Exchange verification:
+- до отдельного security release разрешено использовать существующий
+  approved Bybit account credential для **read-only REST calls** Supervisor;
+  это не передаёт Supervisor владение торговыми мутациями;
+- Supervisor code path не импортирует торговые mutation functions и не
+  вызывает create/amend/cancel/close endpoints; credential доступ ограничен
+  точным service principal и systemd credential delivery;
+- independent account evidence обязательно свежие position/TP/SL и exact
+  account/symbol/positionIdx; PostgreSQL и WS projection не могут выступать
+  единственным доказательством VERIFY;
+- проверяются оба фактически действующих TP и SL относительно current
+  approved protection state/ExitPlan, а не только начальных Entry prices:
+  legitimate Exit changes не должны ошибочно выглядеть как breach;
+- отсутствие, устаревание и ошибка чтения = UNKNOWN (not VERIFIED);
+  неверная фактическая защита = NOT_VERIFIED с durable fault/evidence;
+- **TECHNICAL_DEBT / SECURITY**: разделить Exchange credentials на
+  trading-mutation и least-privilege read-only, затем удалить использование
+  общего trading credential из Supervisor; не считать временную модель
+  permanent approved least-privilege architecture;
+- это решение не подтверждает implementation/deploy/runtime; для включения
+  независимого контроля нужны тесты read-only isolation, точных цен/rounding,
+  dynamic TP/SL, failed/stale reads, actor-path/systemd permissions и
+  release verification. LIVE re-arm остаётся отдельной owner operation.
+
 EXCHANGE_POSITION_OWNERSHIP_CONFLICT не является critical lifecycle fault:
 это штатный fail-closed EntryDecision outcome до real request.
 
