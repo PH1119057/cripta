@@ -2295,16 +2295,26 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     connection.commit()
     # Audit is separate from the mutation outcome. A failed audit must never
     # trigger retry of an already acknowledged Exchange mutation.
-    try:
-        record_effective_protection_after_command(
-            connection, command_id=command_id, symbol=symbol,
-            payload=payload, key=key, secret=secret,
+    # Audit only protection-mutating commands. Ordinary close/other commands
+    # must not add authenticated Exchange reads or trigger REST rate limits.
+    protection_mutation = (
+        kind in {"entry", "initial_protection", "break_even", "current_stop", "trailing_stop"}
+        or (
+            kind == "strategy_exit"
+            and str(payload.get("action_kind") or "") in {"SET_TP", "SET_STOP", "SET_PROTECTION"}
         )
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        # Non-fatal evidence persistence failure: the independent Supervisor
-        # must treat a missing record as UNKNOWN, never as VERIFIED.
+    )
+    if protection_mutation:
+        try:
+            record_effective_protection_after_command(
+                connection, command_id=command_id, symbol=symbol,
+                payload=payload, key=key, secret=secret,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            # Never retry a confirmed Exchange mutation for audit failure.
+            # Missing evidence stays UNKNOWN until independent reconciliation.
 
 
 
