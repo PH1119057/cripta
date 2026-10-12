@@ -83,6 +83,7 @@ async def direct_account_snapshot(
     *,
     api_key: str,
     api_secret: str,
+    expected_user_id: str,
     base_url: str = "https://api.bybit.kz",
 ) -> dict[str, object]:
     if len(set(symbols)) != len(symbols):
@@ -90,10 +91,18 @@ async def direct_account_snapshot(
     reader = LifecycleAccountReadTransport(
         api_key=api_key, api_secret=api_secret, base_url=base_url,
     )
+    identity = await reader.get("/v5/user/query-api", {}, authenticated=True)
+    if identity.get("retCode") != 0:
+        raise RuntimeError("Bybit account identity request failed")
+    details = identity.get("result")
+    actual_user_id = str(details.get("userID") or "").strip() if isinstance(details, Mapping) else ""
+    if not expected_user_id or not actual_user_id or actual_user_id != expected_user_id:
+        raise RuntimeError("Bybit account identity does not match approved userID")
     results = await asyncio.gather(*(_symbol_snapshot(reader, s) for s in symbols))
     return {
         "source": "BYBIT_AUTHENTICATED_ACCOUNT_GET",
         "account_ref": "BYBIT:UNIFIED",
+        "account_user_id": actual_user_id,
         "complete": True,
         "observed_at": datetime.now(UTC).isoformat(),
         "symbols": dict(results),
