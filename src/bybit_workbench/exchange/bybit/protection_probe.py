@@ -6,14 +6,17 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .transport import LifecycleAccountReadTransport
 
 
 def _rows(response: Mapping[str, Any], symbol: str) -> tuple[list[dict[str, Any]], str]:
     if response.get("retCode") != 0:
-        raise RuntimeError("Bybit account read rejected (code=" + str(response.get("retCode")) + ")")
+        raise RuntimeError(
+            "Bybit account read rejected (code=" + str(response.get("retCode")) + ")"
+        )
     result = response.get("result")
     if not isinstance(result, Mapping) or not isinstance(result.get("list"), list):
         raise RuntimeError("incomplete Bybit account result")
