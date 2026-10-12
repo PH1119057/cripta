@@ -24,7 +24,11 @@ class FakeConnection:
 
     def execute(self, statement, params=()):
         if "command_type='entry'" in statement:
-            return Cursor([{"payload_json": '{"initial_protection":{"stop_loss_pct":"10","take_profit_price":"110"}}'}])
+            return Cursor([{
+                "payload_json": (
+                    '{"initial_protection":{"stop_loss_pct":"10","take_profit_price":"110"}}'
+                )
+            }])
         if "requested_at_epoch_ms" in statement:
             if self.legacy:
                 return Cursor([{
