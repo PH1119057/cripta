@@ -122,6 +122,10 @@ def expected_protection(
             raise ProtectionIntentUnavailable(
                 "current-stop effective price lacks durable approved result"
             )
+        elif kind == "trailing_stop":
+            raise ProtectionIntentUnavailable(
+                "trailing-stop effective price lacks durable approved result"
+            )
 
     return stop, target, tp_kind
 
