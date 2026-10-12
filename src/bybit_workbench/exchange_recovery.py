@@ -97,7 +97,7 @@ def prove_orphan_closed_cycle(
             subsequent_executions,
             key=lambda x: (int(str(x.get("execTime") or 0)), str(x.get("execId") or "")),
         ):
-            execution_time = int(row.get("execTime") or 0)
+            execution_time = int(str(row.get("execTime") or 0))
             if execution_time <= last_entry_ms:
                 continue
             if str(row.get("symbol") or "") != symbol:
