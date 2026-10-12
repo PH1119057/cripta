@@ -38,6 +38,8 @@ def evaluate_protection(
         observed = datetime.fromisoformat(str(evidence["observed_at"])).astimezone(UTC)
     except (KeyError, TypeError, ValueError):
         return "UNKNOWN", "Exchange observation timestamp invalid"
+    if observed.tzinfo is None or now.tzinfo is None:
+        return "UNKNOWN", "Exchange observation clock lacks timezone"
     age = (now.astimezone(UTC) - observed).total_seconds()
     if age < -1 or age > max_age_seconds:
         return "UNKNOWN", "Exchange account observation is stale"
@@ -80,7 +82,7 @@ def evaluate_protection(
             and str(o.get("orderLinkId") or "").startswith(prefix)
             and o.get("orderStatus") in {"New", "PartiallyFilled"}
             and str(o.get("side")) == expected_side
-            and bool(o.get("reduceOnly"))
+            and o.get("reduceOnly") is True
             and int(str(o.get("positionIdx") if o.get("positionIdx") is not None else "-1")) == position_idx
             and _decimal(o.get("leavesQty") or o.get("qty")) > 0
             and abs(_decimal(o.get("price")) - expected_tp) <= tick
