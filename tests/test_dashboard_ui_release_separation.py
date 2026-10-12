@@ -5,7 +5,9 @@ DEV = Path("docs/DEVELOPMENT_RELEASE_RULES_RU.md").read_text(encoding="utf-8")
 ARCH = Path("docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(encoding="utf-8")
 OBS = Path("docs/OBSERVATION_ANALYTICS_RU.md").read_text(encoding="utf-8")
 MAP = Path("docs/CURRENT_PROJECT_MAP_RU.md").read_text(encoding="utf-8")
-INSTALLER = Path("operations/infrastructure/install_verified_release.sh").read_text(encoding="utf-8")
+INSTALLER = Path("operations/infrastructure/install_verified_release.sh").read_text(
+    encoding="utf-8"
+)
 UI_DEPLOY = Path("operations/infrastructure/deploy_dashboard_ui.sh").read_text(encoding="utf-8")
 
 
