@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 DEV = Path("docs/DEVELOPMENT_RELEASE_RULES_RU.md").read_text(encoding="utf-8")
 ARCH = Path("docs/CRIPTA_ARCHITECTURE_RULES_RU_V1.md").read_text(encoding="utf-8")
 OBS = Path("docs/OBSERVATION_ANALYTICS_RU.md").read_text(encoding="utf-8")
