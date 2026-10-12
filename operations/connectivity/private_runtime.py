@@ -113,6 +113,10 @@ class BybitMutationRejected(RuntimeError):
     """Bybit explicitly rejected the mutation."""
 
 
+class EntryValidityReadUnavailable(RuntimeError):
+    """Public market-data revalidation unavailable; no Exchange mutation was attempted."""
+
+
 class ExchangeReadUnavailable(RuntimeError):
     """Read-only exchange truth could not be refreshed deterministically."""
 
@@ -2252,11 +2256,16 @@ def _r1_signal_validity(
         f"{REST_URL}/v5/market/kline?{query}",
         headers={"User-Agent": "cripta-r1-entry-validity/1"},
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        raw = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            raw = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, TimeoutError) as exc:
+        raise EntryValidityReadUnavailable(
+            f"R1 SIGNAL_VALIDITY kline transport unavailable: {type(exc).__name__}"
+        ) from exc
     if int(raw.get("retCode", -1)) != 0:
-        raise ExchangeMutationBarrier(
-            f"R1 SIGNAL_VALIDITY kline failed: {raw.get('retMsg')}"
+        raise EntryValidityReadUnavailable(
+            f"R1 SIGNAL_VALIDITY kline unavailable: {raw.get('retMsg')}"
         )
     rows = ((raw.get("result") or {}).get("list") or [])
     candles = map_rest_klines(
@@ -2359,7 +2368,12 @@ def cancel_expired_entry_limits(
             continue
         lifetime_mode = str(payload.get("entry_lifetime_mode") or "TIME_TTL").upper()
         if lifetime_mode == "SIGNAL_VALIDITY":
-            still_valid, reason = _r1_signal_validity(payload, str(symbol))
+            try:
+                still_valid, reason = _r1_signal_validity(payload, str(symbol))
+            except EntryValidityReadUnavailable:
+                # An already-live PostOnly order must never be cancelled using missing market data.
+                # Propagate to a bounded retry and preserve any existing Exchange safety gate.
+                raise
             if still_valid:
                 continue
             _cancel_entry_limit(
@@ -2422,6 +2436,12 @@ def command_worker_loop(key: str, secret: str) -> None:
             if time.monotonic() >= next_limit_cleanup:
                 try:
                     cancel_expired_entry_limits(connection, key, secret, now_ms)
+                except EntryValidityReadUnavailable as exc:
+                    connection.rollback()
+                    atomic_status("command", {"state": "degraded_market_read",
+                                              "error": str(exc), "mutation_sent": False,
+                                              "global_gate_changed": False})
+                    next_limit_cleanup = time.monotonic() + 15
                 except PreMutationSafetyBlock as exc:
                     handle_pre_mutation_safety_block(connection, None, exc)
                 except ExchangeMutationBarrier as exc:
@@ -2430,7 +2450,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                     )
                 except Exception:
                     connection.rollback()
-                next_limit_cleanup = time.monotonic() + 1
+                next_limit_cleanup = max(next_limit_cleanup, time.monotonic() + 1)
             pickup_window_ms = 10_000 if entry_policy == "base_entry_v1" else SIGNAL_PICKUP_WINDOW_MS
             fresh_after=max(
                 now_ms-pickup_window_ms,
