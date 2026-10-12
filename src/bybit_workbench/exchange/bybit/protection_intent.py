@@ -78,7 +78,15 @@ def expected_protection(
                 order_type = str(mutation.get("order_type") or "").upper()
                 if order_type not in {"MARKET", "LIMIT"}:
                     raise ProtectionIntentUnavailable("Exit TP order type unresolved")
-                tp_kind = "POSITION" if order_type == "MARKET" else "MAKER_ORDER"
+                if order_type == "MARKET":
+                    raise ProtectionIntentUnavailable(
+                        "marketable SET_TP may close position; fresh reconciliation required"
+                    )
+                if str(mutation.get("marketable_action") or "") == "CLOSE_MARKET":
+                    raise ProtectionIntentUnavailable(
+                        "maker SET_TP may have executed market close; fresh order lineage required"
+                    )
+                tp_kind = "MAKER_ORDER"
             elif action == "SET_STOP":
                 stop = _amount(mutation.get("stop_price"))
                 if stop % step != 0:
@@ -95,6 +103,10 @@ def expected_protection(
                     target = _amount(actual["takeProfit"])
                     tp_kind = "POSITION"
         elif kind == "break_even":
+            if payload.get("strategy_position_id") != position_id:
+                raise ProtectionIntentUnavailable(
+                    "break-even command cannot be attributed to exact StrategyPosition"
+                )
             plan = result.get("protectionPlan")
             if not isinstance(plan, Mapping):
                 raise ProtectionIntentUnavailable("break-even effective stop lacks durable price")
