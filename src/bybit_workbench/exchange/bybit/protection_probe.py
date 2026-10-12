@@ -2,6 +2,7 @@
 
 Only the read-only transport is reachable. No trading mutation API is imported.
 """
+
 from __future__ import annotations
 
 import asyncio
