@@ -11,6 +11,7 @@ NOW = datetime(2026, 10, 12, tzinfo=UTC)
 def _evidence(*, stop="90", tp="110", orders=None):
     return {
         "complete": True, "account_ref": "BYBIT:UNIFIED",
+        "account_user_id": "approved-existing-account",
         "observed_at": NOW.isoformat(),
         "symbols": {"APTUSDT": {
             "positions": [{
@@ -36,6 +37,8 @@ def test_exchange_protection_confirmed_only_from_account_truth():
     assert _check(_evidence(stop="0")) == "NOT_VERIFIED"
     assert _check(_evidence(tp="0")) == "NOT_VERIFIED"
     assert _check(_evidence(stop="85")) == "NOT_VERIFIED"
+    assert _check(_evidence(stop="90.01")) == "NOT_VERIFIED"
+    assert _check(_evidence(tp="110.01")) == "NOT_VERIFIED"
     assert _check(None) == "UNKNOWN"
     assert _check({**_evidence(), "complete": False}) == "UNKNOWN"
 
@@ -75,6 +78,12 @@ def test_dynamic_maker_tp_requires_exact_order():
     )
     assert (
         _check(_evidence(tp="0", orders=[{**order, "price": "113"}]),
+            kind="MAKER_ORDER", tp=Decimal("115"),
+            order_id="maker-123",
+        ) == "NOT_VERIFIED"
+    )
+    assert (
+        _check(_evidence(tp="0", orders=[{**order, "leavesQty": "0.1"}]),
             kind="MAKER_ORDER", tp=Decimal("115"),
             order_id="maker-123",
         ) == "NOT_VERIFIED"
