@@ -2235,14 +2235,19 @@ def _r1_signal_validity(
     if original_low <= 0 or original_high <= original_low:
         raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY structural bounds are invalid")
 
-    ticker, _ = api_get(
-        "/v5/market/tickers",
-        {"category": "linear", "symbol": symbol},
-    )
-    item = ((ticker.get("result") or {}).get("list") or [{}])[0]
-    last = Decimal(str(item.get("lastPrice") or 0))
+    try:
+        ticker, _ = api_get(
+            "/v5/market/tickers",
+            {"category": "linear", "symbol": symbol},
+        )
+        item = ((ticker.get("result") or {}).get("list") or [{}])[0]
+        last = Decimal(str(item.get("lastPrice") or 0))
+    except (OSError, ValueError, TimeoutError, ExchangeReadUnavailable) as exc:
+        raise EntryValidityReadUnavailable(
+            f"R1 SIGNAL_VALIDITY ticker unavailable: {type(exc).__name__}"
+        ) from exc
     if last <= 0:
-        raise ExchangeMutationBarrier("R1 SIGNAL_VALIDITY ticker price unavailable")
+        raise EntryValidityReadUnavailable("R1 SIGNAL_VALIDITY ticker price unavailable")
     target_hit = (side == "Buy" and last >= original_target) or (
         side == "Sell" and last <= original_target
     )
