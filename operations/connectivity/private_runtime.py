@@ -1917,6 +1917,7 @@ def record_effective_protection_after_command(
         command_id=command_id, symbol=symbol, position_idx=position_idx,
         account_ref="BYBIT:UNIFIED",
         account_evidence=account, observed_at=now,
+        strategy_position_id=str(payload.get("strategy_position_id") or "") or None,
     ).as_record()
     if account is None:
         evidence["reason"] = reason
