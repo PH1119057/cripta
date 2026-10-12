@@ -294,7 +294,7 @@ def archive_content_manifest_fingerprint(
     missing: list[str] = []
     mismatched: list[str] = []
     for path in paths:
-        relative = str(path.relative_to(root))
+        relative = path.relative_to(root).as_posix()
         item = by_path.get(relative)
         if item is None:
             missing.append(relative)
