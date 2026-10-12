@@ -66,6 +66,15 @@ def test_market_fallback_makes_limit_tp_unknown():
         }])
 
 
+def test_unresolved_trailing_stop_fails_closed():
+    with pytest.raises(ProtectionIntentUnavailable, match="trailing-stop"):
+        _base([{
+            "command_type": "trailing_stop",
+            "payload": {"strategy_position_id": "position-A"},
+            "result": {"retCode": 0},
+        }])
+
+
 def test_unattributed_break_even_does_not_update_other_position():
     with pytest.raises(ProtectionIntentUnavailable, match="exact StrategyPosition"):
         _base([{
@@ -137,6 +146,7 @@ def test_full_approved_protection_verdict_requires_live_exact_maker_order():
     }
     snapshot = {
         "complete": True, "account_ref": "BYBIT:UNIFIED",
+        "account_user_id": "approved-existing-account",
         "observed_at": now.isoformat(),
         "symbols": {"APTUSDT": {
             "positions": [{"symbol": "APTUSDT", "side": "Buy",
