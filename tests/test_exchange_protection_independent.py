@@ -107,7 +107,9 @@ def test_approved_dynamic_exit_supersedes_initial_tp_and_stop():
 
 def test_signed_lifecycle_transport_has_no_exchange_mutation_endpoint():
     import asyncio
+
     from bybit_workbench.exchange.bybit.transport import LifecycleAccountReadTransport
+
     reader = LifecycleAccountReadTransport(api_key="test", api_secret="test")
     try:
         asyncio.run(reader.get("/v5/order/create", {}, authenticated=True))
