@@ -35,7 +35,7 @@ def test_exchange_confirmation_requires_full_account_snapshot():
     assert _build(None).state == "UNKNOWN"
     assert _build({"retCode": 0, "result": {"orderId": "accepted"}}).state == "UNKNOWN"
     assert _build({"complete": True, "account_ref": "WRONG"}).state == "UNKNOWN"
-    assert _build(_snapshot()).state == "VERIFIED"
+    assert _build(_snapshot()).state == "OBSERVED_PRESENT"
 
 
 def test_missing_sl_or_tp_does_not_mean_approved():
@@ -51,7 +51,7 @@ def test_dynamic_maker_tp_is_recognized_as_separate_surface():
         "price": "115", "leavesQty": "1",
     }
     result = _build(_snapshot(tp="0", orders=[maker]))
-    assert result.state == "VERIFIED"
+    assert result.state == "OBSERVED_PRESENT"
     assert result.maker_take_profit_order_ids == ("maker123",)
     assert _build(_snapshot(tp="0", orders=[{**maker, "reduceOnly": False}])).state == "NOT_VERIFIED"
 
