@@ -7,6 +7,7 @@ from bybit_workbench.universal_entry.market_watch import (
     compute_r1_l53_stability_diagnostic,
 )
 
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
