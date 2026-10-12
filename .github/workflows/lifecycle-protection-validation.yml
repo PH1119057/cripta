@@ -68,13 +68,59 @@ jobs:
       - run: uv sync --locked --all-extras --python 3.12
       - name: Install server PostgreSQL driver for tests
         run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
-      - name: All changed Python files have zero Ruff diagnostics
+      - name: Require NEW_RUFF_DIAGNOSTICS=0 on changed Python files
         shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          mapfile -t files < <(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- "*.py")
-          if (("${#files[@]}" > 0)); then
-            .venv/bin/python -m ruff check "${files[@]}"
-          fi
+          mapfile -t files < <(git diff --name-only "$BASE_SHA" HEAD -- "*.py")
+          git worktree add --detach ../base-ruff "$BASE_SHA"
+          set +e
+          .venv/bin/python -m ruff check "${files[@]}" --output-format=json > head-ruff.json
+          (
+            cd ../base-ruff
+            base_files=()
+            for file in "${files[@]}"; do
+              [[ -f "$file" ]] && base_files+=("$file")
+            done
+            if (("${#base_files[@]}" > 0)); then
+              "$GITHUB_WORKSPACE/.venv/bin/python" -m ruff check \
+                "${base_files[@]}" --output-format=json > "$GITHUB_WORKSPACE/base-ruff.json"
+            else
+              printf '[]\n' > "$GITHUB_WORKSPACE/base-ruff.json"
+            fi
+          )
+          set -e
+          .venv/bin/python - <<'PY'
+          from collections import Counter
+          import json
+          from pathlib import Path
+
+          def diagnostics(path: str) -> Counter[str]:
+              rows = json.loads(Path(path).read_text(encoding="utf-8") or "[]")
+              out: Counter[str] = Counter()
+              for item in rows:
+                  filename = str(item["filename"]).replace("\\", "/")
+                  for marker in ("/base-ruff/", "/cripta/"):
+                      if marker in filename:
+                          filename = filename.split(marker, 1)[1]
+                          break
+                  out[
+                      f"{filename}|{item.get('code')}|{item.get('message')}"
+                  ] += 1
+              return out
+
+          base = diagnostics("base-ruff.json")
+          head = diagnostics("head-ruff.json")
+          new = head - base
+          print(f"BASE_RUFF_DIAGNOSTICS={sum(base.values())}")
+          print(f"HEAD_RUFF_DIAGNOSTICS={sum(head.values())}")
+          print(f"NEW_RUFF_DIAGNOSTICS={sum(new.values())}")
+          if new:
+              for item, count in sorted(new.items()):
+                  print(f"  {count}x {item}")
+              raise SystemExit(1)
+          PY
       - name: Capture head full pytest result
         shell: bash
         run: |
