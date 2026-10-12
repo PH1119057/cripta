@@ -161,10 +161,26 @@ def test_r1_public_read_unavailable_does_not_use_exchange_mutation_barrier() -> 
         n for n in tree.body
         if isinstance(n, ast.FunctionDef) and n.name == "cancel_expired_entry_limits"
     )
-    raised = [n.exc.func.id for n in ast.walk(validity) if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call) and isinstance(n.exc.func, ast.Name)]
+    raised = [
+        n.exc.func.id
+        for n in ast.walk(validity)
+        if isinstance(n, ast.Raise)
+        and isinstance(n.exc, ast.Call)
+        and isinstance(n.exc.func, ast.Name)
+    ]
     assert "EntryValidityReadUnavailable" in raised
-    assert any(isinstance(n, ast.ExceptHandler) and isinstance(n.type, ast.Name) and n.type.id == "EntryValidityReadUnavailable" for n in ast.walk(worker))
-    assert any(isinstance(n, ast.ExceptHandler) and isinstance(n.type, ast.Name) and n.type.id == "EntryValidityReadUnavailable" for n in ast.walk(cleanup))
+    assert any(
+        isinstance(n, ast.ExceptHandler)
+        and isinstance(n.type, ast.Name)
+        and n.type.id == "EntryValidityReadUnavailable"
+        for n in ast.walk(worker)
+    )
+    assert any(
+        isinstance(n, ast.ExceptHandler)
+        and isinstance(n.type, ast.Name)
+        and n.type.id == "EntryValidityReadUnavailable"
+        for n in ast.walk(cleanup)
+    )
     assert "next_limit_cleanup = time.monotonic() + 15" in source
     assert "handle_exchange_mutation_barrier(" in source
 
@@ -178,7 +194,10 @@ def test_r1_public_rate_limit_maps_to_deferred_validity() -> None:
 
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    func = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_r1_signal_validity")
+    func = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "_r1_signal_validity"
+    )
 
     class Deferred(Exception):
         pass
@@ -194,9 +213,14 @@ def test_r1_public_rate_limit_maps_to_deferred_validity() -> None:
             return None
 
         def read(self):
-            return json.dumps({"retCode": 10006, "retMsg": "Too many visits. Exceeded the API Rate Limit."}).encode()
+            return json.dumps(
+                {"retCode": 10006, "retMsg": "Too many visits. Exceeded the API Rate Limit."}
+            ).encode()
 
-    request = types.SimpleNamespace(Request=lambda *_a, **_k: None, urlopen=lambda *_a, **_k: Response())
+    request = types.SimpleNamespace(
+        Request=lambda *_a, **_k: None,
+        urlopen=lambda *_a, **_k: Response(),
+    )
     globals_ = {
         "Decimal": Decimal,
         "json": json,
@@ -208,7 +232,16 @@ def test_r1_public_rate_limit_maps_to_deferred_validity() -> None:
         "REST_URL": "https://invalid.example",
     }
     exec(compile(ast.Module(body=[func], type_ignores=[]), "source", "exec"), globals_)
-    payload = {"side": "Buy", "entry_validity": {"operator": "R1_EXACT_SIGNAL", "signal_entry_price": "1", "signal_target_price": "2", "signal_structure_low": "0.5", "signal_structure_high": "2.5"}}
+    payload = {
+        "side": "Buy",
+        "entry_validity": {
+            "operator": "R1_EXACT_SIGNAL",
+            "signal_entry_price": "1",
+            "signal_target_price": "2",
+            "signal_structure_low": "0.5",
+            "signal_structure_high": "2.5",
+        },
+    }
     try:
         globals_["_r1_signal_validity"](payload, "APTUSDT")
     except Deferred as exc:
