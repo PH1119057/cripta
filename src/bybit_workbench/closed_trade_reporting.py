@@ -6,7 +6,7 @@ from decimal import Decimal
 
 
 def recovered_closed_cycles(rows: Sequence[Sequence[object]]) -> list[dict[str, object]]:
-    result = []
+    result: list[dict[str, object]] = []
     for r in rows:
         (
             reservation, symbol, side, qty, exit_price, entry_fee,
@@ -14,7 +14,11 @@ def recovered_closed_cycles(rows: Sequence[Sequence[object]]) -> list[dict[str, 
         ) = r
         if not isinstance(evidence, dict):
             import json
+            if not isinstance(evidence, (str, bytes, bytearray)):
+                raise ValueError("closed-cycle evidence must be JSON")
             evidence = json.loads(evidence)
+        if not isinstance(evidence, dict):
+            raise ValueError("closed-cycle evidence must be an object")
         ids = evidence.get("exit_execution_ids") or []
         if not ids or evidence.get("source") != "EXACT_BYBIT_EXECUTION_HISTORY":
             continue
@@ -23,10 +27,10 @@ def recovered_closed_cycles(rows: Sequence[Sequence[object]]) -> list[dict[str, 
             "provenance": "RECOVERED_UNOWNED",
             "strategy_id": None, "strategy_version": None,
             "symbol": str(symbol), "side": str(side),
-            "qty": float(qty), "price": float(exit_price),
+            "qty": float(str(qty)), "price": float(str(exit_price)),
             "closed_at_epoch_ms": int(evidence["closed_at_epoch_ms"]),
-            "gross_pnl": float(gross), "entry_fee": float(entry_fee),
-            "exit_fee": float(exit_fee), "net_pnl": float(net),
+            "gross_pnl": float(str(gross)), "entry_fee": float(str(entry_fee)),
+            "exit_fee": float(str(exit_fee)), "net_pnl": float(str(net)),
             "actual_net_pnl": None, "economics_completeness": "PARTIAL_NO_FUNDING",
             "reason": "восстановлено по исполнениям Bybit",
             "exec_ids": list(ids),
@@ -43,7 +47,7 @@ def owner_controlled_closed_cycles(
         command, symbol, raw, order_id, exec_id, side, qty, price, fee, when = row
         entries.append((str(command),str(symbol),str(order_id),str(exec_id),
                         str(side),Decimal(str(qty)),Decimal(str(price)),
-                        Decimal(str(fee)),int(when)))
+                        Decimal(str(fee)),int(str(when))))
     result = []
     for command,symbol,_order_id,_exec_id,side,qty,price,fee,when in entries:
         if qty <= 0:
@@ -55,11 +59,15 @@ def owner_controlled_closed_cycles(
         candidates = []
         for x in exit_rows:
             xsym,xorder,xid,xside,xqty,xprice,xfee,xtime,raw = x
-            if str(xsym) != symbol or str(xside) == side or not (when < int(xtime) < upper):
+            if str(xsym) != symbol or str(xside) == side or not (when < int(str(xtime)) < upper):
                 continue
             if not isinstance(raw, dict):
                 import json
+                if not isinstance(raw, (str, bytes, bytearray)):
+                    raise ValueError("exit evidence must be JSON")
                 raw = json.loads(raw)
+            if not isinstance(raw, dict):
+                raise ValueError("exit evidence must be an object")
             if Decimal(str(raw.get("closedSize") or 0)) != qty:
                 continue
             if Decimal(str(xqty)) != qty:
@@ -75,10 +83,10 @@ def owner_controlled_closed_cycles(
             "cycle_key": "owner-control:" + command,
             "provenance": "OWNER_CONTROL",
             "strategy_id": None, "strategy_version": None,
-            "symbol": symbol, "side": side, "qty": float(qty),
-            "price": float(exit_price), "closed_at_epoch_ms": int(xtime),
-            "gross_pnl": float(gross), "entry_fee": float(fee),
-            "exit_fee": float(xfee), "net_pnl": float(net),
+            "symbol": symbol, "side": side, "qty": float(str(qty)),
+            "price": float(str(exit_price)), "closed_at_epoch_ms": int(str(xtime)),
+            "gross_pnl": float(str(gross)), "entry_fee": float(fee),
+            "exit_fee": float(str(xfee)), "net_pnl": float(str(net)),
             "actual_net_pnl": None, "economics_completeness": "PARTIAL_NO_FUNDING",
             "reason": "контрольная сделка Bybit", "exec_ids": [str(xid)],
         })
@@ -94,7 +102,12 @@ def merge_evidenced_closed_trades(
     seen: set[str] = set()
     out = []
     for item in [*standard,*recovered,*control]:
-        ids = set(str(x) for x in item.get("exec_ids", []) if x)
+        raw_ids = item.get("exec_ids", [])
+        ids = (
+            {str(x) for x in raw_ids if x}
+            if isinstance(raw_ids, (list, tuple, set, frozenset))
+            else set()
+        )
         if not ids or ids & seen:
             continue
         seen.update(ids)
@@ -102,4 +115,4 @@ def merge_evidenced_closed_trades(
         x.setdefault("provenance", "STRATEGY")
         x.setdefault("cycle_key", "strategy:" + ":".join(sorted(ids)))
         out.append(x)
-    return sorted(out, key=lambda x: int(x["closed_at_epoch_ms"]), reverse=True)
+    return sorted(out, key=lambda x: int(str(x["closed_at_epoch_ms"])), reverse=True)
