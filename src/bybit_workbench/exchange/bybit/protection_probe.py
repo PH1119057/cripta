@@ -87,7 +87,6 @@ async def direct_account_snapshot(
     *,
     api_key: str,
     api_secret: str,
-    expected_user_id: str,
     base_url: str = "https://api.bybit.kz",
 ) -> dict[str, object]:
     if len(set(symbols)) != len(symbols):
@@ -103,8 +102,8 @@ async def direct_account_snapshot(
         str(details.get("userID") or "").strip()
         if isinstance(details, Mapping) else ""
     )
-    if not expected_user_id or not actual_user_id or actual_user_id != expected_user_id:
-        raise RuntimeError("Bybit account identity does not match approved userID")
+    if not actual_user_id:
+        raise RuntimeError("authenticated Bybit account userID unavailable")
     results = await asyncio.gather(*(_symbol_snapshot(reader, s) for s in symbols))
     return {
         "source": "BYBIT_AUTHENTICATED_ACCOUNT_GET",
