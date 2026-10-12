@@ -22,12 +22,12 @@ def _evidence(*, stop="90", tp="110", orders=None):
     }
 
 
-def _check(evidence, *, kind="POSITION", tp=Decimal("110")):
+def _check(evidence, *, kind="POSITION", tp=Decimal("110"), order_id=None):
     return evaluate_protection(
         evidence, position_id="pos-test-1", symbol="APTUSDT",
         position_idx=0, side="Buy", expected_stop=Decimal("90"),
         expected_tp=tp, expected_tp_kind=kind,
-        tick=Decimal("0.01"), now=NOW,
+        tick=Decimal("0.01"), now=NOW, expected_tp_order_id=order_id,
     )[0]
 
 
@@ -54,12 +54,12 @@ def test_dynamic_maker_tp_requires_exact_order():
     order = {
         "symbol": "APTUSDT", "positionIdx": 0, "side": "Sell",
         "orderLinkId": prefix + "abcdefgh", "orderStatus": "New",
-        "reduceOnly": True, "leavesQty": "1", "price": "115",
+        "reduceOnly": True, "leavesQty": "1", "price": "115", "orderId": "maker-123",
     }
-    assert _check(_evidence(tp="0", orders=[order]), kind="MAKER_ORDER", tp=Decimal("115")) == "VERIFIED"
-    assert _check(_evidence(tp="0"), kind="MAKER_ORDER", tp=Decimal("115")) == "NOT_VERIFIED"
-    assert _check(_evidence(tp="0", orders=[{**order, "reduceOnly": False}]), kind="MAKER_ORDER", tp=Decimal("115")) == "NOT_VERIFIED"
-    assert _check(_evidence(tp="0", orders=[{**order, "price": "113"}]), kind="MAKER_ORDER", tp=Decimal("115")) == "NOT_VERIFIED"
+    assert _check(_evidence(tp="0", orders=[order]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "VERIFIED"
+    assert _check(_evidence(tp="0"), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
+    assert _check(_evidence(tp="0", orders=[{**order, "reduceOnly": False}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
+    assert _check(_evidence(tp="0", orders=[{**order, "price": "113"}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
 
 
 def test_approved_dynamic_exit_supersedes_initial_tp_and_stop():
@@ -70,7 +70,7 @@ def test_approved_dynamic_exit_supersedes_initial_tp_and_stop():
         {"command_type": "strategy_exit", "payload": {
             "strategy_position_id": "pos-test-1", "action_kind": "SET_TP",
             "requested_mutation": {"take_profit_price": "115", "order_type": "LIMIT"},
-        }, "result": {"retCode": 0}},
+        }, "result": {"retCode": 0, "result": {"orderId": "maker-123", "orderLinkId": "utp" + __import__("hashlib").sha256(b"pos-test-1").hexdigest()[:12] + "-abcd"}}},
         {"command_type": "strategy_exit", "payload": {
             "strategy_position_id": "pos-test-1", "action_kind": "SET_STOP",
             "requested_mutation": {"stop_price": "95"},
