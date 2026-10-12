@@ -222,13 +222,13 @@ def evaluate_live_arm(
         (list(required_codes),),
     ).fetchall()
     by_identity: dict[tuple[str, str, str], Mapping[str, object] | Sequence[object]] = {}
-    for row in rows:
+    for record in rows:
         key = (
-            str(_value(row, "check_code", 0)),
-            str(_value(row, "scope_type", 1)),
-            str(_value(row, "scope_key", 2)),
+            str(_value(record, "check_code", 0)),
+            str(_value(record, "scope_type", 1)),
+            str(_value(record, "scope_key", 2)),
         )
-        by_identity[key] = row
+        by_identity[key] = record
 
     checks: list[LiveArmCheck] = []
     for code in required_codes:
