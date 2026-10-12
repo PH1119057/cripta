@@ -5,6 +5,7 @@ independent account GET evidence by the Lifecycle Supervisor.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from typing import Mapping
 
@@ -174,7 +175,7 @@ def verify_approved_exchange_protection(
     tick: object,
     entry_payload: Mapping[str, object],
     completed_commands: list[Mapping[str, object]],
-    now: "datetime",
+    now: datetime,
 ) -> tuple[str, str]:
     """One fail-closed comparison of approved intent and fresh Exchange truth.
 
@@ -182,7 +183,6 @@ def verify_approved_exchange_protection(
     positions and orders are mandatory. All unsupported or ambiguous lineage
     produces UNKNOWN, not an assumed protection price.
     """
-    from datetime import datetime
     from .protection_evidence import evaluate_protection
 
     try:
