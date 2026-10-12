@@ -5,7 +5,7 @@ UI = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 PRIVATE = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
 
 
-def test_owner_controlled_live_test_is_visible_on_strategy_control_page() -> None:
+def test_owner_controlled_live_test_is_visible_in_bybit_log_with_explicit_confirmation() -> None:
     assert 'id="ownerTestEntrySection"' in UI
     assert 'id="ownerTestSymbol"' in UI
     assert '<option selected>LTCUSDT</option>' in UI
@@ -16,7 +16,7 @@ def test_owner_controlled_live_test_is_visible_on_strategy_control_page() -> Non
     assert 'Открыть контрольную сделку' in UI
     assert 'open:[openTradesSection]' in UI
     assert (
-        'control:[strategyTradeControlSection,ownerTestEntrySection]'
+        'bybit_log:[ownerTestEntrySection,bybitLogSection]'
         in UI
     )
 
