@@ -1,4 +1,5 @@
 """Pure fail-closed evaluation of fresh, independent Bybit protection evidence."""
+
 from __future__ import annotations
 
 import hashlib
