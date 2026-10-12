@@ -88,7 +88,7 @@ def test_exact_maker_order_identity_and_market_fallback():
     assert accepted_maker_tp_order_id(
         position_id="position-A", completed_commands=[maker],
     ) == "maker-order-123"
-    fallback = {"**maker, "result": {"retCode": 0, "result": {
+    fallback = {**maker, "result": {"retCode": 0, "result": {
         "orderId": "market-close-123", "orderLinkId": "close-request",
     }}}
     with pytest.raises(ProtectionIntentUnavailable, match="not exact maker"):
