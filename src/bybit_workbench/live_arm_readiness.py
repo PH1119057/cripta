@@ -233,7 +233,9 @@ def evaluate_live_arm(
     checks: list[LiveArmCheck] = []
     for code in required_codes:
         scope_type, scope_key = scope_for_check(code, context)
-        row = by_identity.get((code, scope_type, scope_key))
+        row: Mapping[str, object] | Sequence[object] | None = by_identity.get(
+            (code, scope_type, scope_key)
+        )
         if row is None:
             checks.append(
                 LiveArmCheck(
