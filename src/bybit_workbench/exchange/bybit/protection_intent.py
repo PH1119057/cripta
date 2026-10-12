@@ -3,6 +3,7 @@
 These are policy/command inputs, not Exchange truth. They are compared with
 independent account GET evidence by the Lifecycle Supervisor.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
