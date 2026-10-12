@@ -40,3 +40,13 @@ def test_release_runner_inhibits_entry_before_installer_without_flat_gate():
     assert "20261009_release_arm_incidents.sql" in installer
     assert "TRADING_STATE_INFORMATIONAL=" in installer
     assert "Release installation is independent of all Exchange" in installer
+
+
+def test_dashboard_only_projects_open_incidents_for_loaded_release():
+    source = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
+    query = source[source.index("release_incident_rows = connection.execute("):]
+    query = query[:query.index("# Dashboard-only projection")]
+    assert "WHERE state='OPEN' AND release_commit=%s" in query
+    assert "(LOADED_RELEASE_COMMIT,)" in query
+    # Historical incidents stay durable in DB; only presentation is scoped.
+    assert "UPDATE control.release_arm_incidents" not in query
