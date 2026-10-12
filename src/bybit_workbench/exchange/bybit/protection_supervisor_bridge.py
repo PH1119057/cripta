@@ -21,8 +21,14 @@ def _json_dict(value: object) -> Mapping[str, object]:
     return parsed
 
 
-def _command_lineage(connection: Any, *, position_id: str, symbol: str,
-                     entry_command_id: str, fill_at: datetime) -> list[dict[str, object]]:
+def _command_lineage(
+    connection: Any,
+    *,
+    position_id: str,
+    symbol: str,
+    entry_command_id: str,
+    fill_at: datetime,
+) -> list[Mapping[str, object]]:
     rows = connection.execute(
         """SELECT command_id, command_type, payload_json, result_json
              FROM runtime.trade_commands
@@ -36,7 +42,7 @@ def _command_lineage(connection: Any, *, position_id: str, symbol: str,
     ).fetchall()
     if len(rows) > 1000:
         raise ValueError("protection command lineage truncated")
-    commands: list[dict[str, object]] = []
+    commands: list[Mapping[str, object]] = []
     for row in rows:
         payload = _json_dict(row["payload_json"])
         kind = str(row["command_type"])
@@ -86,14 +92,23 @@ def account_protection_verdicts(
             ).fetchone()
             if not entry_row:
                 raise ValueError("exact Entry command unavailable")
+            fill_at = position["fill_at"]
+            if not isinstance(fill_at, datetime):
+                raise ValueError("position fill_at is not datetime")
+            position_idx = position["position_idx"]
+            if not isinstance(position_idx, int) or isinstance(position_idx, bool):
+                raise ValueError("position_idx is not integer")
             commands = _command_lineage(
-                connection, position_id=position_id, symbol=symbol,
-                entry_command_id=entry_command_id, fill_at=position["fill_at"],
+                connection,
+                position_id=position_id,
+                symbol=symbol,
+                entry_command_id=entry_command_id,
+                fill_at=fill_at,
             )
             state, reason = verify_approved_exchange_protection(
                 account_evidence=account_evidence, position_id=position_id,
                 entry_command_id=entry_command_id, symbol=symbol,
-                position_idx=int(position["position_idx"]),
+                position_idx=position_idx,
                 side=str(position["side"]),
                 entry_price=position["actual_avg_fill"],
                 tick=scope["tick"], entry_payload=_json_dict(entry_row["payload_json"]),
