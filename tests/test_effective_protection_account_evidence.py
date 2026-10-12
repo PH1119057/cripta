@@ -5,7 +5,6 @@ from bybit_workbench.exchange.bybit.effective_protection import (
     effective_protection_from_account,
 )
 
-
 NOW = datetime(2026, 10, 12, tzinfo=UTC)
 
 
@@ -58,7 +57,10 @@ def test_dynamic_maker_tp_is_recognized_as_separate_surface():
     result = _build(_snapshot(tp="0", orders=[maker]))
     assert result.state == "OBSERVED_PRESENT"
     assert result.maker_take_profit_order_ids == ("maker123",)
-    assert _build(_snapshot(tp="0", orders=[{**maker, "reduceOnly": False}])).state == "NOT_VERIFIED"
+    assert (
+        _build(_snapshot(tp="0", orders=[{**maker, "reduceOnly": False}])).state
+        == "NOT_VERIFIED"
+    )
 
 
 def test_evidence_contains_exact_command_identity():
