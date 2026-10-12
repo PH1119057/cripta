@@ -3,6 +3,7 @@
 Acknowledging an order command is not proof of the resulting TP/SL state.
 This module is pure and cannot send Exchange mutations or alter a trading gate.
 """
+
 from __future__ import annotations
 
 import hashlib
