@@ -48,7 +48,7 @@ def owner_controlled_closed_cycles(
         entries.append((str(command),str(symbol),str(order_id),str(exec_id),
                         str(side),Decimal(str(qty)),Decimal(str(price)),
                         Decimal(str(fee)),int(str(when))))
-    result = []
+    result: list[dict[str, object]] = []
     for command,symbol,_order_id,_exec_id,side,qty,price,fee,when in entries:
         if qty <= 0:
             continue
