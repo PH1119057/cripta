@@ -50,7 +50,7 @@ def test_market_set_tp_is_not_resting_tp():
 
 
 def test_market_fallback_makes_limit_tp_unknown():
-    with pytest.raises(ProtectionIntentUnavailable, match="market"):
+    with pytest.raises(ProtectionIntentUnavailable, match="identity missing"):
         _base([{
             "command_type": "strategy_exit",
             "payload": {"strategy_position_id": "position-A",
