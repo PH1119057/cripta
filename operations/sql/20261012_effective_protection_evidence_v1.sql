@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS runtime.effective_protection_evidence (
     position_idx integer NOT NULL,
     evidence_source text NOT NULL
         CHECK (evidence_source = 'BYBIT_AUTHENTICATED_ACCOUNT_GET'),
-    state text NOT NULL CHECK (state IN ('VERIFIED','NOT_VERIFIED','UNKNOWN')),
+    state text NOT NULL CHECK (state IN ('OBSERVED_PRESENT','NOT_VERIFIED','UNKNOWN')),
     stop_loss numeric,
     position_take_profit numeric,
     maker_take_profit_order_ids jsonb NOT NULL DEFAULT '[]'::jsonb
