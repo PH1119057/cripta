@@ -81,3 +81,26 @@ def test_exchange_missing_stop_is_not_verified():
         FakeConnection(), positions=[_position()],
         account_evidence=snapshot, now=NOW,
     )["p1"]["state"] == "NOT_VERIFIED"
+
+
+def test_supervisor_runtime_uses_independent_read_and_keeps_lifecycle_nontrading():
+    from pathlib import Path
+    import ast
+    source = Path("operations/monitoring/lifecycle_supervisor_runtime.py").read_text()
+    tree = ast.parse(source)
+    functions = {f.name: f for f in tree.body if isinstance(f, ast.FunctionDef)}
+    assert "_independent_exchange_snapshot" in functions
+    assert "account_protection_verdicts" in source
+    assert "exchange_protection=protection" in source
+    reader = ast.unparse(functions["_independent_exchange_snapshot"])
+    assert "direct_account_snapshot(" in reader
+    assert "api_post(" not in reader
+    assert "submit_order" not in reader
+    assert "trade" not in reader.lower().split("return asyncio.run", 1)[-1]
+
+
+def test_legacy_supervisor_marker_cannot_prove_protection():
+    from pathlib import Path
+    source = Path("src/bybit_workbench/lifecycle_supervisor.py").read_text()
+    assert "independent Exchange account protection evidence not supplied" in source
+    assert '"VERIFIED" if row["initial_protection_confirmed_at"]' not in source
