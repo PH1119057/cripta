@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -93,7 +93,10 @@ def prove_orphan_closed_cycle(
         exit_orders: list[str] = []
         closed_ms = 0
         opposite = "Sell" if side == "Buy" else "Buy"
-        for row in sorted(subsequent_executions, key=lambda x: (int(x.get("execTime") or 0), str(x.get("execId") or ""))):
+        for row in sorted(
+            subsequent_executions,
+            key=lambda x: (int(x.get("execTime") or 0), str(x.get("execId") or "")),
+        ):
             execution_time = int(row.get("execTime") or 0)
             if execution_time <= last_entry_ms:
                 continue
