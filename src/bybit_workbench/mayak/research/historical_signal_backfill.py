@@ -256,7 +256,7 @@ def archive_metadata_fingerprint(
             continue
         stat = path.stat()
         try:
-            relative = str(path.relative_to(root))
+            relative = path.relative_to(root).as_posix()
         except ValueError:
             relative = str(path)
         rows.append(
