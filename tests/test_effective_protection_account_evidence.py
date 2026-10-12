@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 
 from bybit_workbench.exchange.bybit.effective_protection import effective_protection_from_account
@@ -11,6 +12,7 @@ def _build(payload):
         command_id="command-1", symbol="APTUSDT",
         position_idx=0, account_ref="BYBIT:UNIFIED",
         account_evidence=payload, observed_at=NOW,
+        strategy_position_id="pos-test-1",
     )
 
 
@@ -47,7 +49,7 @@ def test_dynamic_maker_tp_is_recognized_as_separate_surface():
     maker = {
         "symbol": "APTUSDT", "positionIdx": 0,
         "orderStatus": "New", "reduceOnly": True,
-        "orderLinkId": "utp123456789abc-0123", "orderId": "maker123",
+        "orderLinkId": "utp" + hashlib.sha256(b"pos-test-1").hexdigest()[:12] + "-0123", "orderId": "maker123",
         "price": "115", "leavesQty": "1",
     }
     result = _build(_snapshot(tp="0", orders=[maker]))
