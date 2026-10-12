@@ -44,28 +44,15 @@ class ExitTieBreak(StrEnum):
 
 
 class ExitPositionContext(Protocol):
-    """Read-only exact Strategy position lineage required by Exit decisions."""
+    """Mode-neutral exact Strategy position lineage required by Exit decisions."""
 
-    @property
-    def strategy_position_id(self) -> str: ...
-
-    @property
-    def strategy_id(self) -> str: ...
-
-    @property
-    def strategy_version(self) -> str: ...
-
-    @property
-    def strategy_config_fingerprint(self) -> str: ...
-
-    @property
-    def exit_plan_fingerprint(self) -> str: ...
-
-    @property
-    def symbol(self) -> str: ...
-
-    @property
-    def direction(self) -> TradeDirection: ...
+    strategy_position_id: str
+    strategy_id: str
+    strategy_version: str
+    strategy_config_fingerprint: str
+    exit_plan_fingerprint: str
+    symbol: str
+    direction: TradeDirection
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,10 +224,7 @@ def _resolve_dynamic_mutation(
             return [resolve(item) for item in value]
         return value
 
-    resolved = resolve(mutation.to_dict())
-    if not isinstance(resolved, Mapping):
-        raise ExitPlanContractError("dynamic mutation must resolve to an object")
-    return FrozenPolicy.from_mapping(resolved)
+    return FrozenPolicy.from_mapping(resolve(mutation.to_dict()))
 
 
 class UniversalExitEngine:
