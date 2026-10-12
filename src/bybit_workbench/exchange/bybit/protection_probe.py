@@ -91,6 +91,7 @@ async def direct_account_snapshot(
 ) -> dict[str, object]:
     if len(set(symbols)) != len(symbols):
         raise ValueError("repeated Exchange account audit scope")
+    observed_at = datetime.now(UTC)
     reader = LifecycleAccountReadTransport(
         api_key=api_key, api_secret=api_secret, base_url=base_url,
     )
@@ -110,6 +111,8 @@ async def direct_account_snapshot(
         "account_ref": "BYBIT:UNIFIED",
         "account_user_id": actual_user_id,
         "complete": True,
-        "observed_at": datetime.now(UTC).isoformat(),
+        # Conservative freshness: timestamp the beginning of the authenticated
+        # inventory, not the end after potentially slow paginated reads.
+        "observed_at": observed_at.isoformat(),
         "symbols": dict(results),
     }
