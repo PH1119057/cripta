@@ -7,7 +7,10 @@ from decimal import Decimal
 def recovered_closed_cycles(rows):
     result = []
     for r in rows:
-        reservation, symbol, side, qty, exit_price, entry_fee, exit_fee, gross, net, evidence, recovered_at = r
+        (
+            reservation, symbol, side, qty, exit_price, entry_fee,
+            exit_fee, gross, net, evidence, recovered_at,
+        ) = r
         if not isinstance(evidence, dict):
             import json
             evidence = json.loads(evidence)
