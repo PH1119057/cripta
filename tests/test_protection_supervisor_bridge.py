@@ -51,6 +51,7 @@ def _position():
 def _exchange():
     return {
         "complete": True, "account_ref": "BYBIT:UNIFIED",
+        "account_user_id": "approved-existing-account",
         "observed_at": NOW.isoformat(),
         "symbols": {"APTUSDT": {
             "tick": "0.01",
@@ -101,6 +102,7 @@ def test_supervisor_runtime_uses_independent_read_and_keeps_lifecycle_nontrading
     assert "exchange_protection=protection" in source
     reader = ast.unparse(functions["_independent_exchange_snapshot"])
     assert "direct_account_snapshot(" in reader
+    assert "if not symbols" not in reader
     assert "api_post(" not in reader
     assert "submit_order" not in reader
     assert "trade" not in reader.lower().split("return asyncio.run", 1)[-1]
