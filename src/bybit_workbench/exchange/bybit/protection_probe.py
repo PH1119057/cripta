@@ -4,9 +4,9 @@ Only the read-only transport is reachable. No trading mutation API is imported.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 import asyncio
 from datetime import UTC, datetime
-from collections.abc import Mapping
 from typing import Any
 
 from .transport import LifecycleAccountReadTransport
