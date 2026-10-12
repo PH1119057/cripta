@@ -111,3 +111,15 @@ def test_legacy_supervisor_marker_cannot_prove_protection():
     source = Path("src/bybit_workbench/lifecycle_supervisor.py").read_text()
     assert "independent Exchange account protection evidence not supplied" in source
     assert '"VERIFIED" if row["initial_protection_confirmed_at"]' not in source
+
+
+def test_supervisor_scans_all_managed_open_positions_across_bot_instances():
+    from pathlib import Path
+
+    source = Path("operations/monitoring/lifecycle_supervisor_runtime.py").read_text()
+    selection = source.split("def _account_positions(", 1)[1].split(
+        "def _independent_exchange_snapshot(", 1
+    )[0]
+    assert "FROM runtime.position_ownership" in selection
+    assert "WHERE state='OPEN'" in selection
+    assert "bot_instance_id='universal-entry'" not in selection
