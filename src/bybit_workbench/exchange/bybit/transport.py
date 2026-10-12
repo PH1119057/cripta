@@ -85,12 +85,16 @@ class LifecycleAccountReadTransport:
 
     async def get(self, endpoint: str, params: Mapping[str, Any],
                   *, authenticated: bool) -> Mapping[str, Any]:
-        if (authenticated and endpoint not in self._PRIVATE) or (not authenticated and endpoint not in self._PUBLIC):
+        if (authenticated and endpoint not in self._PRIVATE) or (
+            not authenticated and endpoint not in self._PUBLIC
+        ):
             raise ValueError("Lifecycle read transport endpoint is not permitted")
         await self._limiter.acquire()
         return await asyncio.to_thread(self._get_blocking, endpoint, params, authenticated)
 
-    def _get_blocking(self, endpoint: str, params: Mapping[str, Any], authenticated: bool) -> Mapping[str, Any]:
+    def _get_blocking(
+        self, endpoint: str, params: Mapping[str, Any], authenticated: bool
+    ) -> Mapping[str, Any]:
         import hashlib
         import hmac
         import json
