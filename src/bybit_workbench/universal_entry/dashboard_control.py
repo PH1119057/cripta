@@ -827,7 +827,9 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     take_profit_enabled = _bool(target_policy.get("enabled"), "exit_policy.take_profit.enabled")
     protection_role = str(initial_protection.get("role") or "NORMAL_EXIT").upper()
     catastrophic_guard = protection_role == "CATASTROPHIC_GUARD"
-    if hard_enabled != stop_enabled and not (catastrophic_guard and stop_enabled and not hard_enabled):
+    if hard_enabled != stop_enabled and not (
+        catastrophic_guard and stop_enabled and not hard_enabled
+    ):
         raise ValueError(
             "hard_stop and initial_protection stop enablement must match unless "
             "initial_protection.role=CATASTROPHIC_GUARD"
