@@ -1,8 +1,8 @@
 """Pure fail-closed evaluation of fresh, independent Bybit protection evidence."""
 from __future__ import annotations
 
-from collections.abc import Mapping
 import hashlib
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
