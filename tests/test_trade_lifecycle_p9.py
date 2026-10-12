@@ -86,10 +86,32 @@ def test_long_running_shadow_cycles_close_each_database_transaction() -> None:
         "                mark_exit_claims_stale("
         in EXIT_RUNTIME
     )
-    assert (
-        "with connection.transaction():\n"
-        "        return LifecycleSupervisor(connection, policy=policy).scan("
-        in LIFECYCLE_RUNTIME
+    # LifecycleScan retains its database transaction even when independent
+    # Exchange protection evidence is supplied to the Supervisor.
+    import ast
+
+    runtime_ast = ast.parse(LIFECYCLE_RUNTIME)
+    scan = next(
+        node for node in runtime_ast.body
+        if isinstance(node, ast.FunctionDef) and node.name == "scan_once"
+    )
+    transactions = [
+        node for node in ast.walk(scan)
+        if isinstance(node, ast.With)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and ast.unparse(item.context_expr.func) == "connection.transaction"
+            for item in node.items
+        )
+    ]
+    assert any(
+        any(
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == "scan"
+            for inner in ast.walk(transaction)
+        )
+        for transaction in transactions
     )
 
 
