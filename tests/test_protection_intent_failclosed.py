@@ -1,11 +1,12 @@
 import hashlib
 from decimal import Decimal
+
 import pytest
 
 from bybit_workbench.exchange.bybit.protection_intent import (
     ProtectionIntentUnavailable,
-    expected_protection,
     accepted_maker_tp_order_id,
+    expected_protection,
     verify_approved_exchange_protection,
 )
 
@@ -119,7 +120,7 @@ def test_idempotent_maker_tp_response_preserves_exchange_identity():
 
 
 def test_full_approved_protection_verdict_requires_live_exact_maker_order():
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
     now = datetime(2026, 10, 12, tzinfo=UTC)
     prefix = "utp" + hashlib.sha256(b"position-A").hexdigest()[:12] + "-"
     command = {
