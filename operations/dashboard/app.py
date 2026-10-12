@@ -93,7 +93,7 @@ R1_PARITY_ATTESTED_MODULE_SHA256 = {
     "src/bybit_workbench/universal_entry/engine.py": "9d09e1d8d8432631ae55fea1dd5524a1689805ea1d1adc19a6f511ae5ab2347d",
     "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
     "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
-    "src/bybit_workbench/universal_exit/engine.py": "d5da446f651fbddd88189c50a30f0591cd92b18b326c31f5271476101672cd36",
+    "src/bybit_workbench/universal_exit/engine.py": "d93f18b9ba63ba46e80d1cdd643d85f7cbe688dfc85e213495185b84fbad1d18",
     "src/bybit_workbench/universal_exit/execution_bridge.py": "259d7c6972666e05b5d9c4ae3ee602e5f16440e28183ed87740365ca4299c2c2",
 }
 
