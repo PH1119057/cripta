@@ -100,6 +100,9 @@ def test_supervisor_runtime_uses_independent_read_and_keeps_lifecycle_nontrading
     assert "_independent_exchange_snapshot" in functions
     assert "account_protection_verdicts" in source
     assert "exchange_protection=protection" in source
+    assert '"account_read_complete"' in source
+    assert '"account_observed_at"' in source
+    assert '"account_identity_present"' in source
     reader = ast.unparse(functions["_independent_exchange_snapshot"])
     assert "direct_account_snapshot(" in reader
     assert "if not symbols" not in reader
