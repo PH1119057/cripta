@@ -224,7 +224,10 @@ def _resolve_dynamic_mutation(
             return [resolve(item) for item in value]
         return value
 
-    return FrozenPolicy.from_mapping(resolve(mutation.to_dict()))
+    resolved = resolve(mutation.to_dict())
+    if not isinstance(resolved, Mapping):
+        raise ExitPlanContractError("dynamic mutation must resolve to an object")
+    return FrozenPolicy.from_mapping(resolved)
 
 
 class UniversalExitEngine:
