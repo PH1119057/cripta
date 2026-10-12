@@ -103,7 +103,7 @@ jobs:
                   filename = str(item["filename"]).replace("\\", "/")
                   for marker in ("/base-ruff/", "/cripta/"):
                       if marker in filename:
-                          filename = filename.split(marker, 1)[1]
+                          filename = filename.rsplit(marker, 1)[1]
                           break
                   out[
                       f"{filename}|{item.get('code')}|{item.get('message')}"
