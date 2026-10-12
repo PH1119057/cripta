@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from bybit_workbench.exchange.bybit import protection_probe
