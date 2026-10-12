@@ -33,6 +33,7 @@ CREATE INDEX IF NOT EXISTS ix_effective_protection_command
  (command_id, observed_at DESC)
  WHERE command_id IS NOT NULL;
 
--- DB grants and effective writer responsibility require dedicated
--- DEVELOPMENT_RELEASE review before deployment; no blanket privileges here.
+-- Exact runtime writer is cripta-private-runtime.service (User=cripta).
+-- No DELETE or UPDATE rights: records are append-only.
+GRANT SELECT, INSERT ON runtime.effective_protection_evidence TO cripta;
 COMMIT;
