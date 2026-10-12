@@ -887,6 +887,14 @@ Execution отвечает за:
 - recovery after restart;
 - technical fail-closed.
 
+
+
+## 4.4.1 Read-only SIGNAL_VALIDITY unavailability for outstanding Entry — OWNER DECISION 2026-10-12
+
+An outstanding Exchange-acknowledged PostOnly Entry remains an Exchange order. A temporary failed public ticker/kline read during periodic Strategy SIGNAL_VALIDITY revalidation is **not** an unknown Exchange mutation outcome. The verifier must report UNKNOWN/deferred, make **no cancellation or new mutation** from missing evidence, and retry only after bounded backoff. It must never infer SIGNAL_VALIDITY=true or false from absent/stale data. Report durable actionable degraded data-read evidence without manufacturing an ExchangeMutationBarrier or global mainnet disarm solely for this pre-cancel read failure.
+
+The outstanding order must continue to be monitored by Exchange reconciliation and its Strategy lifetime contract; an unavailable read does not grant indefinite silent safety clearance. A failed/ambiguous mutation, uncertain fill, unsafe Exchange reconciliation, genuine protection/position invariant violation, or any independent global gate reason retains the existing fail-closed emergency contract. Recovery and LIVE re-arm are not implicit side effects of this change. This section does not change Strategy signals, target geometry, cancel-on-verified-invalid rules or Exchange mutation ownership.
+
 ## 4.5 Exchange-agnostic
 
 Bybit является текущим подключённым провайдером.
