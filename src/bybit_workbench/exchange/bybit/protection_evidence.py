@@ -75,6 +75,8 @@ def evaluate_protection(
         if tp <= 0 or abs(tp - expected_tp) > tick:
             return "NOT_VERIFIED", "Exchange position Take Profit differs from approved TP"
     elif expected_tp_kind == "MAKER_ORDER":
+        if not expected_tp_order_id:
+            return "UNKNOWN", "exact accepted dynamic TP orderId not provided"
         prefix = "utp" + hashlib.sha256(position_id.encode()).hexdigest()[:12] + "-"
         expected_side = "Sell" if side == "Buy" else "Buy"
         matches = [
