@@ -81,16 +81,17 @@ def expected_protection(
                 if order_type not in {"MARKET", "LIMIT"}:
                     raise ProtectionIntentUnavailable("Exit TP order type unresolved")
                 if order_type == "MARKET":
-                    raise ProtectionIntentUnavailable(
-                        "marketable SET_TP may close position; fresh reconciliation required"
+                    # Execution SET_TP/MARKET installs a conditional position
+                    # TP via /v5/position/trading-stop (tpOrderType=Market).
+                    # This is NOT the market-close fallback of LIMIT SET_TP.
+                    tp_kind = "POSITION"
+                else:
+                    # LIMIT SET_TP may instead issue a market-close fallback.
+                    # Only a tagged maker order ACK proves a resting TP.
+                    accepted_maker_tp_order_id(
+                        position_id=position_id, completed_commands=[command],
                     )
-                # marketable_action=CLOSE_MARKET is a permitted fallback,
-                # not proof that fallback occurred. Only exact maker ACK
-                # identity can establish an outstanding maker-TP candidate.
-                accepted_maker_tp_order_id(
-                    position_id=position_id, completed_commands=[command],
-                )
-                tp_kind = "MAKER_ORDER"
+                    tp_kind = "MAKER_ORDER"
             elif action == "SET_STOP":
                 stop = _amount(mutation.get("stop_price"))
                 if stop % step != 0:
