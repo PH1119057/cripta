@@ -5,11 +5,11 @@ This module is pure and cannot send Exchange mutations or alter a trading gate.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from collections.abc import Mapping
 
 
 @dataclass(frozen=True, slots=True)
