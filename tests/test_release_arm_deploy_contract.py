@@ -4,7 +4,8 @@ from pathlib import Path
 def test_red_banner_is_above_all_portal_sections_and_not_audio_dependent():
     html = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
     banner = html.index('id="releaseArmCriticalBanner"')
-    assert banner < html.index("<header>")
+    assert banner < html.index('id="infra"')
+    assert banner < html.index('id="liveDesk"')
     assert 'role="alert"' in html
     assert 'aria-live="assertive"' in html
     assert 'position:sticky;top:0;z-index:1000' in html
