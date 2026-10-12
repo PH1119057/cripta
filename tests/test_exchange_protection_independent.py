@@ -57,16 +57,16 @@ def test_dynamic_maker_tp_requires_exact_order():
         "reduceOnly": True, "leavesQty": "1", "price": "115", "orderId": "maker-123",
     }
     assert (
-        assert _check(_evidence(tp="0", orders=[order]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "VERIFIED"
+        _check(_evidence(tp="0", orders=[order]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "VERIFIED"
     )
     assert (
-        assert _check(_evidence(tp="0"), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
+        _check(_evidence(tp="0"), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
     )
     assert (
-        assert _check(_evidence(tp="0", orders=[{**order, "reduceOnly": False}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
+        _check(_evidence(tp="0", orders=[{**order, "reduceOnly": False}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
     )
     assert (
-        assert _check(_evidence(tp="0", orders=[{**order, "price": "113"}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
+        _check(_evidence(tp="0", orders=[{**order, "price": "113"}]), kind="MAKER_ORDER", tp=Decimal("115"), order_id="maker-123") == "NOT_VERIFIED"
     )
 
 
