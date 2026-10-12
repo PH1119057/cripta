@@ -4,9 +4,9 @@ Does not alter exchange state, account gates or durable position ownership.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from collections.abc import Mapping, Sequence
 
 
 @dataclass(frozen=True)
