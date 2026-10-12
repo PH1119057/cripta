@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from bybit_workbench.exchange.bybit.protection_intent import verify_approved_exchange_protection
 
