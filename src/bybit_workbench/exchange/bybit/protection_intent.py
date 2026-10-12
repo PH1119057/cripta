@@ -5,9 +5,9 @@ independent account GET evidence by the Lifecycle Supervisor.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
-from collections.abc import Mapping
 
 
 class ProtectionIntentUnavailable(ValueError):
