@@ -5,7 +5,6 @@ from decimal import Decimal
 from bybit_workbench.exchange.bybit.protection_evidence import evaluate_protection
 from bybit_workbench.exchange.bybit.protection_intent import expected_protection
 
-
 NOW = datetime(2026, 10, 12, tzinfo=UTC)
 
 
