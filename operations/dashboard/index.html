@@ -121,6 +121,11 @@
     <div id="releaseArmCriticalDetails" style="margin-top:6px;line-height:1.5"></div>
     <small>Существующие позиции и их Exit должны продолжать сопровождаться. Это уведомление не зависит от звука и не закрывается вручную.</small>
   </div>
+  <section id="observerFaultBanner" class="durable-fault-banner" hidden role="alert" aria-live="assertive">
+    <h2>Ошибки Entry Observer · требуется явное решение оператора</h2>
+    <div id="observerFaultSummary" class="durable-fault-summary">—</div>
+    <div id="observerFaultItems"></div>
+  </section>
   <div id="releaseStampFooter" aria-label="Время последнего обновления">Обновление · <span id="stamp">загрузка…</span></div>
   <nav aria-label="Разделы"><button class="tab active" data-panel="liveDesk">Торговля</button><div class="menu-group"><button class="tab menu-label" type="button">Настройки ▾</button><div class="menu-items"><button class="tab" data-panel="entry">Настройки входа</button><button class="tab" data-panel="strategies">Стратегии входа и выхода</button><button class="tab" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="serverControl">Ресурсы сервера</button></div></div><div class="menu-group"><button class="tab menu-label" type="button">Статистика и исследования ▾</button><div class="menu-items"><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="testLibrary">Библиотека тестов</button><button class="tab" data-panel="bots">Торговые боты</button></div></div><button class="tab" data-panel="history">История исследований</button><button class="tab" data-panel="rules">Правила проекта</button><button class="tab" data-panel="checklist">Чек-лист</button><a class="tab" href="/logout">Выйти</a></nav>
 
@@ -186,11 +191,6 @@
           <div id="exitOwnerCriticalBanner" class="console-owner-danger" hidden aria-live="assertive"></div>
           <div class="console-event-list">
             <span id="tradeCommandStatus" hidden></span>
-            <section id="observerFaultBanner" class="durable-fault-banner rail-faults" hidden aria-live="polite">
-              <h2>Ошибки Entry Observer</h2>
-              <div id="observerFaultSummary" class="durable-fault-summary">—</div>
-              <div id="observerFaultItems"></div>
-            </section>
             <div id="liveCriticalEventList" aria-live="polite"></div><div id="liveSystemEventFeed"></div>
             <div id="gateEventMessage" class="console-event-note muted">Состояние шлюза загружается…</div>
           </div>
