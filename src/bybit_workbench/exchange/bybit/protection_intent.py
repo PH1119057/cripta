@@ -10,7 +10,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
-
 class ProtectionIntentUnavailable(ValueError):
     pass
 
