@@ -20,5 +20,7 @@ jobs:
       - run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
       - run: .\.venv\Scripts\python.exe -m ruff check src tests
       - run: .\.venv\Scripts\python.exe -m mypy src/bybit_workbench
+      - name: Install server PostgreSQL test driver
+        run: uv pip install --python .\.venv\Scripts\python.exe "psycopg[binary]==3.2.10"
       - run: .\.venv\Scripts\python.exe -m pytest
       - run: .\.venv\Scripts\python.exe -m bybit_workbench --headless --database ci-smoke.db
