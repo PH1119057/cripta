@@ -123,3 +123,22 @@ def test_supervisor_scans_all_managed_open_positions_across_bot_instances():
     assert "FROM runtime.position_ownership" in selection
     assert "WHERE state='OPEN'" in selection
     assert "bot_instance_id='universal-entry'" not in selection
+
+
+def test_supervisor_uses_existing_single_encrypted_credential_read_only():
+    from pathlib import Path
+
+    unit = Path("operations/systemd/cripta-lifecycle-supervisor.service").read_text()
+    runtime = Path("operations/monitoring/lifecycle_supervisor_runtime.py").read_text()
+    transport = Path("src/bybit_workbench/exchange/bybit/transport.py").read_text()
+
+    assert "User=cripta" in unit
+    assert "LoadCredentialEncrypted=bybit-mainnet:" in unit
+    assert '"bybit-mainnet"' in runtime
+    assert "approved_user_id" not in runtime
+    assert "direct_account_snapshot(" in runtime
+    assert "LifecycleAccountReadTransport" in transport
+    assert '"/v5/position/list"' in transport
+    assert '"/v5/order/realtime"' in transport
+    assert '"/v5/user/query-api"' in transport
+    assert '"/v5/order/create"' not in transport.split("class LifecycleAccountReadTransport", 1)[1]
