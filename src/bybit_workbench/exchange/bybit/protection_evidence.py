@@ -35,7 +35,7 @@ def evaluate_protection(
     if evidence.get("account_ref") != "BYBIT:UNIFIED":
         return "UNKNOWN", "unexpected account identity"
     try:
-        observed = datetime.fromisoformat(str(evidence["observed_at"])).astimezone(UTC)
+        observed = datetime.fromisoformat(str(evidence["observed_at"]))
     except (KeyError, TypeError, ValueError):
         return "UNKNOWN", "Exchange observation timestamp invalid"
     if observed.tzinfo is None or now.tzinfo is None:
