@@ -27,6 +27,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install uv==0.11.33
       - run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
+      - name: Install server-only PostgreSQL test driver
+        run: .\.venv\Scripts\python.exe -m pip install "psycopg[binary]==3.2.10"
       - name: New protection code lint
         run: |
           .\.venv\Scripts\python.exe -m ruff check src/bybit_workbench/exchange/bybit/effective_protection.py src/bybit_workbench/exchange/bybit/protection_evidence.py src/bybit_workbench/exchange/bybit/protection_intent.py src/bybit_workbench/exchange/bybit/protection_probe.py src/bybit_workbench/exchange/bybit/protection_supervisor_bridge.py src/bybit_workbench/exchange/bybit/transport.py src/bybit_workbench/lifecycle_supervisor.py tests/test_effective_protection_account_evidence.py tests/test_effective_protection_execution_wiring.py tests/test_exchange_protection_independent.py tests/test_protection_intent_failclosed.py tests/test_protection_probe_identity.py tests/test_protection_supervisor_bridge.py
