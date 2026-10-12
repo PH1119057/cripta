@@ -202,7 +202,7 @@ def test_dispatcher_unit_uses_packaged_dispatcher_source_root() -> None:
     assert "Environment=PYTHONPATH=/srv/cripta/runtime/current/production/src" in unit
 
 
-def test_verified_installer_prunes_release_backups_to_one_previous_with_short_control_checkpoint() -> None:
+def test_verified_installer_prunes_release_backups_to_one_previous_with_short_control_checkpoint(\n) -> None:
     source = INSTALLER.read_text(encoding="utf-8")
     for token in (
         'CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"',
