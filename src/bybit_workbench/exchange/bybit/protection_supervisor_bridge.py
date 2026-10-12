@@ -3,6 +3,7 @@
 No credentials and no Exchange mutation rights: caller supplies a fresh account
 snapshot from a separately authorized GET-only reader.
 """
+
 from __future__ import annotations
 
 import json
