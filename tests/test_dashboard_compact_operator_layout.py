@@ -21,12 +21,9 @@ def test_health_controls_are_singletons_in_new_locations() -> None:
     trading_workspace = HTML.split('id="liveDesk"', 1)[1].split(
         'id="closedWorkspaceRail"', 1
     )[0]
-    for item in (
-        "observerFaultBanner",
-        "tradeCommandStatus",
-        "tradeOperationStatus",
-        "tradeGateButton",
-    ):
+    assert HTML.index('id="observerFaultBanner"') < HTML.index('id="infra"')
+    assert 'role="alert" aria-live="assertive"' in HTML
+    for item in ("tradeCommandStatus", "tradeOperationStatus", "tradeGateButton"):
         assert f'id="{item}"' in trading_workspace
         assert f'id="{item}"' not in market_rail
 
