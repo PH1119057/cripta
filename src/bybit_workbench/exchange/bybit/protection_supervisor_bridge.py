@@ -5,9 +5,9 @@ snapshot from a separately authorized GET-only reader.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 from datetime import datetime
-from collections.abc import Mapping
 from typing import Any
 
 from bybit_workbench.exchange.bybit.protection_intent import verify_approved_exchange_protection
