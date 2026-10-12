@@ -5,11 +5,11 @@ This module is pure and cannot send Exchange mutations or alter a trading gate.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Mapping
+from collections.abc import Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,9 +112,13 @@ def effective_protection_from_account(
                         and _positive(order.get("leavesQty") or order.get("qty")) is not None
                         and order.get("orderId")
                     ))
-                    state = "OBSERVED_PRESENT" if stop is not None and (tp is not None or maker) else "NOT_VERIFIED"
+                    state = (
+                        "OBSERVED_PRESENT"
+                        if stop is not None and (tp is not None or maker)
+                        else "NOT_VERIFIED"
+                    )
                     reason = (
-                        "Exchange effective protection surfaces present; approval comparison pending"
+                        "Exchange protection surfaces present; approval comparison pending"
                         if state == "OBSERVED_PRESENT" else
                         "Exchange position lacks effective Hard Stop or Take Profit"
                     )
