@@ -54,7 +54,7 @@ def evaluate_protection(
     matches = [
         p for p in positions
         if isinstance(p, Mapping) and p.get("symbol") == symbol
-        and int(str(p.get("positionIdx") or "-1")) == position_idx
+        and int(str(p.get("positionIdx") if p.get("positionIdx") is not None else "-1")) == position_idx
         and _decimal(p.get("size")) > 0
     ]
     if len(matches) != 1:
@@ -81,7 +81,7 @@ def evaluate_protection(
             and o.get("orderStatus") in {"New", "PartiallyFilled"}
             and str(o.get("side")) == expected_side
             and bool(o.get("reduceOnly"))
-            and int(str(o.get("positionIdx") or "-1")) == position_idx
+            and int(str(o.get("positionIdx") if o.get("positionIdx") is not None else "-1")) == position_idx
             and _decimal(o.get("leavesQty") or o.get("qty")) > 0
             and abs(_decimal(o.get("price")) - expected_tp) <= tick
         ]
