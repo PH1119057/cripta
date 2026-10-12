@@ -224,9 +224,10 @@ class PostgresEntryAdmissionPort:
                 observed_at = mode[3]
                 received_at = mode[4]
                 fresh_until = mode[5]
-                if not all(
-                    isinstance(value, datetime)
-                    for value in (observed_at, received_at, fresh_until)
+                if not (
+                    isinstance(observed_at, datetime)
+                    and isinstance(received_at, datetime)
+                    and isinstance(fresh_until, datetime)
                 ):
                     raise PositionModeStateUnavailable("position mode timestamps are invalid")
                 if (
