@@ -105,10 +105,10 @@ def effective_protection_from_account(
                         and _positive(order.get("leavesQty") or order.get("qty")) is not None
                         and order.get("orderId")
                     ))
-                    state = "VERIFIED" if stop is not None and (tp is not None or maker) else "NOT_VERIFIED"
+                    state = "OBSERVED_PRESENT" if stop is not None and (tp is not None or maker) else "NOT_VERIFIED"
                     reason = (
                         "Exchange effective protection surfaces present; approval comparison pending"
-                        if state == "VERIFIED" else
+                        if state == "OBSERVED_PRESENT" else
                         "Exchange position lacks effective Hard Stop or Take Profit"
                     )
                 elif not matches:
