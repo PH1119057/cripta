@@ -184,6 +184,17 @@ def main() -> int:
                     connection, positions=positions, account_evidence=account,
                     now=now,
                 )
+            account_read_complete = bool(
+                account and account.get("complete") is True
+            )
+            account_observed_at = (
+                str(account.get("observed_at"))
+                if account_read_complete else None
+            )
+            account_identity_present = bool(
+                account_read_complete
+                and str(account.get("account_user_id") or "").strip()
+            )
             result = scan_once(
                 connection, now=now, policy=policy, protection=protection,
             )
@@ -215,6 +226,9 @@ def main() -> int:
                     },
                     "protection_audit": {
                         "account_read_error": read_error,
+                        "account_read_complete": account_read_complete,
+                        "account_observed_at": account_observed_at,
+                        "account_identity_present": account_identity_present,
                         "positions_checked": len(protection),
                         "states": {k: v["state"] for k, v in protection.items()},
                     },
