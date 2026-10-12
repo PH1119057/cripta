@@ -7,7 +7,8 @@ def test_dashboard_live_actions_use_strategy_owned_symbols_not_monitor_checkbox_
     assert 'id="tradeOperationStatus"' in html
     assert "beginTimedStatus" in html
     assert "gateChanging" in html
-    assert "livePostTimed('/api/live/gate'" in html
+    assert "endpoint=r1?'/api/r1/micro-live':'/api/live/gate'" in html
+    assert "livePostTimed(endpoint,{enabled,confirmed:" in html
     assert "Список монет задаётся только StrategyCard" in html
     assert "Нельзя открыть шлюз: не выбрана ни одна торговая монета" not in html
     for legacy_id in (
@@ -48,7 +49,7 @@ def test_live_polling_adapts_to_visible_trade_page_and_skips_hidden_dom() -> Non
     html = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
     assert "function livePollDelay()" in html
     assert (
-        "open:1000,paper_open:2000,paper_closed:5000,monitor:2000,closed:10000,signals:5000" in html
+        "open:1000,paper_open:2000,paper_closed:5000,monitor:2000,control:2000,closed:10000,signals:5000,bybit_log:2000" in html
     )
     assert "if(document.hidden)return 30000" in html
     assert "if(activePanelName()!=='liveDesk')return 15000" in html
