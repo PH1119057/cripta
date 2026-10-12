@@ -31,6 +31,26 @@ def test_authenticated_user_identity_comes_from_existing_key(monkeypatch):
     assert account["complete"] is True
 
 
+def test_flat_scope_still_authenticates_account_identity(monkeypatch):
+    calls = []
+
+    class FakeReader:
+        def __init__(self, **kwargs):
+            pass
+
+        async def get(self, endpoint, params, *, authenticated):
+            calls.append((endpoint, authenticated))
+            return {"retCode": 0, "result": {"userID": "existing-account"}}
+
+    monkeypatch.setattr(protection_probe, "LifecycleAccountReadTransport", FakeReader)
+    account = asyncio.run(protection_probe.direct_account_snapshot(
+        (), api_key="fixture", api_secret="fixture",
+    ))
+    assert calls == [("/v5/user/query-api", True)]
+    assert account["account_user_id"] == "existing-account"
+    assert account["symbols"] == {}
+
+
 def test_missing_authenticated_identity_fails_closed(monkeypatch):
     class FakeReader:
         def __init__(self, **kwargs):
