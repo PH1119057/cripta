@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
-from bybit_workbench.exchange.bybit.protection_supervisor_bridge import account_protection_verdicts
+
+from bybit_workbench.exchange.bybit.protection_supervisor_bridge import (
+    account_protection_verdicts,
+)
 
 NOW = datetime(2026, 10, 12, tzinfo=UTC)
 
@@ -84,8 +87,8 @@ def test_exchange_missing_stop_is_not_verified():
 
 
 def test_supervisor_runtime_uses_independent_read_and_keeps_lifecycle_nontrading():
-    from pathlib import Path
     import ast
+    from pathlib import Path
     source = Path("operations/monitoring/lifecycle_supervisor_runtime.py").read_text()
     tree = ast.parse(source)
     functions = {f.name: f for f in tree.body if isinstance(f, ast.FunctionDef)}
