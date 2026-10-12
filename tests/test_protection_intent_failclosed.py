@@ -39,16 +39,18 @@ def test_direct_stop_uses_exact_current_price():
     }])[0] == Decimal("95")
 
 
-def test_market_set_tp_is_not_resting_tp():
-    with pytest.raises(ProtectionIntentUnavailable, match="marketable"):
-        _base([{
-            "command_type": "strategy_exit",
-            "payload": {"strategy_position_id": "position-A",
-                        "action_kind": "SET_TP",
-                        "requested_mutation": {
-                            "take_profit_price": "105", "order_type": "MARKET"}},
-            "result": {"retCode": 0},
-        }])
+def test_market_set_tp_is_conditional_position_tp():
+    stop, target, kind = _base([{
+        "command_type": "strategy_exit",
+        "payload": {"strategy_position_id": "position-A",
+                    "action_kind": "SET_TP",
+                    "requested_mutation": {
+                        "take_profit_price": "105", "order_type": "MARKET"}},
+        "result": {"retCode": 0},
+    }])
+    assert (stop, target, kind) == (
+        Decimal("90"), Decimal("105"), "POSITION"
+    )
 
 
 def test_market_fallback_makes_limit_tp_unknown():
