@@ -82,10 +82,12 @@ def expected_protection(
                     raise ProtectionIntentUnavailable(
                         "marketable SET_TP may close position; fresh reconciliation required"
                     )
-                if str(mutation.get("marketable_action") or "") == "CLOSE_MARKET":
-                    raise ProtectionIntentUnavailable(
-                        "maker SET_TP may have executed market close; fresh order lineage required"
-                    )
+                # marketable_action=CLOSE_MARKET is a permitted fallback,
+                # not proof that fallback occurred. Only exact maker ACK
+                # identity can establish an outstanding maker-TP candidate.
+                accepted_maker_tp_order_id(
+                    position_id=position_id, completed_commands=[command],
+                )
                 tp_kind = "MAKER_ORDER"
             elif action == "SET_STOP":
                 stop = _amount(mutation.get("stop_price"))
