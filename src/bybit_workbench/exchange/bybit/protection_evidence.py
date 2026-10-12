@@ -1,10 +1,10 @@
 """Pure fail-closed evaluation of fresh, independent Bybit protection evidence."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from collections.abc import Mapping
 
 
 def _decimal(value: object) -> Decimal:
