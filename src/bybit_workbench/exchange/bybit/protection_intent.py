@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
-from typing import Mapping
+from collections.abc import Mapping
 
 
 class ProtectionIntentUnavailable(ValueError):
@@ -95,7 +95,9 @@ def expected_protection(
                 if stop % step != 0:
                     raise ProtectionIntentUnavailable("approved stop violates tick")
             elif action == "SET_PROTECTION":
-                raise ProtectionIntentUnavailable("combined protection update requires exact verification")
+                raise ProtectionIntentUnavailable(
+                    "combined protection update requires exact verification"
+                )
         elif kind == "initial_protection":
             if payload.get("entry_command_id") != entry_command_id:
                 continue
@@ -115,7 +117,9 @@ def expected_protection(
                 raise ProtectionIntentUnavailable("break-even effective stop lacks durable price")
             stop = _amount(plan.get("stop"))
         elif kind == "current_stop":
-            raise ProtectionIntentUnavailable("current-stop effective price lacks durable approved result")
+            raise ProtectionIntentUnavailable(
+                "current-stop effective price lacks durable approved result"
+            )
 
     return stop, target, tp_kind
 
