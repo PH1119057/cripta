@@ -95,7 +95,10 @@ async def direct_account_snapshot(
     if identity.get("retCode") != 0:
         raise RuntimeError("Bybit account identity request failed")
     details = identity.get("result")
-    actual_user_id = str(details.get("userID") or "").strip() if isinstance(details, Mapping) else ""
+    actual_user_id = (
+        str(details.get("userID") or "").strip()
+        if isinstance(details, Mapping) else ""
+    )
     if not expected_user_id or not actual_user_id or actual_user_id != expected_user_id:
         raise RuntimeError("Bybit account identity does not match approved userID")
     results = await asyncio.gather(*(_symbol_snapshot(reader, s) for s in symbols))
