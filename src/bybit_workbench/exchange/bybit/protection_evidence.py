@@ -36,6 +36,8 @@ def evaluate_protection(
         return "UNKNOWN", "fresh authenticated account evidence unavailable"
     if evidence.get("account_ref") != "BYBIT:UNIFIED":
         return "UNKNOWN", "unexpected account identity"
+    if not str(evidence.get("account_user_id") or "").strip():
+        return "UNKNOWN", "authenticated account userID unavailable"
     try:
         observed = datetime.fromisoformat(str(evidence["observed_at"]))
     except (KeyError, TypeError, ValueError):
@@ -66,14 +68,15 @@ def evaluate_protection(
     pos = matches[0]
     if pos.get("side") != side:
         return "NOT_VERIFIED", "Exchange position direction mismatch"
+    position_size = _decimal(pos.get("size"))
     stop = _decimal(pos.get("stopLoss"))
     if tick <= 0 or expected_stop <= 0 or expected_tp <= 0:
         return "UNKNOWN", "approved protection price or tick is unavailable"
-    if stop <= 0 or abs(stop - expected_stop) > tick:
+    if stop <= 0 or stop != expected_stop:
         return "NOT_VERIFIED", "Exchange Hard Stop differs from current approved stop"
     if expected_tp_kind == "POSITION":
         tp = _decimal(pos.get("takeProfit"))
-        if tp <= 0 or abs(tp - expected_tp) > tick:
+        if tp <= 0 or tp != expected_tp:
             return "NOT_VERIFIED", "Exchange position Take Profit differs from approved TP"
     elif expected_tp_kind == "MAKER_ORDER":
         if not expected_tp_order_id:
@@ -92,8 +95,8 @@ def evaluate_protection(
             and str(o.get("side")) == expected_side
             and o.get("reduceOnly") is True
             and str(o.get("positionIdx", "-1")) == str(position_idx)
-            and _decimal(o.get("leavesQty") or o.get("qty")) > 0
-            and abs(_decimal(o.get("price")) - expected_tp) <= tick
+            and _decimal(o.get("leavesQty") or o.get("qty")) >= position_size
+            and _decimal(o.get("price")) == expected_tp
         ]
         if len(matches) != 1:
             return "NOT_VERIFIED", "approved dynamic maker Take Profit order absent"
