@@ -1152,9 +1152,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             """SELECT incident_id,release_commit,reason,affected,
                       detected_at,last_checked_at
                  FROM control.release_arm_incidents
-                WHERE state='OPEN'
+                WHERE state='OPEN' AND release_commit=%s
                 ORDER BY detected_at DESC
-                LIMIT 20"""
+                LIMIT 20""",
+            (LOADED_RELEASE_COMMIT,),
         ).fetchall()
         # Dashboard-only projection of durable EntryDecision refusals (no policy evaluation).
         entry_refusal_rows = connection.execute(
