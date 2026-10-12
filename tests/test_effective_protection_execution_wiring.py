@@ -12,7 +12,10 @@ def test_post_command_protection_audit_is_read_only():
     assert "api_get" in calls
     assert "api_post" not in calls
     assert "handle_exchange_mutation_barrier" not in calls
-    assert source.index("state='completed'") < source.index("record_effective_protection_after_command(", source.index("def execute_command("))
+    assert source.index("state='completed'") < source.index(
+        "record_effective_protection_after_command(",
+        source.index("def execute_command("),
+    )
 
 
 def test_evidence_migration_registered():
