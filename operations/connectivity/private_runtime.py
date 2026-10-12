@@ -40,6 +40,7 @@ from bybit_workbench.account_state_generation import (
     current_complete_account_state_generation,
 )
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
+from bybit_workbench.exchange.bybit.effective_protection import effective_protection_from_account
 from bybit_workbench.exchange.bybit.time_calibration import (
     BybitTimeCalibration,
     build_bybit_time_calibration,
@@ -1865,6 +1866,85 @@ def _execute_universal_exit_command(
     return result
 
 
+
+def record_effective_protection_after_command(
+    connection: psycopg.Connection,
+    *,
+    command_id: str,
+    symbol: str,
+    payload: dict[str, object],
+    key: str,
+    secret: str,
+) -> None:
+    """Best-effort independent Exchange read after confirmed command completion.
+
+    Failure to read creates an UNKNOWN record; never relabel an acknowledged
+    mutation as ambiguous or change the trading gate for this audit.
+    """
+    now = datetime.now(UTC)
+    account: dict[str, object] | None = None
+    reason = ""
+    position_idx = int(payload.get("position_idx") or 0)
+    try:
+        positions, _ = api_get(
+            "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
+        )
+        orders, _ = api_get(
+            "/v5/order/realtime",
+            {"category": "linear", "symbol": symbol, "openOnly": "0", "limit": "50"},
+            key, secret,
+        )
+        raw_positions = (positions.get("result") or {}).get("list")
+        raw_orders = (orders.get("result") or {}).get("list")
+        if not isinstance(raw_positions, list) or not isinstance(raw_orders, list):
+            raise ValueError("partial post-mutation Exchange inventory")
+        if any(p.get("symbol") != symbol for p in raw_positions):
+            raise ValueError("unexpected Exchange position symbol")
+        if any(o.get("symbol") != symbol for o in raw_orders):
+            raise ValueError("unexpected Exchange order symbol")
+        # A truncated order inventory is NOT sufficient proof.
+        if len(raw_orders) >= 50 or (orders.get("result") or {}).get("nextPageCursor"):
+            raise ValueError("post-mutation Exchange order inventory not fully paged")
+        account = {
+            "complete": True, "account_ref": "BYBIT:UNIFIED",
+            "symbols": {symbol: {
+                "positions": raw_positions, "orders": raw_orders,
+            }},
+        }
+    except Exception as exc:
+        reason = f"account-read-{type(exc).__name__}"
+    evidence = effective_protection_from_account(
+        command_id=command_id, symbol=symbol, position_idx=position_idx,
+        account_ref="BYBIT:UNIFIED",
+        account_evidence=account, observed_at=now,
+    ).as_record()
+    if account is None:
+        evidence["reason"] = reason
+    evidence_id = "effective-protection-" + hashlib.sha256(
+        f"{command_id}|{now.isoformat()}".encode()
+    ).hexdigest()[:32]
+    connection.execute(
+        """INSERT INTO runtime.effective_protection_evidence (
+            evidence_id,observed_at,command_id,strategy_position_id,
+            account_ref,exchange_position_key,symbol,position_idx,
+            evidence_source,state,stop_loss,position_take_profit,
+            maker_take_profit_order_ids,reason,evidence
+        ) VALUES (
+            %s,%s,%s,%s,%s,%s,%s,%s,
+            'BYBIT_AUTHENTICATED_ACCOUNT_GET',%s,%s,%s,%s::jsonb,%s,%s::jsonb
+        )""",
+        (
+            evidence_id, now, command_id, payload.get("strategy_position_id"),
+            "BYBIT:UNIFIED",
+            f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
+            symbol, position_idx, evidence["state"],
+            evidence["stop_loss"], evidence["position_take_profit"],
+            json.dumps(evidence["maker_take_profit_order_ids"]),
+            evidence["reason"], json.dumps(evidence),
+        ),
+    )
+
+
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
@@ -2211,7 +2291,21 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
-    connection.execute("UPDATE runtime.trade_commands SET state='completed',finished_at_epoch_ms=%s,result_json=%s WHERE command_id=%s",(int(time.time()*1000),json.dumps(result,ensure_ascii=False),command_id)); connection.commit()
+    connection.execute("UPDATE runtime.trade_commands SET state='completed',finished_at_epoch_ms=%s,result_json=%s WHERE command_id=%s",(int(time.time()*1000),json.dumps(result,ensure_ascii=False),command_id))
+    connection.commit()
+    # Audit is separate from the mutation outcome. A failed audit must never
+    # trigger retry of an already acknowledged Exchange mutation.
+    try:
+        record_effective_protection_after_command(
+            connection, command_id=command_id, symbol=symbol,
+            payload=payload, key=key, secret=secret,
+        )
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        # Non-fatal evidence persistence failure: the independent Supervisor
+        # must treat a missing record as UNKNOWN, never as VERIFIED.
+
 
 
 def _r1_signal_validity(
