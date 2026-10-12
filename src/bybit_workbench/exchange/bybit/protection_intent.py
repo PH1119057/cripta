@@ -160,3 +160,60 @@ def accepted_maker_tp_order_id(
     if latest is None:
         raise ProtectionIntentUnavailable("no approved completed maker TP order")
     return latest
+
+
+def verify_approved_exchange_protection(
+    *,
+    account_evidence: Mapping[str, object] | None,
+    position_id: str,
+    entry_command_id: str,
+    symbol: str,
+    position_idx: int,
+    side: str,
+    entry_price: object,
+    tick: object,
+    entry_payload: Mapping[str, object],
+    completed_commands: list[Mapping[str, object]],
+    now: "datetime",
+) -> tuple[str, str]:
+    """One fail-closed comparison of approved intent and fresh Exchange truth.
+
+    Never claims VERIFIED from command ACK alone: live exact Bybit account
+    positions and orders are mandatory. All unsupported or ambiguous lineage
+    produces UNKNOWN, not an assumed protection price.
+    """
+    from datetime import datetime
+    from .protection_evidence import evaluate_protection
+
+    try:
+        stop, target, kind = expected_protection(
+            position_id=position_id,
+            entry_command_id=entry_command_id,
+            side=side,
+            entry_price=entry_price,
+            tick=tick,
+            entry_payload=entry_payload,
+            completed_commands=completed_commands,
+        )
+        maker_id = (
+            accepted_maker_tp_order_id(
+                position_id=position_id,
+                completed_commands=completed_commands,
+            )
+            if kind == "MAKER_ORDER" else None
+        )
+        return evaluate_protection(
+            account_evidence,
+            position_id=position_id,
+            symbol=symbol,
+            position_idx=position_idx,
+            side=side,
+            expected_stop=stop,
+            expected_tp=target,
+            expected_tp_kind=kind,
+            expected_tp_order_id=maker_id,
+            tick=_amount(tick),
+            now=now,
+        )
+    except (ProtectionIntentUnavailable, TypeError, ValueError, KeyError) as exc:
+        return "UNKNOWN", "approved Exchange protection lineage incomplete: " + type(exc).__name__
