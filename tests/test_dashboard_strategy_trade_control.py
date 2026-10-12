@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 HTML = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 
 
