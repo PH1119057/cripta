@@ -149,9 +149,18 @@ def test_r1_public_read_unavailable_does_not_use_exchange_mutation_barrier() -> 
     """A public read failure while checking live PostOnly validity is not a mutation."""
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    validity = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_r1_signal_validity")
-    worker = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "command_worker_loop")
-    cleanup = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "cancel_expired_entry_limits")
+    validity = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "_r1_signal_validity"
+    )
+    worker = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "command_worker_loop"
+    )
+    cleanup = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "cancel_expired_entry_limits"
+    )
     raised = [n.exc.func.id for n in ast.walk(validity) if isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call) and isinstance(n.exc.func, ast.Name)]
     assert "EntryValidityReadUnavailable" in raised
     assert any(isinstance(n, ast.ExceptHandler) and isinstance(n.type, ast.Name) and n.type.id == "EntryValidityReadUnavailable" for n in ast.walk(worker))
