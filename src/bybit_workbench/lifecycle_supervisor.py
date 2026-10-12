@@ -1222,11 +1222,8 @@ class LifecycleSupervisor:
             if self._exchange_protection is None:
                 # Backward-compatible test/inert scan; production supplies direct
                 # authenticated account evidence rather than trusting this marker.
-                protection_state = (
-                    "VERIFIED" if row["initial_protection_confirmed_at"] is not None
-                    else "UNKNOWN"
-                )
-                protection_reason = "legacy DB marker; no independent Exchange sample"
+                protection_state = "UNKNOWN"
+                protection_reason = "independent Exchange account protection evidence not supplied"
             else:
                 observed = self._exchange_protection.get(position_id)
                 protection_state = (
