@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 SOURCE = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
 
 
@@ -43,7 +42,9 @@ def test_wallet_is_read_after_inventory_and_position_mode_proofs() -> None:
 def test_periodic_read_failure_keeps_private_ws_connected() -> None:
     start = SOURCE.index("def private_loop(")
     body = SOURCE[start:]
-    periodic = body.index('reconcile(\n                            connection, key, secret, "periodic"')
+    periodic = body.index(
+        'reconcile(\n                            connection, key, secret, "periodic"'
+    )
     degraded = body.index("except ExchangeReadUnavailable as exc:", periodic)
     outer = body.index("except Exception as exc:", degraded)
     assert periodic < degraded < outer

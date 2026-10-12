@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 DASHBOARD = Path("operations/dashboard/index.html")
 
 

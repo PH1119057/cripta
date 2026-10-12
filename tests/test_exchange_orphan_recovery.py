@@ -1,5 +1,5 @@
-from decimal import Decimal
 import copy
+from decimal import Decimal
 
 from bybit_workbench.exchange_recovery import prove_orphan_closed_cycle
 

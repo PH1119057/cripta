@@ -7,6 +7,8 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -20,5 +22,38 @@ jobs:
       - run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
       - run: .\.venv\Scripts\python.exe -m ruff check src tests
       - run: .\.venv\Scripts\python.exe -m mypy src/bybit_workbench
-      - run: .\.venv\Scripts\python.exe -m pytest
+      - name: Install server PostgreSQL test driver
+        run: uv pip install --python .\.venv\Scripts\python.exe "psycopg[binary]==3.2.10"
+      # POSIX-only fcntl archive is covered by the dedicated Linux job below.
+      # POSIX-only shell/crypt/permission tests run in the mandatory Linux full job.
+      - run: >-
+          .\.venv\Scripts\python.exe -m pytest
+          --ignore=tests/test_public_trade_archive.py
+          --ignore=tests/test_permission_preflight_contract.py
+          --ignore=tests/test_source_checkout_sync_contract.py
+          --ignore=tests/test_server_release_git_first.py
+          --ignore=tests/test_dashboard_password_hash.py
       - run: .\.venv\Scripts\python.exe -m bybit_workbench --headless --database ci-smoke.db
+
+  unix-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --all-extras --python 3.12
+      - run: .venv/bin/python -m pytest tests/test_public_trade_archive.py
+
+  linux-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --all-extras --python 3.12
+      - run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
+      - run: .venv/bin/python -m pytest

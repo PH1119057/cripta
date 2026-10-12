@@ -1,1 +1,9 @@
 config/strategy_compat/entry_v1_core_calibration_20260518_20260816.json -text -diff
+
+# Keep attested Python module bytes identical on Windows and Linux.
+operations/monitoring/universal_entry_shadow.py text eol=lf
+src/bybit_workbench/universal_entry/engine.py text eol=lf
+src/bybit_workbench/universal_entry/paper_runtime.py text eol=lf
+src/bybit_workbench/universal_entry/reverse_intent.py text eol=lf
+src/bybit_workbench/universal_exit/engine.py text eol=lf
+src/bybit_workbench/universal_exit/execution_bridge.py text eol=lf

@@ -125,7 +125,11 @@ def mark_entry_order_acknowledged(
             """SELECT state,state_reason FROM runtime.capital_reservations
                WHERE reservation_id=%s""", (reservation_id,)
         ).fetchone()
-        if latest is not None and str(latest[0]) == "RELEASED" and str(latest[1] or "").startswith("ENTRY_CANCEL_CONFIRMED_ZERO_FILL:"):
+        if (
+            latest is not None
+            and str(latest[0]) == "RELEASED"
+            and str(latest[1] or "").startswith("ENTRY_CANCEL_CONFIRMED_ZERO_FILL:")
+        ):
             order = connection.execute(
                 """SELECT order_status,payload_json::jsonb->>'cumExecQty'
                    FROM runtime.exchange_order_history
@@ -138,7 +142,12 @@ def mark_entry_order_acknowledged(
                    WHERE order_id=%s OR order_link_id=%s LIMIT 1""",
                 (exchange_order_id, command_id[:36]),
             ).fetchone()
-            if order is not None and str(order[0]) == "Cancelled" and Decimal(str(order[1] or "0")) == 0 and execution is None:
+            if (
+                order is not None
+                and str(order[0]) == "Cancelled"
+                and Decimal(str(order[1] or "0")) == 0
+                and execution is None
+            ):
                 return "RELEASED"
         raise RuntimeError("entry order acknowledgement reservation race")
     claim = connection.execute(

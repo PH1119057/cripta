@@ -247,7 +247,7 @@ def process_due_deliveries(
     if row is None:
         pending = 0
     elif isinstance(row, Mapping):
-        pending = int(next(iter(row.values())))
+        pending = int(str(next(iter(row.values()))))
     else:
         pending = int(str(row[0]))
     return DeliveryProcessResult(

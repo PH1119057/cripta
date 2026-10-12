@@ -1192,11 +1192,11 @@ class LifecycleSupervisor:
                 ).fetchone()
                 if latest_mode is not None and (
                     str(latest_mode["position_mode"]) != "ONE_WAY"
-                    or int(
+                    or int(str(
                         latest_mode["position_idx"]
                         if latest_mode["position_idx"] is not None
                         else -1
-                    )
+                    ))
                     != 0
                 ):
                     mode_reason = (
@@ -1275,9 +1275,12 @@ class LifecycleSupervisor:
                 if age < 0:
                     # Recheck against a fresh DB clock: the claim may have been
                     # updated after the supervisor epoch timestamp was captured.
-                    db_clock = self._connection.execute(
+                    clock_row = self._connection.execute(
                         "SELECT clock_timestamp() AS observed_at"
-                    ).fetchone()["observed_at"]
+                    ).fetchone()
+                    if clock_row is None:
+                        raise RuntimeError("database clock observation is missing")
+                    db_clock = _as_datetime(clock_row["observed_at"], "DB clock")
                     age = (db_clock - last_seen).total_seconds()
                 if age < 0:
                     claim_reason = "Exit Engine claim heartbeat is from the future"

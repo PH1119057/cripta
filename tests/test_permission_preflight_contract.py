@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import getpass
-import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFLIGHT = ROOT / "operations" / "infrastructure" / "cripta-permission-preflight"

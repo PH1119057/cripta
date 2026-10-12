@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -99,6 +100,8 @@ class CursorLike(Protocol):
 
 class ConnectionLike(Protocol):
     def execute(self, statement: str, parameters: Sequence[object] = ()) -> CursorLike: ...
+
+    def transaction(self) -> AbstractContextManager[object]: ...
 
 
 def exchange_position_key(symbol: str, position_idx: int) -> str:

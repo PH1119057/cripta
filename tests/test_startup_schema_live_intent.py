@@ -17,5 +17,9 @@ def test_successful_schema_validation_preserves_owner_live_intent():
 def test_successful_bootstrap_still_reconciles_before_trading_threads():
     source = SRC.read_text(encoding="utf-8")
     main = source[source.index("def main() -> None:"):]
-    assert main.index("validate_runtime_schema_contract(bootstrap)") < main.index("startup_live_safety(bootstrap")
-    assert main.index("startup_live_safety(bootstrap") < main.index("threading.Thread(target=trade_loop")
+    assert main.index("validate_runtime_schema_contract(bootstrap)") < main.index(
+        "startup_live_safety(bootstrap"
+    )
+    assert main.index("startup_live_safety(bootstrap") < main.index(
+        "threading.Thread(target=trade_loop"
+    )

@@ -4,9 +4,9 @@ Does not alter exchange state, account gates or durable position ownership.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Mapping, Sequence
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,7 @@ def prove_orphan_closed_cycle(
             entry_value += qty * price
             entry_fee += abs(_decimal(row.get("execFee")))
             entry_ids.append(exec_id)
-            last_entry_ms = max(last_entry_ms, int(row.get("execTime") or 0))
+            last_entry_ms = max(last_entry_ms, int(str(row.get("execTime") or 0)))
         if entry_qty != filled_qty or last_entry_ms <= 0:
             return None
         remaining = entry_qty
@@ -93,8 +93,11 @@ def prove_orphan_closed_cycle(
         exit_orders: list[str] = []
         closed_ms = 0
         opposite = "Sell" if side == "Buy" else "Buy"
-        for row in sorted(subsequent_executions, key=lambda x: (int(x.get("execTime") or 0), str(x.get("execId") or ""))):
-            execution_time = int(row.get("execTime") or 0)
+        for row in sorted(
+            subsequent_executions,
+            key=lambda x: (int(str(x.get("execTime") or 0)), str(x.get("execId") or "")),
+        ):
+            execution_time = int(str(row.get("execTime") or 0))
             if execution_time <= last_entry_ms:
                 continue
             if str(row.get("symbol") or "") != symbol:

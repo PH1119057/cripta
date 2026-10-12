@@ -460,7 +460,10 @@ def test_legacy_research_discovery_and_final_filesystem_state_are_explicit() -> 
 def test_retired_entry_shadow_scanner_and_legacy_worktrees_do_not_return() -> None:
     installer = _read("operations/infrastructure/install_verified_release.sh")
     current_map = _read("docs/CURRENT_PROJECT_MAP_RU.md")
-    assert "cripta-entry-shadow-scanner.service|cripta-entry-shadow-scanner.service" not in installer
+    assert (
+        "cripta-entry-shadow-scanner.service|cripta-entry-shadow-scanner.service"
+        not in installer
+    )
     assert "Entry shadow scanner RETIRED by owner decision 2026-10-01" in current_map
 
     forbidden = (

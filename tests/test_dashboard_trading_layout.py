@@ -6,7 +6,7 @@ APP_SOURCE = Path("operations/dashboard/app.py").read_text(encoding="utf-8")
 
 def test_primary_trading_tables_are_promoted_in_requested_order() -> None:
     assert (
-        "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,ownerTestEntrySection,"
+        "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,"
         "openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,"
         "coinMonitorSection,signalObservationSection,bybitLogSection)"
     ) in SOURCE
@@ -70,11 +70,12 @@ def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
     assert "trade-subpage-hidden" in SOURCE
     assert (
         "tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,"
-        "ownerTestEntrySection,openTradesSection"
+        "openTradesSection"
     ) in SOURCE
+    assert "bybitLogSection.before(ownerTestEntrySection)" in SOURCE
     assert "open:[openTradesSection]" in SOURCE
     assert (
-        "control:[strategyTradeControlSection,ownerTestEntrySection]"
+        "control:[strategyTradeControlSection]"
         in SOURCE
     )
     assert 'id="tradeOperatorBar" class="trade-operator-bar"' in SOURCE
@@ -130,7 +131,7 @@ def test_closed_trade_table_uses_exact_postgresql_attribution() -> None:
 
 def test_bybit_entry_log_is_last_trade_subpage_and_is_read_only_history() -> None:
     assert 'data-trade-page="bybit_log">Лог Bybit</button>' in SOURCE
-    assert "bybit_log:[bybitLogSection]" in SOURCE
+    assert "bybit_log:[ownerTestEntrySection,bybitLogSection]" in SOURCE
     assert 'id="bybitLogRows"' in SOURCE
     assert "function renderBybitEntryLog(rows)" in SOURCE
     assert "ENTRY_CANCEL_CONFIRMED_ZERO_FILL:" in SOURCE

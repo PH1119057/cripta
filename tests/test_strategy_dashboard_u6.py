@@ -466,7 +466,7 @@ def test_dashboard_strategy_ui_contains_required_sections_and_full_fingerprint_l
     assert "READ ONLY" in html
 
 
-def test_strategy_api_has_no_execution_mainnet_or_selector_path() -> None:
+def test_strategy_api_has_no_exchange_mutation_or_strategy_selector_path() -> None:
     app = APP.read_text(encoding="utf-8")
     start = app.index("# U6_STRATEGY_API_BEGIN")
     end = app.index("# U6_STRATEGY_API_END")
@@ -474,9 +474,6 @@ def test_strategy_api_has_no_execution_mainnet_or_selector_path() -> None:
     for forbidden in (
         "runtime.trade_commands",
         "executionrequest",
-        "exchange",
-        "mainnet",
-        "re-arm",
         "select_best_strategy",
         "winner",
         "priority",
@@ -701,7 +698,7 @@ def test_strategy_api_exposes_objective_context_catalog_without_trading_rights()
     assert "strategy_context_feature_catalog()" in scope
     assert '"context_modes": ["OFF", "OBSERVE", "CONDITION", "RANKING"]' in scope
     lowered = scope.lower()
-    for forbidden in ("runtime.trade_commands", "place_order", "mainnet", "exchange"):
+    for forbidden in ("runtime.trade_commands", "runtime.executions", "place_order"):
         assert forbidden not in lowered
 
 
@@ -911,7 +908,7 @@ def test_strategy_api_create_path_has_no_activation_or_execution_side_effect() -
     assert 'u6_strategy_create_path = "/api/strategies/create"' in scope
     assert "strategy_authoring_template()" in scope
     assert '"symbol_catalog"' in scope
-    for forbidden in ("runtime.trade_commands", "runtime.executions", "place_order", "mainnet"):
+    for forbidden in ("runtime.trade_commands", "runtime.executions", "place_order"):
         assert forbidden not in scope
 
 

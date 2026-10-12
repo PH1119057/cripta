@@ -1,9 +1,13 @@
-from pathlib import Path
+import importlib
 import sys
+from pathlib import Path
+
 import pytest
+
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / "operations/connectivity"),
                 str(Path(__file__).resolve().parents[1] / "research/server/connectivity")]
-import private_runtime as runtime
+runtime = importlib.import_module("private_runtime")
+
 
 def test_sixty_positions_require_two_pages(monkeypatch):
     def get(endpoint, params, *_):

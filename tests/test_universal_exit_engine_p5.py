@@ -407,7 +407,14 @@ def test_dynamic_set_tp_resolves_current_exit_observation_fact() -> None:
             rule(
                 "SET_TP",
                 required_fact_paths=["fact.geometry.l5_3.target_inner"],
-                predicate={"op": "COMPARE", "params": {"path": "fact.geometry.l5_3.target_inner", "comparator": "GT", "value": "0"}},
+                predicate={
+                    "op": "COMPARE",
+                    "params": {
+                        "path": "fact.geometry.l5_3.target_inner",
+                        "comparator": "GT",
+                        "value": "0",
+                    },
+                },
                 mutation={
                     "take_profit_price": {
                         "fact_path": "fact.geometry.l5_3.target_inner"
@@ -441,7 +448,10 @@ def test_dynamic_set_tp_missing_current_fact_fails_closed() -> None:
             rule(
                 "SET_TP",
                 required_fact_paths=["fact.pnl_pct"],
-                predicate={"op": "COMPARE", "params": {"path": "fact.pnl_pct", "comparator": "GTE", "value": "1"}},
+                predicate={
+                    "op": "COMPARE",
+                    "params": {"path": "fact.pnl_pct", "comparator": "GTE", "value": "1"},
+                },
                 mutation={
                     "take_profit_price": {
                         "fact_path": "fact.geometry.l5_3.target_inner"

@@ -47,6 +47,12 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+# Keep R1 paper-runtime byte-identical to its independently verified parity attestation.
+# SIM114 is purely a syntactic suggestion to combine equivalent TAKE_PROFIT branches.
+# Do not rewrite the attested module as part of unrelated CI maintenance.
+[tool.ruff.lint.per-file-ignores]
+"src/bybit_workbench/universal_entry/paper_runtime.py" = ["SIM114"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

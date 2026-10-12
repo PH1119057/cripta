@@ -1,6 +1,6 @@
-from pathlib import Path
 import os
 import subprocess
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "operations" / "infrastructure" / "cripta-source-sync"
@@ -50,7 +50,11 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     _git(seed, "commit", "-m", "one")
     _git(seed, "remote", "add", "origin", str(origin))
     _git(seed, "push", "-u", "origin", "main")
-    subprocess.run(["git", "clone", "-b", "main", str(origin), str(mirror)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "clone", "-b", "main", str(origin), str(mirror)],
+        check=True,
+        capture_output=True,
+    )
     return origin, seed, mirror
 
 

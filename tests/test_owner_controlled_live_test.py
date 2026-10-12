@@ -5,7 +5,7 @@ UI = Path("operations/dashboard/index.html").read_text(encoding="utf-8")
 PRIVATE = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
 
 
-def test_owner_controlled_live_test_is_visible_on_strategy_control_page() -> None:
+def test_owner_controlled_live_test_is_visible_in_bybit_log_with_explicit_confirmation() -> None:
     assert 'id="ownerTestEntrySection"' in UI
     assert 'id="ownerTestSymbol"' in UI
     assert '<option selected>LTCUSDT</option>' in UI
@@ -16,7 +16,7 @@ def test_owner_controlled_live_test_is_visible_on_strategy_control_page() -> Non
     assert 'Открыть контрольную сделку' in UI
     assert 'open:[openTradesSection]' in UI
     assert (
-        'control:[strategyTradeControlSection,ownerTestEntrySection]'
+        'bybit_log:[ownerTestEntrySection,bybitLogSection]'
         in UI
     )
 
@@ -43,7 +43,9 @@ def test_owner_controlled_live_test_requires_current_active_micro_live_symbol() 
     assert "FROM control.live_arm_sessions" in APP
     assert "state='ACTIVE'" in APP
     assert "symbol=%s" in APP
-    block = APP.split('if kind == "owner_test_entry":', 1)[1].split('elif kind == "trailing_stop":', 1)[0]
+    block = APP.split('if kind == "owner_test_entry":', 1)[1].split(
+        'elif kind == "trailing_stop":', 1
+    )[0]
     assert "release_commit=%s" not in block
     assert "JOIN strategy_entry.strategy_activations act" in block
     assert "JOIN strategy_entry.execution_permissions perm" in block
