@@ -477,7 +477,7 @@ def prepare_runtime_entry_command(
     r1_structure: dict[str, object] | None = None
     if str(execution_policy.get("entry_validity_operator") or "") == "R1_EXACT_SIGNAL":
         signal_geometry = _mapping(signal_attributes.get("geometry"), "R1 signal geometry")
-        r1_structure = _mapping(signal_geometry.get("5"), "R1 5m signal geometry")
+        r1_structure = dict(_mapping(signal_geometry.get("5"), "R1 5m signal geometry"))
     payload: dict[str, object] = {
         "source": "universal_entry",
         "execution_request_id": request.execution_request_id,
