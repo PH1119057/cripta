@@ -5,8 +5,8 @@ snapshot from a separately authorized GET-only reader.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
