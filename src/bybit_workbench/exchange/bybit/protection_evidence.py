@@ -28,6 +28,7 @@ def evaluate_protection(
     tick: Decimal,
     now: datetime,
     max_age_seconds: float = 15,
+    expected_tp_order_id: str | None = None,
 ) -> tuple[str, str]:
     """Return VERIFIED, NOT_VERIFIED or UNKNOWN; never infer account truth from DB."""
     if not isinstance(evidence, Mapping) or evidence.get("complete") is not True:
@@ -80,6 +81,7 @@ def evaluate_protection(
             o for o in orders
             if isinstance(o, Mapping) and o.get("symbol") == symbol
             and str(o.get("orderLinkId") or "").startswith(prefix)
+            and (expected_tp_order_id is None or str(o.get("orderId") or "") == expected_tp_order_id)
             and o.get("orderStatus") in {"New", "PartiallyFilled"}
             and str(o.get("side")) == expected_side
             and o.get("reduceOnly") is True
