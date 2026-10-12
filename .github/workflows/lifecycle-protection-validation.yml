@@ -30,6 +30,8 @@ jobs:
       - name: New protection code lint
         run: |
           .\.venv\Scripts\python.exe -m ruff check src/bybit_workbench/exchange/bybit/effective_protection.py src/bybit_workbench/exchange/bybit/protection_evidence.py src/bybit_workbench/exchange/bybit/protection_intent.py src/bybit_workbench/exchange/bybit/protection_probe.py src/bybit_workbench/exchange/bybit/protection_supervisor_bridge.py src/bybit_workbench/exchange/bybit/transport.py src/bybit_workbench/lifecycle_supervisor.py tests/test_effective_protection_account_evidence.py tests/test_effective_protection_execution_wiring.py tests/test_exchange_protection_independent.py tests/test_protection_intent_failclosed.py tests/test_protection_probe_identity.py tests/test_protection_supervisor_bridge.py
+      - name: Protection regression tests
+        run: .\\.venv\\Scripts\\python.exe -m pytest tests/test_effective_protection_account_evidence.py tests/test_effective_protection_execution_wiring.py tests/test_exchange_protection_independent.py tests/test_protection_intent_failclosed.py tests/test_protection_probe_identity.py tests/test_protection_supervisor_bridge.py
       - name: Full pytest independent of historical repository lint debt
         run: .\.venv\Scripts\python.exe -m pytest
       - name: Headless application smoke
