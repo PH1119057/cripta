@@ -115,3 +115,46 @@ def expected_protection(
             raise ProtectionIntentUnavailable("current-stop effective price lacks durable approved result")
 
     return stop, target, tp_kind
+
+
+def accepted_maker_tp_order_id(
+    *,
+    position_id: str,
+    completed_commands: list[Mapping[str, object]],
+) -> str:
+    """Prove latest SET_TP ACK identifies a maker order for the exact position.
+
+    Market-close results may also contain an orderId, but not the unique
+    position-derived maker orderLinkId. Those are never treated as resting TP.
+    """
+    import hashlib
+
+    prefix = "utp" + hashlib.sha256(position_id.encode()).hexdigest()[:12] + "-"
+    latest: str | None = None
+    for command in completed_commands:
+        if command.get("command_type") != "strategy_exit":
+            continue
+        payload = command.get("payload")
+        result = command.get("result")
+        if not isinstance(payload, Mapping) or payload.get("strategy_position_id") != position_id:
+            continue
+        if payload.get("action_kind") != "SET_TP":
+            continue
+        if not isinstance(result, Mapping) or result.get("retCode") != 0:
+            raise ProtectionIntentUnavailable("latest TP command ACK not confirmed")
+        mutation = payload.get("requested_mutation")
+        if not isinstance(mutation, Mapping):
+            raise ProtectionIntentUnavailable("TP mutation unavailable")
+        if str(mutation.get("order_type") or "").upper() != "LIMIT":
+            raise ProtectionIntentUnavailable("latest TP is not a maker limit order")
+        detail = result.get("result")
+        if not isinstance(detail, Mapping):
+            raise ProtectionIntentUnavailable("latest TP Exchange order identity missing")
+        order_id = str(detail.get("orderId") or "").strip()
+        link_id = str(detail.get("orderLinkId") or "").strip()
+        if not order_id or not link_id.startswith(prefix):
+            raise ProtectionIntentUnavailable("latest TP ACK not exact maker position order")
+        latest = order_id
+    if latest is None:
+        raise ProtectionIntentUnavailable("no approved completed maker TP order")
+    return latest
