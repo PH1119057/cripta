@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def test_post_command_protection_audit_is_read_only():
-    source = Path("operations/connectivity/private_runtime.py").read_text()
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     audit = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                  and node.name == "record_effective_protection_after_command")
