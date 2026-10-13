@@ -2280,6 +2280,19 @@ def _run_multi_strategy_observer() -> None:
                 )
                 if outcome == "STOP":
                     break
+            except websocket.WebSocketConnectionClosedException as exc:
+                # A public socket drop starts a fresh epoch; the continuity
+                # state is never reused to admit new real entries.
+                _observer_status(
+                    state="RECONNECTING",
+                    epoch_id=None,
+                    active_bundles=(),
+                    symbols=(),
+                    reason=f"public WebSocket disconnected: {type(exc).__name__}",
+                )
+                if stopping_flag:
+                    break
+                time.sleep(2.0)
             except Exception as exc:
                 try:
                     fault_id = _record_observer_runtime_fault(
