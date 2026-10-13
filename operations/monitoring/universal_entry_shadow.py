@@ -467,17 +467,28 @@ def _fetch_recent_trade_snapshot(
         f"{PUBLIC_REST.rstrip('/')}/v5/market/recent-trade?{query}",
         headers={"User-Agent": "Cripta-U5-Trade-Audit/1"},
     )
-    try:
-        with urllib.request.urlopen(
-            request,
-            timeout=TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS,
-            context=_HTTPS_CONTEXT,
-        ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception as exc:
-        raise ContinuityNotProvable(
-            f"PUBLIC_TRADE silence audit unavailable for {symbol}: {type(exc).__name__}: {exc}"
-        ) from exc
+    # Two bounded attempts share the previous total network wait budget.
+    # A transient public REST timeout must not block the observer heartbeat
+    # longer than the original single audit attempt.
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS / 2,
+                context=_HTTPS_CONTEXT,
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as exc:
+            if attempt == 0:
+                continue
+            raise ContinuityNotProvable(
+                f"PUBLIC_TRADE silence audit unavailable for {symbol}: {type(exc).__name__}: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise ContinuityNotProvable(
+                f"PUBLIC_TRADE silence audit unavailable for {symbol}: {type(exc).__name__}: {exc}"
+            ) from exc
     if not isinstance(payload, dict) or int(payload.get("retCode", -1)) != 0:
         raise ContinuityNotProvable(f"PUBLIC_TRADE silence audit failed for {symbol}")
     server_ms = payload.get("time")
