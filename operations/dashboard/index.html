@@ -94,6 +94,15 @@
     .console-events,.console-gate{min-width:0;background:#0b151e;border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:7px}
     .console-header{display:flex;flex-direction:column;gap:2px}.console-header>b{font-size:12px}.console-header small{font-size:10px;color:var(--muted)}
     .console-event-list{max-height:190px;overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-right:3px}
+    /* Durable observer faults stay visible in the existing operator event scroll area,
+       without shifting the trading workspace or suppressing any fault evidence. */
+    .console-event-list .durable-fault-banner{margin:3px 0 8px;padding:8px;border-width:1px;box-shadow:none;border-radius:7px}
+    .console-event-list .durable-fault-banner h2{font-size:12px;margin-bottom:5px}
+    .console-event-list .durable-fault-summary{font-size:11px;margin-bottom:5px}
+    .console-event-list .durable-fault-item{display:block;padding:5px 0;font-size:11px}
+    .console-event-list .durable-fault-item summary{cursor:pointer;overflow-wrap:anywhere}
+    .console-event-list .durable-fault-error{font-size:11px}
+
     .console-event{margin:3px 0;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:#101d28}
     .console-event summary{display:flex;gap:6px;align-items:center;color:var(--text);font-size:11px;line-height:1.3;font-weight:500;overflow-wrap:anywhere}
     .console-event summary::marker{color:var(--accent)}.console-event .trade-command-alert{padding:0;border:0;background:none;font-size:11px;font-weight:550}
@@ -121,11 +130,6 @@
     <div id="releaseArmCriticalDetails" style="margin-top:6px;line-height:1.5"></div>
     <small>Существующие позиции и их Exit должны продолжать сопровождаться. Это уведомление не зависит от звука и не закрывается вручную.</small>
   </div>
-  <section id="observerFaultBanner" class="durable-fault-banner" hidden role="alert" aria-live="assertive">
-    <h2>RED · ошибка Universal Entry observer · требуется явное решение оператора</h2>
-    <div id="observerFaultSummary" class="durable-fault-summary">—</div>
-    <div id="observerFaultItems"></div>
-  </section>
   <div id="releaseStampFooter" aria-label="Время последнего обновления">Обновление · <span id="stamp">загрузка…</span></div>
   <nav aria-label="Разделы"><button class="tab active" data-panel="liveDesk">Торговля</button><div class="menu-group"><button class="tab menu-label" type="button">Настройки ▾</button><div class="menu-items"><button class="tab" data-panel="entry">Настройки входа</button><button class="tab" data-panel="strategies">Стратегии входа и выхода</button><button class="tab" data-panel="infra">Инфраструктура</button><button class="tab" data-panel="serverControl">Ресурсы сервера</button></div></div><div class="menu-group"><button class="tab menu-label" type="button">Статистика и исследования ▾</button><div class="menu-items"><button class="tab" data-panel="current">Текущие исследования</button><button class="tab" data-panel="testLibrary">Библиотека тестов</button><button class="tab" data-panel="bots">Торговые боты</button></div></div><button class="tab" data-panel="history">История исследований</button><button class="tab" data-panel="rules">Правила проекта</button><button class="tab" data-panel="checklist">Чек-лист</button><a class="tab" href="/logout">Выйти</a></nav>
 
@@ -190,6 +194,11 @@
           <div id="gatewayEmergencyBanner" class="console-owner-danger" hidden role="alert" aria-live="assertive"></div>
           <div id="exitOwnerCriticalBanner" class="console-owner-danger" hidden aria-live="assertive"></div>
           <div class="console-event-list">
+            <section id="observerFaultBanner" class="durable-fault-banner" hidden role="alert" aria-live="assertive">
+              <h2>RED · ошибка Universal Entry observer · требуется явное решение оператора</h2>
+              <div id="observerFaultSummary" class="durable-fault-summary">—</div>
+              <div id="observerFaultItems"></div>
+            </section>
             <span id="tradeCommandStatus" hidden></span>
             <div id="liveCriticalEventList" aria-live="polite"></div><div id="liveSystemEventFeed"></div>
             <div id="gateEventMessage" class="console-event-note muted">Состояние шлюза загружается…</div>
