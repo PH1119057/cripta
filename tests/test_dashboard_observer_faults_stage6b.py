@@ -142,7 +142,8 @@ def test_dashboard_global_red_banner_and_resolve_ui_are_non_trading() -> None:
     html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
     backend = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
 
-    assert html.index('id="observerFaultBanner"') < html.index('id="infra"')
+    assert html.index('class="console-event-list"') < html.index('id="observerFaultBanner"')
+    assert html.index('id="observerFaultBanner"') < html.index('id="liveCriticalEventList"')
     assert "RED · ошибка Universal Entry observer" in html
     assert "function renderObserverFaults" in html
     assert "async function resolveObserverFault" in html
