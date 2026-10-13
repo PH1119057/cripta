@@ -2251,6 +2251,8 @@ def _run_multi_strategy_observer() -> None:
     OBSERVER_STATE_ROOT.mkdir(parents=True, exist_ok=True)
     service_started_at = datetime.now(UTC)
     stopping_flag = False
+    disconnect_count = 0
+    disconnect_window_started = 0.0
 
     def stop(_signum: int, _frame: object) -> None:
         nonlocal stopping_flag
@@ -2280,7 +2282,25 @@ def _run_multi_strategy_observer() -> None:
                 )
                 if outcome == "STOP":
                     break
+                disconnect_count = 0
             except websocket.WebSocketConnectionClosedException as exc:
+                now_mono = time.monotonic()
+                if now_mono - disconnect_window_started > 60.0:
+                    disconnect_window_started = now_mono
+                    disconnect_count = 0
+                disconnect_count += 1
+                if disconnect_count >= 3:
+                    fault_id = _record_observer_runtime_fault(
+                        connection, exc, observed_at=datetime.now(UTC), observer_epoch_id=None
+                    )
+                    _observer_status(
+                        state="ERROR", epoch_id=None, active_bundles=(), symbols=(),
+                        reason=f"repeated WebSocket disconnects [fault_id={fault_id}]",
+                    )
+                    if stopping_flag:
+                        break
+                    time.sleep(2.0)
+                    continue
                 # A public socket drop starts a fresh epoch; the continuity
                 # state is never reused to admit new real entries.
                 _observer_status(
