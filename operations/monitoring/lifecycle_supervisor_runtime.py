@@ -179,6 +179,10 @@ def main() -> int:
                     read_error = type(exc).__name__
                 last_scope = symbols
                 next_read = time.monotonic() + 10.0
+            # The authenticated GET may take seconds. Evaluate freshness using
+            # the clock AFTER the read, never the pre-request scan timestamp.
+            # Keep the 15-second evidence expiry and fail-closed UNKNOWN.
+            now = datetime.now(UTC)
             with connection.transaction():
                 protection = account_protection_verdicts(
                     connection, positions=positions, account_evidence=account,
