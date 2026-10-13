@@ -26,14 +26,15 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
         pass
 
     class Response:
-        def __enter__(self) -> "Response":
+        def __enter__(self) -> Response:
             return self
 
         def __exit__(self, *_args: object) -> None:
             pass
 
         def read(self) -> bytes:
-            return json.dumps({"retCode": 0, "time": 1791840000000, "result": {"list": []}}).encode()
+            body = {"retCode": 0, "time": 1791840000000, "result": {"list": []}}
+            return json.dumps(body).encode()
 
     timeouts: list[float] = []
 
