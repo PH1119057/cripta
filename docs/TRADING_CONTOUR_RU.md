@@ -1044,6 +1044,69 @@ break-even, not a worst-case profit guarantee.
 
 A resulting manual protection mutation is attributed as `OWNER_MODIFIED_STOP`.
 
+### 4.8.2 Owner-controlled TP mechanics diagnostic — OWNER DECISION 2026-10-14
+
+Purpose: prove actual Bybit PostOnly + reduceOnly duplicate/order-amend behavior without
+changing any Strategy version or Universal Exit decision semantics.
+
+An authenticated Dashboard control named **«Испытание TP»** is located next to
+«Открыть контрольную сделку». It is a separate owner-controlled diagnostic,
+not StrategySignal, EntryDecision, StrategyPosition, or R1 Exit. It must not
+claim Universal Exit ownership and must never enter R1 performance evidence.
+
+The control may trigger an Exchange mutation only after an explicit owner
+confirmation on that particular run. Scope is limited to the existing
+owner-controlled MICRO_LIVE diagnostic constraints of §4.8 (10 USDT,
+1x, allowed active cohort symbol, ONE_WAY positionIdx=0, free physical
+slot, permitted mainnet gate, fresh verified account/readiness evidence).
+The diagnostic may not select LTC or another symbol merely because it
+was named in discussion when its slot is occupied or its account state
+cannot be proved.
+
+Initial position must be protected by the exact §4.8 exchange SL/TP.
+All later TP experiments must maintain a verified exchange SL independently.
+Use bot-unique orderLinkId and persistent diagnostic run/event identity;
+the operation is single-flight, idempotent and recovery-aware. No concurrent
+Strategy/Exit/owner mutation may own the same slot. No direct bypass from
+Dashboard to Bybit: production Execution/private-runtime remains the only
+Exchange mutation boundary.
+
+Test matrix:
+1. independently read and verify exact position, initial SL, TP and qty;
+2. amend existing maker reduceOnly TP toward and away from market;
+3. independently confirm amended orderId, status, price, leavesQty and
+   whether Bybit retained, replaced or rejected the order;
+4. when safely possible, create another PostOnly reduceOnly TP against the
+   same position and check which (if any) Bybit reduces/cancels;
+5. verify PostOnly rejection/cancellation when order would cross the book
+   without deliberately creating an unprotected position;
+6. test retry/ambiguous acknowledgement semantics without blindly
+   duplicating an exchange mutation;
+7. reconcile final TP/SL, close the diagnostic position under explicit
+   preapproved diagnostic close contract, verify flat/zero pending orders,
+   and report actual result after commissions.
+
+Every step must record before/after exchange REST evidence, orderId,
+orderLinkId, status, requested/actual price and qty, API response,
+reason and timestamp. Outcomes are PASS, FAIL or UNKNOWN; acknowledged
+API request alone is never a PASS. A test cannot claim completion with
+open exposure or unaccounted orders.
+
+On missing/stale/inconsistent Bybit evidence, unexpected order
+cancellation/fill, loss of SL or unknown mutation outcome: stop all
+further experimentation, retain reconciliation ownership, deliver
+durable owner alert, block new Entry, and do not perform speculative
+retries. Any emergency close or SL reassertion must be explicitly
+covered by an approved operator/Strategy policy, never invented by
+Supervisor. Unknown means UNKNOWN, not safe or automatically failed.
+
+Preparation gate before enablement: exact source/runtime identity,
+actor/path and credential isolation, testnet/injected-adapter test suite,
+Bybit-specific precision and reduceOnly behaviour checks, full production
+release gate and post-deploy runtime verification. UI must remain
+disabled/unavailable until backend, recovery, tests and immutable audit
+are implemented and verified. Adding a button alone is not implementation.
+
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
 Execution mode — это выбор среды исполнения одной активной Strategy, а не
