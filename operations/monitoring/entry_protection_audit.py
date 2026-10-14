@@ -13,10 +13,20 @@ from typing import Any
 
 
 def classify_protection(state: str) -> str:
-    return {"UNKNOWN": "PROOF_UNAVAILABLE", "NOT_VERIFIED": "PROTECTION_NOT_CONFIRMED", "VERIFIED": "CONFIRMED_AT_OBSERVATION"}.get(state, "UNCLASSIFIED")
+    return {
+        "UNKNOWN": "PROOF_UNAVAILABLE",
+        "NOT_VERIFIED": "PROTECTION_NOT_CONFIRMED",
+        "VERIFIED": "CONFIRMED_AT_OBSERVATION",
+    }.get(state, "UNCLASSIFIED")
 
 
-def summarize(decisions: list[tuple[str, str]], faults: list[tuple[Any, ...]], *, since: datetime, now: datetime) -> dict[str, Any]:
+def summarize(
+    decisions: list[tuple[str, str]],
+    faults: list[tuple[Any, ...]],
+    *,
+    since: datetime,
+    now: datetime,
+) -> dict[str, Any]:
     by_decision: dict[str, int] = {}
     by_reason: dict[str, int] = {}
     for code, reason in decisions:
@@ -29,7 +39,9 @@ def summarize(decisions: list[tuple[str, str]], faults: list[tuple[Any, ...]], *
         evidence = payload if isinstance(payload, dict) else {}
         classification = classify_protection(str(evidence.get("protection_state") or ""))
         duration = max(0.0, (min(end or now, now) - max(start, since)).total_seconds())
-        group = by_proof.setdefault(classification, {"count": 0, "duration_seconds": 0.0, "still_open": 0})
+        group = by_proof.setdefault(
+            classification, {"count": 0, "duration_seconds": 0.0, "still_open": 0}
+        )
         group["count"] += 1
         group["duration_seconds"] += duration
         if end is None:
@@ -41,7 +53,8 @@ def summarize(decisions: list[tuple[str, str]], faults: list[tuple[Any, ...]], *
     return {"window_start": since.isoformat(), "window_end": now.isoformat(),
             "entry_counts": by_decision, "entry_reason_counts": by_reason,
             "protection_proof": by_proof, "incidents": records,
-            "caveats": ["Blocked does not establish false positive without historical LIVE-arm evidence.",
+            "caveats": [
+                "Blocked does not establish false positive without historical LIVE-arm evidence.",
                         "UNKNOWN does not establish missing Exchange stop.",
                         "RESOLVED does not establish continuous protection."]}
 
@@ -74,7 +87,10 @@ def main() -> int:
     import psycopg
     now = datetime.now(UTC)
     since = now - timedelta(hours=args.hours)
-    dsn = os.environ.get("CRIPTA_DATABASE_DSN", "dbname=cripta user=cripta host=/var/run/postgresql")
+    dsn = os.environ.get(
+        "CRIPTA_DATABASE_DSN",
+        "dbname=cripta user=cripta host=/var/run/postgresql",
+    )
     with psycopg.connect(dsn, autocommit=True) as connection:
         print(json.dumps(collect(connection, since=since, now=now), ensure_ascii=False, indent=2))
     return 0
