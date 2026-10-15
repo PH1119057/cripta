@@ -168,6 +168,7 @@ def main() -> int:
     connection = psycopg.connect(DB_DSN, autocommit=False, row_factory=dict_row)
     next_read = 0.0
     last_scope: tuple[str, ...] = ()
+    last_position_ids: frozenset[str] = frozenset()
     account: dict[str, object] | None = None
     read_error = ""
     try:
@@ -190,7 +191,20 @@ def main() -> int:
             symbols = tuple(sorted(
                 {str(p["symbol"]) for p in positions} | arm_symbols
             ))
-            if symbols != last_scope or time.monotonic() >= next_read:
+            position_ids = frozenset(str(p["position_id"]) for p in positions)
+            # Arm scopes can include the symbol before its Entry fills.  A
+            # cached account read from before fill must NEVER be used as the
+            # first independent protection verdict for the new position.
+            # Force a fresh authenticated GET on each position lifecycle
+            # transition even when the symbol set has not changed.
+            new_position_identity = position_ids != last_position_ids
+            if new_position_identity:
+                account = None
+            if (
+                symbols != last_scope
+                or new_position_identity
+                or time.monotonic() >= next_read
+            ):
                 try:
                     account = _independent_exchange_snapshot(symbols)
                     read_error = ""
@@ -198,6 +212,7 @@ def main() -> int:
                     account = None
                     read_error = type(exc).__name__
                 last_scope = symbols
+                last_position_ids = position_ids
                 next_read = time.monotonic() + 10.0
             # The authenticated GET may take seconds. Evaluate freshness using
             # the clock AFTER the read, never the pre-request scan timestamp.
