@@ -696,6 +696,7 @@ function installExportControl(title,table,prefix){const heading=[...document.que
 installExportControl('Независимое наблюдение за сигналами','signals','signals');installExportControl('Завершённые сделки Bybit','closed','closed');
 tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection,bybitLogSection);
 bybitLogSection.before(ownerTestEntrySection);
+const marketIndicatorSection=document.getElementById('marketIndicatorSection');
 const tradePages={open:[openTradesSection,coinMonitorSection,marketIndicatorSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],control:[strategyTradeControlSection],signals:[signalObservationSection],bybit_log:[ownerTestEntrySection,bybitLogSection]};
 const expandedRailPositions=new Set();
 function toggleRailPosition(symbol){
