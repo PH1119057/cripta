@@ -19,6 +19,8 @@ from bybit_workbench.fault_delivery import (
     escalate_missing_dashboard_display,
     process_due_deliveries,
 )
+from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
+from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
@@ -172,7 +174,22 @@ def main() -> int:
         while running:
             now = datetime.now(UTC)
             positions = _account_positions(connection)
-            symbols = tuple(sorted({str(p["symbol"]) for p in positions}))
+            # Audit old-release sessions in the existing Supervisor cycle.
+            # A complete per-symbol authenticated Exchange snapshot is required
+            # before any session is retired; the installed release is never
+            # inferred from the previous approval row.
+            with connection.transaction():
+                session_rows = connection.execute(
+                    """SELECT DISTINCT symbol FROM control.live_arm_sessions
+                       WHERE state='ACTIVE' ORDER BY symbol"""
+                ).fetchall()
+            arm_symbols = {
+                str(r["symbol"] if isinstance(r, dict) else r[0])
+                for r in session_rows
+            }
+            symbols = tuple(sorted(
+                {str(p["symbol"]) for p in positions} | arm_symbols
+            ))
             if symbols != last_scope or time.monotonic() >= next_read:
                 try:
                     account = _independent_exchange_snapshot(symbols)
@@ -205,6 +222,32 @@ def main() -> int:
             result = scan_once(
                 connection, now=now, policy=policy, protection=protection,
             )
+            retired_arms: tuple[str, ...] = ()
+            # This code never creates new sessions, changes permissions,
+            # or enables mainnet. Unknown Exchange truth leaves old sessions
+            # untouched and the entry guard fail-closed.
+            installed_file = Path(
+                os.environ.get(
+                    "CRIPTA_RUNTIME_INSTALLED_COMMIT_PATH",
+                    "/srv/cripta/runtime/current/INSTALLED_COMMIT",
+                )
+            )
+            loaded_commit = (
+                installed_file.read_text(encoding="utf-8").strip()
+                if installed_file.is_file() else ""
+            )
+            if len(loaded_commit) == 40:
+                with connection.transaction():
+                    retired_arms = retire_stale_release_arms(
+                        connection,
+                        loaded_commit=loaded_commit,
+                        account_snapshot=account,
+                        now=now,
+                    )
+                    if retired_arms:
+                        check_release_arm_invariant(
+                            connection, loaded_commit=loaded_commit, now=now
+                        )
             with connection.transaction():
                 delivery = process_due_deliveries(
                     connection,
@@ -232,6 +275,7 @@ def main() -> int:
                     "dashboard_inbox": {
                         "unseen_escalated_this_pass": unseen_dashboard,
                     },
+                    "historical_live_arm_retired": list(retired_arms),
                     "critical_delivery": {
                         "configured": bool(OWNER_ALERT_WEBHOOK_URL),
                         "attempted": delivery.attempted,
