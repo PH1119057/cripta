@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.2
-**Дата:** 2026-10-11
+**Версия:** 3.3
+**Дата:** 2026-10-15
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -326,7 +326,17 @@ provenance. Не отвечает, подходит ли рынок конкре
 
 **CoinMarketContext** — objective per-instrument context, сохраняющий физически
 раздельные price/money/liquidity/positioning/liquidation/relative-strength/
-quality dimensions.
+quality dimensions. Если dimension нормализуется, сравнение выполняется только
+с причинной историей того же `symbol`; absolute cross-coin thresholds и
+нормализация одной монеты историей другой запрещены. Relative-strength остаётся
+отдельной dimension и не подменяет собственный baseline symbol.
+
+**CoinSelfBaselineEvidence** — versioned causal strategy-agnostic evidence
+самонормализации одной dimension одного `symbol`: raw value + optional
+normalized value/percentile + exact baseline spec/window/sample count +
+observed_at/quality/provenance/fingerprint. Exact окна/quantiles/weights
+утверждаются только через research/owner decision. Сам объект не является
+StrategySignal, Entry/Exit decision или `CoinMarketRating`.
 
 **CoinMarketRating** — опциональная strategy-agnostic оценка объективного
 состояния инструмента по отдельно утверждённой формуле. Не использует PnL или

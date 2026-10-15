@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.5
-**Дата:** 2026-10-08
+**Версия:** 12.6
+**Дата:** 2026-10-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -2364,3 +2364,66 @@ persistent red portal banner, not sound-only and not dependent on new signals.
 
 This is a dated decision/evidence checkpoint, **not** proof of implementation,
 Git publication to main, deployment or successful runtime behavior.
+
+# 34. Per-symbol self-normalized CoinMarketContext — OWNER DECISION / CHECKED HERE 2026-10-15
+
+OWNER DECISION:
+- состояние монеты оценивается относительно причинной истории **этой же монеты**;
+- absolute USD liquidation/price thresholds не являются универсальным
+  cross-symbol критерием;
+- MAYAK сохраняет objective physical facts, Dispatcher публикует структурированный
+  per-symbol context, а торговая интерпретация остаётся только в exact Strategy
+  Context Policy;
+- vector dimensions имеют приоритет; scalar `CoinMarketRating` до отдельного
+  research/formula approval отсутствует;
+- первая цель — observation/replay/research. Эта ревизия не меняет R1 Entry/Exit,
+  H9, capital/leverage, protection, LIVE-arm или Exchange mutation.
+
+CHECKED HERE перед этой feature branch:
+
+~~~text
+GitHub main / SOURCE_HEAD    = 03f2ce37d0939d972b47d065a9a722c214af8c4c
+source checkout              = clean main, same SHA
+INSTALLED_COMMIT             = 4a9795be8fa67e18e79cedd81190e7db422e43ac
+runtime/current target       = /srv/cripta/runtime/releases/4a9795be8fa67e18e79cedd81190e7db422e43ac
+LOADED process identity      = NOT CHECKED HERE in this documentation stage
+feature branch               = feature/per-symbol-coin-market-context-20261015
+production deploy            = NOT PERFORMED
+~~~
+
+Current implementation finding on that baseline:
+- `LiveMayakEngine` already emits per-symbol price, flow, OI/funding/mark/index,
+  order-book and exact-liquidation raw context where source is available;
+- current per-symbol liquidation context has raw notional/count windows but does
+  not yet provide the approved self-normalized vector/percentile evidence from
+  OBS §2.8;
+- Dispatcher already persists immutable `CoinMarketContext` with
+  `trading_effect=NONE`;
+- `CoinMarketRating` remains `NOT_IMPLEMENTED`;
+- current global liquidation intensity/phase thresholds are not promoted as the
+  per-symbol self-baseline formula by this decision.
+
+Capability-conservation matrix:
+
+| CAPABILITY | BEFORE OWNER/STATUS | AFTER OWNER/STATUS | MIGRATION |
+| --- | --- | --- | --- |
+| objective market observation | MAYAK / IMPLEMENTED | MAYAK / CONSERVED + enriched | additive |
+| per-symbol structured context | Dispatcher / IMPLEMENTED | Dispatcher / CONSERVED + enriched | schema/versioned |
+| Strategy-specific interpretation | Strategy Context Policy / CANON | unchanged | none |
+| Entry/Exit mutation rights | Strategy/Engines/Execution | unchanged | none |
+| scalar CoinMarketRating | no approved formula | still NOT APPROVED | research required |
+
+Roadmap status at this documentation checkpoint:
+
+~~~text
+CURRENT MAIN VERIFIED               = PASS
+ISOLATED FEATURE BRANCH             = CREATED
+CANON UPDATE                        = PREPARED IN FEATURE BRANCH
+MAYAK OBJECTIVE ENRICHMENT          = NOT YET IMPLEMENTED
+DISPATCHER CONTEXT ENRICHMENT       = NOT YET IMPLEMENTED
+OBSERVATION REPLAY PARITY           = NOT YET TESTED FOR NEW FIELDS
+SELF-BASELINE RESEARCH              = NOT YET RUN
+COINMARKETRATING FORMULA            = NOT APPROVED
+STRATEGY CONTEXT POLICY TRADING USE = NOT AUTHORIZED
+LIVE / EXCHANGE CHANGE              = NONE
+~~~

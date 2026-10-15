@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.24
-**Дата:** 2026-10-11
+**Версия:** 3.25
+**Дата:** 2026-10-15
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1057,3 +1057,35 @@ Canonical ownership: TRADING_CONTOUR §4.8.1 owns the exact operator command
 contract; GLOSSARY owns the term distinction. This revision does not alter the
 active document set, mandatory pre-read, routing or Project Source count, so
 README / AGENTS / Project Instructions topology update is not required.
+
+# 35. Per-symbol CoinMarketContext self-normalization revision — 2026-10-15
+
+OWNER DECISION:
+- `CoinMarketContext` normalization is symbol-local: a coin is compared only
+  against its own causal history;
+- MAYAK/Dispatcher remain strategy-agnostic and receive no ALLOW/BLOCK/Exit
+  trading rights;
+- exact self-baseline windows/quantiles/weights and any scalar
+  `CoinMarketRating` remain research/owner-decision items;
+- Strategy interpretation remains owned by versioned Strategy Context Policy.
+
+Canonical ownership:
+- OBSERVATION_ANALYTICS §2.8 owns the observation/normalization contract;
+- GLOSSARY owns `CoinSelfBaselineEvidence`;
+- CURRENT_PROJECT_MAP records staged implementation/research status;
+- existing ARCH/TRADING context-ownership boundaries are unchanged.
+
+Documentation maintenance gate:
+- active document set: unchanged;
+- paths / mandatory pre-read / routing: unchanged;
+- Project Source remains exactly 11 current docs;
+- no renumber of existing sections;
+- no canonical token/list owner moved;
+- README / AGENTS / Project Instructions topology update is not required;
+- release/runtime identity is recorded as a dated pre-implementation checkpoint
+  in CURRENT_PROJECT_MAP;
+- no open Strategy/Exit/LIVE decision is closed by this documentation cycle.
+
+This revision authorizes implementation of the **strategy-agnostic observation
+and replay capability only**. It does not approve a scalar rating, Entry gate,
+automatic Position action, Exit rule, LIVE arm or Exchange mutation.
