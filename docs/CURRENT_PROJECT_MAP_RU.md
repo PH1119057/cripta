@@ -357,6 +357,51 @@ cripta-source-sync.timer          enabled/active
   operational delta в одно слово «версия».
 
 
+
+### Read-only access route — CHECKED HERE 2026-10-15
+
+На host `robot` проверено через SentinelX:
+
+- `sentinelx` — service principal управления (в проверенном контексте
+  `uid=994`); его невозможность прочитать protected runtime path сама
+  по себе не означает отказ Unix actor `cripta`.
+- `sudo -u cripta python3 -c '...'` через отдельный `sentinel_exec`
+  успешно работает от `cripta` (`uid=107`), если точная команда
+  соответствует allowlist и tool security policy.
+- `/srv/cripta/runtime/current` читается этим actor; snapshot symlink
+  указывает на release `dbecd991566484fdfb0724f308fbd023ca6d455a`.
+- `/var/lib/cripta/universal_entry_observer/status.json` читается от
+  `cripta`; это liveness/status snapshot, не durable fault table.
+- PostgreSQL socket smoke под Unix `cripta` с
+  `dbname=cripta user=cripta` подтвердил `current_user=cripta`,
+  `current_database=cripta`; `runtime.lifecycle_faults` доступна для
+  SELECT (фактически прочитана).
+- `/var/lib/cripta/release/INSTALLED_COMMIT` прочитан от `cripta`:
+  `dbecd991566484fdfb0724f308fbd023ca6d455a`.
+- `SOURCE_HEAD` на дату проверки =
+  `29edfcaa693bd35c8f97e8ed81cadb325bead937`;
+  этот SHA совпал с найденным GitHub `main`.
+- SentinelX `exec` с chained shell `;` и неразрешённым
+  `sudo -u cripta ls` возвращал `command_not_allowed`, а попытки
+  `script_run` отклонялись отдельной защитой инструмента.
+  Эти отказы не являются доказательством Unix permission defect.
+- `journalctl` от `sentinelx` не получил доступ к system journal;
+  journal-read как `cripta` / privileged reader **не проверен здесь**.
+
+Операционный маршрут, с которого начинать следующие диагностики:
+
+1. Прочитать `DEVELOPMENT_RELEASE §19.5` и current MAP §1.4.
+2. Проверить `sentinel_capabilities`, actor и exact tool operation.
+3. Для protected CRIPTA read-only facts использовать already approved
+   `sudo -u cripta python3 -c '...'` — **одна команда на один вызов**.
+4. Для PostgreSQL проверить `current_user` и SELECT scope; ничего не
+   менять в БД без отдельной матрицы и approval.
+5. Для write/deploy идти по §5.1 + §19.1–19.4, не переносить доказанные
+   read permissions на write permissions.
+
+Это датированное `CHECKED HERE`, а не вечная конфигурация.
+Никаких новых sudo/Unix/DB прав данным documentation update не выдаётся.
+
 ## 1.5 Filesystem contour separation — OWNER DECISION / CHECKED HERE 2026-09-29
 
 Target contract:

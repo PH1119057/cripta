@@ -136,6 +136,8 @@ Server-side script без actor/path contract: `PREPARED=NO`.
 Проверка от root/SentinelX/другого user не доказывает права фактического writer.
 Не лечить DENIED через `chmod 777`, uncontrolled recursive `chown/chmod`, запуск всего workflow от root или лишние privileges.
 
+Server/DB access: `DEVELOPMENT_RELEASE §19.5` + `CURRENT_PROJECT_MAP §1.4`. SentinelX policy, Unix/DB actor и mutation approval — независимые gates.
+
 ## 8. Git / deploy / runtime
 
 Различать:
