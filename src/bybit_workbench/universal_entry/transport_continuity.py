@@ -71,6 +71,7 @@ class PublicWsHeartbeat:
         self.pong_timeout_seconds = pong_timeout_seconds
         self._last_activity_monotonic = started_monotonic
         self._pending_ping_sent_at: float | None = None
+        self._deadline_breached = False
 
     def ping_due(self, now_monotonic: float) -> bool:
         return (
@@ -82,17 +83,25 @@ class PublicWsHeartbeat:
         if self._pending_ping_sent_at is None:
             self._pending_ping_sent_at = now_monotonic
 
-    def note_pong(self, now_monotonic: float) -> None:
+    def _accept_activity(self, now_monotonic: float) -> None:
+        # A frame observed after the proof deadline is too late to resurrect
+        # the epoch. Caller still observes the sticky failure after recv().
+        if self.deadline_exceeded(now_monotonic):
+            return
         self._last_activity_monotonic = now_monotonic
         self._pending_ping_sent_at = None
 
+    def note_pong(self, now_monotonic: float) -> None:
+        self._accept_activity(now_monotonic)
+
     def note_market_frame(self, now_monotonic: float) -> None:
-        self._last_activity_monotonic = now_monotonic
-        self._pending_ping_sent_at = None
+        self._accept_activity(now_monotonic)
 
     def deadline_exceeded(self, now_monotonic: float) -> bool:
         sent_at = self._pending_ping_sent_at
-        return sent_at is not None and now_monotonic - sent_at >= self.pong_timeout_seconds
+        if sent_at is not None and now_monotonic - sent_at >= self.pong_timeout_seconds:
+            self._deadline_breached = True
+        return self._deadline_breached
 
 
 class ExactFactDeduper:
