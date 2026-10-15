@@ -328,6 +328,17 @@ Deployment contract presentation/read-model layer:
 - следующий успешный status refresh/restart не имеет права молча удалить или
   resolve такой fault; Dashboard обязан показывать unresolved fault красным до
   explicit operator/owner resolution;
+- OWNER DECISION 2026-10-15: каждый `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR`,
+  включая severity `ERROR`, показывать в существующей центральной панели
+  Dashboard «События системы»; повторы одной exact signature агрегируются
+  через occurrence_count, без требования отвечать на каждое сообщение;
+- явное закрытие после устранения общей причины допускает групповую работу
+  оператора, но не автоматическое снятие unresolved fault при успешном epoch;
+  каждый закрытый exact fault сохраняет reason/operator/time audit;
+- durable owner-delivery retry/acknowledgement/escalation остаётся отдельным
+  доказательством доставки: UI/read-model не подменяет delivery record;
+  канал для dashboard-oriented уведомлений нельзя молча выдавать за
+  существующий OWNER_WEBHOOK; требуется отдельная проверенная implementation;
 - exact Dashboard presentation/read-model bytes имеют отдельную
   `DASHBOARD_UI_COMMIT` identity.
 
