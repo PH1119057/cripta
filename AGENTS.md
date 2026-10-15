@@ -116,6 +116,8 @@ Target roots: source `/srv/cripta/source_checkout`, runtime code
 `CURRENT_PROJECT_MAP §1.5`.
 
 
+Для server/DB forensic строго применять `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5`: tool policy, actual effective actor и mutation authorization независимы. Датированные safe read-only команды — `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. Успех SELECT не доказывает WRITE или LIVE authorization.
+
 ## Bootstrap synchronization invariant
 
 Точный current document set и routing определяет
