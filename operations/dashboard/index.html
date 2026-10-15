@@ -1004,6 +1004,18 @@ function renderObserverFaults(model){
     const error=[x.error_type,x.error_message].filter(Boolean).join(': ')||x.fault_code||'observer runtime fault';
     return `<div class="durable-fault-item"><details><summary><b>RED</b> · ${safe(String(error).slice(0,95))}</summary><div class="durable-fault-error">${safe(error)}</div><div class="durable-fault-meta">fault ${safe(x.fault_id)} · повторов ${count} · первый ${safe(first)} · последний ${safe(last)}<br>service ${safe(x.service)} · release ${safe(x.source_commit||'—')} · epoch ${safe(x.last_observer_epoch_id||'—')}</div><button class="action danger" type="button" data-fault-id="${safe(x.fault_id)}" onclick="resolveObserverFault(this.dataset.faultId)">Явно закрыть fault</button></details></div>`;
   }).join('');
+  // Receipt is created only after the banner was rendered in a visible tab.
+  // Browser retry happens on the next regular refresh if the POST fails.
+  requestAnimationFrame(()=>{
+    if(document.hidden || banner.getClientRects().length===0)return;
+    const faultIds=items.map(x=>String(x.fault_id||'')).filter(Boolean);
+    if(!faultIds.length)return;
+    fetch('/api/observer-faults/displayed',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fault_ids:faultIds})
+    }).catch(()=>{});
+  });
 }
 async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});const d=await r.json();
   stamp.textContent='обновлено '+new Date(d.generated_at_epoch*1000).toLocaleString('ru-RU'); dataSize.textContent=size(d.disk.used)+' / '+size(d.disk.total); period.textContent=(d.evaluation_start||'—')+' → '+(d.evaluation_end||'—'); diskBar.style.width=(100*d.disk.used/d.disk.total).toFixed(1)+'%';
