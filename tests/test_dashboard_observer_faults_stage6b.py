@@ -165,3 +165,28 @@ def test_dashboard_global_red_banner_and_resolve_ui_are_non_trading() -> None:
     assert "resolve_observer_runtime_fault(" in endpoint_scope
     assert "runtime.trade_commands" not in endpoint_scope
     assert "execution_permissions" not in endpoint_scope
+
+
+def test_owner_observer_fault_notification_uses_existing_central_console() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    console = html.index('class="operator-console"')
+    events = html.index('class="console-events"', console)
+    existing_banner = html.index('id="observerFaultBanner"', events)
+    feed = html.index('id="liveSystemEventFeed"', existing_banner)
+    assert console < events < existing_banner < feed
+    assert 'renderObserverFaults(d.observer_faults)' in html
+    assert "const count=Number(x.occurrence_count||1)" in html
+    # Visibility requires no per-message acknowledgement.
+    body = html[html.index("function renderObserverFaults("):]
+    body = body.split("\nfunction ", 1)[0]
+    assert "acknowledge_delivery(" not in body
+    assert "Unresolved faults:" in body
+    assert "observerFaultItems" in body
+
+
+def test_observer_fault_console_does_not_claim_ui_is_durable_delivery() -> None:
+    source = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(
+        encoding="utf-8"
+    )
+    assert "OWNER DECISION 2026-10-15" in source
+    assert "UI/read-model не подменяет delivery record" in source
