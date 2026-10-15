@@ -60,6 +60,7 @@
     .rail-open-position .rail-symbol{font-weight:800}
     .rail-direction{font-size:19px;font-weight:900;margin-right:4px;vertical-align:middle}
     .rail-long-arrow{color:var(--ok);font-weight:900}.rail-short-arrow{color:#ff737c;font-weight:900}
+    .action.break-even-ready{background:#17412d!important;border-color:#4dbb7b!important;color:#c8f5d7!important;box-shadow:0 0 0 1px #4dbb7b33 inset}
     .rail-open-position .rail-position-pnl{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}
     .rail-open-position .rail-position-meta{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
     .rail-open-position .rail-position-more{padding-top:9px;margin-top:8px;border-top:1px solid var(--line)}
@@ -707,6 +708,23 @@ function toggleRailPosition(symbol){
   if(detail)detail.hidden=open;
   if(button)button.setAttribute('aria-expanded',String(!open));
 }
+function breakEvenVisualReady(p){
+  // UI-only, conservative preview. The authoritative operator command still
+  // computes the exact tick-rounded stop and checks executable Bybit price.
+  const entry=Number(p.entry_price),qty=Number(p.size),close=Number(p.executable_close_price);
+  const pnl=Number(p.net_pnl_to_close),stop=Number(p.stop_loss||0);
+  const fresh=Date.now()-Number(p.refreshed_at_epoch_ms||0);
+  if(![entry,qty,close,pnl].every(Number.isFinite)||entry<=0||qty<=0||close<=0||p.net_pnl_to_close==null||fresh<0||fresh>10000)return false;
+  const side=p.side==='Buy'?1:p.side==='Sell'?-1:0;
+  if(!side||side*(close-entry)<=0)return false;
+  // Extra margin above net-to-close covers the execution slippage reserve
+  // and a conservative tick-rounding buffer without optimistic green signals.
+  const needed=Math.max(0.03,entry*qty*0.002);
+  if(pnl<needed)return false;
+  // Already protected at or beyond entry is not a new manual BE opportunity.
+  if(stop>0&&side*(stop-entry)>=0)return false;
+  return true;
+}
 function renderOpenRailPositions(positions){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
   if(!rail||!count)return;
@@ -731,7 +749,7 @@ function renderOpenRailPositions(positions){
           '<span>SL: <b>'+price(stop)+'</b></span><span>TP / BE: '+price(Number(p.break_even_price||0))+'</span>'+
           '<span>Статус: '+safe(p.supervisor?.state||'—')+'</span><span>Стоп: '+(trail>0?'плавающий':'обычный')+'</span></div>'+
         '<div class="rail-position-controls">'+
-          '<button class="action" type="button" onclick="tradeCommand(\'break_even\',\''+symbol+'\')">Безубыток</button>'+
+          '<button class="action '+(breakEvenVisualReady(p)?'break-even-ready':'')+'" type="button" title="'+(breakEvenVisualReady(p)?'Расчётная готовность: цена покрывает комиссии и запас; точный порог проверяет Bybit':'Пока рано: нужен достаточный плюс после комиссий и запас на исполнение')+'" onclick="tradeCommand(\'break_even\',\''+symbol+'\')">Безубыток</button>'+
           '<button class="action" type="button" onclick="tradeCommand(\'current_stop\',\''+symbol+'\')">Стоп −0,20%</button>'+
           '<select id="trail-'+symbol+'" aria-label="Отступ плавающего стопа" onchange="rememberTrailing(\''+symbol+'\',this.value)">'+trailingOptions(p.symbol)+'</select>'+
           '<button class="action" type="button" onclick="setTrailing(\''+symbol+'\','+(trail<=0)+')">'+(trail>0?'Выключить плавающий стоп':'Включить плавающий стоп')+'</button>'+
