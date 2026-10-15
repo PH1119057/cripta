@@ -137,3 +137,49 @@ def test_observer_status_refresh_does_not_mutate_durable_fault_state() -> None:
     body = source[start:end]
     assert "lifecycle_faults" not in body
     assert "RESOLVED" not in body
+
+
+def test_dashboard_inbox_migration_and_install_order() -> None:
+    migration = (
+        ROOT / "operations/sql/20261015_observer_dashboard_delivery_v1.sql"
+    ).read_text(encoding="utf-8")
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert "channel IN ('OWNER_WEBHOOK','DASHBOARD_INBOX')" in migration
+    assert "WHERE f.fault_code='UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR'" in migration
+    assert "AND f.state='OPEN'" in migration
+    assert "'DASHBOARD_INBOX','PENDING'" in migration
+    assert "ON CONFLICT (fault_id) DO NOTHING" in migration
+    assert installer.index("20261006_observer_runtime_fault_v1.sql") < (
+        installer.index("20261015_observer_dashboard_delivery_v1.sql")
+    )
+
+
+def test_unshown_dashboard_delivery_escalates_without_webhook_delivery() -> None:
+    from bybit_workbench.fault_delivery import escalate_missing_dashboard_display
+
+    class Updated:
+        rowcount = 2
+
+    class Connection:
+        def __init__(self):
+            self.statement = ""
+            self.parameters = ()
+
+        def execute(self, statement, parameters=()):
+            self.statement = statement
+            self.parameters = tuple(parameters)
+            return Updated()
+
+    connection = Connection()
+    count = escalate_missing_dashboard_display(
+        connection, now=NOW, display_timeout_seconds=300,
+    )
+    assert count == 2
+    assert "d.channel='DASHBOARD_INBOX'" in connection.statement
+    assert "d.state='PENDING'" in connection.statement
+    assert "state='ESCALATION_REQUIRED'" in connection.statement
+    assert "DASHBOARD_DISPLAY_NOT_CONFIRMED" in connection.statement
+    assert "OWNER_WEBHOOK" not in connection.statement
+    assert connection.parameters[1] < connection.parameters[0]
