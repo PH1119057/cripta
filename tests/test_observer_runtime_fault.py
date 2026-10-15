@@ -58,7 +58,9 @@ def test_observer_runtime_error_is_upserted_as_durable_non_autoresolving_fault(
     delivery_statement, delivery_parameters = connection.calls[1]
     assert "INSERT INTO runtime.lifecycle_fault_deliveries" in delivery_statement
     assert "'DASHBOARD_INBOX'" in delivery_statement
-    assert "ON CONFLICT(fault_id) DO NOTHING" in delivery_statement
+    assert "ON CONFLICT(fault_id) DO UPDATE" in delivery_statement
+    assert "last_resolved_at" in delivery_statement
+    assert "acknowledged_at IS NOT NULL" in delivery_statement
     assert delivery_parameters[1] == first
     assert payload["owner_resolution_required"] is True
 
