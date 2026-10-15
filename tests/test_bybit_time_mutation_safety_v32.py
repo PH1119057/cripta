@@ -310,6 +310,7 @@ def test_clock_probe_rejects_all_slow_rtt_without_mutation() -> None:
 def test_clock_probe_fails_closed_when_all_rest_attempts_timeout() -> None:
     import ast
     from types import SimpleNamespace
+
     import pytest
 
     node = next(
