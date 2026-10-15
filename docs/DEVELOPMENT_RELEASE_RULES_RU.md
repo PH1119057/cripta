@@ -1339,6 +1339,22 @@ protection, Exit, position supervision, private-runtime reconciliation, or
 resolution of pending/ambiguous commands. It must not manufacture an Exchange
 mutation or relabel an open position as a deployment blocker.
 
+OWNER DECISION 2026-10-15 — stale session lifecycle retirement (not re-arm):
+After application release changes, previous-release LIVE-arm sessions remain
+historical authorization evidence and are never rewritten to a new commit.
+Lifecycle Supervisor may automatically mark an old ACTIVE session CLOSED only
+after fresh authenticated and COMPLETE Exchange account-wide position and
+order evidence, exact same-account identity, no position, open/pending order,
+ambiguous request, reservation or physical slot claim for the session's scope,
+and verified completion of its Exit/reconciliation. UNKNOWN must fail closed.
+An open position remains under its existing Exit owner; retirement waits until
+verified closure. The closure writes durable timestamp/reason and never enables
+mainnet gate, Strategy activation, execution permission, or a new LIVE-arm
+session. A new release requires fresh checklist evidence and explicit OWNER ARM.
+No timer or separate polling service is introduced: use the existing Lifecycle
+Supervisor cycle. Session retirement alone cannot establish real-entry
+readiness.
+
 Once LOADED_COMMIT changes, release-bound LIVE-arm sessions from a different
 application commit are **not transferable**. Reopening new REAL Entry requires
 exact-release readiness evidence and a **new explicit OWNER ARM**, never silent

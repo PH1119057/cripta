@@ -1140,6 +1140,20 @@ capital reservation, idempotence and initial protection. Existing Exit/position
 supervision remains independent; unresolved safety faults are not waived by
 this policy. No LIVE re-arm is a side effect of deploy.
 
+## 4.10.1 Owner decision 2026-10-15 — stale LIVE-arm retirement
+
+After a deployed release changes, prior-release ACTIVE arm rows must not be
+rewritten to the new commit and never authorize new Entry. The existing
+Lifecycle Supervisor may close old arm rows when the mainnet gate is OFF,
+authenticated fresh Bybit evidence is complete for every affected symbol,
+Exchange positions and open orders are absent, and local open positions,
+pending trade commands, reservations, and physical slot claims are absent.
+This requires durable retirement audit; unknown evidence retains ACTIVE
+historical rows and blocks new REAL Entry. An open position remains under its
+original Exit owner until confirmed closed; no process or timer is created.
+Automated retirement creates no new arm, does not enable permission/gate, and
+does not remove the current release-specific operator readiness checklist.
+
 ## 4.11 Owner decision 2026-10-09 — R1 dynamic L5-3 Exit TP structural changes and Exchange price steps
 
 Only a structural change of the **opposite working-range extremum** qualifies a

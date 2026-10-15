@@ -1004,7 +1004,9 @@ def fresh_bybit_time_calibration() -> BybitTimeCalibration:
             f"best_rtt_ms={best.round_trip_ms:.1f} "
             f"limit_ms={BYBIT_TIME_PROBE_MAX_RTT_MS:.1f} "
             f"offset_ms={best.offset_ms:.1f} "
-            f"attempts={BYBIT_TIME_PROBE_ATTEMPTS}"
+            f"attempts={BYBIT_TIME_PROBE_ATTEMPTS} "
+            f"probe_rtts_ms={','.join(f'{item.round_trip_ms:.1f}' for item in observations)} "
+            "path=/v5/market/time"
         )
 
     raise UnsafeBybitClock(

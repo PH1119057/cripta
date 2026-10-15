@@ -713,10 +713,23 @@ research execution root.
 
 # 18. Exchange-time / operator-alert terms
 
+**STALE_LIVE_ARM_RETIREMENT** — смена состояния старой release-bound LIVE-arm
+сессии ACTIVE -> CLOSED после доказанной отсутствующей Exchange exposure и
+незавершённых локальных операций в exact scope, с immutable audit evidence.
+Это НЕ перенос разрешения на новый release и НЕ новый owner arm.
+
 **Bybit Time Calibration** — fresh observation of Bybit public server time
 bound to a local monotonic midpoint. It is used to construct authenticated
 Bybit timestamps without requiring the host wall clock to be numerically equal
 to Bybit. Host-vs-Bybit offset remains diagnostic telemetry.
+A Bybit probe RTT covers remote network/CDN, TLS and HTTP processing; it is
+not a measure of local NTP clock drift. Use UTC epoch timestamps, NTP for host
+clock, official Bybit time calibration at the mutating safety boundary, and
+fail-closed RTT evidence. Do not set host system time from a remote HTTP reply,
+do not infer shared datacenter or Bybit NTP peers from server location, and do
+not silently loosen the calibrated RTT safety limit. Each RTT refusal logs the
+per-attempt measurements and exact configured Bybit REST endpoint; it is not
+proof of clock desynchronization.
 
 **PRE_MUTATION_SAFETY_BLOCK** — deterministic refusal before an Exchange
 mutation is sent because a required execution-safety prerequisite cannot be
