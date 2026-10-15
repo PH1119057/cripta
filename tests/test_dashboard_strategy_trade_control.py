@@ -20,7 +20,7 @@ def test_strategy_table_shows_capital_leverage_and_actual_gate_state() -> None:
 
 
 def test_open_subpage_contains_only_real_open_positions() -> None:
-    assert "open:[openTradesSection]" in HTML
+    assert "open:[openTradesSection,coinMonitorSection,marketIndicatorSection]" in HTML
     assert (
         "control:[strategyTradeControlSection]"
         in HTML
