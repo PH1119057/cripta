@@ -77,7 +77,10 @@ from bybit_workbench.universal_entry.shadow_runtime import (
     derive_unknown_prestart_horizon_seconds,
 )
 from bybit_workbench.universal_entry.storage import ShadowParityStore, StrategyEntryStore
-from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
+from bybit_workbench.universal_entry.trade_mirror import (
+    PublicTradeMirrorBuffer,
+    assert_exact_recovery_coverage,
+)
 from bybit_workbench.universal_entry.transport_continuity import (
     ContinuityAction,
     ContinuityNotProvable,
@@ -2154,13 +2157,11 @@ def _run_observer_epoch(
                             {symbol: trade_cursors[symbol]},
                             cutoff_at=audit_exc.cutoff_by_symbol[symbol],
                         )
-                        actual_ids = {event.exec_id for event in recovered}
-                        absent_ids = set(expected) - actual_ids
-                        if absent_ids:
-                            raise ContinuityNotProvable(
-                                f"observer mirror recovery incomplete for {symbol}: "
-                                f"missing {len(absent_ids)} exact execId(s)"
-                            ) from audit_exc
+                        assert_exact_recovery_coverage(
+                            symbol=symbol,
+                            expected_exec_ids=expected,
+                            recovered=recovered,
+                        )
                         recovered_by_symbol[symbol] = recovered
                     for symbol in sorted(recovered_by_symbol):
                         for event in recovered_by_symbol[symbol]:
