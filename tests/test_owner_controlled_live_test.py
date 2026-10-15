@@ -14,7 +14,7 @@ def test_owner_controlled_live_test_is_visible_in_bybit_log_with_explicit_confir
     assert 'SL / TP' in UI
     assert '−0,5% / +0,5%' in UI
     assert 'Открыть контрольную сделку' in UI
-    assert 'open:[openTradesSection]' in UI
+    assert 'open:[openTradesSection,coinMonitorSection,marketIndicatorSection]' in UI
     assert (
         'bybit_log:[ownerTestEntrySection,bybitLogSection]'
         in UI

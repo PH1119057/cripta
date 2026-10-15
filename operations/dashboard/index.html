@@ -54,6 +54,28 @@
       main:has(#liveDesk.active) #liveDesk .closed-scroll,main:has(#liveDesk.active) #liveDesk .table-scroll{max-width:100%;overflow-x:auto}
       main:has(#liveDesk.active) #liveDesk .trade-operator-grid{min-width:0}
     }
+    /* Open Bybit positions replace the unused left signal rail. */
+    .rail-open-position{border:1px solid var(--line);border-radius:9px;background:#0b1721;margin-bottom:8px;padding:9px;min-width:0}
+    .rail-open-position .rail-position-summary{display:flex;justify-content:space-between;align-items:center;gap:6px;width:100%;padding:0;border:0;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+    .rail-open-position .rail-symbol{font-weight:800}
+    .rail-direction{font-size:19px;font-weight:900;margin-right:4px;vertical-align:middle}
+    .rail-long-arrow{color:var(--ok);font-weight:900}.rail-short-arrow{color:#ff737c;font-weight:900}
+    .rail-open-position .rail-position-pnl{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px}
+    .rail-open-position .rail-position-meta{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+    .rail-open-position .rail-position-more{padding-top:9px;margin-top:8px;border-top:1px solid var(--line)}
+    .rail-open-position .rail-position-more[hidden]{display:none}
+    .rail-position-facts{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:6px 0;font-size:11px}
+    .rail-position-facts span{min-width:0;overflow-wrap:anywhere}
+    .rail-position-controls{display:flex;flex-wrap:wrap;gap:5px}
+    .rail-position-controls .action{font-size:11px;padding:6px;max-width:100%;white-space:normal}
+    .rail-position-controls select{max-width:100%;padding:6px;background:#09131b;color:var(--text);border:1px solid var(--line);border-radius:6px}
+    .market-indicator-note{margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:12px;color:var(--muted)}
+    @media(min-width:1250px){
+      main:has(#liveDesk.active) #openTradesSection{display:none!important}
+      main:has(#liveDesk.active) #coinMonitorSection .signal-scroll{max-height:none!important;overflow:visible!important}
+      main:has(#liveDesk.active) #coinMonitorSection table{min-width:0!important;table-layout:fixed;font-size:11px}
+      main:has(#liveDesk.active) #coinMonitorSection td,main:has(#liveDesk.active) #coinMonitorSection th{padding:6px 4px;overflow-wrap:anywhere}
+    }
     @media(max-width:1249px){.workspace-rail{display:none!important}}
 
     /* Desktop operator workspace: bounded independent scroll and compact health rail. */
@@ -173,10 +195,10 @@
     </article>
   </section>
   
-  <aside id="marketWorkspaceRail" class="workspace-rail" aria-label="Рыночные индикаторы">
-    <h2>Сигналы рынка</h2>
-    <div class="rail-muted">Мониторинг рынка · место для будущих сигналов</div>
-    <div class="rail-scroll"><div class="rail-placeholder">Рыночные сигналы пока не настроены</div></div>
+  <aside id="marketWorkspaceRail" class="workspace-rail" aria-label="Открытые сделки Bybit">
+    <h2>Открытые сделки <span id="openRailCount" class="rail-muted">0</span></h2>
+    <div class="rail-muted">LONG <span class="rail-long-arrow">↑</span> · SHORT <span class="rail-short-arrow">↓</span> · нажмите на сделку для управления</div>
+    <div id="openRailPositions" class="rail-scroll" aria-live="polite"><div class="rail-placeholder">Открытых позиций на Bybit нет.</div></div>
   </aside>
 <section id="liveDesk" class="grid panel">
     <div id="tradeSubnav" class="trade-subnav" aria-label="Подстраницы торговли"><button type="button" data-trade-page="open">Открытые сделки</button><button type="button" data-trade-page="closed">Завершённые сделки</button><button type="button" data-trade-page="paper_open">Открытые псевдосделки</button><button type="button" data-trade-page="paper_closed">Завершённые псевдосделки</button><button type="button" data-trade-page="monitor">Монитор Strategy</button><button type="button" data-trade-page="control">Управление Strategy</button><button type="button" data-trade-page="signals">Наблюдение за сигналами</button><button type="button" data-trade-page="bybit_log">Лог Bybit</button></div>
@@ -232,6 +254,11 @@
     <article id="strategyPaperOpenSection" class="card full core-trading-table"><h2>Открытые псевдосделки</h2><div id="strategyPaperOpenSummary" class="metric">—</div><div class="muted" style="margin:6px 0 12px">ACTIVE Strategy оцениваются по реальному рынку. Execution OFF означает: реального ордера нет, но Entry/Exit/Hedge lifecycle и PnL считаются как у сделки.</div><div id="strategyPaperByStrategy" class="position-card-grid"></div><div id="strategyPaperOpen" class="paper-card-scroll" style="margin-top:12px"></div></article><article id="strategyPaperClosedSection" class="card full core-trading-table"><h2>Завершённые псевдосделки</h2><div id="strategyPaperClosedSummary" class="metric">—</div><div id="strategyPaperClosed" class="paper-card-scroll" style="margin-top:12px"></div></article>
     <article id="coinMonitorSection" class="card full core-trading-table"><h2>Монитор Strategy · монеты и точки входа</h2><div id="entryShadowSummary" class="metric">—</div><div id="entryShadowDetail" class="muted" style="margin:6px 0 10px">Загрузка состояния Universal Entry…</div><div class="signal-monitor-toolbar"><label>Стратегия<select id="strategyMonitorFilter"><option value="all">Все активные Strategy</option></select></label><label>Ближе к Entry<select id="strategyMonitorNear"><option value="0.25">0,25%</option><option value="0.5">0,50%</option><option value="1" selected>1,00%</option><option value="2">2,00%</option><option value="999">все</option></select></label><label>Зелёный ≤<select id="strategyMonitorGreen" onchange="onStrategyMonitorGreenChange()"><option value="0.25">0,25%</option><option value="0.3">0,30%</option><option value="0.5" selected>0,50%</option><option value="1">1,00%</option></select></label><span class="muted">Светофор — только визуализация readiness; EntryPlan не меняется. Список монет задаётся только StrategyCard.</span></div><div class="signal-scroll" style="max-height:650px;overflow:auto"><table style="min-width:1620px"><thead><tr><th>Strategy</th><th>Монета</th><th>Направление</th><th>Готовность</th><th>Состояние</th><th>Цена сейчас</th><th>Entry</th><th>До Entry</th><th>Кандидат / зоны</th><th>Flow / OI</th><th>Cooldown / embargo</th><th>Обновлено</th></tr></thead><tbody id="entryShadowRows"></tbody></table></div></article>
     <article id="signalObservationSection" class="card full core-trading-table"><h2>Независимое наблюдение за сигналами</h2><div class="signal-monitor-toolbar"><label>Стратегия<select id="signalStrategyFilter"><option value="all">Все стратегии</option></select></label><div id="signalWindowLabel" class="muted">Последние 24 часа · загрузка…</div></div><div id="signalStats" class="signal-stat-grid"></div><div id="signalStrategyBreakdown" class="position-card-grid signal-strategy-summary"></div><div class="signal-scroll" style="max-height:620px;overflow:auto;scrollbar-gutter:stable"><table style="min-width:1250px"><thead><tr><th>Время сигнала</th><th data-signal-strategy-col>Стратегия</th><th>Монета</th><th>Направление</th><th>Статус</th><th>Цена входа</th><th>Текущая / выход</th><th>Результат</th><th>После комиссий</th><th>MFE</th><th>MAE</th></tr></thead><tbody id="liveRows"></tbody></table></div></article>
+    <article id="marketIndicatorSection" class="card full core-trading-table market-indicator-section">
+      <h2>Рыночные индикаторы</h2>
+      <div class="muted">Общий рынок и сигналы наблюдения отображаются под торговыми таблицами, без отдельной боковой прокрутки. Монитор Strategy расположен выше.</div>
+      <div class="market-indicator-note">Рыночные сигналы пока не настроены. Готовность монет и условия Entry находятся в таблице «Монитор Strategy».</div>
+    </article>
     <article id="closedTradesSection" class="card full core-trading-table"><h2>Завершённые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Сверху видны сделки за сегодня. Более старые записи находятся ниже во внутренней прокрутке; вся страница из-за них не растягивается. Нажмите строку, чтобы раскрыть причинную карточку.</div><div class="closed-scroll"><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина стратегии</th><th>Причина биржи</th><th>После комиссий</th></tr></thead><tbody id="realClosedRows"></tbody></table></div></article>
     <article id="bybitLogSection" class="card full core-trading-table"><h2>Лог Bybit · попытки входа</h2><div class="muted" style="margin-bottom:10px">Технический журнал реальных Entry-заявок. Принятая Bybit лимитная заявка ещё не является открытой сделкой. Здесь видно, ждала ли она fill, была ли отменена без исполнения и по какой причинной причине.</div><div class="closed-scroll"><table style="min-width:1450px"><thead><tr><th>Время</th><th>Монета</th><th>Strategy</th><th>Направление</th><th>Limit</th><th>Bybit order</th><th>Статус</th><th>Fill</th><th>SL / TP</th><th>Причина / итог</th></tr></thead><tbody id="bybitLogRows"><tr><td colspan="10" class="muted">Загрузка журнала Bybit…</td></tr></tbody></table></div></article>
   </section>
@@ -669,7 +696,50 @@ function installExportControl(title,table,prefix){const heading=[...document.que
 installExportControl('Независимое наблюдение за сигналами','signals','signals');installExportControl('Завершённые сделки Bybit','closed','closed');
 tradeSubnav.after(tradeOperatorBar,strategyTradeControlSection,openTradesSection,closedTradesSection,strategyPaperOpenSection,strategyPaperClosedSection,coinMonitorSection,signalObservationSection,bybitLogSection);
 bybitLogSection.before(ownerTestEntrySection);
-const tradePages={open:[openTradesSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],control:[strategyTradeControlSection],signals:[signalObservationSection],bybit_log:[ownerTestEntrySection,bybitLogSection]};
+const marketIndicatorSection=document.getElementById('marketIndicatorSection');
+const tradePages={open:[openTradesSection,coinMonitorSection,marketIndicatorSection],closed:[closedTradesSection],paper_open:[strategyPaperOpenSection],paper_closed:[strategyPaperClosedSection],monitor:[coinMonitorSection],control:[strategyTradeControlSection],signals:[signalObservationSection],bybit_log:[ownerTestEntrySection,bybitLogSection]};
+const expandedRailPositions=new Set();
+function toggleRailPosition(symbol){
+  const open=expandedRailPositions.has(symbol);
+  if(open)expandedRailPositions.delete(symbol);else expandedRailPositions.add(symbol);
+  const detail=document.getElementById('rail-open-'+symbol);
+  const button=document.getElementById('rail-toggle-'+symbol);
+  if(detail)detail.hidden=open;
+  if(button)button.setAttribute('aria-expanded',String(!open));
+}
+function renderOpenRailPositions(positions){
+  const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
+  if(!rail||!count)return;
+  count.textContent=String(positions.length);
+  const active=new Set(positions.map(p=>p.symbol));
+  for(const symbol of expandedRailPositions)if(!active.has(symbol))expandedRailPositions.delete(symbol);
+  rail.innerHTML=positions.length?positions.map(p=>{
+    const symbol=safe(p.symbol),isLong=p.side==='Buy',direction=isLong?'LONG':'SHORT';
+    const arrow=isLong?'<span class="rail-direction rail-long-arrow" aria-label="LONG">↑</span>':'<span class="rail-direction rail-short-arrow" aria-label="SHORT">↓</span>';
+    const pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),pnlText=pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT';
+    const entry=Number(p.entry_price),mark=Number(p.mark_price),qty=Number(p.size),stop=Number(p.stop_loss||0),trail=Number(p.trailing_stop||0);
+    const expanded=expandedRailPositions.has(p.symbol),pnlClass=pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':'';
+    const price=v=>Number.isFinite(v)&&v>0?v.toFixed(4):'—';
+    return '<div class="rail-open-position">'+
+      '<button type="button" class="rail-position-summary" id="rail-toggle-'+symbol+'" onclick="toggleRailPosition(\''+symbol+'\')" aria-expanded="'+expanded+'" aria-controls="rail-open-'+symbol+'">'+
+        '<span>'+arrow+'<span class="rail-symbol">'+symbol+'</span><br><small class="rail-position-meta">'+direction+' · '+safe(p.strategy_name||p.strategy_id||'Strategy')+'</small></span>'+
+        '<span class="rail-position-pnl '+pnlClass+'">'+pnlText+'<br><small class="rail-position-meta">после комиссий</small></span>'+
+        '<span aria-hidden="true">'+(expanded?'▾':'▸')+'</span></button>'+
+      '<div class="rail-position-meta">Вход '+price(entry)+' · Сейчас '+price(mark)+' · '+qty.toFixed(4)+'</div>'+
+      '<div class="rail-position-more" id="rail-open-'+symbol+'" '+(expanded?'':'hidden')+'>'+
+        '<div class="rail-position-facts"><span>Сторона: <b>'+direction+'</b></span><span>Маржа: '+Number(p.bybit_position_im||0).toFixed(2)+' USDT</span>'+
+          '<span>SL: <b>'+price(stop)+'</b></span><span>TP / BE: '+price(Number(p.break_even_price||0))+'</span>'+
+          '<span>Статус: '+safe(p.supervisor?.state||'—')+'</span><span>Стоп: '+(trail>0?'плавающий':'обычный')+'</span></div>'+
+        '<div class="rail-position-controls">'+
+          '<button class="action" type="button" onclick="tradeCommand(\'break_even\',\''+symbol+'\')">Безубыток</button>'+
+          '<button class="action" type="button" onclick="tradeCommand(\'current_stop\',\''+symbol+'\')">Стоп −0,20%</button>'+
+          '<select id="trail-'+symbol+'" aria-label="Отступ плавающего стопа" onchange="rememberTrailing(\''+symbol+'\',this.value)">'+trailingOptions(p.symbol)+'</select>'+
+          '<button class="action" type="button" onclick="setTrailing(\''+symbol+'\','+(trail<=0)+')">'+(trail>0?'Выключить плавающий стоп':'Включить плавающий стоп')+'</button>'+
+          '<button class="action danger" type="button" onclick="tradeCommand(\'close\',\''+symbol+'\')">Закрыть</button>'+
+          '<a class="action" href="https://www.bybit.kz/trade/usdt/'+symbol+'" target="_blank" rel="noopener">Bybit ↗</a>'+
+        '</div></div></div>';
+  }).join(''):'<div class="rail-placeholder">Открытых позиций на Bybit нет.</div>';
+}
 let livePollTimer=null;
 function activePanelName(){return document.querySelector('main > .panel.active')?.id||'infra'}
 function activeTradePage(){return tradeSubnav.querySelector('button.active')?.dataset.tradePage||'open'}
@@ -912,6 +982,7 @@ function renderLiveState(d){
   document.getElementById('gateEventMessage').textContent=liveGateOpen?'Шлюз открыт · новые реальные входы разрешены при готовности Strategy':'Шлюз закрыт · новые реальные входы запрещены';renderLiveCriticalEvents(lt);renderMiniLogFeed(lt);tradeGateNotice.innerHTML=liveGateOpen?'<b>Новые реальные входы разрешены глобально.</b> Вход всё равно возможен только для ACTIVE Strategy с Execution ON.':'<b>Новые реальные входы запрещены глобально.</b> ACTIVE Strategy продолжают PAPER-мониторинг.';renderGateReasons(lt);
   tradeEquity.textContent=wallet?num(wallet.total_equity):'нет данных';tradeAvailable.textContent=wallet?num(wallet.available_balance):'нет данных';livePositions.textContent=positions.length;const positionReserve=wallet?Number(wallet.reserved_for_positions||0):0,orderReserve=wallet?Number(wallet.reserved_for_orders||0):0,inUse=positionReserve+orderReserve;tradeInUse.textContent=wallet?`${inUse.toFixed(2)} USDT`:'нет данных';tradeInUseDetail.textContent=wallet?`позиции ${positionReserve.toFixed(2)} + заявки ${orderReserve.toFixed(2)} USDT`:'нет account snapshot';tradeBalanceDetail.textContent=wallet?`баланс без текущего результата: ${Number(wallet.wallet_balance||0).toFixed(2)} USDT`:'account snapshot отсутствует';updateOperatorConnection();
   const positionKeys=new Set(positions.map(p=>p.symbol+':'+p.side)),savedPositionKeys=localStorage.getItem('cripta-open-position-keys');if(lastOpenPositions===null&&savedPositionKeys){try{lastOpenPositions=new Set(JSON.parse(savedPositionKeys))}catch(_e){lastOpenPositions=null}}if(lastOpenPositions!==null){for(const key of positionKeys)if(!lastOpenPositions.has(key))entrySound()}lastOpenPositions=positionKeys;localStorage.setItem('cripta-open-position-keys',JSON.stringify([...positionKeys]));
+  renderOpenRailPositions(positions);
   if(activeTradePage()==='open')positionRows.innerHTML=positions.length?positions.map(p=>{const entry=Number(p.entry_price),mark=Number(p.mark_price),size=Number(p.size),leverage=Number(p.leverage||1),direction=p.side==='Buy'?1:-1,supervisorState=({WARMUP:'прогрев',HEALTHY:'нормально',WARNING:'предупреждение',RECOVERY:'восстановление',PROVEN:'движение подтверждено',RUNNER:'сильное движение',BROKEN:'идея сломана',BLOCKED:'данных недостаточно',ERROR:'ошибка'})[p.supervisor?.state]||p.supervisor?.state||'—',move=entry>0&&mark>0?direction*(mark/entry-1)*100:null,stop=Number(p.stop_loss||0),stopMove=entry>0&&stop>0?direction*(stop/entry-1)*100:null,trail=Number(p.trailing_stop||0),trailPct=mark>0&&trail>0?trail/mark*100:null,trailTrigger=Number(p.trailing_trigger_price||0),trailTriggerMove=entry>0&&trailTrigger>0?direction*(trailTrigger/entry-1)*100:null,notional=entry*size,bybitMargin=Number(p.bybit_position_im||0),actualMargin=bybitMargin>0?bybitMargin:leverage>0?notional/leverage:null,pnl=p.net_pnl_to_close==null?null:Number(p.net_pnl_to_close),marginReturn=actualMargin>0&&pnl!=null?pnl/actualMargin*100:null,age=Math.max(0,Math.round((Date.now()-Number(p.refreshed_at_epoch_ms||0))/1000));return `<tr><td><a href="https://www.bybit.kz/trade/usdt/${p.symbol}" target="_blank" rel="noopener"><b>${p.symbol}</b></a><br><small class="muted">данные ${age} сек. назад</small></td><td>${p.strategy_name?`<span class="strategy-name-chip">${safe(p.strategy_name)}</span><br><small class="muted">${safe(p.strategy_version||'')}</small>`:p.strategy_id?`<small>${safe(p.strategy_id)} · ${safe(p.strategy_version)}</small>`:'<span class="muted">не привязана</span>'}</td><td><span class="pill">${safe(supervisorState)}</span></td><td>${p.side==='Buy'?'покупка':'продажа'}</td><td>${p.size}<br><small class="muted">объём ${notional.toFixed(2)} USDT<br>маржа ≈ ${actualMargin==null?'—':actualMargin.toFixed(2)} USDT</small></td><td>${entry.toFixed(4)}</td><td>${p.break_even_price?Number(p.break_even_price).toFixed(4):'—'}</td><td>${mark?mark.toFixed(4):'—'}</td><td>${stop?stop.toFixed(4):'не установлен'}${stopMove==null?'':`<br><b class="${stopMove>=0?'ok':'warn'}">${stopMove>=0?'+':''}${stopMove.toFixed(3)}% от входа</b>`}${trailPct==null?'':`<br><span class="ok">отступ плавающего стопа: ${trailPct.toFixed(3)}%</span>`}${trailTrigger>0?`<br><b class="ok">плавающий стоп сейчас: ${trailTrigger.toFixed(4)} (${trailTriggerMove==null?'—':(trailTriggerMove>=0?'+':' ')+trailTriggerMove.toFixed(3)+'% от входа'})</b><br><small class="muted">подтверждено Bybit</small>`:trail>0?`<br><span class="warn">цена плавающего стопа ещё не получена</span>`:''}</td><td><b class="${pnl==null?'muted':pnl>0?'ok':pnl<0?'loss':''}">${pnl==null?'—':(pnl>0?'+':'')+pnl.toFixed(4)+' USDT'}</b><br><small class="muted">после комиссий · закрытие тейкером (оценка)${marginReturn==null?'':' · '+(marginReturn>0?'+':'')+marginReturn.toFixed(2)+'% маржи'}</small></td><td><button class="action" onclick="tradeCommand('break_even','${p.symbol}')">Безубыток</button> <button class="action" onclick="tradeCommand('current_stop','${p.symbol}')">Стоп −0,20%</button><br><select id="trail-${p.symbol}" title="Отступ плавающего стопа" onchange="rememberTrailing('${p.symbol}',this.value)">${trailingOptions(p.symbol)}</select> <button class="action" onclick="setTrailing('${p.symbol}',${trail<=0})">${trail>0?'Выключить плавающий стоп':'Включить плавающий стоп'}</button> <button class="action danger" onclick="tradeCommand('close','${p.symbol}')">Закрыть</button></td></tr>`}).join(''):'<tr><td colspan="12" class="muted">Открытых позиций на Bybit нет.</td></tr>';
   const reasonText={StopLoss:'стоп',TakeProfit:'цель',TrailingStop:'плавающий стоп',UNKNOWN:'закрыто вручную'};const closed=lt.recent_closed||[],closedKeys=new Set(closed.map(x=>String(x.cycle_key||((x.exec_ids||[]).join(":"))||x.symbol+":"+x.closed_at_epoch_ms)));
   const soundSeenStorageKey='cripta-seen-closed-cycles-v1',storedCycleKeys=localStorage.getItem(soundSeenStorageKey);

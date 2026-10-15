@@ -73,7 +73,7 @@ def test_trading_uses_sticky_operator_bar_and_real_subpages() -> None:
         "openTradesSection"
     ) in SOURCE
     assert "bybitLogSection.before(ownerTestEntrySection)" in SOURCE
-    assert "open:[openTradesSection]" in SOURCE
+    assert "open:[openTradesSection,coinMonitorSection,marketIndicatorSection]" in SOURCE
     assert (
         "control:[strategyTradeControlSection]"
         in SOURCE
