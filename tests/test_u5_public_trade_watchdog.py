@@ -266,3 +266,14 @@ def test_u5_service_does_not_restart_clean_not_comparable_forever() -> None:
     )
     assert "Restart=on-failure" in unit
     assert "Restart=always" not in unit
+
+
+def test_late_pong_cannot_restore_expired_heartbeat_proof() -> None:
+    heartbeat = PublicWsHeartbeat(10.0, 5.0, started_monotonic=100.0)
+    heartbeat.note_ping_sent(110.0)
+    assert heartbeat.deadline_exceeded(115.0)
+    heartbeat.note_pong(115.5)
+    assert heartbeat.deadline_exceeded(115.5), (
+        "A late pong cannot retroactively prove the abandoned transport epoch"
+    )
+
