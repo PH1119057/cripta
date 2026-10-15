@@ -89,7 +89,7 @@ PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
 OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
 R1_PARITY_ATTESTED_MODULE_SHA256 = {
-    "operations/monitoring/universal_entry_shadow.py": "fd8e7c55fd914363cf3deff3f02a1ec35e597e5021671aca16f8e4a407b80278",
+    "operations/monitoring/universal_entry_shadow.py": "e789cfe8f843ef10ed61222b902cfa79efa12bc8d3b5827b86ecf35b8cab8e19",
     "src/bybit_workbench/universal_entry/engine.py": "9d09e1d8d8432631ae55fea1dd5524a1689805ea1d1adc19a6f511ae5ab2347d",
     "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
     "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
