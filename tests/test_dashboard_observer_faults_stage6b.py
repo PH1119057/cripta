@@ -251,3 +251,30 @@ def test_display_receipt_uses_existing_authenticated_dashboard_endpoint() -> Non
     assert backend.index("if self.require_login():") < backend.index(
         'if path == "/api/observer-faults/displayed":'
     )
+
+
+def test_full_release_coordinates_exact_dashboard_bundle_and_runtime_cutover() -> None:
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert 'ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"' in installer
+    assert 'cmp -s "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html"' in installer
+    assert 'cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py"' in installer
+    assert installer.index('mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"') < (
+        installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"')
+    )
+    assert installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"') < (
+        installer.index('systemctl daemon-reload', installer.index('cutover_started=1'))
+    )
+    assert 'install -o cripta -g cripta -m 0644 "$ui_release/app.py" "$runtime_release/operations/dashboard/app.py"' in installer
+
+
+def test_dashboard_verifier_restricts_inbox_receipt_to_nontrading_delivery() -> None:
+    verifier = (
+        ROOT / "operations/infrastructure/deploy_dashboard_ui.sh"
+    ).read_text(encoding="utf-8")
+    assert '"/api/observer-faults/displayed"' in verifier
+    assert '"confirm_observer_faults_displayed"' in verifier
+    assert '"UPDATE runtime.lifecycle_fault_deliveries" not in value' in verifier
+    assert "d.channel='DASHBOARD_INBOX'" in verifier
+    assert "f.state='OPEN'" in verifier
