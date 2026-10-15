@@ -256,3 +256,82 @@ def test_pending_entry_cancel_pre_mutation_block_disarms_without_restart() -> No
     assert cleanup.index("except PreMutationSafetyBlock as exc:") < cleanup.index(
         "except ExchangeMutationBarrier as exc:"
     )
+
+
+def test_clock_probe_rejects_all_slow_rtt_without_mutation() -> None:
+    import ast
+    from types import SimpleNamespace
+
+    source = text(PRIVATE)
+    node = next(
+        item for item in ast.parse(source).body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "fresh_bybit_time_calibration"
+    )
+    class Unsafe(Exception):
+        pass
+
+    values = iter([0, 1_200_000_000, 2_000_000_000, 3_200_000_000,
+                   4_000_000_000, 5_200_000_000])
+    wall_values = iter([0, 1_200_000_000, 2_000_000_000, 3_200_000_000,
+                        4_000_000_000, 5_200_000_000])
+    calls = []
+
+    def fake_get(path, params):
+        calls.append((path, params))
+        return {"retCode": 0, "time": 1000}, 0
+
+    from bybit_workbench.exchange.bybit.time_calibration import (
+        build_bybit_time_calibration,
+    )
+    scope = {
+        "time": SimpleNamespace(
+            time_ns=lambda: next(wall_values),
+            monotonic_ns=lambda: next(values),
+        ),
+        "api_get": fake_get,
+        "BYBIT_TIME_PROBE_ATTEMPTS": 3,
+        "BYBIT_TIME_PROBE_MAX_RTT_MS": 1000.0,
+        "build_bybit_time_calibration": build_bybit_time_calibration,
+        "_server_time_ms": lambda payload: 1000.0,
+        "UnsafeBybitClock": Unsafe,
+    }
+    compiled = compile(
+        ast.Module(body=[node], type_ignores=[]), str(PRIVATE), "exec"
+    )
+    exec(compiled, scope)
+    import pytest
+    with pytest.raises(Unsafe, match="UNSAFE_BYBIT_TIME_PROBE_RTT"):
+        scope["fresh_bybit_time_calibration"]()
+    assert len(calls) == 3
+
+
+def test_clock_probe_fails_closed_when_all_rest_attempts_timeout() -> None:
+    import ast
+    from types import SimpleNamespace
+    import pytest
+
+    node = next(
+        item for item in ast.parse(text(PRIVATE)).body
+        if isinstance(item, ast.FunctionDef)
+        and item.name == "fresh_bybit_time_calibration"
+    )
+    class Unsafe(Exception):
+        pass
+
+    attempts = []
+    def timeout(path, params):
+        attempts.append(path)
+        raise TimeoutError("synthetic timeout")
+
+    scope = {
+        "time": SimpleNamespace(time_ns=lambda: 0, monotonic_ns=lambda: 0),
+        "api_get": timeout,
+        "BYBIT_TIME_PROBE_ATTEMPTS": 3,
+        "BYBIT_TIME_PROBE_MAX_RTT_MS": 1000.0,
+        "UnsafeBybitClock": Unsafe,
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(PRIVATE), "exec"), scope)
+    with pytest.raises(Unsafe, match="BYBIT_TIME_CALIBRATION_UNAVAILABLE"):
+        scope["fresh_bybit_time_calibration"]()
+    assert attempts == ["/v5/market/time"] * 3
