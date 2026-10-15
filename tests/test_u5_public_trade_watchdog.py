@@ -285,3 +285,28 @@ def test_late_market_frame_cannot_restore_expired_heartbeat_proof() -> None:
     assert heartbeat.deadline_exceeded(115.001)
 
 
+
+
+def test_all_public_ws_loops_reject_expiry_before_processing_frames() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    # Each of mirror, active observer, and parity observer must reject an
+    # expired epoch before calling note_pong, process_fact, or process_message.
+    for clock in ("now_monotonic", "now_mono"):
+        if clock == "now_monotonic":
+            assert source.count(
+                "if heartbeat.deadline_exceeded(now_monotonic):"
+            ) == 2
+        else:
+            assert source.count("if heartbeat.deadline_exceeded(now_mono):") == 1
+    assert source.count("if heartbeat.deadline_exceeded") == 3
+    assert source.count("if message is not None:") >= 3
+    for marker in (
+        "publicTrade mirror application heartbeat deadline exceeded",
+        "observer application heartbeat deadline exceeded",
+        "application heartbeat deadline exceeded",
+    ):
+        assert marker in source
+
+
