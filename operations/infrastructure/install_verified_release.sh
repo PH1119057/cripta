@@ -102,6 +102,24 @@ if [[ ! -d "$tooling_release" ]]; then
   as_repo_owner git -C "$SOURCE" archive --format=tar "$RELEASE_COMMIT" -- research/server/jobs research/server/dataset research/server/cripta-download-expansion.service     | runuser -u cripta -- tar -xf - -C "$tooling_release"
 fi
 
+# Prepare the separately identified Dashboard bundle from the same approved
+# Git release. Its active symlink switches only during the coordinated cutover.
+ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"
+if [[ ! -d "$ui_release" ]]; then
+  install -d -o root -g cripta -m 0755 "$ui_release"
+  install -o root -g cripta -m 0644 "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html"
+  install -o root -g cripta -m 0644 "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py"
+  printf '%s\n' "$RELEASE_COMMIT" > "$ui_release/DASHBOARD_UI_COMMIT"
+  chown root:cripta "$ui_release/DASHBOARD_UI_COMMIT"
+  chmod 0644 "$ui_release/DASHBOARD_UI_COMMIT"
+fi
+cmp -s "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html" ||
+  die "candidate Dashboard HTML differs from exact runtime release"
+cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py" ||
+  die "candidate Dashboard app differs from exact runtime release"
+[[ "$(cat "$ui_release/DASHBOARD_UI_COMMIT")" == "$RELEASE_COMMIT" ]] ||
+  die "candidate Dashboard identity mismatch"
+
 # Dashboard presentation/read-model is a separate release identity. Bootstrap it only when the
 # independent Dashboard rail has not been initialized yet; otherwise preserve the
 # current Dashboard bundle across full application-runtime deploys.
@@ -404,6 +422,16 @@ runuser -u cripta -- env \
 cutover_started=1
 mv -Tf "$next_runtime" "$RUNTIME_ROOT/current"
 mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"
+# A single cutover of the independently versioned UI bundle accompanies the
+# database schema and observer runtime. Dashboard app is a regular runtime file.
+next_dashboard="$DASHBOARD_UI_ROOT/.current-$RELEASE_COMMIT"
+rm -f "$next_dashboard"
+ln -s "$ui_release" "$next_dashboard"
+mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"
+install -o cripta -g cripta -m 0644 "$ui_release/app.py" "$runtime_release/operations/dashboard/app.py"
+[[ "$(readlink -f "$DASHBOARD_UI_ROOT/current")" == "$ui_release" ]] ||
+  die "Dashboard UI cutover identity mismatch"
+
 
 for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
