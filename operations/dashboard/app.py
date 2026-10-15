@@ -2645,6 +2645,52 @@ def resolve_observer_runtime_fault(
     return row is not None
 
 
+
+def confirm_observer_faults_displayed(
+    connection: psycopg.Connection,
+    *,
+    fault_ids: list[str],
+    operator: str,
+    displayed_at: datetime,
+) -> int:
+    """Authenticated browser receipt, not owner resolution or trading approval."""
+    unique = list(dict.fromkeys(fault_ids))
+    if not unique or len(unique) > 100:
+        raise ValueError("неверное число fault IDs")
+    if any(not isinstance(value, str) or not value.startswith("observer-fault-")
+           or len(value) > 160 for value in unique):
+        raise ValueError("некорректный fault_id")
+    exact_operator = operator.strip()
+    if not exact_operator:
+        raise ValueError("operator не определён")
+    current = displayed_at.astimezone(UTC)
+    result = connection.execute(
+        """UPDATE runtime.lifecycle_fault_deliveries d
+              SET state='ACKNOWLEDGED',
+                  attempts=d.attempts+1,
+                  last_attempt_at=%s,
+                  delivered_at=coalesce(d.delivered_at,%s),
+                  acknowledged_at=%s,
+                  payload=d.payload || jsonb_build_object(
+                      'displayed_by',%s::text,
+                      'displayed_at',%s::text
+                  ),
+                  updated_at=clock_timestamp()
+             FROM runtime.lifecycle_faults f
+            WHERE f.fault_id=d.fault_id
+              AND f.fault_code=%s AND f.state='OPEN'
+              AND d.channel='DASHBOARD_INBOX'
+              AND d.state IN ('PENDING','ESCALATION_REQUIRED')
+              AND d.fault_id=ANY(%s)""",
+        (
+            current, current, current, exact_operator, current.isoformat(),
+            OBSERVER_RUNTIME_FAULT_CODE, unique,
+        ),
+    )
+    return int(result.rowcount)
+
+
+
 def snapshot() -> dict[str, object]:
     global _cache
     now = time.monotonic()
