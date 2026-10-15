@@ -277,3 +277,11 @@ def test_late_pong_cannot_restore_expired_heartbeat_proof() -> None:
         "A late pong cannot retroactively prove the abandoned transport epoch"
     )
 
+
+def test_late_market_frame_cannot_restore_expired_heartbeat_proof() -> None:
+    heartbeat = PublicWsHeartbeat(10.0, 5.0, started_monotonic=100.0)
+    heartbeat.note_ping_sent(110.0)
+    heartbeat.note_market_frame(115.001)
+    assert heartbeat.deadline_exceeded(115.001)
+
+
