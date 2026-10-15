@@ -178,6 +178,38 @@ def escalate_unacknowledged(
     return updated.rowcount
 
 
+
+def escalate_missing_dashboard_display(
+    connection: ConnectionLike,
+    *,
+    now: datetime,
+    display_timeout_seconds: int,
+) -> int:
+    """Unseen inbox item remains undelivered and escalates without webhook routing."""
+    if display_timeout_seconds <= 0:
+        raise ValueError("display timeout must be positive")
+    result = connection.execute(
+        """UPDATE runtime.lifecycle_fault_deliveries d
+              SET state='ESCALATION_REQUIRED',
+                  escalation_at=%s,
+                  last_error='DASHBOARD_DISPLAY_NOT_CONFIRMED',
+                  updated_at=clock_timestamp()
+             FROM runtime.lifecycle_faults f
+            WHERE f.fault_id=d.fault_id
+              AND f.state='OPEN'
+              AND f.fault_code='UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR'
+              AND d.channel='DASHBOARD_INBOX'
+              AND d.state='PENDING'
+              AND d.created_at <= %s""",
+        (
+            now.astimezone(UTC),
+            now.astimezone(UTC) - timedelta(seconds=display_timeout_seconds),
+        ),
+    )
+    return int(result.rowcount)
+
+
+
 def acknowledge_delivery(
     connection: ConnectionLike,
     *,
@@ -207,6 +239,11 @@ def process_due_deliveries(
         connection,
         now=now,
         acknowledgement_timeout_seconds=acknowledgement_timeout_seconds,
+    )
+    escalated += escalate_missing_dashboard_display(
+        connection,
+        now=now,
+        display_timeout_seconds=acknowledgement_timeout_seconds,
     )
     attempted = 0
     delivered = 0
