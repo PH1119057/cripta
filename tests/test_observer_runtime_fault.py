@@ -55,6 +55,11 @@ def test_observer_runtime_error_is_upserted_as_durable_non_autoresolving_fault(
     assert payload["error_type"] == "ValueError"
     assert payload["error_message"] == "forced-test-error"
     assert payload["auto_resolve"] is False
+    delivery_statement, delivery_parameters = connection.calls[1]
+    assert "INSERT INTO runtime.lifecycle_fault_deliveries" in delivery_statement
+    assert "'DASHBOARD_INBOX'" in delivery_statement
+    assert "ON CONFLICT(fault_id) DO NOTHING" in delivery_statement
+    assert delivery_parameters[1] == first
     assert payload["owner_resolution_required"] is True
 
 
@@ -110,8 +115,8 @@ def test_repeated_observer_fault_preserves_history_and_requires_explicit_resolut
         observed_at=observed, observer_epoch_id="epoch-2",
     )
     assert first == second
-    assert len(connection.calls) == 2
-    for statement, parameters in connection.calls:
+    assert len(connection.calls) == 4
+    for statement, parameters in connection.calls[::2]:
         assert "ON CONFLICT(fault_id) DO UPDATE" in statement
         assert "SET state='OPEN'" in statement
         assert "resolved_at=NULL" in statement
