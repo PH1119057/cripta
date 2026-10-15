@@ -713,6 +713,11 @@ research execution root.
 
 # 18. Exchange-time / operator-alert terms
 
+**STALE_LIVE_ARM_RETIREMENT** — смена состояния старой release-bound LIVE-arm
+сессии ACTIVE -> CLOSED после доказанной отсутствующей Exchange exposure и
+незавершённых локальных операций в exact scope, с immutable audit evidence.
+Это НЕ перенос разрешения на новый release и НЕ новый owner arm.
+
 **Bybit Time Calibration** — fresh observation of Bybit public server time
 bound to a local monotonic midpoint. It is used to construct authenticated
 Bybit timestamps without requiring the host wall clock to be numerically equal
