@@ -388,3 +388,43 @@ def test_runtime_has_clean_continuity_stop_before_generic_crash_handler() -> Non
     assert 'status="NOT_COMPARABLE"' in block
     assert "return" in block
     assert "raise" not in block
+
+
+def test_exact_coverage_rejects_nonempty_but_incomplete_mirror() -> None:
+    from bybit_workbench.universal_entry.trade_mirror import assert_exact_recovery_coverage
+
+    mirror = PublicTradeMirrorBuffer(("UNIUSDT",), retention_seconds=600)
+    mirror.start_epoch(NOW)
+    mirror.record_message(
+        _message("UNIUSDT", [
+            _trade("UNIUSDT", "anchor", 100, NOW, price="10", size="1", side="Buy"),
+            _trade(
+                "UNIUSDT", "A", 101, NOW + timedelta(seconds=1),
+                price="11", size="1", side="Buy",
+            ),
+        ]),
+        received_at=NOW + timedelta(seconds=1),
+    )
+    recovered = mirror.recover_after(
+        {"UNIUSDT": TradeCursor("UNIUSDT", "anchor", 100, NOW)},
+        cutoff_at=NOW + timedelta(seconds=2),
+    )
+    assert [item.exec_id for item in recovered] == ["A"]
+    with pytest.raises(ContinuityNotProvable, match="recovery incomplete"):
+        assert_exact_recovery_coverage(
+            symbol="UNIUSDT", expected_exec_ids=("A", "B"), recovered=recovered,
+        )
+    assert_exact_recovery_coverage(
+        symbol="UNIUSDT", expected_exec_ids=("A",), recovered=recovered,
+    )
+
+
+def test_exact_coverage_rejects_empty_expected_ids() -> None:
+    from bybit_workbench.universal_entry.trade_mirror import assert_exact_recovery_coverage
+
+    with pytest.raises(ContinuityNotProvable, match="no REST-proven"):
+        assert_exact_recovery_coverage(
+            symbol="UNIUSDT", expected_exec_ids=(), recovered=(),
+        )
+
+
