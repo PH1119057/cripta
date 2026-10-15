@@ -335,10 +335,21 @@ Deployment contract presentation/read-model layer:
 - явное закрытие после устранения общей причины допускает групповую работу
   оператора, но не автоматическое снятие unresolved fault при успешном epoch;
   каждый закрытый exact fault сохраняет reason/operator/time audit;
-- durable owner-delivery retry/acknowledgement/escalation остаётся отдельным
-  доказательством доставки: UI/read-model не подменяет delivery record;
-  канал для dashboard-oriented уведомлений нельзя молча выдавать за
-  существующий OWNER_WEBHOOK; требуется отдельная проверенная implementation;
+- для ошибок наблюдателя нужен отдельный durable delivery path
+  `DASHBOARD_INBOX` в той же центральной панели, без обязательного клика
+  оператора на каждое повторение; `OWNER_WEBHOOK` остаётся отдельным каналом,
+  его условия доставки и получатели не меняются;
+- запись в журнал, выдача через API и отображение в браузере — разные
+  состояния. `DELIVERED` для `DASHBOARD_INBOX` допустимо только после
+  подтверждения браузером фактического отображения уведомления, не от одного
+  read-model/API fetch; отсутствие такого подтверждения сохраняет pending
+  и требует retry/escalation. Успешный показ не закрывает underlying fault;
+- повтор одного exact fault обновляет счётчик/последнее время и не порождает
+  поток идентичных карточек; подтверждение показа не означает, что оператор
+  устранил причину или согласился на resolution;
+- migration/worker/read-model/client должны быть введены одним тестируемым
+  release change; до этого `DASHBOARD_INBOX` не считается implemented,
+  а показ старого banner не считается доказательством durable delivery;
 - exact Dashboard presentation/read-model bytes имеют отдельную
   `DASHBOARD_UI_COMMIT` identity.
 
