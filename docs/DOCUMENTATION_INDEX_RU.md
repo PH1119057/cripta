@@ -436,6 +436,10 @@ Sensitive credentials, private keys, SSH aliases/paths и secret-store details �
 MAP не публикуются.
 
 
+### Operational access routing — 2026-10-15
+
+При server access / DB forensic сначала применять `DEVELOPMENT_RELEASE §19.5` (SentinelX tool policy ≠ Unix effective actor ≠ project authorization). Датированные подтверждённые команды и текущие identities находятся в `CURRENT_PROJECT_MAP §1.4`. Read-only smoke не доказывает права на write, deploy или LIVE. Эта документационная синхронизация не меняет active document set, pre-read и Project Source bundle.
+
 ## 17.9 ChatGPT UI capacity limits
 
 OWNER CHECKED HERE 2026-09-28:
