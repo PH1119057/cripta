@@ -639,14 +639,14 @@ smoke безопасен для данного пути.
 
 Этот раздел определяет **процедуру выбора способа доступа**, а не раздаёт
 дополнительные полномочия. Актуальные Unix users, filesystem roots и snapshot
-фактически подтверждённых операций — в \`CURRENT_PROJECT_MAP §1.4\`.
-При расхождении с сервером сначала фиксировать \`CHECKED HERE / FINDING\`.
+фактически подтверждённых операций — в `CURRENT_PROJECT_MAP §1.4`.
+При расхождении с сервером сначала фиксировать `CHECKED HERE / FINDING`.
 
 Три независимых уровня разрешений:
 
 1. **Tool policy:** SentinelX host online + operation/capability + allowlisted
-   prefix/path. \`command_not_allowed\` означает отказ policy/parser агента,
-   а не Unix \`EACCES\`.
+   prefix/path. `command_not_allowed` означает отказ policy/parser агента,
+   а не Unix `EACCES`.
 2. **Unix / DB effective actor:** фактические UID/GID/groups, traverse/read/write
    права на exact path, systemd sandbox и, отдельно, PostgreSQL role/grants.
 3. **Project authorization:** read-only forensic, source mutation, DB migration,
@@ -657,47 +657,47 @@ smoke безопасен для данного пути.
 
 | Задача | Инструмент | Фактический actor | Ограничение |
 | --- | --- | --- | --- |
-| GitHub \`main\` и документация | GitHub connector, \`ref=main\` | GitHub identity | Только remote — authority; SHA подтверждать отдельно |
-| Состояние сервера, unit, PID | SentinelX \`capabilities\`, \`service_status\`, \`exec: systemctl show\` | \`sentinelx\` (management reader) | \`active\` != runtime behavior verified |
-| Git forensic на source mirror | \`sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...\` при allowlist | \`cripta\` | Не выполнять root Git или команды, меняющие index |
-| Protected runtime state | SentinelX \`exec\` с allowlisted \`sudo -u cripta python3 -c '...'\` | \`cripta\` | Только выборочные read-only операции и безопасный вывод |
-| PostgreSQL read forensic | \`sudo -u cripta python3 -c 'import psycopg; ...'\` | Unix \`cripta\`, DB role проверяется \`current_user\` | Только SELECT/metadata; подключение к \`dbname=cripta user=cripta\` доказать smoke |
-| PostgreSQL DDL/backfill | Approved migration rail | Exact authorized migration actor/role | Права и backup проверить до DDL; runtime \`cripta\` не подменяет мигратора |
-| systemd/unit/path mutation | Approved server-management rail | \`root\` для exact OS steps | Actor/path matrix и explicit deploy approval |
-| Runtime/research file writes | Approved service/installer/job | Exact service \`User\`, обычно \`cripta\` | §5.1 + §19.1–19.4; не наследовать права SentinelX |
+| GitHub `main` и документация | GitHub connector, `ref=main` | GitHub identity | Только remote — authority; SHA подтверждать отдельно |
+| Состояние сервера, unit, PID | SentinelX `capabilities`, `service_status`, `exec: systemctl show` | `sentinelx` (management reader) | `active` != runtime behavior verified |
+| Git forensic на source mirror | `sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...` при allowlist | `cripta` | Не выполнять root Git или команды, меняющие index |
+| Protected runtime state | SentinelX `exec` с allowlisted `sudo -u cripta python3 -c '...'` | `cripta` | Только выборочные read-only операции и безопасный вывод |
+| PostgreSQL read forensic | `sudo -u cripta python3 -c 'import psycopg; ...'` | Unix `cripta`, DB role проверяется `current_user` | Только SELECT/metadata; подключение к `dbname=cripta user=cripta` доказать smoke |
+| PostgreSQL DDL/backfill | Approved migration rail | Exact authorized migration actor/role | Права и backup проверить до DDL; runtime `cripta` не подменяет мигратора |
+| systemd/unit/path mutation | Approved server-management rail | `root` для exact OS steps | Actor/path matrix и explicit deploy approval |
+| Runtime/research file writes | Approved service/installer/job | Exact service `User`, обычно `cripta` | §5.1 + §19.1–19.4; не наследовать права SentinelX |
 | Торговая мутация | Только canonical Execution path | Real execution service identity | LIVE gates и explicit owner approval; диагностика прав их не заменяет |
 
-Для \`sentinel_exec\` отправлять **одну разрешённую команду**: chained shell
-\`;\`, \`&&\`, pipes, shell quoting и вложенный \`sudo\` могут быть отклонены
+Для `sentinel_exec` отправлять **одну разрешённую команду**: chained shell
+`;`, `&&`, pipes, shell quoting и вложенный `sudo` могут быть отклонены
 ещё policy/parser layer. Нельзя интерпретировать такой отказ как неисправность
-Unix permissions. \`script_run\` также проходит отдельный host/product security
-gate; его отказ не разрешает обходить policy либо менять \`config.yaml\`.
+Unix permissions. `script_run` также проходит отдельный host/product security
+gate; его отказ не разрешает обходить policy либо менять `config.yaml`.
 
-Рабочий read-only пример, проверенный 2026-10-15 на host \`robot\`:
+Рабочий read-only пример, проверенный 2026-10-15 на host `robot`:
 
-\`\`\`bash
+```bash
 sudo -u cripta python3 -c 'import os; print(os.geteuid()); print(os.readlink("/srv/cripta/runtime/current"))'
 sudo -u cripta python3 -c 'import psycopg; c=psycopg.connect("dbname=cripta user=cripta"); print(c.execute("select current_user,current_database()").fetchone())'
-\`\`\`
+```
 
-Это **два независимых вызова**, не один multiline/chained \`exec\`.
+Это **два независимых вызова**, не один multiline/chained `exec`.
 Python/psycopg доступность, DB schema и права обязаны подтверждаться
 в фактическом actor/interpreter контексте. В диагностическом выводе запрещены
 secrets, env credentials, private tokens и персональные данные. Не открывать
-целиком \`/etc/cripta/*.env\` ради проверки identity; читать только явно
+целиком `/etc/cripta/*.env` ради проверки identity; читать только явно
 утверждённые несекретные поля или использовать status metadata.
 
-\`Permission denied\` классифицировать только после определения exact actor
-и target path. Если \`sentinelx\` не может читать \`/var/lib/cripta\`,
-сначала выбрать already-approved \`cripta\` read path, а не предлагать
-\`chmod/chown\`, расширять sudo или изменять SentinelX policy.
-Если ни один approved путь не существует: \`BLOCKED\` с exact отказом,
+`Permission denied` классифицировать только после определения exact actor
+и target path. Если `sentinelx` не может читать `/var/lib/cripta`,
+сначала выбрать already-approved `cripta` read path, а не предлагать
+`chmod/chown`, расширять sudo или изменять SentinelX policy.
+Если ни один approved путь не существует: `BLOCKED` с exact отказом,
 без самостоятельного расширения доступа.
 
-Для любой mutation отдельно требуются \`SCRIPT/SERVICE, EFFECTIVE_ACTOR,
+Для любой mutation отдельно требуются `SCRIPT/SERVICE, EFFECTIVE_ACTOR,
 READ_PATHS, WRITE_PATHS, CREATE_CHILD_PARENTS, RENAME_DELETE_PARENTS,
-SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND\`;
-затем §19.1–19.4 и server snapshot MAP §1.4. \`ReadWritePaths=\`
+SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
+затем §19.1–19.4 и server snapshot MAP §1.4. `ReadWritePaths=`
 не доказывает Unix write permission. Успешный read-only smoke
 не считается разрешением на mutation.
 
