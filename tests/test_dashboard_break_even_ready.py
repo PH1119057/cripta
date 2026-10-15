@@ -7,7 +7,8 @@ def test_break_even_highlight_requires_fresh_fee_aware_profit_buffer():
     block = block.split('function renderOpenRailPositions', 1)[0]
     for token in (
         'p.executable_close_price', 'p.net_pnl_to_close',
-        'p.refreshed_at_epoch_ms', 'p.stop_loss', '0.002', 'fresh>10000',
+        'p.refreshed_at_epoch_ms', 'p.stop_loss', '0.005', 'age>3000',
+        "p.entry_fee_basis!=='ACTUAL'", 'net>=Math.max(0.05,pullbackBuffer)',
     ):
         assert token in block
     assert '.action.break-even-ready' in html
