@@ -15,7 +15,10 @@ from psycopg.rows import dict_row
 
 from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
 from bybit_workbench.exchange.bybit.protection_supervisor_bridge import account_protection_verdicts
-from bybit_workbench.fault_delivery import process_due_deliveries
+from bybit_workbench.fault_delivery import (
+    escalate_missing_dashboard_display,
+    process_due_deliveries,
+)
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
@@ -211,6 +214,11 @@ def main() -> int:
                     retry_seconds=OWNER_ALERT_RETRY_SECONDS,
                     acknowledgement_timeout_seconds=OWNER_ALERT_ACK_TIMEOUT_SECONDS,
                 )
+                unseen_dashboard = escalate_missing_dashboard_display(
+                    connection,
+                    now=now,
+                    display_timeout_seconds=OWNER_ALERT_ACK_TIMEOUT_SECONDS,
+                )
             _status(
                 {
                     "state": "RUNNING",
@@ -221,6 +229,9 @@ def main() -> int:
                     "active_fault_codes": list(result.active_fault_codes),
                     "exit_owner_max_age_seconds": (policy.exit_owner_max_age_seconds),
                     "exchange_state_max_age_seconds": (policy.exchange_state_max_age_seconds),
+                    "dashboard_inbox": {
+                        "unseen_escalated_this_pass": unseen_dashboard,
+                    },
                     "critical_delivery": {
                         "configured": bool(OWNER_ALERT_WEBHOOK_URL),
                         "attempted": delivery.attempted,

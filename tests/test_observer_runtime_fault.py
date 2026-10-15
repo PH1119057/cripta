@@ -55,6 +55,13 @@ def test_observer_runtime_error_is_upserted_as_durable_non_autoresolving_fault(
     assert payload["error_type"] == "ValueError"
     assert payload["error_message"] == "forced-test-error"
     assert payload["auto_resolve"] is False
+    delivery_statement, delivery_parameters = connection.calls[1]
+    assert "INSERT INTO runtime.lifecycle_fault_deliveries" in delivery_statement
+    assert "'DASHBOARD_INBOX'" in delivery_statement
+    assert "ON CONFLICT(fault_id) DO UPDATE" in delivery_statement
+    assert "last_resolved_at" in delivery_statement
+    assert "acknowledged_at IS NOT NULL" in delivery_statement
+    assert delivery_parameters[1] == first
     assert payload["owner_resolution_required"] is True
 
 
@@ -93,3 +100,88 @@ def test_fault_token_is_canonical_and_installer_orders_migration() -> None:
         < installer.index("20261006_observer_runtime_fault_v1.sql")
         < installer.index("20261003_market_observation_alert_v1.sql")
     )
+
+
+def test_repeated_observer_fault_preserves_history_and_requires_explicit_resolution(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(observer, "LOADED_COMMIT", "b" * 40)
+    connection = FakeConnection()
+    observed = NOW
+    first = observer._record_observer_runtime_fault(
+        connection, TimeoutError("transient REST outage"),
+        observed_at=observed, observer_epoch_id="epoch-1",
+    )
+    second = observer._record_observer_runtime_fault(
+        connection, TimeoutError("transient REST outage"),
+        observed_at=observed, observer_epoch_id="epoch-2",
+    )
+    assert first == second
+    assert len(connection.calls) == 4
+    for statement, parameters in connection.calls[::2]:
+        assert "ON CONFLICT(fault_id) DO UPDATE" in statement
+        assert "SET state='OPEN'" in statement
+        assert "resolved_at=NULL" in statement
+        assert "'first_seen_at'" in statement
+        assert "'occurrence_count'" in statement
+        assert "state='RESOLVED'" not in statement
+        payload = json.loads(str(parameters[4]))
+        assert payload["owner_resolution_required"] is True
+        assert payload["auto_resolve"] is False
+
+
+def test_observer_status_refresh_does_not_mutate_durable_fault_state() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    start = source.index("def _observer_status(")
+    end = source.index("\ndef ", start + 1)
+    body = source[start:end]
+    assert "lifecycle_faults" not in body
+    assert "RESOLVED" not in body
+
+
+def test_dashboard_inbox_migration_and_install_order() -> None:
+    migration = (
+        ROOT / "operations/sql/20261015_observer_dashboard_delivery_v1.sql"
+    ).read_text(encoding="utf-8")
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert "channel IN ('OWNER_WEBHOOK','DASHBOARD_INBOX')" in migration
+    assert "WHERE f.fault_code='UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR'" in migration
+    assert "AND f.state='OPEN'" in migration
+    assert "'DASHBOARD_INBOX','PENDING'" in migration
+    assert "ON CONFLICT (fault_id) DO NOTHING" in migration
+    assert installer.index("20261006_observer_runtime_fault_v1.sql") < (
+        installer.index("20261015_observer_dashboard_delivery_v1.sql")
+    )
+
+
+def test_unshown_dashboard_delivery_escalates_without_webhook_delivery() -> None:
+    from bybit_workbench.fault_delivery import escalate_missing_dashboard_display
+
+    class Updated:
+        rowcount = 2
+
+    class Connection:
+        def __init__(self):
+            self.statement = ""
+            self.parameters = ()
+
+        def execute(self, statement, parameters=()):
+            self.statement = statement
+            self.parameters = tuple(parameters)
+            return Updated()
+
+    connection = Connection()
+    count = escalate_missing_dashboard_display(
+        connection, now=NOW, display_timeout_seconds=300,
+    )
+    assert count == 2
+    assert "d.channel='DASHBOARD_INBOX'" in connection.statement
+    assert "d.state='PENDING'" in connection.statement
+    assert "state='ESCALATION_REQUIRED'" in connection.statement
+    assert "DASHBOARD_DISPLAY_NOT_CONFIRMED" in connection.statement
+    assert "OWNER_WEBHOOK" not in connection.statement
+    assert connection.parameters[1] < connection.parameters[0]

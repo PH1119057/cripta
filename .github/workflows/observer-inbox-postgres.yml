@@ -1,0 +1,97 @@
+name: observer-inbox-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261015_observer_dashboard_delivery_v1.sql"
+      - "operations/monitoring/universal_entry_shadow.py"
+      - "operations/dashboard/app.py"
+      - "src/bybit_workbench/fault_delivery.py"
+      - ".github/workflows/observer-inbox-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: observer_inbox_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d observer_inbox_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: observer_inbox_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact disposable fault delivery baseline
+        shell: bash
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA runtime;
+          CREATE TABLE runtime.lifecycle_faults (
+              fault_id text PRIMARY KEY,
+              fault_code text NOT NULL,
+              severity text NOT NULL,
+              state text NOT NULL
+          );
+          CREATE TABLE runtime.lifecycle_fault_deliveries (
+              delivery_id text PRIMARY KEY,
+              fault_id text NOT NULL UNIQUE REFERENCES runtime.lifecycle_faults(fault_id),
+              channel text NOT NULL,
+              state text NOT NULL,
+              attempts integer NOT NULL DEFAULT 0,
+              next_attempt_at timestamptz NOT NULL,
+              payload jsonb NOT NULL,
+              CONSTRAINT lifecycle_fault_deliveries_channel_check
+                  CHECK (channel='OWNER_WEBHOOK')
+          );
+          INSERT INTO runtime.lifecycle_faults VALUES
+            ('observer-fault-a','UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR','ERROR','OPEN'),
+            ('observer-fault-b','UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR','ERROR','OPEN'),
+            ('observer-fault-closed','UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR','ERROR','RESOLVED'),
+            ('critical-fault','EXCHANGE_STATE_DIVERGED','CRITICAL','OPEN');
+          INSERT INTO runtime.lifecycle_fault_deliveries
+             (delivery_id,fault_id,channel,state,next_attempt_at,payload)
+          VALUES
+             ('critical-webhook','critical-fault','OWNER_WEBHOOK','PENDING',now(),'{}');
+          SQL
+      - name: Migrate and prove backfill + idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261015_observer_dashboard_delivery_v1.sql
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261015_observer_dashboard_delivery_v1.sql
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM runtime.lifecycle_fault_deliveries
+                  WHERE channel='DASHBOARD_INBOX' AND state='PENDING'
+                    AND attempts=0) <> 2 THEN
+              RAISE EXCEPTION 'observer backfill must create exactly 2 pending receipts';
+            END IF;
+            IF (SELECT count(*) FROM runtime.lifecycle_fault_deliveries
+                  WHERE channel='OWNER_WEBHOOK' AND state='PENDING') <> 1 THEN
+              RAISE EXCEPTION 'existing webhook must remain untouched';
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM runtime.lifecycle_fault_deliveries
+              WHERE fault_id='observer-fault-closed'
+            ) THEN
+              RAISE EXCEPTION 'resolved observer fault must not backfill';
+            END IF;
+          END $$;
+          SQL
+          echo "ISOLATED_MIGRATION_AND_IDEMPOTENT_BACKFILL=PASS"

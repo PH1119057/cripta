@@ -92,7 +92,7 @@ old_endpoints = set(re.findall(r"/api/[A-Za-z0-9_./?-]+", old_html))
 new_endpoints = set(re.findall(r"/api/[A-Za-z0-9_./?-]+", new_html))
 removed_endpoints = old_endpoints - new_endpoints
 added_endpoints = new_endpoints - old_endpoints
-allowed_added_endpoints = {"/api/observer-faults/resolve"}
+allowed_added_endpoints = {"/api/observer-faults/resolve", "/api/observer-faults/displayed"}
 if removed_endpoints:
     raise SystemExit(
         "Dashboard verifier failed: API endpoint removed: "
@@ -120,6 +120,7 @@ allowed_functions = {
     "observer_runtime_fault_state",
     "merge_observer_fault_health",
     "resolve_observer_runtime_fault",
+    "confirm_observer_faults_displayed",
     "_r1_paper_real_parity_attestation",
     "_u6_prepare_r1_prearm_evidence",
     "snapshot",
@@ -216,6 +217,24 @@ for kind, name in changed:
                         "Dashboard verifier failed: unauthorized mutation SQL in "
                         "resolve_observer_runtime_fault"
                     )
+            elif name == "confirm_observer_faults_displayed":
+                if (
+                    "UPDATE runtime.lifecycle_fault_deliveries" not in src
+                    or "d.channel='DASHBOARD_INBOX'" not in src
+                    or "f.fault_code=%s" not in src
+                    or "f.state='OPEN'" not in src
+                    or "d.state IN ('PENDING','ESCALATION_REQUIRED')" not in src
+                ):
+                    raise SystemExit(
+                        "Dashboard verifier failed: inbox receipt scope changed"
+                    )
+                if any(
+                    "UPDATE runtime.lifecycle_fault_deliveries" not in value
+                    for value in mutation_strings
+                ):
+                    raise SystemExit(
+                        "Dashboard verifier failed: unauthorized inbox mutation"
+                    )
             elif name == "_u6_prepare_r1_prearm_evidence":
                 if any(
                     "INSERT INTO control.live_arm_evidence" not in value
@@ -303,7 +322,10 @@ for kind, name in changed:
         if exact_cohort_only:
             print("DASHBOARD_R1_CONTROL_COHORT_EXACT_CHANGE=PASS")
             continue
-        if '/api/observer-faults/resolve' not in added:
+        if (
+            '/api/observer-faults/resolve' not in added
+            and '/api/observer-faults/displayed' not in added
+        ):
             raise SystemExit(
                 "Dashboard verifier failed: observer fault resolve endpoint missing"
             )

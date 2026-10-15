@@ -201,13 +201,15 @@ def test_topic_silence_audit_detects_exact_missing_trade_and_forces_reconnect() 
             NOW + timedelta(seconds=2),
         )
 
-    with pytest.raises(runtime.PublicTradeStreamBehind, match="missing exact trade"):
+    with pytest.raises(runtime.PublicTradeStreamBehind, match="missing exact trade") as exc:
         runtime._audit_public_trade_silence(
             ("UNIUSDT",),
             {"UNIUSDT": anchor},
             {"UNIUSDT": {"anchor"}},
             fetch_fn=fetch,
         )
+    assert exc.value.missing_exec_ids == {"UNIUSDT": ("missing",)}
+    assert exc.value.cutoff_by_symbol == {"UNIUSDT": NOW + timedelta(seconds=2)}
 
 
 def test_topic_silence_audit_missing_anchor_is_not_provable() -> None:
@@ -264,3 +266,47 @@ def test_u5_service_does_not_restart_clean_not_comparable_forever() -> None:
     )
     assert "Restart=on-failure" in unit
     assert "Restart=always" not in unit
+
+
+def test_late_pong_cannot_restore_expired_heartbeat_proof() -> None:
+    heartbeat = PublicWsHeartbeat(10.0, 5.0, started_monotonic=100.0)
+    heartbeat.note_ping_sent(110.0)
+    assert heartbeat.deadline_exceeded(115.0)
+    heartbeat.note_pong(115.5)
+    assert heartbeat.deadline_exceeded(115.5), (
+        "A late pong cannot retroactively prove the abandoned transport epoch"
+    )
+
+
+def test_late_market_frame_cannot_restore_expired_heartbeat_proof() -> None:
+    heartbeat = PublicWsHeartbeat(10.0, 5.0, started_monotonic=100.0)
+    heartbeat.note_ping_sent(110.0)
+    heartbeat.note_market_frame(115.001)
+    assert heartbeat.deadline_exceeded(115.001)
+
+
+
+
+def test_all_public_ws_loops_reject_expiry_before_processing_frames() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    # Each of mirror, active observer, and parity observer must reject an
+    # expired epoch before calling note_pong, process_fact, or process_message.
+    for clock in ("now_monotonic", "now_mono"):
+        if clock == "now_monotonic":
+            assert source.count(
+                "if heartbeat.deadline_exceeded(now_monotonic):"
+            ) == 2
+        else:
+            assert source.count("if heartbeat.deadline_exceeded(now_mono):") == 1
+    assert source.count("if heartbeat.deadline_exceeded") == 3
+    assert source.count("if message is not None:") >= 3
+    for marker in (
+        "publicTrade mirror application heartbeat deadline exceeded",
+        "observer application heartbeat deadline exceeded",
+        "application heartbeat deadline exceeded",
+    ):
+        assert marker in source
+
+

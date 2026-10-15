@@ -165,3 +165,122 @@ def test_dashboard_global_red_banner_and_resolve_ui_are_non_trading() -> None:
     assert "resolve_observer_runtime_fault(" in endpoint_scope
     assert "runtime.trade_commands" not in endpoint_scope
     assert "execution_permissions" not in endpoint_scope
+
+
+def test_owner_observer_fault_notification_uses_existing_central_console() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    console = html.index('class="operator-console"')
+    events = html.index('class="console-events"', console)
+    existing_banner = html.index('id="observerFaultBanner"', events)
+    feed = html.index('id="liveSystemEventFeed"', existing_banner)
+    assert console < events < existing_banner < feed
+    assert 'renderObserverFaults(d.observer_faults)' in html
+    assert "const count=Number(x.occurrence_count||1)" in html
+    # Visibility requires no per-message acknowledgement.
+    body = html[html.index("function renderObserverFaults("):]
+    body = body.split("\nfunction ", 1)[0]
+    assert "acknowledge_delivery(" not in body
+    assert "Открытых проблем:" in body
+    assert "observerFaultItems" in body
+
+
+def test_observer_fault_console_does_not_claim_ui_is_durable_delivery() -> None:
+    source = (ROOT / "docs/OBSERVATION_ANALYTICS_RU.md").read_text(
+        encoding="utf-8"
+    )
+    assert "OWNER DECISION 2026-10-15" in source
+    assert "подтверждения браузером фактического отображения уведомления" in source
+
+
+def test_browser_display_receipt_does_not_resolve_observer_fault() -> None:
+    from operations.dashboard.app import confirm_observer_faults_displayed
+
+    class Result:
+        rowcount = 1
+
+    class Connection:
+        def __init__(self):
+            self.query = ""
+            self.parameters = ()
+
+        def execute(self, query, parameters=()):
+            self.query = query
+            self.parameters = parameters
+            return Result()
+
+    connection = Connection()
+    confirmed = confirm_observer_faults_displayed(
+        connection,
+        fault_ids=["observer-fault-test"],
+        operator="operator",
+        displayed_at=NOW,
+    )
+    assert confirmed == 1
+    assert "d.channel='DASHBOARD_INBOX'" in connection.query
+    assert "f.state='OPEN'" in connection.query
+    assert "state='ACKNOWLEDGED'" in connection.query
+    assert "d.state IN ('PENDING','ESCALATION_REQUIRED')" in connection.query
+    assert "runtime.lifecycle_faults SET state='RESOLVED'" not in connection.query
+    assert connection.parameters[-1] == ["observer-fault-test"]
+
+
+def test_browser_receipt_rejects_invalid_ids_without_db_write() -> None:
+    from operations.dashboard.app import confirm_observer_faults_displayed
+
+    class DeniedConnection:
+        def execute(self, _query, _params=()):
+            raise AssertionError("invalid id must not reach database")
+
+    with pytest.raises(ValueError, match="некорректный fault_id"):
+        confirm_observer_faults_displayed(
+            DeniedConnection(),
+            fault_ids=["arbitrary-fault"],
+            operator="operator",
+            displayed_at=NOW,
+        )
+
+
+def test_display_receipt_uses_existing_authenticated_dashboard_endpoint() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    backend = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
+    assert "document.hidden || banner.getClientRects().length===0" in html
+    assert "requestAnimationFrame(()=>" in html
+    assert "fetch('/api/observer-faults/displayed'" in html
+    assert 'if path == "/api/observer-faults/displayed":' in backend
+    assert "confirm_observer_faults_displayed(" in backend
+    assert backend.index("if self.require_login():") < backend.index(
+        'if path == "/api/observer-faults/displayed":'
+    )
+
+
+def test_full_release_coordinates_exact_dashboard_bundle_and_runtime_cutover() -> None:
+    installer = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert 'ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"' in installer
+    assert (
+        'cmp -s "$runtime_release/operations/dashboard/index.html" '
+        '"$ui_release/index.html"' in installer
+    )
+    assert 'cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py"' in installer
+    assert installer.index('mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"') < (
+        installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"')
+    )
+    assert installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"') < (
+        installer.index('systemctl daemon-reload', installer.index('cutover_started=1'))
+    )
+    assert (
+        'install -o cripta -g cripta -m 0644 "$ui_release/app.py" '
+        '"$runtime_release/operations/dashboard/app.py"' in installer
+    )
+
+
+def test_dashboard_verifier_restricts_inbox_receipt_to_nontrading_delivery() -> None:
+    verifier = (
+        ROOT / "operations/infrastructure/deploy_dashboard_ui.sh"
+    ).read_text(encoding="utf-8")
+    assert '"/api/observer-faults/displayed"' in verifier
+    assert '"confirm_observer_faults_displayed"' in verifier
+    assert '"UPDATE runtime.lifecycle_fault_deliveries" not in value' in verifier
+    assert "d.channel='DASHBOARD_INBOX'" in verifier
+    assert "f.state='OPEN'" in verifier

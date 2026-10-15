@@ -34,6 +34,25 @@ class MirrorTrade:
         )
 
 
+def assert_exact_recovery_coverage(
+    *,
+    symbol: str,
+    expected_exec_ids: Sequence[str],
+    recovered: Sequence[MirrorTrade],
+) -> None:
+    """Reject partial mirror recovery even when one or more events were returned."""
+    expected = set(expected_exec_ids)
+    actual = {event.exec_id for event in recovered if event.symbol == symbol}
+    if not expected:
+        raise ContinuityNotProvable(f"no REST-proven missing PUBLIC_TRADE ids for {symbol}")
+    missing = expected - actual
+    if missing:
+        raise ContinuityNotProvable(
+            f"observer mirror recovery incomplete for {symbol}: "
+            f"missing {len(missing)} exact execId(s)"
+        )
+
+
 class PublicTradeMirrorBuffer:
     """Exact received-order buffer for one continuous publicTrade mirror epoch."""
 

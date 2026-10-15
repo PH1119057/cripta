@@ -524,6 +524,16 @@ operator/owner resolution; сам fault не создаёт Entry/Exit/Exchange 
 lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
 escalation state. Наличие записи только в UI/read-model не считается доставкой.
 
+**DASHBOARD_INBOX** — отдельный от `OWNER_WEBHOOK` durable delivery channel для
+`UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` severity `ERROR`: запись в БД имеет
+`PENDING` до подтверждения браузером фактического показа в центральной панели
+«События системы». Успешная выдача API без показа не считается доставкой.
+Подтверждение показа без отдельного клика оператора переводит delivery в
+`ACKNOWLEDGED` (receipt уровня отображения, **не** operator resolution);
+отсутствие такого receipt к deadline -> `ESCALATION_REQUIRED`; запись исходного
+fault остаётся `OPEN` до отдельного явного решения оператора. Этот channel
+не отправляется через `OWNER_WEBHOOK` и не назначает торговых прав.
+
 `mainnet gate` — технический execution gate, разрешающий или запрещающий
 реальную Exchange mutation. Не является Entry/Exit policy и не заменяет
 StrategyActivation/execution permission.

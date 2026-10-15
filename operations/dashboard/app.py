@@ -89,7 +89,7 @@ PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
 OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
 R1_PARITY_ATTESTED_MODULE_SHA256 = {
-    "operations/monitoring/universal_entry_shadow.py": "fd8e7c55fd914363cf3deff3f02a1ec35e597e5021671aca16f8e4a407b80278",
+    "operations/monitoring/universal_entry_shadow.py": "d8a1c0d92e46a4526386c212eccf751c6aab9a6d266e203ec33549c6fb3b2a2d",
     "src/bybit_workbench/universal_entry/engine.py": "9d09e1d8d8432631ae55fea1dd5524a1689805ea1d1adc19a6f511ae5ab2347d",
     "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
     "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
@@ -2645,6 +2645,52 @@ def resolve_observer_runtime_fault(
     return row is not None
 
 
+
+def confirm_observer_faults_displayed(
+    connection: psycopg.Connection,
+    *,
+    fault_ids: list[str],
+    operator: str,
+    displayed_at: datetime,
+) -> int:
+    """Authenticated browser receipt, not owner resolution or trading approval."""
+    unique = list(dict.fromkeys(fault_ids))
+    if not unique or len(unique) > 100:
+        raise ValueError("неверное число fault IDs")
+    if any(not isinstance(value, str) or not value.startswith("observer-fault-")
+           or len(value) > 160 for value in unique):
+        raise ValueError("некорректный fault_id")
+    exact_operator = operator.strip()
+    if not exact_operator:
+        raise ValueError("operator не определён")
+    current = displayed_at.astimezone(UTC)
+    result = connection.execute(
+        """UPDATE runtime.lifecycle_fault_deliveries d
+              SET state='ACKNOWLEDGED',
+                  attempts=d.attempts+1,
+                  last_attempt_at=%s,
+                  delivered_at=coalesce(d.delivered_at,%s),
+                  acknowledged_at=%s,
+                  payload=d.payload || jsonb_build_object(
+                      'displayed_by',%s::text,
+                      'displayed_at',%s::text
+                  ),
+                  updated_at=clock_timestamp()
+             FROM runtime.lifecycle_faults f
+            WHERE f.fault_id=d.fault_id
+              AND f.fault_code=%s AND f.state='OPEN'
+              AND d.channel='DASHBOARD_INBOX'
+              AND d.state IN ('PENDING','ESCALATION_REQUIRED')
+              AND d.fault_id=ANY(%s)""",
+        (
+            current, current, current, exact_operator, current.isoformat(),
+            OBSERVER_RUNTIME_FAULT_CODE, unique,
+        ),
+    )
+    return int(result.rowcount)
+
+
+
 def snapshot() -> dict[str, object]:
     global _cache
     now = time.monotonic()
@@ -4211,6 +4257,39 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             return
         if path in U6_STRATEGY_POST_PATHS:
             _u6_handle_post(self, path)
+            return
+        if path == "/api/observer-faults/displayed":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 8192:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise ValueError("некорректный запрос")
+                ids = request.get("fault_ids")
+                if not isinstance(ids, list):
+                    raise ValueError("fault_ids обязателен")
+                operator = self.session_user() or "UNKNOWN"
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    confirmed = confirm_observer_faults_displayed(
+                        connection,
+                        fault_ids=ids,
+                        operator=operator,
+                        displayed_at=datetime.now(UTC),
+                    )
+                self.send_body(
+                    200,
+                    json.dumps({"confirmed": confirmed}).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
             return
         if path == "/api/observer-faults/resolve":
             try:

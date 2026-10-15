@@ -328,6 +328,35 @@ Deployment contract presentation/read-model layer:
 - следующий успешный status refresh/restart не имеет права молча удалить или
   resolve такой fault; Dashboard обязан показывать unresolved fault красным до
   explicit operator/owner resolution;
+- OWNER DECISION 2026-10-15: каждый `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR`,
+  включая severity `ERROR`, показывать в существующей центральной панели
+  Dashboard «События системы»; повторы одной exact signature агрегируются
+  через occurrence_count, без требования отвечать на каждое сообщение;
+- явное закрытие после устранения общей причины допускает групповую работу
+  оператора, но не автоматическое снятие unresolved fault при успешном epoch;
+  каждый закрытый exact fault сохраняет reason/operator/time audit;
+- для ошибок наблюдателя нужен отдельный durable delivery path
+  `DASHBOARD_INBOX` в той же центральной панели, без обязательного клика
+  оператора на каждое повторение; `OWNER_WEBHOOK` остаётся отдельным каналом,
+  его условия доставки и получатели не меняются;
+- запись в журнал, выдача через API и отображение в браузере — разные
+  состояния. `DELIVERED` для `DASHBOARD_INBOX` допустимо только после
+  подтверждения браузером фактического отображения уведомления, не от одного
+  read-model/API fetch; отсутствие такого подтверждения сохраняет pending
+  и требует retry/escalation. Успешный показ не закрывает underlying fault;
+- повтор одного exact fault обновляет счётчик/последнее время и не порождает
+  поток идентичных карточек; подтверждение показа не означает, что оператор
+  устранил причину или согласился на resolution;
+- migration/worker/read-model/client должны быть введены одним тестируемым
+  release change; до этого `DASHBOARD_INBOX` не считается implemented,
+  а показ старого banner не считается доказательством durable delivery;
+- OWNER DECISION 2026-10-15: совместимый Observer/runtime и отдельно
+  идентифицированный Dashboard bundle выпускаются согласованно из одного
+  проверенного Git commit; до DB/schema cutover проверяются exact UI bytes,
+  затем переключаются runtime и Dashboard identities до старта managed services.
+  Частичная смена одного слоя без другого не считается успешным release;
+  rollback после миграций требует отдельной проверки и не подразумевается
+  автоматически при неудаче installer;
 - exact Dashboard presentation/read-model bytes имеют отдельную
   `DASHBOARD_UI_COMMIT` identity.
 

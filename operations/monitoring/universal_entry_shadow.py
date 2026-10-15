@@ -77,7 +77,10 @@ from bybit_workbench.universal_entry.shadow_runtime import (
     derive_unknown_prestart_horizon_seconds,
 )
 from bybit_workbench.universal_entry.storage import ShadowParityStore, StrategyEntryStore
-from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
+from bybit_workbench.universal_entry.trade_mirror import (
+    PublicTradeMirrorBuffer,
+    assert_exact_recovery_coverage,
+)
 from bybit_workbench.universal_entry.transport_continuity import (
     ContinuityAction,
     ContinuityNotProvable,
@@ -456,7 +459,18 @@ def _fetch_server_time() -> datetime:
 
 
 class PublicTradeStreamBehind(ConnectionError):
-    """Public recent-trade proves the accepted WS trade cursor is behind."""
+    """REST-proven missing exact identities; recovery must cover the entire set."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing_exec_ids: Mapping[str, tuple[str, ...]],
+        cutoff_by_symbol: Mapping[str, datetime],
+    ) -> None:
+        super().__init__(message)
+        self.missing_exec_ids = dict(missing_exec_ids)
+        self.cutoff_by_symbol = dict(cutoff_by_symbol)
 
 
 def _fetch_recent_trade_snapshot(
@@ -534,23 +548,30 @@ def _audit_public_trade_silence(
         for symbol in symbols:
             snapshots[symbol] = fetch(symbol)
 
-    missing_counts: dict[str, int] = {}
+    missing_exec_ids: dict[str, tuple[str, ...]] = {}
     for symbol in symbols:
         rows, cutoff_at = snapshots[symbol]
-        unknown_exec_ids = audit_recent_trade_window(
+        missing_exec_ids[symbol] = audit_recent_trade_window(
             rows,
             anchor=trade_cursors[symbol],
             cutoff_at=cutoff_at,
             known_exec_ids=known_current_seq_exec_ids.get(symbol, set()),
         )
-        missing_counts[symbol] = len(unknown_exec_ids)
-    missing = {symbol: count for symbol, count in missing_counts.items() if count > 0}
+    missing = {
+        symbol: ids for symbol, ids in missing_exec_ids.items() if ids
+    }
     if missing:
-        rendered = ",".join(f"{symbol}:{count}" for symbol, count in sorted(missing.items()))
-        raise PublicTradeStreamBehind(
-            f"PUBLIC_TRADE silence audit found missing exact trade(s): {rendered}"
+        rendered = ",".join(
+            f"{symbol}:{len(ids)}" for symbol, ids in sorted(missing.items())
         )
-    return missing_counts
+        raise PublicTradeStreamBehind(
+            f"PUBLIC_TRADE silence audit found missing exact trade(s): {rendered}",
+            missing_exec_ids=missing,
+            cutoff_by_symbol={
+                symbol: snapshots[symbol][1] for symbol in missing
+            },
+        )
+    return {symbol: 0 for symbol in symbols}
 
 
 def _trade_cursor(raw: Mapping[str, object]) -> TradeCursor:
@@ -822,6 +843,10 @@ def _run_public_trade_mirror(
                 except websocket.WebSocketTimeoutException:
                     pass
                 now_monotonic = time.monotonic()
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "publicTrade mirror application heartbeat deadline exceeded"
+                    )
                 if message is not None:
                     if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                         heartbeat.note_pong(now_monotonic)
@@ -829,10 +854,6 @@ def _run_public_trade_mirror(
                         heartbeat.note_market_frame(now_monotonic)
                         if str(message.get("topic") or "").startswith("publicTrade."):
                             mirror.record_message(message, received_at=received_at)
-                if heartbeat.deadline_exceeded(now_monotonic):
-                    raise websocket.WebSocketConnectionClosedException(
-                        "publicTrade mirror application heartbeat deadline exceeded"
-                    )
                 if heartbeat.ping_due(now_monotonic):
                     sock.send('{"op":"ping"}')
                     heartbeat.note_ping_sent(now_monotonic)
@@ -1524,6 +1545,44 @@ def _record_observer_runtime_fault(
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
         ),
     )
+    # Enqueue one durable console notification per exact fault identity.
+    # The authenticated browser confirms presentation separately; this
+    # enqueue must never be interpreted as notification delivery.
+    connection.execute(
+        """INSERT INTO runtime.lifecycle_fault_deliveries(
+               delivery_id,fault_id,channel,state,attempts,next_attempt_at,payload
+           ) VALUES(%s,%s,'DASHBOARD_INBOX','PENDING',0,%s,%s::jsonb)
+           ON CONFLICT(fault_id) DO UPDATE
+           SET state='PENDING',
+               attempts=0,
+               next_attempt_at=EXCLUDED.next_attempt_at,
+               last_attempt_at=NULL,
+               delivered_at=NULL,
+               acknowledged_at=NULL,
+               escalation_at=NULL,
+               last_error=NULL,
+               updated_at=clock_timestamp()
+           WHERE runtime.lifecycle_fault_deliveries.channel='DASHBOARD_INBOX'
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at IS NOT NULL
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at <
+                 (SELECT (payload->>'last_resolved_at')::timestamptz
+                    FROM runtime.lifecycle_faults
+                   WHERE fault_id=EXCLUDED.fault_id)""",
+        (
+            "observer-inbox-" + fault_id,
+            fault_id,
+            current,
+            json.dumps(
+                {
+                    "fault_id": fault_id,
+                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                    "channel": "DASHBOARD_INBOX",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        ),
+    )
     return fault_id
 
 
@@ -2128,18 +2187,27 @@ def _run_observer_epoch(
                 try:
                     _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
                 except PublicTradeStreamBehind as audit_exc:
-                    cutoff_at = datetime.now(UTC)
-                    recovered = trade_mirror.recover_after(
-                        trade_cursors,
-                        cutoff_at=cutoff_at,
+                    # Validate all REST-proven missing execIds before replaying any
+                    # event. A nonempty mirror result is not continuity proof.
+                    recovered_by_symbol = {}
+                    for symbol, expected in audit_exc.missing_exec_ids.items():
+                        recovered = trade_mirror.recover_after(
+                            {symbol: trade_cursors[symbol]},
+                            cutoff_at=audit_exc.cutoff_by_symbol[symbol],
+                        )
+                        assert_exact_recovery_coverage(
+                            symbol=symbol,
+                            expected_exec_ids=expected,
+                            recovered=recovered,
+                        )
+                        recovered_by_symbol[symbol] = recovered
+                    # Preserve the mirror's original cross-symbol received order.
+                    # Replaying in alphabetical symbol order changes causal semantics.
+                    recovered_all = sorted(
+                        (event for events in recovered_by_symbol.values() for event in events),
+                        key=lambda event: event.ordinal,
                     )
-                    if not recovered:
-                        raise ContinuityNotProvable(
-                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
-                        ) from audit_exc
-                    for event in recovered:
-                        if event.symbol not in stale:
-                            continue
+                    for event in recovered_all:
                         process_fact(
                             _replay_trade_fact(event.as_replay_trade(), event.received_at),
                             TradeCursor(
@@ -2182,6 +2250,8 @@ def _run_observer_epoch(
                 except websocket.WebSocketTimeoutException:
                     pass
             now_mono = time.monotonic()
+            if heartbeat.deadline_exceeded(now_mono):
+                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
             if message is not None:
                 if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                     heartbeat.note_pong(now_mono)
@@ -2203,8 +2273,6 @@ def _run_observer_epoch(
                     for fact in _kline_facts(message, received_at):
                         if fact.symbol in symbols:
                             process_fact(fact)
-            if heartbeat.deadline_exceeded(now_mono):
-                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
             if heartbeat.ping_due(now_mono):
                 sock.send('{"op":"ping"}')
                 heartbeat.note_ping_sent(now_mono)
@@ -2913,6 +2981,10 @@ def _run_parity_main() -> None:
                     except websocket.WebSocketTimeoutException:
                         pass
                 now_monotonic = time.monotonic()
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "application heartbeat deadline exceeded"
+                    )
                 if message is not None:
                     if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                         heartbeat.note_pong(now_monotonic)
@@ -2920,10 +2992,6 @@ def _run_parity_main() -> None:
                         heartbeat.note_market_frame(now_monotonic)
                     if not process_message(message, received_at):
                         return
-                if heartbeat.deadline_exceeded(now_monotonic):
-                    raise websocket.WebSocketConnectionClosedException(
-                        "application heartbeat deadline exceeded"
-                    )
                 if heartbeat.ping_due(now_monotonic):
                     sock.send('{"op":"ping"}')
                     heartbeat.note_ping_sent(now_monotonic)

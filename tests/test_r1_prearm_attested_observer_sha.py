@@ -23,7 +23,9 @@ def test_attested_observer_sha_matches_current_source() -> None:
     assert len(assignments) == 1
     hashes = ast.literal_eval(assignments[0].value)
     actual_hash = hashlib.sha256(OBSERVER.read_bytes()).hexdigest()
-    assert hashes["operations/monitoring/universal_entry_shadow.py"] == actual_hash
+    assert hashes["operations/monitoring/universal_entry_shadow.py"] == actual_hash, (
+        f"CURRENT_OBSERVER_SHA256={actual_hash}"
+    )
     assert len(hashes) == 6
 
 
