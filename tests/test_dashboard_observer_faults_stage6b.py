@@ -258,7 +258,10 @@ def test_full_release_coordinates_exact_dashboard_bundle_and_runtime_cutover() -
         ROOT / "operations/infrastructure/install_verified_release.sh"
     ).read_text(encoding="utf-8")
     assert 'ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"' in installer
-    assert 'cmp -s "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html"' in installer
+    assert (
+        'cmp -s "$runtime_release/operations/dashboard/index.html" '
+        '"$ui_release/index.html"' in installer
+    )
     assert 'cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py"' in installer
     assert installer.index('mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"') < (
         installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"')
@@ -266,7 +269,10 @@ def test_full_release_coordinates_exact_dashboard_bundle_and_runtime_cutover() -
     assert installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"') < (
         installer.index('systemctl daemon-reload', installer.index('cutover_started=1'))
     )
-    assert 'install -o cripta -g cripta -m 0644 "$ui_release/app.py" "$runtime_release/operations/dashboard/app.py"' in installer
+    assert (
+        'install -o cripta -g cripta -m 0644 "$ui_release/app.py" '
+        '"$runtime_release/operations/dashboard/app.py"' in installer
+    )
 
 
 def test_dashboard_verifier_restricts_inbox_receipt_to_nontrading_delivery() -> None:
