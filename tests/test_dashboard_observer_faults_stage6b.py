@@ -180,7 +180,7 @@ def test_owner_observer_fault_notification_uses_existing_central_console() -> No
     body = html[html.index("function renderObserverFaults("):]
     body = body.split("\nfunction ", 1)[0]
     assert "acknowledge_delivery(" not in body
-    assert "Unresolved faults:" in body
+    assert "Открытых проблем:" in body
     assert "observerFaultItems" in body
 
 
