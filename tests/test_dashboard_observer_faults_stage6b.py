@@ -190,3 +190,64 @@ def test_observer_fault_console_does_not_claim_ui_is_durable_delivery() -> None:
     )
     assert "OWNER DECISION 2026-10-15" in source
     assert "UI/read-model не подменяет delivery record" in source
+
+
+def test_browser_display_receipt_does_not_resolve_observer_fault() -> None:
+    from operations.dashboard.app import confirm_observer_faults_displayed
+
+    class Result:
+        rowcount = 1
+
+    class Connection:
+        def __init__(self):
+            self.query = ""
+            self.parameters = ()
+
+        def execute(self, query, parameters=()):
+            self.query = query
+            self.parameters = parameters
+            return Result()
+
+    connection = Connection()
+    confirmed = confirm_observer_faults_displayed(
+        connection,
+        fault_ids=["observer-fault-test"],
+        operator="operator",
+        displayed_at=NOW,
+    )
+    assert confirmed == 1
+    assert "d.channel='DASHBOARD_INBOX'" in connection.query
+    assert "f.state='OPEN'" in connection.query
+    assert "state='ACKNOWLEDGED'" in connection.query
+    assert "d.state IN ('PENDING','ESCALATION_REQUIRED')" in connection.query
+    assert "runtime.lifecycle_faults SET state='RESOLVED'" not in connection.query
+    assert connection.parameters[-1] == ["observer-fault-test"]
+
+
+def test_browser_receipt_rejects_invalid_ids_without_db_write() -> None:
+    from operations.dashboard.app import confirm_observer_faults_displayed
+
+    class DeniedConnection:
+        def execute(self, _query, _params=()):
+            raise AssertionError("invalid id must not reach database")
+
+    with pytest.raises(ValueError, match="некорректный fault_id"):
+        confirm_observer_faults_displayed(
+            DeniedConnection(),
+            fault_ids=["arbitrary-fault"],
+            operator="operator",
+            displayed_at=NOW,
+        )
+
+
+def test_display_receipt_uses_existing_authenticated_dashboard_endpoint() -> None:
+    html = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
+    backend = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
+    assert "document.hidden || banner.getClientRects().length===0" in html
+    assert "requestAnimationFrame(()=>" in html
+    assert "fetch('/api/observer-faults/displayed'" in html
+    assert 'if path == "/api/observer-faults/displayed":' in backend
+    assert "confirm_observer_faults_displayed(" in backend
+    assert backend.index("if self.require_login():") < backend.index(
+        'if path == "/api/observer-faults/displayed":'
+    )
