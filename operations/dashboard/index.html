@@ -709,21 +709,24 @@ function toggleRailPosition(symbol){
   if(button)button.setAttribute('aria-expanded',String(!open));
 }
 function breakEvenVisualReady(p){
-  // UI-only, conservative preview. The authoritative operator command still
-  // computes the exact tick-rounded stop and checks executable Bybit price.
-  const entry=Number(p.entry_price),qty=Number(p.size),close=Number(p.executable_close_price);
-  const pnl=Number(p.net_pnl_to_close),stop=Number(p.stop_loss||0);
-  const fresh=Date.now()-Number(p.refreshed_at_epoch_ms||0);
-  if(![entry,qty,close,pnl].every(Number.isFinite)||entry<=0||qty<=0||close<=0||p.net_pnl_to_close==null||fresh<0||fresh>10000)return false;
+  // Strict display-only estimate, not an executable price guarantee.
+  // net_pnl_to_close already subtracts actual entry fee and estimated
+  // taker exit fee. UNKNOWN actual fees, stale quotes or thin profit => dark.
+  const entry=Number(p.entry_price),qty=Number(p.size);
+  const executable=Number(p.executable_close_price),net=Number(p.net_pnl_to_close);
+  const stop=Number(p.stop_loss||0),age=Date.now()-Number(p.refreshed_at_epoch_ms||0);
   const side=p.side==='Buy'?1:p.side==='Sell'?-1:0;
-  if(!side||side*(close-entry)<=0)return false;
-  // Extra margin above net-to-close covers the execution slippage reserve
-  // and a conservative tick-rounding buffer without optimistic green signals.
-  const needed=Math.max(0.03,entry*qty*0.002);
-  if(pnl<needed)return false;
-  // Already protected at or beyond entry is not a new manual BE opportunity.
+  if(p.entry_fee_basis!=='ACTUAL'||p.net_pnl_to_close==null||
+     ![entry,qty,executable,net,stop].every(Number.isFinite)||
+     entry<=0||qty<=0||executable<=0||!side||age<0||age>3000)return false;
+  if(side*(executable-entry)<=0)return false;
   if(stop>0&&side*(stop-entry)>=0)return false;
-  return true;
+  // Require profit AFTER commissions, PLUS an additional adverse-price
+  // buffer for quote movement while the owner confirms and Bybit processes
+  // the stop. 0.50% of notional is deliberately more conservative than the
+  // 0.02% slippage reserve in operator_break_even_plan, not a promise.
+  const pullbackBuffer=entry*qty*0.005;
+  return net>=Math.max(0.05,pullbackBuffer);
 }
 function renderOpenRailPositions(positions){
   const rail=document.getElementById('openRailPositions'),count=document.getElementById('openRailCount');
