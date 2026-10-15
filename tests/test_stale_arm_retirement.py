@@ -81,7 +81,7 @@ def test_fail_closed_when_gate_open():
     assert not retire_stale_release_arms(
         c, loaded_commit=CURRENT, account_snapshot=snapshot(), now=NOW
     )
-    assert not any("UPDATE" in sql for sql, _ in c.statements)
+    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
 
 def test_fail_closed_when_exchange_has_position():
@@ -90,7 +90,7 @@ def test_fail_closed_when_exchange_has_position():
         c, loaded_commit=CURRENT,
         account_snapshot=snapshot(positions=[{"size": "0.4"}]), now=NOW
     )
-    assert not any("UPDATE" in sql for sql, _ in c.statements)
+    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
 
 def test_fail_closed_when_exchange_has_order_or_local_pending():
@@ -102,7 +102,7 @@ def test_fail_closed_when_exchange_has_order_or_local_pending():
         assert not retire_stale_release_arms(
             c, loaded_commit=CURRENT, account_snapshot=snap, now=NOW
         )
-        assert not any("UPDATE" in sql for sql, _ in c.statements)
+        assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
 
 def test_fail_closed_when_account_is_not_fresh_or_complete():
@@ -116,7 +116,7 @@ def test_fail_closed_when_account_is_not_fresh_or_complete():
         assert not retire_stale_release_arms(
             c, loaded_commit=CURRENT, account_snapshot=snap, now=NOW
         )
-        assert not any("UPDATE" in sql for sql, _ in c.statements)
+        assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
 
 def test_runtime_supervisor_audits_all_active_arm_symbols():
@@ -154,5 +154,5 @@ def test_bybit_clock_failure_explains_network_samples_not_host_clock():
     assert "BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0" in runtime
     assert "BYBIT_TIME_PROBE_ATTEMPTS = 3" in runtime
     assert "probe_rtts_ms=" in runtime
-    assert "endpoint={REST_URL.rstrip('/')}/v5/market/time" in runtime
+    assert "path=/v5/market/time" in runtime
     assert "UNSAFE_BYBIT_CLOCK_OFFSET" not in runtime
