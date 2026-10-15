@@ -995,7 +995,8 @@ function renderObserverFaults(model){
     return;
   }
   banner.hidden=false;
-  summary.textContent=`Unresolved faults: ${items.length}. Успешный observer epoch не закроет их автоматически.`;
+  const totalOccurrences=items.reduce((n,x)=>n+Math.max(1,Number(x.occurrence_count)||1),0);
+  summary.textContent=`Открытых проблем: ${items.length} · зарегистрировано срабатываний: ${totalOccurrences}. Подтверждать каждое сообщение не нужно; после разбора причины закройте соответствующие ошибки явно.`;
   body.innerHTML=items.map(x=>{
     const first=x.first_seen_at?new Date(x.first_seen_at).toLocaleString('ru-RU'):'—';
     const last=x.last_seen_at?new Date(x.last_seen_at).toLocaleString('ru-RU'):'—';
