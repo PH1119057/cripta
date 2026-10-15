@@ -201,13 +201,15 @@ def test_topic_silence_audit_detects_exact_missing_trade_and_forces_reconnect() 
             NOW + timedelta(seconds=2),
         )
 
-    with pytest.raises(runtime.PublicTradeStreamBehind, match="missing exact trade"):
+    with pytest.raises(runtime.PublicTradeStreamBehind, match="missing exact trade") as exc:
         runtime._audit_public_trade_silence(
             ("UNIUSDT",),
             {"UNIUSDT": anchor},
             {"UNIUSDT": {"anchor"}},
             fetch_fn=fetch,
         )
+    assert exc.value.missing_exec_ids == {"UNIUSDT": ("missing",)}
+    assert exc.value.cutoff_by_symbol == {"UNIUSDT": NOW + timedelta(seconds=2)}
 
 
 def test_topic_silence_audit_missing_anchor_is_not_provable() -> None:
