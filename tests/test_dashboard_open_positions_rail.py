@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 UI = Path("operations/dashboard/index.html")
 
 
@@ -35,7 +34,10 @@ def test_market_monitor_is_under_central_tables_without_inner_vertical_scroll():
     source = UI.read_text(encoding="utf-8")
     assert 'id="marketIndicatorSection"' in source
     assert "open:[openTradesSection,coinMonitorSection,marketIndicatorSection]" in source
-    assert "#coinMonitorSection .signal-scroll{max-height:none!important;overflow:visible!important}" in source
+    assert (
+        "#coinMonitorSection .signal-scroll{max-height:none!important;overflow:visible!important}"
+        in source
+    )
     assert "#openTradesSection{display:none!important}" in source
     assert "@media(max-width:1249px){.workspace-rail{display:none!important}}" in source
 
