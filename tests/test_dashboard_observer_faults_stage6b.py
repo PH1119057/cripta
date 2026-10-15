@@ -189,7 +189,7 @@ def test_observer_fault_console_does_not_claim_ui_is_durable_delivery() -> None:
         encoding="utf-8"
     )
     assert "OWNER DECISION 2026-10-15" in source
-    assert "UI/read-model не подменяет delivery record" in source
+    assert "Успешная выдача API без показа не считается доставкой" in source
 
 
 def test_browser_display_receipt_does_not_resolve_observer_fault() -> None:
