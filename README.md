@@ -88,6 +88,8 @@ from research. Exact contract: `DEVELOPMENT_RELEASE §42`,
 `RESEARCH_COMPUTE §17`; current migration state: `CURRENT_PROJECT_MAP §1.5`.
 
 
+Для серверной диагностики сначала применять `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5`: отдельно SentinelX allowlist, Unix/DB effective actor и проектное разрешение на операцию. Проверенные read-only маршруты/actor snapshot — `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. Отказ `command_not_allowed` не является Unix `EACCES`.
+
 ## Root bootstrap invariant
 
 `README.md` и `AGENTS.md` — единственные текущие Markdown-entrypoints в
