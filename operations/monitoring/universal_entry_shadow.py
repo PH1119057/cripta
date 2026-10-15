@@ -1552,7 +1552,22 @@ def _record_observer_runtime_fault(
         """INSERT INTO runtime.lifecycle_fault_deliveries(
                delivery_id,fault_id,channel,state,attempts,next_attempt_at,payload
            ) VALUES(%s,%s,'DASHBOARD_INBOX','PENDING',0,%s,%s::jsonb)
-           ON CONFLICT(fault_id) DO NOTHING""",
+           ON CONFLICT(fault_id) DO UPDATE
+           SET state='PENDING',
+               attempts=0,
+               next_attempt_at=EXCLUDED.next_attempt_at,
+               last_attempt_at=NULL,
+               delivered_at=NULL,
+               acknowledged_at=NULL,
+               escalation_at=NULL,
+               last_error=NULL,
+               updated_at=clock_timestamp()
+           WHERE runtime.lifecycle_fault_deliveries.channel='DASHBOARD_INBOX'
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at IS NOT NULL
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at <
+                 (SELECT (payload->>'last_resolved_at')::timestamptz
+                    FROM runtime.lifecycle_faults
+                   WHERE fault_id=EXCLUDED.fault_id)""",
         (
             "observer-inbox-" + fault_id,
             fault_id,
