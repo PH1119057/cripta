@@ -19,8 +19,8 @@ from bybit_workbench.fault_delivery import (
     escalate_missing_dashboard_display,
     process_due_deliveries,
 )
-from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
+from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
