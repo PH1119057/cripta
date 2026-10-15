@@ -2163,17 +2163,22 @@ def _run_observer_epoch(
                             recovered=recovered,
                         )
                         recovered_by_symbol[symbol] = recovered
-                    for symbol in sorted(recovered_by_symbol):
-                        for event in recovered_by_symbol[symbol]:
-                            process_fact(
-                                _replay_trade_fact(event.as_replay_trade(), event.received_at),
-                                TradeCursor(
-                                    event.symbol,
-                                    event.exec_id,
-                                    event.seq,
-                                    event.traded_at,
-                                ),
-                            )
+                    # Preserve the mirror's original cross-symbol received order.
+                    # Replaying in alphabetical symbol order changes causal semantics.
+                    recovered_all = sorted(
+                        (event for events in recovered_by_symbol.values() for event in events),
+                        key=lambda event: event.ordinal,
+                    )
+                    for event in recovered_all:
+                        process_fact(
+                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
                 proven_at = time.monotonic()
                 for symbol in stale:
                     trade_proof_monotonic[symbol] = proven_at
