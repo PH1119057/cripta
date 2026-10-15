@@ -129,3 +129,30 @@ def test_runtime_supervisor_audits_all_active_arm_symbols():
     assert "retire_stale_release_arms(" in source
     assert "check_release_arm_invariant(" in source
     assert "if retired_arms:" in source
+
+
+def test_retirement_uses_only_approved_migration_and_release_path():
+    from pathlib import Path
+
+    migration = Path(
+        "operations/sql/20261015_live_arm_retirement_events_v1.sql"
+    ).read_text(encoding="utf-8")
+    installer = Path(
+        "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    assert "control.live_arm_retirement_events" in migration
+    assert "GRANT SELECT,INSERT" in migration
+    assert "20261015_live_arm_retirement_events_v1.sql" in installer
+
+
+def test_bybit_clock_failure_explains_network_samples_not_host_clock():
+    from pathlib import Path
+
+    runtime = Path(
+        "operations/connectivity/private_runtime.py"
+    ).read_text(encoding="utf-8")
+    assert "BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0" in runtime
+    assert "BYBIT_TIME_PROBE_ATTEMPTS = 3" in runtime
+    assert "probe_rtts_ms=" in runtime
+    assert "endpoint={REST_URL.rstrip('/')}/v5/market/time" in runtime
+    assert "UNSAFE_BYBIT_CLOCK_OFFSET" not in runtime
