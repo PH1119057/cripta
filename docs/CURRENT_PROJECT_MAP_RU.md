@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.6
+**Версия:** 12.7
 **Дата:** 2026-10-15
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2416,12 +2416,14 @@ Capability-conservation matrix:
 Roadmap status at this documentation checkpoint:
 
 ~~~text
-CURRENT MAIN VERIFIED               = PASS
+CURRENT MAIN RECHECKED              = PASS (later main delta UI-only / no overlap)
 ISOLATED FEATURE BRANCH             = CREATED
-CANON UPDATE                        = PREPARED IN FEATURE BRANCH
-MAYAK OBJECTIVE ENRICHMENT          = NOT YET IMPLEMENTED
-DISPATCHER CONTEXT ENRICHMENT       = NOT YET IMPLEMENTED
-OBSERVATION REPLAY PARITY           = NOT YET TESTED FOR NEW FIELDS
+CANON UPDATE                        = COMMITTED ON FEATURE BRANCH
+MAYAK OBJECTIVE ENRICHMENT          = IMPLEMENTED / ISOLATED
+DISPATCHER CONTEXT ENRICHMENT       = IMPLEMENTED / ISOLATED
+OBSERVATION REPLAY PARITY           = TESTED / PASS
+FULL ISOLATED TEST SUITE            = PASS (1791 passed / 70 skipped)
+IMPLEMENTATION GITHUB COMMIT         = PENDING
 SELF-BASELINE RESEARCH              = NOT YET RUN
 COINMARKETRATING FORMULA            = NOT APPROVED
 STRATEGY CONTEXT POLICY TRADING USE = NOT AUTHORIZED

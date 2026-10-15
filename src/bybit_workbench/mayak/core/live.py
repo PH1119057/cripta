@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from .coin_stress import build_coin_stress_inputs
+
 
 class SourceQuality(StrEnum):
     WARMUP = "прогрев"
@@ -486,6 +488,48 @@ class LiquidationWindow:
                 "baseline_p99_usd": p99 if intensity_status == "VALID" else None,
             }
         )
+
+        side_dynamics: dict[str, dict[str, Any]] = {}
+        for exchange_side, semantic in (
+            ("Buy", "LONG_LIQUIDATED"),
+            ("Sell", "SHORT_LIQUIDATED"),
+        ):
+            current_side_usd = float(
+                sum(row[3] for row in current_rows if row[2] == exchange_side)
+            )
+            prior_side_minutes: list[float] = []
+            for offset in range(1, 6):
+                lower = now - (offset + 1) * 60
+                upper = now - offset * 60
+                prior_side_minutes.append(
+                    float(
+                        sum(
+                            row[3]
+                            for row in rows
+                            if lower < row[0] <= upper and row[2] == exchange_side
+                        )
+                    )
+                )
+            prior_side_average = sum(prior_side_minutes) / 5
+            side_dynamics[semantic] = {
+                "status": acceleration_status,
+                "exchange_side": exchange_side,
+                "current_1m_usd": (
+                    current_side_usd if continuous_seconds >= 60 else None
+                ),
+                "prior_5m_average_usd_per_min": (
+                    prior_side_average if acceleration_status == "VALID" else None
+                ),
+                "speed_usd_per_min": (
+                    current_side_usd if continuous_seconds >= 60 else None
+                ),
+                "acceleration_usd_per_min2": (
+                    (current_side_usd - prior_side_average) / 5
+                    if acceleration_status == "VALID"
+                    else None
+                ),
+            }
+        result["side_dynamics"] = side_dynamics
         return result
 
 
@@ -505,10 +549,10 @@ class SourceStamp:
 
 class LiveMayakEngine:
     ARCHITECTURE_VERSION = "1.1"
-    FEATURE_VERSION = "objective-coin-context-v2"
+    FEATURE_VERSION = "objective-coin-context-v3"
     """Pure, causal, read-only market observer. It has no execution dependency."""
 
-    VERSION = "mayak-v2.2"
+    VERSION = "mayak-v2.3"
 
     def __init__(self, symbols: tuple[str, ...], *, exact_liquidations: bool = True) -> None:
         self.symbols = symbols
@@ -734,7 +778,7 @@ class LiveMayakEngine:
                 f"{minutes}m": self.trades[("linear", symbol)].metrics(
                     now_ts, minutes * 60
                 )["return_pct"]
-                for minutes in (1, 5, 15, 60)
+                for minutes in (1, 5, 15, 30, 60)
             }
             ticker = self.tickers.get(symbol)
             books = {market: self.books.get((market, symbol)) for market in ("spot", "linear")}
@@ -871,7 +915,7 @@ class LiveMayakEngine:
         config_fingerprint: str,
     ) -> dict[str, dict[str, Any]]:
         panel_medians: dict[str, float | None] = {}
-        for horizon in ("1m", "5m", "15m", "60m"):
+        for horizon in ("1m", "5m", "15m", "30m", "60m"):
             values = [
                 float(coin["returns_by_horizon"][horizon])
                 for coin in coins.values()
@@ -889,7 +933,7 @@ class LiveMayakEngine:
             ticker = coin.get("ticker") or {}
             returns_by_horizon = coin.get("returns_by_horizon") or {}
             relative: dict[str, Any] = {}
-            for horizon in ("1m", "5m", "15m", "60m"):
+            for horizon in ("1m", "5m", "15m", "30m", "60m"):
                 value = returns_by_horizon.get(horizon)
                 panel = panel_medians[horizon]
                 btc_value = btc_returns.get(horizon)
@@ -973,11 +1017,19 @@ class LiveMayakEngine:
                     "reason": "EXACT_LIQUIDATION_SOURCE_NOT_AVAILABLE",
                 }
             )
+            spot_flow = self.trades[("spot", symbol)].flow_context(now_ts)
+            derivatives_flow = self.trades[("linear", symbol)].flow_context(now_ts)
+            stress_inputs = build_coin_stress_inputs(
+                returns_by_horizon=returns_by_horizon,
+                liquidations=liquidation,
+                positioning=positioning,
+                derivatives_flow=derivatives_flow,
+            )
             payload = {
                 "price": {"returns": returns_by_horizon},
                 "money": {
-                    "spot": self.trades[("spot", symbol)].flow_context(now_ts),
-                    "derivatives": self.trades[("linear", symbol)].flow_context(now_ts),
+                    "spot": spot_flow,
+                    "derivatives": derivatives_flow,
                 },
                 "positioning": positioning,
                 "liquidity": {
@@ -985,6 +1037,7 @@ class LiveMayakEngine:
                     "derivatives": coin.get("books", {}).get("linear"),
                 },
                 "liquidations": liquidation,
+                "stress_inputs": stress_inputs,
                 "relative_strength": relative,
                 "event_context": {"status": "NO_DATA", "observed_at": None},
                 "data_quality": {
@@ -1023,7 +1076,7 @@ class LiveMayakEngine:
                 "coin_context_id": context_id,
                 "symbol": symbol,
                 "observed_at": observed_at,
-                "schema_version": "coin-market-context-v1",
+                "schema_version": "coin-market-context-v2",
                 "engine_version": self.VERSION,
                 "feature_version": self.FEATURE_VERSION,
                 "config_fingerprint": config_fingerprint,
@@ -1502,13 +1555,4 @@ class LiveMayakEngine:
         ):
             return MarketState.MONEY_DIVERGENCE, [
                 "цена почти стоит",
-                "агрессивные продажи преобладают раньше движения цены",
-            ]
-        if agreement >= 0.7 and abs(median) >= 0.1:
-            return MarketState.DIRECTIONAL, ["широкий рынок движется в одном направлении"]
-        if corr >= 0.7:
-            return MarketState.TRANSITION, [
-                "общий рыночный фактор усилился",
-                "направление ещё не подтверждено",
-            ]
-        return MarketState.CALM, ["выраженного общего движения не обнаружено"]
+                "агрессивные продажи преоблада

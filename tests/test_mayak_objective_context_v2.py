@@ -166,6 +166,57 @@ def test_per_coin_liquidations_keep_long_short_separate() -> None:
     assert ada["phase"] == "NONE"
 
 
+
+def test_coin_stress_inputs_are_scale_aware_and_not_a_trading_rating() -> None:
+    item = prepared_engine()
+    now = fixed_now().timestamp()
+
+    item.on_ticker(
+        "BTCUSDT",
+        now - 301,
+        open_interest=110,
+        open_interest_value=11000,
+    )
+    item.on_ticker(
+        "BTCUSDT",
+        now,
+        open_interest=100,
+        open_interest_value=10000,
+    )
+
+    item.on_trade("linear", "BTCUSDT", now - 59, "Buy", 100, 1)
+    item.on_trade("linear", "BTCUSDT", now - 1, "Buy", 101, 1)
+
+    for minute in range(2, 7):
+        item.on_liquidation("BTCUSDT", now - minute * 60, "Buy", 100, 1)
+    item.on_liquidation("BTCUSDT", now - 20, "Buy", 100, 2)
+    item.on_liquidation("BTCUSDT", now - 10, "Sell", 100, 3)
+
+    payload = item.snapshot(fixed_now())["coin_market_contexts"]["BTCUSDT"]["payload"]
+    stress = payload["stress_inputs"]
+    one = stress["horizons"]["1m"]
+
+    assert stress["trading_effect"] == "NONE"
+    assert stress["side_semantics"] == {
+        "Buy": "LONG_LIQUIDATED",
+        "Sell": "SHORT_LIQUIDATED",
+    }
+    assert one["long_liquidation_notional_usd"] == pytest.approx(200)
+    assert one["short_liquidation_notional_usd"] == pytest.approx(300)
+    assert one["long_liquidation_to_oi"] == pytest.approx(0.02)
+    assert one["short_liquidation_to_oi"] == pytest.approx(0.03)
+    assert one["total_liquidation_to_derivatives_turnover"] == pytest.approx(500 / 201)
+    assert one["price_return_pct"] == pytest.approx(1.0)
+    assert one["long_liquidation_direction_return_pct"] == pytest.approx(-1.0)
+    assert one["short_liquidation_direction_return_pct"] == pytest.approx(1.0)
+    assert stress["oi_clearance_pct"]["5m"] > 0
+    assert stress["liquidation_dynamics"]["LONG_LIQUIDATED"]["current_1m_usd"] == 200
+    assert stress["liquidation_dynamics"]["SHORT_LIQUIDATED"]["current_1m_usd"] == 300
+    assert stress["self_baseline"]["status"] == "RESEARCH_NOT_APPROVED"
+    assert stress["self_baseline"]["percentiles"] is None
+    assert stress["multi_venue_confirmation"]["status"] == "NO_DATA"
+
+
 def test_relative_strength_is_panel_relative_not_strategy_relative() -> None:
     item = prepared_engine()
     now = fixed_now().timestamp()
@@ -191,8 +242,8 @@ def test_coin_market_context_contains_no_trading_command_or_strategy_outcome() -
     for forbidden in ("signal_id", "position_id", "pnl", "entry_decision", "strategycoinfit"):
         assert forbidden not in serialized
     assert context["provenance"]["trading_command"] is False
-    assert context["schema_version"] == "coin-market-context-v1"
-    assert context["engine_version"] == "mayak-v2.2"
+    assert context["schema_version"] == "coin-market-context-v2"
+    assert context["engine_version"] == "mayak-v2.3"
 
 
 def test_spot_subscription_limit_and_ack_contract_are_explicit() -> None:

@@ -18,9 +18,9 @@ from .contracts import (
     TradingCapacitySnapshot,
 )
 
-DISPATCHER_VERSION = "dispatcher-v2.1"
+DISPATCHER_VERSION = "dispatcher-v2.2"
 GLOBAL_SCHEMA_VERSION = "global-market-context-v2.1"
-COIN_SCHEMA_VERSION = "dispatcher-coin-context-v2.1"
+COIN_SCHEMA_VERSION = "dispatcher-coin-context-v2.2"
 CAPACITY_SCHEMA_VERSION = "trading-capacity-v2.1"
 MARKET_FRESH_SECONDS = 90
 COIN_FRESH_SECONDS = 90
