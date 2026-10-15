@@ -350,6 +350,13 @@ Deployment contract presentation/read-model layer:
 - migration/worker/read-model/client должны быть введены одним тестируемым
   release change; до этого `DASHBOARD_INBOX` не считается implemented,
   а показ старого banner не считается доказательством durable delivery;
+- OWNER DECISION 2026-10-15: совместимый Observer/runtime и отдельно
+  идентифицированный Dashboard bundle выпускаются согласованно из одного
+  проверенного Git commit; до DB/schema cutover проверяются exact UI bytes,
+  затем переключаются runtime и Dashboard identities до старта managed services.
+  Частичная смена одного слоя без другого не считается успешным release;
+  rollback после миграций требует отдельной проверки и не подразумевается
+  автоматически при неудаче installer;
 - exact Dashboard presentation/read-model bytes имеют отдельную
   `DASHBOARD_UI_COMMIT` identity.
 
