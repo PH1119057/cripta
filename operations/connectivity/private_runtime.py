@@ -1006,7 +1006,7 @@ def fresh_bybit_time_calibration() -> BybitTimeCalibration:
             f"offset_ms={best.offset_ms:.1f} "
             f"attempts={BYBIT_TIME_PROBE_ATTEMPTS} "
             f"probe_rtts_ms={','.join(f'{item.round_trip_ms:.1f}' for item in observations)} "
-            f"endpoint={REST_URL.rstrip('/')}/v5/market/time"
+            "path=/v5/market/time"
         )
 
     raise UnsafeBybitClock(
