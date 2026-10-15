@@ -93,7 +93,11 @@ def retire_stale_release_arms(
                           WHERE strategy_id=%s AND strategy_version=%s
                             AND state<>'RELEASED')
                 OR EXISTS(SELECT 1 FROM runtime.trade_commands
-                          WHERE symbol=%s AND state NOT IN ('completed','failed'))
+                          WHERE symbol=%s AND (
+                              state NOT IN ('completed','failed')
+                              OR (state='failed' AND
+                                  coalesce(error,'') LIKE 'EXCHANGE_MUTATION_BARRIER%%')
+                          ))
             )""",
             (symbol, symbol, strategy_id, strategy_version, symbol),
         ).fetchone()
