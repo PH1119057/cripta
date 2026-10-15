@@ -240,11 +240,6 @@ def process_due_deliveries(
         now=now,
         acknowledgement_timeout_seconds=acknowledgement_timeout_seconds,
     )
-    escalated += escalate_missing_dashboard_display(
-        connection,
-        now=now,
-        display_timeout_seconds=acknowledgement_timeout_seconds,
-    )
     attempted = 0
     delivered = 0
     for item in due_deliveries(connection, now=now):
