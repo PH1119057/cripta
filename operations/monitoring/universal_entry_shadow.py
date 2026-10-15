@@ -843,6 +843,10 @@ def _run_public_trade_mirror(
                 except websocket.WebSocketTimeoutException:
                     pass
                 now_monotonic = time.monotonic()
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "publicTrade mirror application heartbeat deadline exceeded"
+                    )
                 if message is not None:
                     if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                         heartbeat.note_pong(now_monotonic)
@@ -850,10 +854,6 @@ def _run_public_trade_mirror(
                         heartbeat.note_market_frame(now_monotonic)
                         if str(message.get("topic") or "").startswith("publicTrade."):
                             mirror.record_message(message, received_at=received_at)
-                if heartbeat.deadline_exceeded(now_monotonic):
-                    raise websocket.WebSocketConnectionClosedException(
-                        "publicTrade mirror application heartbeat deadline exceeded"
-                    )
                 if heartbeat.ping_due(now_monotonic):
                     sock.send('{"op":"ping"}')
                     heartbeat.note_ping_sent(now_monotonic)
@@ -2212,6 +2212,8 @@ def _run_observer_epoch(
                 except websocket.WebSocketTimeoutException:
                     pass
             now_mono = time.monotonic()
+            if heartbeat.deadline_exceeded(now_mono):
+                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
             if message is not None:
                 if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                     heartbeat.note_pong(now_mono)
@@ -2233,8 +2235,6 @@ def _run_observer_epoch(
                     for fact in _kline_facts(message, received_at):
                         if fact.symbol in symbols:
                             process_fact(fact)
-            if heartbeat.deadline_exceeded(now_mono):
-                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
             if heartbeat.ping_due(now_mono):
                 sock.send('{"op":"ping"}')
                 heartbeat.note_ping_sent(now_mono)
@@ -2943,6 +2943,10 @@ def _run_parity_main() -> None:
                     except websocket.WebSocketTimeoutException:
                         pass
                 now_monotonic = time.monotonic()
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "application heartbeat deadline exceeded"
+                    )
                 if message is not None:
                     if message.get("op") == "pong" or message.get("ret_msg") == "pong":
                         heartbeat.note_pong(now_monotonic)
@@ -2950,10 +2954,6 @@ def _run_parity_main() -> None:
                         heartbeat.note_market_frame(now_monotonic)
                     if not process_message(message, received_at):
                         return
-                if heartbeat.deadline_exceeded(now_monotonic):
-                    raise websocket.WebSocketConnectionClosedException(
-                        "application heartbeat deadline exceeded"
-                    )
                 if heartbeat.ping_due(now_monotonic):
                     sock.send('{"op":"ping"}')
                     heartbeat.note_ping_sent(now_monotonic)
