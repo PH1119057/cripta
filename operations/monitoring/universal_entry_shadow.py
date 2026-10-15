@@ -1545,6 +1545,29 @@ def _record_observer_runtime_fault(
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
         ),
     )
+    # Enqueue one durable console notification per exact fault identity.
+    # The authenticated browser confirms presentation separately; this
+    # enqueue must never be interpreted as notification delivery.
+    connection.execute(
+        """INSERT INTO runtime.lifecycle_fault_deliveries(
+               delivery_id,fault_id,channel,state,attempts,next_attempt_at,payload
+           ) VALUES(%s,%s,'DASHBOARD_INBOX','PENDING',0,%s,%s::jsonb)
+           ON CONFLICT(fault_id) DO NOTHING""",
+        (
+            "observer-inbox-" + fault_id,
+            fault_id,
+            current,
+            json.dumps(
+                {
+                    "fault_id": fault_id,
+                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                    "channel": "DASHBOARD_INBOX",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        ),
+    )
     return fault_id
 
 
