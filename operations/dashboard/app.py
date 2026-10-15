@@ -4258,6 +4258,39 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         if path in U6_STRATEGY_POST_PATHS:
             _u6_handle_post(self, path)
             return
+        if path == "/api/observer-faults/displayed":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 8192:
+                    raise ValueError("недопустимый размер запроса")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise ValueError("некорректный запрос")
+                ids = request.get("fault_ids")
+                if not isinstance(ids, list):
+                    raise ValueError("fault_ids обязателен")
+                operator = self.session_user() or "UNKNOWN"
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    confirmed = confirm_observer_faults_displayed(
+                        connection,
+                        fault_ids=ids,
+                        operator=operator,
+                        displayed_at=datetime.now(UTC),
+                    )
+                self.send_body(
+                    200,
+                    json.dumps({"confirmed": confirmed}).encode(),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, json.JSONDecodeError, psycopg.Error) as exc:
+                self.send_body(
+                    400,
+                    json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                    "application/json; charset=utf-8",
+                )
+            return
         if path == "/api/observer-faults/resolve":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
