@@ -43,7 +43,9 @@ def test_full_runtime_installer_preserves_independent_ui_identity() -> None:
 
 
 def test_ui_verifier_allows_only_stage6b_fault_resolution_extension() -> None:
-    assert 'allowed_added_endpoints = {"/api/observer-faults/resolve"}' in UI_DEPLOY
+    assert '"/api/observer-faults/resolve"' in UI_DEPLOY
+    assert '"/api/observer-faults/displayed"' in UI_DEPLOY
+    assert '"confirm_observer_faults_displayed"' in UI_DEPLOY
     assert '"OBSERVER_RUNTIME_FAULT_CODE"' in UI_DEPLOY
     assert '"observer_runtime_fault_state"' in UI_DEPLOY
     assert '"merge_observer_fault_health"' in UI_DEPLOY
