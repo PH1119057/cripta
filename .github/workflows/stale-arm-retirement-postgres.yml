@@ -1,0 +1,73 @@
+name: stale-arm-retirement-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261015_live_arm_retirement_events_v1.sql"
+      - "src/bybit_workbench/stale_arm_retirement.py"
+      - "operations/monitoring/lifecycle_supervisor_runtime.py"
+      - ".github/workflows/stale-arm-retirement-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit-schema:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: stale_arm_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stale_arm_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: stale_arm_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact disposable account-scope audit baseline
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cripta;
+          CREATE SCHEMA control;
+          GRANT USAGE ON SCHEMA control TO cripta;
+          CREATE TABLE control.live_arm_sessions (
+            live_arm_session_id text PRIMARY KEY
+          );
+          INSERT INTO control.live_arm_sessions VALUES ('session-ci');
+          SQL
+      - name: Validate migration idempotence and immutable audit rights
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261015_live_arm_retirement_events_v1.sql
+          psql -X -v ON_ERROR_STOP=1 -f operations/sql/20261015_live_arm_retirement_events_v1.sql
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          SET ROLE cripta;
+          INSERT INTO control.live_arm_retirement_events
+             (event_id,live_arm_session_id,previous_release_commit,
+              loaded_commit,reason,retired_at,evidence)
+          VALUES ('retirement-ci','session-ci',repeat('a',40),repeat('b',40),
+                  'EXACT_SCOPE_FLAT_AFTER_RELEASE_CHANGE',now(),'{}');
+          RESET ROLE;
+          DO $$
+          BEGIN
+            IF (SELECT count(*) FROM control.live_arm_retirement_events) <> 1 THEN
+              RAISE EXCEPTION 'audit event was not persisted';
+            END IF;
+            IF has_table_privilege('cripta',
+                  'control.live_arm_retirement_events','UPDATE') THEN
+              RAISE EXCEPTION 'runtime role must not rewrite retirement audit';
+            END IF;
+          END $$;
+          SQL
+          echo "RETIREMENT_AUDIT_POSTGRES=PASS"
