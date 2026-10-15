@@ -24,7 +24,7 @@ def test_recovered_exact_release_does_not_alarm():
     assert result["critical"] is False
 
 
-def test_real_entry_not_ready_alone_alarms():
+def test_historical_entry_denial_does_not_override_current_exact_arm():
     result = project_release_arm_health(
         loaded_commit="a" * 40,
         gate_open=True,
@@ -32,7 +32,8 @@ def test_real_entry_not_ready_alone_alarms():
         recent_not_arm_ready=1,
         last_not_arm_ready_at="2026-10-09T00:00:00Z",
     )
-    assert result["critical"] is True
+    assert result["critical"] is False
+    assert result["recent_not_arm_ready"] == 1
 
 
 def test_disarmed_gate_still_shows_unresolved_release_mismatch():

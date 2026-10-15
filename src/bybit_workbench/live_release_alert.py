@@ -37,8 +37,7 @@ def project_release_arm_health(
             or (
                 gate_open
                 and (
-                    recent_not_arm_ready > 0
-                    or not loaded_commit
+                    not loaded_commit
                     or not sessions
                 )
             )
