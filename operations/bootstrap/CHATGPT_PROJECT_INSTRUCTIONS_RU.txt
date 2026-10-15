@@ -147,10 +147,7 @@ Server/DB: `DEVELOPMENT_RELEASE §19.5` + `CURRENT_PROJECT_MAP §1.4`; tool, act
 `LOADED_COMMIT`
 `OPERATIONAL_DELTA_COMMIT(S)` при наличии.
 
-Source sync != deploy.
-Commit != deploy.
-Deploy != loaded runtime.
-Service active != runtime behavior verified.
+Source sync != deploy != loaded runtime; service active != behavior verified.
 
 При operational deltas `SOURCE_LIVE_IDENTITY=PASS` для real-arm запрещён до сведения production state к одному exact verified release composition.
 
