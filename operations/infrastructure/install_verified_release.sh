@@ -372,6 +372,7 @@ migration_files=(
   operations/sql/20260920_slot_admission_v1.sql
   operations/sql/20261006_account_state_generation_v1.sql
   operations/sql/20261006_observer_runtime_fault_v1.sql
+  operations/sql/20261015_observer_dashboard_delivery_v1.sql
   operations/sql/20261003_market_observation_alert_v1.sql
   operations/sql/20261004_r1_reverse_transitions.sql
   operations/sql/20261004_r1_live_arm_waiver.sql
