@@ -5,10 +5,10 @@ authorizes new-release LIVE arm; no Exchange mutation is performed.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
-import json
 
 
 def retire_stale_release_arms(
