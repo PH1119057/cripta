@@ -456,7 +456,18 @@ def _fetch_server_time() -> datetime:
 
 
 class PublicTradeStreamBehind(ConnectionError):
-    """Public recent-trade proves the accepted WS trade cursor is behind."""
+    """REST-proven missing exact identities; recovery must cover the entire set."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing_exec_ids: Mapping[str, tuple[str, ...]],
+        cutoff_by_symbol: Mapping[str, datetime],
+    ) -> None:
+        super().__init__(message)
+        self.missing_exec_ids = dict(missing_exec_ids)
+        self.cutoff_by_symbol = dict(cutoff_by_symbol)
 
 
 def _fetch_recent_trade_snapshot(
@@ -534,23 +545,30 @@ def _audit_public_trade_silence(
         for symbol in symbols:
             snapshots[symbol] = fetch(symbol)
 
-    missing_counts: dict[str, int] = {}
+    missing_exec_ids: dict[str, tuple[str, ...]] = {}
     for symbol in symbols:
         rows, cutoff_at = snapshots[symbol]
-        unknown_exec_ids = audit_recent_trade_window(
+        missing_exec_ids[symbol] = audit_recent_trade_window(
             rows,
             anchor=trade_cursors[symbol],
             cutoff_at=cutoff_at,
             known_exec_ids=known_current_seq_exec_ids.get(symbol, set()),
         )
-        missing_counts[symbol] = len(unknown_exec_ids)
-    missing = {symbol: count for symbol, count in missing_counts.items() if count > 0}
+    missing = {
+        symbol: ids for symbol, ids in missing_exec_ids.items() if ids
+    }
     if missing:
-        rendered = ",".join(f"{symbol}:{count}" for symbol, count in sorted(missing.items()))
-        raise PublicTradeStreamBehind(
-            f"PUBLIC_TRADE silence audit found missing exact trade(s): {rendered}"
+        rendered = ",".join(
+            f"{symbol}:{len(ids)}" for symbol, ids in sorted(missing.items())
         )
-    return missing_counts
+        raise PublicTradeStreamBehind(
+            f"PUBLIC_TRADE silence audit found missing exact trade(s): {rendered}",
+            missing_exec_ids=missing,
+            cutoff_by_symbol={
+                symbol: snapshots[symbol][1] for symbol in missing
+            },
+        )
+    return {symbol: 0 for symbol in symbols}
 
 
 def _trade_cursor(raw: Mapping[str, object]) -> TradeCursor:
@@ -2128,27 +2146,33 @@ def _run_observer_epoch(
                 try:
                     _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
                 except PublicTradeStreamBehind as audit_exc:
-                    cutoff_at = datetime.now(UTC)
-                    recovered = trade_mirror.recover_after(
-                        trade_cursors,
-                        cutoff_at=cutoff_at,
-                    )
-                    if not recovered:
-                        raise ContinuityNotProvable(
-                            "observer mirror recovery returned no exact PUBLIC_TRADE events"
-                        ) from audit_exc
-                    for event in recovered:
-                        if event.symbol not in stale:
-                            continue
-                        process_fact(
-                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
-                            TradeCursor(
-                                event.symbol,
-                                event.exec_id,
-                                event.seq,
-                                event.traded_at,
-                            ),
+                    # Validate all REST-proven missing execIds before replaying any
+                    # event. A nonempty mirror result is not continuity proof.
+                    recovered_by_symbol = {}
+                    for symbol, expected in audit_exc.missing_exec_ids.items():
+                        recovered = trade_mirror.recover_after(
+                            {symbol: trade_cursors[symbol]},
+                            cutoff_at=audit_exc.cutoff_by_symbol[symbol],
                         )
+                        actual_ids = {event.exec_id for event in recovered}
+                        absent_ids = set(expected) - actual_ids
+                        if absent_ids:
+                            raise ContinuityNotProvable(
+                                f"observer mirror recovery incomplete for {symbol}: "
+                                f"missing {len(absent_ids)} exact execId(s)"
+                            ) from audit_exc
+                        recovered_by_symbol[symbol] = recovered
+                    for symbol in sorted(recovered_by_symbol):
+                        for event in recovered_by_symbol[symbol]:
+                            process_fact(
+                                _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                                TradeCursor(
+                                    event.symbol,
+                                    event.exec_id,
+                                    event.seq,
+                                    event.traded_at,
+                                ),
+                            )
                 proven_at = time.monotonic()
                 for symbol in stale:
                     trade_proof_monotonic[symbol] = proven_at
