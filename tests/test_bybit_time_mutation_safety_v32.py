@@ -292,6 +292,7 @@ def test_clock_probe_rejects_all_slow_rtt_without_mutation() -> None:
         "api_get": fake_get,
         "BYBIT_TIME_PROBE_ATTEMPTS": 3,
         "BYBIT_TIME_PROBE_MAX_RTT_MS": 1000.0,
+        "BybitTimeCalibration": object,
         "build_bybit_time_calibration": build_bybit_time_calibration,
         "_server_time_ms": lambda payload: 1000.0,
         "UnsafeBybitClock": Unsafe,
@@ -329,6 +330,7 @@ def test_clock_probe_fails_closed_when_all_rest_attempts_timeout() -> None:
         "api_get": timeout,
         "BYBIT_TIME_PROBE_ATTEMPTS": 3,
         "BYBIT_TIME_PROBE_MAX_RTT_MS": 1000.0,
+        "BybitTimeCalibration": object,
         "UnsafeBybitClock": Unsafe,
     }
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(PRIVATE), "exec"), scope)
