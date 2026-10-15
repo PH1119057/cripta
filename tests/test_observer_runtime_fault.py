@@ -93,3 +93,42 @@ def test_fault_token_is_canonical_and_installer_orders_migration() -> None:
         < installer.index("20261006_observer_runtime_fault_v1.sql")
         < installer.index("20261003_market_observation_alert_v1.sql")
     )
+
+
+def test_repeated_observer_fault_preserves_history_and_requires_explicit_resolution(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(observer, "LOADED_COMMIT", "b" * 40)
+    connection = FakeConnection()
+    observed = NOW
+    first = observer._record_observer_runtime_fault(
+        connection, TimeoutError("transient REST outage"),
+        observed_at=observed, observer_epoch_id="epoch-1",
+    )
+    second = observer._record_observer_runtime_fault(
+        connection, TimeoutError("transient REST outage"),
+        observed_at=observed, observer_epoch_id="epoch-2",
+    )
+    assert first == second
+    assert len(connection.calls) == 2
+    for statement, parameters in connection.calls:
+        assert "ON CONFLICT(fault_id) DO UPDATE" in statement
+        assert "SET state='OPEN'" in statement
+        assert "resolved_at=NULL" in statement
+        assert "'first_seen_at'" in statement
+        assert "'occurrence_count'" in statement
+        assert "state='RESOLVED'" not in statement
+        payload = json.loads(str(parameters[4]))
+        assert payload["owner_resolution_required"] is True
+        assert payload["auto_resolve"] is False
+
+
+def test_observer_status_refresh_does_not_mutate_durable_fault_state() -> None:
+    source = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    start = source.index("def _observer_status(")
+    end = source.index("\ndef ", start + 1)
+    body = source[start:end]
+    assert "lifecycle_faults" not in body
+    assert "RESOLVED" not in body
