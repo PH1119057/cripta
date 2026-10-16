@@ -65,6 +65,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 DATA_ROOT = Path(os.environ.get("CRIPTA_DATA_ROOT", "/data/cripta"))
 APP_ROOT = Path(os.environ.get("CRIPTA_APP_ROOT", "/srv/cripta"))
 LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 PERIOD = "20260518_20260816"
 STATE = DATA_ROOT / "datasets" / "raw" / PERIOD / "download_state.json"
 EXPANSION_STATE = DATA_ROOT / "datasets" / "raw" / PERIOD / "download_state_expansion_20260823.json"
@@ -857,18 +858,35 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         reasons.append("private runtime state is stale")
     latest = connection.execute(
         """SELECT finished_at_epoch_ms,ok FROM runtime.reconciliation_runs
-           ORDER BY id DESC LIMIT 1"""
+           WHERE (
+                (trading_account_id=%s AND identity_status='PROVEN')
+                OR identity_status='LEGACY_UNKNOWN'
+           )
+           ORDER BY id DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if not latest or not bool(latest[1]) or now_ms - int(latest[0]) > 15_000:
         reasons.append("fresh exchange reconciliation is required")
     wallet = connection.execute(
-        "SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest WHERE singleton=1"
+        """SELECT refreshed_at_epoch_ms FROM runtime.wallet_latest
+           WHERE singleton=1
+             AND (
+                  (trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN'
+             )""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if not wallet or now_ms - int(wallet[0]) > 15_000:
         reasons.append("mandatory exchange state is stale")
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
-           WHERE command_type='entry' AND state IN ('queued','running') LIMIT 1"""
+           WHERE command_type='entry' AND state IN ('queued','running')
+             AND (
+                  (trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN'
+             )
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if ambiguous:
         reasons.append("ambiguous local Entry command remains")
@@ -876,12 +894,27 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         """SELECT 1 FROM runtime.hot_orders o
            JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
            WHERE c.command_type='entry'
-             AND o.order_status IN ('New','PartiallyFilled','Untriggered') LIMIT 1"""
+             AND o.order_status IN ('New','PartiallyFilled','Untriggered')
+             AND (
+                  (o.trading_account_id=%s AND o.identity_status='PROVEN')
+                  OR o.identity_status='LEGACY_UNKNOWN'
+             )
+             AND (
+                  (c.trading_account_id=%s AND c.identity_status='PROVEN')
+                  OR c.identity_status='LEGACY_UNKNOWN'
+             )
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchone()
     if pending:
         reasons.append("bot-owned pending Entry order remains")
     for symbol, raw_payload in connection.execute(
-        "SELECT symbol,payload_json FROM runtime.hot_positions"
+        """SELECT symbol,payload_json FROM runtime.hot_positions
+           WHERE (
+                (trading_account_id=%s AND identity_status='PROVEN')
+                OR identity_status='LEGACY_UNKNOWN'
+           )""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall():
         raw = raw_payload if isinstance(raw_payload, dict) else json.loads(raw_payload)
         if (
@@ -3686,12 +3719,24 @@ def _u6_prepare_r1_prearm_evidence(
 
     reconciliation = connection.execute(
         """SELECT finished_at_epoch_ms,ok,positions,orders
-             FROM runtime.reconciliation_runs ORDER BY id DESC LIMIT 1"""
+             FROM runtime.reconciliation_runs
+            WHERE (
+                  (trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN'
+            )
+            ORDER BY id DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     wallet = connection.execute(
         """SELECT refreshed_at_epoch_ms,total_equity,available_balance,
                   payload_json::jsonb->>'accountType'
-             FROM runtime.wallet_latest WHERE singleton=1"""
+             FROM runtime.wallet_latest
+            WHERE singleton=1
+              AND (
+                   (trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN'
+              )""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if not reconciliation or not bool(reconciliation[1]):
         raise ValueError("R1 PREARM: reconciliation missing/failed")
@@ -3712,8 +3757,10 @@ def _u6_prepare_r1_prearm_evidence(
                   observed_at,fresh_until
              FROM runtime.position_mode_states
             WHERE instrument = ANY(%s)
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
             ORDER BY instrument,observed_at DESC""",
-        (symbols,),
+        (symbols, TRADING_ACCOUNT_ID),
     ).fetchall()
     pm = {str(row[0]): row for row in pm_rows}
     if set(pm) != set(symbols):
@@ -4728,16 +4775,42 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                 )
                             occupied = connection.execute(
                                 """SELECT
-                                    EXISTS(SELECT 1 FROM runtime.hot_positions
-                                           WHERE symbol=%s AND NULLIF(size,'')::numeric > 0)
-                                    OR EXISTS(SELECT 1 FROM runtime.hot_orders
-                                              WHERE symbol=%s
-                                                AND order_status IN ('New','PartiallyFilled','Untriggered')
-                                                AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false)
-                                    OR EXISTS(SELECT 1 FROM runtime.trade_commands
-                                              WHERE symbol=%s AND command_type='entry'
-                                                AND state IN ('queued','running'))""",
-                                (symbol, symbol, symbol),
+                                    EXISTS(
+                                        SELECT 1 FROM runtime.hot_positions
+                                         WHERE symbol=%s
+                                           AND NULLIF(size,'')::numeric > 0
+                                           AND (
+                                                (trading_account_id=%s AND identity_status='PROVEN')
+                                                OR identity_status='LEGACY_UNKNOWN'
+                                           )
+                                    )
+                                    OR EXISTS(
+                                        SELECT 1 FROM runtime.hot_orders
+                                         WHERE symbol=%s
+                                           AND order_status IN ('New','PartiallyFilled','Untriggered')
+                                           AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
+                                           AND (
+                                                (trading_account_id=%s AND identity_status='PROVEN')
+                                                OR identity_status='LEGACY_UNKNOWN'
+                                           )
+                                    )
+                                    OR EXISTS(
+                                        SELECT 1 FROM runtime.trade_commands
+                                         WHERE symbol=%s AND command_type='entry'
+                                           AND state IN ('queued','running')
+                                           AND (
+                                                (trading_account_id=%s AND identity_status='PROVEN')
+                                                OR identity_status='LEGACY_UNKNOWN'
+                                           )
+                                    )""",
+                                (
+                                    symbol,
+                                    TRADING_ACCOUNT_ID,
+                                    symbol,
+                                    TRADING_ACCOUNT_ID,
+                                    symbol,
+                                    TRADING_ACCOUNT_ID,
+                                ),
                             ).fetchone()
                             if occupied and bool(occupied[0]):
                                 raise ValueError("по монете уже есть позиция, входная заявка или команда")
@@ -4779,13 +4852,17 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             else f"web-{kind[:4]}-{symbol[:12]}-{int(time.time() * 1000)}"
                         )
                         connection.execute(
-                            "INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms) VALUES(%s,%s,%s,%s,'queued',%s)",
+                            """INSERT INTO runtime.trade_commands(
+                                   command_id,command_type,symbol,payload_json,state,
+                                   requested_at_epoch_ms,trading_account_id,identity_status
+                               ) VALUES(%s,%s,%s,%s,'queued',%s,%s,'PROVEN')""",
                             (
                                 command_id,
                                 command_type,
                                 symbol,
                                 json.dumps(command_payload),
                                 int(time.time() * 1000),
+                                TRADING_ACCOUNT_ID,
                             ),
                         )
                     connection.commit()
@@ -4901,5 +4978,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
 
 
 if __name__ == "__main__":
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Dashboard control/live state")
     server = ThreadingHTTPServer(("127.0.0.1", 8765), Handler)
     server.serve_forever()
