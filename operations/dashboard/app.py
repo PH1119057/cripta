@@ -1119,10 +1119,24 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
-        wallet = connection.execute("""SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
-            available_balance,payload_json FROM runtime.wallet_latest WHERE singleton=1""").fetchone()
-        rows = connection.execute("""SELECT symbol,position_idx,side,size,entry_price,leverage,
-            refreshed_at_epoch_ms,payload_json FROM runtime.hot_positions ORDER BY symbol""").fetchall()
+        wallet = connection.execute(
+            """SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
+                      available_balance,payload_json
+                 FROM runtime.wallet_latest
+                WHERE singleton=1
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'""",
+            (TRADING_ACCOUNT_ID,),
+        ).fetchone()
+        rows = connection.execute(
+            """SELECT symbol,position_idx,side,size,entry_price,leverage,
+                      refreshed_at_epoch_ms,payload_json
+                 FROM runtime.hot_positions
+                WHERE trading_account_id=%s
+                  AND identity_status='PROVEN'
+                ORDER BY symbol""",
+            (TRADING_ACCOUNT_ID,),
+        ).fetchall()
         ownership_rows = []
         if connection.execute("SELECT to_regclass('runtime.position_ownership')").fetchone()[0]:
             ownership_rows = connection.execute(
@@ -1130,28 +1144,54 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                       coalesce((
                           SELECT sum(e.exec_fee::numeric)
                             FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
-                            JOIN runtime.executions e ON e.exec_id=xid.exec_id
+                            JOIN runtime.executions e
+                              ON e.exec_id=xid.exec_id
+                             AND (
+                                  (o.trading_account_id=%s
+                                   AND o.identity_status='PROVEN'
+                                   AND e.trading_account_id=%s
+                                   AND e.identity_status='PROVEN')
+                                  OR
+                                  (o.identity_status='LEGACY_UNKNOWN'
+                                   AND e.identity_status='LEGACY_UNKNOWN')
+                             )
                       ),0) AS entry_fee_actual
                    FROM runtime.position_ownership o
                    LEFT JOIN strategy_entry.strategy_cards c
                      ON c.strategy_id=o.strategy_id AND c.strategy_version=o.strategy_version
                    WHERE o.state='OPEN'
-                   ORDER BY o.created_at DESC"""
+                     AND (
+                          (o.trading_account_id=%s AND o.identity_status='PROVEN')
+                          OR o.identity_status='LEGACY_UNKNOWN'
+                     )
+                   ORDER BY o.created_at DESC""",
+                (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
             ).fetchall()
         strategy_name_rows = connection.execute(
             "SELECT strategy_id,strategy_version,name FROM strategy_entry.strategy_cards"
         ).fetchall()
-        trailing_rows = connection.execute("""SELECT DISTINCT ON (symbol) symbol,
-            payload_json,exchange_updated_ms FROM runtime.hot_orders
-            WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
-            ORDER BY symbol,exchange_updated_ms DESC""").fetchall()
-        pending_order_rows = connection.execute("""SELECT symbol,side,qty,price,leaves_qty,
-            refreshed_at_epoch_ms,payload_json FROM runtime.hot_orders
-            WHERE order_status IN ('New','PartiallyFilled','Untriggered')
-              AND COALESCE(payload_json::jsonb->>'reduceOnly','false') <> 'true'
-              AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'
-              AND COALESCE(payload_json::jsonb->>'orderType','') = 'Limit'
-            ORDER BY exchange_updated_ms DESC""").fetchall()
+        trailing_rows = connection.execute(
+            """SELECT DISTINCT ON (symbol) symbol,payload_json,exchange_updated_ms
+                 FROM runtime.hot_orders
+                WHERE payload_json::jsonb->>'stopOrderType'='TrailingStop'
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'
+                ORDER BY symbol,exchange_updated_ms DESC""",
+            (TRADING_ACCOUNT_ID,),
+        ).fetchall()
+        pending_order_rows = connection.execute(
+            """SELECT symbol,side,qty,price,leaves_qty,
+                      refreshed_at_epoch_ms,payload_json
+                 FROM runtime.hot_orders
+                WHERE order_status IN ('New','PartiallyFilled','Untriggered')
+                  AND COALESCE(payload_json::jsonb->>'reduceOnly','false') <> 'true'
+                  AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'
+                  AND COALESCE(payload_json::jsonb->>'orderType','') = 'Limit'
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'
+                ORDER BY exchange_updated_ms DESC""",
+            (TRADING_ACCOUNT_ID,),
+        ).fetchall()
         settings = connection.execute(
             """SELECT stake_usdt,leverage,enabled_symbols_json,entry_offset_pct,
             entry_limit_ttl_seconds,auto_profit_protection,auto_trailing_stop,
@@ -1163,7 +1203,15 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ).fetchone()
         rearm = live_rearm_readiness(connection)
         commands = connection.execute(
-            "SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error FROM runtime.trade_commands ORDER BY requested_at_epoch_ms DESC LIMIT 20"
+            """SELECT command_id,command_type,symbol,state,requested_at_epoch_ms,error
+                 FROM runtime.trade_commands
+                WHERE (
+                     (trading_account_id=%s AND identity_status='PROVEN')
+                     OR identity_status='LEGACY_UNKNOWN'
+                )
+                ORDER BY requested_at_epoch_ms DESC
+                LIMIT 20""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchall()
         # Read-only fail-closed projection of durable gate/session state.
         release_arm_rows = connection.execute(
@@ -1238,9 +1286,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             ) e ON true
             LEFT JOIN LATERAL (
                 SELECT order_status,updated_at_epoch_ms,payload_json
-                FROM runtime.exchange_order_history
+                FROM runtime.exchange_order_history h
                 WHERE order_id =
                       c.result_json::jsonb->'result'->>'orderId'
+                  AND (
+                       (c.identity_status='PROVEN'
+                        AND h.trading_account_id=c.trading_account_id
+                        AND h.identity_status='PROVEN')
+                       OR
+                       (c.identity_status='LEGACY_UNKNOWN'
+                        AND h.identity_status='LEGACY_UNKNOWN')
+                  )
                 ORDER BY updated_at_epoch_ms DESC
                 LIMIT 1
             ) h ON true
@@ -1253,13 +1309,26 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                                 / sum(exec_qty::numeric)
                            ELSE NULL
                        END AS avg_fill_price
-                FROM runtime.executions
+                FROM runtime.executions x
                 WHERE order_id =
                       c.result_json::jsonb->'result'->>'orderId'
+                  AND (
+                       (c.identity_status='PROVEN'
+                        AND x.trading_account_id=c.trading_account_id
+                        AND x.identity_status='PROVEN')
+                       OR
+                       (c.identity_status='LEGACY_UNKNOWN'
+                        AND x.identity_status='LEGACY_UNKNOWN')
+                  )
             ) x ON true
             WHERE c.command_type='entry'
+              AND (
+                   (c.trading_account_id=%s AND c.identity_status='PROVEN')
+                   OR c.identity_status='LEGACY_UNKNOWN'
+              )
             ORDER BY c.requested_at_epoch_ms DESC
-            LIMIT 100"""
+            LIMIT 100""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchall()
         supervisor_rows = []
         if connection.execute("SELECT to_regclass('supervisor.snapshots')").fetchone()[0]:
@@ -1281,17 +1350,27 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 FROM runtime.position_exit_attribution a
                 JOIN runtime.position_ownership o USING(position_id,trade_id)
                 WHERE a.link_status='EXACT'
+                  AND (
+                       (o.trading_account_id=%s AND o.identity_status='PROVEN')
+                       OR o.identity_status='LEGACY_UNKNOWN'
+                  )
                 ORDER BY a.closed_at DESC LIMIT %s""",
-                (1000 if include_history else 20,),
+                (TRADING_ACCOUNT_ID, 1000 if include_history else 20),
             ).fetchall()
         # Exchange-evidenced closures without StrategyPosition ownership.
         recovered_closed_rows = connection.execute(
-            """SELECT reservation_id,symbol,side,actual_qty,exit_vwap,
-                      entry_fee_actual,exit_fee_actual,gross_pnl,
-                      net_without_funding,evidence,recovered_at
-               FROM runtime.recovered_closed_entry_cycles
-               ORDER BY recovered_at DESC LIMIT %s""",
-            (1000 if include_history else 40,),
+            """SELECT rc.reservation_id,rc.symbol,rc.side,rc.actual_qty,rc.exit_vwap,
+                      rc.entry_fee_actual,rc.exit_fee_actual,rc.gross_pnl,
+                      rc.net_without_funding,rc.evidence,rc.recovered_at
+                 FROM runtime.recovered_closed_entry_cycles rc
+                 JOIN runtime.capital_reservations r
+                   ON r.reservation_id=rc.reservation_id
+                WHERE (
+                     (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                     OR r.identity_status='LEGACY_UNKNOWN'
+                )
+                ORDER BY rc.recovered_at DESC LIMIT %s""",
+            (TRADING_ACCOUNT_ID, 1000 if include_history else 40),
         ).fetchall()
         control_entry_rows = connection.execute(
             """SELECT c.command_id,c.symbol,c.payload_json,e.order_id,e.exec_id,
@@ -1301,34 +1380,68 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                  ON e.order_id = c.result_json::jsonb->'result'->>'orderId'
                WHERE c.command_type='entry' AND c.state='completed'
                  AND c.payload_json::jsonb->>'source'='owner_controlled_live_test'
+                 AND (
+                      (c.trading_account_id=%s AND c.identity_status='PROVEN'
+                       AND e.trading_account_id=%s AND e.identity_status='PROVEN')
+                      OR
+                      (c.identity_status='LEGACY_UNKNOWN'
+                       AND e.identity_status='LEGACY_UNKNOWN')
+                 )
                ORDER BY e.exec_time_ms DESC LIMIT %s""",
-            (1000 if include_history else 40,),
+            (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, 1000 if include_history else 40),
         ).fetchall()
         control_exit_rows = connection.execute(
             """SELECT e.symbol,e.order_id,e.exec_id,e.side,e.exec_qty,
                       e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json
                FROM runtime.executions e
                WHERE (e.payload_json::jsonb->>'closedSize')::numeric > 0
+                 AND (
+                      (e.trading_account_id=%s AND e.identity_status='PROVEN')
+                      OR e.identity_status='LEGACY_UNKNOWN'
+                 )
                ORDER BY e.exec_time_ms DESC LIMIT %s""",
-            (3000 if include_history else 120,),
+            (TRADING_ACCOUNT_ID, 3000 if include_history else 120),
         ).fetchall()
         execution_rows = []
         if include_history and not has_exact_exit_table:
-            execution_rows = connection.execute("""SELECT symbol,side,exec_price,exec_qty,exec_fee,
-                exec_time_ms,order_id,payload_json FROM (
-                    SELECT symbol,side,exec_price,exec_qty,exec_fee,exec_time_ms,order_id,payload_json
-                    FROM runtime.executions ORDER BY exec_time_ms DESC LIMIT 5000
-                ) AS recent_executions ORDER BY exec_time_ms ASC""").fetchall()
+            execution_rows = connection.execute(
+                """SELECT symbol,side,exec_price,exec_qty,exec_fee,
+                          exec_time_ms,order_id,payload_json
+                     FROM (
+                         SELECT symbol,side,exec_price,exec_qty,exec_fee,
+                                exec_time_ms,order_id,payload_json
+                           FROM runtime.executions
+                          WHERE (
+                               (trading_account_id=%s AND identity_status='PROVEN')
+                               OR identity_status='LEGACY_UNKNOWN'
+                          )
+                          ORDER BY exec_time_ms DESC
+                          LIMIT 5000
+                     ) AS recent_executions
+                    ORDER BY exec_time_ms ASC""",
+                (TRADING_ACCOUNT_ID,),
+            ).fetchall()
         lifecycle_rows = []
         if include_history and connection.execute(
             "SELECT to_regclass('analyst.trade_lifecycles')"
         ).fetchone()[0]:
-            lifecycle_rows = connection.execute("""SELECT trade_id,position_id,symbol,side,
-                strategy_id,strategy_version,opened_at,closed_at,lifecycle_state,
-                data_completeness,diagnosis_class,actual_net_pnl,lifecycle_json,
-                actual_net_without_funding,bot_instance_id,entry_command_id,
-                geometry_handoff_id
-                FROM analyst.trade_lifecycles ORDER BY closed_at DESC NULLS LAST LIMIT 500""").fetchall()
+            lifecycle_rows = connection.execute(
+                """SELECT l.trade_id,l.position_id,l.symbol,l.side,
+                          l.strategy_id,l.strategy_version,l.opened_at,l.closed_at,
+                          l.lifecycle_state,l.data_completeness,l.diagnosis_class,
+                          l.actual_net_pnl,l.lifecycle_json,l.actual_net_without_funding,
+                          l.bot_instance_id,l.entry_command_id,l.geometry_handoff_id
+                     FROM analyst.trade_lifecycles l
+                     JOIN runtime.position_ownership o
+                       ON o.position_id=l.position_id
+                    WHERE (
+                         (o.trading_account_id=%s AND o.identity_status='PROVEN')
+                         OR o.identity_status='LEGACY_UNKNOWN'
+                    )
+                    ORDER BY l.closed_at DESC NULLS LAST
+                    LIMIT 500""",
+                (TRADING_ACCOUNT_ID,),
+            ).fetchall()
         market_context = None
         if connection.execute(
             "SELECT to_regclass('mayak_v2.shared_market_contexts')"
