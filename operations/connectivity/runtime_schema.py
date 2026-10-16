@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-exit-account-r6c"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-command-account-r6d"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
