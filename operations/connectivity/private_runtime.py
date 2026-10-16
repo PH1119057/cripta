@@ -952,8 +952,20 @@ def observe_m3_entry_context(
 
 
 def connection_event(connection: psycopg.Connection, channel: str, event: str, **details: object) -> None:
-    connection.execute("INSERT INTO runtime.connection_events(at_epoch_ms,channel,event,details_json) VALUES(%s,%s,%s,%s)",
-                       (int(time.time() * 1000), channel, event, json.dumps(details, ensure_ascii=False)))
+    connection.execute(
+        """INSERT INTO runtime.connection_events(
+               at_epoch_ms,channel,event,details_json,
+               trading_account_id,account_connector_id,identity_status)
+           VALUES(%s,%s,%s,%s,%s,%s,'PROVEN')""",
+        (
+            int(time.time() * 1000),
+            channel,
+            event,
+            json.dumps(details, ensure_ascii=False),
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
+        ),
+    )
     connection.commit()
 
 
@@ -3720,9 +3732,18 @@ def reconcile(
             )
             connection.execute(
                 """INSERT INTO runtime.reconciliation_runs(
-                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
-                    VALUES(%s,%s,%s,1,%s,%s,'')""",
-                (started, now, reason, len(position_list), len(order_list)),
+                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error,
+                    trading_account_id,account_connector_id,identity_status)
+                    VALUES(%s,%s,%s,1,%s,%s,'',%s,%s,'PROVEN')""",
+                (
+                    started,
+                    now,
+                    reason,
+                    len(position_list),
+                    len(order_list),
+                    TRADING_ACCOUNT_ID,
+                    ACCOUNT_CONNECTOR_ID,
+                ),
             )
         return len(position_list), len(order_list)
     except Exception as exc:
@@ -3742,9 +3763,17 @@ def reconcile(
             )
             connection.execute(
                 """INSERT INTO runtime.reconciliation_runs(
-                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error)
-                    VALUES(%s,%s,%s,0,0,0,%s)""",
-                (started, finished, reason, f"{type(exc).__name__}: {exc}"),
+                    started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders,error,
+                    trading_account_id,account_connector_id,identity_status)
+                    VALUES(%s,%s,%s,0,0,0,%s,%s,%s,'PROVEN')""",
+                (
+                    started,
+                    finished,
+                    reason,
+                    f"{type(exc).__name__}: {exc}",
+                    TRADING_ACCOUNT_ID,
+                    ACCOUNT_CONNECTOR_ID,
+                ),
             )
         if isinstance(exc, ExchangeReadUnavailable):
             raise
@@ -3792,34 +3821,66 @@ def upsert_position(connection: psycopg.Connection, item: dict[str, object], now
     ).fetchone()
     merged = json.loads(existing[0]) if existing else {}
     merged.update(item)
-    connection.execute("""INSERT INTO runtime.hot_positions(symbol,position_idx,side,size,entry_price,leverage,
-        exchange_updated_ms,refreshed_at_epoch_ms,payload_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT(symbol,position_idx) DO UPDATE SET side=excluded.side,size=excluded.size,
-        entry_price=excluded.entry_price,leverage=excluded.leverage,exchange_updated_ms=excluded.exchange_updated_ms,
-        refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,payload_json=excluded.payload_json""",
+    connection.execute("""INSERT INTO runtime.hot_positions(
+        symbol,position_idx,side,size,entry_price,leverage,
+        exchange_updated_ms,refreshed_at_epoch_ms,payload_json,
+        trading_account_id,account_connector_id,identity_status)
+        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
+        ON CONFLICT(symbol,position_idx) DO UPDATE SET
+        side=excluded.side,size=excluded.size,entry_price=excluded.entry_price,
+        leverage=excluded.leverage,exchange_updated_ms=excluded.exchange_updated_ms,
+        refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
+        payload_json=excluded.payload_json,
+        trading_account_id=excluded.trading_account_id,
+        account_connector_id=excluded.account_connector_id,
+        identity_status='PROVEN'""",
         (merged.get("symbol", ""), int(merged.get("positionIdx") or 0), merged.get("side", ""), merged.get("size", "0"),
          merged.get("entryPrice") or merged.get("avgPrice") or "", merged.get("leverage", ""), int(merged.get("updatedTime") or 0), now,
-         json.dumps(merged, ensure_ascii=False)))
+         json.dumps(merged, ensure_ascii=False), TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID))
 
 
 def upsert_order(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
-    connection.execute("""INSERT INTO runtime.hot_orders(order_id,order_link_id,symbol,side,order_status,qty,price,
-        leaves_qty,exchange_updated_ms,refreshed_at_epoch_ms,payload_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT(order_id) DO UPDATE SET order_status=excluded.order_status,leaves_qty=excluded.leaves_qty,
-        exchange_updated_ms=excluded.exchange_updated_ms,refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
-        payload_json=excluded.payload_json""",
+    connection.execute("""INSERT INTO runtime.hot_orders(
+        order_id,order_link_id,symbol,side,order_status,qty,price,
+        leaves_qty,exchange_updated_ms,refreshed_at_epoch_ms,payload_json,
+        trading_account_id,account_connector_id,identity_status)
+        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
+        ON CONFLICT(order_id) DO UPDATE SET
+        order_link_id=excluded.order_link_id,symbol=excluded.symbol,side=excluded.side,
+        order_status=excluded.order_status,qty=excluded.qty,price=excluded.price,
+        leaves_qty=excluded.leaves_qty,exchange_updated_ms=excluded.exchange_updated_ms,
+        refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,payload_json=excluded.payload_json,
+        trading_account_id=excluded.trading_account_id,
+        account_connector_id=excluded.account_connector_id,
+        identity_status='PROVEN'""",
         (item.get("orderId", ""), item.get("orderLinkId", ""), item.get("symbol", ""), item.get("side", ""),
          item.get("orderStatus", ""), item.get("qty", ""), item.get("price", ""), item.get("leavesQty", ""),
-         int(item.get("updatedTime") or 0), now, json.dumps(item, ensure_ascii=False)))
+         int(item.get("updatedTime") or 0), now, json.dumps(item, ensure_ascii=False),
+         TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID))
 
 
 def upsert_wallet(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
     available = str(account_available_usdt(item))
-    connection.execute("""INSERT INTO runtime.wallet_latest(singleton,refreshed_at_epoch_ms,total_equity,wallet_balance,
-        available_balance,payload_json) VALUES(1,%s,%s,%s,%s,%s) ON CONFLICT(singleton) DO UPDATE SET
-        refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,total_equity=excluded.total_equity,
-        wallet_balance=excluded.wallet_balance,available_balance=excluded.available_balance,payload_json=excluded.payload_json""",
-        (now, item.get("totalEquity", ""), item.get("totalWalletBalance", ""), available, json.dumps(item, ensure_ascii=False)))
+    connection.execute("""INSERT INTO runtime.wallet_latest(
+        singleton,refreshed_at_epoch_ms,total_equity,wallet_balance,available_balance,payload_json,
+        trading_account_id,account_connector_id,identity_status)
+        VALUES(1,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
+        ON CONFLICT(singleton) DO UPDATE SET
+        refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
+        total_equity=excluded.total_equity,wallet_balance=excluded.wallet_balance,
+        available_balance=excluded.available_balance,payload_json=excluded.payload_json,
+        trading_account_id=excluded.trading_account_id,
+        account_connector_id=excluded.account_connector_id,
+        identity_status='PROVEN'""",
+        (
+            now,
+            item.get("totalEquity", ""),
+            item.get("totalWalletBalance", ""),
+            available,
+            json.dumps(item, ensure_ascii=False),
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
+        ))
 
 
 def handle_private(connection: psycopg.Connection, message: dict[str, object]) -> None:
@@ -3828,8 +3889,21 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
         return
     now = int(time.time() * 1000)
     data = message.get("data") or []
-    connection.execute("INSERT INTO runtime.private_events(received_at_epoch_ms,topic,message_id,creation_time_ms,payload_json) VALUES(%s,%s,%s,%s,%s)",
-                       (now, topic, str(message.get("id") or ""), int(message.get("creationTime") or 0), json.dumps(message, ensure_ascii=False)))
+    connection.execute(
+        """INSERT INTO runtime.private_events(
+               received_at_epoch_ms,topic,message_id,creation_time_ms,payload_json,
+               trading_account_id,account_connector_id,identity_status)
+           VALUES(%s,%s,%s,%s,%s,%s,%s,'PROVEN')""",
+        (
+            now,
+            topic,
+            str(message.get("id") or ""),
+            int(message.get("creationTime") or 0),
+            json.dumps(message, ensure_ascii=False),
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
+        ),
+    )
     for item in data:
         if topic.startswith("position"):
             if float(item.get("size") or 0) == 0:

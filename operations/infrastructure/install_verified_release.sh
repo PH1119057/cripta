@@ -403,6 +403,7 @@ migration_files=(
   operations/sql/20261016_identity_registry_r1.sql
   operations/sql/20261016_identity_registry_r2_seed.sql
   operations/sql/20261016_identity_bridge_r3_r4.sql
+  operations/sql/20261016_private_current_state_r5a.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

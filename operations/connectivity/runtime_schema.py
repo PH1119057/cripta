@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-identity-r3-r4"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-private-current-state-r5a"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -62,6 +62,24 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "account_state_generations", "identity_status"),
     ("runtime", "position_mode_states", "identity_status"),
     ("dispatcher_v2", "trading_capacity_snapshots", "identity_status"),
+    ("runtime", "wallet_latest", "trading_account_id"),
+    ("runtime", "wallet_latest", "account_connector_id"),
+    ("runtime", "wallet_latest", "identity_status"),
+    ("runtime", "hot_positions", "trading_account_id"),
+    ("runtime", "hot_positions", "account_connector_id"),
+    ("runtime", "hot_positions", "identity_status"),
+    ("runtime", "hot_orders", "trading_account_id"),
+    ("runtime", "hot_orders", "account_connector_id"),
+    ("runtime", "hot_orders", "identity_status"),
+    ("runtime", "reconciliation_runs", "trading_account_id"),
+    ("runtime", "reconciliation_runs", "account_connector_id"),
+    ("runtime", "reconciliation_runs", "identity_status"),
+    ("runtime", "private_events", "trading_account_id"),
+    ("runtime", "private_events", "account_connector_id"),
+    ("runtime", "private_events", "identity_status"),
+    ("runtime", "connection_events", "trading_account_id"),
+    ("runtime", "connection_events", "account_connector_id"),
+    ("runtime", "connection_events", "identity_status"),
     ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
     ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
     ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),
