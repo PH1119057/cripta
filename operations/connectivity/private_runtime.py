@@ -82,6 +82,8 @@ if ENTRY_COMMAND_SOURCE not in {"LEGACY_V1", "UNIVERSAL_ENTRY"}:
     raise RuntimeError(f"unsupported CRIPTA_ENTRY_COMMAND_SOURCE={ENTRY_COMMAND_SOURCE}")
 PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
+ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -92,6 +94,35 @@ PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
 PRIVATE_RECONNECT_RECOVERED_REASON = (
     "private WS reconnect recovered: verified R1 arm restored"
 )
+
+
+def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
+    if not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID:
+        raise RuntimeError("TRADING_ACCOUNT_IDENTITY_CONFIG_MISSING")
+    row = connection.execute(
+        """SELECT a.venue_id,a.account_kind,a.account_type,a.environment,a.status,
+                  c.status,v.venue_kind
+             FROM identity.trading_accounts a
+             JOIN identity.account_connectors c
+               ON c.trading_account_id=a.trading_account_id
+             JOIN identity.venues v ON v.venue_id=a.venue_id
+            WHERE a.trading_account_id=%s
+              AND c.account_connector_id=%s""",
+        (TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("TRADING_ACCOUNT_IDENTITY_NOT_REGISTERED")
+    venue_id, account_kind, account_type, environment, account_status, connector_status, venue_kind = map(str, row)
+    if (
+        venue_id != "venue-bybit"
+        or venue_kind != "CEX"
+        or account_kind != "MAIN"
+        or account_type != "UNIFIED"
+        or environment != "MAINNET"
+        or account_status != "ACTIVE"
+        or connector_status != "ACTIVE"
+    ):
+        raise RuntimeError("TRADING_ACCOUNT_IDENTITY_MISMATCH")
 
 
 class PreMutationSafetyBlock(RuntimeError):
@@ -3451,15 +3482,17 @@ def persist_position_mode_states(
     for item in states:
         connection.execute(
             """INSERT INTO runtime.position_mode_states(
-                   position_mode_state_ref,exchange,account_ref,product_category,
-                   instrument,position_mode,position_idx,observed_at,received_at,
-                   fresh_until,provenance
-               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+                   position_mode_state_ref,exchange,account_ref,trading_account_id,
+                   account_connector_id,identity_status,product_category,instrument,
+                   position_mode,position_idx,observed_at,received_at,fresh_until,provenance
+               ) VALUES(%s,%s,%s,%s,%s,'PROVEN',%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
                ON CONFLICT(position_mode_state_ref) DO NOTHING""",
             (
                 item["position_mode_state_ref"],
                 item["exchange"],
                 item["account_ref"],
+                TRADING_ACCOUNT_ID,
+                ACCOUNT_CONNECTOR_ID,
                 item["product_category"],
                 item["instrument"],
                 item["position_mode"],
@@ -3488,11 +3521,20 @@ def _begin_account_state_generation(
     with connection.transaction():
         connection.execute(
             """INSERT INTO runtime.account_state_generations(
-                   generation_id,account_ref,reason,state,started_at,position_mode_refs,
+                   generation_id,account_ref,trading_account_id,account_connector_id,
+                   identity_status,reason,state,started_at,position_mode_refs,
                    error,created_at,updated_at)
-               VALUES(%s,%s,%s,'COLLECTING',to_timestamp(%s / 1000.0),'{}'::jsonb,
+               VALUES(%s,%s,%s,%s,'PROVEN',%s,'COLLECTING',
+                      to_timestamp(%s / 1000.0),'{}'::jsonb,
                       '',clock_timestamp(),clock_timestamp())""",
-            (generation_id, ACCOUNT_REF, reason, started_ms),
+            (
+                generation_id,
+                ACCOUNT_REF,
+                TRADING_ACCOUNT_ID,
+                ACCOUNT_CONNECTOR_ID,
+                reason,
+                started_ms,
+            ),
         )
 
 
@@ -3988,6 +4030,7 @@ def main() -> None:
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
+        validate_runtime_identity_contract(bootstrap)
     except Exception as exc:
         disarm_new_entries(
             bootstrap,
@@ -4008,6 +4051,14 @@ def main() -> None:
         {
             "state": "READY",
             "version": EXPECTED_RUNTIME_SCHEMA_VERSION,
+        },
+    )
+    atomic_status(
+        "identity",
+        {
+            "state": "READY",
+            "trading_account_id": TRADING_ACCOUNT_ID,
+            "account_connector_id": ACCOUNT_CONNECTOR_ID,
         },
     )
     startup_live_safety(bootstrap, credentials["api_key"], credentials["api_secret"])

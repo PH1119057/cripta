@@ -37,6 +37,32 @@ STATUS_PATH = Path(
 SOURCE_COMMIT = os.environ.get("DISPATCHER_V2_SOURCE_COMMIT", "UNSPECIFIED")
 SOURCE_ADAPTER = os.environ.get("CRIPTA_ACCOUNT_ADAPTER", "current_exchange_adapter")
 SOURCE_ACCOUNT_REF = os.environ.get("CRIPTA_ACCOUNT_REF", "runtime.wallet_latest:1")
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
+ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
+
+
+def _validate_runtime_identity(connection: psycopg.Connection[Any]) -> None:
+    if not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID:
+        raise ValueError("TRADING_ACCOUNT_IDENTITY_CONFIG_MISSING")
+    row = connection.execute(
+        """SELECT a.venue_id,a.account_type,a.environment,a.status,c.status
+             FROM identity.trading_accounts a
+             JOIN identity.account_connectors c
+               ON c.trading_account_id=a.trading_account_id
+            WHERE a.trading_account_id=%s
+              AND c.account_connector_id=%s""",
+        (TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID),
+    ).fetchone()
+    if row is None:
+        raise ValueError("TRADING_ACCOUNT_IDENTITY_NOT_REGISTERED")
+    if tuple(str(value) for value in row) != (
+        "venue-bybit",
+        "UNIFIED",
+        "MAINNET",
+        "ACTIVE",
+        "ACTIVE",
+    ):
+        raise ValueError("TRADING_ACCOUNT_IDENTITY_MISMATCH")
 
 
 def _source_global_rows(
@@ -200,9 +226,9 @@ def _insert_capacity(connection: psycopg.Connection[Any], record: Mapping[str, A
             freshness_status,freshness_age_seconds,total_equity,wallet_balance,
             used_position_margin,reserved_order_margin,free_balance,available_for_new_trading,
             open_positions_count,active_orders_count,coverage,payload,provenance,
-            content_hash,trading_effect)
+            content_hash,trading_effect,trading_account_id,account_connector_id,identity_status)
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                   %s,%s,%s,%s,%s,%s,%s)
+                   %s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
             ON CONFLICT(capacity_snapshot_id) DO NOTHING""",
         (
             record["capacity_snapshot_id"],
@@ -230,6 +256,8 @@ def _insert_capacity(connection: psycopg.Connection[Any], record: Mapping[str, A
             Jsonb(record["provenance"]),
             record["content_hash"],
             record["trading_effect"],
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
         ),
     )
 
@@ -352,6 +380,8 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    with psycopg.connect(DSN) as identity_connection:
+        _validate_runtime_identity(identity_connection)
     while not stopped:
         started = time.monotonic()
         try:
