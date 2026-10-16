@@ -1,7 +1,7 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 1.9
-**Дата:** 2026-10-07
+**Версия:** 2.0
+**Дата:** 2026-10-16
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
 Этот документ объединяет MAYAK, Dispatcher, Monitoring, Lifecycle Supervisor,
@@ -264,6 +264,92 @@ rate наших Entry или suitability конкретной Strategy.
 До отдельного owner-approved research/formula один scalar rating не
 придумывается. Вектор объективных dimensions предпочтительнее ложной единой
 оценки. Текущий implementation status хранится в CURRENT_PROJECT_MAP.
+
+## 2.8 Per-symbol self-normalized CoinMarketContext — OWNER DECISION 2026-10-15
+
+Цель этого capability — описывать объективное текущее состояние **одного
+конкретного symbol**, а не ранжировать монеты между собой и не выдавать
+Strategy suitability.
+
+Канонический инвариант нормализации:
+
+~~~text
+RAW FACT FOR SYMBOL
+-> CAUSAL HISTORY OF THE SAME SYMBOL
+-> SELF-NORMALIZED EVIDENCE
+~~~
+
+Если dimension переводится в percentile/z-score/relative stress band, baseline
+строится только по собственной причинной истории того же `symbol`. Нельзя
+нормализовать APT через BTC, LTC через ARB либо использовать одинаковый
+абсолютный USD threshold для разных инструментов. Cross-symbol/BTC/ETH relative
+strength может сохраняться отдельной objective dimension, но не является
+self-baseline монеты.
+
+CoinMarketContext сохраняет физические dimensions раздельно. Первая
+implementation/research stage обязана поддержать, где exact source доступен:
+
+- price return/amplitude минимум `1m/5m/15m/30m/60m`;
+- LONG/SHORT liquidation notional/count раздельно минимум `1m/5m/15m`;
+- liquidation intensity относительно собственного OI и derivatives turnover;
+- liquidation velocity и acceleration по каждой стороне;
+- OI change / clearance;
+- causal price response на forced liquidation flow;
+- spot/derivatives executed flow;
+- liquidity/depth/spread evidence, если источник доступен;
+- mark/index/funding derivative state;
+- multi-venue confirmation, если exact approved feeds доступны;
+- freshness/coverage/quality/provenance для каждой используемой dimension.
+
+Знак/название liquidation side обязаны следовать exact source semantics.
+До доказанного parser/source mapping нельзя переименовывать exchange `Buy/Sell`
+в `long_liquidation/short_liquidation` по догадке.
+
+Self-normalized evidence обязано хранить одновременно raw value и описание
+baseline, достаточное для replay:
+
+~~~text
+symbol
+dimension_id
+raw_value
+normalized_value / percentile [если рассчитано]
+baseline_spec_id
+baseline_window
+sample_count
+observed_at
+quality
+provenance
+version/fingerprint
+~~~
+
+Точные baseline windows, percentile boundaries, weights и state thresholds не
+становятся global defaults. `1d/7d/30d/90d`, `q90/q95/q97.5/q99` и подобные
+наборы разрешены только как research grid до отдельного
+`RESEARCH RESULT -> OWNER DECISION -> CANON`.
+
+До такого решения Dispatcher публикует вектор objective dimensions /
+`CoinSelfBaselineEvidence`; единый `CoinMarketRating` не вычисляется.
+Наблюдательный deployment этого capability обязан сохранять
+`trading_effect=NONE`.
+
+Strategy может использовать этот context только через exact versioned
+`Strategy Context Policy` по TRADING_CONTOUR. Автоматический Entry block/allow,
+Position action или Exit action не возникает из MAYAK/Dispatcher. Promotion:
+
+~~~text
+OBSERVATION / REPLAY
+-> RESEARCH / OOS
+-> OWNER DECISION
+-> NEW STRATEGY VERSION / CONTEXT POLICY
+-> TEST / SHADOW
+-> LIVE EQUIVALENCE
+-> MICRO_LIVE
+-> LIVE
+~~~
+
+Missing/stale/partial source не становится `0`, `NORMAL` или хорошим состоянием.
+Если exact liquidation history отсутствует, status = `NO_DATA`; proxy может
+существовать только как отдельно названный/versioned research object.
 
 # 3. MONITORING — наблюдение и UI
 
