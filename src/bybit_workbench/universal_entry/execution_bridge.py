@@ -48,6 +48,9 @@ class PreparedRuntimeEntryCommand:
     exchange_position_slot_claim_id: str
     position_mode_state_ref: str
     strategy_activation_id: str
+    strategy_execution_binding_id: str
+    execution_leg: str
+    trading_account_id: str
     symbol: str
     direction: TradeDirection
     requested_at: datetime
@@ -209,6 +212,15 @@ def _validate_policy_identity(
         raise ExecutionBridgeBlocked(
             ExecutionBridgeBlockCode.ADMISSION_LINEAGE_MISSING,
             "real EntryExecutionRequest requires slot claim and position-mode lineage",
+        )
+    if (
+        not request.strategy_execution_binding_id
+        or not request.execution_leg
+        or not request.trading_account_id
+    ):
+        raise ExecutionBridgeBlocked(
+            ExecutionBridgeBlockCode.ADMISSION_LINEAGE_MISSING,
+            "real EntryExecutionRequest requires Strategy execution binding lineage",
         )
     return activation_id, card, entry, exit_plan, activation
 
@@ -493,6 +505,9 @@ def prepare_runtime_entry_command(
         "exchange_position_slot_claim_id": request.exchange_position_slot_claim_id,
         "position_mode_state_ref": request.position_mode_state_ref,
         "strategy_activation_id": activation_id,
+        "strategy_execution_binding_id": request.strategy_execution_binding_id,
+        "execution_leg": request.execution_leg,
+        "trading_account_id": request.trading_account_id,
         "calculated_entry_price": signal_attributes.get("calculated_entry_price"),
         "entry_reference_source": signal_attributes.get("entry_reference_source"),
         "strategy_entry_offset_pct_signed": signal_attributes.get("entry_offset_pct_signed"),
@@ -568,6 +583,9 @@ def prepare_runtime_entry_command(
         exchange_position_slot_claim_id=str(request.exchange_position_slot_claim_id),
         position_mode_state_ref=str(request.position_mode_state_ref),
         strategy_activation_id=activation_id,
+        strategy_execution_binding_id=str(request.strategy_execution_binding_id),
+        execution_leg=str(request.execution_leg),
+        trading_account_id=str(request.trading_account_id),
         symbol=request.symbol,
         direction=request.direction,
         requested_at=request.requested_at.astimezone(UTC),

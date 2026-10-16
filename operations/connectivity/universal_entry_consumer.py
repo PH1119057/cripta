@@ -34,6 +34,7 @@ ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1"
 CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
 LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 
 running = True
 
@@ -82,6 +83,18 @@ def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
             None if row.get("position_mode_state_ref") is None
             else str(row["position_mode_state_ref"])
         ),
+        strategy_execution_binding_id=(
+            None if row.get("strategy_execution_binding_id") is None
+            else str(row["strategy_execution_binding_id"])
+        ),
+        execution_leg=(
+            None if row.get("execution_leg") is None
+            else str(row["execution_leg"])
+        ),
+        trading_account_id=(
+            None if row.get("trading_account_id") is None
+            else str(row["trading_account_id"])
+        ),
     )
 
 
@@ -93,7 +106,15 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
                   a.strategy_config_fingerprint AS activation_strategy_config_fingerprint,
                   p.execution_permission_id,p.enabled_at AS execution_enabled_at,
                   c.state AS capital_reservation_state,
-                  c.account_ref AS capital_reservation_account_ref
+                  c.account_ref AS capital_reservation_account_ref,
+                  c.strategy_execution_binding_id AS capital_binding_id,
+                  c.execution_leg AS capital_execution_leg,
+                  c.trading_account_id AS capital_trading_account_id,
+                  c.identity_status AS capital_identity_status,
+                  e.strategy_execution_binding_id AS decision_binding_id,
+                  e.execution_leg AS decision_execution_leg,
+                  e.trading_account_id AS decision_trading_account_id,
+                  e.identity_status AS decision_identity_status
              FROM strategy_entry.execution_requests r
              JOIN strategy_entry.strategy_attempts t
                ON t.strategy_attempt_id=r.strategy_attempt_id
@@ -111,6 +132,10 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
              LEFT JOIN runtime.capital_reservations c
                ON c.reservation_id=r.capital_reservation_id
               AND c.strategy_attempt_id=r.strategy_attempt_id
+             LEFT JOIN strategy_entry.entry_decisions e
+               ON e.entry_decision_id=r.entry_decision_id
+              AND e.strategy_attempt_id=r.strategy_attempt_id
+              AND e.signal_id=r.signal_id
             WHERE NOT EXISTS (
                   SELECT 1 FROM strategy_entry.execution_dispatches d
                    WHERE d.execution_request_id=r.execution_request_id
@@ -258,16 +283,29 @@ def _publish_command(
     now_ms = int(now.timestamp() * 1000)
     inserted = connection.execute(
         """INSERT INTO runtime.trade_commands(
-               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms
-           ) VALUES(%s,'entry',%s,%s,'queued',%s)
+               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,'entry',%s,%s,'queued',%s,%s,%s,%s,'PROVEN')
            ON CONFLICT(command_id) DO NOTHING
            RETURNING command_id""",
-        (prepared.command_id, prepared.symbol, payload_json, now_ms),
+        (
+            prepared.command_id,
+            prepared.symbol,
+            payload_json,
+            now_ms,
+            prepared.strategy_execution_binding_id,
+            prepared.execution_leg,
+            prepared.trading_account_id,
+        ),
     ).fetchone()
     if inserted is None:
         existing = connection.execute(
-            """SELECT command_type,symbol,payload_json FROM runtime.trade_commands
-                WHERE command_id=%s""",
+            """SELECT command_type,symbol,payload_json,
+                      strategy_execution_binding_id,execution_leg,trading_account_id,
+                      identity_status
+                   FROM runtime.trade_commands
+                  WHERE command_id=%s""",
             (prepared.command_id,),
         ).fetchone()
         if existing is None:
@@ -276,6 +314,10 @@ def _publish_command(
             str(existing["command_type"]) != "entry"
             or str(existing["symbol"]) != prepared.symbol
             or json.loads(str(existing["payload_json"])) != prepared.payload
+            or str(existing["strategy_execution_binding_id"]) != prepared.strategy_execution_binding_id
+            or str(existing["execution_leg"]) != prepared.execution_leg
+            or str(existing["trading_account_id"]) != prepared.trading_account_id
+            or str(existing["identity_status"]) != "PROVEN"
         ):
             raise RuntimeError("deterministic Universal command_id collision")
     connection.execute(
@@ -332,6 +374,9 @@ def _publish_command(
         capital_reservation_id=prepared.capital_reservation_id,
         exchange_position_slot_claim_id=prepared.exchange_position_slot_claim_id,
         position_mode_state_ref=prepared.position_mode_state_ref,
+        strategy_execution_binding_id=prepared.strategy_execution_binding_id,
+        execution_leg=prepared.execution_leg,
+        trading_account_id=prepared.trading_account_id,
     )
     _record_request_state(
         connection,
@@ -350,6 +395,60 @@ def _admission_pre_dispatch_status(
     *,
     now: datetime,
 ) -> tuple[str, str]:
+    if (
+        request.strategy_execution_binding_id is None
+        or request.execution_leg is None
+        or request.trading_account_id is None
+        or str(row.get("identity_status") or "") != "PROVEN"
+    ):
+        return "BINDING_INVALID", "REQUEST_BINDING_LINEAGE_MISSING"
+    if not TRADING_ACCOUNT_ID or request.trading_account_id != TRADING_ACCOUNT_ID:
+        return "BINDING_INVALID", "REQUEST_TRADING_ACCOUNT_MISMATCH"
+    if (
+        str(row.get("capital_binding_id") or "") != request.strategy_execution_binding_id
+        or str(row.get("capital_execution_leg") or "") != request.execution_leg
+        or str(row.get("capital_trading_account_id") or "") != request.trading_account_id
+        or str(row.get("capital_identity_status") or "") != "PROVEN"
+    ):
+        return "BINDING_INVALID", "CAPITAL_BINDING_LINEAGE_MISMATCH"
+    if (
+        str(row.get("decision_binding_id") or "") != request.strategy_execution_binding_id
+        or str(row.get("decision_execution_leg") or "") != request.execution_leg
+        or str(row.get("decision_trading_account_id") or "") != request.trading_account_id
+        or str(row.get("decision_identity_status") or "") != "PROVEN"
+    ):
+        return "BINDING_INVALID", "ENTRY_DECISION_BINDING_LINEAGE_MISMATCH"
+    binding = connection.execute(
+        """SELECT b.strategy_activation_id,b.execution_leg,b.execution_role,
+                  b.trading_account_id,b.allocation_mode,b.binding_state,
+                  b.effective_from,b.effective_to,a.enabled,ta.status,ta.environment
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN strategy_entry.strategy_activations a
+               ON a.activation_id=b.strategy_activation_id
+             JOIN identity.trading_accounts ta
+               ON ta.trading_account_id=b.trading_account_id
+            WHERE b.strategy_execution_binding_id=%s""",
+        (request.strategy_execution_binding_id,),
+    ).fetchone()
+    if binding is None:
+        return "BINDING_INVALID", "STRATEGY_EXECUTION_BINDING_MISSING"
+    if (
+        str(binding["strategy_activation_id"]) != str(row["activation_id"])
+        or str(binding["execution_leg"]) != request.execution_leg
+        or str(binding["execution_role"]) != "PRIMARY"
+        or str(binding["trading_account_id"]) != request.trading_account_id
+        or str(binding["allocation_mode"]) != "DEDICATED_STRATEGY"
+        or str(binding["binding_state"]) != "ACTIVE"
+        or binding["effective_from"].astimezone(UTC) > now
+        or (
+            binding["effective_to"] is not None
+            and binding["effective_to"].astimezone(UTC) <= now
+        )
+        or not bool(binding["enabled"])
+        or str(binding["status"]) != "ACTIVE"
+        or str(binding["environment"]) != "MAINNET"
+    ):
+        return "BINDING_INVALID", "STRATEGY_EXECUTION_BINDING_NOT_ACTIVE"
     account_ref = str(row.get("capital_reservation_account_ref") or "")
     if account_ref != CURRENT_ACCOUNT_REF:
         return "INVARIANT_BROKEN", f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
@@ -363,7 +462,8 @@ def _admission_pre_dispatch_status(
     claim = connection.execute(
         """SELECT exchange_position_key,account_ref,symbol,position_idx,
                   strategy_attempt_id,position_mode_state_ref,capital_reservation_id,
-                  claim_state
+                  claim_state,strategy_execution_binding_id,execution_leg,
+                  trading_account_id,identity_status
              FROM runtime.exchange_position_slot_claims
             WHERE exchange_position_slot_claim_id=%s""",
         (request.exchange_position_slot_claim_id,),
@@ -380,6 +480,10 @@ def _admission_pre_dispatch_status(
         str(claim["position_mode_state_ref"]),
         str(claim["capital_reservation_id"]),
         str(claim["claim_state"]),
+        str(claim["strategy_execution_binding_id"]),
+        str(claim["execution_leg"]),
+        str(claim["trading_account_id"]),
+        str(claim["identity_status"]),
     )
     expected = (
         expected_key,
@@ -390,12 +494,17 @@ def _admission_pre_dispatch_status(
         request.position_mode_state_ref,
         request.capital_reservation_id,
         "CLAIMED",
+        request.strategy_execution_binding_id,
+        request.execution_leg,
+        request.trading_account_id,
+        "PROVEN",
     )
     if actual != expected:
         return "INVARIANT_BROKEN", f"SLOT_CLAIM_IDENTITY_MISMATCH:{actual!r}"
 
     mode = connection.execute(
-        """SELECT position_mode,position_idx,observed_at,received_at,fresh_until
+        """SELECT position_mode,position_idx,observed_at,received_at,fresh_until,
+                  trading_account_id,identity_status
              FROM runtime.position_mode_states
             WHERE position_mode_state_ref=%s""",
         (request.position_mode_state_ref,),
@@ -416,6 +525,11 @@ def _admission_pre_dispatch_status(
     mode_position_idx = (
         -1 if mode["position_idx"] is None else int(mode["position_idx"])
     )
+    if (
+        str(mode["trading_account_id"]) != request.trading_account_id
+        or str(mode["identity_status"]) != "PROVEN"
+    ):
+        return "BINDING_INVALID", "POSITION_MODE_TRADING_ACCOUNT_MISMATCH"
     if str(mode["position_mode"]) != "ONE_WAY" or mode_position_idx != 0:
         return (
             "MODE_MISMATCH",
@@ -425,9 +539,12 @@ def _admission_pre_dispatch_status(
     newer = connection.execute(
         """SELECT position_mode_state_ref,position_mode,position_idx,fresh_until
              FROM runtime.position_mode_states
-            WHERE account_ref=%s AND product_category='LINEAR' AND instrument=%s
+            WHERE account_ref=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+              AND product_category='LINEAR' AND instrument=%s
             ORDER BY observed_at DESC,created_at DESC LIMIT 1""",
-        (CURRENT_ACCOUNT_REF, request.symbol),
+        (CURRENT_ACCOUNT_REF, request.trading_account_id, request.symbol),
     ).fetchone()
     if (
         newer is not None
@@ -726,6 +843,36 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     admission_status, admission_detail = _admission_pre_dispatch_status(
         connection, row, request, now=current
     )
+    if admission_status == "BINDING_INVALID":
+        reason = f"STRATEGY_EXECUTION_BINDING_NOT_READY:{admission_detail}"
+        with connection.transaction():
+            _record_blocked(
+                connection,
+                request,
+                reason=reason,
+                payload={
+                    "block_code": "STRATEGY_EXECUTION_BINDING_NOT_READY",
+                    "detail": admission_detail,
+                    "strategy_execution_binding_id": request.strategy_execution_binding_id,
+                    "execution_leg": request.execution_leg,
+                    "trading_account_id": request.trading_account_id,
+                },
+            )
+            _release_pre_exchange_admission(
+                connection,
+                request,
+                reason="PRE_EXCHANGE_BLOCK:STRATEGY_EXECUTION_BINDING_NOT_READY",
+                now=current,
+            )
+            _record_request_state(
+                connection,
+                request,
+                state="REQUEST_CANCELLED",
+                occurred_at=current,
+                reason=reason,
+            )
+        return "BLOCKED:STRATEGY_EXECUTION_BINDING_NOT_READY"
+
     if admission_status in {"STALE_MODE", "MODE_MISMATCH"}:
         reason = (
             "STALE_OR_UNKNOWN_REQUIRED_STATE"
@@ -889,6 +1036,8 @@ def main() -> int:
             )
         )
         return 0
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Universal Entry consumer")
     if POLL_SECONDS <= 0:
         raise SystemExit("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS must be positive")
     signal.signal(signal.SIGTERM, _stop)

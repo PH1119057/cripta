@@ -35,6 +35,9 @@ class UniversalEntryLineage:
     capital_reservation_state: str
     exchange_position_slot_claim_id: str
     position_mode_state_ref: str
+    strategy_execution_binding_id: str
+    execution_leg: str
+    trading_account_id: str
     emergency_policy_json: str
 
     def __post_init__(self) -> None:
@@ -54,6 +57,9 @@ class UniversalEntryLineage:
             "capital_reservation_state",
             "exchange_position_slot_claim_id",
             "position_mode_state_ref",
+            "strategy_execution_binding_id",
+            "execution_leg",
+            "trading_account_id",
             "emergency_policy_json",
         ):
             if not str(getattr(self, field)).strip():
@@ -85,6 +91,9 @@ class UniversalEntryLineage:
             "capital_reservation_id": self.capital_reservation_id,
             "exchange_position_slot_claim_id": self.exchange_position_slot_claim_id,
             "position_mode_state_ref": self.position_mode_state_ref,
+            "strategy_execution_binding_id": self.strategy_execution_binding_id,
+            "execution_leg": self.execution_leg,
+            "trading_account_id": self.trading_account_id,
             "bot_instance_id": "universal-entry",
         }
         for field, value in expected.items():
@@ -124,7 +133,14 @@ def load_universal_entry_lineage(
                   r.strategy_config_fingerprint,r.entry_plan_fingerprint,
                   r.exit_plan_fingerprint,r.strategy_attempt_id,r.entry_decision_id,
                   t.strategy_activation_id,r.capital_reservation_id,c.account_ref,c.state,
-                  r.exchange_position_slot_claim_id,r.position_mode_state_ref
+                  r.exchange_position_slot_claim_id,r.position_mode_state_ref,
+                  r.strategy_execution_binding_id,r.execution_leg,r.trading_account_id,
+                  e.strategy_execution_binding_id,e.execution_leg,e.trading_account_id,
+                  c.strategy_execution_binding_id,c.execution_leg,c.trading_account_id,
+                  s.strategy_execution_binding_id,s.execution_leg,s.trading_account_id,
+                  tc.strategy_execution_binding_id,tc.execution_leg,tc.trading_account_id,
+                  r.identity_status,e.identity_status,c.identity_status,s.identity_status,
+                  tc.identity_status
              FROM strategy_entry.execution_dispatches d
              JOIN strategy_entry.execution_requests r
                ON r.execution_request_id=d.execution_request_id
@@ -134,6 +150,14 @@ def load_universal_entry_lineage(
              JOIN runtime.capital_reservations c
                ON c.reservation_id=r.capital_reservation_id
               AND c.strategy_attempt_id=r.strategy_attempt_id
+             JOIN strategy_entry.entry_decisions e
+               ON e.entry_decision_id=r.entry_decision_id
+              AND e.strategy_attempt_id=r.strategy_attempt_id
+             JOIN runtime.exchange_position_slot_claims s
+               ON s.exchange_position_slot_claim_id=r.exchange_position_slot_claim_id
+              AND s.strategy_attempt_id=r.strategy_attempt_id
+             JOIN runtime.trade_commands tc
+               ON tc.command_id=d.command_id
             WHERE d.command_id=%s
               AND d.state='DISPATCHED'
               AND d.capital_reservation_id=r.capital_reservation_id""",
@@ -160,8 +184,17 @@ def load_universal_entry_lineage(
         capital_reservation_state=str(row[12]),
         exchange_position_slot_claim_id=str(row[13]),
         position_mode_state_ref=str(row[14]),
+        strategy_execution_binding_id=str(row[15]),
+        execution_leg=str(row[16]),
+        trading_account_id=str(row[17]),
         emergency_policy_json=canonical_json(dict(emergency_policy)),
     )
+    request_binding = tuple(str(row[i]) for i in range(15, 18))
+    for offset in (18, 21, 24, 27):
+        if tuple(str(row[i]) for i in range(offset, offset + 3)) != request_binding:
+            raise RuntimeError("Universal Entry durable binding lineage mismatch")
+    if any(str(row[i]) != "PROVEN" for i in range(30, 35)):
+        raise RuntimeError("Universal Entry durable binding lineage is not PROVEN")
     lineage.validate_command_payload(command_payload)
     return lineage
 
@@ -198,10 +231,11 @@ def persist_universal_strategy_position(
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
                entry_plan_fingerprint,exit_plan_fingerprint,
                exchange_position_slot_claim_id,position_mode_state_ref,
-               emergency_policy)
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status,emergency_policy)
            VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,NULL,%s,%s,%s,%s,%s,
                   %s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                  %s,%s,%s::jsonb)
+                  %s,%s,%s,%s,%s,'PROVEN',%s::jsonb)
            ON CONFLICT(entry_command_id) DO UPDATE SET
                actual_avg_fill=excluded.actual_avg_fill,
                actual_qty=excluded.actual_qty,
@@ -244,6 +278,9 @@ def persist_universal_strategy_position(
             lineage.exit_plan_fingerprint,
             lineage.exchange_position_slot_claim_id,
             lineage.position_mode_state_ref,
+            lineage.strategy_execution_binding_id,
+            lineage.execution_leg,
+            lineage.trading_account_id,
             lineage.emergency_policy_json,
         ),
     )
@@ -254,7 +291,8 @@ def persist_universal_strategy_position(
                   entry_execution_request_id,entry_plan_fingerprint,
                   exit_plan_fingerprint,account_ref,exchange_position_key,
                   position_idx,symbol,side,actual_avg_fill,actual_qty,fill_at,
-                  entry_command_id,exchange_position_slot_claim_id,position_mode_state_ref
+                  entry_command_id,exchange_position_slot_claim_id,position_mode_state_ref,
+                  strategy_execution_binding_id,execution_leg,trading_account_id,identity_status
              FROM runtime.position_ownership
             WHERE entry_command_id=%s""",
         (entry_command_id,),
@@ -283,8 +321,12 @@ def persist_universal_strategy_position(
     if (
         str(stored[20]) != lineage.exchange_position_slot_claim_id
         or str(stored[21]) != lineage.position_mode_state_ref
+        or str(stored[22]) != lineage.strategy_execution_binding_id
+        or str(stored[23]) != lineage.execution_leg
+        or str(stored[24]) != lineage.trading_account_id
+        or str(stored[25]) != "PROVEN"
     ):
-        raise RuntimeError("persisted StrategyPosition admission lineage mismatch")
+        raise RuntimeError("persisted StrategyPosition admission/binding lineage mismatch")
 
     bind_slot_claim_to_position(
         connection,

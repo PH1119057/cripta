@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-binding-lineage-r6b1"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-command-position-r6b2"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -103,6 +103,14 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("strategy_entry", "execution_requests", "execution_leg"),
     ("strategy_entry", "execution_requests", "trading_account_id"),
     ("strategy_entry", "execution_requests", "identity_status"),
+    ("runtime", "trade_commands", "strategy_execution_binding_id"),
+    ("runtime", "trade_commands", "execution_leg"),
+    ("runtime", "trade_commands", "trading_account_id"),
+    ("runtime", "trade_commands", "identity_status"),
+    ("runtime", "position_ownership", "strategy_execution_binding_id"),
+    ("runtime", "position_ownership", "execution_leg"),
+    ("runtime", "position_ownership", "trading_account_id"),
+    ("runtime", "position_ownership", "identity_status"),
     ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
     ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
     ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),
