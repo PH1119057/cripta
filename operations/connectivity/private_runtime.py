@@ -245,8 +245,14 @@ def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> De
         return cached[1]
     worst = Decimal("0")
     rows = connection.execute(
-        "SELECT payload_json FROM runtime.private_events WHERE topic='order.linear' "
-        "ORDER BY received_at_epoch_ms DESC LIMIT 5000"
+        """SELECT payload_json
+             FROM runtime.private_events
+            WHERE topic='order.linear'
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY received_at_epoch_ms DESC
+            LIMIT 5000""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall()
     for (raw_payload,) in rows:
         payload = json.loads(raw_payload)

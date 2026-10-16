@@ -136,12 +136,15 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
                ON e.entry_decision_id=r.entry_decision_id
               AND e.strategy_attempt_id=r.strategy_attempt_id
               AND e.signal_id=r.signal_id
-            WHERE NOT EXISTS (
+            WHERE r.trading_account_id=%s
+              AND r.identity_status='PROVEN'
+              AND NOT EXISTS (
                   SELECT 1 FROM strategy_entry.execution_dispatches d
                    WHERE d.execution_request_id=r.execution_request_id
             )
             ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1"""
+            LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
 
 
@@ -723,7 +726,11 @@ def _release_expired_reserved_requests(
                  JOIN runtime.capital_reservations c
                    ON c.reservation_id=r.capital_reservation_id
                   AND c.strategy_attempt_id=r.strategy_attempt_id
-                WHERE c.state='RESERVED'
+                WHERE r.trading_account_id=%s
+                  AND r.identity_status='PROVEN'
+                  AND c.trading_account_id=%s
+                  AND c.identity_status='PROVEN'
+                  AND c.state='RESERVED'
                   AND c.pre_dispatch_expires_at IS NOT NULL
                   AND c.pre_dispatch_expires_at <= %s
                   AND NOT EXISTS (
@@ -732,7 +739,7 @@ def _release_expired_reserved_requests(
                   )
                 ORDER BY c.pre_dispatch_expires_at,r.execution_request_id
                 FOR UPDATE OF c SKIP LOCKED""",
-            (now.astimezone(UTC),),
+            (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, now.astimezone(UTC)),
         ).fetchall()
         for row in rows:
             request = _request_from_row(row)

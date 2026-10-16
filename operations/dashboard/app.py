@@ -789,8 +789,14 @@ def execution_liquidity_risks() -> dict[str, dict[str, object]]:
     try:
         with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
             rows = connection.execute(
-                "SELECT payload_json FROM runtime.private_events WHERE topic='order.linear' "
-                "ORDER BY received_at_epoch_ms DESC LIMIT 5000"
+                """SELECT payload_json
+                     FROM runtime.private_events
+                    WHERE topic='order.linear'
+                      AND trading_account_id=%s
+                      AND identity_status='PROVEN'
+                    ORDER BY received_at_epoch_ms DESC
+                    LIMIT 5000""",
+                (TRADING_ACCOUNT_ID,),
             ).fetchall()
         for (payload,) in rows:
             decoded = json.loads(payload)
