@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.13
+**Версия:** 12.14
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2746,14 +2746,14 @@ DONE IN SOURCE:
   DASHBOARD LIVE READ-MODEL PRIVATE SCOPE
 
 OPEN IN R5:
-  REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT
+  REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT = DONE IN SOURCE FOR ACTIVE PATHS
     ACTIVE UNIVERSAL ENTRY REQUEST SELECTION / EXPIRY = DONE IN SOURCE
     PRIVATE EVENT SLIPPAGE READERS = DONE IN SOURCE
     STALE-ARM / CONTROL PRIVATE SCOPE = DONE IN SOURCE
-    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = NEXT
-    INACTIVE LEGACY WRITER RETIREMENT PROOF = OPEN FOR R10
-  PHYSICAL ACCOUNT-SCOPED PK / UNIQUE KEY CUTOVER
-  REMAINING REPORT / ARCHIVE / REPLAY CONSUMER PARITY AUDIT
+    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = DONE IN SOURCE
+    INACTIVE LEGACY WRITER RETIREMENT PROOF = DEFERRED TO R10
+  PHYSICAL ACCOUNT-SCOPED PK / UNIQUE PREPARATION = NEXT
+  OLD PHYSICAL PK / UNIQUE RETIREMENT = NOT YET / AFTER PARITY GATES
   R9/R10 PARITY AND LEGACY PATH RETIREMENT GATES
 
 R6 STRATEGY EXECUTION BINDING   = SOURCE IMPLEMENTED THROUGH R6d / NOT DEPLOYED
@@ -2784,11 +2784,15 @@ b2f9b1a0  separate command account proof from Strategy binding
 63679739  scope Dashboard live state to TradingAccount
 bf065c95  scope active private consumers to TradingAccount
 c34f4102  scope stale-arm retirement to TradingAccount
+9e867593  scope report/replay private provenance
+cb1423df  scope residual private report readers
+99278812  finish active private reader account scope
 ~~~
 
-The next bounded source task is report/archive/replay private provenance audit within the remaining R5 consumer/writer parity audit.
-Physical PK/UNIQUE changes remain later R5 work and must not be performed until
-that residual inventory/parity gate is complete.
+The next bounded source task is physical account-scoped PK/UNIQUE preparation.
+This next step is additive/preparatory only: old physical PK/UNIQUE constraints
+must remain in place until the later parity/restart/recovery and legacy-path
+retirement gates allow exact cutover.
 
 Documentation maintenance gate:
 
@@ -2836,3 +2840,97 @@ implementation fix/test.
 No deploy, PostgreSQL migration, data rewrite/delete, Exchange mutation or LIVE
 re-arm is performed by this documentation checkpoint.
 
+
+## 37.8 Report/archive/replay provenance checkpoint — CHECKED HERE 2026-10-16
+
+Pre-publication source/runtime identity checked for this documentation cycle:
+
+~~~text
+REMOTE_HEAD             = 9927881213d4a547de89378147a95446e5548f54
+SOURCE_HEAD             = 9927881213d4a547de89378147a95446e5548f54
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Current source evidence after `9e867593...`, `cb1423df...` and `99278812...`:
+
+- report/archive/replay consumers preserve private account provenance instead
+  of silently attributing historical rows to the current TradingAccount;
+- derived `research_context.dispatcher_v2_event_links` receives additive
+  `trading_account_id` / `identity_status` source schema only; existing rows
+  remain `LEGACY_UNKNOWN`, with no invented account backfill;
+- `archive_v2` exports the current identity-bearing private evidence and records
+  provenance counts while rejecting inconsistent `PROVEN` /
+  `LEGACY_UNKNOWN` rows;
+- active M3 / Dispatcher correlation reads keep exact private identity scope;
+- historical `live_v1_session_audit` is explicitly
+  `LEGACY_UNKNOWN_ONLY`;
+- exact-close read-only audit partitions/matches private execution evidence by
+  `identity_status + trading_account_id` and therefore cannot join one proven
+  account's fills into another account's position;
+- Universal Entry observer capacity and Dispatcher status fallback read only
+  exact `PROVEN` capacity for the configured TradingAccount;
+- reverse-transition position lookup prefers the exact current
+  `PROVEN` TradingAccount and preserves an explicit `LEGACY_UNKNOWN` fallback
+  without assigning legacy history to that account.
+
+Universal Exit shadow remains a decision-only position consumer, not a
+single-account private-state adapter. Its current global position scan is not
+reclassified as an account-scope defect solely because more than one
+TradingAccount may exist: exact StrategyPosition / Exit lineage already carries
+or resolves `trading_account_id` and `ExecutionLeg`; Exchange
+mutation/reconciliation must remain exact-account scoped under
+`TRADING_CONTOUR §7.4`.
+
+Residual private references under `research/**` were re-scanned. The only
+remaining legacy writer is
+`research/server/connectivity/private_runtime.py`; it is historical/inactive
+and remains deliberately deferred to R10 retirement proof. It is not treated as
+current writer authority and is not modified by this R5 cycle.
+
+Verification evidence for the implementation commits:
+
+~~~text
+PY_COMPILE                         = PASS
+TARGETED R5 CONTRACTS              = PASS
+LATEST TARGETED SET                = 67 / 67 PASS
+FULL PYTEST                        = 1875 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES          = CONFIRMED
+NEW TEST FAILURES                  = 0
+DIFF CHECK                         = PASS
+NEW DESTRUCTIVE SQL                = NONE
+OLD PK / UNIQUE RETIREMENT         = NOT PERFORMED
+~~~
+
+The 12 full-suite failures are pre-existing source/baseline findings in
+unrelated R6/pre-arm/source-assertion tests and are not converted to PASS by
+this checkpoint.
+
+Separate pre-existing finding remains open and unchanged:
+
+~~~text
+operations/connectivity/universal_entry_consumer.py
+entry_plans lookup contains four SQL placeholders with a two-value parameter tuple.
+~~~
+
+That finding is not an identity-policy decision and is not silently repaired
+inside this provenance changeset.
+
+Status of this R5 sub-gate:
+
+~~~text
+REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE = DONE IN SOURCE
+ACTIVE PRIVATE READER / WRITER SCOPE AUDIT    = DONE IN SOURCE
+INACTIVE LEGACY WRITER RETIREMENT             = DEFERRED TO R10
+PHYSICAL ACCOUNT-SCOPED KEY PREPARATION       = NEXT
+DEPLOYED                                      = NO
+RUNTIME BEHAVIOR VERIFIED FOR NEW SOURCE      = NO
+~~~
+
+No deploy, PostgreSQL mutation, data rewrite/delete, Exchange mutation or LIVE
+re-arm is performed by this documentation checkpoint.
