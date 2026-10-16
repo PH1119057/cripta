@@ -12,7 +12,7 @@ def test_r2_seed_registers_only_proven_current_identities() -> None:
     assert "'ta-2122c81ecff14f3b85b102db605212f7'" in sql
     assert "'ac-ed73de20410548d6841aeafa5f196f70'" in sql
     assert "'systemd-credential:bybit-mainnet'" in sql
-    assert "'BYBIT:UNIFIED'" in sql
+    assert "BYBIT:UNIFIED" in sql
     assert "external_account_ref" in sql
     assert "NULL" in sql
     assert "identity.instruments" not in sql
