@@ -59,11 +59,17 @@ def build(
     ).fetchall()
     commands = connection.execute(
         """SELECT * FROM runtime.trade_commands
-           WHERE requested_at_epoch_ms BETWEEN %s AND %s ORDER BY requested_at_epoch_ms""",
+           WHERE identity_status='LEGACY_UNKNOWN'
+             AND trading_account_id IS NULL
+             AND requested_at_epoch_ms BETWEEN %s AND %s
+           ORDER BY requested_at_epoch_ms""",
         (started_ms, cutoff_ms),
     ).fetchall()
     executions = connection.execute(
-        """SELECT * FROM runtime.executions WHERE exec_time_ms BETWEEN %s AND %s
+        """SELECT * FROM runtime.executions
+           WHERE identity_status='LEGACY_UNKNOWN'
+             AND trading_account_id IS NULL
+             AND exec_time_ms BETWEEN %s AND %s
            ORDER BY exec_time_ms""",
         (started_ms, cutoff_ms),
     ).fetchall()
@@ -129,6 +135,7 @@ def build(
         "session_started_at": datetime.fromtimestamp(started_ms / 1000, UTC).isoformat(),
         "audit_cutoff": datetime.fromtimestamp(cutoff_ms / 1000, UTC).isoformat(),
         "data_completeness": completeness,
+        "private_identity_scope": "LEGACY_UNKNOWN_ONLY",
         "entry_funnel": {
             "unique_core_signals": len({str(row["signal_id"]) for row in decisions}),
             "valid_consumed_context": len(contexts),

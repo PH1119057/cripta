@@ -31,6 +31,36 @@ def decimal(value: Any) -> Decimal:
         return Decimal(0)
 
 
+def private_identity(row: Any) -> tuple[str, str | None]:
+    status = str(row["identity_status"] or "")
+    account = None if row["trading_account_id"] is None else str(row["trading_account_id"])
+    if status == "PROVEN":
+        if not account:
+            raise RuntimeError("PROVEN private row is missing trading_account_id")
+        return status, account
+    if status == "LEGACY_UNKNOWN":
+        if account is not None:
+            raise RuntimeError("LEGACY_UNKNOWN private row must not claim trading_account_id")
+        return status, None
+    raise RuntimeError(f"unsupported private identity_status: {status or 'EMPTY'}")
+
+
+def identity_predicate(alias: str, status: str, account: str | None) -> tuple[str, tuple[Any, ...]]:
+    if status == "PROVEN":
+        if account is None:
+            raise RuntimeError("PROVEN identity requires trading_account_id")
+        return (
+            f"{alias}.identity_status='PROVEN' AND {alias}.trading_account_id=%s",
+            (account,),
+        )
+    if status == "LEGACY_UNKNOWN":
+        return (
+            f"{alias}.identity_status='LEGACY_UNKNOWN' AND {alias}.trading_account_id IS NULL",
+            (),
+        )
+    raise RuntimeError(f"unsupported private identity_status: {status}")
+
+
 def initialize(connection: psycopg.Connection[Any]) -> None:
     connection.execute("CREATE SCHEMA IF NOT EXISTS analyst")
     connection.execute("""CREATE TABLE IF NOT EXISTS analyst.trade_lifecycles(
@@ -67,10 +97,22 @@ def initialize(connection: psycopg.Connection[Any]) -> None:
 
 def refresh(connection: psycopg.Connection[Any]) -> int:
     entries = connection.execute("""SELECT * FROM runtime.trade_commands
-        WHERE command_type='entry' AND payload_json::jsonb->>'entry_policy'='m3_full_live_v1'
+        WHERE command_type='entry'
+          AND payload_json::jsonb->>'entry_policy'='m3_full_live_v1'
+          AND identity_status IN ('PROVEN','LEGACY_UNKNOWN')
         ORDER BY requested_at_epoch_ms""").fetchall()
     updated = 0
     for entry in entries:
+        identity_status, trading_account_id = private_identity(entry)
+        exec_scope, exec_scope_params = identity_predicate(
+            "x", identity_status, trading_account_id
+        )
+        command_scope, command_scope_params = identity_predicate(
+            "c", identity_status, trading_account_id
+        )
+        ownership_scope, ownership_scope_params = identity_predicate(
+            "p", identity_status, trading_account_id
+        )
         entry_payload, entry_response = (
             document(entry["payload_json"]),
             document(entry["result_json"]),
@@ -79,10 +121,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         order_id = str(entry_result.get("orderId") or "")
         link_id = str(entry_result.get("orderLinkId") or entry_payload.get("order_link_id") or "")
         fills = connection.execute(
-            """SELECT * FROM runtime.executions
-            WHERE (%s<>'' AND order_id=%s) OR (%s<>'' AND order_link_id=%s)
+            f"""SELECT * FROM runtime.executions x
+            WHERE {exec_scope}
+              AND ((%s<>'' AND order_id=%s) OR (%s<>'' AND order_link_id=%s))
             ORDER BY exec_time_ms""",
-            (order_id, order_id, link_id, link_id),
+            (*exec_scope_params, order_id, order_id, link_id, link_id),
         ).fetchall()
         if not fills:
             continue
@@ -103,8 +146,9 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
                 (decision["signal_id"],),
             ).fetchone()
         ownership = connection.execute(
-            """SELECT * FROM runtime.position_ownership WHERE entry_command_id=%s""",
-            (entry["command_id"],),
+            f"""SELECT * FROM runtime.position_ownership p
+            WHERE {ownership_scope} AND entry_command_id=%s""",
+            (*ownership_scope_params, entry["command_id"]),
         ).fetchone()
         position_id = None if ownership is None else str(ownership["position_id"])
         attribution = (
@@ -120,11 +164,12 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             []
             if position_id is None
             else connection.execute(
-                """SELECT * FROM runtime.trade_commands
-                WHERE command_type='close'
+                f"""SELECT * FROM runtime.trade_commands c
+                WHERE {command_scope}
+                  AND command_type='close'
                   AND payload_json::jsonb->>'position_id'=%s
                 ORDER BY requested_at_epoch_ms""",
-                (position_id,),
+                (*command_scope_params, position_id),
             ).fetchall()
         )
         close_command = None
@@ -133,9 +178,11 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             exact_exec_ids = list(attribution["exit_execution_ids"] or [])
             if exact_exec_ids:
                 close_fills = connection.execute(
-                    """SELECT * FROM runtime.executions
-                       WHERE exec_id=ANY(%s) ORDER BY exec_time_ms,exec_id""",
-                    (exact_exec_ids,),
+                    f"""SELECT * FROM runtime.executions x
+                       WHERE {exec_scope}
+                         AND exec_id=ANY(%s)
+                       ORDER BY exec_time_ms,exec_id""",
+                    (*exec_scope_params, exact_exec_ids),
                 ).fetchall()
         for candidate in closes if attribution is None else []:
             response = document(candidate["result_json"])
@@ -143,10 +190,17 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             candidate_order = str(result.get("orderId") or "")
             candidate_link = str(result.get("orderLinkId") or "")
             rows = connection.execute(
-                """SELECT * FROM runtime.executions
-                WHERE (%s<>'' AND order_id=%s) OR (%s<>'' AND order_link_id=%s)
+                f"""SELECT * FROM runtime.executions x
+                WHERE {exec_scope}
+                  AND ((%s<>'' AND order_id=%s) OR (%s<>'' AND order_link_id=%s))
                 ORDER BY exec_time_ms""",
-                (candidate_order, candidate_order, candidate_link, candidate_link),
+                (
+                    *exec_scope_params,
+                    candidate_order,
+                    candidate_order,
+                    candidate_link,
+                    candidate_link,
+                ),
             ).fetchall()
             if rows:
                 close_command, close_fills = candidate, rows
@@ -228,6 +282,10 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
         lifecycle = {
             "trade_id": trade_id,
             "strategy": {"id": "m3_full_live_v1", "version": "1.0.0-owner-live"},
+            "private_identity": {
+                "identity_status": identity_status,
+                "trading_account_id": trading_account_id,
+            },
             "signal": None
             if decision is None
             else {"id": decision["signal_id"], "at_ms": decision["signal_at_epoch_ms"]},
@@ -258,14 +316,20 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
             "protection": [
                 dict(row)
                 for row in connection.execute(
-                    """SELECT * FROM runtime.trade_commands
-                WHERE symbol=%s AND requested_at_epoch_ms>=%s
-                AND (payload_json::jsonb->>'entry_command_id'=%s OR
-                     payload_json::jsonb->>'source'='m3_full_live_v1_1')
-                AND command_type IN
-                ('initial_protection','break_even','current_stop','trailing_stop')
+                    f"""SELECT * FROM runtime.trade_commands c
+                WHERE {command_scope}
+                  AND symbol=%s AND requested_at_epoch_ms>=%s
+                  AND (payload_json::jsonb->>'entry_command_id'=%s OR
+                       payload_json::jsonb->>'source'='m3_full_live_v1_1')
+                  AND command_type IN
+                  ('initial_protection','break_even','current_stop','trailing_stop')
                 ORDER BY requested_at_epoch_ms""",
-                    (entry["symbol"], opened_ms, entry["command_id"]),
+                    (
+                        *command_scope_params,
+                        entry["symbol"],
+                        opened_ms,
+                        entry["command_id"],
+                    ),
                 ).fetchall()
             ],
             "hold_timeline": hold_timeline,

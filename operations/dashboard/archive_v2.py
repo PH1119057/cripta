@@ -81,6 +81,36 @@ class TableExport:
 
 
 TABLE_EXPORTS = (
+    TableExport(
+        "runtime.account_state_generations",
+        "execution/account_state_generations.jsonl",
+        ("completed_at", "started_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.position_mode_states",
+        "execution/position_mode_states.jsonl",
+        ("observed_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.capital_reservations",
+        "execution/capital_reservations.jsonl",
+        ("updated_at", "created_at"),
+    ),
+    TableExport(
+        "runtime.exchange_position_slot_claims",
+        "execution/exchange_position_slot_claims.jsonl",
+        ("updated_at", "claimed_at"),
+    ),
+    TableExport(
+        "strategy_entry.strategy_execution_bindings",
+        "strategy_entry/strategy_execution_bindings.jsonl",
+        ("updated_at", "effective_from", "created_at"),
+    ),
+    TableExport(
+        "strategy_exit.execution_requests",
+        "strategy_exit/execution_requests.jsonl",
+        ("requested_at", "created_at"),
+    ),
     TableExport("runtime.executions", "exchange/executions.jsonl", ("exec_time_ms", "received_at")),
     TableExport("runtime.private_events", "exchange/private_events.jsonl", ("received_at",)),
     TableExport(
@@ -303,6 +333,45 @@ TABLE_EXPORTS = (
 )
 
 
+ACCOUNT_IDENTITY_EXPORTS = frozenset(
+    {
+        "runtime.account_state_generations",
+        "runtime.position_mode_states",
+        "runtime.capital_reservations",
+        "runtime.exchange_position_slot_claims",
+        "runtime.executions",
+        "runtime.private_events",
+        "runtime.trade_commands",
+        "runtime.connection_events",
+        "runtime.reconciliation_runs",
+        "runtime.hot_orders",
+        "runtime.hot_positions",
+        "runtime.wallet_latest",
+        "runtime.position_ownership",
+        "runtime.exchange_order_history",
+        "dispatcher_v2.trading_capacity_snapshots",
+        "strategy_entry.entry_decisions",
+        "strategy_entry.execution_requests",
+        "strategy_exit.execution_requests",
+    }
+)
+
+
+def _validate_account_identity(row: dict[str, Any]) -> tuple[str, str | None]:
+    status = str(row.get("identity_status") or "")
+    raw_account = row.get("trading_account_id")
+    account_id = None if raw_account is None else str(raw_account)
+    if status == "PROVEN":
+        if not account_id:
+            raise RuntimeError("PROVEN archive row is missing trading_account_id")
+        return status, account_id
+    if status == "LEGACY_UNKNOWN":
+        if account_id is not None:
+            raise RuntimeError("LEGACY_UNKNOWN archive row must not claim trading_account_id")
+        return status, None
+    raise RuntimeError(f"unsupported archive identity_status: {status or 'EMPTY'}")
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -480,6 +549,17 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
             if not columns:
                 continue
             types = dict(columns)
+            account_identity = spec.table in ACCOUNT_IDENTITY_EXPORTS
+            if account_identity:
+                missing_identity_columns = {
+                    "trading_account_id",
+                    "identity_status",
+                } - set(types)
+                if missing_identity_columns:
+                    raise RuntimeError(
+                        f"{spec.table} missing account provenance columns: "
+                        + ",".join(sorted(missing_identity_columns))
+                    )
             time_column = next((name for name in spec.time_candidates if name in types), None)
             where: str = ""
             parameters: list[Any] = []
@@ -503,6 +583,8 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
             minimum_time: Any = None
             maximum_time: Any = None
             digest = hashlib.sha256()
+            identity_status_counts: dict[str, int] = {}
+            identity_account_counts: dict[str, int] = {}
             with (
                 connection.cursor(name=f"archive_v2_{table_index}") as cursor,
                 archive.open(spec.path, "w", force_zip64=True) as destination,
@@ -511,6 +593,13 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                 cursor.execute(query, parameters)
                 for result in cursor:
                     row = result[0]
+                    if account_identity:
+                        status, account_id = _validate_account_identity(row)
+                        identity_status_counts[status] = identity_status_counts.get(status, 0) + 1
+                        if account_id is not None:
+                            identity_account_counts[account_id] = (
+                                identity_account_counts.get(account_id, 0) + 1
+                            )
                     payload = (json.dumps(row, ensure_ascii=False, default=str) + "\n").encode()
                     destination.write(payload)
                     digest.update(payload)
@@ -530,6 +619,13 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                     "max_time": maximum_time,
                     "sha256": digest.hexdigest(),
                     "columns": [{"name": n, "type": t} for n, t in columns],
+                    "identity_provenance": None
+                    if not account_identity
+                    else {
+                        "scope": "TRADING_ACCOUNT",
+                        "status_counts": identity_status_counts,
+                        "account_counts": identity_account_counts,
+                    },
                 }
             )
         archive.writestr(

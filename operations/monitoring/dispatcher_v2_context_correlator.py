@@ -20,7 +20,7 @@ STATUS_PATH = Path(
     )
 )
 SOURCE_COMMIT = os.environ.get("DISPATCHER_V2_CORRELATOR_SOURCE_COMMIT", "UNSPECIFIED")
-CORRELATOR_VERSION = "dispatcher-v2-context-correlator-v1"
+CORRELATOR_VERSION = "dispatcher-v2-context-correlator-v2"
 
 EVENT_SOURCE_SQL = r"""
 SELECT 'SIGNAL'::text AS event_type,
@@ -32,6 +32,8 @@ SELECT 'SIGNAL'::text AS event_type,
        NULL::text AS trade_id,
        o.symbol::text AS symbol,
        o.direction::text AS side,
+       NULL::text AS trading_account_id,
+       'LEGACY_UNKNOWN'::text AS identity_status,
        jsonb_build_object(
            'source_table','monitoring.opportunities',
            'decision',o.decision,
@@ -50,6 +52,8 @@ SELECT 'ENTRY_DECISION',
        NULL::text,
        e.symbol,
        e.direction,
+       NULL::text,
+       'LEGACY_UNKNOWN'::text,
        jsonb_build_object(
            'source_table','runtime.entry_decisions',
            'decision',e.decision,
@@ -71,6 +75,8 @@ SELECT 'TRADE_COMMAND',
        p.trade_id,
        c.symbol,
        c.payload_json::jsonb ->> 'side',
+       c.trading_account_id,
+       c.identity_status,
        jsonb_build_object(
            'source_table','runtime.trade_commands',
            'command_type',c.command_type,
@@ -78,13 +84,28 @@ SELECT 'TRADE_COMMAND',
        )
 FROM runtime.trade_commands c
 LEFT JOIN runtime.position_ownership p
-  ON p.entry_command_id=c.command_id
-  OR p.entry_command_id=NULLIF(c.payload_json::jsonb ->> 'entry_command_id','')
+  ON (
+       p.entry_command_id=c.command_id
+       OR p.entry_command_id=NULLIF(c.payload_json::jsonb ->> 'entry_command_id','')
+     )
+ AND (
+       (c.identity_status='PROVEN'
+        AND p.identity_status='PROVEN'
+        AND p.trading_account_id=c.trading_account_id)
+       OR
+       (c.identity_status='LEGACY_UNKNOWN'
+        AND p.identity_status='LEGACY_UNKNOWN'
+        AND p.trading_account_id IS NULL)
+     )
 
 UNION ALL
 
 SELECT 'EXECUTION',
-       x.exec_id,
+       CASE
+         WHEN x.identity_status='PROVEN' AND x.trading_account_id IS NOT NULL
+           THEN x.trading_account_id || ':' || x.exec_id
+         ELSE x.exec_id
+       END,
        to_timestamp(COALESCE(x.exec_time_ms,x.received_at_epoch_ms) / 1000.0),
        COALESCE(p.signal_id, NULLIF(c.payload_json::jsonb ->> 'signal_id','')),
        NULL::text,
@@ -92,18 +113,42 @@ SELECT 'EXECUTION',
        p.trade_id,
        x.symbol,
        x.side,
+       x.trading_account_id,
+       x.identity_status,
        jsonb_build_object(
            'source_table','runtime.executions',
+           'exec_id',x.exec_id,
            'order_id',x.order_id,
            'order_link_id',x.order_link_id,
            'exec_type',x.payload_json::jsonb ->> 'execType'
        )
 FROM runtime.executions x
-LEFT JOIN runtime.trade_commands c ON c.command_id=x.order_link_id
+LEFT JOIN runtime.trade_commands c
+  ON c.command_id=x.order_link_id
+ AND (
+       (x.identity_status='PROVEN'
+        AND c.identity_status='PROVEN'
+        AND c.trading_account_id=x.trading_account_id)
+       OR
+       (x.identity_status='LEGACY_UNKNOWN'
+        AND c.identity_status='LEGACY_UNKNOWN'
+        AND c.trading_account_id IS NULL)
+     )
 LEFT JOIN runtime.position_ownership p
-  ON p.execution_ids ? x.exec_id
-  OR p.exit_execution_ids ? x.exec_id
-  OR p.entry_command_id=c.command_id
+  ON (
+       p.execution_ids ? x.exec_id
+       OR p.exit_execution_ids ? x.exec_id
+       OR p.entry_command_id=c.command_id
+     )
+ AND (
+       (x.identity_status='PROVEN'
+        AND p.identity_status='PROVEN'
+        AND p.trading_account_id=x.trading_account_id)
+       OR
+       (x.identity_status='LEGACY_UNKNOWN'
+        AND p.identity_status='LEGACY_UNKNOWN'
+        AND p.trading_account_id IS NULL)
+     )
 
 UNION ALL
 
@@ -116,6 +161,8 @@ SELECT 'POSITION_LIFECYCLE',
        l.trade_id,
        p.symbol,
        p.side,
+       p.trading_account_id,
+       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
        jsonb_build_object(
            'source_table','runtime.position_lifecycle_events',
            'event_type',l.event_type
@@ -134,6 +181,8 @@ SELECT 'SUPERVISOR_TRANSITION',
        p.trade_id,
        s.symbol,
        p.side,
+       p.trading_account_id,
+       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
        jsonb_build_object(
            'source_table','supervisor.transitions',
            'old_state',s.old_state,
@@ -154,6 +203,8 @@ SELECT 'EXIT_DECISION',
        p.trade_id,
        d.symbol,
        p.side,
+       p.trading_account_id,
+       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
        jsonb_build_object(
            'source_table','supervisor.exit_decisions',
            'internal_reason',d.internal_reason,
@@ -196,14 +247,14 @@ def correlate(*, batch_limit: int) -> int:
     )
     INSERT INTO research_context.dispatcher_v2_event_links(
         event_type,reference_id,occurred_at,signal_id,strategy_attempt_id,
-        position_id,trade_id,symbol,side,
+        position_id,trade_id,symbol,side,trading_account_id,identity_status,
         global_context_id,global_observed_at,global_age_seconds,
         coin_context_id,coin_observed_at,coin_age_seconds,
         capacity_snapshot_id,capacity_observed_at,capacity_age_seconds,
         observed_context_mode,consumed_context_mode,link_quality,
         event_payload,provenance,trading_effect)
     SELECT e.event_type,e.reference_id,e.occurred_at,e.signal_id,e.strategy_attempt_id,
-           e.position_id,e.trade_id,e.symbol,e.side,
+           e.position_id,e.trade_id,e.symbol,e.side,e.trading_account_id,e.identity_status,
            g.global_context_id,g.observed_at,
            extract(epoch FROM (e.occurred_at-g.observed_at)),
            c.coin_context_id,c.observed_at,
@@ -229,6 +280,8 @@ def correlate(*, batch_limit: int) -> int:
                'source_commit',%s::text,
                'coin_same_global_context',true,
                'strategy_attempt_id_status','NOT_AVAILABLE_CURRENT_RUNTIME',
+               'trading_account_id',e.trading_account_id,
+               'identity_status',e.identity_status,
                'trading_command',false
            ),
            'NONE'
@@ -250,7 +303,11 @@ def correlate(*, batch_limit: int) -> int:
     LEFT JOIN LATERAL (
         SELECT capacity_snapshot_id,observed_at
         FROM dispatcher_v2.trading_capacity_snapshots
-        WHERE observed_at <= e.occurred_at
+        WHERE e.identity_status='PROVEN'
+          AND e.trading_account_id IS NOT NULL
+          AND identity_status='PROVEN'
+          AND trading_account_id=e.trading_account_id
+          AND observed_at <= e.occurred_at
         ORDER BY observed_at DESC
         LIMIT 1
     ) a ON true
