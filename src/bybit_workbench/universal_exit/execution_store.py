@@ -52,6 +52,18 @@ def _request_from_row(row: Mapping[str, object]) -> ExitExecutionRequest:
         requested_mutation=FrozenPolicy.from_mapping(mutation),
         requested_at=requested_at.astimezone(UTC),
         expires_at=expires_at.astimezone(UTC),
+        strategy_execution_binding_id=(
+            None if row.get("strategy_execution_binding_id") is None
+            else str(row.get("strategy_execution_binding_id"))
+        ),
+        execution_leg=(
+            None if row.get("execution_leg") is None else str(row.get("execution_leg"))
+        ),
+        trading_account_id=(
+            None if row.get("trading_account_id") is None
+            else str(row.get("trading_account_id"))
+        ),
+        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
     )
 
 
@@ -124,8 +136,10 @@ def persist_exit_execution_request(
                    strategy_id,strategy_version,strategy_config_fingerprint,
                    exit_plan_fingerprint,account_ref,exchange_position_key,
                    position_idx,symbol,direction,action_kind,requested_mutation,
-                   requested_at,expires_at
-               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+                   requested_at,expires_at,strategy_execution_binding_id,
+                   execution_leg,trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,
+                        %s,%s,%s,%s)
                ON CONFLICT(execution_request_id) DO NOTHING""",
             (
                 request.execution_request_id,
@@ -144,6 +158,10 @@ def persist_exit_execution_request(
                 request.requested_mutation.payload_json,
                 request.requested_at.astimezone(UTC),
                 request.expires_at.astimezone(UTC),
+                request.strategy_execution_binding_id,
+                request.execution_leg,
+                request.trading_account_id,
+                request.identity_status,
             ),
         )
         stored = load_exit_execution_request(
@@ -189,7 +207,9 @@ def exact_open_position(
                   strategy_activation_id,signal_id,strategy_attempt_id,
                   entry_decision_id,entry_execution_request_id,
                   entry_plan_fingerprint,exit_plan_fingerprint,entry_command_id,
-                  symbol,side,actual_avg_fill,actual_qty,fill_at,state,bot_instance_id
+                  symbol,side,actual_avg_fill,actual_qty,fill_at,state,bot_instance_id,
+                  strategy_execution_binding_id,execution_leg,trading_account_id,
+                  identity_status
              FROM runtime.position_ownership
             WHERE position_id=%s""",
         (request.strategy_position_id,),
@@ -225,6 +245,18 @@ def exact_open_position(
         actual_avg_fill=row["actual_avg_fill"],  # type: ignore[arg-type]
         actual_qty=row["actual_qty"],  # type: ignore[arg-type]
         fill_at=fill_at.astimezone(UTC),
+        strategy_execution_binding_id=(
+            None if row.get("strategy_execution_binding_id") is None
+            else str(row.get("strategy_execution_binding_id"))
+        ),
+        execution_leg=(
+            None if row.get("execution_leg") is None else str(row.get("execution_leg"))
+        ),
+        trading_account_id=(
+            None if row.get("trading_account_id") is None
+            else str(row.get("trading_account_id"))
+        ),
+        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
     )
     expected = (
         request.strategy_position_id,
@@ -237,6 +269,10 @@ def exact_open_position(
         request.exit_plan_fingerprint,
         request.symbol,
         request.direction,
+        request.strategy_execution_binding_id,
+        request.execution_leg,
+        request.trading_account_id,
+        request.identity_status,
     )
     actual = (
         position.strategy_position_id,
@@ -249,6 +285,10 @@ def exact_open_position(
         position.exit_plan_fingerprint,
         position.symbol,
         position.direction,
+        position.strategy_execution_binding_id,
+        position.execution_leg,
+        position.trading_account_id,
+        position.identity_status,
     )
     if actual != expected:
         raise RuntimeError("ExitExecutionRequest / StrategyPosition exact identity mismatch")
@@ -259,16 +299,31 @@ def mutation_in_flight(
     connection: ConnectionLike,
     request: ExitExecutionRequest,
 ) -> str | None:
-    row = connection.execute(
-        """SELECT command_id,state
-             FROM runtime.trade_commands
-            WHERE command_type='strategy_exit'
-              AND state IN ('queued','running')
-              AND payload_json::jsonb->>'strategy_position_id'=%s
-            ORDER BY requested_at_epoch_ms,command_id
-            LIMIT 1""",
-        (request.strategy_position_id,),
-    ).fetchone()
+    if request.identity_status == "PROVEN":
+        row = connection.execute(
+            """SELECT command_id,state
+                 FROM runtime.trade_commands
+                WHERE command_type='strategy_exit'
+                  AND state IN ('queued','running')
+                  AND payload_json::jsonb->>'strategy_position_id'=%s
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'
+                ORDER BY requested_at_epoch_ms,command_id
+                LIMIT 1""",
+            (request.strategy_position_id, request.trading_account_id),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            """SELECT command_id,state
+                 FROM runtime.trade_commands
+                WHERE command_type='strategy_exit'
+                  AND state IN ('queued','running')
+                  AND payload_json::jsonb->>'strategy_position_id'=%s
+                  AND identity_status='LEGACY_UNKNOWN'
+                ORDER BY requested_at_epoch_ms,command_id
+                LIMIT 1""",
+            (request.strategy_position_id,),
+        ).fetchone()
     if row is None:
         return None
     return f"{row['command_id']}:{row['state']}"
@@ -304,8 +359,10 @@ def publish_runtime_exit_command(
         payload_json = json.dumps(prepared.payload, ensure_ascii=False, sort_keys=True)
         inserted = connection.execute(
             """INSERT INTO runtime.trade_commands(
-                   command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms
-               ) VALUES(%s,'strategy_exit',%s,%s,'queued',%s)
+                   command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+                   strategy_execution_binding_id,execution_leg,trading_account_id,
+                   identity_status
+               ) VALUES(%s,'strategy_exit',%s,%s,'queued',%s,%s,%s,%s,%s)
                ON CONFLICT(command_id) DO NOTHING
                RETURNING command_id""",
             (
@@ -313,11 +370,17 @@ def publish_runtime_exit_command(
                 request.symbol,
                 payload_json,
                 int(now.astimezone(UTC).timestamp() * 1000),
+                request.strategy_execution_binding_id,
+                request.execution_leg,
+                request.trading_account_id,
+                request.identity_status,
             ),
         ).fetchone()
         if inserted is None:
             existing = connection.execute(
-                """SELECT command_type,symbol,payload_json
+                """SELECT command_type,symbol,payload_json,
+                          strategy_execution_binding_id,execution_leg,
+                          trading_account_id,identity_status
                      FROM runtime.trade_commands WHERE command_id=%s""",
                 (prepared.command_id,),
             ).fetchone()
@@ -327,6 +390,19 @@ def publish_runtime_exit_command(
                 str(existing["command_type"]) != "strategy_exit"
                 or str(existing["symbol"]) != request.symbol
                 or json.loads(str(existing["payload_json"])) != prepared.payload
+                or (
+                    None if existing["strategy_execution_binding_id"] is None
+                    else str(existing["strategy_execution_binding_id"])
+                ) != request.strategy_execution_binding_id
+                or (
+                    None if existing["execution_leg"] is None
+                    else str(existing["execution_leg"])
+                ) != request.execution_leg
+                or (
+                    None if existing["trading_account_id"] is None
+                    else str(existing["trading_account_id"])
+                ) != request.trading_account_id
+                or str(existing["identity_status"]) != request.identity_status
             ):
                 raise RuntimeError("deterministic Universal Exit command_id collision")
 

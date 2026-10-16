@@ -130,6 +130,10 @@ class ExitExecutionRequest:
     requested_mutation: FrozenPolicy
     requested_at: datetime
     expires_at: datetime
+    strategy_execution_binding_id: str | None = None
+    execution_leg: str | None = None
+    trading_account_id: str | None = None
+    identity_status: str = "LEGACY_UNKNOWN"
 
     def __post_init__(self) -> None:
         for field in (
@@ -152,6 +156,20 @@ class ExitExecutionRequest:
             raise ValueError("ExitExecutionRequest timestamps must be timezone-aware")
         if self.expires_at <= self.requested_at:
             raise ValueError("ExitExecutionRequest.expires_at must be after requested_at")
+        if self.identity_status not in {"PROVEN", "LEGACY_UNKNOWN"}:
+            raise ValueError("ExitExecutionRequest identity_status is invalid")
+        identity_fields = (
+            self.strategy_execution_binding_id,
+            self.execution_leg,
+            self.trading_account_id,
+        )
+        if self.identity_status == "PROVEN":
+            if any(value is None or not str(value).strip() for value in identity_fields):
+                raise ValueError("PROVEN ExitExecutionRequest requires binding/account lineage")
+        elif any(value is not None and str(value).strip() for value in identity_fields):
+            raise ValueError(
+                "LEGACY_UNKNOWN ExitExecutionRequest cannot claim binding/account lineage"
+            )
 
     @classmethod
     def from_decision(
@@ -196,4 +214,8 @@ class ExitExecutionRequest:
             requested_mutation=decision.requested_mutation,
             requested_at=requested_at.astimezone(UTC),
             expires_at=expires_at.astimezone(UTC),
+            strategy_execution_binding_id=position.strategy_execution_binding_id,
+            execution_leg=position.execution_leg,
+            trading_account_id=position.trading_account_id,
+            identity_status=position.identity_status,
         )

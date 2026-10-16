@@ -432,6 +432,10 @@ def persist_universal_strategy_position(
         fill_at=fill_at,
         exchange_position_slot_claim_id=lineage.exchange_position_slot_claim_id,
         position_mode_state_ref=lineage.position_mode_state_ref,
+        strategy_execution_binding_id=lineage.strategy_execution_binding_id,
+        execution_leg=lineage.execution_leg,
+        trading_account_id=lineage.trading_account_id,
+        identity_status="PROVEN",
     )
 
 

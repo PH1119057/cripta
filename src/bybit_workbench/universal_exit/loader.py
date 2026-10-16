@@ -44,7 +44,8 @@ def load_exit_binding(
                   p.entry_decision_id,p.entry_execution_request_id,
                   p.entry_plan_fingerprint,p.exit_plan_fingerprint,p.entry_command_id,
                   p.symbol,p.side,p.actual_avg_fill,p.actual_qty,p.fill_at,
-                  ep.exit_plan_version,ep.plan_json
+                  p.strategy_execution_binding_id,p.execution_leg,p.trading_account_id,
+                  p.identity_status,ep.exit_plan_version,ep.plan_json
              FROM runtime.position_ownership p
              JOIN strategy_entry.exit_plans ep
                ON ep.exit_plan_fingerprint=p.exit_plan_fingerprint
@@ -99,6 +100,18 @@ def load_exit_binding(
         actual_avg_fill=Decimal(str(row.get("actual_avg_fill"))),
         actual_qty=Decimal(str(row.get("actual_qty"))),
         fill_at=fill_at.astimezone(UTC),
+        strategy_execution_binding_id=(
+            None if row.get("strategy_execution_binding_id") is None
+            else str(row.get("strategy_execution_binding_id"))
+        ),
+        execution_leg=(
+            None if row.get("execution_leg") is None else str(row.get("execution_leg"))
+        ),
+        trading_account_id=(
+            None if row.get("trading_account_id") is None
+            else str(row.get("trading_account_id"))
+        ),
+        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
     )
 
     raw_plan = _mapping(row.get("plan_json"), "ExitPlan.plan_json")

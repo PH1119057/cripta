@@ -38,6 +38,10 @@ class StrategyPosition:
     exchange_position_slot_claim_id: str | None = None
     position_mode_state_ref: str | None = None
     initial_protection_confirmed_at: datetime | None = None
+    strategy_execution_binding_id: str | None = None
+    execution_leg: str | None = None
+    trading_account_id: str | None = None
+    identity_status: str = "LEGACY_UNKNOWN"
 
     def __post_init__(self) -> None:
         required_text = (
@@ -66,6 +70,20 @@ class StrategyPosition:
             raise ValueError("StrategyPosition fill and quantity must be positive")
         if self.fill_at.tzinfo is None:
             raise ValueError("StrategyPosition fill_at must be timezone-aware")
+        if self.identity_status not in {"PROVEN", "LEGACY_UNKNOWN"}:
+            raise ValueError("StrategyPosition identity_status is invalid")
+        identity_fields = (
+            self.strategy_execution_binding_id,
+            self.execution_leg,
+            self.trading_account_id,
+        )
+        if self.identity_status == "PROVEN":
+            if any(value is None or not str(value).strip() for value in identity_fields):
+                raise ValueError("PROVEN StrategyPosition requires binding/account lineage")
+        elif any(value is not None and str(value).strip() for value in identity_fields):
+            raise ValueError(
+                "LEGACY_UNKNOWN StrategyPosition cannot claim binding/account lineage"
+            )
 
     @property
     def fill_at_utc(self) -> datetime:

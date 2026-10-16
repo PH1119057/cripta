@@ -388,6 +388,10 @@ def prepare_runtime_exit_command(
         position.position_idx,
         position.symbol,
         position.direction,
+        position.strategy_execution_binding_id,
+        position.execution_leg,
+        position.trading_account_id,
+        position.identity_status,
     )
     actual = (
         request.strategy_position_id,
@@ -400,6 +404,10 @@ def prepare_runtime_exit_command(
         request.position_idx,
         request.symbol,
         request.direction,
+        request.strategy_execution_binding_id,
+        request.execution_leg,
+        request.trading_account_id,
+        request.identity_status,
     )
     if actual != expected:
         raise ExitExecutionBridgeBlocked(
@@ -429,6 +437,10 @@ def prepare_runtime_exit_command(
         "symbol": request.symbol,
         "direction": request.direction.value,
         "action_kind": request.action_kind.value,
+        "strategy_execution_binding_id": request.strategy_execution_binding_id,
+        "execution_leg": request.execution_leg,
+        "trading_account_id": request.trading_account_id,
+        "identity_status": request.identity_status,
         "requested_mutation": mutation,
         "expires_at": request.expires_at.astimezone(UTC).isoformat(),
     }
