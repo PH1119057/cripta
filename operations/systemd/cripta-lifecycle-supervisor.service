@@ -9,6 +9,7 @@ User=cripta
 Group=cripta
 WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 EnvironmentFile=-/etc/cripta/release.env
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred

@@ -587,9 +587,11 @@ def _admission_pre_dispatch_status(
         """SELECT side,size
              FROM runtime.hot_positions
             WHERE symbol=%s AND position_idx=0
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
               AND NULLIF(size,'')::numeric > 0
             LIMIT 1""",
-        (request.symbol,),
+        (request.symbol, request.trading_account_id),
     ).fetchone()
     if hot_position is not None:
         return (
@@ -602,8 +604,12 @@ def _admission_pre_dispatch_status(
              FROM runtime.trade_commands
             WHERE command_type='entry' AND symbol=%s
               AND state IN ('queued','running')
+              AND (
+                   (trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN'
+              )
             ORDER BY requested_at_epoch_ms LIMIT 1""",
-        (request.symbol,),
+        (request.symbol, request.trading_account_id),
     ).fetchone()
     if pending_command is not None:
         return (
@@ -615,10 +621,12 @@ def _admission_pre_dispatch_status(
         """SELECT order_id,order_status
              FROM runtime.hot_orders
             WHERE symbol=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
               AND order_status IN ('New','PartiallyFilled','Untriggered')
               AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
             ORDER BY order_id LIMIT 1""",
-        (request.symbol,),
+        (request.symbol, request.trading_account_id),
     ).fetchone()
     if pending_order is not None:
         return (

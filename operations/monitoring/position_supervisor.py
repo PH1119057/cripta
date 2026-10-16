@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import signal
 import time
 import urllib.parse
@@ -21,6 +22,7 @@ from bybit_workbench.position_supervisor import (
 )
 
 MAYAK_STATUS = Path("/var/lib/cripta/mayak_v2/status.json")
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 running = True
 _public_cache: dict[str, tuple[float, dict[str, object]]] = {}
 
@@ -167,8 +169,14 @@ def initialize(connection: psycopg.Connection) -> None:
 
 
 def exchange_positions(connection: psycopg.Connection) -> list[tuple[ExchangePosition, Decimal]]:
-    rows = connection.execute("""SELECT symbol,position_idx,side,size,entry_price,
-        leverage,payload_json FROM runtime.hot_positions ORDER BY symbol""").fetchall()
+    rows = connection.execute(
+        """SELECT symbol,position_idx,side,size,entry_price,leverage,payload_json
+             FROM runtime.hot_positions
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY symbol""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchall()
     result: list[tuple[ExchangePosition, Decimal]] = []
     for row in rows:
         raw = json.loads(row[6])
@@ -176,9 +184,13 @@ def exchange_positions(connection: psycopg.Connection) -> list[tuple[ExchangePos
         owner = connection.execute(
             """SELECT position_id FROM runtime.position_ownership
                WHERE symbol=%s AND side=%s AND state='OPEN'
+                 AND (
+                      (trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN'
+                 )
                  AND abs(extract(epoch from (fill_at-to_timestamp(%s/1000.0))))<=10
                ORDER BY fill_at DESC LIMIT 1""",
-            (row[0], row[2], open_ms),
+            (row[0], row[2], TRADING_ACCOUNT_ID, open_ms),
         ).fetchone()
         identity = ExchangePosition(
             position_id=(
@@ -353,6 +365,8 @@ def restore_created(
 
 
 def main() -> None:
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Position Supervisor")
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     registry = SupervisorRegistry()

@@ -414,9 +414,11 @@ class PostgresEntryAdmissionPort:
                 """SELECT side,size
                      FROM runtime.hot_positions
                     WHERE symbol=%s AND position_idx=0
+                      AND trading_account_id=%s
+                      AND identity_status='PROVEN'
                       AND size::numeric <> 0
                     LIMIT 1""",
-                (request.symbol,),
+                (request.symbol, request.trading_account_id),
             ).fetchone()
             if hot is not None:
                 raise SlotOwnershipConflict(
@@ -427,10 +429,12 @@ class PostgresEntryAdmissionPort:
                 """SELECT order_id
                      FROM runtime.hot_orders
                     WHERE symbol=%s
+                      AND trading_account_id=%s
+                      AND identity_status='PROVEN'
                       AND order_status IN ('New','PartiallyFilled','Untriggered')
                       AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
                     LIMIT 1""",
-                (request.symbol,),
+                (request.symbol, request.trading_account_id),
             ).fetchone()
             if pending is not None:
                 raise SlotOwnershipConflict("non-reduce Exchange order occupies slot")

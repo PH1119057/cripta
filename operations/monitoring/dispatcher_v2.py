@@ -182,20 +182,30 @@ def _account_state(connection: psycopg.Connection[Any]) -> TradingAccountState |
         wallet = cursor.execute(
             """SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
                       available_balance,payload_json
-               FROM runtime.wallet_latest WHERE singleton=1"""
+               FROM runtime.wallet_latest
+              WHERE singleton=1
+                AND trading_account_id=%s
+                AND identity_status='PROVEN'""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchone()
         if wallet is None:
             return None
         positions_row = cursor.execute(
-            "SELECT count(*) AS n FROM runtime.hot_positions"
+            """SELECT count(*) AS n FROM runtime.hot_positions
+                WHERE trading_account_id=%s
+                  AND identity_status='PROVEN'""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchone()
         assert positions_row is not None
         positions_count = int(positions_row["n"])
         active_orders_row = cursor.execute(
             """SELECT count(*) AS n FROM runtime.hot_orders
-               WHERE order_status IN ('New','PartiallyFilled','Untriggered')
+               WHERE trading_account_id=%s
+                 AND identity_status='PROVEN'
+                 AND order_status IN ('New','PartiallyFilled','Untriggered')
                  AND COALESCE(payload_json::jsonb->>'reduceOnly','false') <> 'true'
-                 AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'"""
+                 AND COALESCE(payload_json::jsonb->>'closeOnTrigger','false') <> 'true'""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchone()
         assert active_orders_row is not None
         active_orders_count = int(active_orders_row["n"])

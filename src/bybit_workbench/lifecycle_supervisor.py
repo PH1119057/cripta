@@ -109,9 +109,13 @@ class LifecycleSupervisor:
         *,
         policy: LifecycleSupervisorPolicy | None = None,
         exchange_protection: Mapping[str, Mapping[str, object]] | None = None,
+        trading_account_id: str | None = None,
     ) -> None:
         self._connection = connection
         self._policy = policy or LifecycleSupervisorPolicy()
+        self._trading_account_id = (
+            None if trading_account_id is None else trading_account_id.strip()
+        )
         # Production passes independently read account evidence each scan.
         self._exchange_protection = exchange_protection
 
@@ -1395,11 +1399,21 @@ class LifecycleSupervisor:
         max_age = self._policy.exchange_state_max_age_seconds
         if max_age is None:
             return None
-        run = self._connection.execute(
-            """SELECT finished_at_epoch_ms,ok
-                 FROM runtime.reconciliation_runs
-                ORDER BY id DESC LIMIT 1"""
-        ).fetchone()
+        if self._trading_account_id:
+            run = self._connection.execute(
+                """SELECT finished_at_epoch_ms,ok
+                     FROM runtime.reconciliation_runs
+                    WHERE trading_account_id=%s
+                      AND identity_status='PROVEN'
+                    ORDER BY id DESC LIMIT 1""",
+                (self._trading_account_id,),
+            ).fetchone()
+        else:
+            run = self._connection.execute(
+                """SELECT finished_at_epoch_ms,ok
+                     FROM runtime.reconciliation_runs
+                    ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
         if run is None or int(str(run["ok"])) != 1:
             return None
         finished_at = datetime.fromtimestamp(
@@ -1415,14 +1429,33 @@ class LifecycleSupervisor:
         finished_at = self._fresh_exchange_reconciliation(now)
         if finished_at is None:
             return ()
-        rows = self._connection.execute(
-            """SELECT p.position_id,p.symbol,p.position_idx,p.side,
-                      h.side AS hot_side,h.size AS hot_size
-                 FROM runtime.position_ownership p
-                 LEFT JOIN runtime.hot_positions h
-                   ON h.symbol=p.symbol AND h.position_idx=p.position_idx
-                WHERE p.bot_instance_id='universal-entry' AND p.state='OPEN'"""
-        ).fetchall()
+        if self._trading_account_id:
+            rows = self._connection.execute(
+                """SELECT p.position_id,p.symbol,p.position_idx,p.side,
+                          h.side AS hot_side,h.size AS hot_size
+                     FROM runtime.position_ownership p
+                     LEFT JOIN runtime.hot_positions h
+                       ON h.symbol=p.symbol
+                      AND h.position_idx=p.position_idx
+                      AND h.trading_account_id=%s
+                      AND h.identity_status='PROVEN'
+                    WHERE p.bot_instance_id='universal-entry'
+                      AND p.state='OPEN'
+                      AND (
+                           (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                           OR p.identity_status='LEGACY_UNKNOWN'
+                      )""",
+                (self._trading_account_id, self._trading_account_id),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                """SELECT p.position_id,p.symbol,p.position_idx,p.side,
+                          h.side AS hot_side,h.size AS hot_size
+                     FROM runtime.position_ownership p
+                     LEFT JOIN runtime.hot_positions h
+                       ON h.symbol=p.symbol AND h.position_idx=p.position_idx
+                    WHERE p.bot_instance_id='universal-entry' AND p.state='OPEN'"""
+            ).fetchall()
         faults: list[FaultCondition] = []
         for row in rows:
             mismatch = (

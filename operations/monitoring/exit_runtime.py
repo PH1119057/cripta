@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import signal
 import time
 import urllib.parse
@@ -16,6 +17,7 @@ STRUCTURAL_EARLY_EXIT_ENABLED = False
 STRUCTURAL_BREAK_RULE = "NOT_PROVEN"
 STATUS_PATH = Path("/var/lib/cripta/exit_runtime/status.json")
 DEFAULT_SLIPPAGE_PCT = Decimal("0.0002")
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 running = True
 
 
@@ -305,11 +307,20 @@ def cycle(connection: psycopg.Connection) -> None:
                   o.actual_avg_fill,o.actual_qty,p.payload_json,o.bot_instance_id
            FROM runtime.position_ownership o
            JOIN runtime.hot_positions p
-             ON p.symbol=o.symbol AND p.position_idx=o.position_idx AND p.side=o.side
+             ON p.symbol=o.symbol
+            AND p.position_idx=o.position_idx
+            AND p.side=o.side
+            AND p.trading_account_id=%s
+            AND p.identity_status='PROVEN'
            WHERE o.state='OPEN' AND o.close_link_status='OPEN'
+             AND (
+                  (o.trading_account_id=%s AND o.identity_status='PROVEN')
+                  OR o.identity_status='LEGACY_UNKNOWN'
+             )
              AND o.bot_instance_id IS NOT NULL
              AND o.bot_instance_id <> 'universal-entry'
-           ORDER BY o.fill_at"""
+           ORDER BY o.fill_at""",
+        (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchall()
     for row in rows:
         position_id, entry_id, symbol, side = map(str, row[:4])
@@ -349,6 +360,8 @@ def cycle(connection: psycopg.Connection) -> None:
 
 
 def main() -> None:
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Exit Runtime")
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     atomic_status("STARTING")

@@ -33,6 +33,7 @@ DB_DSN = os.environ.get(
 )
 MODE = os.environ.get("CRIPTA_LIFECYCLE_SUPERVISOR", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_LIFECYCLE_SUPERVISOR_POLL_SECONDS", "2.0"))
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 OWNER_ALERT_WEBHOOK_URL = os.environ.get("CRIPTA_OWNER_ALERT_WEBHOOK_URL", "").strip()
 OWNER_ALERT_MAX_ATTEMPTS = int(os.environ.get("CRIPTA_OWNER_ALERT_MAX_ATTEMPTS", "3"))
 OWNER_ALERT_RETRY_SECONDS = int(os.environ.get("CRIPTA_OWNER_ALERT_RETRY_SECONDS", "30"))
@@ -113,7 +114,12 @@ def _account_positions(connection: psycopg.Connection[Any]) -> list[dict[str, An
                       entry_command_id,fill_at
                  FROM runtime.position_ownership
                 WHERE state='OPEN'
-                ORDER BY position_id"""
+                  AND (
+                       (trading_account_id=%s AND identity_status='PROVEN')
+                       OR identity_status='LEGACY_UNKNOWN'
+                  )
+                ORDER BY position_id""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchall())
 
 
@@ -143,15 +149,20 @@ def scan_once(
     protection: dict[str, dict[str, object]] | None = None,
 ) -> LifecycleScanResult:
     with connection.transaction():
-        return LifecycleSupervisor(connection, policy=policy, exchange_protection=protection).scan(
-            now=now.astimezone(UTC)
-        )
+        return LifecycleSupervisor(
+            connection,
+            policy=policy,
+            exchange_protection=protection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+        ).scan(now=now.astimezone(UTC))
 
 
 def main() -> int:
     global running
     if MODE != "ENABLED":
         raise SystemExit("Lifecycle Supervisor runtime is explicitly disabled")
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Lifecycle Supervisor")
     if POLL_SECONDS <= 0:
         raise SystemExit("Lifecycle Supervisor poll seconds must be positive")
     if (
