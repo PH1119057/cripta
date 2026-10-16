@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-06-account-generation-v1"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-identity-r1"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -13,6 +13,11 @@ REQUIRED_RELATIONS: tuple[str, ...] = (
     "control.execution_gates",
     "control.live_arm_evidence",
     "control.live_arm_sessions",
+    "identity.account_connectors",
+    "identity.instruments",
+    "identity.market_sources",
+    "identity.trading_accounts",
+    "identity.venues",
     "monitoring.entry_geometry_handoffs",
     "monitoring.opportunities",
     "runtime.account_state_generations",
@@ -47,6 +52,13 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "position_ownership", "position_mode_state_ref"),
     ("runtime", "position_ownership", "initial_protection_confirmed_at"),
     ("runtime", "position_ownership", "emergency_policy"),
+    ("runtime", "account_state_generations", "trading_account_id"),
+    ("runtime", "account_state_generations", "account_connector_id"),
+    ("runtime", "position_mode_states", "trading_account_id"),
+    ("runtime", "position_mode_states", "account_connector_id"),
+    ("runtime", "position_mode_states", "instrument_id"),
+    ("dispatcher_v2", "trading_capacity_snapshots", "trading_account_id"),
+    ("dispatcher_v2", "trading_capacity_snapshots", "account_connector_id"),
     ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
     ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
     ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),
