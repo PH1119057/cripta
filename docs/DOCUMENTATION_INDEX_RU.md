@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.26
+**Версия:** 3.27
 **Дата:** 2026-10-16
 **Статус:** канонический индекс документации
 
@@ -1137,3 +1137,49 @@ Documentation maintenance gate:
 - no Entry/Exit/Strategy/LIVE rule is changed;
 - this documentation commit performs no DB purge, schema migration, service
   restart, deploy, LIVE arm or Exchange mutation.
+
+# 37. Multi-account / multi-venue identity revision — OWNER DECISION 2026-10-16
+
+OWNER DECISION:
+- market identity, private account identity and Strategy identity are separate
+  axes;
+- Venue / MarketSource / InstrumentIdentity own public market lineage;
+- TradingAccount is the stable opaque identity of a concrete private
+  main/subaccount/wallet and is not BYBIT:UNIFIED or another account type label;
+- StrategyCard remains independent of physical accounts;
+- REAL StrategyActivation resolves through StrategyExecutionBinding and one or
+  more named ExecutionLegs to exact TradingAccounts;
+- DEDICATED_STRATEGY is the default REAL isolation: one TradingAccount is not
+  concurrently shared by independent REAL StrategyActivations;
+- one Strategy may use multiple TradingAccounts for explicit multi-leg
+  execution; this does not itself authorize arbitrage/hedge behavior;
+- public market data is stored once per MarketSource/Instrument/time, not once
+  per TradingAccount;
+- different Venues remain distinct market facts; cross-venue aggregates preserve
+  contributor lineage;
+- CEX and DEX use the same upper identity model while adapters/provenance remain
+  venue-specific;
+- order/fill/position uniqueness must be scoped by exact provider/account
+  semantics rather than assumed globally;
+- current BYBIT:UNIFIED single-account implementation is a migration finding,
+  not the target identity model.
+
+Canonical ownership:
+- ARCH §49 owns upper identity/cardinality and account-isolation invariants;
+- GLOSSARY §33 owns terminology;
+- TRADING_CONTOUR §7 owns Strategy/Entry/Exit/Execution consumption of bindings;
+- OBSERVATION_ANALYTICS §7 owns market-source vs account-data observation grain;
+- DEVELOPMENT_RELEASE §48 owns additive/cutover/destructive migration ordering;
+- RESEARCH_COMPUTE §20 owns research dataset identity/provenance rules;
+- SECURITY owns credential separation;
+- CURRENT_PROJECT_MAP §37 records implementation gaps/status only.
+
+Documentation maintenance gate:
+- active document set remains unchanged;
+- no file path, mandatory pre-read or routed-reading rule changes;
+- Project Source remains exactly 11 current documents;
+- existing section numbers are not renumbered;
+- README / AGENTS / Project Instructions topology update is not required;
+- this documentation revision contains no Python/SQL/runtime mutation;
+- DB migration, data deletion, deploy, LIVE arm and Exchange mutation remain
+  separate future implementation steps.

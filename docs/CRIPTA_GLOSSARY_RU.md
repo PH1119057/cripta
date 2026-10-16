@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.4
+**Версия:** 3.5
 **Дата:** 2026-10-16
 **Статус:** обязательный канонический терминологический контракт
 
@@ -800,3 +800,61 @@ preserves minute, venue/source, symbol, objective facts/features,
 quality/freshness and exact provenance/version identity without requiring
 permanent raw-trade/order-book archives or duplicate full MAYAK/Dispatcher
 payloads.
+
+## 33. Venue / market-source / trading-account terminology — OWNER DECISION 2026-10-16
+
+**Venue / venue_id** — stable CRIPTA identity of the physical trading
+venue/protocol where an instrument exists. Includes centralized exchanges and
+approved decentralized/on-chain venues. Venue is broader than the legacy word
+Exchange.
+
+**MarketSource / market_source_id** — exact strategy-agnostic source identity for
+public/objective market facts. It preserves provider/origin semantics and
+provenance. Several TradingAccounts on one Venue normally consume one shared
+MarketSource; different providers for the same Venue are distinct MarketSources
+until equivalence is proved.
+
+**InstrumentIdentity / instrument_id** — stable CRIPTA identity of one exact
+tradable/observable instrument within its Venue/product semantics. A raw symbol
+string alone is not guaranteed to be globally unique. DEX identity may require
+chain/network/protocol/pool semantics.
+
+**TradingAccount / trading_account_id** — stable opaque CRIPTA identity for one
+exact private execution account, CEX main/subaccount or approved on-chain wallet
+execution identity. It is not Venue, account type, API key, credential name,
+BYBIT:UNIFIED or another descriptive composite.
+
+**external_account_ref** — provider-side account/subaccount/wallet reference
+used as provenance when available. It does not replace trading_account_id and
+must not expose secrets.
+
+**AccountConnector / account_connector_id** — versioned/runtime connection
+identity authorized to obtain private state and/or perform permitted mutations
+for one TradingAccount. Credential rotation/replacement does not change
+trading_account_id.
+
+**StrategyExecutionBinding** — durable/effective mapping from one
+StrategyActivation + ExecutionLeg to one exact TradingAccount for REAL
+execution. The binding is execution placement/configuration, not StrategyCard
+trading logic.
+
+**ExecutionLeg** — named physical execution leg of a StrategyActivation. Normal
+single-venue execution has PRIMARY. Multi-leg Strategy may have LEG_A/LEG_B/etc.
+The term alone does not define hedge/arbitrage policy.
+
+**DEDICATED_STRATEGY account isolation** — default REAL allocation model where
+one TradingAccount is not concurrently shared by independent REAL
+StrategyActivations. One Strategy may own several accounts through distinct
+ExecutionLegs.
+
+**CrossVenueMarketContext** — derived strategy-agnostic context combining facts
+from several Venue/MarketSource identities while preserving contributor
+lineage, quality and freshness. It never replaces the underlying venue facts.
+
+Existing **Exchange** remains the execution/provider term for a centralized
+exchange adapter and exchange-authoritative private truth. Where a rule applies
+to CEX and DEX alike, Venue is the broader canonical term.
+
+Existing **Exchange position slot** is now understood as exact
+TradingAccount-scoped physical inventory:
+TradingAccount + product/category + InstrumentIdentity + position-mode identity.

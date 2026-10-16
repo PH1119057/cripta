@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.9
-**Дата:** 2026-10-07
+**Версия:** 3.0
+**Дата:** 2026-10-16
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -919,3 +919,146 @@ Before changing or purging current PostgreSQL history:
 
 No cleanup, PostgreSQL rewrite, service restart, LIVE arm or Exchange mutation is
 authorized by this documentation decision alone.
+
+## 49. Venue / MarketSource / TradingAccount identity — OWNER DECISION 2026-10-16
+
+CRIPTA separates market identity, private execution identity and Strategy
+identity. These axes may be linked, but must not be collapsed into one
+identifier.
+
+~~~text
+MARKET
+Venue -> MarketSource -> InstrumentIdentity -> market facts/context
+
+PRIVATE EXECUTION
+Venue -> TradingAccount -> AccountConnector -> private account/execution truth
+
+STRATEGY
+StrategyCard -> StrategyActivation -> StrategyExecutionBinding
+                                     -> ExecutionLeg -> TradingAccount
+~~~
+
+### 49.1 Venue and market-source boundary
+
+Venue is the physical trading venue/protocol on which an instrument exists.
+It may be a centralized exchange or a decentralized/on-chain venue.
+
+MarketSource is the exact source of public/objective market facts. One Venue may
+have multiple MarketSources (for example direct public feed, approved historical
+archive or another provider carrying exact venue-origin data). MarketSource
+identity must preserve provider/origin semantics and provenance.
+
+Public market facts are scoped by MarketSource + InstrumentIdentity + event/time
+identity, not by CRIPTA TradingAccount. Five Bybit subaccounts therefore consume
+the same Bybit public market stream where source semantics are identical; CRIPTA
+must not persist five copies merely because five private accounts exist.
+
+Different Venues remain distinct market sources even when prices are highly
+correlated. A cross-venue context/aggregate is DERIVED_RECOMPUTABLE_DATA and must
+preserve the exact contributing venue/source lineage. This is required for
+future divergence, lead/lag, basis and arbitrage research.
+
+### 49.2 TradingAccount and AccountConnector
+
+TradingAccount is CRIPTA's stable opaque identity for one exact private execution
+account: CEX main/subaccount or an approved on-chain wallet execution identity.
+It is not the venue name, account type, API key, credential name or a composite
+such as BYBIT:UNIFIED.
+
+Each TradingAccount carries or resolves, where applicable:
+
+~~~text
+trading_account_id
+venue_id
+external_account_ref
+parent_trading_account_id
+account_kind
+account_type
+environment
+status
+~~~
+
+External/provider account identifiers remain provenance, not CRIPTA's primary
+identity. Unknown historical account identity stays UNKNOWN/LEGACY; migration
+must not infer a specific subaccount from symbol/time proximity.
+
+AccountConnector is the runtime/config identity that obtains private account
+state and/or performs authorized mutations for one TradingAccount. Credential
+rotation or connector replacement does not change trading_account_id.
+Credentials remain outside durable public/project identity and follow SECURITY.
+
+AccountStateGeneration, wallet/capital state, position mode, reconciliation,
+orders, fills, fees, protection, positions and realized account economics are
+TradingAccount-scoped facts.
+
+### 49.3 StrategyExecutionBinding and ExecutionLeg
+
+StrategyCard defines trading logic and must not embed the physical account as a
+result-affecting Strategy parameter.
+
+A REAL StrategyActivation receives one or more explicit
+StrategyExecutionBinding records. A binding maps an ExecutionLeg to an exact
+TradingAccount for an effective interval and execution role.
+
+The normal single-venue form is:
+
+~~~text
+StrategyActivation -> PRIMARY ExecutionLeg -> one TradingAccount
+~~~
+
+A multi-leg Strategy may use multiple TradingAccounts/Venues, for example
+arbitrage:
+
+~~~text
+StrategyActivation
+  -> LEG_A -> TradingAccount on Venue A
+  -> LEG_B -> TradingAccount on Venue B
+  -> optional LEG_C -> approved DEX/on-chain TradingAccount
+~~~
+
+For REAL execution the default isolation contract is DEDICATED_STRATEGY:
+one TradingAccount is not concurrently shared by independent REAL
+StrategyActivations. Shared-account netting/allocation requires a separate
+owner-approved contract. This restriction does not prevent one Strategy from
+owning multiple TradingAccounts as distinct ExecutionLegs.
+
+PAPER has no real TradingAccount mutation rights; a simulated account identity
+must never be accepted as evidence for REAL admission.
+
+### 49.4 Account-scoped physical keys
+
+Any physical position/order/execution identity that is not proven globally
+unique by provider contract must be scoped by Venue and TradingAccount as
+required. A physical position slot is conceptually identified by at least:
+
+~~~text
+TradingAccount
+product/category
+InstrumentIdentity
+position mode / positionIdx
+~~~
+
+exchange_position_slot_claim_id remains the immutable identity of the claim
+event/ownership record. A semantic exchange_position_key must not collapse
+different TradingAccounts into the same physical slot.
+
+Likewise Exchange orderId/execId uniqueness must not be assumed outside the
+exact provider/account scope. Adapter contracts must state the required
+uniqueness scope.
+
+### 49.5 Storage consequence
+
+MarketSource data and TradingAccount private data have independent storage and
+retention lifecycles.
+
+- public market analytics grain is MarketSource + InstrumentIdentity + time;
+- private account state/audit grain includes TradingAccount;
+- Strategy trade/audit lineage references both the consumed market evidence and
+  the exact TradingAccount/ExecutionLeg used for REAL execution;
+- account count must not multiply stored public market telemetry;
+- venue count may multiply venue-specific market facts because those differences
+  are analytically meaningful.
+
+ARCH §48 storage/recoverability rules remain controlling. This section changes
+identity/ownership only and does not authorize DB migration, deletion, deploy,
+LIVE arm or Exchange mutation.

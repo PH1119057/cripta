@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.7
-**Дата:** 2026-10-11
+**Версия:** 2.8
+**Дата:** 2026-10-16
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1183,3 +1183,60 @@ effective price/quantity must not cause a redundant Bybit amendment/order.
 This decision concerns existing R1 dynamic SET_TP only. Stop Loss rounding,
 other Strategies, changes to Entry rules, new trailing/threshold policy,
 and proactive LIVE re-arm are not authorized by this section.
+
+# 7. Multi-account / multi-venue execution identity — OWNER DECISION 2026-10-16
+
+ARCH §49 owns the upper identity/cardinality model. This section defines how the
+trading contour consumes it.
+
+## 7.1 Strategy is account-independent policy
+
+StrategyCard / EntryPlan / ExitPlan do not hard-code a physical TradingAccount.
+StrategyActivation selects execution environment separately from the immutable
+trading policy.
+
+For REAL execution, every accepted strategy_attempt must resolve through an
+active StrategyExecutionBinding to one exact ExecutionLeg and TradingAccount
+before capital reservation / physical-slot admission. Missing, stale,
+overlapping or ambiguous binding is fail-closed and cannot fall back to a
+default account.
+
+## 7.2 REAL admission is TradingAccount-scoped
+
+AccountStateGeneration, available capital, position-mode evidence, physical
+slot, hot/private inventory, protection and reconciliation must all belong to
+the same exact trading_account_id as the ExecutionLeg.
+
+A successful check against another account on the same Venue does not satisfy
+admission. Likewise public Bybit market context is not private account evidence.
+
+The current one-way physical slot remains account-scoped. Multiple
+TradingAccounts may legitimately hold the same InstrumentIdentity and
+positionIdx concurrently without ownership conflict.
+
+## 7.3 Dedicated Strategy account isolation
+
+Normal REAL deployment uses DEDICATED_STRATEGY isolation: one TradingAccount
+serves at most one independent REAL StrategyActivation at a time. This gives
+separate capital, loss, profit, positions and recovery evidence.
+
+One StrategyActivation may use more than one TradingAccount only through
+explicitly named ExecutionLegs. Multi-leg atomicity/hedge/arbitrage semantics
+are Strategy-owned and require their own approved Strategy contract; the mere
+existence of multiple bindings does not create an arbitrage policy.
+
+Sharing one TradingAccount across independent REAL Strategies, internal netting
+or cross-Strategy capital pooling remains forbidden until separately approved.
+
+## 7.4 Execution and recovery lineage
+
+EntryExecutionRequest / ExitExecutionRequest and durable lifecycle lineage must
+carry or resolve the exact TradingAccount and ExecutionLeg used for the
+mutation. Exchange recovery is performed per TradingAccount/AccountConnector and
+must never reconcile one account's open orders/positions into another account.
+
+Strategy statistics remain attribution-gated by ARCH §47. A dedicated account
+makes accounting clearer but does not replace exact Strategy ownership lineage.
+
+This revision changes no Entry threshold, Exit rule, stake, leverage, protection
+or LIVE-arm policy.

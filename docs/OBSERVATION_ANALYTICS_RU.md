@@ -1,6 +1,6 @@
 # CRIPTA — наблюдение, контекст, мониторинг и аналитика
 
-**Версия:** 2.0
+**Версия:** 2.1
 **Дата:** 2026-10-16
 **Статус:** активный канонический контракт наблюдательно-аналитического контура
 
@@ -768,3 +768,63 @@ critical audible alarm.
 Browser audio policy still applies: if audio playback has not yet been unlocked
 by a user gesture, the existing Dashboard sound queue holds the alarm until
 playback becomes available.
+
+# 7. Market-source vs trading-account identity — OWNER DECISION 2026-10-16
+
+ARCH §49 owns Venue / MarketSource / TradingAccount identity. MAYAK, Dispatcher
+and Analytics must preserve this separation.
+
+## 7.1 Public market observation grain
+
+Public/objective market facts are keyed causally by:
+
+~~~text
+market_source_id
+instrument_id
+observed/event time
+source-specific event identity where applicable
+~~~
+
+venue_id is preserved directly or through immutable MarketSource lineage.
+trading_account_id is not part of the public market-data grain.
+
+Therefore N subaccounts on one Venue do not create N copies of price, public
+trades, OI, funding, liquidations, public order book or CoinMarketContext when
+the underlying MarketSource is the same.
+
+## 7.2 Private account observation grain
+
+Account/trading-capacity observations are a separate contour keyed by exact
+trading_account_id and AccountConnector provenance. Wallet, free balance,
+margin, private positions/orders, account mode and account health must not be
+published as if they were market facts.
+
+Dispatcher may consume both:
+- strategy-agnostic market context from MarketSource;
+- separate TradingAccount capacity/admission evidence.
+
+These inputs remain distinct in provenance and retention. Trading-account
+capacity is not duplicated into long-horizon market replay merely to accompany
+each market minute.
+
+## 7.3 Multi-venue and DEX observation
+
+Different Venues keep distinct MarketSource facts even when their prices track
+closely. CrossVenueMarketContext, venue spread, lead/lag, divergence, basis or
+other cross-venue aggregates are derived contexts and must preserve contributor
+IDs/freshness/quality.
+
+For DEX/on-chain observation the market source may identify chain/network,
+protocol/pool and block/event provenance instead of a centralized Exchange
+feed. The same separation remains: public pool/chain state is market evidence;
+the CRIPTA wallet used to transact is TradingAccount/private execution identity.
+
+## 7.4 Compact analytical history
+
+The compact analytical representation from ARCH §48 uses
+MarketSource + InstrumentIdentity + time as its market grain. Strategy/account
+labels are joined only when the research question requires actual
+decision/execution/economics lineage; they must not cause physical duplication
+of identical public market rows.
+
+This section grants no trading command or Strategy policy.

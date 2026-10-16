@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.6
+**Версия:** 12.7
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2456,3 +2456,68 @@ DEPLOY / RUNTIME CHANGE             = NONE
 Publication of this changeset may advance GitHub/source identity. Per INDEX
 §17.5 the final commit SHA is verified externally and is not self-referenced
 inside this document. No deploy or LIVE/re-arm follows from source publication.
+
+# 37. Multi-account / multi-venue identity gap — OWNER DECISION / CHECKED HERE 2026-10-16
+
+Pre-publication source authority checked against GitHub main:
+f3a84de0682c2902463b230e057ea4e02fab3877.
+
+Owner-approved target model is now documented by ARCH §49, TRADING_CONTOUR §7,
+OBSERVATION_ANALYTICS §7 and GLOSSARY §33.
+
+## 37.1 Current production/source findings — READ-ONLY forensic 2026-10-16
+
+Current implementation remains single-account oriented and is **not**
+multi-account ready.
+
+Verified PostgreSQL/source findings:
+
+- runtime AccountStateGeneration currently uses account_ref BYBIT:UNIFIED;
+- runtime.position_mode_states likewise scopes current mode rows to
+  exchange=BYBIT, account_ref=BYBIT:UNIFIED;
+- dispatcher_v2.trading_capacity_snapshots currently reports one
+  source_account_ref runtime.wallet_latest:1;
+- current position-key builder emits
+  BYBIT:UNIFIED:LINEAR:USDT:<symbol>:<positionIdx>;
+- universal Entry consumer explicitly rejects an account_ref different from the
+  single CURRENT_ACCOUNT_REF;
+- runtime.hot_positions primary identity is symbol + position_idx and contains
+  no explicit account identity;
+- runtime.hot_orders primary identity is order_id and current rows contain no
+  explicit trading_account_id;
+- runtime.executions primary identity is exec_id and current rows contain no
+  explicit trading_account_id;
+- runtime.position_ownership has account_ref for newer lifecycle rows, but
+  historical rows may be NULL and must not be silently assigned to a future
+  subaccount;
+- no durable StrategyExecutionBinding object currently maps a
+  StrategyActivation to an exact TradingAccount before admission.
+
+These are FINDING / CURRENT LIMITATION, not permission to change schema.
+
+## 37.2 Current market/account separation finding
+
+MAYAK/Dispatcher public market context is already conceptually
+strategy-agnostic and must not be multiplied by future subaccounts. Current
+large market tables and research links have real FK/consumer dependencies, so
+they cannot be purged before replacement analytics/replay consumers are proven.
+
+Private/account tables form a separate admission/recovery chain including
+AccountStateGeneration, position-mode evidence, capital reservations, physical
+slot claims, position ownership, private orders/executions and protection.
+
+## 37.3 Implementation status after this documentation cycle
+
+~~~text
+IDENTITY_MODEL_CANON              = YES
+MULTI_ACCOUNT_IMPLEMENTED         = NO
+MULTI_VENUE_EXECUTION_IMPLEMENTED = NO
+STRATEGY_ACCOUNT_BINDING          = NOT IMPLEMENTED
+DB_SCHEMA_MIGRATION               = NOT STARTED
+DATA_RETENTION_CUTOVER            = NOT STARTED
+DATA_DELETE                       = NO
+LIVE_BEHAVIOR_CHANGED             = NO
+~~~
+
+Implementation must follow DEVELOPMENT_RELEASE §48. No legacy identity is
+rewritten by this documentation revision.

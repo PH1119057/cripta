@@ -1,7 +1,7 @@
 # CRIPTA — security baseline
 
-**Версия:** 1.3
-**Дата:** 2026-09-28
+**Версия:** 1.4
+**Дата:** 2026-10-16
 **Статус:** обязательный technical security baseline
 
 Этот файл входит в base pre-read для любой содержательной работы.
@@ -56,3 +56,31 @@ patch_backups/, archive/history and historical payloads.
 6. только затем восстанавливать работу.
 
 Source of truth и active docs определяет docs/DOCUMENTATION_INDEX_RU*.md.
+
+## Trading-account credential separation — OWNER DECISION 2026-10-16
+
+trading_account_id, account_connector_id and credential_ref are three different
+concepts.
+
+- trading_account_id is a stable non-secret CRIPTA identity for one exact private
+  account/wallet execution scope;
+- account_connector_id identifies the connector/config instance or role bound to
+  that TradingAccount;
+- credential_ref may point to an approved secret-store entry but must not contain
+  API key, API secret, private key, session token or other secret material.
+
+Credential rotation/revocation or connector replacement must not change
+trading_account_id and must not require rewriting historical trade ownership.
+
+Provider external_account_ref may be operationally sensitive even when not a
+secret. Store/log/display only the minimum needed for exact identity and audit;
+do not expose it in public documentation, screenshots or unnecessary telemetry.
+
+One connector credential must never be silently reused for a different
+TradingAccount identity. Before REAL mutation the runtime must prove that the
+loaded credential/connector resolves to the same exact TradingAccount expected
+by StrategyExecutionBinding and AccountStateGeneration.
+
+DEX private keys/signing material follow the same rule: public wallet/venue
+identity may be referenced where required, while signing secrets remain only in
+approved secret storage.

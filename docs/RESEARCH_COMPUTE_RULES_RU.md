@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.1 · 2026-10-04
+**Версия:** 2.2 · 2026-10-16
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -533,3 +533,35 @@ The current first implementation stage is SHADOW/test only. Real activation
 still requires a separately owner-approved initial loss-containment contract;
 historical V1/S2/S3 protection values must not be inherited.
 
+
+## 20. Multi-venue research identity — OWNER DECISION 2026-10-16
+
+Research datasets that contain public market facts must preserve causal identity
+at least as:
+
+~~~text
+market_source_id
+venue_id or immutable venue lineage
+instrument_id
+event/observed time
+quality/freshness/provenance
+~~~
+
+A raw symbol string is not sufficient as a globally unique instrument key.
+
+Multiple CRIPTA TradingAccounts consuming the same MarketSource must not multiply
+the public market dataset. Account/Strategy fields are joined as labels/evidence
+only when a research question requires actual admission, execution, economics or
+attribution.
+
+Cross-venue research preserves each contributing venue/source before computing
+spreads, divergence, leader/lagger, basis or arbitrage features. A derived
+aggregate never replaces raw contributor identity.
+
+For DEX/on-chain research, provenance may additionally require chain/network,
+protocol/pool and block/transaction/event identity. Wallet/TradingAccount
+identity remains private execution lineage, not public market grain.
+
+Downloaded reconstructible external data still follows bounded-cache and source
+snapshot/provenance rules. This section changes dataset identity only and does
+not create trading policy.

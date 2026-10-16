@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 1.9 · 2026-10-04
+**Версия:** 2.0 · 2026-10-16
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -1431,3 +1431,80 @@ The §44–§46 separation and explicit owner re-arm rules remain mandatory.
 Until the effective lock rail and its concurrency tests are verified, report
 `DEPLOY_SERIALIZATION=NOT_VERIFIED` and do not claim concurrent deployment
 safety merely from this documentation decision.
+
+## 48. Identity/key/storage migration gate — OWNER DECISION 2026-10-16
+
+Any migration from the current single-account identities to ARCH §49 is treated
+as a major PostgreSQL/runtime contract change. Destructive cleanup is the final
+stage, never discovery.
+
+Required order:
+
+~~~text
+R0  READ-ONLY DB/source dependency map
+R1  additive identity schema/columns/registries
+R2  register current proven Venue/MarketSource/TradingAccount identities
+R3  proven-only backfill
+R4  preserve ambiguous legacy identity as UNKNOWN/LEGACY
+R5  account-scope private state / position / order / execution keys
+R6  introduce StrategyExecutionBinding / ExecutionLeg
+R7  market-source/instrument identity cutover
+R8  compact analytical representation + consumer migration
+R9  dual-read/parity/restart/recovery verification
+R10 new constraints + prove legacy writer/reader path unused
+R11 retention/deletion only after equivalence and backup gates
+R12 physical PostgreSQL space reclaim by an approved method
+R13 at least 7 days disk/runtime/research observation
+~~~
+
+### 48.1 Additive before destructive
+
+The first production migration must preserve the old readable path while new
+identities are introduced. Existing columns/keys/tables are not renamed,
+dropped or repurposed as the first step.
+
+Backfill may assign a concrete trading_account_id only when exact evidence proves
+the account. Historical NULL/ambiguous/BYBIT:UNIFIED-era facts that cannot be
+proven to a unique future account remain explicit LEGACY/UNKNOWN; symbol/time
+proximity is not sufficient.
+
+Dual compatibility must have one declared authority and deterministic parity.
+Uncontrolled permanent dual-write truth is forbidden. If temporary dual write
+is required, reconciliation/equality checks and retirement criteria are part of
+the migration.
+
+### 48.2 Consumer and key cutover gate
+
+Before enforcing new account-scoped keys, inventory and test all readers/writers
+including runtime, Dashboard, reports, archive/export, replay/research,
+Lifecycle Supervisor and release/pre-arm checks.
+
+Order/exec identifiers are scoped according to exact adapter/provider semantics.
+Do not globally widen/narrow uniqueness by guess.
+
+Before old identity retirement:
+
+~~~text
+NEW_WRITER_PATH                 = PASS
+NEW_READER_PATH                 = PASS
+ACCOUNT_SCOPE_PARITY            = PASS
+MARKET_SOURCE_PARITY            = PASS
+RESTART_RECOVERY                = PASS
+REPORT_REPLAY_RESEARCH          = PASS
+LEGACY_REQUIRED_READERS         = 0
+BACKUP_ROLLBACK                 = PASS
+~~~
+
+### 48.3 Destructive retention/reclaim gate
+
+Retention/purge follows ARCH §48 only after the identity migration and compact
+analytics consumers are proven. Deleting rows is not proof of filesystem space
+reclaim. PostgreSQL reclaim method must be chosen from current table/index/free
+space/lock evidence and must not blindly use a rewrite operation when disk
+headroom is insufficient.
+
+Any irreversible deletion requires a verified restore path to the retained
+backup/cold evidence appropriate to that data class.
+
+All normal actor/path/DB-role, backup, release, service and LIVE-arm rules in
+this document still apply. Migration/deploy never re-arms LIVE automatically.
