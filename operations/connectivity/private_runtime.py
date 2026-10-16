@@ -2709,9 +2709,21 @@ def command_worker_loop(key: str, secret: str) -> None:
                         direction=str(direction), signal_at_ms=int(signal_at_ms),
                     )
                 occupied=connection.execute("""SELECT
-                    EXISTS(SELECT 1 FROM runtime.hot_positions WHERE symbol=%s) OR
-                    EXISTS(SELECT 1 FROM runtime.hot_orders WHERE symbol=%s AND order_status IN ('New','PartiallyFilled','Untriggered')) OR
-                    EXISTS(SELECT 1 FROM runtime.trade_commands WHERE symbol=%s AND command_type='entry' AND state IN ('queued','running'))""",(symbol,symbol,symbol)).fetchone()[0]
+                    EXISTS(SELECT 1 FROM runtime.hot_positions
+                           WHERE symbol=%s
+                             AND trading_account_id=%s
+                             AND identity_status='PROVEN') OR
+                    EXISTS(SELECT 1 FROM runtime.hot_orders
+                           WHERE symbol=%s
+                             AND trading_account_id=%s
+                             AND identity_status='PROVEN'
+                             AND order_status IN ('New','PartiallyFilled','Untriggered')) OR
+                    EXISTS(SELECT 1 FROM runtime.trade_commands
+                           WHERE symbol=%s AND command_type='entry'
+                             AND state IN ('queued','running')
+                             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                                  OR identity_status='LEGACY_UNKNOWN'))""",
+                    (symbol,TRADING_ACCOUNT_ID,symbol,TRADING_ACCOUNT_ID,symbol,TRADING_ACCOUNT_ID)).fetchone()[0]
                 if occupied:
                     record_entry_decision(connection, signal_id, symbol, direction, signal_at_ms,
                                           "запрещён", "по монете уже есть позиция, заявка или команда")
@@ -3488,11 +3500,13 @@ def collect_position_mode_states(
                     """SELECT instrument
                          FROM runtime.position_mode_states
                         WHERE account_ref='BYBIT:UNIFIED'
+                          AND trading_account_id=%s
+                          AND identity_status='PROVEN'
                           AND product_category='LINEAR'
                           AND observed_at >= %s
                           AND instrument = ANY(%s)
                         GROUP BY instrument""",
-                    (cutoff, symbols),
+                    (TRADING_ACCOUNT_ID, cutoff, symbols),
                 ).fetchall()
             }
         if recent == set(symbols):
@@ -3715,7 +3729,10 @@ def reconcile(
                     (str(row[0]), int(row[1] or 0))
                     for row in connection.execute(
                         """SELECT symbol,position_idx FROM runtime.position_ownership
-                           WHERE state='OPEN' AND close_link_status='OPEN'"""
+                           WHERE state='OPEN' AND close_link_status='OPEN'
+                             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                                  OR identity_status='LEGACY_UNKNOWN')""",
+                        (TRADING_ACCOUNT_ID,),
                     ).fetchall()
                 }
             missing_owned_position = bool(owned_keys - current_keys)
@@ -3753,10 +3770,20 @@ def reconcile(
         with connection.transaction():
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (ACCOUNT_REF,),
+                (TRADING_ACCOUNT_ID,),
             )
-            connection.execute("DELETE FROM runtime.hot_positions")
-            connection.execute("DELETE FROM runtime.hot_orders")
+            connection.execute(
+                """DELETE FROM runtime.hot_positions
+                    WHERE trading_account_id=%s
+                      AND identity_status='PROVEN'""",
+                (TRADING_ACCOUNT_ID,),
+            )
+            connection.execute(
+                """DELETE FROM runtime.hot_orders
+                    WHERE trading_account_id=%s
+                      AND identity_status='PROVEN'""",
+                (TRADING_ACCOUNT_ID,),
+            )
             for p in position_list:
                 upsert_position(connection, p, now)
             for o in order_list:
@@ -3888,8 +3915,15 @@ def upsert_exchange_order_history(
 
 def upsert_position(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
     existing = connection.execute(
-        "SELECT payload_json FROM runtime.hot_positions WHERE symbol=%s AND position_idx=%s",
-        (item.get("symbol", ""), int(item.get("positionIdx") or 0)),
+        """SELECT payload_json FROM runtime.hot_positions
+            WHERE symbol=%s AND position_idx=%s
+              AND ((trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN')""",
+        (
+            item.get("symbol", ""),
+            int(item.get("positionIdx") or 0),
+            TRADING_ACCOUNT_ID,
+        ),
     ).fetchone()
     merged = json.loads(existing[0]) if existing else {}
     merged.update(item)
@@ -3979,7 +4013,17 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
     for item in data:
         if topic.startswith("position"):
             if float(item.get("size") or 0) == 0:
-                connection.execute("DELETE FROM runtime.hot_positions WHERE symbol=%s AND position_idx=%s", (item.get("symbol", ""), int(item.get("positionIdx") or 0)))
+                connection.execute(
+                    """DELETE FROM runtime.hot_positions
+                        WHERE symbol=%s AND position_idx=%s
+                          AND ((trading_account_id=%s AND identity_status='PROVEN')
+                               OR identity_status='LEGACY_UNKNOWN')""",
+                    (
+                        item.get("symbol", ""),
+                        int(item.get("positionIdx") or 0),
+                        TRADING_ACCOUNT_ID,
+                    ),
+                )
             else:
                 upsert_position(connection, item, now)
         elif topic.startswith("order"):
@@ -3992,8 +4036,11 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
                 # cancellation worker initiating the cancel.
                 upsert_exchange_order_history(connection, item, now)
                 connection.execute(
-                    "DELETE FROM runtime.hot_orders WHERE order_id=%s",
-                    (item.get("orderId", ""),),
+                    """DELETE FROM runtime.hot_orders
+                        WHERE order_id=%s
+                          AND ((trading_account_id=%s AND identity_status='PROVEN')
+                               OR identity_status='LEGACY_UNKNOWN')""",
+                    (item.get("orderId", ""), TRADING_ACCOUNT_ID),
                 )
                 if order_status in {"Cancelled", "Rejected", "Deactivated"}:
                     order_link_id = str(item.get("orderLinkId") or "")
