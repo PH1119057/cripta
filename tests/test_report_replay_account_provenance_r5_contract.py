@@ -119,3 +119,24 @@ def test_no_physical_key_cutover_in_this_changeset() -> None:
     assert "DROP CONSTRAINT" not in MIGRATION
     assert "PRIMARY KEY" not in MIGRATION
     assert "UNIQUE INDEX" not in MIGRATION
+
+
+def test_active_observer_capacity_is_scoped_to_current_trading_account() -> None:
+    observer = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "FROM dispatcher_v2.trading_capacity_snapshots" in observer
+    assert "WHERE trading_account_id=%s" in observer
+    assert "AND identity_status='PROVEN'" in observer
+    assert "(TRADING_ACCOUNT_ID, observed_at)" in observer
+
+
+def test_exact_close_audit_never_crosses_private_account_identity() -> None:
+    audit = (ROOT / "operations/sql/p1_exact_close_readonly_audit.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "PARTITION BY identity_status,trading_account_id,symbol,position_idx" in audit
+    assert "e.trading_account_id=o.trading_account_id" in audit
+    assert "o.identity_status='LEGACY_UNKNOWN'" in audit
+    assert "e.identity_status='LEGACY_UNKNOWN'" in audit
+    assert "trading_account_id,identity_status" in audit

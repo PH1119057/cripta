@@ -1432,9 +1432,11 @@ def _observer_objective_inputs(
         """SELECT capacity_snapshot_id,observed_at,available_for_new_trading,
                   data_quality,source_account_ref
              FROM dispatcher_v2.trading_capacity_snapshots
-            WHERE observed_at <= %s
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'
+              AND observed_at <= %s
             ORDER BY observed_at DESC LIMIT 1""",
-        (observed_at,),
+        (TRADING_ACCOUNT_ID, observed_at),
     ).fetchone()
     capacity: TradingCapacitySnapshot | None = None
     if capacity_row is not None:
