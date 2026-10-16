@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.25
+**Версия:** 3.26
 **Дата:** 2026-10-16
 **Статус:** канонический индекс документации
 
@@ -1091,3 +1091,49 @@ This integrated revision authorizes and implements only the
 self-baseline windows/quantiles/weights remain research items and the scalar
 `CoinMarketRating` remains unapproved. No Entry gate, Position action, Exit
 rule, LIVE arm, deployment or Exchange mutation is authorized by this revision.
+
+
+# 36. Storage / recoverability / retention — OWNER DECISION 2026-10-16
+
+OWNER DECISION:
+- production storage is classified by recoverability, audit value and
+  provenance rather than by a simplistic “internal/external” split;
+- the five storage classes are CRIPTA_IRREPLACEABLE_DATA,
+  EXTERNAL_RECONSTRUCTIBLE_DATA, EXTERNAL_NON_RECONSTRUCTIBLE_DATA,
+  DERIVED_RECOMPUTABLE_DATA and HOT_OPERATIONAL_DATA;
+- full high-frequency HOT market telemetry has a default maximum production
+  retention of 24 hours;
+- long-horizon analytics uses one compact causal representation preserving
+  venue/source + symbol lineage instead of multi-month duplicate full
+  MAYAK/Dispatcher JSONB;
+- PostgreSQL is an operational/audit database, not a permanent market-data lake;
+- old irreplaceable project history may move to verified cold storage instead
+  of remaining forever in hot PostgreSQL;
+- reconstructible heavy external input is normally bounded cache:
+  acquire -> verify -> derive/research -> preserve reproducibility evidence ->
+  expire raw cache;
+- new venues/observers must declare storage class and budget so the architecture
+  scales to the configured multi-venue target;
+- current historical cleanup is a separate migration and requires consumer/FK
+  inventory, replacement analytics verification, backup/rollback and
+  post-cutover runtime/disk evidence;
+- first cutover is observed for at least 7 days before storage behavior is
+  declared operationally stable.
+
+Canonical ownership:
+- ARCH §48 owns storage/recoverability/retention architecture;
+- GLOSSARY §32 owns storage-class terminology;
+- DEVELOPMENT_RELEASE owns PostgreSQL/filesystem migration, backup, rollback and
+  actor/path safety;
+- RESEARCH_COMPUTE owns research dataset provenance/reproducibility and bounded
+  heavy-input processing.
+
+Documentation maintenance gate:
+- active document set: unchanged;
+- paths / mandatory pre-read / routing: unchanged;
+- Project Source remains exactly 11 current docs;
+- no existing section renumbered;
+- README / AGENTS / Project Instructions topology update is not required;
+- no Entry/Exit/Strategy/LIVE rule is changed;
+- this documentation commit performs no DB purge, schema migration, service
+  restart, deploy, LIVE arm or Exchange mutation.

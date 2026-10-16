@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.3
+**Версия:** 3.4
 **Дата:** 2026-10-16
 **Статус:** обязательный канонический терминологический контракт
 
@@ -767,3 +767,36 @@ audible alerts.
 **HISTORICAL_OUTCOME_UNKNOWN** — verified absent current exposure but insufficient exchange execution evidence to reconstruct exact exit and net result after fees. The alert and accounting work persist without automatically blocking unrelated Entries.
 
 **Scoped mutation ambiguity** — uncertain sent/possibly sent Exchange command whose restriction applies only to its proven affected identity/slot/account. Empty current exposure does not prove the command was never filled.
+
+
+## 32. Storage / recoverability terminology — OWNER DECISION 2026-10-16
+
+**CRIPTA_IRREPLACEABLE_DATA** — data/evidence whose exact future reconstruction
+is impossible or not sufficiently guaranteed for CRIPTA audit, recovery or
+decision explanation. It remains durable while required, but need not remain in
+hot PostgreSQL forever; verified cold archive is allowed.
+
+**EXTERNAL_RECONSTRUCTIBLE_DATA** — approved external data that can be reacquired
+for the required range with exact source semantics and provenance. Permanent
+local retention is not required by default.
+
+**EXTERNAL_NON_RECONSTRUCTIBLE_DATA** — externally observed facts for which exact
+later reacquisition is unavailable or not sufficiently guaranteed. Preserve
+only the compact exact facts/events justified by audit or analytics value.
+
+**DERIVED_RECOMPUTABLE_DATA** — data deterministically reproducible from retained
+canonical facts plus exact versioned code/config/provenance. Duplicate long-term
+full representations are prohibited unless one copy is separately required as
+event-linked audit evidence.
+
+**HOT_OPERATIONAL_DATA** — full recent telemetry/current context required for
+live observation, recent diagnostics and restart/recovery. For high-frequency
+market telemetry the canonical default maximum HOT retention is 24 hours unless
+the owner separately approves a longer full-fidelity window.
+
+**Canonical analytical representation** — compact causal strategy-agnostic
+history used for long-horizon replay/research. In multi-venue operation it
+preserves minute, venue/source, symbol, objective facts/features,
+quality/freshness and exact provenance/version identity without requiring
+permanent raw-trade/order-book archives or duplicate full MAYAK/Dispatcher
+payloads.

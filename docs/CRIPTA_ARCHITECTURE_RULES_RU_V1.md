@@ -1,6 +1,6 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 2.8
+**Версия:** 2.9
 **Дата:** 2026-10-07
 **Статус:** верхний канонический архитектурный контракт
 
@@ -788,3 +788,134 @@ The operator's closed real trades ledger must include all **exchange-evidenced**
 **Strategy performance is attribution-gated:** include a trade in the metrics of exactly its proven owning `strategy_id`, `strategy_version` and exact Strategy activation/config identity. An unowned recovery or owner/control-smoke trade is visible in the operator's all-trades history but excluded from every Strategy numerator, denominator, trade count, win rate and P&L (including R1). Each distinct Strategy calculates its own metrics independently. Unknown attribution stays UNKNOWN, never defaulted to R1. Duplicated representations of one Exchange close must be collapsed by stable, exact execution/cycle keys; replay and restart must not double-count.
 
 Closing notifications read from the same durable, deduplicated operator ledger rather than only `position_exit_attribution`. New evidenced closures emit at most one notification per unique cycle, including control and recovered trades, regardless of selected UI tab. Page refresh, restart and reconnect must not replay old closures as new alerts. Notification delivery is separately auditable from verified closure and must not modify Exchange/Lifecycle ownership. No Strategy rules or trading thresholds are changed by this reporting contract.
+
+
+## 48. Data storage, recoverability and retention — OWNER DECISION 2026-10-16
+
+Production storage must scale to multi-venue observation without turning
+PostgreSQL into a market-data lake. Long-term retention is determined by
+**recoverability, audit value and exact provenance**, not merely by whether a
+fact originated inside or outside CRIPTA.
+
+Every persistent data family must be assigned to exactly one primary storage
+class:
+
+1. **CRIPTA_IRREPLACEABLE_DATA** — project-generated or project-bound evidence
+   whose exact future reconstruction is impossible or not sufficiently
+   guaranteed for audit/recovery. Examples include Strategy/Entry/Exit decisions,
+   exact activation/config identity, ownership/lineage, execution attribution,
+   operator actions, durable faults/continuity evidence, notification delivery,
+   and exact event-linked context needed to explain a real decision. It must be
+   preserved durably while required by the project. Old generations may leave
+   hot PostgreSQL for verified cold storage, but only with manifest/hash,
+   provenance and tested restore.
+2. **EXTERNAL_RECONSTRUCTIBLE_DATA** — external market data whose exact required
+   range can be re-acquired from an approved source with known semantics and
+   provenance. It is cache/input, not permanent production truth by default:
+   download/read/derive/research, then expire or delete according to bounded
+   cache policy. Research still preserves input provenance, source identity,
+   time range and result reproducibility.
+3. **EXTERNAL_NON_RECONSTRUCTIBLE_DATA** — externally observed data for which
+   exact later reacquisition is unavailable or not sufficiently guaranteed.
+   Preserve only the compact exact events/facts that have justified analytical,
+   audit or recovery value; do not retain an unlimited raw stream merely because
+   it was observed live.
+4. **DERIVED_RECOMPUTABLE_DATA** — MAYAK/Dispatcher/analytics views that can be
+   deterministically recomputed from retained canonical facts plus exact
+   versioned code/config/provenance. The same market fact must not be retained
+   indefinitely in multiple full JSON representations. A derived object needed
+   as exact evidence for a concrete signal/trade/fault may be promoted into the
+   event-linked CRIPTA irreplaceable audit record.
+5. **HOT_OPERATIONAL_DATA** — full current market/runtime telemetry required for
+   live observation, recent diagnostics, restart/recovery and immediate operator
+   work. The default maximum retention of full high-frequency market telemetry
+   in hot production storage is **24 hours**. A longer full-fidelity HOT window
+   requires a separate explicit owner decision and a capacity justification.
+
+The classification test is intentionally stricter than “our data / external
+data”. Exchange facts may still be irreplaceable for CRIPTA when provider
+history is limited or exact internal attribution/provenance cannot be recreated.
+Conversely, CRIPTA-generated derived telemetry does not become permanent merely
+because CRIPTA produced it.
+
+### 48.1 Canonical analytical representation
+
+Long-horizon analytics must use a compact, causal, strategy-agnostic analytical
+representation rather than retained full runtime snapshots. For multi-venue
+operation its physical grain must preserve at least:
+
+~~~text
+observed_minute
+venue/source identity
+symbol
+objective compact market facts/features
+quality/freshness
+provenance/version/fingerprint
+~~~
+
+A CRIPTA cross-venue aggregate may exist as a separate derived object, but must
+not erase the venue-level lineage required to reproduce it.
+
+The compact analytical representation keeps the dimensions actually required
+for replay/research (for example price path/returns, executed flow, OI/funding,
+mark/index/basis where applicable, compact liquidity features, exact liquidation
+aggregates/events where available, quality and provenance). It does **not**
+require permanent retention of raw public trades, full order-book tapes or
+several equivalent MAYAK/Dispatcher JSON payloads.
+
+Higher horizons, MFE/MAE, H3/H9 geometry and Strategy outcomes are recomputed
+from canonical facts and exact versioned algorithms when that is sufficient.
+Strategy/event-specific geometry or outcome evidence actually used by a real
+decision remains in its durable audit lineage.
+
+Exact long-term retention of the compact analytical dataset is a separate
+capacity/research decision; this section does not silently establish an
+unbounded data lake. Reacquirable heavy external input may follow:
+
+~~~text
+DOWNLOAD / STREAM
+-> VERIFY SOURCE + PROVENANCE
+-> CAUSAL DERIVATION / RESEARCH
+-> PRESERVE RESULT + REPRODUCIBILITY EVIDENCE
+-> EXPIRE RAW CACHE
+~~~
+
+### 48.2 PostgreSQL boundary and duplicate-storage prohibition
+
+PostgreSQL is the operational database, not the permanent repository for
+multi-month high-frequency market archives. It owns current state, recent HOT
+telemetry and durable queryable project/audit facts that need database
+semantics. Older CRIPTA irreplaceable history may be offloaded to verified cold
+storage when hot queryability is no longer required.
+
+A single objective fact must have one canonical durable representation.
+MAYAK/Dispatcher/runtime may expose multiple live/read views, but this does not
+authorize indefinite physical duplication of the same minute/fact in several
+large JSONB tables.
+
+Adding a new venue, symbol, observer or context layer must include a storage
+budget and class assignment. Capacity planning must assume the configured
+multi-venue target, not only the current one-venue load.
+
+### 48.3 Deletion / migration safety
+
+This owner decision defines the target architecture; it does **not** authorize
+immediate deletion of existing history.
+
+Before changing or purging current PostgreSQL history:
+
+1. inventory exact readers, foreign keys, append-only triggers and report/replay
+   consumers;
+2. build/verify the replacement compact analytical path where required;
+3. preserve CRIPTA irreplaceable and selected non-reconstructible evidence;
+4. prove source/provenance/replay equivalence for data being represented in a
+   new form;
+5. create and verify the required backup/rollback checkpoint under
+   DEVELOPMENT_RELEASE;
+6. apply retention/schema migration with the approved DB/filesystem actors;
+7. prove reclaimed disk space and runtime/report/research behavior;
+8. observe disk growth and retention behavior for at least the first **7 days**
+   after cutover before declaring the storage model operationally stable.
+
+No cleanup, PostgreSQL rewrite, service restart, LIVE arm or Exchange mutation is
+authorized by this documentation decision alone.
