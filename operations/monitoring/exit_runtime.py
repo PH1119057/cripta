@@ -73,9 +73,15 @@ def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) 
     qty = Decimal("0")
     fee = Decimal("0")
     rows = connection.execute(
-        "SELECT side,exec_qty,exec_fee,payload_json FROM runtime.executions "
-        "WHERE symbol=%s ORDER BY exec_time_ms,exec_id",
-        (symbol,),
+        """SELECT side,exec_qty,exec_fee,payload_json
+             FROM runtime.executions
+            WHERE symbol=%s
+              AND (
+                   (trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN'
+              )
+            ORDER BY exec_time_ms,exec_id""",
+        (symbol, TRADING_ACCOUNT_ID),
     ).fetchall()
     for execution_side, raw_qty, raw_fee, raw_payload in rows:
         execution_qty = Decimal(str(raw_qty))
@@ -97,8 +103,14 @@ def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) 
 def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> Decimal:
     worst = Decimal("0")
     rows = connection.execute(
-        "SELECT payload_json FROM runtime.private_events WHERE topic='order.linear' "
-        "ORDER BY received_at_epoch_ms DESC LIMIT 5000"
+        """SELECT payload_json FROM runtime.private_events
+            WHERE topic='order.linear'
+              AND (
+                   (trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN'
+              )
+            ORDER BY received_at_epoch_ms DESC LIMIT 5000""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall()
     for (raw_payload,) in rows:
         payload = _json(raw_payload)
@@ -198,8 +210,9 @@ def queue_profit_protection(
     command_id = "auto-be-" + hashlib.sha256(key.encode()).hexdigest()[:25]
     connection.execute(
         """INSERT INTO runtime.trade_commands(
-               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-           VALUES(%s,'break_even',%s,%s,'queued',%s)
+               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+               trading_account_id,identity_status)
+           VALUES(%s,'break_even',%s,%s,'queued',%s,%s,'PROVEN')
            ON CONFLICT(command_id) DO NOTHING""",
         (
             command_id,
@@ -216,6 +229,7 @@ def queue_profit_protection(
                 }
             ),
             int(time.time() * 1000),
+            TRADING_ACCOUNT_ID,
         ),
     )
 
@@ -251,8 +265,12 @@ def queue_trailing(
              AND command_id LIKE 'web-%%'
              AND requested_at_epoch_ms >= %s
              AND payload_json::jsonb->>'enabled'='false'
+             AND (
+                  (trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN'
+             )
            ORDER BY requested_at_epoch_ms DESC LIMIT 1""",
-        (symbol, open_time),
+        (symbol, open_time, TRADING_ACCOUNT_ID),
     ).fetchone()
     if disabled:
         return
@@ -262,8 +280,12 @@ def queue_trailing(
              AND state='completed' AND requested_at_epoch_ms >= %s
              AND payload_json::jsonb->>'enabled'='true'
              AND payload_json::jsonb->>'distance_pct'=%s
+             AND (
+                  (trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN'
+             )
            LIMIT 1""",
-        (symbol, open_time, str(trailing_pct)),
+        (symbol, open_time, str(trailing_pct), TRADING_ACCOUNT_ID),
     ).fetchone()
     if already_enabled:
         return
@@ -272,8 +294,9 @@ def queue_trailing(
     command_id = "auto-trail-" + hashlib.sha256(key.encode()).hexdigest()[:21]
     connection.execute(
         """INSERT INTO runtime.trade_commands(
-               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-           VALUES(%s,'trailing_stop',%s,%s,'queued',%s)
+               command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+               trading_account_id,identity_status)
+           VALUES(%s,'trailing_stop',%s,%s,'queued',%s,%s,'PROVEN')
            ON CONFLICT(command_id) DO NOTHING""",
         (
             command_id,
@@ -287,6 +310,7 @@ def queue_trailing(
                 }
             ),
             int(time.time() * 1000),
+            TRADING_ACCOUNT_ID,
         ),
     )
 
