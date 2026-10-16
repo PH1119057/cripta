@@ -113,13 +113,20 @@ class ConnectionLike(Protocol):
     def transaction(self) -> AbstractContextManager[object]: ...
 
 
-def exchange_position_key(symbol: str, position_idx: int) -> str:
+def exchange_position_key(
+    trading_account_id: str,
+    symbol: str,
+    position_idx: int,
+) -> str:
     if position_idx < 0:
         raise ValueError("position_idx cannot be negative")
+    account = trading_account_id.strip()
+    if not account:
+        raise ValueError("trading_account_id is required")
     normalized = symbol.strip().upper()
     if not normalized:
         raise ValueError("symbol is required")
-    return f"BYBIT:UNIFIED:LINEAR:USDT:{normalized}:{position_idx}"
+    return f"BYBIT:{account}:LINEAR:USDT:{normalized}:{position_idx}"
 
 
 def load_universal_entry_lineage(
@@ -220,7 +227,7 @@ def persist_universal_strategy_position(
         raise ValueError(f"unsupported Bybit position side: {side}")
     if actual_avg_fill <= 0 or actual_qty <= 0:
         raise ValueError("actual fill and quantity must be positive")
-    key = exchange_position_key(symbol, position_idx)
+    key = exchange_position_key(lineage.trading_account_id, symbol, position_idx)
     connection.execute(
         """INSERT INTO runtime.position_ownership(
                position_id,trade_id,bot_instance_id,strategy_id,strategy_version,

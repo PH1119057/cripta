@@ -23,6 +23,7 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
+TEST_TRADING_ACCOUNT_ID = "ta-test"
 
 
 def _seed_request(
@@ -46,7 +47,7 @@ def _seed_request(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    exchange_key = exchange_position_key(symbol, 0)
+    exchange_key = exchange_position_key(TEST_TRADING_ACCOUNT_ID, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"{prefix}-command"
 
@@ -376,7 +377,7 @@ def test_confirmed_fill_binds_exact_strategy_position_and_consumes_reservation()
             ids["entry_fp"],
             ids["exit_fp"],
             "BYBIT:UNIFIED",
-            exchange_position_key("UNIUSDT", 0),
+            exchange_position_key(TEST_TRADING_ACCOUNT_ID, "UNIUSDT", 0),
         )
         reservation = connection.execute(
             """SELECT state,strategy_position_id,exchange_commitment_ref
@@ -494,7 +495,7 @@ def test_consumer_detects_post_admission_slot_invariant_and_keeps_resources_for_
                 f"{prefix}-old-signal",
                 f"{prefix}-old-command",
                 NOW,
-                exchange_position_key("ETHUSDT", 0),
+                exchange_position_key(TEST_TRADING_ACCOUNT_ID, "ETHUSDT", 0),
             ),
         )
         connection.commit()

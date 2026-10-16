@@ -228,6 +228,7 @@ class PostgresEntryAdmissionPort:
                     generation = current_complete_account_state_generation(
                         self._connection,
                         account_ref=request.account_ref,
+                        trading_account_id=request.trading_account_id,
                     )
                 except AccountStateGenerationUnavailable as exc:
                     raise PositionModeStateUnavailable(str(exc)) from exc

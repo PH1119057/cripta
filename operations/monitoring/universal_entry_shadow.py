@@ -36,6 +36,7 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.entry_admission import PostgresEntryAdmissionPort
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
 from bybit_workbench.lifecycle_ack import record_plan_consumption
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     active_live_arm_session,
@@ -1334,6 +1335,7 @@ def _real_entry_account_state(
         generation = current_complete_account_state_generation(
             connection,
             account_ref="BYBIT:UNIFIED",
+            trading_account_id=TRADING_ACCOUNT_ID,
             acquire_account_lock=True,
         )
     except AccountStateGenerationUnavailable as exc:
@@ -2155,7 +2157,7 @@ def _run_observer_epoch(
                 real_admission_ready_for=real_admission_ready_for,
                 execution_bindings=execution_bindings,
                 exchange_position_keys={
-                    symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+                    symbol: exchange_position_key(TRADING_ACCOUNT_ID, symbol, 0)
                     for symbol in symbols
                 },
                 allow_new_signals=sensor_ready(fact.observed_at),

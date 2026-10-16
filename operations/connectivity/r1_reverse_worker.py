@@ -17,6 +17,7 @@ from bybit_workbench.account_state_generation import (
     current_complete_account_state_generation,
 )
 from bybit_workbench.entry_admission import EntryAdmissionRequest, PostgresEntryAdmissionPort
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 
 DB_DSN = os.environ.get(
@@ -26,6 +27,7 @@ DB_DSN = os.environ.get(
 POLL_SECONDS = float(os.environ.get("CRIPTA_R1_REVERSE_POLL_SECONDS", "0.25"))
 CONSUMER_ARM = os.environ.get("CRIPTA_R1_REVERSE_MAINNET", "DISABLED").strip().upper()
 ACCOUNT_REF = "BYBIT:UNIFIED"
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 running = True
 
 
@@ -63,6 +65,36 @@ def _execution_permission_enabled(
         ),
     ).fetchone()
     return found is not None
+
+
+def _active_primary_binding(
+    connection: psycopg.Connection[Any],
+    *,
+    strategy_activation_id: str,
+    now: datetime,
+) -> tuple[str, str, str]:
+    if not TRADING_ACCOUNT_ID:
+        raise RuntimeError("R1 reverse TradingAccount identity is not configured")
+    row = connection.execute(
+        """SELECT b.strategy_execution_binding_id,b.execution_leg,b.trading_account_id
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN identity.trading_accounts ta
+               ON ta.trading_account_id=b.trading_account_id
+            WHERE b.strategy_activation_id=%s
+              AND b.execution_leg='PRIMARY'
+              AND b.execution_role='PRIMARY'
+              AND b.allocation_mode='DEDICATED_STRATEGY'
+              AND b.binding_state='ACTIVE'
+              AND b.trading_account_id=%s
+              AND b.effective_from<=%s
+              AND (b.effective_to IS NULL OR b.effective_to>%s)
+              AND ta.status='ACTIVE'
+              AND ta.environment='MAINNET'""",
+        (strategy_activation_id, TRADING_ACCOUNT_ID, now, now),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("R1 reverse StrategyExecutionBinding is not ACTIVE")
+    return str(row[0]), str(row[1]), str(row[2])
 
 
 def _next_transition(connection: psycopg.Connection[Any]) -> Mapping[str, object] | None:
@@ -208,6 +240,7 @@ def _capacity(
         generation = current_complete_account_state_generation(
             connection,
             account_ref=ACCOUNT_REF,
+            trading_account_id=TRADING_ACCOUNT_ID,
             acquire_account_lock=True,
         )
     except AccountStateGenerationUnavailable as exc:
@@ -228,6 +261,11 @@ def _create_open_request(
 ) -> str:
     if not _active_exact(connection, row):
         raise RuntimeError("R1 reverse exact StrategyActivation is not active")
+    binding_id, execution_leg, trading_account_id = _active_primary_binding(
+        connection,
+        strategy_activation_id=str(row["strategy_activation_id"]),
+        now=now,
+    )
     card = _card(connection, row)
     lifecycle = _mapping(card.get("lifecycle_policy"), "R1 lifecycle_policy")
     reverse = _mapping(
@@ -246,6 +284,13 @@ def _create_open_request(
     source_payload = _mapping(row["payload"], "reverse transition payload")
     request_payload = dict(
         _mapping(source_payload.get("entry_request_payload"), "reverse entry request payload")
+    )
+    request_payload.update(
+        {
+            "strategy_execution_binding_id": binding_id,
+            "execution_leg": execution_leg,
+            "trading_account_id": trading_account_id,
+        }
     )
     if str(request_payload.get("execution_override") or "") != "OPPOSITE_FLIP_TAKER":
         raise RuntimeError("R1 reverse common intent execution_override mismatch")
@@ -304,8 +349,10 @@ def _create_open_request(
     admission = PostgresEntryAdmissionPort(connection).admit(
         EntryAdmissionRequest(
             account_ref=ACCOUNT_REF,
-            exchange_position_key=(
-                f"BYBIT:UNIFIED:LINEAR:USDT:{row['symbol']}:0"
+            exchange_position_key=exchange_position_key(
+                trading_account_id,
+                str(row["symbol"]),
+                0,
             ),
             symbol=str(row["symbol"]),
             direction=str(row["to_direction"]),
@@ -323,6 +370,10 @@ def _create_open_request(
             requested_at=now,
             pre_dispatch_expires_at=now + timedelta(seconds=max_age),
             account_state_generation_id=capacity_id,
+            strategy_activation_id=str(row["strategy_activation_id"]),
+            strategy_execution_binding_id=binding_id,
+            execution_leg=execution_leg,
+            trading_account_id=trading_account_id,
         )
     )
 
@@ -345,13 +396,18 @@ def _create_open_request(
         "exchange_position_slot_claim_id": admission.exchange_position_slot_claim_id,
         "position_mode_state_ref": admission.position_mode_state_ref,
         "reverse_transition_id": row["reverse_transition_id"],
+        "strategy_execution_binding_id": binding_id,
+        "execution_leg": execution_leg,
+        "trading_account_id": trading_account_id,
     }
     connection.execute(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED',%s,%s,%s,%s,%s,%s,%s::jsonb)
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status,payload
+           ) VALUES(%s,%s,%s,'ACCEPTED',%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN',%s::jsonb)
            ON CONFLICT(entry_decision_id) DO NOTHING""",
         (
             decision_id,
@@ -363,6 +419,9 @@ def _create_open_request(
             admission.capital_reservation.reservation_id,
             admission.exchange_position_slot_claim_id,
             admission.position_mode_state_ref,
+            binding_id,
+            execution_leg,
+            trading_account_id,
             canonical_json(decision_payload),
         ),
     )
@@ -376,8 +435,10 @@ def _create_open_request(
                signal_id,strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
                exit_plan_fingerprint,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s)
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
            ON CONFLICT(execution_request_id) DO NOTHING""",
         (
             request_id,
@@ -396,6 +457,9 @@ def _create_open_request(
             admission.capital_reservation.reservation_id,
             admission.exchange_position_slot_claim_id,
             admission.position_mode_state_ref,
+            binding_id,
+            execution_leg,
+            trading_account_id,
         ),
     )
     state_id = "reqstate-" + request_id.removeprefix("request-")
@@ -558,6 +622,8 @@ def main() -> int:
         raise SystemExit("CRIPTA_R1_REVERSE_POLL_SECONDS must be positive")
     if CONSUMER_ARM != "ENABLED":
         raise SystemExit("R1 reverse mainnet worker is explicitly disabled")
+    if not TRADING_ACCOUNT_ID:
+        raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for R1 reverse worker")
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     with psycopg.connect(DB_DSN, row_factory=dict_row) as connection:

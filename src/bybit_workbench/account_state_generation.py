@@ -25,6 +25,7 @@ class AccountStateGeneration:
     positions_count: int
     active_orders_count: int
     position_mode_refs: Mapping[str, str]
+    trading_account_id: str | None = None
 
 
 class CursorLike(Protocol):
@@ -39,25 +40,44 @@ def current_complete_account_state_generation(
     connection: ConnectionLike,
     *,
     account_ref: str,
+    trading_account_id: str | None = None,
     acquire_account_lock: bool = False,
 ) -> AccountStateGeneration:
+    lock_identity = trading_account_id or account_ref
     if acquire_account_lock:
         connection.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-            (account_ref,),
+            (lock_identity,),
         )
 
-    row = connection.execute(
-        """SELECT generation_id,state,started_at,completed_at,account_ref,account_type,
-                  total_equity,wallet_balance,available_balance,positions_count,
-                  active_orders_count,position_mode_refs,error
-             FROM runtime.account_state_generations
-            WHERE account_ref=%s
-              AND state IN ('COMPLETE','FAILED')
-            ORDER BY started_at DESC,generation_id DESC
-            LIMIT 1""",
-        (account_ref,),
-    ).fetchone()
+    if trading_account_id:
+        row = connection.execute(
+            """SELECT generation_id,state,started_at,completed_at,account_ref,account_type,
+                      total_equity,wallet_balance,available_balance,positions_count,
+                      active_orders_count,position_mode_refs,error,
+                      trading_account_id,identity_status
+                 FROM runtime.account_state_generations
+                WHERE account_ref=%s
+                  AND trading_account_id=%s
+                  AND identity_status='PROVEN'
+                  AND state IN ('COMPLETE','FAILED')
+                ORDER BY started_at DESC,generation_id DESC
+                LIMIT 1""",
+            (account_ref, trading_account_id),
+        ).fetchone()
+    else:
+        row = connection.execute(
+            """SELECT generation_id,state,started_at,completed_at,account_ref,account_type,
+                      total_equity,wallet_balance,available_balance,positions_count,
+                      active_orders_count,position_mode_refs,error,
+                      trading_account_id,identity_status
+                 FROM runtime.account_state_generations
+                WHERE account_ref=%s
+                  AND state IN ('COMPLETE','FAILED')
+                ORDER BY started_at DESC,generation_id DESC
+                LIMIT 1""",
+            (account_ref,),
+        ).fetchone()
     if row is None:
         raise AccountStateGenerationUnavailable(
             f"account state generation missing for {account_ref}"
@@ -117,4 +137,5 @@ def current_complete_account_state_generation(
         positions_count=int(str(row[9])),
         active_orders_count=int(str(row[10])),
         position_mode_refs=refs,
+        trading_account_id=(None if row[13] is None else str(row[13])),
     )

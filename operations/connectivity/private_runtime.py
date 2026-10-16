@@ -458,6 +458,7 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         current_complete_account_state_generation(
             connection,
             account_ref=ACCOUNT_REF,
+            trading_account_id=TRADING_ACCOUNT_ID,
         )
     except AccountStateGenerationUnavailable:
         return False, "MANDATORY_EXCHANGE_STATE_STALE"

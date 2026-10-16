@@ -30,3 +30,18 @@ def test_reverse_worker_uses_generation_capacity_not_dispatcher_age() -> None:
     assert "current_complete_account_state_generation" in capacity
     assert "dispatcher_v2.trading_capacity_snapshots" not in capacity
     assert "capacity_max_age_seconds" not in capacity
+
+def test_account_generation_can_fail_closed_on_exact_trading_account() -> None:
+    source = (ROOT / "src/bybit_workbench/account_state_generation.py").read_text(encoding="utf-8")
+    assert "trading_account_id: str | None = None" in source
+    assert "AND trading_account_id=%s" in source
+    assert "AND identity_status='PROVEN'" in source
+
+
+def test_reverse_worker_requires_exact_strategy_execution_binding() -> None:
+    source = (ROOT / "operations/connectivity/r1_reverse_worker.py").read_text(encoding="utf-8")
+    assert "def _active_primary_binding(" in source
+    assert "b.execution_role='PRIMARY'" in source
+    assert "b.allocation_mode='DEDICATED_STRATEGY'" in source
+    assert "strategy_execution_binding_id=binding_id" in source
+    assert "identity_status" in source

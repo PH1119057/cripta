@@ -470,7 +470,11 @@ def _admission_pre_dispatch_status(
     ).fetchone()
     if claim is None:
         return "INVARIANT_BROKEN", "SLOT_CLAIM_MISSING"
-    expected_key = exchange_position_key(request.symbol, CURRENT_POSITION_IDX)
+    expected_key = exchange_position_key(
+        request.trading_account_id,
+        request.symbol,
+        CURRENT_POSITION_IDX,
+    )
     actual = (
         str(claim["exchange_position_key"]),
         str(claim["account_ref"]),
