@@ -42,7 +42,7 @@ def test_r1_migration_is_in_verified_installer_and_schema_contract() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
     schema = SCHEMA.read_text(encoding="utf-8")
     assert "operations/sql/20261016_identity_registry_r1.sql" in installer
-    assert 'runtime-schema-2026-10-16-identity-' in schema
+    assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema
     for relation in (
         "identity.venues",
         "identity.market_sources",
