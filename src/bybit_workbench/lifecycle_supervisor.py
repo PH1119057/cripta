@@ -330,7 +330,13 @@ class LifecycleSupervisor:
                       strategy_config_fingerprint,direction,position_mode_state_ref,
                       capital_reservation_id,strategy_position_id,claim_state,
                       claimed_at,bound_at,released_at,release_reason
-                 FROM runtime.exchange_position_slot_claims"""
+                 FROM runtime.exchange_position_slot_claims
+                WHERE (
+                      %s IS NULL
+                      OR (trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in slot_claims:
             claim_id = str(row["exchange_position_slot_claim_id"])
@@ -401,7 +407,13 @@ class LifecycleSupervisor:
             """SELECT reservation_id,strategy_attempt_id,signal_id,strategy_id,
                       strategy_version,strategy_config_fingerprint,created_at,
                       updated_at,state,strategy_position_id
-                 FROM runtime.capital_reservations"""
+                 FROM runtime.capital_reservations
+                WHERE (
+                      %s IS NULL
+                      OR (trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in reservations:
             total += self._insert_event(
@@ -590,7 +602,13 @@ class LifecycleSupervisor:
                       d.capital_reservation_id,d.exchange_position_slot_claim_id,
                       d.position_mode_state_ref
                  FROM strategy_entry.execution_dispatches d
-                WHERE d.state='DISPATCHED'"""
+                WHERE d.state='DISPATCHED'
+                  AND (
+                       %s IS NULL
+                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                       OR r.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in dispatches:
             total += self._insert_event(
@@ -632,7 +650,13 @@ class LifecycleSupervisor:
                  LEFT JOIN strategy_entry.execution_requests r
                    ON r.capital_reservation_id=c.reservation_id
                 WHERE c.exchange_commitment_ref IS NOT NULL
-                  AND c.exchange_commitment_at IS NOT NULL"""
+                  AND c.exchange_commitment_at IS NOT NULL
+                  AND (
+                       %s IS NULL
+                       OR (c.trading_account_id=%s AND c.identity_status='PROVEN')
+                       OR c.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in acknowledgements:
             total += self._insert_event(
@@ -676,7 +700,13 @@ class LifecycleSupervisor:
                  FROM runtime.position_ownership p
                  LEFT JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=p.entry_execution_request_id
-                WHERE p.bot_instance_id='universal-entry'"""
+                WHERE p.bot_instance_id='universal-entry'
+                  AND (
+                       %s IS NULL
+                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                       OR p.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in positions:
             exact = {
@@ -751,10 +781,18 @@ class LifecycleSupervisor:
                 )
 
         claims = self._connection.execute(
-            """SELECT claim_id,strategy_position_id,exit_plan_fingerprint,
-                      strategy_activation_id,consumer_instance_id,claimed_at
-                 FROM runtime.position_exit_claims
-                WHERE status='CLAIMED'"""
+            """SELECT c.claim_id,c.strategy_position_id,c.exit_plan_fingerprint,
+                      c.strategy_activation_id,c.consumer_instance_id,c.claimed_at
+                 FROM runtime.position_exit_claims c
+                 JOIN runtime.position_ownership p
+                   ON p.position_id=c.strategy_position_id
+                WHERE c.status='CLAIMED'
+                  AND (
+                       %s IS NULL
+                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                       OR p.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in claims:
             total += self._insert_event(
@@ -770,10 +808,18 @@ class LifecycleSupervisor:
             )
 
         exit_decisions = self._connection.execute(
-            """SELECT exit_decision_id,strategy_position_id,strategy_id,
-                      strategy_version,strategy_config_fingerprint,
-                      exit_plan_fingerprint,decided_at
-                 FROM strategy_exit.exit_decisions"""
+            """SELECT d.exit_decision_id,d.strategy_position_id,d.strategy_id,
+                      d.strategy_version,d.strategy_config_fingerprint,
+                      d.exit_plan_fingerprint,d.decided_at
+                 FROM strategy_exit.exit_decisions d
+                 JOIN runtime.position_ownership p
+                   ON p.position_id=d.strategy_position_id
+                WHERE (
+                      %s IS NULL
+                      OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                      OR p.identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_decisions:
             total += self._insert_event(
@@ -792,7 +838,13 @@ class LifecycleSupervisor:
             """SELECT execution_request_id,exit_decision_id,strategy_position_id,
                       strategy_id,strategy_version,strategy_config_fingerprint,
                       exit_plan_fingerprint,requested_at
-                 FROM strategy_exit.execution_requests"""
+                 FROM strategy_exit.execution_requests
+                WHERE (
+                      %s IS NULL
+                      OR (trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_requests:
             total += self._insert_event(
@@ -848,7 +900,13 @@ class LifecycleSupervisor:
                    ON r.execution_request_id=d.execution_request_id
                 WHERE tc.command_type='strategy_exit'
                   AND tc.state='completed'
-                  AND tc.finished_at_epoch_ms IS NOT NULL"""
+                  AND tc.finished_at_epoch_ms IS NOT NULL
+                  AND (
+                       %s IS NULL
+                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                       OR r.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in mutations:
             occurred = datetime.fromtimestamp(
@@ -884,7 +942,13 @@ class LifecycleSupervisor:
                       p.entry_execution_request_id,p.exit_plan_fingerprint
                  FROM runtime.position_exit_attribution a
                  JOIN runtime.position_ownership p ON p.position_id=a.position_id
-                WHERE p.bot_instance_id='universal-entry'"""
+                WHERE p.bot_instance_id='universal-entry'
+                  AND (
+                       %s IS NULL
+                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                       OR p.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in economics:
             total += self._insert_event(
@@ -994,7 +1058,13 @@ class LifecycleSupervisor:
                       ORDER BY e.occurred_at DESC,e.created_at DESC,
                                e.request_state_event_id DESC
                       LIMIT 1
-                 ) latest_request_state ON true"""
+                 ) latest_request_state ON true
+                WHERE (
+                      %s IS NULL
+                      OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                      OR r.identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in entry_requests:
             request_state = str(row["request_state"] or "")
@@ -1029,7 +1099,13 @@ class LifecycleSupervisor:
         ambiguous_entry = self._connection.execute(
             """SELECT reservation_id,strategy_attempt_id,strategy_position_id
                  FROM runtime.capital_reservations
-                WHERE state='RECONCILIATION_REQUIRED'"""
+                WHERE state='RECONCILIATION_REQUIRED'
+                  AND (
+                       %s IS NULL
+                       OR (trading_account_id=%s AND identity_status='PROVEN')
+                       OR identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in ambiguous_entry:
             faults.append(
@@ -1053,8 +1129,13 @@ class LifecycleSupervisor:
         stuck = self._connection.execute(
             """SELECT reservation_id,strategy_attempt_id
                  FROM runtime.capital_reservations
-                WHERE state='RESERVED' AND pre_dispatch_expires_at <= %s""",
-            (now,),
+                WHERE state='RESERVED' AND pre_dispatch_expires_at <= %s
+                  AND (
+                       %s IS NULL
+                       OR (trading_account_id=%s AND identity_status='PROVEN')
+                       OR identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (now, self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in stuck:
             faults.append(
@@ -1090,7 +1171,13 @@ class LifecycleSupervisor:
                  LEFT JOIN runtime.position_exit_claims c
                    ON c.strategy_position_id=p.position_id
                 WHERE p.bot_instance_id='universal-entry'
-                  AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')"""
+                  AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
+                  AND (
+                       %s IS NULL
+                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                       OR p.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in positions:
             position_id = str(row["position_id"])
@@ -1190,9 +1277,18 @@ class LifecycleSupervisor:
                         WHERE account_ref=%s
                           AND product_category='LINEAR'
                           AND instrument=%s
+                          AND (
+                               %s IS NULL
+                               OR (trading_account_id=%s AND identity_status='PROVEN')
+                          )
                         ORDER BY observed_at DESC,created_at DESC
                         LIMIT 1""",
-                    (row["account_ref"], row["symbol"]),
+                    (
+                        row["account_ref"],
+                        row["symbol"],
+                        self._trading_account_id,
+                        self._trading_account_id,
+                    ),
                 ).fetchone()
                 if latest_mode is not None and (
                     str(latest_mode["position_mode"]) != "ONE_WAY"
@@ -1310,7 +1406,13 @@ class LifecycleSupervisor:
                       d.state,d.reason
                  FROM strategy_exit.execution_requests r
                  LEFT JOIN strategy_exit.execution_dispatches d
-                   ON d.execution_request_id=r.execution_request_id"""
+                   ON d.execution_request_id=r.execution_request_id
+                WHERE (
+                      %s IS NULL
+                      OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                      OR r.identity_status='LEGACY_UNKNOWN'
+                )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_requests:
             blocked = str(row["state"] or "") == "BLOCKED"
@@ -1347,7 +1449,13 @@ class LifecycleSupervisor:
                  JOIN strategy_exit.execution_dispatches d
                    ON d.execution_request_id=r.execution_request_id
                 WHERE p.state='RECONCILIATION_REQUIRED'
-                  AND d.state='DISPATCHED'"""
+                  AND d.state='DISPATCHED'
+                  AND (
+                       %s IS NULL
+                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
+                       OR p.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_ambiguous:
             position_id = str(row["position_id"])
@@ -1363,13 +1471,21 @@ class LifecycleSupervisor:
             )
 
         entry_safety_blocks = self._connection.execute(
-            """SELECT dispatch_id,execution_request_id,reason
-                 FROM strategy_entry.execution_dispatches
-                WHERE state='BLOCKED'
+            """SELECT d.dispatch_id,d.execution_request_id,d.reason
+                 FROM strategy_entry.execution_dispatches d
+                 JOIN strategy_entry.execution_requests r
+                   ON r.execution_request_id=d.execution_request_id
+                WHERE d.state='BLOCKED'
                   AND (
-                    reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%'
-                    OR reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%'
-                  )"""
+                    d.reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%'
+                    OR d.reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%'
+                  )
+                  AND (
+                       %s IS NULL
+                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
+                       OR r.identity_status='LEGACY_UNKNOWN'
+                  )""",
+            (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in entry_safety_blocks:
             reason = str(row["reason"] or "")
