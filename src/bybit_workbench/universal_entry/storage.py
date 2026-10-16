@@ -229,8 +229,11 @@ class StrategyEntryStore:
                            strategy_config_fingerprint,entry_plan_fingerprint,
                            symbol,direction,requested_at,payload,
                            exit_plan_fingerprint,capital_reservation_id,
-                           exchange_position_slot_claim_id,position_mode_state_ref
-                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s)""",
+                           exchange_position_slot_claim_id,position_mode_state_ref,
+                           strategy_execution_binding_id,execution_leg,trading_account_id,
+                           identity_status
+                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,
+                                %s,%s,%s,'PROVEN')""",
                     (
                         request.execution_request_id,
                         request.strategy_attempt_id,
@@ -248,6 +251,9 @@ class StrategyEntryStore:
                         request.capital_reservation_id,
                         request.exchange_position_slot_claim_id,
                         request.position_mode_state_ref,
+                        request.strategy_execution_binding_id,
+                        request.execution_leg,
+                        request.trading_account_id,
                     ),
                 )
                 state_event_id = "reqstate-" + request.execution_request_id.removeprefix("request-")
@@ -386,8 +392,10 @@ class StrategyEntryStore:
             """INSERT INTO strategy_entry.entry_decisions(
                    entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                    reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-                   exchange_position_slot_claim_id,position_mode_state_ref,payload
-               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                   exchange_position_slot_claim_id,position_mode_state_ref,
+                   strategy_execution_binding_id,execution_leg,trading_account_id,
+                   identity_status,payload
+               ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
             (
                 decision.entry_decision_id,
                 decision.strategy_attempt_id,
@@ -399,6 +407,14 @@ class StrategyEntryStore:
                 decision.capital_reservation_id,
                 decision.exchange_position_slot_claim_id,
                 decision.position_mode_state_ref,
+                decision.strategy_execution_binding_id,
+                decision.execution_leg,
+                decision.trading_account_id,
+                (
+                    "PROVEN"
+                    if decision.strategy_execution_binding_id is not None
+                    else "LEGACY_UNKNOWN"
+                ),
                 _json(decision),
             ),
         )

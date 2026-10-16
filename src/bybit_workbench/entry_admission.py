@@ -45,6 +45,10 @@ class SlotOwnershipConflict(RuntimeError):
     pass
 
 
+class StrategyExecutionBindingUnavailable(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class EntryAdmissionRequest:
     account_ref: str
@@ -65,6 +69,10 @@ class EntryAdmissionRequest:
     requested_at: datetime
     pre_dispatch_expires_at: datetime
     account_state_generation_id: str | None = None
+    strategy_activation_id: str | None = None
+    strategy_execution_binding_id: str | None = None
+    execution_leg: str | None = None
+    trading_account_id: str | None = None
 
     def __post_init__(self) -> None:
         for field in (
@@ -83,6 +91,16 @@ class EntryAdmissionRequest:
         ):
             if not str(getattr(self, field)).strip():
                 raise ValueError(f"Entry admission requires {field}")
+        binding_values = (
+            self.strategy_activation_id,
+            self.strategy_execution_binding_id,
+            self.execution_leg,
+            self.trading_account_id,
+        )
+        if any(value is not None for value in binding_values) and not all(
+            value is not None and str(value).strip() for value in binding_values
+        ):
+            raise ValueError("Entry admission binding identity must be all-or-none")
         if self.direction not in {"LONG", "SHORT"}:
             raise ValueError("Entry admission direction must be LONG or SHORT")
         if self.requested_amount <= 0:
@@ -152,9 +170,53 @@ class PostgresEntryAdmissionPort:
     def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
+            if request.strategy_execution_binding_id is not None:
+                binding = self._connection.execute(
+                    """SELECT b.strategy_activation_id,b.execution_leg,
+                              b.trading_account_id,b.execution_role,
+                              b.allocation_mode,b.binding_state,
+                              b.effective_from,b.effective_to,ta.status,ta.environment,
+                              a.enabled
+                         FROM strategy_entry.strategy_execution_bindings b
+                         JOIN identity.trading_accounts ta
+                           ON ta.trading_account_id=b.trading_account_id
+                         JOIN strategy_entry.strategy_activations a
+                           ON a.activation_id=b.strategy_activation_id
+                        WHERE b.strategy_execution_binding_id=%s
+                        FOR SHARE""",
+                    (request.strategy_execution_binding_id,),
+                ).fetchone()
+                expected_binding = (
+                    request.strategy_activation_id,
+                    request.execution_leg,
+                    request.trading_account_id,
+                )
+                if binding is None:
+                    raise StrategyExecutionBindingUnavailable(
+                        "strategy execution binding disappeared before admission"
+                    )
+                actual_binding = (str(binding[0]),str(binding[1]),str(binding[2]))
+                if actual_binding != expected_binding:
+                    raise StrategyExecutionBindingUnavailable(
+                        "strategy execution binding identity changed before admission"
+                    )
+                if (
+                    str(binding[3]) != "PRIMARY"
+                    or str(binding[4]) != "DEDICATED_STRATEGY"
+                    or str(binding[5]) != "ACTIVE"
+                    or binding[6] > now
+                    or (binding[7] is not None and binding[7] <= now)
+                    or str(binding[8]) != "ACTIVE"
+                    or str(binding[9]) != "MAINNET"
+                    or binding[10] is not True
+                ):
+                    raise StrategyExecutionBindingUnavailable(
+                        "strategy execution binding is not active for admission"
+                    )
+            account_lock_identity = request.trading_account_id or request.account_ref
             self._connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (request.account_ref,),
+                (account_lock_identity,),
             )
             self._connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
@@ -179,21 +241,54 @@ class PostgresEntryAdmissionPort:
                     raise PositionModeStateUnavailable(
                         "account state generation capital changed before admission"
                     )
+                if request.trading_account_id is not None:
+                    generation_identity = self._connection.execute(
+                        """SELECT trading_account_id,identity_status
+                             FROM runtime.account_state_generations
+                            WHERE generation_id=%s""",
+                        (generation.generation_id,),
+                    ).fetchone()
+                    if (
+                        generation_identity is None
+                        or str(generation_identity[0]) != request.trading_account_id
+                        or str(generation_identity[1]) != "PROVEN"
+                    ):
+                        raise PositionModeStateUnavailable(
+                            "account state generation TradingAccount mismatch"
+                        )
                 state_ref = generation.position_mode_refs.get(request.symbol, "")
                 if not state_ref:
                     raise PositionModeStateUnavailable(
                         "current account state generation has no position-mode proof for "
                         f"{request.symbol}"
                     )
-                mode = self._connection.execute(
-                    """SELECT position_mode,position_idx
-                         FROM runtime.position_mode_states
-                        WHERE position_mode_state_ref=%s
-                          AND account_ref=%s
-                          AND product_category='LINEAR'
-                          AND instrument=%s""",
-                    (state_ref, request.account_ref, request.symbol),
-                ).fetchone()
+                if request.trading_account_id is not None:
+                    mode = self._connection.execute(
+                        """SELECT position_mode,position_idx
+                             FROM runtime.position_mode_states
+                            WHERE position_mode_state_ref=%s
+                              AND account_ref=%s
+                              AND trading_account_id=%s
+                              AND identity_status='PROVEN'
+                              AND product_category='LINEAR'
+                              AND instrument=%s""",
+                        (
+                            state_ref,
+                            request.account_ref,
+                            request.trading_account_id,
+                            request.symbol,
+                        ),
+                    ).fetchone()
+                else:
+                    mode = self._connection.execute(
+                        """SELECT position_mode,position_idx
+                             FROM runtime.position_mode_states
+                            WHERE position_mode_state_ref=%s
+                              AND account_ref=%s
+                              AND product_category='LINEAR'
+                              AND instrument=%s""",
+                        (state_ref, request.account_ref, request.symbol),
+                    ).fetchone()
                 if mode is None:
                     raise PositionModeStateUnavailable(
                         f"generation position mode state missing: {state_ref}"
@@ -251,7 +346,8 @@ class PostgresEntryAdmissionPort:
             existing = self._connection.execute(
                 """SELECT exchange_position_slot_claim_id,exchange_position_key,
                           position_mode_state_ref,position_idx,capital_reservation_id,
-                          claim_state
+                          claim_state,strategy_execution_binding_id,execution_leg,
+                          trading_account_id
                      FROM runtime.exchange_position_slot_claims
                     WHERE strategy_attempt_id=%s
                     FOR UPDATE""",
@@ -267,6 +363,14 @@ class PostgresEntryAdmissionPort:
                         SlotClaimState.BOUND.value,
                         SlotClaimState.RECONCILIATION_REQUIRED.value,
                     }
+                    or (
+                        request.strategy_execution_binding_id is not None
+                        and (
+                            str(existing[6]) != request.strategy_execution_binding_id
+                            or str(existing[7]) != request.execution_leg
+                            or str(existing[8]) != request.trading_account_id
+                        )
+                    )
                 ):
                     raise ValueError("slot claim identity collision")
                 if existing[4] is None:
@@ -335,8 +439,11 @@ class PostgresEntryAdmissionPort:
                        exchange_position_slot_claim_id,exchange_position_key,account_ref,
                        symbol,position_idx,strategy_attempt_id,strategy_id,strategy_version,
                        strategy_config_fingerprint,entry_plan_fingerprint,direction,
-                       position_mode_state_ref,claim_state,claimed_at,updated_at
-                   ) VALUES(%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,'CLAIMED',%s,%s)""",
+                       position_mode_state_ref,claim_state,claimed_at,updated_at,
+                       strategy_execution_binding_id,execution_leg,trading_account_id,
+                       identity_status
+                   ) VALUES(%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,'CLAIMED',%s,%s,
+                            %s,%s,%s,%s)""",
                 (
                     request.slot_claim_id,
                     request.exchange_position_key,
@@ -351,6 +458,14 @@ class PostgresEntryAdmissionPort:
                     state_ref,
                     now,
                     now,
+                    request.strategy_execution_binding_id,
+                    request.execution_leg,
+                    request.trading_account_id,
+                    (
+                        "PROVEN"
+                        if request.strategy_execution_binding_id is not None
+                        else "LEGACY_UNKNOWN"
+                    ),
                 ),
             )
 
@@ -387,6 +502,9 @@ class PostgresEntryAdmissionPort:
             capacity_available=request.capacity_available,
             requested_at=request.requested_at,
             pre_dispatch_expires_at=request.pre_dispatch_expires_at,
+            strategy_execution_binding_id=request.strategy_execution_binding_id,
+            execution_leg=request.execution_leg,
+            trading_account_id=request.trading_account_id,
         )
 
 

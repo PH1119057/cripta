@@ -47,6 +47,7 @@ from bybit_workbench.universal_entry import (
     MarketFactEnvelope,
     ObjectiveContext,
     TechnicalReadiness,
+    StrategyExecutionBindingRef,
     TradeDirection,
     TradingCapacitySnapshot,
     UniversalEntryEngine,
@@ -1218,21 +1219,18 @@ def _real_execution_selected_activation_ids(
     )
 
 
-def _real_execution_binding_activation_ids(
+def _real_execution_bindings(
     connection: Any,
     bundles: tuple[object, ...],
     *,
     observed_at: datetime | None = None,
-) -> frozenset[str]:
-    """Return activations with one exact active PRIMARY account binding.
-
-    This is an admission prerequisite only. It never creates/changes bindings.
-    """
+) -> dict[str, StrategyExecutionBindingRef]:
     if not TRADING_ACCOUNT_ID:
-        return frozenset()
+        return {}
     at = (observed_at or datetime.now(UTC)).astimezone(UTC)
     rows = connection.execute(
-        """SELECT b.strategy_activation_id
+        """SELECT b.strategy_execution_binding_id,b.strategy_activation_id,
+                  b.execution_leg,b.trading_account_id
              FROM strategy_entry.strategy_execution_bindings b
              JOIN strategy_entry.strategy_activations a
                ON a.activation_id=b.strategy_activation_id
@@ -1250,13 +1248,27 @@ def _real_execution_binding_activation_ids(
               AND ta.environment='MAINNET'""",
         (TRADING_ACCOUNT_ID, at, at),
     ).fetchall()
-    bound = {str(row[0]) for row in rows}
-    known = {
-        cast(Any, raw_bundle).activation.activation_id
-        for raw_bundle in bundles
-    }
-    return frozenset(bound.intersection(known))
+    known = {cast(Any, raw_bundle).activation.activation_id for raw_bundle in bundles}
+    result: dict[str, StrategyExecutionBindingRef] = {}
+    for row in rows:
+        ref = StrategyExecutionBindingRef(
+            strategy_execution_binding_id=str(row[0]),
+            strategy_activation_id=str(row[1]),
+            execution_leg=str(row[2]),
+            trading_account_id=str(row[3]),
+        )
+        if ref.strategy_activation_id in known:
+            result[ref.strategy_activation_id] = ref
+    return result
 
+
+def _real_execution_binding_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime | None = None,
+) -> frozenset[str]:
+    return frozenset(_real_execution_bindings(connection,bundles,observed_at=observed_at))
 
 def _real_execution_activation_ids(
     connection: Any,
@@ -1735,11 +1747,12 @@ def _run_observer_epoch(
         connection, bundles
     )
     release_ready_for = _real_execution_activation_ids(connection, bundles)
-    binding_ready_for = _real_execution_binding_activation_ids(
+    execution_bindings = _real_execution_bindings(
         connection,
         bundles,
         observed_at=epoch_started,
     )
+    binding_ready_for = frozenset(execution_bindings)
     real_admission_ready_for = release_ready_for.intersection(binding_ready_for)
     entry_admission_port = (
         PostgresEntryAdmissionPort(connection)
@@ -2140,6 +2153,7 @@ def _run_observer_epoch(
                 entry_admission_port=entry_admission_port,
                 real_admission_required_for=real_execution_selected_for,
                 real_admission_ready_for=real_admission_ready_for,
+                execution_bindings=execution_bindings,
                 exchange_position_keys={
                     symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
                     for symbol in symbols

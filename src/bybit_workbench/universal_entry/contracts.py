@@ -560,6 +560,24 @@ class StrategyAttempt:
 
 
 @dataclass(frozen=True, slots=True)
+class StrategyExecutionBindingRef:
+    strategy_execution_binding_id: str
+    strategy_activation_id: str
+    execution_leg: str
+    trading_account_id: str
+
+    def __post_init__(self) -> None:
+        for field in (
+            "strategy_execution_binding_id",
+            "strategy_activation_id",
+            "execution_leg",
+            "trading_account_id",
+        ):
+            if not str(getattr(self, field)).strip():
+                raise ValueError(f"Strategy execution binding requires {field}")
+
+
+@dataclass(frozen=True, slots=True)
 class EntryDecision:
     entry_decision_id: str
     strategy_attempt_id: str
@@ -571,6 +589,9 @@ class EntryDecision:
     capital_reservation_id: str | None = None
     exchange_position_slot_claim_id: str | None = None
     position_mode_state_ref: str | None = None
+    strategy_execution_binding_id: str | None = None
+    execution_leg: str | None = None
+    trading_account_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -611,6 +632,9 @@ class EntryExecutionRequest:
     capital_reservation_id: str | None = None
     exchange_position_slot_claim_id: str | None = None
     position_mode_state_ref: str | None = None
+    strategy_execution_binding_id: str | None = None
+    execution_leg: str | None = None
+    trading_account_id: str | None = None
 
 
 # Backward-compatible import name for code written before Entry/Exit requests

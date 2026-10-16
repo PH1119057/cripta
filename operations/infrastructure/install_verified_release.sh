@@ -406,6 +406,7 @@ migration_files=(
   operations/sql/20261016_private_current_state_r5a.sql
   operations/sql/20261016_execution_evidence_r5b.sql
   operations/sql/20261016_strategy_execution_binding_r6a.sql
+  operations/sql/20261016_binding_lineage_r6b1.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

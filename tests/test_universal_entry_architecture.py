@@ -38,6 +38,7 @@ from bybit_workbench.universal_entry import (
     SensorObservation,
     SensorRequirement,
     StrategyActivation,
+    StrategyExecutionBindingRef,
     StrategyCard,
     TechnicalReadiness,
     TouchPolicy,
@@ -213,6 +214,18 @@ def real_evaluate(
         {event.symbol: f"BYBIT:UNIFIED:LINEAR:USDT:{event.symbol}:0"},
     )
     kwargs["real_admission_required_for"] = real_ids
+    kwargs.setdefault(
+        "execution_bindings",
+        {
+            activation_id: StrategyExecutionBindingRef(
+                "bind-test-" + activation_id,
+                activation_id,
+                "PRIMARY",
+                "ta-test",
+            )
+            for activation_id in real_ids
+        },
+    )
     kwargs["entry_admission_port"] = admission_port
     return engine.process(event, **kwargs)
 

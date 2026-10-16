@@ -31,7 +31,8 @@ def test_r6a_real_entry_requires_release_arm_and_exact_account_binding() -> None
     assert "b.allocation_mode='DEDICATED_STRATEGY'" in source
     assert "b.trading_account_id=%s" in source
     assert "release_ready_for = _real_execution_activation_ids(connection, bundles)" in source
-    assert "binding_ready_for = _real_execution_binding_activation_ids(" in source
+    assert "execution_bindings = _real_execution_bindings(" in source
+    assert "binding_ready_for = frozenset(execution_bindings)" in source
     assert "real_admission_ready_for = release_ready_for.intersection(binding_ready_for)" in source
     assert "FROM strategy_entry.strategy_execution_bindings" in source
     assert '("BINDING",' in source

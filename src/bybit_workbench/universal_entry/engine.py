@@ -12,6 +12,7 @@ from bybit_workbench.entry_admission import (
     PositionModeMismatch,
     PositionModeStateUnavailable,
     SlotOwnershipConflict,
+    StrategyExecutionBindingUnavailable,
 )
 
 from .context_features import compare_context_value, extract_context_feature
@@ -37,6 +38,7 @@ from .contracts import (
     SensorObservation,
     SensorRequirement,
     StrategyAttempt,
+    StrategyExecutionBindingRef,
     StrategySignal,
     TechnicalReadiness,
     TradeDirection,
@@ -85,6 +87,7 @@ class UniversalEntryEngine:
         entry_admission_port: EntryAdmissionPort | None = None,
         real_admission_required_for: frozenset[str] = frozenset(),
         real_admission_ready_for: frozenset[str] | None = None,
+        execution_bindings: Mapping[str, StrategyExecutionBindingRef] | None = None,
         exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
         admission_time: datetime | None = None,
@@ -267,13 +270,22 @@ class UniversalEntryEngine:
                         if exchange_position_keys is None
                         else exchange_position_keys.get(signal.symbol)
                     )
+                    execution_binding = (
+                        None
+                        if execution_bindings is None
+                        else execution_bindings.get(plan.strategy_activation_id)
+                    )
                     effective_readiness = technical_readiness
                     effective_admission_port = entry_admission_port
                     if not real_ready:
                         effective_readiness = TechnicalReadiness(
                             False,
                             admission_time or fact_for_predicate.observed_at,
-                            "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                            (
+                                "REAL_EXECUTION_BINDING_NOT_READY"
+                                if execution_binding is None
+                                else "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
+                            ),
                         )
                         effective_admission_port = None
                     decision = self._decision(
@@ -286,6 +298,7 @@ class UniversalEntryEngine:
                         account_ref=account_ref,
                         entry_admission_port=effective_admission_port,
                         exchange_position_key=exchange_position_key,
+                        execution_binding=execution_binding,
                         policy_attempt_block=policy_attempt_block,
                     )
                     request = self._execution_request(
@@ -930,6 +943,7 @@ class UniversalEntryEngine:
         account_ref: str | None,
         entry_admission_port: EntryAdmissionPort | None,
         exchange_position_key: str | None,
+        execution_binding: StrategyExecutionBindingRef | None,
         policy_attempt_block: str | None = None,
     ) -> EntryDecision:
         code = EntryDecisionCode.ACCEPTED
@@ -949,6 +963,16 @@ class UniversalEntryEngine:
         elif not technical_readiness.ready:
             code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
             reason = technical_readiness.reason
+
+        if (
+            code is EntryDecisionCode.ACCEPTED
+            and (
+                execution_binding is None
+                or execution_binding.strategy_activation_id != plan.strategy_activation_id
+            )
+        ):
+            code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+            reason = "REAL_EXECUTION_BINDING_MISSING_OR_MISMATCHED"
 
         requested, max_age, min_quality = self._capital_settings(plan)
         if code is EntryDecisionCode.ACCEPTED and requested is None:
@@ -1019,6 +1043,19 @@ class UniversalEntryEngine:
                                     pre_dispatch_expires_at=now
                                     + timedelta(seconds=request_max_age_seconds),
                                     account_state_generation_id=generation_id,
+                                    strategy_activation_id=plan.strategy_activation_id,
+                                    strategy_execution_binding_id=(
+                                        None if execution_binding is None
+                                        else execution_binding.strategy_execution_binding_id
+                                    ),
+                                    execution_leg=(
+                                        None if execution_binding is None
+                                        else execution_binding.execution_leg
+                                    ),
+                                    trading_account_id=(
+                                        None if execution_binding is None
+                                        else execution_binding.trading_account_id
+                                    ),
                                 )
                             )
                         except PositionModeStateUnavailable as exc:
@@ -1028,6 +1065,9 @@ class UniversalEntryEngine:
                             code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
                             position_mode_state_ref = exc.state_ref
                             reason = "EXCHANGE_POSITION_MODE_MISMATCH: " + str(exc)
+                        except StrategyExecutionBindingUnavailable as exc:
+                            code = EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+                            reason = "STRATEGY_EXECUTION_BINDING_UNAVAILABLE: " + str(exc)
                         except SlotOwnershipConflict as exc:
                             code = EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
                             reason = str(exc)
@@ -1070,6 +1110,9 @@ class UniversalEntryEngine:
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            None if execution_binding is None else execution_binding.strategy_execution_binding_id,
+            None if execution_binding is None else execution_binding.execution_leg,
+            None if execution_binding is None else execution_binding.trading_account_id,
         )
 
     def _execution_intent(
@@ -1151,6 +1194,9 @@ class UniversalEntryEngine:
             capital_reservation_id=decision.capital_reservation_id,
             exchange_position_slot_claim_id=decision.exchange_position_slot_claim_id,
             position_mode_state_ref=decision.position_mode_state_ref,
+            strategy_execution_binding_id=decision.strategy_execution_binding_id,
+            execution_leg=decision.execution_leg,
+            trading_account_id=decision.trading_account_id,
         )
 
     def _notifications(

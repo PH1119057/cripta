@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-strategy-binding-r6a"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-binding-lineage-r6b1"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -87,6 +87,22 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "exchange_order_history", "trading_account_id"),
     ("runtime", "exchange_order_history", "account_connector_id"),
     ("runtime", "exchange_order_history", "identity_status"),
+    ("runtime", "capital_reservations", "strategy_execution_binding_id"),
+    ("runtime", "capital_reservations", "execution_leg"),
+    ("runtime", "capital_reservations", "trading_account_id"),
+    ("runtime", "capital_reservations", "identity_status"),
+    ("runtime", "exchange_position_slot_claims", "strategy_execution_binding_id"),
+    ("runtime", "exchange_position_slot_claims", "execution_leg"),
+    ("runtime", "exchange_position_slot_claims", "trading_account_id"),
+    ("runtime", "exchange_position_slot_claims", "identity_status"),
+    ("strategy_entry", "entry_decisions", "strategy_execution_binding_id"),
+    ("strategy_entry", "entry_decisions", "execution_leg"),
+    ("strategy_entry", "entry_decisions", "trading_account_id"),
+    ("strategy_entry", "entry_decisions", "identity_status"),
+    ("strategy_entry", "execution_requests", "strategy_execution_binding_id"),
+    ("strategy_entry", "execution_requests", "execution_leg"),
+    ("strategy_entry", "execution_requests", "trading_account_id"),
+    ("strategy_entry", "execution_requests", "identity_status"),
     ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
     ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
     ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),
