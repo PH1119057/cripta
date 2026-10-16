@@ -369,7 +369,11 @@ def restore_r1_gate_after_verified_reconnect(
 
     reconciliation = connection.execute(
         """SELECT started_at_epoch_ms,finished_at_epoch_ms,reason,ok,positions,orders
-             FROM runtime.reconciliation_runs ORDER BY id DESC LIMIT 1"""
+             FROM runtime.reconciliation_runs
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY id DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if (
         not reconciliation
@@ -384,7 +388,11 @@ def restore_r1_gate_after_verified_reconnect(
 
     wallet = connection.execute(
         """SELECT refreshed_at_epoch_ms,payload_json::jsonb->>'accountType'
-             FROM runtime.wallet_latest WHERE singleton=1"""
+             FROM runtime.wallet_latest
+            WHERE singleton=1
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if (
         not wallet
@@ -399,11 +407,13 @@ def restore_r1_gate_after_verified_reconnect(
                   instrument,position_mode,position_idx,observed_at,fresh_until
              FROM runtime.position_mode_states
             WHERE account_ref='BYBIT:UNIFIED'
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
               AND product_category='LINEAR'
               AND instrument = ANY(%s)
               AND observed_at >= to_timestamp(%s / 1000.0)
             ORDER BY instrument,observed_at DESC""",
-        (list(R1_SYMBOLS), reconnect_started_ms),
+        (TRADING_ACCOUNT_ID, list(R1_SYMBOLS), reconnect_started_ms),
     ).fetchall()
     now = datetime.now(UTC)
     if len(mode_rows) != 5 or {str(row[0]) for row in mode_rows} != set(R1_SYMBOLS):
@@ -470,15 +480,21 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state='running'
              AND error LIKE 'EXCHANGE_MUTATION_BARRIER:%'
-           LIMIT 1"""
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if unresolved:
         return False, "AMBIGUOUS_EXCHANGE_MUTATION"
     ambiguous = connection.execute(
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
-             AND requested_at_epoch_ms < %s LIMIT 1""",
-        (PROCESS_STARTED_AT_MS,),
+             AND requested_at_epoch_ms < %s
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')
+           LIMIT 1""",
+        (PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     ).fetchone()
     if ambiguous:
         return False, "AMBIGUOUS_PRESTART_ENTRY_COMMAND"
@@ -486,13 +502,19 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         """SELECT 1 FROM runtime.hot_orders o
            JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
            WHERE c.command_type='entry'
+             AND o.trading_account_id=%s
+             AND o.identity_status='PROVEN'
              AND o.order_status IN ('New','PartiallyFilled','Untriggered')
-           LIMIT 1"""
+           LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
     if pending_owned:
         return False, "BOT_OWNED_PENDING_ENTRY_REMAINS"
     for symbol, raw_payload in connection.execute(
-        "SELECT symbol,payload_json FROM runtime.hot_positions"
+        """SELECT symbol,payload_json FROM runtime.hot_positions
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall():
         raw = (
             raw_payload
@@ -549,7 +571,10 @@ def cancel_bot_owned_pending_entry_orders(
            FROM runtime.hot_orders o
            JOIN runtime.trade_commands c ON c.command_id=o.order_link_id
            WHERE c.command_type='entry'
-             AND o.order_status IN ('New','PartiallyFilled','Untriggered')"""
+             AND o.trading_account_id=%s
+             AND o.identity_status='PROVEN'
+             AND o.order_status IN ('New','PartiallyFilled','Untriggered')""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall()
     cancelled = 0
     for order_id, symbol, raw_payload in rows:
@@ -580,11 +605,16 @@ def protect_recovered_bot_positions(
            FROM runtime.trade_commands c
            JOIN runtime.executions e ON e.order_link_id=c.command_id
            WHERE c.command_type='entry'
+             AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
+                  OR c.identity_status='LEGACY_UNKNOWN')
+             AND ((e.trading_account_id=%s AND e.identity_status='PROVEN')
+                  OR e.identity_status='LEGACY_UNKNOWN')
              AND COALESCE(
                    (e.payload_json::jsonb->>'closedSize')::numeric,
                    0
                  )=0
-           GROUP BY c.command_id,c.symbol,c.payload_json"""
+           GROUP BY c.command_id,c.symbol,c.payload_json""",
+        (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchall()
     protected = 0
 
@@ -593,8 +623,10 @@ def protect_recovered_bot_positions(
             """SELECT side,entry_price,payload_json
                FROM runtime.hot_positions
                WHERE symbol=%s
+                 AND trading_account_id=%s
+                 AND identity_status='PROVEN'
                ORDER BY position_idx LIMIT 1""",
-            (symbol,),
+            (symbol, TRADING_ACCOUNT_ID),
         ).fetchone()
         if position_row is None:
             continue
@@ -680,8 +712,11 @@ def protect_recovered_bot_positions(
 
         verified = connection.execute(
             """SELECT payload_json FROM runtime.hot_positions
-               WHERE symbol=%s ORDER BY position_idx LIMIT 1""",
-            (symbol,),
+               WHERE symbol=%s
+                 AND trading_account_id=%s
+                 AND identity_status='PROVEN'
+               ORDER BY position_idx LIMIT 1""",
+            (symbol, TRADING_ACCOUNT_ID),
         ).fetchone()
         if verified is not None:
             verified_raw = (
@@ -708,17 +743,21 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
     rows = connection.execute(
         """SELECT command_id,state FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
-             AND requested_at_epoch_ms < %s""",
-        (PROCESS_STARTED_AT_MS,),
+             AND requested_at_epoch_ms < %s
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')""",
+        (PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     ).fetchall()
     now_ms = int(time.time() * 1000)
     for command_id, _state in rows:
         # A previously sent but not yet filled PostOnly order remains live.
         open_orders = connection.execute(
             """SELECT order_id FROM runtime.hot_orders
-               WHERE order_link_id=%s AND order_status IN
-                   ('New','PartiallyFilled','Untriggered')""",
-            (str(command_id)[:36],),
+               WHERE order_link_id=%s
+                 AND trading_account_id=%s
+                 AND identity_status='PROVEN'
+                 AND order_status IN ('New','PartiallyFilled','Untriggered')""",
+            (str(command_id)[:36], TRADING_ACCOUNT_ID),
         ).fetchall()
         if len(open_orders) > 1:
             raise ExchangeMutationBarrier(
@@ -751,8 +790,11 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
 
         execution = connection.execute(
             """SELECT 1 FROM runtime.executions
-               WHERE order_link_id=%s LIMIT 1""",
-            (str(command_id)[:36],),
+               WHERE order_link_id=%s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
+               LIMIT 1""",
+            (str(command_id)[:36], TRADING_ACCOUNT_ID),
         ).fetchone()
         if execution:
             connection.execute(
@@ -766,10 +808,12 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
 
         history = connection.execute(
             """SELECT order_id FROM runtime.exchange_order_history
-               WHERE order_link_id=%s AND order_status IN
-                   ('Cancelled','Rejected','Deactivated')
+               WHERE order_link_id=%s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
+                 AND order_status IN ('Cancelled','Rejected','Deactivated')
                ORDER BY updated_at_epoch_ms DESC LIMIT 1""",
-            (str(command_id)[:36],),
+            (str(command_id)[:36], TRADING_ACCOUNT_ID),
         ).fetchone()
         if history:
             resolve_cancelled_entry_reservation_after_reconcile(
@@ -1279,8 +1323,13 @@ def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) 
     qty = Decimal("0")
     fee = Decimal("0")
     rows = connection.execute(
-        "SELECT side,exec_qty,exec_fee,payload_json FROM runtime.executions WHERE symbol=%s ORDER BY exec_time_ms,exec_id",
-        (symbol,),
+        """SELECT side,exec_qty,exec_fee,payload_json
+             FROM runtime.executions
+            WHERE symbol=%s
+              AND ((trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN')
+            ORDER BY exec_time_ms,exec_id""",
+        (symbol, TRADING_ACCOUNT_ID),
     ).fetchall()
     for execution_side, raw_qty, raw_fee, raw_payload in rows:
         execution_qty = Decimal(str(raw_qty))
@@ -1453,16 +1502,23 @@ def record_protection_or_owner_event(
     if ownership is None:
         return
     after_row = connection.execute(
-        "SELECT payload_json FROM runtime.hot_positions WHERE symbol=%s ORDER BY position_idx LIMIT 1",
-        (symbol,),
+        """SELECT payload_json FROM runtime.hot_positions
+            WHERE symbol=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY position_idx LIMIT 1""",
+        (symbol, TRADING_ACCOUNT_ID),
     ).fetchone()
     after = json.loads(after_row[0]) if after_row else {}
     before = before or {}
     order_rows = connection.execute(
         """SELECT order_id FROM runtime.hot_orders
-           WHERE symbol=%s AND payload_json::jsonb->>'reduceOnly'='true'
+           WHERE symbol=%s
+             AND trading_account_id=%s
+             AND identity_status='PROVEN'
+             AND payload_json::jsonb->>'reduceOnly'='true'
            ORDER BY order_id""",
-        (symbol,),
+        (symbol, TRADING_ACCOUNT_ID),
     ).fetchall()
     exchange_order_ids = sorted(str(value[0]) for value in order_rows)
     initiator = "OWNER" if command_id.startswith("web-") else "ALGORITHM"
@@ -2531,7 +2587,10 @@ def cancel_expired_entry_limits(
         """SELECT o.order_id,o.symbol,c.command_id,c.requested_at_epoch_ms,c.payload_json
              FROM runtime.hot_orders o
              JOIN runtime.trade_commands c ON o.order_link_id=c.command_id
-            WHERE c.command_type='entry' AND c.state='completed'"""
+            WHERE c.command_type='entry' AND c.state='completed'
+              AND o.trading_account_id=%s
+              AND o.identity_status='PROVEN'""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall()
     for order_id, symbol, command_id, requested_at, raw_payload in rows:
         payload = json.loads(raw_payload)
