@@ -16,10 +16,15 @@ def retire_stale_release_arms(
     *,
     loaded_commit: str,
     account_snapshot: Mapping[str, object] | None,
+    trading_account_id: str,
     now: datetime,
 ) -> tuple[str, ...]:
     instant = now.astimezone(UTC)
-    if len(loaded_commit) != 40 or account_snapshot is None:
+    if (
+        len(loaded_commit) != 40
+        or account_snapshot is None
+        or not str(trading_account_id).strip()
+    ):
         return ()
     if (
         account_snapshot.get("source") != "BYBIT_AUTHENTICATED_ACCOUNT_GET"
@@ -49,12 +54,20 @@ def retire_stale_release_arms(
         return ()
 
     rows = connection.execute(
-        """SELECT live_arm_session_id,strategy_id,strategy_version,
-                  symbol,release_commit
-             FROM control.live_arm_sessions
-            WHERE state='ACTIVE' AND release_commit<>%s
-            ORDER BY live_arm_session_id FOR UPDATE""",
-        (loaded_commit,),
+        """SELECT a.live_arm_session_id,a.strategy_id,a.strategy_version,
+                  a.symbol,a.release_commit,a.strategy_activation_id,
+                  b.strategy_execution_binding_id,b.trading_account_id
+             FROM control.live_arm_sessions a
+             LEFT JOIN strategy_entry.strategy_execution_bindings b
+               ON b.strategy_activation_id=a.strategy_activation_id
+              AND b.execution_leg='PRIMARY'
+              AND b.allocation_mode='DEDICATED_STRATEGY'
+              AND b.binding_state='ACTIVE'
+              AND b.effective_from<=%s
+              AND (b.effective_to IS NULL OR b.effective_to>%s)
+            WHERE a.state='ACTIVE' AND a.release_commit<>%s
+            ORDER BY a.live_arm_session_id FOR UPDATE OF a""",
+        (instant, instant, loaded_commit),
     ).fetchall()
 
     def value(row: Any, index: int, key: str) -> str:
@@ -67,6 +80,13 @@ def retire_stale_release_arms(
         strategy_version = value(row, 2, "strategy_version")
         symbol = value(row, 3, "symbol")
         prior_release = value(row, 4, "release_commit")
+        binding_id = value(row, 6, "strategy_execution_binding_id")
+        bound_account = value(row, 7, "trading_account_id")
+        if (
+            not binding_id
+            or bound_account != trading_account_id
+        ):
+            continue
         scope = inventory.get(symbol)
         if not isinstance(scope, Mapping):
             continue
@@ -86,20 +106,47 @@ def retire_stale_release_arms(
         blocked = connection.execute(
             """SELECT (
                 EXISTS(SELECT 1 FROM runtime.position_ownership
-                       WHERE symbol=%s AND state<>'CLOSED')
+                       WHERE symbol=%s AND state<>'CLOSED'
+                         AND (
+                              (trading_account_id=%s AND identity_status='PROVEN')
+                              OR identity_status='LEGACY_UNKNOWN'
+                         ))
                 OR EXISTS(SELECT 1 FROM runtime.exchange_position_slot_claims
-                          WHERE symbol=%s AND claim_state<>'RELEASED')
+                          WHERE symbol=%s AND claim_state<>'RELEASED'
+                            AND (
+                                 (trading_account_id=%s AND identity_status='PROVEN')
+                                 OR identity_status='LEGACY_UNKNOWN'
+                            ))
                 OR EXISTS(SELECT 1 FROM runtime.capital_reservations
                           WHERE strategy_id=%s AND strategy_version=%s
-                            AND state<>'RELEASED')
+                            AND state<>'RELEASED'
+                            AND (
+                                 (trading_account_id=%s AND identity_status='PROVEN')
+                                 OR identity_status='LEGACY_UNKNOWN'
+                            ))
                 OR EXISTS(SELECT 1 FROM runtime.trade_commands
-                          WHERE symbol=%s AND (
-                              state NOT IN ('completed','failed')
-                              OR (state='failed' AND
-                                  coalesce(error,'') LIKE 'EXCHANGE_MUTATION_BARRIER%%')
-                          ))
+                          WHERE symbol=%s
+                            AND (
+                                 (trading_account_id=%s AND identity_status='PROVEN')
+                                 OR identity_status='LEGACY_UNKNOWN'
+                            )
+                            AND (
+                                state NOT IN ('completed','failed')
+                                OR (state='failed' AND
+                                    coalesce(error,'') LIKE 'EXCHANGE_MUTATION_BARRIER%%')
+                            ))
             )""",
-            (symbol, symbol, strategy_id, strategy_version, symbol),
+            (
+                symbol,
+                trading_account_id,
+                symbol,
+                trading_account_id,
+                strategy_id,
+                strategy_version,
+                trading_account_id,
+                symbol,
+                trading_account_id,
+            ),
         ).fetchone()
         if blocked is None or bool(
             blocked[0] if not isinstance(blocked, Mapping)
@@ -130,6 +177,8 @@ def retire_stale_release_arms(
                     "symbol": symbol,
                     "strategy_id": strategy_id,
                     "strategy_version": strategy_version,
+                    "strategy_execution_binding_id": binding_id,
+                    "trading_account_id": trading_account_id,
                     "authenticated_account_read": True,
                     "observed_at": observed.astimezone(UTC).isoformat(),
                     "positions_count": len(positions),

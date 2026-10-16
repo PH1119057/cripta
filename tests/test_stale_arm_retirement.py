@@ -22,9 +22,10 @@ class Cursor:
 
 
 class FakeDB:
-    def __init__(self, *, gate=False, blocked=False):
+    def __init__(self, *, gate=False, blocked=False, bound_account="ta-current"):
         self.gate = gate
         self.blocked = blocked
+        self.bound_account = bound_account
         self.statements = []
 
     def execute(self, sql, params=()):
@@ -38,6 +39,9 @@ class FakeDB:
                 "strategy_version": "1.1-micro-live",
                 "symbol": "APTUSDT",
                 "release_commit": PRIOR,
+                "strategy_activation_id": "activation-a",
+                "strategy_execution_binding_id": "binding-a",
+                "trading_account_id": self.bound_account,
             }])
         if "SELECT (" in sql:
             return Cursor([(self.blocked,)])
@@ -63,7 +67,7 @@ def snapshot(*, positions=None, orders=None, observed=NOW):
 def test_safe_flat_scope_retires_old_authorization_not_rearms():
     c = FakeDB()
     result = retire_stale_release_arms(
-        c, loaded_commit=CURRENT, account_snapshot=snapshot(), now=NOW
+        c, loaded_commit=CURRENT, account_snapshot=snapshot(), trading_account_id="ta-current", now=NOW
     )
     assert result == ("session-a",)
     joined = "\n".join(sql for sql, _ in c.statements)
@@ -79,7 +83,7 @@ def test_safe_flat_scope_retires_old_authorization_not_rearms():
 def test_fail_closed_when_gate_open():
     c = FakeDB(gate=True)
     assert not retire_stale_release_arms(
-        c, loaded_commit=CURRENT, account_snapshot=snapshot(), now=NOW
+        c, loaded_commit=CURRENT, account_snapshot=snapshot(), trading_account_id="ta-current", now=NOW
     )
     assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
@@ -88,7 +92,8 @@ def test_fail_closed_when_exchange_has_position():
     c = FakeDB()
     assert not retire_stale_release_arms(
         c, loaded_commit=CURRENT,
-        account_snapshot=snapshot(positions=[{"size": "0.4"}]), now=NOW
+        account_snapshot=snapshot(positions=[{"size": "0.4"}]),
+        trading_account_id="ta-current", now=NOW
     )
     assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
@@ -100,7 +105,7 @@ def test_fail_closed_when_exchange_has_order_or_local_pending():
     ):
         c = FakeDB(blocked=blocked)
         assert not retire_stale_release_arms(
-            c, loaded_commit=CURRENT, account_snapshot=snap, now=NOW
+            c, loaded_commit=CURRENT, account_snapshot=snap, trading_account_id="ta-current", now=NOW
         )
         assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
@@ -114,7 +119,7 @@ def test_fail_closed_when_account_is_not_fresh_or_complete():
     ):
         c = FakeDB()
         assert not retire_stale_release_arms(
-            c, loaded_commit=CURRENT, account_snapshot=snap, now=NOW
+            c, loaded_commit=CURRENT, account_snapshot=snap, trading_account_id="ta-current", now=NOW
         )
         assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
@@ -156,3 +161,43 @@ def test_bybit_clock_failure_explains_network_samples_not_host_clock():
     assert "probe_rtts_ms=" in runtime
     assert "path=/v5/market/time" in runtime
     assert "UNSAFE_BYBIT_CLOCK_OFFSET" not in runtime
+
+
+def test_fail_closed_when_arm_binding_belongs_to_other_account():
+    c = FakeDB(bound_account="ta-other")
+    assert not retire_stale_release_arms(
+        c,
+        loaded_commit=CURRENT,
+        account_snapshot=snapshot(),
+        trading_account_id="ta-current",
+        now=NOW,
+    )
+    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
+
+
+def test_retirement_scopes_local_blockers_to_exact_account_and_preserves_legacy_unknown():
+    c = FakeDB()
+    retire_stale_release_arms(
+        c,
+        loaded_commit=CURRENT,
+        account_snapshot=snapshot(),
+        trading_account_id="ta-current",
+        now=NOW,
+    )
+    joined = "\n".join(sql for sql, _ in c.statements)
+    assert "strategy_execution_bindings" in joined
+    assert "b.execution_leg='PRIMARY'" in joined
+    assert "b.allocation_mode='DEDICATED_STRATEGY'" in joined
+    assert joined.count("trading_account_id=%s") >= 4
+    assert joined.count("identity_status='LEGACY_UNKNOWN'") >= 4
+    params = [params for sql, params in c.statements if "SELECT (" in sql][0]
+    assert params.count("ta-current") == 4
+
+
+def test_runtime_passes_exact_trading_account_to_stale_arm_retirement():
+    from pathlib import Path
+
+    source = Path(
+        "operations/monitoring/lifecycle_supervisor_runtime.py"
+    ).read_text(encoding="utf-8")
+    assert "trading_account_id=TRADING_ACCOUNT_ID" in source
