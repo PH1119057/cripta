@@ -33,10 +33,12 @@ def _mapping(value: object) -> Mapping[str, object] | None:
 def _reservation_for_command(
     connection: ConnectionLike,
     command_id: str,
-) -> tuple[str, str, str, str] | None:
+) -> tuple[str, str, str, str, str | None, str] | None:
     row = connection.execute(
         """SELECT c.reservation_id,c.state,
-                  r.exchange_position_slot_claim_id,r.execution_request_id
+                  r.exchange_position_slot_claim_id,r.execution_request_id,
+                  tc.trading_account_id,tc.identity_status,
+                  r.trading_account_id,r.identity_status
              FROM runtime.trade_commands tc
              JOIN strategy_entry.execution_dispatches d
                ON d.command_id=tc.command_id
@@ -63,11 +65,36 @@ def _reservation_for_command(
         return None
     reservation_id = str(payload.get("capital_reservation_id") or "")
     slot_claim_id = str(payload.get("exchange_position_slot_claim_id") or "")
+    command_account = None if row[4] is None else str(row[4])
+    command_status = str(row[5] or "LEGACY_UNKNOWN")
+    request_account = None if row[6] is None else str(row[6])
+    request_status = str(row[7] or "LEGACY_UNKNOWN")
     if not reservation_id or reservation_id != str(row[0]):
         raise RuntimeError("Universal Entry command/reservation lineage mismatch")
     if not slot_claim_id or slot_claim_id != str(row[2] or ""):
         raise RuntimeError("Universal Entry command/slot-claim lineage mismatch")
-    return reservation_id, str(row[1]), slot_claim_id, str(row[3])
+    if command_status != request_status:
+        raise RuntimeError("Universal Entry command/request identity status mismatch")
+    if command_status == "PROVEN":
+        if (
+            not command_account
+            or command_account != request_account
+            or str(payload.get("trading_account_id") or "") != command_account
+        ):
+            raise RuntimeError("Universal Entry command/request TradingAccount mismatch")
+    elif command_status == "LEGACY_UNKNOWN":
+        if command_account is not None or request_account is not None:
+            raise RuntimeError("legacy Universal Entry lineage claims TradingAccount")
+    else:
+        raise RuntimeError("Universal Entry command identity status is invalid")
+    return (
+        reservation_id,
+        str(row[1]),
+        slot_claim_id,
+        str(row[3]),
+        command_account,
+        command_status,
+    )
 
 
 def _record_request_state(
@@ -102,7 +129,7 @@ def mark_entry_order_acknowledged(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state, slot_claim_id, execution_request_id = binding
+    reservation_id, state, slot_claim_id, execution_request_id, trading_account_id, identity_status = binding
     if state == "PENDING_EXCHANGE_REFLECTION":
         return state
     if state in {"CONSUMED", "RELEASED", "RECONCILIATION_REQUIRED"}:
@@ -134,13 +161,38 @@ def mark_entry_order_acknowledged(
                 """SELECT order_status,payload_json::jsonb->>'cumExecQty'
                    FROM runtime.exchange_order_history
                    WHERE order_id=%s AND order_link_id=%s
+                     AND identity_status=%s
+                     AND (
+                          (%s='PROVEN' AND trading_account_id=%s)
+                          OR %s='LEGACY_UNKNOWN'
+                     )
                    ORDER BY updated_at_epoch_ms DESC LIMIT 1""",
-                (exchange_order_id, command_id[:36]),
+                (
+                    exchange_order_id,
+                    command_id[:36],
+                    identity_status,
+                    identity_status,
+                    trading_account_id,
+                    identity_status,
+                ),
             ).fetchone()
             execution = connection.execute(
                 """SELECT 1 FROM runtime.executions
-                   WHERE order_id=%s OR order_link_id=%s LIMIT 1""",
-                (exchange_order_id, command_id[:36]),
+                   WHERE (order_id=%s OR order_link_id=%s)
+                     AND identity_status=%s
+                     AND (
+                          (%s='PROVEN' AND trading_account_id=%s)
+                          OR %s='LEGACY_UNKNOWN'
+                     )
+                   LIMIT 1""",
+                (
+                    exchange_order_id,
+                    command_id[:36],
+                    identity_status,
+                    identity_status,
+                    trading_account_id,
+                    identity_status,
+                ),
             ).fetchone()
             if (
                 order is not None
@@ -179,7 +231,7 @@ def finalize_failed_entry_command_reservation(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state, slot_claim_id, execution_request_id = binding
+    reservation_id, state, slot_claim_id, execution_request_id, trading_account_id, identity_status = binding
     if state in {"CONSUMED", "RELEASED"}:
         return state
 
@@ -260,7 +312,7 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     binding = _reservation_for_command(connection, command_id)
     if binding is None:
         return None
-    reservation_id, state, slot_claim_id, execution_request_id = binding
+    reservation_id, state, slot_claim_id, execution_request_id, trading_account_id, identity_status = binding
     if state in {"CONSUMED", "RELEASED"}:
         return state
 
@@ -268,9 +320,20 @@ def resolve_cancelled_entry_reservation_after_reconcile(
         """SELECT position_id
              FROM runtime.position_ownership
             WHERE entry_command_id=%s
+              AND identity_status=%s
+              AND (
+                   (%s='PROVEN' AND trading_account_id=%s)
+                   OR %s='LEGACY_UNKNOWN'
+              )
             ORDER BY fill_at DESC
             LIMIT 1""",
-        (command_id,),
+        (
+            command_id,
+            identity_status,
+            identity_status,
+            trading_account_id,
+            identity_status,
+        ),
     ).fetchone()
     if position is not None:
         return finalize_failed_entry_command_reservation(
@@ -283,8 +346,20 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     history = connection.execute(
         """SELECT order_status,payload_json
              FROM runtime.exchange_order_history
-            WHERE order_id=%s AND order_link_id=%s""",
-        (exchange_order_id, command_id[:36]),
+            WHERE order_id=%s AND order_link_id=%s
+              AND identity_status=%s
+              AND (
+                   (%s='PROVEN' AND trading_account_id=%s)
+                   OR %s='LEGACY_UNKNOWN'
+              )""",
+        (
+            exchange_order_id,
+            command_id[:36],
+            identity_status,
+            identity_status,
+            trading_account_id,
+            identity_status,
+        ),
     ).fetchone()
     if history is None:
         return finalize_failed_entry_command_reservation(
@@ -315,9 +390,21 @@ def resolve_cancelled_entry_reservation_after_reconcile(
     execution = connection.execute(
         """SELECT 1
              FROM runtime.executions
-            WHERE order_id=%s OR order_link_id=%s
+            WHERE (order_id=%s OR order_link_id=%s)
+              AND identity_status=%s
+              AND (
+                   (%s='PROVEN' AND trading_account_id=%s)
+                   OR %s='LEGACY_UNKNOWN'
+              )
             LIMIT 1""",
-        (exchange_order_id, command_id[:36]),
+        (
+            exchange_order_id,
+            command_id[:36],
+            identity_status,
+            identity_status,
+            trading_account_id,
+            identity_status,
+        ),
     ).fetchone()
     order_status = str(history[0])
     if order_status == "Cancelled" and cumulative_fill == 0 and execution is None:
