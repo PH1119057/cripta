@@ -1475,13 +1475,26 @@ def _maybe_record_reverse_transition(
               AND strategy_id=%s AND strategy_version=%s
               AND strategy_config_fingerprint=%s
               AND symbol=%s
-            ORDER BY fill_at DESC LIMIT 1
+              AND (
+                   (trading_account_id=%s AND identity_status='PROVEN')
+                   OR
+                   (trading_account_id IS NULL AND identity_status='LEGACY_UNKNOWN')
+              )
+            ORDER BY
+              CASE
+                WHEN trading_account_id=%s AND identity_status='PROVEN' THEN 0
+                ELSE 1
+              END,
+              fill_at DESC
+            LIMIT 1
             FOR SHARE""",
         (
             signal.strategy_id,
             signal.strategy_version,
             signal.strategy_config_fingerprint,
             signal.symbol,
+            TRADING_ACCOUNT_ID,
+            TRADING_ACCOUNT_ID,
         ),
     ).fetchone()
     if row is None or str(row[1]) != expected_side:

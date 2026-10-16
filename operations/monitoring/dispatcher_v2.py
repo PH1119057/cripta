@@ -312,7 +312,10 @@ def run_once() -> dict[str, Any]:
         if latest_capacity_id is None:
             row = connection.execute(
                 """SELECT capacity_snapshot_id FROM dispatcher_v2.trading_capacity_snapshots
-                   ORDER BY observed_at DESC LIMIT 1"""
+                   WHERE trading_account_id=%s
+                     AND identity_status='PROVEN'
+                   ORDER BY observed_at DESC LIMIT 1""",
+                (TRADING_ACCOUNT_ID,),
             ).fetchone()
             latest_capacity_id = None if row is None else str(row[0])
         coin_count_row = connection.execute(

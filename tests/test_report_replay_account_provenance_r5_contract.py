@@ -140,3 +140,24 @@ def test_exact_close_audit_never_crosses_private_account_identity() -> None:
     assert "o.identity_status='LEGACY_UNKNOWN'" in audit
     assert "e.identity_status='LEGACY_UNKNOWN'" in audit
     assert "trading_account_id,identity_status" in audit
+
+
+def test_observer_reverse_transition_does_not_cross_proven_accounts() -> None:
+    observer = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "trading_account_id=%s AND identity_status='PROVEN'" in observer
+    assert "trading_account_id IS NULL AND identity_status='LEGACY_UNKNOWN'" in observer
+    assert "WHEN trading_account_id=%s AND identity_status='PROVEN' THEN 0" in observer
+
+
+def test_dispatcher_status_capacity_fallback_is_current_account_only() -> None:
+    dispatcher = (ROOT / "operations/monitoring/dispatcher_v2.py").read_text(
+        encoding="utf-8"
+    )
+    anchor = dispatcher.index("if latest_capacity_id is None:")
+    body = dispatcher[anchor : anchor + 600]
+    assert "FROM dispatcher_v2.trading_capacity_snapshots" in body
+    assert "WHERE trading_account_id=%s" in body
+    assert "AND identity_status='PROVEN'" in body
+    assert "(TRADING_ACCOUNT_ID,)" in body
