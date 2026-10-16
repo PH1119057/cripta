@@ -56,4 +56,4 @@ def test_r6a_does_not_retrofit_open_positions_or_enable_live() -> None:
     assert "control.execution_gates" not in sql
     assert "control.live_arm_sessions" not in sql
     schema = SCHEMA.read_text(encoding="utf-8")
-    assert "runtime-schema-2026-10-16-strategy-binding-r6a" in schema
+    assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema

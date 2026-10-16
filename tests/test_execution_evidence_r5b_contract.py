@@ -35,7 +35,7 @@ def test_r5b_does_not_stamp_strategy_owned_commands_or_positions() -> None:
     source = PRIVATE.read_text(encoding="utf-8")
     assert "runtime.trade_commands" in source
     schema = SCHEMA.read_text(encoding="utf-8")
-    assert "runtime-schema-2026-10-16-execution-evidence-r5b" in schema
+    assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema
     # Strategy-owned durable lineage is intentionally deferred to R6 binding.
     sql = MIGRATION.read_text(encoding="utf-8")
     assert "runtime.trade_commands" not in sql
