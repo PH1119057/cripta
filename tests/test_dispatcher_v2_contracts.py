@@ -54,9 +54,9 @@ def test_coin_context_preserves_physical_layers_without_rating() -> None:
         "mayak_snapshot_id": 42,
         "observed_at": now - timedelta(seconds=10),
         "symbol": "LINKUSDT",
-        "schema_version": "coin-market-context-v1",
-        "engine_version": "mayak-v2.2",
-        "feature_version": "objective-coin-context-v2",
+        "schema_version": "coin-market-context-v2",
+        "engine_version": "mayak-v2.3",
+        "feature_version": "objective-coin-context-v3",
         "config_fingerprint": "mayak-config",
         "data_quality": "MEDIUM",
         "content_hash": "coin-source-hash",
@@ -65,6 +65,7 @@ def test_coin_context_preserves_physical_layers_without_rating() -> None:
             "liquidity": {"derivatives": {"imbalance": -0.1}},
             "positioning": {"open_interest": 123.0},
             "liquidations": {"status": "WARMUP"},
+            "stress_inputs": {"version": "coin-stress-inputs-v1", "trading_effect": "NONE"},
             "relative_strength": {"5m": {"relative_to_panel_pct": 0.2}},
             "event_context": {"status": "NO_DATA"},
             "data_quality": {"coverage": 0.6, "fresh_sources": 3, "expected_sources": 5},
@@ -76,6 +77,8 @@ def test_coin_context_preserves_physical_layers_without_rating() -> None:
     assert item.symbol == "LINKUSDT"
     assert item.objective_facts["money"]["spot"]["5m"]["net_usd"] == 12.5
     assert item.provenance["coin_market_rating"] == "NOT_IMPLEMENTED"
+    assert item.objective_facts["stress_inputs"]["trading_effect"] == "NONE"
+    assert item.schema_version == "dispatcher-coin-context-v2.2"
     assert "score" not in item.objective_facts
 
 

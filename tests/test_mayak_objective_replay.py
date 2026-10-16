@@ -45,7 +45,10 @@ def test_replay_routes_into_same_live_engine() -> None:
             direct.on_ticker(
                 event.symbol or "", event.event_at, **{k: float(v) for k, v in payload.items()}
             )
-    assert replay.snapshot(at) == direct.snapshot(datetime.fromtimestamp(at, UTC))
+    replay_snapshot = replay.snapshot(at)
+    direct_snapshot = direct.snapshot(datetime.fromtimestamp(at, UTC))
+    assert "stress_inputs" in replay_snapshot["coin_market_contexts"]["BTCUSDT"]["payload"]
+    assert replay_snapshot == direct_snapshot
 
 
 def test_replay_rejects_out_of_order_event() -> None:

@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.5
-**Дата:** 2026-10-08
+**Версия:** 12.6
+**Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -2364,3 +2364,95 @@ persistent red portal banner, not sound-only and not dependent on new signals.
 
 This is a dated decision/evidence checkpoint, **not** proof of implementation,
 Git publication to main, deployment or successful runtime behavior.
+
+# 34. Per-symbol self-normalized CoinMarketContext — OWNER DECISION 2026-10-15 / CHECKED HERE 2026-10-16
+
+OWNER DECISION:
+- состояние монеты оценивается относительно причинной истории **этой же монеты**;
+- absolute USD liquidation/price thresholds не являются универсальным
+  cross-symbol критерием;
+- MAYAK сохраняет objective physical facts, Dispatcher публикует структурированный
+  per-symbol context, а торговая интерпретация остаётся только в exact Strategy
+  Context Policy;
+- vector dimensions имеют приоритет; scalar `CoinMarketRating` до отдельного
+  research/formula approval отсутствует;
+- первая цель — observation/replay/research. Эта ревизия не меняет R1 Entry/Exit,
+  H9, capital/leverage, protection, LIVE-arm или Exchange mutation.
+
+Pre-publication baseline, CHECKED HERE 2026-10-16:
+
+~~~text
+GitHub main / SOURCE_HEAD    = 0125f7119569e59331c85ec01644f55337239858
+source checkout              = clean main, same SHA
+INSTALLED_COMMIT             = 4a9795be8fa67e18e79cedd81190e7db422e43ac
+runtime/current target       = /srv/cripta/runtime/releases/4a9795be8fa67e18e79cedd81190e7db422e43ac
+LOADED_COMMIT                = NOT CHECKED HERE
+DASHBOARD_UI_COMMIT          = 0125f7119569e59331c85ec01644f55337239858
+integration worktree branch  = feature/per-symbol-coin-market-context-integration-20261016
+production deploy            = NOT PERFORMED
+~~~
+
+The integration branch is based directly on current `0125f711...` main, so all
+current Dashboard changes are inherited unchanged. `operations/dashboard/**`
+has zero diff in this changeset.
+
+Implementation findings/evidence:
+- `LiveMayakEngine` already emitted per-symbol price, flow, OI/funding/mark/index,
+  order-book and exact-liquidation facts where source was available;
+- existing per-symbol liquidation context already had a narrow current
+  60-minute nonzero self-baseline for total liquidation intensity
+  (`p50/p90/p99` + normalization to p50), but it was not a general versioned
+  multi-dimension `CoinSelfBaselineEvidence` contract;
+- this changeset adds scale-aware per-symbol `stress_inputs` while preserving
+  raw facts: liquidation/OI ratios, liquidation/derivatives-turnover ratios,
+  directional price response, OI clearance and side-specific liquidation
+  speed/acceleration;
+- exact Bybit `allLiquidation.S` semantics were rechecked against the official
+  provider contract: current `Buy -> LONG_LIQUIDATED`,
+  `Sell -> SHORT_LIQUIDATED`; collector passes the raw provider side into MAYAK;
+- MAYAK coin context schema advances to `coin-market-context-v2`,
+  engine/feature versions to `mayak-v2.3` / `objective-coin-context-v3`;
+- Dispatcher preserves the new objective vector and advances only its per-coin
+  context version to `dispatcher-coin-context-v2.2`; scalar
+  `CoinMarketRating` remains `NOT_IMPLEMENTED`;
+- current implementation intentionally leaves `self_baseline` as
+  `RESEARCH_NOT_APPROVED` and multi-venue confirmation as `NO_DATA` until
+  exact research/source support exists;
+- prior remote feature commit `cd1427ed1877e9bf014f3f0d35bf48f5659a2b31`
+  is **SUPERSEDED / NOT A RELEASE BASELINE** because its published
+  `live.py` was truncated after pre-publication tests. The current integration
+  was reconstructed from exact `0125f711...` main and revalidated.
+
+Capability-conservation matrix:
+
+| CAPABILITY | BEFORE OWNER/STATUS | AFTER OWNER/STATUS | MIGRATION |
+| --- | --- | --- | --- |
+| objective market observation | MAYAK / IMPLEMENTED | MAYAK / CONSERVED + enriched | additive |
+| per-symbol structured context | Dispatcher / IMPLEMENTED | Dispatcher / CONSERVED + enriched | schema/versioned |
+| Strategy-specific interpretation | Strategy Context Policy / CANON | unchanged | none |
+| Entry/Exit mutation rights | Strategy/Engines/Execution | unchanged | none |
+| scalar CoinMarketRating | no approved formula | still NOT APPROVED | research required |
+
+Changeset status before GitHub publication:
+
+~~~text
+CURRENT MAIN BASELINE               = PASS / 0125f711...
+DASHBOARD DELTA IN CHANGESET        = NONE
+CANON UPDATE                        = PREPARED IN CHANGESET
+MAYAK OBJECTIVE ENRICHMENT          = IMPLEMENTED IN CHANGESET
+DISPATCHER CONTEXT ENRICHMENT       = IMPLEMENTED IN CHANGESET
+OBSERVATION REPLAY PARITY           = TARGETED TEST PASS
+TARGETED MAYAK/DISPATCHER TESTS     = 44 passed
+TARGETED + GOVERNANCE FINAL GATE    = 73 passed
+RUFF CHANGED CODE                   = PASS
+MYPY CHANGED SOURCE                 = PASS / 0 issues
+FULL ISOLATED TEST SUITE            = 1794 passed / 70 skipped / 0 failed
+SELF-BASELINE RESEARCH              = NOT YET RUN
+COINMARKETRATING FORMULA            = NOT APPROVED
+STRATEGY CONTEXT POLICY TRADING USE = NOT AUTHORIZED
+DEPLOY / RUNTIME CHANGE             = NONE
+~~~
+
+Publication of this changeset may advance GitHub/source identity. Per INDEX
+§17.5 the final commit SHA is verified externally and is not self-referenced
+inside this document. No deploy or LIVE/re-arm follows from source publication.
