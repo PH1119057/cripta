@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.11
+**Версия:** 12.12
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2747,6 +2747,11 @@ DONE IN SOURCE:
 
 OPEN IN R5:
   REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT
+    ACTIVE UNIVERSAL ENTRY REQUEST SELECTION / EXPIRY = DONE IN SOURCE
+    PRIVATE EVENT SLIPPAGE READERS = DONE IN SOURCE
+    STALE-ARM / CONTROL PRIVATE SCOPE = OPEN
+    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = OPEN
+    INACTIVE LEGACY WRITER RETIREMENT PROOF = OPEN FOR R10
   PHYSICAL ACCOUNT-SCOPED PK / UNIQUE KEY CUTOVER
   REMAINING REPORT / ARCHIVE / REPLAY CONSUMER PARITY AUDIT
   R9/R10 PARITY AND LEGACY PATH RETIREMENT GATES
@@ -2777,9 +2782,10 @@ b2f9b1a0  separate command account proof from Strategy binding
 4d54a226  scope protection evidence to TradingAccount
 760070cc  scope Dashboard controls to TradingAccount
 63679739  scope Dashboard live state to TradingAccount
+bf065c95  scope active private consumers to TradingAccount
 ~~~
 
-The next bounded source task is the remaining R5 private consumer/writer parity audit.
+The next bounded source task is stale-arm/control private scoping within the remaining R5 consumer/writer parity audit.
 Physical PK/UNIQUE changes remain later R5 work and must not be performed until
 that residual inventory/parity gate is complete.
 
@@ -2795,4 +2801,37 @@ README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
 PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
 TRADING BEHAVIOR                = UNCHANGED
 ~~~
+
+## 37.7 Residual R5 audit findings — CHECKED HERE 2026-10-16
+
+Current source audit after `bf065c95...` confirms:
+
+- production `private_runtime` is pinned by its systemd drop-in to
+  `CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY`; the old `LEGACY_V1`
+  writer code remains present but is not the active production Entry writer;
+- future R10 must still prove and retire that inactive legacy writer before
+  `LEGACY_UNKNOWN` fallback removal and multi-account readiness;
+- Universal Entry consumer request selection and pre-dispatch expiry cleanup
+  are now limited to exact `trading_account_id` with
+  `identity_status='PROVEN'`;
+- private-runtime and Dashboard execution-slippage evidence now read only
+  exact current-account `runtime.private_events` with `PROVEN` identity;
+- the residual audit still has separate stale-arm/control and
+  report/archive/replay provenance work; therefore R5 is not complete.
+
+Separate pre-existing implementation finding discovered by a broad SQL static
+audit:
+
+~~~text
+FINDING:
+operations/connectivity/universal_entry_consumer.py
+entry_plans lookup contains four SQL placeholders with a two-value parameter tuple.
+~~~
+
+This mismatch predates the account-scope changes above and is not silently
+repaired inside the R5 identity changeset. It requires a separate bounded
+implementation fix/test.
+
+No deploy, PostgreSQL migration, data rewrite/delete, Exchange mutation or LIVE
+re-arm is performed by this documentation checkpoint.
 
