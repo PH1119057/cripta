@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from typing import Any
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-command-account-r6d"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-account-keys-r5-prep"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -42,6 +43,36 @@ REQUIRED_RELATIONS: tuple[str, ...] = (
     "runtime.trade_settings",
     "runtime.wallet_latest",
     "strategy_dispatcher.assessments",
+)
+
+REQUIRED_ACCOUNT_KEY_INDEXES: tuple[
+    tuple[str, str, tuple[str, ...]], ...
+] = (
+    (
+        "runtime.ux_wallet_latest_trading_account_singleton",
+        "runtime.wallet_latest",
+        ("trading_account_id", "singleton"),
+    ),
+    (
+        "runtime.ux_hot_positions_trading_account_slot",
+        "runtime.hot_positions",
+        ("trading_account_id", "symbol", "position_idx"),
+    ),
+    (
+        "runtime.ux_hot_orders_trading_account_order",
+        "runtime.hot_orders",
+        ("trading_account_id", "order_id"),
+    ),
+    (
+        "runtime.ux_executions_trading_account_exec",
+        "runtime.executions",
+        ("trading_account_id", "exec_id"),
+    ),
+    (
+        "runtime.ux_exchange_order_history_trading_account_order",
+        "runtime.exchange_order_history",
+        ("trading_account_id", "order_id"),
+    ),
 )
 
 REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -150,9 +181,50 @@ def _missing_columns(connection: psycopg.Connection) -> list[str]:
     return missing
 
 
+def _invalid_account_key_indexes(connection: psycopg.Connection[Any]) -> list[str]:
+    invalid: list[str] = []
+    for index_name, table_name, expected_columns in REQUIRED_ACCOUNT_KEY_INDEXES:
+        row = connection.execute(
+            """SELECT tbl.oid::regclass::text,
+                      ix.indisunique,
+                      ix.indnullsnotdistinct,
+                      array_agg(att.attname ORDER BY keycol.ordinality)
+                 FROM pg_class idx
+                 JOIN pg_index ix ON ix.indexrelid=idx.oid
+                 JOIN pg_class tbl ON tbl.oid=ix.indrelid
+                 JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY
+                      AS keycol(attnum,ordinality)
+                   ON keycol.ordinality <= ix.indnkeyatts
+                 JOIN pg_attribute att
+                   ON att.attrelid=tbl.oid
+                  AND att.attnum=keycol.attnum
+                WHERE idx.oid=to_regclass(%s)
+                GROUP BY tbl.oid,ix.indisunique,ix.indnullsnotdistinct""",
+            (index_name,),
+        ).fetchone()
+        if row is None:
+            invalid.append(f"{index_name}:MISSING")
+            continue
+        actual_table = str(row[0])
+        actual_columns = tuple(str(value) for value in row[3])
+        if (
+            actual_table != table_name
+            or not bool(row[1])
+            or not bool(row[2])
+            or actual_columns != expected_columns
+        ):
+            invalid.append(
+                f"{index_name}:"
+                f"table={actual_table},unique={bool(row[1])},"
+                f"nulls_not_distinct={bool(row[2])},columns={actual_columns}"
+            )
+    return invalid
+
+
 def validate_runtime_schema_shape(connection: psycopg.Connection) -> None:
     missing_relations = _missing_relations(connection)
     missing_columns = _missing_columns(connection)
+    invalid_account_key_indexes = _invalid_account_key_indexes(connection)
     enabled_type = connection.execute(
         """SELECT data_type FROM information_schema.columns
            WHERE table_schema='control' AND table_name='execution_gates'
@@ -163,6 +235,10 @@ def validate_runtime_schema_shape(connection: psycopg.Connection) -> None:
         errors.append("missing relations: " + ", ".join(missing_relations))
     if missing_columns:
         errors.append("missing columns: " + ", ".join(missing_columns))
+    if invalid_account_key_indexes:
+        errors.append(
+            "invalid account key indexes: " + ", ".join(invalid_account_key_indexes)
+        )
     if not enabled_type or str(enabled_type[0]) != "smallint":
         errors.append("control.execution_gates.enabled must be SMALLINT")
     if errors:
