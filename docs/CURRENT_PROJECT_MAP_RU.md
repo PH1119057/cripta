@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.9
+**Версия:** 12.10
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2706,6 +2706,91 @@ README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
 PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
 SECTION RENUMBER                = NONE
 OPEN ARCHITECTURE DECISIONS     = NOT SILENTLY CLOSED
+TRADING BEHAVIOR                = UNCHANGED
+~~~
+
+## 37.6 Current R5/R6 source progress checkpoint — CHECKED HERE 2026-10-16
+
+This checkpoint supersedes §37.5 only for current source implementation status.
+No production deploy, PostgreSQL mutation, cleanup, retention cutover or LIVE
+re-arm is performed by this documentation update.
+
+Verified identities immediately before this checkpoint:
+
+~~~text
+REMOTE_HEAD                     = 760070cc6e0454db3704531f221e6f482aa6418f
+SOURCE_HEAD                     = 760070cc6e0454db3704531f221e6f482aa6418f
+SOURCE_WORKTREE                 = CLEAN
+INSTALLED_COMMIT                = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT                   = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB / FILESYSTEM MIGRATION       = NOT PERFORMED IN THIS SOURCE CYCLE
+DEPLOY                          = NOT PERFORMED
+~~~
+
+Current source progress:
+
+~~~text
+R5 ACCOUNT-SCOPED CURRENT STATE = PARTIAL / ACTIVE IMPLEMENTATION
+
+DONE IN SOURCE:
+  REAL ENTRY SLOT SCOPE
+  CRITICAL PRIVATE READERS
+  PRIVATE RESTART / READINESS EVIDENCE
+  HOT PRIVATE PROJECTIONS
+  OWNERSHIP / ORPHAN / WORKER PRIVATE EVIDENCE
+  ENTRY RECONCILIATION EVIDENCE
+  LEGACY EXIT PRIVATE EVIDENCE
+  LIFECYCLE SUPERVISOR PRIVATE FACT SCOPE
+  PROTECTION SUPERVISOR PRIVATE EVIDENCE
+  DASHBOARD CONTROL / PRE-ARM PRIVATE SCOPE
+
+OPEN IN R5:
+  DASHBOARD LIVE READ-MODEL PRIVATE SCOPE
+  PHYSICAL ACCOUNT-SCOPED PK / UNIQUE KEY CUTOVER
+  REMAINING REPORT / ARCHIVE / REPLAY CONSUMER PARITY AUDIT
+  R9/R10 PARITY AND LEGACY PATH RETIREMENT GATES
+
+R6 STRATEGY EXECUTION BINDING   = SOURCE IMPLEMENTED THROUGH R6d / NOT DEPLOYED
+  R6a REAL BINDING GATE         = DONE IN SOURCE
+  R6b1 ATOMIC ENTRY LINEAGE     = DONE IN SOURCE
+  R6b2 COMMAND/POSITION LINEAGE = DONE IN SOURCE
+  R6c UNIVERSAL EXIT LINEAGE    = DONE IN SOURCE
+  R6d COMMAND ACCOUNT PROOF     = DONE IN SOURCE
+
+R7 MARKET/INSTRUMENT CUTOVER    = NOT IMPLEMENTED
+R8 COMPACT ANALYTICS CUTOVER    = NOT IMPLEMENTED
+R11 RETENTION / DELETE          = NOT STARTED
+R12 PHYSICAL RECLAIM            = NOT STARTED
+MULTI_ACCOUNT LIVE READY        = NO
+~~~
+
+Recent source commits represented by this checkpoint:
+
+~~~text
+34588f84  scope private ownership evidence to TradingAccount
+e17a0a28  carry TradingAccount through Universal Exit lineage
+b2f9b1a0  separate command account proof from Strategy binding
+46848c8b  scope Entry reconciliation evidence to TradingAccount
+558a8516  scope legacy Exit evidence to TradingAccount
+3a99cb77  scope Lifecycle Supervisor facts to TradingAccount
+4d54a226  scope protection evidence to TradingAccount
+760070cc  scope Dashboard controls to TradingAccount
+~~~
+
+The next bounded source task is Dashboard live/read-model private-state scoping.
+Physical PK/UNIQUE changes remain later R5 work and must not be performed until
+the remaining consumer inventory/parity gate is complete.
+
+Documentation maintenance gate:
+
+~~~text
+ACTIVE DOCUMENT SET             = UNCHANGED
+DOCUMENT PATHS                  = UNCHANGED
+BASE PRE-READ                   = UNCHANGED
+ROUTING                         = UNCHANGED
+PROJECT SOURCE FILE COUNT       = 11 / UNCHANGED
+README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
+PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
 TRADING BEHAVIOR                = UNCHANGED
 ~~~
 
