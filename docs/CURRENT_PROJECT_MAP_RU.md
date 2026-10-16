@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.8
+**Версия:** 12.9
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2522,7 +2522,7 @@ LIVE_BEHAVIOR_CHANGED             = NO
 Implementation must follow DEVELOPMENT_RELEASE §48. No legacy identity is
 rewritten by this documentation revision.
 
-## 37.4 R1 deployed / R2-R4 source-prepared checkpoint — CHECKED HERE 2026-10-16
+## 37.4 Historical R1 deployed / R2-R4 source-prepared checkpoint — CHECKED HERE 2026-10-16
 
 Pre-publication source/runtime snapshot:
 
@@ -2613,3 +2613,99 @@ The current account model remains single-account in production until the
 account-scoped wallet/hot-state/execution keys and StrategyExecutionBinding are
 implemented and verified. Presence of identity registry tables alone is not
 multi-account readiness.
+
+## 37.5 Current identity/account migration source checkpoint — CHECKED HERE 2026-10-16
+
+This section supersedes §37.4 only for **current source implementation status**.
+§37.4 remains historical evidence of the earlier R1 deploy checkpoint.
+
+Pre-publication identity verified immediately before this documentation update:
+
+~~~text
+REMOTE_HEAD                     = 9b089c4530c700c95ce5061739ef26c6f61e112a
+SOURCE_HEAD                     = 9b089c4530c700c95ce5061739ef26c6f61e112a
+SOURCE_WORKTREE                 = CLEAN
+INSTALLED_COMMIT                = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT                   = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+OPERATIONAL_DELTA_COMMIT(S)     = NONE CHECKED FOR THIS SOURCE-ONLY CYCLE
+~~~
+
+The source mirror and GitHub `main` were equal at this checkpoint. Production
+application runtime remains on the earlier R1 release `88216254...`; the
+following R2-R6 work is **not deployed** and is not runtime-verified.
+
+Current implementation status:
+
+~~~text
+R1 IDENTITY REGISTRY            = DEPLOYED / RUNTIME VERIFIED
+
+R2 CURRENT IDENTITY SEEDS       = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+R3 PROVEN NEW TELEMETRY IDS     = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+R4 LEGACY_UNKNOWN BOUNDARY      = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+
+R5 ACCOUNT-SCOPED CURRENT STATE = PARTIALLY IMPLEMENTED IN SOURCE
+  REAL ENTRY SLOT KEY           = DONE IN SOURCE
+  CRITICAL PRIVATE READERS      = DONE IN SOURCE
+  RESTART/READINESS SCOPE       = DONE IN SOURCE
+  HOT PRIVATE PROJECTIONS       = DONE IN SOURCE
+  OWNERSHIP/ORPHAN/WORKER SCOPE = NOT YET IMPLEMENTED
+
+R6 STRATEGY EXECUTION BINDING   = IMPLEMENTED IN SOURCE THROUGH R6b2
+  R6a BINDING GATE              = DONE IN SOURCE
+  R6b1 ATOMIC ENTRY LINEAGE     = DONE IN SOURCE
+  R6b2 COMMAND/POSITION LINEAGE = DONE IN SOURCE
+  DEPLOYED                      = NO
+  RUNTIME VERIFIED              = NO
+
+R7 MARKET/INSTRUMENT CUTOVER    = NOT IMPLEMENTED
+R8 COMPACT ANALYTICS CUTOVER    = NOT IMPLEMENTED
+RETENTION / DELETE              = NOT STARTED
+PHYSICAL RECLAIM                = NOT STARTED
+MULTI_ACCOUNT LIVE READY        = NO
+~~~
+
+Source evidence already published before this checkpoint includes:
+
+~~~text
+0dd822d6  capture exact account identity in private current state
+5ef88d8f  bind durable exchange evidence to account identity
+b85298b5  require Strategy execution binding before real admission
+7ceb0123  carry Strategy binding through atomic Entry admission
+ccb1fe67  carry Strategy binding into command and position lineage
+9844fbf9  scope real Entry slots to TradingAccount
+5f12d4c8  scope critical private readers to TradingAccount
+916ec24e  scope private restart evidence to TradingAccount
+9b089c45  scope private projections to TradingAccount
+~~~
+
+R5 transition rule at this checkpoint:
+
+- new `PROVEN` private/account state is scoped by exact `TradingAccount`;
+- old `LEGACY_UNKNOWN` command/execution/ownership evidence is retained only
+  as an explicit transition path where required to recover or accompany
+  already-existing legacy trade cycles;
+- `LEGACY_UNKNOWN` is not multi-account proof and must not be treated as a
+  permanent shared-account fallback;
+- before legacy fallback retirement, R10/parity must prove that no active
+  lifecycle/recovery dependency still requires it;
+- historical rows are not rewritten merely to make them appear `PROVEN`.
+
+No PostgreSQL migration after the deployed R1 release, data backfill, retention
+cutover, DELETE, physical reclaim, service restart, Exchange mutation or
+LIVE re-arm is performed by this documentation update.
+
+Documentation maintenance gate for this revision:
+
+~~~text
+ACTIVE DOCUMENT SET             = UNCHANGED
+DOCUMENT PATHS                  = UNCHANGED
+BASE PRE-READ                   = UNCHANGED
+ROUTING                         = UNCHANGED
+PROJECT SOURCE FILE COUNT       = 11 / UNCHANGED
+README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
+PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
+SECTION RENUMBER                = NONE
+OPEN ARCHITECTURE DECISIONS     = NOT SILENTLY CLOSED
+TRADING BEHAVIOR                = UNCHANGED
+~~~
+
