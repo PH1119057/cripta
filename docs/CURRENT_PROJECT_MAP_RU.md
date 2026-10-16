@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.7
+**Версия:** 12.8
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2521,3 +2521,95 @@ LIVE_BEHAVIOR_CHANGED             = NO
 
 Implementation must follow DEVELOPMENT_RELEASE §48. No legacy identity is
 rewritten by this documentation revision.
+
+## 37.4 R1 deployed / R2-R4 source-prepared checkpoint — CHECKED HERE 2026-10-16
+
+Pre-publication source/runtime snapshot:
+
+~~~text
+REMOTE_HEAD                     = c4a4f1bbf2ff4bef3ab1ed93edf0b8d1ce05d677
+SOURCE_HEAD                     = c4a4f1bbf2ff4bef3ab1ed93edf0b8d1ce05d677
+INSTALLED_COMMIT                = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT                   = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+OPERATIONAL_DELTA_COMMIT(S)     = NONE
+~~~
+
+`LOADED_COMMIT` is evidenced by active service process paths under
+`/srv/cripta/runtime/current` resolving to release `88216254...`, together with
+successful post-restart reconciliation and runtime schema validation.
+
+R1 exact status:
+
+~~~text
+IDENTITY_REGISTRY_SCHEMA        = DEPLOYED
+RUNTIME_SCHEMA_CONTRACT         = PASS / runtime-schema-2026-10-16-identity-r1
+identity.venues                 = PRESENT / EMPTY
+identity.market_sources         = PRESENT / EMPTY
+identity.instruments            = PRESENT / EMPTY
+identity.trading_accounts       = PRESENT / EMPTY
+identity.account_connectors     = PRESENT / EMPTY
+R1 BRIDGE COLUMNS               = PRESENT / ALL NULL
+HISTORICAL BACKFILL             = NONE
+DATA DELETE                     = NONE
+~~~
+
+The R1 release was installed through the exact verified release installer with
+a major-structure CONTROL_CHECKPOINT. The rollback backup is recorded by
+`/var/lib/cripta/release/LAST_BACKUP`. Runtime services recovered and the latest
+Exchange-to-DB reconciliation was successful.
+
+Release-bound trading safety after deployment:
+
+~~~text
+MAINNET_GATE                    = 0
+GATE_REASON                     = RELEASE_BOUND_LIVE_ARM_NOT_READY
+OWNER RE-ARM                    = NOT PERFORMED
+~~~
+
+Two stale old-release sessions (`DOTUSDT`, `LTCUSDT`) were automatically retired
+with reason `EXACT_SCOPE_FLAT_AFTER_RELEASE_CHANGE`. Three old-release sessions
+for currently non-flat scopes (`APTUSDT`, `ARBUSDT`, `INJUSDT`) remained ACTIVE
+for lifecycle/Exit continuity while the global mainnet gate stayed closed.
+This is fail-closed release behavior, not a new LIVE approval.
+
+Source-only follow-up status:
+
+~~~text
+R2 CURRENT IDENTITY SEEDS       = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+R3 PROVEN NEW TELEMETRY IDS     = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+R4 LEGACY_UNKNOWN BOUNDARY      = IMPLEMENTED IN SOURCE / NOT DEPLOYED
+R5 ACCOUNT-SCOPED CURRENT STATE = NOT IMPLEMENTED
+R6 STRATEGY EXECUTION BINDING   = NOT IMPLEMENTED
+R7 MARKET/INSTRUMENT CUTOVER    = NOT IMPLEMENTED
+R8 COMPACT ANALYTICS CUTOVER    = NOT IMPLEMENTED
+RETENTION / DELETE              = NOT STARTED
+~~~
+
+R2 intentionally registers no InstrumentIdentity yet. Current MAYAK coin context
+combines spot and linear evidence under one symbol, while private position truth
+belongs to a concrete LINEAR product. Product/instrument semantics must be
+resolved in R7 rather than collapsed into one incorrect identity.
+
+R3/R4 source contract:
+- exact current TradingAccount/AccountConnector IDs are injected by systemd;
+- private runtime validates the pair against the registry before normal startup;
+- new AccountStateGeneration and position-mode rows are written as `PROVEN`;
+- Dispatcher capacity rows carry the same exact account/connector IDs;
+- old rows become explicit `LEGACY_UNKNOWN` through additive metadata-default
+  semantics; no historical UPDATE/backfill is performed.
+
+Current source gate after R3/R4 preparation:
+
+~~~text
+IDENTITY CONTRACT ASSERTS       = 13 PASS
+GOVERNANCE ASSERTS              = 24 PASS
+TRADING ARCH ASSERTS            = 5 PASS
+PYTHON COMPILE                  = PASS (private_runtime/dispatcher/runtime_schema)
+INSTALLER BASH SYNTAX           = PASS
+FULL PYTEST FOR R3/R4           = NOT RUN / pytest unavailable in server runtime toolchain
+~~~
+
+The current account model remains single-account in production until the
+account-scoped wallet/hot-state/execution keys and StrategyExecutionBinding are
+implemented and verified. Presence of identity registry tables alone is not
+multi-account readiness.
