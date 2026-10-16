@@ -28,6 +28,7 @@ def _command_lineage(
     symbol: str,
     entry_command_id: str,
     fill_at: datetime,
+    trading_account_id: str | None = None,
 ) -> list[Mapping[str, object]]:
     rows = connection.execute(
         """SELECT command_id, command_type, payload_json, result_json
@@ -37,8 +38,18 @@ def _command_lineage(
               AND command_type IN
                   ('strategy_exit','break_even','current_stop',
                    'trailing_stop','initial_protection')
+              AND (
+                   %s IS NULL
+                   OR (trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN'
+              )
             ORDER BY requested_at_epoch_ms,command_id LIMIT 1001""",
-        (symbol, int(fill_at.timestamp() * 1000)),
+        (
+            symbol,
+            int(fill_at.timestamp() * 1000),
+            trading_account_id,
+            trading_account_id,
+        ),
     ).fetchall()
     if len(rows) > 1000:
         raise ValueError("protection command lineage truncated")
@@ -71,6 +82,7 @@ def account_protection_verdicts(
     positions: list[Mapping[str, object]],
     account_evidence: Mapping[str, object] | None,
     now: datetime,
+    trading_account_id: str | None = None,
 ) -> dict[str, dict[str, object]]:
     """Each open position receives VERIFIED, NOT_VERIFIED, or UNKNOWN."""
     scopes = account_evidence.get("symbols") if isinstance(account_evidence, Mapping) else None
@@ -86,9 +98,14 @@ def account_protection_verdicts(
                 raise ValueError("instrument tick size unavailable")
             entry_command_id = str(position["entry_command_id"])
             entry_row = connection.execute(
-                "SELECT payload_json FROM runtime.trade_commands "
-                "WHERE command_id=%s AND command_type='entry'",
-                (entry_command_id,),
+                """SELECT payload_json FROM runtime.trade_commands
+                    WHERE command_id=%s AND command_type='entry'
+                      AND (
+                           %s IS NULL
+                           OR (trading_account_id=%s AND identity_status='PROVEN')
+                           OR identity_status='LEGACY_UNKNOWN'
+                      )""",
+                (entry_command_id, trading_account_id, trading_account_id),
             ).fetchone()
             if not entry_row:
                 raise ValueError("exact Entry command unavailable")
@@ -104,6 +121,7 @@ def account_protection_verdicts(
                 symbol=symbol,
                 entry_command_id=entry_command_id,
                 fill_at=fill_at,
+                trading_account_id=trading_account_id,
             )
             state, reason = verify_approved_exchange_protection(
                 account_evidence=account_evidence, position_id=position_id,

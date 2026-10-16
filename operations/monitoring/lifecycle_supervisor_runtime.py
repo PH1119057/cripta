@@ -231,8 +231,11 @@ def main() -> int:
             now = datetime.now(UTC)
             with connection.transaction():
                 protection = account_protection_verdicts(
-                    connection, positions=positions, account_evidence=account,
+                    connection,
+                    positions=positions,
+                    account_evidence=account,
                     now=now,
+                    trading_account_id=TRADING_ACCOUNT_ID,
                 )
             account_read_complete = bool(
                 account and account.get("complete") is True
