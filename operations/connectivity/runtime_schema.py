@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-private-current-state-r5a"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-execution-evidence-r5b"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -80,6 +80,12 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "connection_events", "trading_account_id"),
     ("runtime", "connection_events", "account_connector_id"),
     ("runtime", "connection_events", "identity_status"),
+    ("runtime", "executions", "trading_account_id"),
+    ("runtime", "executions", "account_connector_id"),
+    ("runtime", "executions", "identity_status"),
+    ("runtime", "exchange_order_history", "trading_account_id"),
+    ("runtime", "exchange_order_history", "account_connector_id"),
+    ("runtime", "exchange_order_history", "identity_status"),
     ("strategy_entry", "entry_decisions", "exchange_position_slot_claim_id"),
     ("strategy_entry", "entry_decisions", "position_mode_state_ref"),
     ("strategy_entry", "execution_requests", "exchange_position_slot_claim_id"),

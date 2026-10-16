@@ -516,9 +516,13 @@ def refresh_recent_executions(
         connection.execute(
             """INSERT INTO runtime.executions(
                 exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
-                exec_fee,exec_time_ms,received_at_epoch_ms,payload_json)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT(exec_id) DO NOTHING""",
+                exec_fee,exec_time_ms,received_at_epoch_ms,payload_json,
+                trading_account_id,account_connector_id,identity_status)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
+                ON CONFLICT(exec_id) DO UPDATE SET
+                  trading_account_id=excluded.trading_account_id,
+                  account_connector_id=excluded.account_connector_id,
+                  identity_status='PROVEN'""",
             (
                 item.get("execId", ""),
                 item.get("orderId", ""),
@@ -529,6 +533,8 @@ def refresh_recent_executions(
                 item.get("execPrice", ""), item.get("execFee", ""),
                 int(item.get("execTime") or 0), now,
                 json.dumps(item, ensure_ascii=False),
+                TRADING_ACCOUNT_ID,
+                ACCOUNT_CONNECTOR_ID,
             ),
         )
     connection.commit()
@@ -3793,14 +3799,18 @@ def upsert_exchange_order_history(
     connection.execute(
         """INSERT INTO runtime.exchange_order_history(
             order_id,order_link_id,symbol,side,order_status,updated_at_epoch_ms,
-            payload_json,refreshed_at_epoch_ms)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s)
+            payload_json,refreshed_at_epoch_ms,
+            trading_account_id,account_connector_id,identity_status)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
             ON CONFLICT(order_id) DO UPDATE SET
               order_link_id=excluded.order_link_id,symbol=excluded.symbol,
               side=excluded.side,order_status=excluded.order_status,
               updated_at_epoch_ms=excluded.updated_at_epoch_ms,
               payload_json=excluded.payload_json,
-              refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms""",
+              refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
+              trading_account_id=excluded.trading_account_id,
+              account_connector_id=excluded.account_connector_id,
+              identity_status='PROVEN'""",
         (
             str(item.get("orderId") or ""),
             str(item.get("orderLinkId") or ""),
@@ -3810,6 +3820,8 @@ def upsert_exchange_order_history(
             int(item.get("updatedTime") or 0),
             json.dumps(item, ensure_ascii=False),
             now,
+            TRADING_ACCOUNT_ID,
+            ACCOUNT_CONNECTOR_ID,
         ),
     )
 
@@ -3951,11 +3963,32 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
             else:
                 upsert_order(connection, item, now)
         elif topic.startswith("execution"):
-            connection.execute("""INSERT INTO runtime.executions(exec_id,order_id,order_link_id,symbol,side,exec_qty,
-                exec_price,exec_fee,exec_time_ms,received_at_epoch_ms,payload_json) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT(exec_id) DO NOTHING""", (item.get("execId", ""), item.get("orderId", ""), item.get("orderLinkId", ""),
-                item.get("symbol", ""), item.get("side", ""), item.get("execQty", ""), item.get("execPrice", ""),
-                item.get("execFee", ""), int(item.get("execTime") or 0), now, json.dumps(item, ensure_ascii=False)))
+            connection.execute(
+                """INSERT INTO runtime.executions(
+                       exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
+                       exec_fee,exec_time_ms,received_at_epoch_ms,payload_json,
+                       trading_account_id,account_connector_id,identity_status)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'PROVEN')
+                   ON CONFLICT(exec_id) DO UPDATE SET
+                     trading_account_id=excluded.trading_account_id,
+                     account_connector_id=excluded.account_connector_id,
+                     identity_status='PROVEN'""",
+                (
+                    item.get("execId", ""),
+                    item.get("orderId", ""),
+                    item.get("orderLinkId", ""),
+                    item.get("symbol", ""),
+                    item.get("side", ""),
+                    item.get("execQty", ""),
+                    item.get("execPrice", ""),
+                    item.get("execFee", ""),
+                    int(item.get("execTime") or 0),
+                    now,
+                    json.dumps(item, ensure_ascii=False),
+                    TRADING_ACCOUNT_ID,
+                    ACCOUNT_CONNECTOR_ID,
+                ),
+            )
         elif topic == "wallet":
             upsert_wallet(connection, item, now)
     connection.commit()

@@ -47,4 +47,4 @@ def test_r5a_does_not_claim_multi_account_key_cutover() -> None:
     assert "ON CONFLICT(order_id)" in source
     assert "WHERE singleton=1" in source
     schema = SCHEMA.read_text(encoding="utf-8")
-    assert "runtime-schema-2026-10-16-private-current-state-r5a" in schema
+    assert "EXPECTED_RUNTIME_SCHEMA_VERSION" in schema
