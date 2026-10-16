@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.12
+**Версия:** 12.13
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2749,8 +2749,8 @@ OPEN IN R5:
   REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT
     ACTIVE UNIVERSAL ENTRY REQUEST SELECTION / EXPIRY = DONE IN SOURCE
     PRIVATE EVENT SLIPPAGE READERS = DONE IN SOURCE
-    STALE-ARM / CONTROL PRIVATE SCOPE = OPEN
-    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = OPEN
+    STALE-ARM / CONTROL PRIVATE SCOPE = DONE IN SOURCE
+    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = NEXT
     INACTIVE LEGACY WRITER RETIREMENT PROOF = OPEN FOR R10
   PHYSICAL ACCOUNT-SCOPED PK / UNIQUE KEY CUTOVER
   REMAINING REPORT / ARCHIVE / REPLAY CONSUMER PARITY AUDIT
@@ -2783,9 +2783,10 @@ b2f9b1a0  separate command account proof from Strategy binding
 760070cc  scope Dashboard controls to TradingAccount
 63679739  scope Dashboard live state to TradingAccount
 bf065c95  scope active private consumers to TradingAccount
+c34f4102  scope stale-arm retirement to TradingAccount
 ~~~
 
-The next bounded source task is stale-arm/control private scoping within the remaining R5 consumer/writer parity audit.
+The next bounded source task is report/archive/replay private provenance audit within the remaining R5 consumer/writer parity audit.
 Physical PK/UNIQUE changes remain later R5 work and must not be performed until
 that residual inventory/parity gate is complete.
 
