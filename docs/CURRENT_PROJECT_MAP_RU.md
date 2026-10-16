@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.10
+**Версия:** 12.11
 **Дата:** 2026-10-16
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2743,9 +2743,10 @@ DONE IN SOURCE:
   LIFECYCLE SUPERVISOR PRIVATE FACT SCOPE
   PROTECTION SUPERVISOR PRIVATE EVIDENCE
   DASHBOARD CONTROL / PRE-ARM PRIVATE SCOPE
+  DASHBOARD LIVE READ-MODEL PRIVATE SCOPE
 
 OPEN IN R5:
-  DASHBOARD LIVE READ-MODEL PRIVATE SCOPE
+  REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT
   PHYSICAL ACCOUNT-SCOPED PK / UNIQUE KEY CUTOVER
   REMAINING REPORT / ARCHIVE / REPLAY CONSUMER PARITY AUDIT
   R9/R10 PARITY AND LEGACY PATH RETIREMENT GATES
@@ -2775,11 +2776,12 @@ b2f9b1a0  separate command account proof from Strategy binding
 3a99cb77  scope Lifecycle Supervisor facts to TradingAccount
 4d54a226  scope protection evidence to TradingAccount
 760070cc  scope Dashboard controls to TradingAccount
+63679739  scope Dashboard live state to TradingAccount
 ~~~
 
-The next bounded source task is Dashboard live/read-model private-state scoping.
+The next bounded source task is the remaining R5 private consumer/writer parity audit.
 Physical PK/UNIQUE changes remain later R5 work and must not be performed until
-the remaining consumer inventory/parity gate is complete.
+that residual inventory/parity gate is complete.
 
 Documentation maintenance gate:
 
