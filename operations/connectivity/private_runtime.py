@@ -848,8 +848,10 @@ def resolve_prestart_non_entry_running_commands(
            SET state='failed',finished_at_epoch_ms=%s,
                error='RESTART_DISARMED: mutation not replayed; exchange truth reconciled'
            WHERE command_type<>'entry' AND state='running'
-             AND requested_at_epoch_ms < %s""",
-        (int(time.time() * 1000), PROCESS_STARTED_AT_MS),
+             AND requested_at_epoch_ms < %s
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')""",
+        (int(time.time() * 1000), PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     )
     connection.commit()
 
@@ -1494,10 +1496,14 @@ def record_protection_or_owner_event(
     entry_command_id = str(command_payload.get("entry_command_id") or "")
     ownership = connection.execute(
         """SELECT position_id,trade_id FROM runtime.position_ownership
-           WHERE (%s<>'' AND entry_command_id=%s)
-              OR (%s='' AND symbol=%s AND state='OPEN')
+           WHERE (
+                    (%s<>'' AND entry_command_id=%s)
+                    OR (%s='' AND symbol=%s AND state='OPEN')
+                 )
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')
            ORDER BY fill_at DESC LIMIT 1""",
-        (entry_command_id, entry_command_id, entry_command_id, symbol),
+        (entry_command_id, entry_command_id, entry_command_id, symbol, TRADING_ACCOUNT_ID),
     ).fetchone()
     if ownership is None:
         return
@@ -1644,8 +1650,10 @@ def _universal_exit_position(
                   strategy_id,strategy_version,strategy_config_fingerprint,
                   exit_plan_fingerprint,symbol,side,state
              FROM runtime.position_ownership
-            WHERE position_id=%s""",
-        (position_id,),
+            WHERE position_id=%s
+              AND ((trading_account_id=%s AND identity_status='PROVEN')
+                   OR identity_status='LEGACY_UNKNOWN')""",
+        (position_id, TRADING_ACCOUNT_ID),
     ).fetchone()
     if owner is None:
         raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISSING")
@@ -1709,16 +1717,20 @@ def assert_legacy_automated_exit_ownership(
             """SELECT position_id,bot_instance_id FROM runtime.position_ownership
                WHERE entry_command_id=%s
                  AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
                ORDER BY fill_at DESC""",
-            (entry_command_id,),
+            (entry_command_id, TRADING_ACCOUNT_ID),
         ).fetchall()
     else:
         rows = connection.execute(
             """SELECT position_id,bot_instance_id FROM runtime.position_ownership
                WHERE symbol=%s
                  AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
                ORDER BY fill_at DESC""",
-            (symbol,),
+            (symbol, TRADING_ACCOUNT_ID),
         ).fetchall()
     if not rows:
         raise ExchangeMutationBarrier(
@@ -2794,15 +2806,27 @@ def command_worker_loop(key: str, secret: str) -> None:
                                       policy_version="1.0.0-owner-live" if entry_policy=="m3_full_live_v1" else "entry-policy-v1",
                                       observed_context=observed_context)
             connection.commit()
-        filled_entries=connection.execute("""SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
-            FROM runtime.trade_commands c JOIN runtime.executions e ON e.order_link_id=c.command_id
-            WHERE c.command_type='entry' AND c.state='completed'
-              AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
-            GROUP BY c.command_id,c.symbol,c.payload_json""").fetchall()
+        filled_entries=connection.execute(
+            """SELECT c.command_id,c.symbol,max(e.exec_time_ms),c.payload_json
+                 FROM runtime.trade_commands c
+                 JOIN runtime.executions e ON e.order_link_id=c.command_id
+                WHERE c.command_type='entry' AND c.state='completed'
+                  AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
+                       OR c.identity_status='LEGACY_UNKNOWN')
+                  AND ((e.trading_account_id=%s AND e.identity_status='PROVEN')
+                       OR e.identity_status='LEGACY_UNKNOWN')
+                  AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
+                GROUP BY c.command_id,c.symbol,c.payload_json""",
+            (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
+        ).fetchall()
         for entry_id,symbol,fill_time_ms,raw_entry_payload in filled_entries:
             position_row=connection.execute(
-                "SELECT side,size,entry_price,payload_json FROM runtime.hot_positions WHERE symbol=%s",
-                (symbol,),
+                """SELECT side,size,entry_price,payload_json
+                     FROM runtime.hot_positions
+                    WHERE symbol=%s
+                      AND trading_account_id=%s
+                      AND identity_status='PROVEN'""",
+                (symbol, TRADING_ACCOUNT_ID),
             ).fetchone()
             if not position_row:
                 continue
@@ -2821,9 +2845,12 @@ def command_worker_loop(key: str, secret: str) -> None:
                 raise RuntimeError("filled Entry lost immutable initial protection contract")
             execution_rows = connection.execute(
                 """SELECT exec_id,order_id,order_link_id,exec_time_ms
-                   FROM runtime.executions WHERE order_link_id=%s
+                   FROM runtime.executions
+                  WHERE order_link_id=%s
+                    AND ((trading_account_id=%s AND identity_status='PROVEN')
+                         OR identity_status='LEGACY_UNKNOWN')
                    ORDER BY exec_time_ms,exec_id""",
-                (entry_id,),
+                (entry_id, TRADING_ACCOUNT_ID),
             ).fetchall()
             binding = connection.execute(
                 """SELECT geometry_handoff_id,signal_id,bot_instance_id,
@@ -2923,8 +2950,16 @@ def command_worker_loop(key: str, secret: str) -> None:
                 (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1],"initial_protection":initial_protection}),int(time.time()*1000)))
         connection.commit()
         # V36: BE/trailing/close decisions belong to Exit. This worker only executes commands.
-        row=connection.execute("""SELECT command_id,command_type,symbol,payload_json FROM runtime.trade_commands
-            WHERE state='queued' ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms LIMIT 1""").fetchone()
+        row=connection.execute(
+            """SELECT command_id,command_type,symbol,payload_json
+                 FROM runtime.trade_commands
+                WHERE state='queued'
+                  AND ((trading_account_id=%s AND identity_status='PROVEN')
+                       OR identity_status='LEGACY_UNKNOWN')
+                ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms
+                LIMIT 1""",
+            (TRADING_ACCOUNT_ID,),
+        ).fetchone()
         if not row:
             # SELECT polling starts an implicit transaction; close it before sleep.
             connection.commit()
@@ -3027,10 +3062,13 @@ def reconcile_position_ownership(
     rows = connection.execute(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id,
-                  entry_execution_request_id
+                  entry_execution_request_id,exchange_position_key
            FROM runtime.position_ownership
-           WHERE state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'
-           ORDER BY fill_at"""
+           WHERE (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
+             AND ((trading_account_id=%s AND identity_status='PROVEN')
+                  OR identity_status='LEGACY_UNKNOWN')
+           ORDER BY fill_at""",
+        (TRADING_ACCOUNT_ID,),
     ).fetchall()
     latest_by_key = {
         (str(row[2]), int(row[7] or 0)): str(row[0]) for row in rows
@@ -3087,14 +3125,19 @@ def reconcile_position_ownership(
         next_fill = connection.execute(
             """SELECT extract(epoch from min(fill_at))*1000
                FROM runtime.position_ownership
-               WHERE symbol=%s AND position_idx=%s AND fill_at>to_timestamp(%s/1000.0)""",
-            (symbol, position_idx, fill_ms),
+               WHERE symbol=%s AND position_idx=%s
+                 AND fill_at>to_timestamp(%s/1000.0)
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')""",
+            (symbol, position_idx, fill_ms, TRADING_ACCOUNT_ID),
         ).fetchone()[0]
         interval_sql = """SELECT exec_id,order_id,order_link_id,side,exec_qty,exec_price,
                                  exec_fee,exec_time_ms,payload_json
                           FROM runtime.executions
-                          WHERE symbol=%s AND exec_time_ms>=%s"""
-        interval_args: tuple[object, ...] = (symbol, fill_ms)
+                          WHERE symbol=%s AND exec_time_ms>=%s
+                            AND ((trading_account_id=%s AND identity_status='PROVEN')
+                                 OR identity_status='LEGACY_UNKNOWN')"""
+        interval_args: tuple[object, ...] = (symbol, fill_ms, TRADING_ACCOUNT_ID)
         if next_fill is not None:
             interval_sql += " AND exec_time_ms<%s"
             interval_args += (int(next_fill),)
@@ -3147,8 +3190,10 @@ def reconcile_position_ownership(
         command_rows = connection.execute(
             """SELECT command_id,result_json FROM runtime.trade_commands
                WHERE command_type='close'
-                 AND payload_json::jsonb->>'position_id'=%s""",
-            (position_id,),
+                 AND payload_json::jsonb->>'position_id'=%s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')""",
+            (position_id, TRADING_ACCOUNT_ID),
         ).fetchall()
         commands = [
             {"command_id": value[0], "result_json": value[1]} for value in command_rows
@@ -3172,8 +3217,11 @@ def reconcile_position_ownership(
         closed_ms = max(int(value["exec_time_ms"] or now) for value in exit_rows)
         entry_fee = connection.execute(
             """SELECT coalesce(sum(abs(exec_fee::numeric)),0)
-               FROM runtime.executions WHERE order_link_id=%s""",
-            (str(row[8]),),
+               FROM runtime.executions
+              WHERE order_link_id=%s
+                AND ((trading_account_id=%s AND identity_status='PROVEN')
+                     OR identity_status='LEGACY_UNKNOWN')""",
+            (str(row[8]), TRADING_ACCOUNT_ID),
         ).fetchone()[0]
         gross = close.gross_pnl or Decimal(0)
         exit_fee = close.exit_fee_actual or Decimal(0)
@@ -3193,7 +3241,7 @@ def reconcile_position_ownership(
             f"{position_id}|{close.exit_order_id}".encode()
         ).hexdigest()[:32]
         evidence = {
-            "exchange_position_key": f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{position_idx}",
+            "exchange_position_key": str(row[10]),
             "close_resolution": close.reason,
             "attribution_method": attribution_method,
             "stop_order_type": exit_body.get("stopOrderType"),
@@ -3306,12 +3354,18 @@ def reconcile_orphan_closed_entry_cycles(
                ON h.order_id=c.exchange_commitment_ref
               AND h.symbol=s.symbol
             WHERE c.account_ref=%s
+              AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
+                   OR c.identity_status='LEGACY_UNKNOWN')
+              AND ((s.trading_account_id=%s AND s.identity_status='PROVEN')
+                   OR s.identity_status='LEGACY_UNKNOWN')
+              AND ((h.trading_account_id=%s AND h.identity_status='PROVEN')
+                   OR h.identity_status='LEGACY_UNKNOWN')
               AND c.state='RECONCILIATION_REQUIRED'
               AND c.strategy_position_id IS NULL
               AND s.claim_state='RECONCILIATION_REQUIRED'
               AND h.order_status='Filled'
             FOR UPDATE OF c,s""",
-        (ACCOUNT_REF,),
+        (ACCOUNT_REF, TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
     ).fetchall()
     recovered = 0
     for (
@@ -3331,16 +3385,21 @@ def reconcile_orphan_closed_entry_cycles(
         # A separately bound StrategyPosition is owned by normal reconciliation.
         if connection.execute(
             """SELECT 1 FROM runtime.position_ownership
-               WHERE entry_command_id=%s LIMIT 1""",
-            (str(entry_command_id),),
+               WHERE entry_command_id=%s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
+               LIMIT 1""",
+            (str(entry_command_id), TRADING_ACCOUNT_ID),
         ).fetchone():
             continue
         entry_rows = connection.execute(
             """SELECT exec_id,order_id,order_link_id,symbol,side,
                       exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
                FROM runtime.executions WHERE order_id=%s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
                ORDER BY exec_time_ms,exec_id""",
-            (str(entry_order_id),),
+            (str(entry_order_id), TRADING_ACCOUNT_ID),
         ).fetchall()
         if not entry_rows:
             continue
@@ -3355,8 +3414,10 @@ def reconcile_orphan_closed_entry_cycles(
                       exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
                FROM runtime.executions
                WHERE symbol=%s AND exec_time_ms >= %s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')
                ORDER BY exec_time_ms,exec_id""",
-            (str(symbol), started_ms),
+            (str(symbol), started_ms, TRADING_ACCOUNT_ID),
         ).fetchall()
         all_evidence = [_exchange_execution_evidence(tuple(row)) for row in all_rows]
         last_entry_ms = max(int(item["execTime"]) for item in entry_evidence)
@@ -3369,8 +3430,10 @@ def reconcile_orphan_closed_entry_cycles(
             continue
         orders = connection.execute(
             """SELECT order_id,payload_json FROM runtime.exchange_order_history
-               WHERE symbol=%s AND updated_at_epoch_ms >= %s""",
-            (str(symbol), started_ms),
+               WHERE symbol=%s AND updated_at_epoch_ms >= %s
+                 AND ((trading_account_id=%s AND identity_status='PROVEN')
+                      OR identity_status='LEGACY_UNKNOWN')""",
+            (str(symbol), started_ms, TRADING_ACCOUNT_ID),
         ).fetchall()
         terminal: dict[str, dict[str, object]] = {}
         for order_key, body in orders:
