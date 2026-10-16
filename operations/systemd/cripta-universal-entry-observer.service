@@ -12,6 +12,7 @@ EnvironmentFile=-/etc/cripta/release.env
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 WorkingDirectory=/srv/cripta/runtime/current
 Environment=CRIPTA_U5_RUNTIME_MODE=MULTI_STRATEGY_OBSERVER
+Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 Environment=CRIPTA_U5_FACT_SOURCE_ID=BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1
 Environment=CRIPTA_U5_OI_SAMPLE_SECONDS=30
 Environment=CRIPTA_UNIVERSAL_ENTRY_OBSERVER_STATE_ROOT=/var/lib/cripta/universal_entry_observer

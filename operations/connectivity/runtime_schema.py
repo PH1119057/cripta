@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-execution-evidence-r5b"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-strategy-binding-r6a"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -31,6 +31,7 @@ REQUIRED_RELATIONS: tuple[str, ...] = (
     "runtime.position_mode_states",
     "runtime.lifecycle_fault_deliveries",
     "strategy_entry.execution_request_state_events",
+    "strategy_entry.strategy_execution_bindings",
     "runtime.hot_orders",
     "runtime.hot_positions",
     "runtime.m3_consumed_context",

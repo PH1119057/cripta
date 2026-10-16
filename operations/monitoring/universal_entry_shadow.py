@@ -112,6 +112,7 @@ BASELINE_COMMIT = os.environ.get(
 ).strip()
 FACT_SOURCE_ID = os.environ.get("CRIPTA_U5_FACT_SOURCE_ID", "BYBIT_PUBLIC_NORMALIZED_U5_V1").strip()
 RUNTIME_MODE = os.environ.get("CRIPTA_U5_RUNTIME_MODE", "PARITY_V1").strip().upper()
+TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 OBSERVER_STATE_ROOT = Path(
     os.environ.get(
         "CRIPTA_UNIVERSAL_ENTRY_OBSERVER_STATE_ROOT",
@@ -1174,10 +1175,19 @@ def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
             WHERE a.enabled=true
             ORDER BY a.activation_id,ep.entry_plan_fingerprint,xp.exit_plan_fingerprint"""
     ).fetchall()
+    binding_rows = connection.execute(
+        """SELECT strategy_execution_binding_id,strategy_activation_id,
+                  execution_leg,execution_role,trading_account_id,
+                  allocation_mode,binding_state,effective_from,
+                  coalesce(effective_to::text,''),updated_at
+             FROM strategy_entry.strategy_execution_bindings
+            ORDER BY strategy_execution_binding_id"""
+    ).fetchall()
     gate_enabled = bool(gate and gate[0])
     return (
         ("MAINNET_GATE", str(gate_enabled)),
         *(tuple(str(item) for item in row) for row in rows),
+        *(("BINDING", *(str(item) for item in row)) for row in binding_rows),
     )
 
 
@@ -1206,6 +1216,46 @@ def _real_execution_selected_activation_ids(
         )
         in allowed
     )
+
+
+def _real_execution_binding_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime | None = None,
+) -> frozenset[str]:
+    """Return activations with one exact active PRIMARY account binding.
+
+    This is an admission prerequisite only. It never creates/changes bindings.
+    """
+    if not TRADING_ACCOUNT_ID:
+        return frozenset()
+    at = (observed_at or datetime.now(UTC)).astimezone(UTC)
+    rows = connection.execute(
+        """SELECT b.strategy_activation_id
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN strategy_entry.strategy_activations a
+               ON a.activation_id=b.strategy_activation_id
+             JOIN identity.trading_accounts ta
+               ON ta.trading_account_id=b.trading_account_id
+            WHERE b.binding_state='ACTIVE'
+              AND b.execution_leg='PRIMARY'
+              AND b.execution_role='PRIMARY'
+              AND b.allocation_mode='DEDICATED_STRATEGY'
+              AND b.trading_account_id=%s
+              AND b.effective_from<=%s
+              AND (b.effective_to IS NULL OR b.effective_to>%s)
+              AND a.enabled=true
+              AND ta.status='ACTIVE'
+              AND ta.environment='MAINNET'""",
+        (TRADING_ACCOUNT_ID, at, at),
+    ).fetchall()
+    bound = {str(row[0]) for row in rows}
+    known = {
+        cast(Any, raw_bundle).activation.activation_id
+        for raw_bundle in bundles
+    }
+    return frozenset(bound.intersection(known))
 
 
 def _real_execution_activation_ids(
@@ -1684,7 +1734,13 @@ def _run_observer_epoch(
     real_execution_selected_for = _real_execution_selected_activation_ids(
         connection, bundles
     )
-    real_admission_ready_for = _real_execution_activation_ids(connection, bundles)
+    release_ready_for = _real_execution_activation_ids(connection, bundles)
+    binding_ready_for = _real_execution_binding_activation_ids(
+        connection,
+        bundles,
+        observed_at=epoch_started,
+    )
+    real_admission_ready_for = release_ready_for.intersection(binding_ready_for)
     entry_admission_port = (
         PostgresEntryAdmissionPort(connection)
         if real_execution_selected_for
