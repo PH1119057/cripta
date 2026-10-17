@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.22
+**Версия:** 12.23
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2795,7 +2795,13 @@ R9 DUAL-READ / PARITY / RESTART = PASS / DEPLOYED / RUNTIME VERIFIED
   BACKUP / ROLLBACK                  = PASS
   LEGACY REQUIRED READERS            = NOT YET / R10 GATE
   LIVE RE-ARM                        = NO
-R10 CONSTRAINTS / LEGACY RETIRE = NEXT / NOT STARTED
+R10 CONSTRAINTS / LEGACY RETIRE = PARTIAL / R10a SOURCE IMPLEMENTED
+  R10a NEW COIN_MINUTES WRITER       = RETIRED IN SOURCE / NOT DEPLOYED
+  R10a REPORT LEGACY FALLBACK        = RETIRED IN SOURCE / NOT DEPLOYED
+  R10a LEGACY_V1 ENTRY WRITER        = RETIRED IN SOURCE / NOT DEPLOYED
+  R10a ACCOUNT-SCOPED CONFLICT KEYS  = CUT OVER IN SOURCE / NOT DEPLOYED
+  OLD GLOBAL PRIMARY KEYS            = RETAINED
+  LEGACY REQUIRED READERS            = >0 / R10b REQUIRED
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2827,12 +2833,17 @@ aab41e26  add compact analytics coverage parity
 f76743bf  add R9 migration verification gates
 768620d6  recover R9b runtime services
 c705ae43  restore R9b report runtime imports
+f65ca9b6  begin R10 legacy path retirement
 ~~~
 
-R9b is deployed and runtime verified. The next bounded stage is R10: prove
-legacy writer/reader paths unused, apply only the newly authorized constraints
-after their source/test gate, and keep destructive retention/delete in R11.
-R9 completion does not authorize R10/R11 mutation or LIVE re-arm.
+R9b is deployed and runtime verified. R10a is now implemented in source only:
+the new duplicate coin-minute writer, scheduled-report fallback and inactive
+LEGACY_V1 Entry writer are retired, and private writer conflict targets use the
+already prepared account-scoped unique indexes. R10 is still incomplete because
+residual LEGACY_UNKNOWN readers/fallbacks and archive/Dashboard historical
+references remain. R10b must prove and reduce that inventory before old primary
+keys or fallback paths can be retired. R9/R10a source publication does not
+authorize R10 production mutation, R11 deletion or LIVE re-arm.
 
 Documentation maintenance gate:
 
@@ -3940,3 +3951,159 @@ It is the next R10 retirement proof before legacy constraints/path removal.
 No data deletion, old JSONB/coin-minute retirement, physical PostgreSQL reclaim,
 Exchange mutation or LIVE re-arm is authorized or performed by this R9b
 checkpoint.
+
+
+## 37.17 R10a legacy writer / fallback retirement source checkpoint — CHECKED HERE 2026-10-17
+
+R10a is a bounded **source-only** cutover. No production deploy, PostgreSQL
+mutation, service restart, data deletion or LIVE re-arm is performed by this
+checkpoint.
+
+Source/runtime separation at implementation publication:
+
+~~~text
+IMPLEMENTATION COMMIT            = f65ca9b6ecaccc50e1a7b05808cc4cb90b5f6878
+REMOTE / SOURCE AFTER CODE SYNC  = f65ca9b6ecaccc50e1a7b05808cc4cb90b5f6878
+SOURCE WORKTREE                  = CLEAN
+INSTALLED / LOADED APPLICATION   = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+DEPLOY                           = NO
+DB MUTATION                      = NO
+SERVICE RESTART                  = NO
+LIVE RE-ARM                      = NO
+~~~
+
+R10a retires the first set of unambiguous legacy paths in source:
+
+1. New duplicate public analytical writes to `mayak_v2.coin_minutes`
+   are stopped. MAYAK continues to write the canonical
+   `analytics.market_minutes` representation and current HOT context tables.
+   Historical `coin_minutes` schema/data are deliberately retained for R11.
+
+2. Daily/weekly MAYAK report source no longer reads
+   `mayak_v2.coin_minutes`. Its public analytical rows are compact-only and
+   the summary now reports:
+
+~~~text
+proven_source              = analytics.market_minutes
+legacy_fallback_source     = null
+compact_replacement_ready  = true
+~~~
+
+A source-smoke of that R10a report against the current production DB completed
+successfully in the research run root and reported
+`legacy_unknown_rows=0`.
+
+3. The inactive `LEGACY_V1` Entry command-source path is retired from the
+   active private runtime and Universal Entry consumer source. Both now default
+   to `UNIVERSAL_ENTRY`; private runtime fails closed on any non-Universal
+   source with `R10_LEGACY_ENTRY_COMMAND_SOURCE_RETIRED`. The Universal Entry
+   consumer remains hard-disabled unless its separate mainnet consumer arm is
+   explicitly enabled; R10a does not arm it.
+
+4. The old private-runtime legacy signal-to-`runtime.trade_commands` Entry
+   writer block is removed. Its operational cleanup for already existing
+   pending Entry limits remains.
+
+5. Current private upsert writers now target the account-scoped unique indexes
+   prepared in R5:
+
+~~~text
+wallet_latest
+  ON CONFLICT(trading_account_id,singleton)
+
+hot_positions
+  ON CONFLICT(trading_account_id,symbol,position_idx)
+
+hot_orders
+  ON CONFLICT(trading_account_id,order_id)
+
+executions
+  ON CONFLICT(trading_account_id,exec_id)
+
+exchange_order_history
+  ON CONFLICT(trading_account_id,order_id)
+~~~
+
+Read-only production inspection confirms all five corresponding
+`NULLS NOT DISTINCT` unique indexes already exist. The old global primary keys
+are **not** dropped in R10a.
+
+The legacy Entry safety contracts were not discarded mechanically. Ten tests
+that referenced the removed writer were moved to the replacement Universal
+Entry authority only after source proof of the replacement invariants:
+
+- `OBSERVE` context is linked but is not a decision mode;
+- decision-affecting context is Strategy-owned through explicit
+  `CONDITION` / `RANKING` policy;
+- the execution request carries immutable causal `signal_fact`, source refs
+  and attributes;
+- execution reference paths are exact `fact.*` paths;
+- real dispatch requires StrategyExecutionBinding, TradingAccount,
+  exchange-position slot claim and position-mode lineage;
+- mainnet execution gate remains an independent pre-dispatch gate.
+
+Those ten replacement contract tests pass 10/10.
+
+R10a source verification:
+
+~~~text
+PY_COMPILE MODIFIED RUNTIME FILES = PASS
+R10a REPLACEMENT CONTRACTS        = 10 / 10 PASS
+R10a TARGETED SET                 = 61 PASS / SAME 7 UE BASELINE FAILURES
+COMPACT-ONLY REPORT SOURCE SMOKE  = PASS
+ACCOUNT UNIQUE INDEX EVIDENCE     = 5 / 5 PRESENT
+RUFF DELTA private_runtime        = 66 -> 55 / 0 NEW FINDINGS
+RUFF DELTA other runtime files    = 0 NEW FINDINGS
+DIFF CHECK                        = PASS
+FULL PYTEST                       = 1937 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES         = CONFIRMED
+NEW TEST FAILURES                 = 0
+~~~
+
+R10 is **not complete**. A residual source inventory still contains legacy
+history/fallback references in runtime, Dashboard/archive and lifecycle/exit
+components. Examples include:
+
+- Dashboard raw-period and `archive_v2` export of historical
+  `mayak_v2.coin_minutes`;
+- private/runtime and lifecycle/exit `LEGACY_UNKNOWN` compatibility reads;
+- Dispatcher context correlator historical compatibility;
+- Universal Exit / protection / stale-arm historical compatibility.
+
+The inventory also includes schema-preservation references such as the retained
+`coin_minutes` table creation. A raw source-reference count is therefore not
+equivalent to a required-reader count.
+
+Current production evidence also proves why R11 cannot start yet:
+
+~~~text
+historical coin_minutes LEGACY_UNKNOWN rows = 730,760 at checked snapshot
+historical private LEGACY_UNKNOWN evidence  = retained
+current HOT private identity                = PROVEN
+R10a historical rewrite/delete             = NONE
+~~~
+
+R10 gate after this checkpoint:
+
+~~~text
+NEW_WRITER_PATH                   = SOURCE CUTOVER PREPARED / NOT DEPLOYED
+NEW_READER_PATH                   = R9 PASS
+ACCOUNT_SCOPE_PARITY              = R9 PASS
+MARKET_SOURCE_PARITY              = R9 PASS
+RESTART_RECOVERY                  = R9 PASS
+REPORT_REPLAY_RESEARCH            = R10a COMPACT-ONLY SOURCE SMOKE PASS
+BACKUP_ROLLBACK                   = R9 PASS
+LEGACY_REQUIRED_READERS           = NOT ZERO / R10b REQUIRED
+OLD GLOBAL PK RETIREMENT          = NOT AUTHORIZED
+R11 RETENTION / DELETE            = NOT AUTHORIZED
+R12 PHYSICAL RECLAIM              = NOT AUTHORIZED
+~~~
+
+The next bounded stage is R10b: classify each remaining legacy reference as
+active required reader, historical preservation/export, or dead compatibility;
+migrate/remove only the active fallback dependencies; then prove
+`LEGACY_REQUIRED_READERS=0` before any old physical key or historical-path
+retirement.
+
+Documentation topology is unchanged: active document set, paths, mandatory
+pre-read/routing and Project Source count remain unchanged.
