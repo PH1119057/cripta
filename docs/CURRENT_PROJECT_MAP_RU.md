@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.20
+**Версия:** 12.21
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2783,6 +2783,13 @@ R8 COMPACT ANALYTICS CUTOVER    = SOURCE IMPLEMENTED THROUGH R8c / NOT DEPLOYED
   SOURCE COMPACT REPLACEMENT READY  = YES FOR KNOWN ANALYTICAL PATHS
   HOT CURRENT JSONB CONTEXTS        = RETAINED BY DESIGN
   OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED / R9-R11 GATES
+R9 DUAL-READ / PARITY / RESTART = PARTIAL / R9a VERIFIER PREPARED IN SOURCE
+  R9a READ-ONLY MIGRATION VERIFIER   = DONE IN SOURCE
+  R9a BACKUP HEADROOM PRECHECK       = PASS ON CURRENT HOST
+  R9 PRODUCTION DEPLOY / DB APPLY    = NOT PERFORMED
+  R9 ACCOUNT / MARKET PARITY         = NOT RUNTIME VERIFIED
+  R9 RESTART / RECOVERY              = NOT RUNTIME VERIFIED
+  R9b VERIFIED DEPLOY + RUNTIME GATE = REQUIRES EXPLICIT DEPLOY APPROVAL
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2811,13 +2818,14 @@ ae54cfec  cut active market readers to exact identity
 8b7c6b93  add compact market analytics foundation
 aab41e26  add compact analytics coverage parity
 3a0a93b4  complete compact analytics primitives
+f76743bf  add R9 migration verification gates
 ~~~
 
-The next bounded migration stage is R9 dual-read/parity/restart/recovery
-verification. R8 source now covers the known current long-horizon
-research/replay analytical paths, while HOT MAYAK/Dispatcher JSON contexts
-remain current-runtime objects. No duplicate-history retirement is authorized
-until R9-R11 gates are satisfied.
+The next bounded production stage is R9b exact verified deploy + DB migration
+apply + dual-read/parity/restart/recovery verification. It is a production
+mutation and therefore requires explicit deploy approval under
+DEVELOPMENT_RELEASE; source publication alone does not authorize it. No
+duplicate-history retirement is authorized until R9-R11 gates are satisfied.
 
 Documentation maintenance gate:
 
@@ -3624,3 +3632,131 @@ routing, README/AGENTS bootstrap and Project Source count remain unchanged.
 
 No deploy, PostgreSQL mutation, historical backfill/rewrite/delete, Exchange
 mutation or LIVE re-arm is performed by this checkpoint.
+
+
+## 37.15 R9a migration verifier / pre-deploy checkpoint — CHECKED HERE 2026-10-17
+
+Source/runtime identity after publication of the bounded R9a verifier:
+
+~~~text
+REMOTE_HEAD             = f76743bfcaaff4518f64dd8080a82b2a016ae823
+SOURCE_HEAD             = f76743bfcaaff4518f64dd8080a82b2a016ae823
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+RELEASE_ENV_COMMIT      = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DEPLOY                  = NO
+DB MIGRATION APPLY      = NO
+SERVICE RESTART         = NO
+LIVE RE-ARM             = NO
+~~~
+
+Source commit `f76743bf...` adds two read-only R9 tools:
+
+1. `operations/monitoring/r9_migration_verifier.py`
+   - starts every DB check with `SET TRANSACTION READ ONLY`;
+   - can capture restart watermarks without requiring the new schema;
+   - verifies the R8c runtime schema contract after deploy;
+   - verifies exact active TradingAccount / AccountConnector registry state;
+   - checks current private-state account scope;
+   - checks exact MarketSource / InstrumentIdentity lineage;
+   - compares recent compact panels against frozen
+     `mayak_v2.coin_market_contexts` through the existing 233-path compact
+     parity contract;
+   - with an explicit post-restart watermark, requires both public MAYAK/compact
+     progress and new PROVEN private account-state/reconciliation evidence;
+   - fails closed and performs no repair/backfill/mutation.
+
+2. `operations/infrastructure/r9_backup_preflight.py`
+   - is read-only;
+   - resolves the exact release-backup filesystem rather than assuming that
+     `/data` and `/data/cripta` share one device;
+   - compares current free space with the size of the latest verified
+     `cripta_before.dump`;
+   - is a minimum headroom check only; PASS does not replace the required actual
+     deploy backup creation/verification.
+
+Read-only current production baseline from the new verifier:
+
+~~~text
+MAYAK_SNAPSHOT_ID                    = 36984
+MAYAK_OBSERVED_AT                    = 2026-10-17T07:47:04.600948+00:00
+ACCOUNT_GENERATION_STARTED_AT        = 2026-10-17T07:47:58.161000+00:00
+RECONCILIATION_STARTED_AT            = 2026-10-17T07:47:51.260000+00:00
+DATABASE_TIME                        = 2026-10-17T07:48:01.827537+00:00
+~~~
+
+The pre-deploy verifier intentionally fails on the currently installed old
+release:
+
+~~~text
+SCHEMA_CONTRACT = FAIL
+missing =
+  strategy_entry.strategy_execution_bindings
+  analytics.market_minutes
+~~~
+
+This is expected evidence that source sync did not silently become deployment.
+It is not repaired in-place and is not relabelled as runtime parity.
+
+Filesystem clarification from exact mount evidence:
+
+~~~text
+/data/cripta/release-backup filesystem = /dev/sdb1
+release-backup free bytes              = 17,780,494,336
+latest verified cripta_before.dump     = 4,450,675,555 bytes
+R9 MINIMUM BACKUP HEADROOM PRECHECK    = PASS
+
+/srv + PostgreSQL filesystem           = /dev/sda1
+current free bytes                     ~= 357,318,656
+current installed runtime release      ~= 58 MiB
+~~~
+
+An earlier coarse `df /data` observation referred to the parent/root
+filesystem and is not used as evidence for release-backup headroom. The
+separate root filesystem remains tight and must be rechecked before an approved
+deploy, but no undocumented minimum-margin threshold is invented here.
+
+Current R9 gate state:
+
+~~~text
+NEW_WRITER_PATH                 = IMPLEMENTED IN SOURCE / NOT RUNTIME VERIFIED
+NEW_READER_PATH                 = IMPLEMENTED IN SOURCE / NOT RUNTIME VERIFIED
+ACCOUNT_SCOPE_PARITY            = NOT CHECKED POST-DEPLOY
+MARKET_SOURCE_PARITY            = NOT CHECKED POST-DEPLOY
+RESTART_RECOVERY                = NOT CHECKED POST-DEPLOY
+REPORT_REPLAY_RESEARCH          = SOURCE TESTED / NOT POST-DEPLOY VERIFIED
+LEGACY_REQUIRED_READERS         = NOT YET R10 GATE
+BACKUP_ROLLBACK                 = HEADROOM PRECHECK PASS / ACTUAL NEW BACKUP NOT RUN
+~~~
+
+Verification evidence for the R9a source changeset:
+
+~~~text
+TARGETED R9a SET                  = 24 / 24 PASS
+READ-ONLY PRODUCTION BASELINE     = PASS
+OLD-SCHEMA FAIL-CLOSED SMOKE      = PASS
+BACKUP HEADROOM MINIMUM PRECHECK  = PASS
+RUFF TARGETED                     = PASS
+PY_COMPILE                        = PASS
+DIFF CHECK                        = PASS
+FULL PYTEST                       = 1925 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES         = CONFIRMED
+NEW TEST FAILURES                 = 0
+~~~
+
+Production boundary after R9a:
+
+~~~text
+CANON_CONFLICT                  = NO
+R9a SOURCE PREPARATION          = PASS
+R9 RUNTIME VERIFICATION         = NOT PERFORMED
+EXPLICIT DEPLOY APPROVAL        = REQUIRED BEFORE R9b
+HARD_STOP_FOR_PRODUCTION_MUTATION = YES UNTIL THAT APPROVAL
+R10 / R11 / R12                 = NOT AUTHORIZED
+~~~
+
+Documentation topology is unchanged: active document set, paths, base pre-read,
+routing, README/AGENTS bootstrap and Project Source count remain unchanged.
+
+No deploy, PostgreSQL mutation, service restart, historical backfill/rewrite/
+delete, Exchange mutation or LIVE re-arm is performed by this checkpoint.
