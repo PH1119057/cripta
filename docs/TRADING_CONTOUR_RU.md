@@ -1044,6 +1044,48 @@ break-even, not a worst-case profit guarantee.
 
 A resulting manual protection mutation is attributed as `OWNER_MODIFIED_STOP`.
 
+### 4.8.2 TP mechanics experiment: isolated PAPER-first — OWNER DECISION 2026-10-14
+
+Owner intent: **create a separate pseudo-position and verify the complete
+TP-replacement algorithm BEFORE any change to production Universal Exit**.
+This research experiment is not an R1 Strategy trade, does not submit
+Exchange mutations, does not forge StrategySignal/StrategyPosition lineage,
+and must not appear in live/PAPER Strategy performance statistics.
+
+A separate «Испытание TP» control may be placed next to the owner-controlled
+real smoke-test in authenticated Dashboard. It launches a **simulation only**,
+not §4.8 real Entry. The test instrument may be LTCUSDT; simulated position
+size, price, fill, initial SL/TP and market movement must be explicit and
+reproducible. Real Bybit private credentials are not used by the simulator.
+The simulation adapter uses the same intended TP order-state semantics,
+including unique orderLinkId, remaining quantity, precision and PostOnly/
+reduceOnly restrictions, but reports them as **MODEL RESULTS**, not
+independent evidence of actual Bybit matching-engine behaviour.
+
+Required deterministic scenarios: create initial maker reduceOnly TP; amend
+toward and away from executable price; submit second reduceOnly TP with first
+resting; reject crossing PostOnly; reject/resolve partially filled amendment;
+handle missing ACK, retry/idempotency, cancelled/rejected state, and potential
+position-close race. Each scenario must assert preserved SL and total
+closing-order quantity, return PASS/FAIL/UNKNOWN, and log exact pre/post state
+without affecting production data or trading. The run must be repeatable.
+
+**Two independent gates** before changing Universal Exit:
+(1) all local deterministic model/integration tests PASS;
+(2) actual Bybit semantics confirmed by an separately authorized isolated
+Exchange experiment, because pseudo-execution cannot prove Bybit's real
+cancel/reduce selection, order amend atomicity, or asynchronous responses.
+That later Exchange experiment requires its own explicit owner confirmation,
+current mainnet gates, verified free slot, per-run SL protection, sole
+private-runtime Exchange mutation ownership, durable reconciliation and
+emergency response contract. It MUST NOT be launched as a side effect
+of the PAPER test. Neither stage by itself authorizes changing live Exit.
+
+Changes proceed RESEARCH/EVIDENCE -> OWNER DECISION -> CANON/STRATEGY VERSION
+as applicable -> TEST/SHADOW -> LIVE EQUIVALENCE -> MICRO_LIVE -> LIVE.
+Do not modify current production Exit TP placement without explicit separate
+decision and release verification.
+
 ## 4.9 PAPER / REAL execution mode — OWNER DECISION 2026-10-06
 
 Execution mode — это выбор среды исполнения одной активной Strategy, а не
