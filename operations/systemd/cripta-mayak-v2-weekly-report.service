@@ -7,6 +7,7 @@ Type=oneshot
 User=cripta
 Group=cripta
 SupplementaryGroups=cripta-share
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
 ExecStartPre=/usr/local/sbin/cripta-permission-preflight --actor cripta --check create-child:/srv/cripta-share/reports
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/mayak_v2_report.py 7
 NoNewPrivileges=true

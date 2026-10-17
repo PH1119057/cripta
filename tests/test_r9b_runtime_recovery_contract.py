@@ -32,3 +32,29 @@ def test_lifecycle_dispatch_scope_joins_execution_request_identity() -> None:
 def test_lifecycle_parameterized_like_patterns_escape_literal_percent() -> None:
     assert "INVARIANT_BROKEN%%'" in LIFECYCLE
     assert "MODE_MISMATCH%%'" in LIFECYCLE
+
+
+DAILY_REPORT_UNIT = (
+    ROOT / "operations/systemd/cripta-mayak-v2-report.service"
+).read_text(encoding="utf-8")
+WEEKLY_REPORT_UNIT = (
+    ROOT / "operations/systemd/cripta-mayak-v2-weekly-report.service"
+).read_text(encoding="utf-8")
+
+
+def test_mayak_report_units_have_runtime_src_pythonpath() -> None:
+    expected = "Environment=PYTHONPATH=/srv/cripta/runtime/current/src"
+    assert expected in DAILY_REPORT_UNIT
+    assert expected in WEEKLY_REPORT_UNIT
+
+
+def test_mayak_report_units_keep_exact_report_actor_and_path_contract() -> None:
+    for unit in (DAILY_REPORT_UNIT, WEEKLY_REPORT_UNIT):
+        assert "User=cripta" in unit
+        assert "Group=cripta" in unit
+        assert "SupplementaryGroups=cripta-share" in unit
+        assert "ReadWritePaths=/srv/cripta-share/reports" in unit
+        assert (
+            "ExecStartPre=/usr/local/sbin/cripta-permission-preflight "
+            "--actor cripta --check create-child:/srv/cripta-share/reports"
+        ) in unit
