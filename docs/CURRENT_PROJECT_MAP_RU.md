@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.15
+**Версия:** 12.16
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2761,7 +2761,13 @@ R6 STRATEGY EXECUTION BINDING   = SOURCE IMPLEMENTED THROUGH R6d / NOT DEPLOYED
   R6c UNIVERSAL EXIT LINEAGE    = DONE IN SOURCE
   R6d COMMAND ACCOUNT PROOF     = DONE IN SOURCE
 
-R7 MARKET/INSTRUMENT CUTOVER    = NOT IMPLEMENTED
+R7 MARKET/INSTRUMENT CUTOVER    = PARTIAL / R7a IDENTITY FOUNDATION + DUAL-WRITE DONE IN SOURCE
+  R7a EXACT CURRENT INSTRUMENT REGISTRY = DONE IN SOURCE
+  R7a MAYAK/DISPATCHER IDENTITY LINEAGE = DONE IN SOURCE
+  R7a POSITION-MODE INSTRUMENT LINEAGE  = DONE IN SOURCE
+  R7b READER CUTOVER / RESIDUAL AUDIT   = NEXT
+  HISTORICAL PUBLIC ID BACKFILL         = NOT PERFORMED
+  DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER PARITY GATES
 R8 COMPACT ANALYTICS CUTOVER    = NOT IMPLEMENTED
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
@@ -2786,12 +2792,13 @@ c34f4102  scope stale-arm retirement to TradingAccount
 cb1423df  scope residual private report readers
 99278812  finish active private reader account scope
 bee199d7  prepare account-scoped physical keys
+4ae7e138  add R7 market/instrument identity lineage
 ~~~
 
-The next bounded source task is R7 MarketSource / InstrumentIdentity cutover.
-The R5 physical-key preparation remains additive only: old physical PK/UNIQUE
-constraints and legacy writer conflict targets stay in place until the later
-parity/restart/recovery and legacy-path retirement gates allow exact cutover.
+The next bounded source task is R7b reader cutover / residual public-market
+identity audit. R7a is deliberately dual-write/backward-compatible: current
+symbol fields and legacy physical keys remain until parity/restart/recovery and
+legacy-path retirement gates allow exact cutover.
 
 Documentation maintenance gate:
 
@@ -3028,3 +3035,117 @@ MULTI_ACCOUNT LIVE READY                  = NO
 
 No deploy, PostgreSQL mutation, data rewrite/delete, Exchange mutation or LIVE
 re-arm is performed by this documentation checkpoint.
+
+
+## 37.10 R7a MarketSource / InstrumentIdentity foundation — CHECKED HERE 2026-10-17
+
+Pre-publication implementation/runtime identity for this checkpoint:
+
+~~~text
+REMOTE_HEAD             = 4ae7e138ade90247c2fb1d8e8d25a9aaf10c0f3e
+SOURCE_HEAD             = 4ae7e138ade90247c2fb1d8e8d25a9aaf10c0f3e
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Read-only current-source/runtime evidence used for R7a:
+
+- current MAYAK consumes both Bybit public SPOT and LINEAR streams;
+- all 20 currently configured MAYAK symbols were observed as supported on both
+  SPOT and LINEAR;
+- read-only Bybit instrument metadata reported the same 20 SPOT instruments as
+  Trading and the same 20 LINEAR instruments as Trading / LinearPerpetual;
+- current MAYAK CoinMarketContext intentionally combines SPOT and LINEAR facts,
+  so R7a does not invent one singular InstrumentIdentity for that derived
+  context.
+
+Source commit `4ae7e138...` implements the bounded R7a foundation:
+
+- preserves the owner-approved composite MarketSource
+  `ms-bybit-mainnet-public-v1`; it is not silently split or redefined;
+- registers 40 exact current InstrumentIdentity rows in source migration:
+  20 SPOT + 20 LINEAR;
+- stable current IDs distinguish product semantics, for example
+  `inst-bybit-spot-btcusdt` and `inst-bybit-linear-btcusdt`;
+- adds nullable additive MarketSource/InstrumentIdentity lineage to current
+  MAYAK and Dispatcher public/derived tables;
+- new MAYAK writes carry exact source identity and, for mixed coin contexts,
+  explicit SPOT + LINEAR contributor identities;
+- exact linear liquidations carry the LINEAR InstrumentIdentity;
+- the canonical MAYAK -> Dispatcher handoff schema now requires
+  `market_source_id` and contributor `instrument_lineage` for new source
+  records;
+- Dispatcher builders fail closed when the new source identity is absent and
+  include it in immutable content identity/provenance;
+- Dispatcher bootstrap consumes only new shared/coin source rows that actually
+  carry the required identity lineage, while downstream symbol fields remain
+  present for the staged cutover;
+- new PROVEN `runtime.position_mode_states` source rows carry the exact
+  LINEAR `instrument_id` in addition to the legacy symbol/product fields;
+- historical rows are not assigned invented identities and receive no UPDATE
+  backfill.
+
+Rollback/cutover safety is intentionally staged:
+
+- R7a identity columns remain nullable in PostgreSQL;
+- FOREIGN KEY constraints are additive / NOT VALID for historical rows;
+- R7a does **not** add new-row NOT-NULL CHECK constraints, because even a
+  `CHECK ... NOT VALID` would still reject writes from the previous runtime
+  during rollback;
+- current `symbol` columns and symbol-based downstream consumers are not
+  retired in R7a;
+- DB non-null enforcement, residual reader cutover and legacy-field retirement
+  require later parity/restart/recovery evidence.
+
+Verification evidence:
+
+~~~text
+TARGETED R7a CONTRACT SET        = 49 / 49 PASS
+MAYAK CANONICAL SCHEMA SET       = 21 / 21 PASS
+PY_COMPILE                       = PASS
+RUFF TARGETED                    = PASS
+PRIVATE_RUNTIME RUFF BASELINE    = 66 FINDINGS / SAME RULE COUNTS / 0 NEW
+SQL PLACEHOLDER STATIC CHECK     = PASS
+INSTALLER BASH SYNTAX            = PASS
+DIFF CHECK                       = PASS
+FULL PYTEST                      = 1889 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES        = CONFIRMED
+NEW TEST FAILURES                = 0
+HISTORICAL PUBLIC ID BACKFILL    = NONE
+DESTRUCTIVE SQL                  = NONE
+~~~
+
+The same separate pre-existing `universal_entry_consumer.py` SQL placeholder
+finding remains open and unchanged; it was not mixed into R7a.
+
+Status after R7a:
+
+~~~text
+R7a IDENTITY FOUNDATION / DUAL-WRITE LINEAGE = DONE IN SOURCE
+R7 PRODUCTION DB APPLY                       = NO
+R7 RUNTIME BEHAVIOR VERIFIED FOR NEW SOURCE  = NO
+R7b READER CUTOVER / RESIDUAL PUBLIC AUDIT   = NEXT
+R8 COMPACT ANALYTICS                         = NOT IMPLEMENTED
+MULTI_ACCOUNT / MULTI-VENUE LIVE READY       = NO
+~~~
+
+Documentation maintenance gate remains unchanged:
+
+~~~text
+ACTIVE DOCUMENT SET             = UNCHANGED
+DOCUMENT PATHS                  = UNCHANGED
+BASE PRE-READ                   = UNCHANGED
+ROUTING                         = UNCHANGED
+PROJECT SOURCE FILE COUNT       = 11 / UNCHANGED
+README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
+PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
+TRADING BEHAVIOR                = UNCHANGED
+~~~
+
+No deploy, PostgreSQL mutation, historical rewrite/delete, Exchange mutation or
+LIVE re-arm is performed by this documentation checkpoint.
