@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.21
+**Версия:** 12.22
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2770,26 +2770,32 @@ R7 MARKET/INSTRUMENT CUTOVER    = SOURCE IMPLEMENTED THROUGH R7b / NOT DEPLOYED
   HISTORICAL PUBLIC ID BACKFILL         = NOT PERFORMED
   INACTIVE LEGACY CORRELATOR RETIREMENT = DEFERRED TO R10
   DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER R9-R10 GATES
-R8 COMPACT ANALYTICS CUTOVER    = SOURCE IMPLEMENTED THROUGH R8c / NOT DEPLOYED
-  R8a EXACT INSTRUMENT-MINUTE TABLE = DONE IN SOURCE
-  R8a MAYAK COMPACT DUAL-WRITE      = DONE IN SOURCE
-  R8a ARCHIVE / SCHEMA CONTRACT     = DONE IN SOURCE
-  R8b FEATURE COVERAGE / PARITY     = DONE IN SOURCE
-  R8b SCHEDULED REPORT COMPACT READ = DONE IN SOURCE
-  R8c MISSING COMPACT PRIMITIVES    = DONE IN SOURCE
-  R8c ARCHIVE RESEARCH READER       = DONE IN SOURCE
-  R8c SIGNAL ANALYSIS COMPACT READ  = DONE IN SOURCE
-  KNOWN ANALYTICAL PATH COVERAGE    = 233 / 233 IN SOURCE
-  SOURCE COMPACT REPLACEMENT READY  = YES FOR KNOWN ANALYTICAL PATHS
+R8 COMPACT ANALYTICS CUTOVER    = DEPLOYED / RUNTIME VERIFIED THROUGH R8c
+  R8a EXACT INSTRUMENT-MINUTE TABLE = DEPLOYED
+  R8a MAYAK COMPACT DUAL-WRITE      = DEPLOYED
+  R8a ARCHIVE / SCHEMA CONTRACT     = DEPLOYED
+  R8b FEATURE COVERAGE / PARITY     = RUNTIME VERIFIED
+  R8b SCHEDULED REPORT COMPACT READ = RUNTIME VERIFIED
+  R8c MISSING COMPACT PRIMITIVES    = DEPLOYED
+  R8c ARCHIVE RESEARCH READER       = SOURCE TESTED / PROD PARITY VERIFIED
+  R8c SIGNAL ANALYSIS COMPACT READ  = DEPLOYED
+  KNOWN ANALYTICAL PATH COVERAGE    = 233 / 233
+  COMPACT REPLACEMENT READY         = YES FOR KNOWN ANALYTICAL PATHS
   HOT CURRENT JSONB CONTEXTS        = RETAINED BY DESIGN
-  OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED / R9-R11 GATES
-R9 DUAL-READ / PARITY / RESTART = PARTIAL / R9a VERIFIER PREPARED IN SOURCE
-  R9a READ-ONLY MIGRATION VERIFIER   = DONE IN SOURCE
-  R9a BACKUP HEADROOM PRECHECK       = PASS ON CURRENT HOST
-  R9 PRODUCTION DEPLOY / DB APPLY    = NOT PERFORMED
-  R9 ACCOUNT / MARKET PARITY         = NOT RUNTIME VERIFIED
-  R9 RESTART / RECOVERY              = NOT RUNTIME VERIFIED
-  R9b VERIFIED DEPLOY + RUNTIME GATE = REQUIRES EXPLICIT DEPLOY APPROVAL
+  OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED / R10-R11 GATES
+R9 DUAL-READ / PARITY / RESTART = PASS / DEPLOYED / RUNTIME VERIFIED
+  R9a READ-ONLY MIGRATION VERIFIER   = DEPLOYED
+  NEW WRITER PATH                    = PASS
+  NEW READER PATH                    = PASS
+  ACCOUNT SCOPE PARITY               = PASS
+  MARKET SOURCE PARITY               = PASS
+  COMPACT ANALYTICS PARITY           = PASS / 13,980 PATH CHECKS
+  RESTART / RECOVERY                 = PASS
+  REPORT / REPLAY / RESEARCH         = PASS
+  BACKUP / ROLLBACK                  = PASS
+  LEGACY REQUIRED READERS            = NOT YET / R10 GATE
+  LIVE RE-ARM                        = NO
+R10 CONSTRAINTS / LEGACY RETIRE = NEXT / NOT STARTED
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2819,13 +2825,14 @@ ae54cfec  cut active market readers to exact identity
 aab41e26  add compact analytics coverage parity
 3a0a93b4  complete compact analytics primitives
 f76743bf  add R9 migration verification gates
+768620d6  recover R9b runtime services
+c705ae43  restore R9b report runtime imports
 ~~~
 
-The next bounded production stage is R9b exact verified deploy + DB migration
-apply + dual-read/parity/restart/recovery verification. It is a production
-mutation and therefore requires explicit deploy approval under
-DEVELOPMENT_RELEASE; source publication alone does not authorize it. No
-duplicate-history retirement is authorized until R9-R11 gates are satisfied.
+R9b is deployed and runtime verified. The next bounded stage is R10: prove
+legacy writer/reader paths unused, apply only the newly authorized constraints
+after their source/test gate, and keep destructive retention/delete in R11.
+R9 completion does not authorize R10/R11 mutation or LIVE re-arm.
 
 Documentation maintenance gate:
 
@@ -3760,3 +3767,176 @@ routing, README/AGENTS bootstrap and Project Source count remain unchanged.
 
 No deploy, PostgreSQL mutation, service restart, historical backfill/rewrite/
 delete, Exchange mutation or LIVE re-arm is performed by this checkpoint.
+
+
+## 37.16 R9b deployed parity / restart / recovery checkpoint — CHECKED HERE 2026-10-17
+
+Owner authorization for the production stage was explicit:
+
+~~~text
+OWNER APPROVAL                    = "Разрешаю deploy R9b"
+LIVE RE-ARM APPROVAL              = NO
+~~~
+
+Final exact production identity:
+
+~~~text
+REMOTE_HEAD                       = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+SOURCE_HEAD                       = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+SOURCE_WORKTREE                   = CLEAN
+INSTALLED_COMMIT                  = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+RELEASE_ENV_COMMIT                = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+DASHBOARD_UI_COMMIT               = c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+RUNTIME CURRENT                   = release c705ae435fd777e8836161e8fe8dd1a84f4d64a5
+MAINNET GATE                      = 0
+ACTIVE LIVE-ARM SESSIONS          = 0
+LIVE RE-ARM                       = NO
+~~~
+
+The R9b rollout required two bounded recovery fixes discovered by real
+post-deploy evidence rather than hidden by source-only tests.
+
+1. Runtime-service recovery commit `768620d6...`
+   - added the runtime source PYTHONPATH to the Dispatcher V2 context correlator;
+   - corrected Lifecycle Supervisor PostgreSQL account-scope NULL typing and
+     dispatch identity joins;
+   - added regression coverage for those runtime failures.
+
+2. Report-runtime recovery commit `c705ae43...`
+   - real daily report smoke exposed
+     `ModuleNotFoundError: No module named 'bybit_workbench'`;
+   - both daily and weekly MAYAK report units now carry
+     `PYTHONPATH=/srv/cripta/runtime/current/src`;
+   - exact report actor/path/sandbox contract remains unchanged;
+   - regression tests cover both units.
+
+The final `c705ae43...` deploy used the canonical serialized installer. Its
+post-deploy evidence includes:
+
+~~~text
+RUNTIME_SCHEMA_MIGRATION          = PASS
+RUNTIME_SCHEMA_CONTRACT           = PASS
+TRADING_CONTROL_UNCHANGED         = PASS
+POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION = PASS
+DEPLOY_EXACT_VERIFIED_COMMIT      = PASS
+GATE                              = 0
+~~~
+
+Final R9 verifier result on the loaded release, with a post-follow-up-deploy
+watermark:
+
+~~~text
+SCHEMA_CONTRACT                   = PASS
+IDENTITY_REGISTRY                 = PASS
+ACCOUNT_SCOPE_PARITY              = PASS
+MARKET_SOURCE_PARITY              = PASS
+COMPACT_ANALYTICS_PARITY          = PASS
+PARITY SNAPSHOTS                  = 3
+PARITY SYMBOLS                    = 60
+PARITY PATH CHECKS                = 13,980
+PATHS PER SYMBOL                  = 233
+RESTART_RECOVERY                  = PASS
+OVERALL                           = PASS
+~~~
+
+Runtime writer evidence after cutover:
+
+~~~text
+analytics.market_minutes v3 rows  = 1,600 at checked snapshot
+latest compact source_observed_at = 2026-10-17 09:03:00.199061+00
+runtime.wallet_latest PROVEN      = 1
+account_state_generations PROVEN  = 333
+reconciliation_runs PROVEN        = 333
+~~~
+
+Scheduled report/read-path verification:
+
+~~~text
+DAILY MAYAK REPORT                = PASS / ExecMainStatus=0
+WEEKLY MAYAK REPORT               = PASS / ExecMainStatus=0
+PROVEN SOURCE                     = analytics.market_minutes
+LEGACY FALLBACK SOURCE            = mayak_v2.coin_minutes
+COMPACT REPLACEMENT READY         = true
+REPORT UNIT SOURCE/LIVE           = PASS
+~~~
+
+The legacy table remains an explicit historical fallback; this R9 checkpoint
+does not authorize its removal.
+
+Exact source/live payload verification after the final deploy:
+
+~~~text
+RUNTIME TRACKED FILES CHECKED     = 437
+RUNTIME TRACKED MISMATCHES        = 0
+TOOLING TRACKED FILES CHECKED     = 12
+TOOLING TRACKED MISMATCHES        = 0
+SOURCE_LIVE_PAYLOAD               = PASS
+~~~
+
+Key runtime services were sampled twice six seconds apart after the final
+cutover. Private runtime, MAYAK, Dispatcher, context correlator, Dashboard,
+Lifecycle Supervisor and Universal Entry consumer/observer all remained active
+with the same PIDs and `NRestarts=0`. No Traceback/ERROR/CRITICAL/Exception
+was found in those key service journals after final cutover.
+
+The only currently failed CRIPTA unit observed is
+`cripta-u5-oi30s-source-soak.service`; its failure timestamp is
+2026-10-09 14:50:58 UTC, so it predates R9b and is not classified as an R9b
+regression.
+
+Backup / rollback evidence:
+
+~~~text
+LATEST DEPLOY BACKUP
+  768620d6... -> c705ae43...
+  cripta_before.dump = 4,665,296,714 bytes
+  pg_restore --list  = PASS
+
+R9 CONTROL CHECKPOINT RETAINED
+  99608ce2... -> 768620d6...
+  cripta_before.dump = 4,663,675,617 bytes
+  pg_restore --list  = PASS
+
+PRE-R9 VERIFIED SYSTEM BACKUP
+  generation         = 20261017T032535Z
+  cripta-backup.service Result / status = success / 0
+  current pg_restore --list             = PASS
+~~~
+
+The canonical system-backup script creates `SHA256SUMS` and does not publish
+the generation until `sha256sum --check`, `pg_restore --list` and both tar
+listing checks pass. A later ad-hoc full SHA256 re-read lost its management
+channel result and is therefore **not** counted as new evidence; the canonical
+backup-job success plus current restore-list check are the evidence used here.
+
+Latest source verification for the final report-recovery changeset:
+
+~~~text
+TARGETED REPORT RECOVERY SET      = 20 / 20 PASS
+SYSTEMD UNIT VERIFY               = PASS
+RUFF TARGETED                     = PASS
+DIFF CHECK                        = PASS
+FULL PYTEST                       = 1931 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES         = CONFIRMED
+NEW TEST FAILURES                 = 0
+~~~
+
+R9 completion gate:
+
+~~~text
+NEW_WRITER_PATH                   = PASS
+NEW_READER_PATH                   = PASS
+ACCOUNT_SCOPE_PARITY              = PASS
+MARKET_SOURCE_PARITY              = PASS
+RESTART_RECOVERY                  = PASS
+REPORT_REPLAY_RESEARCH            = PASS
+BACKUP_ROLLBACK                   = PASS
+LEGACY_REQUIRED_READERS           = NOT YET / R10 GATE
+~~~
+
+`LEGACY_REQUIRED_READERS=0` is deliberately not fabricated by R9 completion.
+It is the next R10 retirement proof before legacy constraints/path removal.
+
+No data deletion, old JSONB/coin-minute retirement, physical PostgreSQL reclaim,
+Exchange mutation or LIVE re-arm is authorized or performed by this R9b
+checkpoint.
