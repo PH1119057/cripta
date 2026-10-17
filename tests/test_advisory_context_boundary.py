@@ -6,6 +6,18 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 PRIVATE_PATH = ROOT / "operations/connectivity/private_runtime.py"
 PRIVATE = PRIVATE_PATH.read_text(encoding="utf-8")
+UNIVERSAL_ENGINE = (
+    ROOT / "src/bybit_workbench/universal_entry/engine.py"
+).read_text(encoding="utf-8")
+UNIVERSAL_BRIDGE = (
+    ROOT / "src/bybit_workbench/universal_entry/execution_bridge.py"
+).read_text(encoding="utf-8")
+UNIVERSAL_CONSUMER = (
+    ROOT / "operations/connectivity/universal_entry_consumer.py"
+).read_text(encoding="utf-8")
+UNIVERSAL_STORAGE = (
+    ROOT / "src/bybit_workbench/universal_entry/storage.py"
+).read_text(encoding="utf-8")
 PROTECTION = (ROOT / "operations/connectivity/protection_math.py").read_text(encoding="utf-8")
 EXIT_RUNTIME = (ROOT / "operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
 RUNTIME_SCHEMA = (ROOT / "operations/connectivity/runtime_schema.py").read_text(
@@ -33,12 +45,16 @@ def test_dispatcher_context_api_does_not_return_boolean_permission() -> None:
     assert "return allowed" not in ast.get_source_segment(PRIVATE, function)
 
 
-def test_incompatible_context_cannot_suppress_entry_command() -> None:
-    worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
-    assert "context_allowed" not in worker
-    assert "if not context_allowed" not in worker
-    assert "observed_context = observe_m3_entry_context" in worker
-    assert "runtime.trade_commands" in worker
+def test_observe_context_cannot_suppress_entry_without_strategy_decision_mode() -> None:
+    assert "_DECISION_MODES = {ContextMode.CONDITION, ContextMode.RANKING}" in UNIVERSAL_ENGINE
+    assert "if requirement.mode in _DECISION_MODES:" in UNIVERSAL_ENGINE
+    assert (
+        "is_consumed = requirement.mode in _DECISION_MODES and status == \"FRESH\""
+        in UNIVERSAL_ENGINE
+    )
+    assert "ContextMode.OBSERVE" not in UNIVERSAL_ENGINE.split("_DECISION_MODES =", 1)[1].split(
+        "\n", 1
+    )[0]
 
 
 def test_context_only_semantics_are_explicit_and_backward_compatible() -> None:
@@ -85,16 +101,23 @@ def test_observed_context_schema_preserves_historical_consumed_rows() -> None:
     assert "analytics.entry_advisory_contexts" in MIGRATION
 
 
-def test_existing_entry_geometry_and_safety_gates_remain_fail_closed() -> None:
-    worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
-    assert "нет причинной неизменяемой геометрии Entry" in worker
-    assert "if not gate_enabled" in worker
-    assert "по монете уже есть позиция, заявка или команда" in worker
+def test_universal_entry_fact_and_admission_gates_remain_fail_closed() -> None:
+    assert "if not _execution_gate_enabled(connection):" in UNIVERSAL_CONSUMER
+    assert "request.exchange_position_slot_claim_id" in UNIVERSAL_CONSUMER
+    assert "request.position_mode_state_ref" in UNIVERSAL_CONSUMER
+    assert "request.strategy_execution_binding_id" in UNIVERSAL_CONSUMER
+    assert "STRATEGY_EXECUTION_BINDING_NOT_READY" in UNIVERSAL_CONSUMER
+    assert "ExecutionRequest.signal_fact" in UNIVERSAL_BRIDGE
+    assert "execution reference_value_path must start with fact." in UNIVERSAL_BRIDGE
 
 
-def test_geometry_jsonb_is_adapted_before_binding_insert() -> None:
-    worker = ast.get_source_segment(PRIVATE, _function("command_worker_loop"))
-    assert "json.dumps(geometry[3], ensure_ascii=False, default=str)" in worker
+def test_causal_signal_fact_is_frozen_before_execution_request_insert() -> None:
+    assert '"signal_fact": {' in UNIVERSAL_ENGINE
+    assert '"source_refs": signal_fact.source_refs' in UNIVERSAL_ENGINE
+    assert '"attributes": signal_fact.attributes.to_dict()' in UNIVERSAL_ENGINE
+    assert "execution_requests(" in UNIVERSAL_STORAGE
+    assert "payload" in UNIVERSAL_STORAGE
+    assert "'PROVEN'" in UNIVERSAL_STORAGE
 
 
 def test_v36_strategy_owns_initial_protection_without_retuning_other_risk() -> None:

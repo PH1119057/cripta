@@ -120,7 +120,7 @@ def test_mayak_restart_restores_only_exact_linear_liquidation_identity() -> None
     assert "(BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID)" in source
 
 
-def test_scheduled_mayak_reports_separate_proven_from_legacy_public_identity() -> None:
+def test_scheduled_mayak_reports_use_only_proven_compact_public_identity() -> None:
     source = (ROOT / "operations/monitoring/mayak_v2_report.py").read_text(
         encoding="utf-8"
     )
@@ -128,9 +128,7 @@ def test_scheduled_mayak_reports_separate_proven_from_legacy_public_identity() -
     assert "legacy_unknown_rows" in source
     assert "FROM analytics.market_minutes" in source
     assert "'PROVEN'::text AS identity_status" in source
-    assert "'LEGACY_UNKNOWN'::text AS identity_status" in source
-    assert "AND market_source_id IS NULL" in source
-    assert "AND spot_instrument_id IS NULL" in source
-    assert "AND linear_instrument_id IS NULL" in source
+    assert "'LEGACY_UNKNOWN'::text AS identity_status" not in source
+    assert "FROM mayak_v2.coin_minutes" not in source
     assert '"proven_source": "analytics.market_minutes"' in source
-    assert '"legacy_fallback_source": "mayak_v2.coin_minutes"' in source
+    assert '"legacy_fallback_source": None' in source

@@ -30,7 +30,9 @@ DB_DSN = os.environ.get(
     "CRIPTA_DATABASE_DSN",
     "dbname=cripta user=cripta host=/var/run/postgresql application_name=universal-entry-consumer",
 )
-ENTRY_COMMAND_SOURCE = os.environ.get("CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1").strip().upper()
+ENTRY_COMMAND_SOURCE = os.environ.get(
+    "CRIPTA_ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"
+).strip().upper()
 CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED").strip().upper()
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
 LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()

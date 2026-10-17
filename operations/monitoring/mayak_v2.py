@@ -446,7 +446,6 @@ class Collector:
                 snapshot["collector_continuity"] = self._advance_continuity(minute)
                 snapshot_id = self._persist_snapshot(snapshot)
                 self._persist_liquidations()
-                self._persist_coin_minutes(snapshot_id, snapshot)
                 self._persist_compact_market_minutes(snapshot_id, snapshot)
                 self._persist_coin_market_contexts(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
@@ -753,78 +752,6 @@ class Collector:
                 ),
             )
             db.commit()
-
-    def _persist_coin_minutes(self, snapshot_id: int, snapshot: dict[str, Any]) -> None:
-        def get(source: dict[str, Any], key: str) -> Any:
-            return source.get(key)
-
-        rows = []
-        for symbol, coin in snapshot.get("coins", {}).items():
-            spot, linear = coin.get("spot") or {}, coin.get("linear") or {}
-            ticker, books = coin.get("ticker") or {}, coin.get("books") or {}
-            spot_book, linear_book = books.get("spot") or {}, books.get("linear") or {}
-            rows.append(
-                (
-                    snapshot["observed_at"],
-                    snapshot_id,
-                    symbol,
-                    get(spot, "buy_usd"),
-                    get(spot, "sell_usd"),
-                    get(spot, "net_usd"),
-                    get(spot, "turnover_usd"),
-                    get(linear, "buy_usd"),
-                    get(linear, "sell_usd"),
-                    get(linear, "net_usd"),
-                    get(linear, "turnover_usd"),
-                    get(linear, "return_pct"),
-                    get(ticker, "open_interest"),
-                    get(ticker, "open_interest_change_pct"),
-                    get(ticker, "funding_rate"),
-                    get(ticker, "mark_price"),
-                    get(ticker, "index_price"),
-                    get(ticker, "long_ratio"),
-                    get(ticker, "short_ratio"),
-                    get(spot_book, "bid_usd"),
-                    get(spot_book, "ask_usd"),
-                    get(spot_book, "bid_change_pct"),
-                    get(spot_book, "ask_change_pct"),
-                    get(linear_book, "bid_usd"),
-                    get(linear_book, "ask_usd"),
-                    get(linear_book, "bid_change_pct"),
-                    get(linear_book, "ask_change_pct"),
-                    get(spot, "large_buy_usd"),
-                    get(spot, "large_sell_usd"),
-                    get(linear, "large_buy_usd"),
-                    get(linear, "large_sell_usd"),
-                    json.dumps(coin.get("quality") or {}, default=str),
-                    BYBIT_PUBLIC_MARKET_SOURCE_ID,
-                    bybit_instrument_id("spot", symbol),
-                    bybit_instrument_id("linear", symbol),
-                )
-            )
-        if rows:
-            with psycopg.connect(DSN) as db:
-                db.cursor().executemany(
-                    """INSERT INTO mayak_v2.coin_minutes(
-                    observed_at,snapshot_id,symbol,
-                    spot_buy_usd,spot_sell_usd,spot_net_usd,spot_turnover_usd,
-                    derivatives_buy_usd,derivatives_sell_usd,derivatives_net_usd,
-                    derivatives_turnover_usd,return_5m_pct,open_interest,
-                    open_interest_change_pct,funding_rate,mark_price,index_price,
-                    long_ratio,short_ratio,spot_bid_usd,spot_ask_usd,
-                    spot_bid_change_pct,spot_ask_change_pct,derivatives_bid_usd,
-                    derivatives_ask_usd,derivatives_bid_change_pct,
-                    derivatives_ask_change_pct,large_spot_buy_usd,large_spot_sell_usd,
-                    large_derivatives_buy_usd,large_derivatives_sell_usd,source_quality,
-                    market_source_id,spot_instrument_id,linear_instrument_id)
-                    VALUES(
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s)
-                    ON CONFLICT(observed_at,symbol) DO NOTHING""",
-                    rows,
-                )
-                db.commit()
 
     def _persist_compact_market_minutes(
         self,

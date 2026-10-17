@@ -10,7 +10,7 @@ Group=cripta
 WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/etc/cripta/release.env
-Environment=CRIPTA_ENTRY_COMMAND_SOURCE=LEGACY_V1
+Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
 Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
 Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 EnvironmentFile=-/etc/cripta/universal_entry_consumer.env

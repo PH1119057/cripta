@@ -27,8 +27,8 @@ def test_r5b_authenticated_exchange_evidence_is_marked_proven() -> None:
         assert "TRADING_ACCOUNT_ID" in section
         assert "ACCOUNT_CONNECTOR_ID" in section
         assert "'PROVEN'" in section
-    assert "ON CONFLICT(exec_id) DO UPDATE SET" in source
-    assert "ON CONFLICT(order_id) DO UPDATE SET" in history
+    assert "ON CONFLICT(trading_account_id,exec_id) DO UPDATE SET" in source
+    assert "ON CONFLICT(trading_account_id,order_id) DO UPDATE SET" in history
 
 
 def test_r5b_does_not_stamp_strategy_owned_commands_or_positions() -> None:

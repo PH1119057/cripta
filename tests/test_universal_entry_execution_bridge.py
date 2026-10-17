@@ -291,23 +291,25 @@ def test_engine_execution_request_carries_exact_signal_fact_snapshot_source() ->
     assert '"attributes": signal_fact.attributes.to_dict()' in source
 
 
-def test_dormant_consumer_requires_two_explicit_activation_switches() -> None:
+def test_dormant_consumer_uses_universal_entry_source_and_explicit_arm() -> None:
     source = (ROOT / "operations/connectivity/universal_entry_consumer.py").read_text(
         encoding="utf-8"
     )
-    assert 'CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1"' in source
+    assert '"CRIPTA_ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"' in source
+    assert "LEGACY_V1" not in source
     assert 'CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABLED"' in source
     assert 'ENTRY_COMMAND_SOURCE != "UNIVERSAL_ENTRY" or CONSUMER_ARM != "ENABLED"' in source
     assert "runtime.trade_commands" in source
 
 
-def test_private_runtime_default_source_and_universal_fill_lineage() -> None:
+def test_private_runtime_retires_legacy_entry_source_and_keeps_universal_lineage() -> None:
     source = (ROOT / "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
     binding = (ROOT / "src/bybit_workbench/strategy_position_binding.py").read_text(
         encoding="utf-8"
     )
-    assert 'CRIPTA_ENTRY_COMMAND_SOURCE", "LEGACY_V1"' in source
-    assert 'if ENTRY_COMMAND_SOURCE == "LEGACY_V1"' in source
+    assert '"CRIPTA_ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"' in source
+    assert "R10_LEGACY_ENTRY_COMMAND_SOURCE_RETIRED" in source
+    assert "LEGACY_V1" not in source
     assert "load_universal_entry_lineage(" in source
     assert "persist_universal_strategy_position(" in source
     for token in (
@@ -338,11 +340,12 @@ def test_dispatch_storage_is_append_only_and_has_exact_lineage() -> None:
         assert token in sql
 
 
-def test_systemd_template_is_hard_disabled_by_default() -> None:
+def test_systemd_template_is_universal_entry_but_hard_disabled_by_default() -> None:
     unit = (ROOT / "operations/systemd/cripta-universal-entry-consumer.service").read_text(
         encoding="utf-8"
     )
-    assert "CRIPTA_ENTRY_COMMAND_SOURCE=LEGACY_V1" in unit
+    assert "CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY" in unit
+    assert "LEGACY_V1" not in unit
     assert "CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
     assert "Restart=on-failure" in unit
 

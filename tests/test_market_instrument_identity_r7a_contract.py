@@ -12,6 +12,9 @@ MIGRATION = (ROOT / "operations/sql/20261017_market_instrument_identity_r7a.sql"
     encoding="utf-8"
 )
 MAYAK = (ROOT / "operations/monitoring/mayak_v2.py").read_text(encoding="utf-8")
+COMPACT = (
+    ROOT / "src/bybit_workbench/mayak/compact_analytics.py"
+).read_text(encoding="utf-8")
 LIVE = (ROOT / "src/bybit_workbench/mayak/core/live.py").read_text(encoding="utf-8")
 DISPATCHER = (ROOT / "operations/monitoring/dispatcher_v2.py").read_text(encoding="utf-8")
 PRIVATE = (ROOT / "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
@@ -62,11 +65,14 @@ def test_r7a_adds_nullable_identity_bridge_with_fk_provenance() -> None:
     assert "position_mode_states_proven_instrument_check" not in MIGRATION
 
 
-def test_mayak_dual_writes_identity_without_removing_symbol() -> None:
+def test_mayak_compact_writer_preserves_exact_identity_and_symbol() -> None:
     assert "_validate_market_identity_registry" in MAYAK
-    assert 'bybit_instrument_id("spot", symbol)' in MAYAK
-    assert 'bybit_instrument_id("linear", symbol)' in MAYAK
-    assert "market_source_id,spot_instrument_id,linear_instrument_id" in MAYAK
+    assert "self._persist_compact_market_minutes(snapshot_id, snapshot)" in MAYAK
+    assert "INSERT INTO mayak_v2.coin_minutes" not in MAYAK
+    assert "BYBIT_PUBLIC_MARKET_SOURCE_ID" in COMPACT
+    assert "bybit_instrument_id(market, symbol)" in COMPACT
+    assert '"external_symbol": symbol' in COMPACT
+    assert '"product_category": product_category' in COMPACT
     assert '"market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID' in LIVE
     assert '"instrument_lineage": instrument_lineage' in LIVE
     assert '"symbol": symbol' in LIVE

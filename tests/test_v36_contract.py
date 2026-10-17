@@ -106,10 +106,19 @@ def test_scanner_persists_strategy_protection_in_immutable_handoff() -> None:
     assert '"initial_protection": ENTRY_V1_CORE_INITIAL_PROTECTION.payload_for(' in text
 
 
-def test_geometry_fail_closed_reason_preserves_existing_contract() -> None:
-    text = (ROOT / "operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "нет причинной неизменяемой геометрии Entry" in text
-    assert "immutable Entry handoff" in text
+def test_causal_entry_fact_and_plan_contract_remain_fail_closed() -> None:
+    engine = (
+        ROOT / "src/bybit_workbench/universal_entry/engine.py"
+    ).read_text(encoding="utf-8")
+    bridge = (
+        ROOT / "src/bybit_workbench/universal_entry/execution_bridge.py"
+    ).read_text(encoding="utf-8")
+    assert '"signal_fact": {' in engine
+    assert '"entry_plan_fingerprint": plan.entry_plan_fingerprint' in engine
+    assert '"source_refs": signal_fact.source_refs' in engine
+    assert "ExecutionRequest.signal_fact" in bridge
+    assert "EntryPlan fingerprint does not match ExecutionRequest" in bridge
+    assert "execution reference_value_path must start with fact." in bridge
 
 
 def test_superseded_p0_test_contract_matches_v36_authority() -> None:

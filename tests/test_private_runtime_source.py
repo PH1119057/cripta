@@ -26,30 +26,36 @@ def test_command_loop_does_not_overwrite_exchange_credentials() -> None:
     assert "secret" not in assigned_names
 
 
-def test_command_worker_keeps_operational_safety_without_market_hard_gate() -> None:
-    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "market_guard_v1" not in source
-    assert "mayak_v2.snapshots" not in source
-    assert 'up_share < Decimal("0.55")' not in source
-    assert 'down_share < Decimal("0.55")' not in source
-    assert "по монете уже есть позиция, заявка или команда" in source
-    assert "if not gate_enabled" in source
-    assert '"теневой допуск"' in source
-    assert 'runtime.entry_decisions' in source
-    for symbol in ("1000PEPEUSDT", "DOGEUSDT", "NEARUSDT", "XLMUSDT"):
-        assert symbol in source
+def test_universal_entry_keeps_operational_safety_without_market_hard_gate() -> None:
+    private = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    consumer = Path(
+        "operations/connectivity/universal_entry_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert "market_guard_v1" not in private
+    assert "mayak_v2.snapshots" not in private
+    assert 'up_share < Decimal("0.55")' not in private
+    assert 'down_share < Decimal("0.55")' not in private
+    assert "if not _execution_gate_enabled(connection):" in consumer
+    assert "STRATEGY_EXECUTION_BINDING_NOT_READY" in consumer
+    assert "exchange_position_slot_claim_id" in consumer
+    assert "position_mode_state_ref" in consumer
+    assert "runtime.trade_commands" in consumer
 
 
-def test_m3_full_live_consumes_only_causal_dispatcher_context() -> None:
-    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert 'configured_entry_policy = str(settings[9] or "base_entry_v1")' in source
-    assert "observe_m3_entry_context" in source
-    assert "observed_at<=%s" in source
-    assert "1.0.0-owner-live" in source
-    assert "OBSERVED_CONTEXT" in source
-    assert '"trading_effect": "NONE"' in source
-    assert "NO_CONTEXT" in source
-    assert "context_allowed" not in source
+def test_universal_entry_consumes_context_only_through_causal_strategy_policy() -> None:
+    engine = Path("src/bybit_workbench/universal_entry/engine.py").read_text(
+        encoding="utf-8"
+    )
+    assert "context.observed_at" in engine
+    assert "now=observed_at" in engine
+    assert "requirement.mode in _DECISION_MODES" in engine
+    assert "_DECISION_MODES = {ContextMode.CONDITION, ContextMode.RANKING}" in engine
+    assert "ContextMode.OBSERVE" in engine
+    assert "consumed[requirement.context_id] = context" in engine
+    assert '"source_refs": signal_fact.source_refs' in engine
+    assert '"attributes": signal_fact.attributes.to_dict()' in engine
 
 
 def test_command_loop_restarts_after_internal_failure() -> None:

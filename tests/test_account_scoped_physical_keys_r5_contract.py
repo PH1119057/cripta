@@ -82,11 +82,15 @@ def test_installer_applies_key_preparation_after_identity_columns_exist() -> Non
     assert r5b < keys
 
 
-def test_writers_remain_on_legacy_conflict_targets_until_later_cutover() -> None:
-    # Preparation must not silently activate multi-account physical writes.
-    # The old PKs remain the final blocker until the later R9/R10 cutover.
-    assert "ON CONFLICT(singleton) DO UPDATE SET" in PRIVATE
-    assert "ON CONFLICT(symbol,position_idx) DO UPDATE SET" in PRIVATE
-    assert "ON CONFLICT(order_id) DO UPDATE SET" in PRIVATE
-    assert "ON CONFLICT(exec_id) DO UPDATE SET" in PRIVATE
-    assert "ON CONFLICT(trading_account_id" not in PRIVATE
+def test_writers_use_prepared_account_scoped_conflict_targets_after_r10a() -> None:
+    assert "ON CONFLICT(trading_account_id,singleton) DO UPDATE SET" in PRIVATE
+    assert (
+        "ON CONFLICT(trading_account_id,symbol,position_idx) DO UPDATE SET"
+        in PRIVATE
+    )
+    assert "ON CONFLICT(trading_account_id,order_id) DO UPDATE SET" in PRIVATE
+    assert "ON CONFLICT(trading_account_id,exec_id) DO UPDATE SET" in PRIVATE
+    assert "ON CONFLICT(singleton) DO UPDATE SET" not in PRIVATE
+    assert "ON CONFLICT(symbol,position_idx) DO UPDATE SET" not in PRIVATE
+    assert "ON CONFLICT(order_id) DO UPDATE SET" not in PRIVATE
+    assert "ON CONFLICT(exec_id) DO UPDATE SET" not in PRIVATE

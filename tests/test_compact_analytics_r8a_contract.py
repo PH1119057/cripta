@@ -143,13 +143,13 @@ def test_r8a_migration_is_additive_compact_and_exact_identity_grained() -> None:
     assert "strategy_id" not in MIGRATION
 
 
-def test_mayak_dual_writes_compact_rows_after_legacy_coin_minutes() -> None:
+def test_mayak_writes_only_compact_market_minutes_after_r10_cutover() -> None:
     assert "compact_market_minute_rows" in MAYAK
     assert "def _persist_compact_market_minutes" in MAYAK
     assert "compact_market_minute_insert_sql" in MAYAK
-    assert MAYAK.index("self._persist_coin_minutes(snapshot_id, snapshot)") < MAYAK.index(
-        "self._persist_compact_market_minutes(snapshot_id, snapshot)"
-    )
+    assert "self._persist_coin_minutes(snapshot_id, snapshot)" not in MAYAK
+    assert "def _persist_coin_minutes" not in MAYAK
+    assert "INSERT INTO mayak_v2.coin_minutes" not in MAYAK
 
 
 def test_installer_and_runtime_schema_require_compact_analytics() -> None:

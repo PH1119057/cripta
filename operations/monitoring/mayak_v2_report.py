@@ -31,43 +31,19 @@ def main() -> None:
             (since, until),
         ).fetchall()
         public_identity = db.execute(
-            """WITH compact AS (
-                   SELECT count(
-                              DISTINCT (
-                                  market_source_id,
-                                  external_symbol,
-                                  observed_minute
-                              )
-                          ) AS proven_rows
-                   FROM analytics.market_minutes
-                   WHERE observed_minute BETWEEN %s AND %s
-               ),
-               legacy AS (
-                   SELECT
-                       count(*) FILTER (
-                           WHERE market_source_id IS NULL
-                             AND spot_instrument_id IS NULL
-                             AND linear_instrument_id IS NULL
-                       ) AS legacy_unknown_rows,
-                       count(*) FILTER (
-                           WHERE NOT (
-                               (market_source_id IS NOT NULL
-                                AND spot_instrument_id IS NOT NULL
-                                AND linear_instrument_id IS NOT NULL)
-                               OR
-                               (market_source_id IS NULL
-                                AND spot_instrument_id IS NULL
-                                AND linear_instrument_id IS NULL)
-                           )
-                       ) AS partial_rows
-                   FROM mayak_v2.coin_minutes
-                   WHERE observed_at BETWEEN %s AND %s
-               )
-               SELECT compact.proven_rows,
-                      legacy.legacy_unknown_rows,
-                      legacy.partial_rows
-               FROM compact CROSS JOIN legacy""",
-            (since, until, since, until),
+            """SELECT
+                   count(
+                       DISTINCT (
+                           market_source_id,
+                           external_symbol,
+                           observed_minute
+                       )
+                   ) AS proven_rows,
+                   0::bigint AS legacy_unknown_rows,
+                   0::bigint AS partial_rows
+               FROM analytics.market_minutes
+               WHERE observed_minute BETWEEN %s AND %s""",
+            (since, until),
         ).fetchone()
         if public_identity is None:
             raise RuntimeError("MAYAK_REPORT_PUBLIC_IDENTITY_QUERY_EMPTY")
@@ -77,71 +53,43 @@ def main() -> None:
                 f"rows={int(public_identity[2] or 0)}"
             )
         coins = db.execute(
-            """WITH proven AS (
-                   SELECT
-                       'PROVEN'::text AS identity_status,
-                       market_source_id,
-                       max(instrument_id) FILTER (
-                           WHERE product_category='SPOT'
-                       ) AS spot_instrument_id,
-                       max(instrument_id) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS linear_instrument_id,
-                       external_symbol AS symbol,
-                       count(DISTINCT observed_minute) AS minutes,
-                       avg(return_5m_pct) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS return_5m_pct,
-                       avg(net_usd) FILTER (
-                           WHERE product_category='SPOT'
-                       ) AS spot_net_usd,
-                       avg(net_usd) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS derivatives_net_usd,
-                       avg(open_interest_change_pct) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS open_interest_change_pct,
-                       avg(funding_rate) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS funding_rate,
-                       avg(bid_change_pct) FILTER (
-                           WHERE product_category='SPOT'
-                       ) AS spot_bid_change_pct,
-                       avg(bid_change_pct) FILTER (
-                           WHERE product_category='LINEAR'
-                       ) AS derivatives_bid_change_pct
-                   FROM analytics.market_minutes
-                   WHERE observed_minute BETWEEN %s AND %s
-                   GROUP BY market_source_id,external_symbol
-               ),
-               legacy AS (
-                   SELECT
-                       'LEGACY_UNKNOWN'::text AS identity_status,
-                       NULL::text AS market_source_id,
-                       NULL::text AS spot_instrument_id,
-                       NULL::text AS linear_instrument_id,
-                       symbol,
-                       count(*) AS minutes,
-                       avg(return_5m_pct),
-                       avg(spot_net_usd),
-                       avg(derivatives_net_usd),
-                       avg(open_interest_change_pct),
-                       avg(funding_rate),
-                       avg(spot_bid_change_pct),
-                       avg(derivatives_bid_change_pct)
-                   FROM mayak_v2.coin_minutes
-                   WHERE observed_at BETWEEN %s AND %s
-                     AND market_source_id IS NULL
-                     AND spot_instrument_id IS NULL
-                     AND linear_instrument_id IS NULL
-                   GROUP BY symbol
-               )
-               SELECT * FROM proven
-               UNION ALL
-               SELECT * FROM legacy
-               ORDER BY identity_status,market_source_id NULLS FIRST,
-                        linear_instrument_id NULLS FIRST,symbol""",
-            (since, until, since, until),
+            """SELECT
+                   'PROVEN'::text AS identity_status,
+                   market_source_id,
+                   max(instrument_id) FILTER (
+                       WHERE product_category='SPOT'
+                   ) AS spot_instrument_id,
+                   max(instrument_id) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS linear_instrument_id,
+                   external_symbol AS symbol,
+                   count(DISTINCT observed_minute) AS minutes,
+                   avg(return_5m_pct) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS return_5m_pct,
+                   avg(net_usd) FILTER (
+                       WHERE product_category='SPOT'
+                   ) AS spot_net_usd,
+                   avg(net_usd) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS derivatives_net_usd,
+                   avg(open_interest_change_pct) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS open_interest_change_pct,
+                   avg(funding_rate) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS funding_rate,
+                   avg(bid_change_pct) FILTER (
+                       WHERE product_category='SPOT'
+                   ) AS spot_bid_change_pct,
+                   avg(bid_change_pct) FILTER (
+                       WHERE product_category='LINEAR'
+                   ) AS derivatives_bid_change_pct
+               FROM analytics.market_minutes
+               WHERE observed_minute BETWEEN %s AND %s
+               GROUP BY market_source_id,external_symbol
+               ORDER BY market_source_id,linear_instrument_id NULLS FIRST,symbol""",
+            (since, until),
         ).fetchall()
         events = db.execute(
             """SELECT occurred_at,event_type,reference_id,symbol,side,snapshot_id,payload
@@ -186,31 +134,13 @@ def main() -> None:
                    FROM analytics.market_minutes
                    WHERE observed_minute BETWEEN %s AND %s
                    GROUP BY observed_minute,external_symbol
-               ),
-               legacy AS (
-                   SELECT
-                       observed_at AS observed_minute,
-                       symbol AS external_symbol,
-                       CASE WHEN spot_net_usd IS NOT NULL THEN 1 ELSE 0 END,
-                       CASE WHEN derivatives_net_usd IS NOT NULL THEN 1 ELSE 0 END,
-                       CASE WHEN open_interest IS NOT NULL THEN 1 ELSE 0 END
-                   FROM mayak_v2.coin_minutes
-                   WHERE observed_at BETWEEN %s AND %s
-                     AND market_source_id IS NULL
-                     AND spot_instrument_id IS NULL
-                     AND linear_instrument_id IS NULL
-               ),
-               combined AS (
-                   SELECT * FROM proven
-                   UNION ALL
-                   SELECT * FROM legacy
                )
                SELECT count(*) AS total,
                       count(*) FILTER (WHERE spot_valid=1) AS spot_valid,
                       count(*) FILTER (WHERE derivatives_valid=1) AS derivatives_valid,
                       count(*) FILTER (WHERE oi_valid=1) AS oi_valid
-               FROM combined""",
-            (since, until, since, until),
+               FROM proven""",
+            (since, until),
         ).fetchone()
         liquidation_quality = db.execute(
             """SELECT coalesce(payload->'liquidations'->>'status','NO_DATA') AS status,
@@ -259,7 +189,7 @@ def main() -> None:
             "legacy_unknown_rows": int(public_identity[1] or 0),
             "partial_rows": int(public_identity[2] or 0),
             "proven_source": "analytics.market_minutes",
-            "legacy_fallback_source": "mayak_v2.coin_minutes",
+            "legacy_fallback_source": None,
             "compact_replacement_ready": compact_replacement_ready(),
         },
         "качество_ликвидаций": [

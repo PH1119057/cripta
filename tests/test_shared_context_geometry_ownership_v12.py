@@ -81,8 +81,23 @@ def test_position_ownership_has_stable_multibot_identity() -> None:
         assert field in MIGRATION
 
 
-def test_runtime_does_not_queue_m3_without_geometry() -> None:
-    assert "нет причинной неизменяемой геометрии Entry" in PRIVATE
+def test_runtime_does_not_queue_entry_without_causal_fact_and_admission() -> None:
+    engine = (
+        ROOT / "src/bybit_workbench/universal_entry/engine.py"
+    ).read_text(encoding="utf-8")
+    bridge = (
+        ROOT / "src/bybit_workbench/universal_entry/execution_bridge.py"
+    ).read_text(encoding="utf-8")
+    consumer = (
+        ROOT / "operations/connectivity/universal_entry_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert '"signal_fact": {' in engine
+    assert '"source_refs": signal_fact.source_refs' in engine
+    assert '"attributes": signal_fact.attributes.to_dict()' in engine
+    assert "ExecutionRequest.signal_fact" in bridge
+    assert "execution reference_value_path must start with fact." in bridge
+    assert "exchange_position_slot_claim_id" in consumer
+    assert "position_mode_state_ref" in consumer
 
 
 def test_runtime_records_exchange_execution_ids() -> None:

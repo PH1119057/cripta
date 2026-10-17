@@ -136,11 +136,9 @@ def test_compact_parity_detects_tampered_fact() -> None:
     assert parity.replacement_ready is False
 
 
-def test_scheduled_report_reads_proven_rows_from_compact_and_legacy_only_from_old_table() -> None:
+def test_scheduled_report_is_compact_only_after_r10_cutover() -> None:
     assert "FROM analytics.market_minutes" in REPORT
     assert '"proven_source": "analytics.market_minutes"' in REPORT
-    assert '"legacy_fallback_source": "mayak_v2.coin_minutes"' in REPORT
-    assert "AND market_source_id IS NULL" in REPORT
-    assert "AND spot_instrument_id IS NULL" in REPORT
-    assert "AND linear_instrument_id IS NULL" in REPORT
+    assert '"legacy_fallback_source": None' in REPORT
+    assert "FROM mayak_v2.coin_minutes" not in REPORT
     assert "compact_replacement_ready()" in REPORT

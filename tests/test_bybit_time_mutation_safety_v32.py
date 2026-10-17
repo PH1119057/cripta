@@ -250,7 +250,9 @@ def test_pending_entry_cancel_pre_mutation_block_disarms_without_restart() -> No
     cleanup_at = worker.index(
         "cancel_expired_entry_limits(connection, key, secret, now_ms)"
     )
-    cleanup = worker[cleanup_at:worker.index("pickup_window_ms", cleanup_at)]
+    cleanup = worker[
+        cleanup_at:worker.index("filled_entries=connection.execute", cleanup_at)
+    ]
     assert "except PreMutationSafetyBlock as exc:" in cleanup
     assert "handle_pre_mutation_safety_block(connection, None, exc)" in cleanup
     assert cleanup.index("except PreMutationSafetyBlock as exc:") < cleanup.index(
