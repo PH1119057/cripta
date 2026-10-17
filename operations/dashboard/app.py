@@ -23,6 +23,7 @@ import psycopg
 
 from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.live_release_alert import project_release_arm_health
+from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     evaluate_live_arm,
@@ -1455,7 +1456,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             market_context = connection.execute(
                 """SELECT market_context_id,observed_at,mayak_version,schema_version,
                 data_quality,payload FROM mayak_v2.shared_market_contexts
-                ORDER BY observed_at DESC LIMIT 1"""
+                WHERE market_source_id=%s
+                ORDER BY observed_at DESC LIMIT 1""",
+                (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
             ).fetchone()
         session_row = connection.execute("""SELECT changed_at_epoch_ms FROM runtime.trade_settings_history
             WHERE new_settings->>'entry_policy'='m3_full_live_v1'
@@ -2074,6 +2077,9 @@ def _write_signal_context_csv(
             dispatcher.coverage AS dispatcher_coverage,
             dispatcher.payload AS dispatcher_payload,
             coin.observed_at AS coin_context_at,
+            coin.market_source_id AS coin_market_source_id,
+            coin.spot_instrument_id AS coin_spot_instrument_id,
+            coin.linear_instrument_id AS coin_linear_instrument_id,
             coin.spot_net_usd,
             coin.spot_turnover_usd,
             coin.derivatives_net_usd,
@@ -2170,6 +2176,23 @@ def _write_signal_context_csv(
         LEFT JOIN LATERAL (
             SELECT cm.*
             FROM mayak_v2.coin_minutes cm
+            JOIN identity.market_sources source_identity
+              ON source_identity.market_source_id=cm.market_source_id
+             AND source_identity.market_source_id=%s
+             AND source_identity.venue_id='venue-bybit'
+             AND source_identity.status='ACTIVE'
+            JOIN identity.instruments spot_identity
+              ON spot_identity.instrument_id=cm.spot_instrument_id
+             AND spot_identity.venue_id='venue-bybit'
+             AND spot_identity.product_category='SPOT'
+             AND spot_identity.external_symbol=o.symbol
+             AND spot_identity.status='ACTIVE'
+            JOIN identity.instruments linear_identity
+              ON linear_identity.instrument_id=cm.linear_instrument_id
+             AND linear_identity.venue_id='venue-bybit'
+             AND linear_identity.product_category='LINEAR'
+             AND linear_identity.external_symbol=o.symbol
+             AND linear_identity.status='ACTIVE'
             WHERE cm.symbol=o.symbol
               AND cm.observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
             ORDER BY cm.observed_at DESC
@@ -2180,10 +2203,10 @@ def _write_signal_context_csv(
         LEFT JOIN monitoring.entry_geometry_handoffs geometry ON geometry.signal_id=o.signal_id
         LEFT JOIN shadow ON shadow.m3_setup_id=o.signal_id
     """
-    parameters: tuple[object, ...] = ()
+    parameters: tuple[object, ...] = (BYBIT_PUBLIC_MARKET_SOURCE_ID,)
     if cutoff_ms is not None:
         query += " WHERE o.signal_at_epoch_ms >= %s"
-        parameters = (cutoff_ms,)
+        parameters = (BYBIT_PUBLIC_MARKET_SOURCE_ID, cutoff_ms)
     query += " ORDER BY o.signal_at_epoch_ms"
     cursor = connection.execute(query, parameters)
     base_columns = [item.name for item in cursor.description]
@@ -2295,12 +2318,16 @@ def _write_dispatcher_v2_signal_context_csv(
             link.global_observed_at,
             link.global_age_seconds,
             global_ctx.data_quality AS global_data_quality,
+            global_ctx.market_source_id AS global_market_source_id,
             global_ctx.freshness_status AS global_stored_freshness_status,
             global_ctx.payload AS global_context_payload,
             link.coin_context_id,
             link.coin_observed_at,
             link.coin_age_seconds,
             coin_ctx.data_quality AS coin_data_quality,
+            coin_ctx.market_source_id AS coin_market_source_id,
+            coin_ctx.spot_instrument_id AS coin_spot_instrument_id,
+            coin_ctx.linear_instrument_id AS coin_linear_instrument_id,
             coin_ctx.freshness_status AS coin_stored_freshness_status,
             coin_ctx.payload AS coin_context_payload,
             link.capacity_snapshot_id,

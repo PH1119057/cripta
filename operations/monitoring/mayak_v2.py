@@ -348,12 +348,20 @@ class Collector:
                 FROM ordered WHERE previous IS NOT NULL"""
             ).fetchone()[0]
             liquidation_rows = db.execute(
-                """SELECT extract(epoch FROM occurred_at),symbol,position_side,
-                          bankruptcy_price,executed_size
-                   FROM mayak_v2.liquidations
-                   WHERE occurred_at >= clock_timestamp() - interval '24 hours'
-                     AND occurred_at <= clock_timestamp()
-                   ORDER BY occurred_at"""
+                """SELECT extract(epoch FROM l.occurred_at),l.symbol,l.position_side,
+                          l.bankruptcy_price,l.executed_size
+                   FROM mayak_v2.liquidations l
+                   JOIN identity.instruments instrument_identity
+                     ON instrument_identity.instrument_id=l.instrument_id
+                    AND instrument_identity.venue_id=%s
+                    AND instrument_identity.product_category='LINEAR'
+                    AND instrument_identity.external_symbol=l.symbol
+                    AND instrument_identity.status='ACTIVE'
+                   WHERE l.market_source_id=%s
+                     AND l.occurred_at >= clock_timestamp() - interval '24 hours'
+                     AND l.occurred_at <= clock_timestamp()
+                   ORDER BY occurred_at""",
+                (BYBIT_VENUE_ID, BYBIT_PUBLIC_MARKET_SOURCE_ID),
             ).fetchall()
         self._restore_liquidation_checkpoint(liquidation_rows)
         if latest is not None:

@@ -12,6 +12,8 @@ from typing import Any
 
 import psycopg
 
+from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
+
 DSN = os.environ.get("CRIPTA_DSN", "dbname=cripta user=cripta host=/var/run/postgresql")
 STATUS_PATH = Path(
     os.environ.get(
@@ -230,6 +232,7 @@ def correlate(*, batch_limit: int) -> int:
     v2_floor AS (
         SELECT min(observed_at) AS first_v2_at
         FROM dispatcher_v2.global_market_contexts
+        WHERE market_source_id=%s
     ),
     eligible AS (
         SELECT source.*
@@ -279,6 +282,9 @@ def correlate(*, batch_limit: int) -> int:
                'method','latest_context_not_after_event',
                'source_commit',%s::text,
                'coin_same_global_context',true,
+               'market_source_id',g.market_source_id,
+               'spot_instrument_id',c.spot_instrument_id,
+               'linear_instrument_id',c.linear_instrument_id,
                'strategy_attempt_id_status','NOT_AVAILABLE_CURRENT_RUNTIME',
                'trading_account_id',e.trading_account_id,
                'identity_status',e.identity_status,
@@ -287,17 +293,39 @@ def correlate(*, batch_limit: int) -> int:
            'NONE'
     FROM eligible e
     LEFT JOIN LATERAL (
-        SELECT global_context_id,observed_at
+        SELECT global_context_id,observed_at,market_source_id
         FROM dispatcher_v2.global_market_contexts
-        WHERE observed_at <= e.occurred_at
+        WHERE market_source_id=%s
+          AND observed_at <= e.occurred_at
         ORDER BY observed_at DESC
         LIMIT 1
     ) g ON true
     LEFT JOIN LATERAL (
-        SELECT coin_context_id,observed_at
-        FROM dispatcher_v2.coin_market_contexts
-        WHERE global_context_id=g.global_context_id
-          AND symbol=e.symbol
+        SELECT coin.coin_context_id,coin.observed_at,
+               coin.spot_instrument_id,coin.linear_instrument_id
+        FROM (
+            SELECT min(instrument_id) AS instrument_id
+            FROM identity.instruments
+            WHERE venue_id='venue-bybit'
+              AND product_category='SPOT'
+              AND external_symbol=e.symbol
+              AND status='ACTIVE'
+            HAVING count(*)=1
+        ) spot_identity
+        CROSS JOIN (
+            SELECT min(instrument_id) AS instrument_id
+            FROM identity.instruments
+            WHERE venue_id='venue-bybit'
+              AND product_category='LINEAR'
+              AND external_symbol=e.symbol
+              AND status='ACTIVE'
+            HAVING count(*)=1
+        ) linear_identity
+        JOIN dispatcher_v2.coin_market_contexts coin
+          ON coin.spot_instrument_id=spot_identity.instrument_id
+         AND coin.linear_instrument_id=linear_identity.instrument_id
+        WHERE coin.global_context_id=g.global_context_id
+          AND coin.market_source_id=%s
         LIMIT 1
     ) c ON true
     LEFT JOIN LATERAL (
@@ -315,7 +343,16 @@ def correlate(*, batch_limit: int) -> int:
     ON CONFLICT(event_type,reference_id) DO NOTHING
     """
     with psycopg.connect(DSN) as connection:
-        cursor = connection.execute(query, (batch_limit, SOURCE_COMMIT))
+        cursor = connection.execute(
+            query,
+            (
+                BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                batch_limit,
+                SOURCE_COMMIT,
+                BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                BYBIT_PUBLIC_MARKET_SOURCE_ID,
+            ),
+        )
         inserted = cursor.rowcount
         connection.commit()
     return inserted

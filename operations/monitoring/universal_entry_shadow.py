@@ -36,6 +36,10 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.entry_admission import PostgresEntryAdmissionPort
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
 from bybit_workbench.lifecycle_ack import record_plan_consumption
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_id,
+)
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
@@ -1391,11 +1395,13 @@ def _observer_objective_inputs(
     observed_at: datetime,
 ) -> tuple[ObjectiveContext | None, dict[str, ObjectiveContext], TradingCapacitySnapshot | None]:
     global_row = connection.execute(
-        """SELECT global_context_id,observed_at,data_quality,payload,source_market_context_id
+        """SELECT global_context_id,observed_at,data_quality,payload,source_market_context_id,
+                  market_source_id
              FROM dispatcher_v2.global_market_contexts
-            WHERE observed_at <= %s
+            WHERE market_source_id=%s
+              AND observed_at <= %s
             ORDER BY observed_at DESC LIMIT 1""",
-        (observed_at,),
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID, observed_at),
     ).fetchone()
     global_context: ObjectiveContext | None = None
     if global_row is not None:
@@ -1406,27 +1412,57 @@ def _observer_objective_inputs(
             quality=DataQuality(str(global_row[2])),
             completeness="COMPLETE",
             payload=FrozenPolicy.from_mapping(cast(Mapping[str, object], global_row[3])),
-            source_refs=(f"dispatcher-global:{global_row[0]}", f"mayak:{global_row[4]}"),
+            source_refs=(
+                f"market-source:{global_row[5]}",
+                f"dispatcher-global:{global_row[0]}",
+                f"mayak:{global_row[4]}",
+            ),
         )
     coins: dict[str, ObjectiveContext] = {}
     if symbols:
+        expected_linear_ids = [
+            bybit_instrument_id("linear", symbol)
+            for symbol in symbols
+        ]
         coin_rows = connection.execute(
-            """SELECT DISTINCT ON (symbol)
-                      symbol,coin_context_id,observed_at,data_quality,payload,source_coin_context_id
+            """SELECT DISTINCT ON (linear_instrument_id)
+                      symbol,coin_context_id,observed_at,data_quality,payload,
+                      source_coin_context_id,market_source_id,spot_instrument_id,
+                      linear_instrument_id
                  FROM dispatcher_v2.coin_market_contexts
-                WHERE symbol = ANY(%s) AND observed_at <= %s
-                ORDER BY symbol,observed_at DESC""",
-            (list(symbols), observed_at),
+                WHERE market_source_id=%s
+                  AND linear_instrument_id = ANY(%s)
+                  AND observed_at <= %s
+                ORDER BY linear_instrument_id,observed_at DESC""",
+            (BYBIT_PUBLIC_MARKET_SOURCE_ID, expected_linear_ids, observed_at),
         ).fetchall()
         for row in coin_rows:
-            coins[str(row[0])] = ObjectiveContext(
+            symbol = str(row[0])
+            expected_spot_id = bybit_instrument_id("spot", symbol)
+            expected_linear_id = bybit_instrument_id("linear", symbol)
+            if (
+                str(row[6]) != BYBIT_PUBLIC_MARKET_SOURCE_ID
+                or str(row[7]) != expected_spot_id
+                or str(row[8]) != expected_linear_id
+            ):
+                raise RuntimeError(
+                    "DISPATCHER_COIN_MARKET_IDENTITY_MISMATCH "
+                    f"symbol={symbol} source={row[6]} spot={row[7]} linear={row[8]}"
+                )
+            coins[symbol] = ObjectiveContext(
                 context_id=str(row[1]),
                 context_type="DISPATCHER_COIN",
                 observed_at=cast(datetime, row[2]).astimezone(UTC),
                 quality=DataQuality(str(row[3])),
                 completeness="COMPLETE",
                 payload=FrozenPolicy.from_mapping(cast(Mapping[str, object], row[4])),
-                source_refs=(f"dispatcher-coin:{row[1]}", f"mayak-coin:{row[5]}"),
+                source_refs=(
+                    f"market-source:{row[6]}",
+                    f"instrument:{row[7]}",
+                    f"instrument:{row[8]}",
+                    f"dispatcher-coin:{row[1]}",
+                    f"mayak-coin:{row[5]}",
+                ),
             )
     capacity_row = connection.execute(
         """SELECT capacity_snapshot_id,observed_at,available_for_new_trading,

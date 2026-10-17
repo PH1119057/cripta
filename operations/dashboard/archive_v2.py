@@ -81,6 +81,17 @@ class TableExport:
 
 
 TABLE_EXPORTS = (
+    TableExport("identity.venues", "identity/venues.jsonl", ("updated_at", "created_at")),
+    TableExport(
+        "identity.market_sources",
+        "identity/market_sources.jsonl",
+        ("updated_at", "created_at"),
+    ),
+    TableExport(
+        "identity.instruments",
+        "identity/instruments.jsonl",
+        ("updated_at", "created_at"),
+    ),
     TableExport(
         "runtime.account_state_generations",
         "execution/account_state_generations.jsonl",
@@ -333,6 +344,28 @@ TABLE_EXPORTS = (
 )
 
 
+PUBLIC_MARKET_IDENTITY_EXPORTS: dict[str, tuple[str, ...]] = {
+    "mayak_v2.coin_minutes": (
+        "market_source_id",
+        "spot_instrument_id",
+        "linear_instrument_id",
+    ),
+    "mayak_v2.liquidations": ("market_source_id", "instrument_id"),
+    "mayak_v2.coin_market_contexts": (
+        "market_source_id",
+        "spot_instrument_id",
+        "linear_instrument_id",
+    ),
+    "mayak_v2.shared_market_contexts": ("market_source_id",),
+    "dispatcher_v2.global_market_contexts": ("market_source_id",),
+    "dispatcher_v2.coin_market_contexts": (
+        "market_source_id",
+        "spot_instrument_id",
+        "linear_instrument_id",
+    ),
+}
+
+
 ACCOUNT_IDENTITY_EXPORTS = frozenset(
     {
         "runtime.account_state_generations",
@@ -370,6 +403,29 @@ def _validate_account_identity(row: dict[str, Any]) -> tuple[str, str | None]:
             raise RuntimeError("LEGACY_UNKNOWN archive row must not claim trading_account_id")
         return status, None
     raise RuntimeError(f"unsupported archive identity_status: {status or 'EMPTY'}")
+
+
+def _validate_public_market_identity(
+    row: dict[str, Any],
+    fields: tuple[str, ...],
+) -> tuple[str, str | None, tuple[str, ...]]:
+    raw_values = tuple(row.get(field) for field in fields)
+    present = tuple(value is not None and str(value) != "" for value in raw_values)
+    if not any(present):
+        return "LEGACY_UNKNOWN", None, ()
+    if not all(present):
+        raise RuntimeError(
+            "public market archive row has partial identity: "
+            + ",".join(f"{field}={row.get(field)!r}" for field in fields)
+        )
+    values = tuple(str(value) for value in raw_values)
+    market_source_id = values[fields.index("market_source_id")]
+    instrument_ids = tuple(
+        value
+        for field, value in zip(fields, values, strict=True)
+        if field != "market_source_id"
+    )
+    return "PROVEN", market_source_id, instrument_ids
 
 
 def _sha256(path: Path) -> str:
@@ -550,6 +606,7 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                 continue
             types = dict(columns)
             account_identity = spec.table in ACCOUNT_IDENTITY_EXPORTS
+            public_identity_fields = PUBLIC_MARKET_IDENTITY_EXPORTS.get(spec.table)
             if account_identity:
                 missing_identity_columns = {
                     "trading_account_id",
@@ -559,6 +616,13 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                     raise RuntimeError(
                         f"{spec.table} missing account provenance columns: "
                         + ",".join(sorted(missing_identity_columns))
+                    )
+            if public_identity_fields:
+                missing_public_identity_columns = set(public_identity_fields) - set(types)
+                if missing_public_identity_columns:
+                    raise RuntimeError(
+                        f"{spec.table} missing public market provenance columns: "
+                        + ",".join(sorted(missing_public_identity_columns))
                     )
             time_column = next((name for name in spec.time_candidates if name in types), None)
             where: str = ""
@@ -585,6 +649,9 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
             digest = hashlib.sha256()
             identity_status_counts: dict[str, int] = {}
             identity_account_counts: dict[str, int] = {}
+            public_identity_status_counts: dict[str, int] = {}
+            public_market_source_counts: dict[str, int] = {}
+            public_instrument_counts: dict[str, int] = {}
             with (
                 connection.cursor(name=f"archive_v2_{table_index}") as cursor,
                 archive.open(spec.path, "w", force_zip64=True) as destination,
@@ -599,6 +666,21 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                         if account_id is not None:
                             identity_account_counts[account_id] = (
                                 identity_account_counts.get(account_id, 0) + 1
+                            )
+                    if public_identity_fields:
+                        public_status, market_source_id, instrument_ids = (
+                            _validate_public_market_identity(row, public_identity_fields)
+                        )
+                        public_identity_status_counts[public_status] = (
+                            public_identity_status_counts.get(public_status, 0) + 1
+                        )
+                        if market_source_id is not None:
+                            public_market_source_counts[market_source_id] = (
+                                public_market_source_counts.get(market_source_id, 0) + 1
+                            )
+                        for instrument_id in instrument_ids:
+                            public_instrument_counts[instrument_id] = (
+                                public_instrument_counts.get(instrument_id, 0) + 1
                             )
                     payload = (json.dumps(row, ensure_ascii=False, default=str) + "\n").encode()
                     destination.write(payload)
@@ -619,13 +701,22 @@ def _statistics(output: Path, cutoff: datetime, since: datetime | None) -> dict[
                     "max_time": maximum_time,
                     "sha256": digest.hexdigest(),
                     "columns": [{"name": n, "type": t} for n, t in columns],
-                    "identity_provenance": None
-                    if not account_identity
-                    else {
-                        "scope": "TRADING_ACCOUNT",
-                        "status_counts": identity_status_counts,
-                        "account_counts": identity_account_counts,
-                    },
+                    "identity_provenance": (
+                        {
+                            "scope": "TRADING_ACCOUNT",
+                            "status_counts": identity_status_counts,
+                            "account_counts": identity_account_counts,
+                        }
+                        if account_identity
+                        else {
+                            "scope": "PUBLIC_MARKET",
+                            "status_counts": public_identity_status_counts,
+                            "market_source_counts": public_market_source_counts,
+                            "instrument_counts": public_instrument_counts,
+                        }
+                        if public_identity_fields
+                        else None
+                    ),
                 }
             )
         archive.writestr(

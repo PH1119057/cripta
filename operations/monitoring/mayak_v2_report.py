@@ -28,12 +28,56 @@ def main() -> None:
             GROUP BY state ORDER BY count(*) DESC""",
             (since, until),
         ).fetchall()
+        public_identity = db.execute(
+            """SELECT
+                  count(*) FILTER (
+                      WHERE market_source_id IS NOT NULL
+                        AND spot_instrument_id IS NOT NULL
+                        AND linear_instrument_id IS NOT NULL
+                  ) AS proven_rows,
+                  count(*) FILTER (
+                      WHERE market_source_id IS NULL
+                        AND spot_instrument_id IS NULL
+                        AND linear_instrument_id IS NULL
+                  ) AS legacy_unknown_rows,
+                  count(*) FILTER (
+                      WHERE NOT (
+                          (market_source_id IS NOT NULL
+                           AND spot_instrument_id IS NOT NULL
+                           AND linear_instrument_id IS NOT NULL)
+                          OR
+                          (market_source_id IS NULL
+                           AND spot_instrument_id IS NULL
+                           AND linear_instrument_id IS NULL)
+                      )
+                  ) AS partial_rows
+               FROM mayak_v2.coin_minutes
+               WHERE observed_at BETWEEN %s AND %s""",
+            (since, until),
+        ).fetchone()
+        if public_identity is None:
+            raise RuntimeError("MAYAK_REPORT_PUBLIC_IDENTITY_QUERY_EMPTY")
+        if int(public_identity[2] or 0) != 0:
+            raise RuntimeError(
+                "MAYAK_REPORT_PARTIAL_PUBLIC_IDENTITY "
+                f"rows={int(public_identity[2] or 0)}"
+            )
         coins = db.execute(
-            """SELECT symbol,count(*),avg(return_5m_pct),avg(spot_net_usd),
-            avg(derivatives_net_usd),avg(open_interest_change_pct),avg(funding_rate),
-            avg(spot_bid_change_pct),avg(derivatives_bid_change_pct)
-            FROM mayak_v2.coin_minutes WHERE observed_at BETWEEN %s AND %s
-            GROUP BY symbol ORDER BY symbol""",
+            """SELECT
+                  CASE
+                    WHEN market_source_id IS NULL THEN 'LEGACY_UNKNOWN'
+                    ELSE 'PROVEN'
+                  END AS identity_status,
+                  market_source_id,spot_instrument_id,linear_instrument_id,
+                  symbol,count(*),avg(return_5m_pct),avg(spot_net_usd),
+                  avg(derivatives_net_usd),avg(open_interest_change_pct),avg(funding_rate),
+                  avg(spot_bid_change_pct),avg(derivatives_bid_change_pct)
+               FROM mayak_v2.coin_minutes
+               WHERE observed_at BETWEEN %s AND %s
+               GROUP BY identity_status,market_source_id,spot_instrument_id,
+                        linear_instrument_id,symbol
+               ORDER BY identity_status,market_source_id NULLS FIRST,
+                        linear_instrument_id NULLS FIRST,symbol""",
             (since, until),
         ).fetchall()
         events = db.execute(
@@ -101,6 +145,11 @@ def main() -> None:
         "связанных_торговых_событий": len(events),
         "непрерывность_regular_snapshot": continuity,
         "покрытие_источников": source_coverage,
+        "публичная_идентичность": {
+            "proven_rows": int(public_identity[0] or 0),
+            "legacy_unknown_rows": int(public_identity[1] or 0),
+            "partial_rows": int(public_identity[2] or 0),
+        },
         "качество_ликвидаций": [
             {"status": row[0], "snapshots": row[1]} for row in liquidation_quality
         ],
@@ -127,6 +176,10 @@ def main() -> None:
     write_csv(
         target / "МОНЕТЫ.csv",
         (
+            "identity_status",
+            "market_source_id",
+            "spot_instrument_id",
+            "linear_instrument_id",
             "монета",
             "минут",
             "среднее_движение_5м",
