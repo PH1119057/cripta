@@ -404,6 +404,7 @@ migration_files=(
   operations/sql/20261016_identity_registry_r2_seed.sql
   operations/sql/20261016_identity_bridge_r3_r4.sql
   operations/sql/20261017_market_instrument_identity_r7a.sql
+  operations/sql/20261017_compact_analytics_r8a.sql
   operations/sql/20261016_private_current_state_r5a.sql
   operations/sql/20261016_execution_evidence_r5b.sql
   operations/sql/20261016_account_scoped_key_preparation_r5.sql

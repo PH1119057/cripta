@@ -6,11 +6,12 @@ from typing import Any
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-17-market-instrument-r7a"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-17-compact-analytics-r8a"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
 REQUIRED_RELATIONS: tuple[str, ...] = (
+    "analytics.market_minutes",
     "control.execution_gates",
     "control.live_arm_evidence",
     "control.live_arm_sessions",
@@ -76,6 +77,13 @@ REQUIRED_ACCOUNT_KEY_INDEXES: tuple[
 )
 
 REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("analytics", "market_minutes", "observed_minute"),
+    ("analytics", "market_minutes", "market_source_id"),
+    ("analytics", "market_minutes", "instrument_id"),
+    ("analytics", "market_minutes", "product_category"),
+    ("analytics", "market_minutes", "source_snapshot_id"),
+    ("analytics", "market_minutes", "config_fingerprint"),
+    ("analytics", "market_minutes", "schema_version"),
     ("control", "execution_gates", "enabled"),
     ("runtime", "position_ownership", "entry_command_id"),
     ("runtime", "position_ownership", "position_idx"),

@@ -93,6 +93,11 @@ TABLE_EXPORTS = (
         ("updated_at", "created_at"),
     ),
     TableExport(
+        "analytics.market_minutes",
+        "analytics/market_minutes.jsonl",
+        ("observed_minute", "source_observed_at"),
+    ),
+    TableExport(
         "runtime.account_state_generations",
         "execution/account_state_generations.jsonl",
         ("completed_at", "started_at", "created_at"),
@@ -345,6 +350,7 @@ TABLE_EXPORTS = (
 
 
 PUBLIC_MARKET_IDENTITY_EXPORTS: dict[str, tuple[str, ...]] = {
+    "analytics.market_minutes": ("market_source_id", "instrument_id"),
     "mayak_v2.coin_minutes": (
         "market_source_id",
         "spot_instrument_id",

@@ -21,6 +21,7 @@ from bybit_workbench.market_identity import (
     BYBIT_VENUE_ID,
     bybit_instrument_id,
 )
+from bybit_workbench.mayak.compact_analytics import compact_market_minute_rows
 from bybit_workbench.mayak.context_records import (
     coin_market_context_records,
     shared_market_context_record,
@@ -443,6 +444,7 @@ class Collector:
                 snapshot_id = self._persist_snapshot(snapshot)
                 self._persist_liquidations()
                 self._persist_coin_minutes(snapshot_id, snapshot)
+                self._persist_compact_market_minutes(snapshot_id, snapshot)
                 self._persist_coin_market_contexts(snapshot_id, snapshot)
                 self._persist_observation_journal(snapshot_id, snapshot)
                 self._persist_shared_market_context(snapshot_id, snapshot)
@@ -820,6 +822,50 @@ class Collector:
                     rows,
                 )
                 db.commit()
+
+    def _persist_compact_market_minutes(
+        self,
+        snapshot_id: int,
+        snapshot: dict[str, Any],
+    ) -> None:
+        rows = compact_market_minute_rows(snapshot_id, snapshot)
+        if not rows:
+            return
+        with psycopg.connect(DSN) as db:
+            db.cursor().executemany(
+                """INSERT INTO analytics.market_minutes(
+                    observed_minute,source_observed_at,venue_id,market_source_id,
+                    instrument_id,external_symbol,product_category,return_5m_pct,
+                    mid_price,buy_usd,sell_usd,net_usd,turnover_usd,
+                    large_buy_usd,large_sell_usd,bid_usd,ask_usd,
+                    bid_change_pct,ask_change_pct,open_interest,
+                    open_interest_change_pct,funding_rate,last_price,mark_price,
+                    index_price,long_ratio,short_ratio,trade_quality,
+                    trade_age_seconds,book_quality,book_age_seconds,
+                    ticker_quality,ticker_age_seconds,transport_quality,
+                    instrument_availability,source_snapshot_id,
+                    architecture_version,engine_version,feature_version,
+                    config_fingerprint,schema_version)
+                    VALUES(
+                    %(observed_minute)s,%(source_observed_at)s,%(venue_id)s,
+                    %(market_source_id)s,%(instrument_id)s,%(external_symbol)s,
+                    %(product_category)s,%(return_5m_pct)s,%(mid_price)s,
+                    %(buy_usd)s,%(sell_usd)s,%(net_usd)s,%(turnover_usd)s,
+                    %(large_buy_usd)s,%(large_sell_usd)s,%(bid_usd)s,%(ask_usd)s,
+                    %(bid_change_pct)s,%(ask_change_pct)s,%(open_interest)s,
+                    %(open_interest_change_pct)s,%(funding_rate)s,%(last_price)s,
+                    %(mark_price)s,%(index_price)s,%(long_ratio)s,%(short_ratio)s,
+                    %(trade_quality)s,%(trade_age_seconds)s,%(book_quality)s,
+                    %(book_age_seconds)s,%(ticker_quality)s,%(ticker_age_seconds)s,
+                    %(transport_quality)s,%(instrument_availability)s,
+                    %(source_snapshot_id)s,%(architecture_version)s,
+                    %(engine_version)s,%(feature_version)s,%(config_fingerprint)s,
+                    %(schema_version)s)
+                    ON CONFLICT(market_source_id,instrument_id,observed_minute)
+                    DO NOTHING""",
+                rows,
+            )
+            db.commit()
 
     def _persist_coin_market_contexts(
         self, snapshot_id: int, snapshot: dict[str, Any]
