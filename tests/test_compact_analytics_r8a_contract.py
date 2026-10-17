@@ -32,60 +32,73 @@ def _snapshot() -> dict[str, object]:
         "engine_version": "mayak-v2.3",
         "feature_version": "objective-coin-context-v3",
         "config_fingerprint": "abc123",
-        "coins": {
+        "coin_market_contexts": {
             "BTCUSDT": {
-                "spot": {
-                    "return_pct": 0.12,
-                    "buy_usd": 10.0,
-                    "sell_usd": 4.0,
-                    "net_usd": 6.0,
-                    "turnover_usd": 14.0,
-                    "large_buy_usd": 3.0,
-                    "large_sell_usd": 1.0,
-                },
-                "linear": {
-                    "return_pct": 0.15,
-                    "buy_usd": 20.0,
-                    "sell_usd": 8.0,
-                    "net_usd": 12.0,
-                    "turnover_usd": 28.0,
-                    "large_buy_usd": 5.0,
-                    "large_sell_usd": 2.0,
-                },
-                "ticker": {
-                    "open_interest": 1000.0,
-                    "open_interest_change_pct": 1.2,
-                    "funding_rate": 0.0001,
-                    "last_price": 68000.0,
-                    "mark_price": 68001.0,
-                    "index_price": 67999.0,
-                    "long_ratio": 0.52,
-                    "short_ratio": 0.48,
-                },
-                "books": {
-                    "spot": {
-                        "mid_price": 67998.0,
-                        "bid_usd": 100.0,
-                        "ask_usd": 110.0,
-                        "bid_change_pct": 2.0,
-                        "ask_change_pct": -1.0,
+                "payload": {
+                    "money": {
+                        "spot": {
+                            "5m": {
+                                "return_pct": 0.12,
+                                "buy_usd": 10.0,
+                                "sell_usd": 4.0,
+                                "net_usd": 6.0,
+                                "turnover_usd": 14.0,
+                                "large_buy_usd": 3.0,
+                                "large_sell_usd": 1.0,
+                            }
+                        },
+                        "derivatives": {
+                            "5m": {
+                                "return_pct": 0.15,
+                                "buy_usd": 20.0,
+                                "sell_usd": 8.0,
+                                "net_usd": 12.0,
+                                "turnover_usd": 28.0,
+                                "large_buy_usd": 5.0,
+                                "large_sell_usd": 2.0,
+                            }
+                        },
                     },
-                    "linear": {
-                        "mid_price": 68000.0,
-                        "bid_usd": 200.0,
-                        "ask_usd": 210.0,
-                        "bid_change_pct": 3.0,
-                        "ask_change_pct": -2.0,
+                    "positioning": {
+                        "open_interest": 1000.0,
+                        "open_interest_change_5m_pct": 1.2,
+                        "funding_rate": 0.0001,
+                        "last_price": 68000.0,
+                        "mark_price": 68001.0,
+                        "index_price": 67999.0,
+                        "long_ratio": 0.52,
+                        "short_ratio": 0.48,
                     },
-                },
-                "quality": {
-                    "spot_trades": quality,
-                    "spot_book": quality,
-                    "linear_trades": quality,
-                    "linear_book": quality,
-                    "linear_ticker": quality,
-                },
-                "availability": {"spot": "SUPPORTED", "linear": "SUPPORTED"},
+                    "liquidity": {
+                        "spot": {
+                            "mid_price": 67998.0,
+                            "bid_usd": 100.0,
+                            "ask_usd": 110.0,
+                            "bid_change_pct": 2.0,
+                            "ask_change_pct": -1.0,
+                        },
+                        "derivatives": {
+                            "mid_price": 68000.0,
+                            "bid_usd": 200.0,
+                            "ask_usd": 210.0,
+                            "bid_change_pct": 3.0,
+                            "ask_change_pct": -2.0,
+                        },
+                    },
+                    "data_quality": {
+                        "sources": {
+                            "spot_trades": quality,
+                            "spot_book": quality,
+                            "linear_trades": quality,
+                            "linear_book": quality,
+                            "linear_ticker": quality,
+                        },
+                        "availability": {
+                            "spot": "SUPPORTED",
+                            "linear": "SUPPORTED",
+                        },
+                    },
+                }
             }
         },
     }

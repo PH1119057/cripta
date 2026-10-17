@@ -124,10 +124,11 @@ def test_scheduled_mayak_reports_separate_proven_from_legacy_public_identity() -
     )
     assert "MAYAK_REPORT_PARTIAL_PUBLIC_IDENTITY" in source
     assert "legacy_unknown_rows" in source
-    assert "CASE" in source
-    assert "WHEN market_source_id IS NULL THEN 'LEGACY_UNKNOWN'" in source
-    assert "ELSE 'PROVEN'" in source
-    assert "GROUP BY identity_status,market_source_id,spot_instrument_id" in source
-    assert '"market_source_id"' in source
-    assert '"spot_instrument_id"' in source
-    assert '"linear_instrument_id"' in source
+    assert "FROM analytics.market_minutes" in source
+    assert "'PROVEN'::text AS identity_status" in source
+    assert "'LEGACY_UNKNOWN'::text AS identity_status" in source
+    assert "AND market_source_id IS NULL" in source
+    assert "AND spot_instrument_id IS NULL" in source
+    assert "AND linear_instrument_id IS NULL" in source
+    assert '"proven_source": "analytics.market_minutes"' in source
+    assert '"legacy_fallback_source": "mayak_v2.coin_minutes"' in source

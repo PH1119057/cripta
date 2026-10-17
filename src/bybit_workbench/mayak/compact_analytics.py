@@ -10,7 +10,7 @@ from bybit_workbench.market_identity import (
     bybit_instrument_id,
 )
 
-COMPACT_ANALYTICS_SCHEMA_VERSION = "compact-market-minute-v1"
+COMPACT_ANALYTICS_SCHEMA_VERSION = "compact-market-minute-v2"
 
 
 def compact_market_minute_rows(
@@ -25,23 +25,30 @@ def compact_market_minute_rows(
     engine_version = _required_text(snapshot, "engine_version")
     feature_version = _required_text(snapshot, "feature_version")
     config_fingerprint = _required_text(snapshot, "config_fingerprint")
-    coins = _mapping(snapshot.get("coins"))
+    contexts = _mapping(snapshot.get("coin_market_contexts"))
 
     rows: list[dict[str, Any]] = []
-    for symbol in sorted(str(value) for value in coins):
-        coin = _mapping(coins[symbol])
-        availability = _mapping(coin.get("availability"))
-        quality = _mapping(coin.get("quality"))
-        books = _mapping(coin.get("books"))
-        ticker = _mapping_or_empty(coin.get("ticker"))
+    for symbol in sorted(str(value) for value in contexts):
+        context = _mapping(contexts[symbol])
+        payload = _mapping(context.get("payload"))
+        money = _mapping(payload.get("money"))
+        liquidity = _mapping(payload.get("liquidity"))
+        positioning = _mapping(payload.get("positioning"))
+        data_quality = _mapping(payload.get("data_quality"))
+        sources = _mapping(data_quality.get("sources"))
+        availability = _mapping(data_quality.get("availability"))
 
-        for market, product_category in (("spot", "SPOT"), ("linear", "LINEAR")):
-            flow = _mapping_or_empty(coin.get(market))
-            book = _mapping_or_empty(books.get(market))
-            trade_quality = _mapping_or_empty(quality.get(f"{market}_trades"))
-            book_quality = _mapping_or_empty(quality.get(f"{market}_book"))
+        for market, payload_market, product_category in (
+            ("spot", "spot", "SPOT"),
+            ("linear", "derivatives", "LINEAR"),
+        ):
+            flow_by_horizon = _mapping(money.get(payload_market))
+            flow = _mapping_or_empty(flow_by_horizon.get("5m"))
+            book = _mapping_or_empty(liquidity.get(payload_market))
+            trade_quality = _mapping_or_empty(sources.get(f"{market}_trades"))
+            book_quality = _mapping_or_empty(sources.get(f"{market}_book"))
             ticker_quality = (
-                _mapping_or_empty(quality.get("linear_ticker"))
+                _mapping_or_empty(sources.get("linear_ticker"))
                 if market == "linear"
                 else {}
             )
@@ -66,16 +73,46 @@ def compact_market_minute_rows(
                     "ask_usd": book.get("ask_usd"),
                     "bid_change_pct": book.get("bid_change_pct"),
                     "ask_change_pct": book.get("ask_change_pct"),
-                    "open_interest": ticker.get("open_interest") if market == "linear" else None,
-                    "open_interest_change_pct": (
-                        ticker.get("open_interest_change_pct") if market == "linear" else None
+                    "open_interest": (
+                        positioning.get("open_interest")
+                        if market == "linear"
+                        else None
                     ),
-                    "funding_rate": ticker.get("funding_rate") if market == "linear" else None,
-                    "last_price": ticker.get("last_price") if market == "linear" else None,
-                    "mark_price": ticker.get("mark_price") if market == "linear" else None,
-                    "index_price": ticker.get("index_price") if market == "linear" else None,
-                    "long_ratio": ticker.get("long_ratio") if market == "linear" else None,
-                    "short_ratio": ticker.get("short_ratio") if market == "linear" else None,
+                    "open_interest_change_pct": (
+                        positioning.get("open_interest_change_5m_pct")
+                        if market == "linear"
+                        else None
+                    ),
+                    "funding_rate": (
+                        positioning.get("funding_rate")
+                        if market == "linear"
+                        else None
+                    ),
+                    "last_price": (
+                        positioning.get("last_price")
+                        if market == "linear"
+                        else None
+                    ),
+                    "mark_price": (
+                        positioning.get("mark_price")
+                        if market == "linear"
+                        else None
+                    ),
+                    "index_price": (
+                        positioning.get("index_price")
+                        if market == "linear"
+                        else None
+                    ),
+                    "long_ratio": (
+                        positioning.get("long_ratio")
+                        if market == "linear"
+                        else None
+                    ),
+                    "short_ratio": (
+                        positioning.get("short_ratio")
+                        if market == "linear"
+                        else None
+                    ),
                     "trade_quality": _optional_text(trade_quality.get("quality")),
                     "trade_age_seconds": trade_quality.get("age_seconds"),
                     "book_quality": _optional_text(book_quality.get("quality")),
