@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.19
+**Версия:** 12.20
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2770,15 +2770,19 @@ R7 MARKET/INSTRUMENT CUTOVER    = SOURCE IMPLEMENTED THROUGH R7b / NOT DEPLOYED
   HISTORICAL PUBLIC ID BACKFILL         = NOT PERFORMED
   INACTIVE LEGACY CORRELATOR RETIREMENT = DEFERRED TO R10
   DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER R9-R10 GATES
-R8 COMPACT ANALYTICS CUTOVER    = PARTIAL / SOURCE IMPLEMENTED THROUGH R8b
+R8 COMPACT ANALYTICS CUTOVER    = SOURCE IMPLEMENTED THROUGH R8c / NOT DEPLOYED
   R8a EXACT INSTRUMENT-MINUTE TABLE = DONE IN SOURCE
   R8a MAYAK COMPACT DUAL-WRITE      = DONE IN SOURCE
   R8a ARCHIVE / SCHEMA CONTRACT     = DONE IN SOURCE
   R8b FEATURE COVERAGE / PARITY     = DONE IN SOURCE
   R8b SCHEDULED REPORT COMPACT READ = DONE IN SOURCE
-  R8c MISSING PRIMITIVES / RESEARCH READERS = NEXT
-  COMPACT REPLACEMENT READY         = NO / 182 REQUIRED PATHS UNCOVERED
-  OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED
+  R8c MISSING COMPACT PRIMITIVES    = DONE IN SOURCE
+  R8c ARCHIVE RESEARCH READER       = DONE IN SOURCE
+  R8c SIGNAL ANALYSIS COMPACT READ  = DONE IN SOURCE
+  KNOWN ANALYTICAL PATH COVERAGE    = 233 / 233 IN SOURCE
+  SOURCE COMPACT REPLACEMENT READY  = YES FOR KNOWN ANALYTICAL PATHS
+  HOT CURRENT JSONB CONTEXTS        = RETAINED BY DESIGN
+  OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED / R9-R11 GATES
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2806,13 +2810,14 @@ bee199d7  prepare account-scoped physical keys
 ae54cfec  cut active market readers to exact identity
 8b7c6b93  add compact market analytics foundation
 aab41e26  add compact analytics coverage parity
+3a0a93b4  complete compact analytics primitives
 ~~~
 
-The next bounded source task is R8c missing-primitives capture plus
-research/replay reader migration. R8b proves only the current covered subset and
-keeps replacement fail-closed: old MAYAK/Dispatcher JSONB and
-mayak_v2.coin_minutes remain required until all analytical paths needed for
-replay/research are covered and later R9-R11 gates authorize retirement.
+The next bounded migration stage is R9 dual-read/parity/restart/recovery
+verification. R8 source now covers the known current long-horizon
+research/replay analytical paths, while HOT MAYAK/Dispatcher JSON contexts
+remain current-runtime objects. No duplicate-history retirement is authorized
+until R9-R11 gates are satisfied.
 
 Documentation maintenance gate:
 
@@ -3474,6 +3479,144 @@ R8c RESEARCH / REPLAY READERS     = NEXT
 R9 DUAL-READ / RESTART / RECOVERY = NOT STARTED
 R11 RETENTION / DELETE            = NOT STARTED
 OLD JSONB / COIN_MINUTE DELETE    = NOT AUTHORIZED
+~~~
+
+Documentation topology is unchanged: active document set, paths, base pre-read,
+routing, README/AGENTS bootstrap and Project Source count remain unchanged.
+
+No deploy, PostgreSQL mutation, historical backfill/rewrite/delete, Exchange
+mutation or LIVE re-arm is performed by this checkpoint.
+
+
+## 37.14 R8c compact primitive coverage / research-reader checkpoint — CHECKED HERE 2026-10-17
+
+Pre-publication implementation/runtime identity:
+
+~~~text
+REMOTE_HEAD             = 3a0a93b4c61728186f40f73d4ec77cc616b61148
+SOURCE_HEAD             = 3a0a93b4c61728186f40f73d4ec77cc616b61148
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Source commit `3a0a93b4...` completes the bounded R8c source representation for
+the **known current research/replay analytical path set** without expanding the
+compact grain beyond `MarketSource + InstrumentIdentity + observed_minute`.
+
+R8c adds 64 compact numeric primitives/features required because exact live
+semantics cannot always be reconstructed from once-per-minute samples alone.
+The added families cover:
+
+- 1m / 15m / 30m / 60m executed-flow windows for SPOT and LINEAR;
+- exact prior-turnover and acceleration evidence, including 5m;
+- best bid/ask, 5/10/25/50 bps compact depth and 1m/5m/15m book dynamics;
+- OI value, 15m/30m/60m OI change, 5m OI speed/acceleration and funding change.
+
+Derived features are not physically duplicated when exact recomputation is
+sufficient. The compact reader recomputes net share, speed, large-trade share,
+turnover-to-prior ratios, book imbalance, mark/index/last premiums and
+panel-relative strength. Exact liquidation events remain the separate
+`mayak_v2.liquidations` event family.
+
+Coverage after R8c:
+
+~~~text
+KNOWN REQUIRED ANALYTICAL PATHS = 233
+DIRECT COMPACT PATHS            = 158
+DETERMINISTICALLY RECOMPUTABLE  = 75
+UNCOVERED                       = 0
+SOURCE COMPACT REPLACEMENT      = READY FOR THIS KNOWN PATH SET
+~~~
+
+A source-level full-panel parity test reconstructs all 233 paths for each symbol
+from the compact representation and compares them with the frozen
+CoinMarketContext payload. The non-trivial test panel contains BTC/ETH/ADA and
+therefore checks 699 path values, including 60m flow, depth/book dynamics,
+long-horizon OI and relative-strength derivation.
+
+The compact writer is also tightened:
+
+- rows are sourced from the already frozen `coin_market_contexts[*]`, not an
+  earlier mutable view;
+- exact symbol, MarketSource, SPOT/LINEAR InstrumentIdentity and observed time
+  are validated before row materialization;
+- the compact schema marker advances to `compact-market-minute-v3`;
+- writer SQL is generated from one static 105-column contract, and row/SQL key
+  parity is tested exactly;
+- the R8c migration is additive only and introduces no UPDATE/backfill, DELETE,
+  DROP or TRUNCATE.
+
+A canonical archive research reader now streams
+`analytics/market_minutes.jsonl`, keeps MarketSource partitions separate,
+fails closed on incompatible compact schema versions and rebuilds analytical
+panel payloads from R8c rows.
+
+Consumer boundary audit:
+
+- daily/weekly MAYAK report PROVEN rows already use compact analytics from R8b;
+- Dashboard signal-analysis causal context now reads exact paired SPOT+LINEAR
+  `analytics.market_minutes` instead of the mixed
+  `mayak_v2.coin_minutes` row;
+- Dashboard raw-period/archive evidence may still include old tables during the
+  staged migration;
+- Dispatcher, Universal Entry and current-context Dashboard reads that consume
+  MAYAK/Dispatcher JSON objects are HOT/current-runtime consumers and are not
+  reclassified as long-horizon analytics solely to force an R8 migration;
+- historical raw-source research jobs that rebuild older periods from external
+  source files are not readers of the current PostgreSQL duplicate-history path
+  and remain valid source-specific replay tools.
+
+Static capacity envelope for the new R8c additions at the current 20-symbol,
+two-product panel:
+
+~~~text
+NEW NUMERIC PRIMITIVES              = 64 FLOAT8 MAX / ROW
+MAX NEW NUMERIC PAYLOAD             = 512 BYTES / ROW
+ROWS / DAY AT 20 x SPOT+LINEAR      = 57,600
+MAX NEW NUMERIC PAYLOAD / DAY       ~= 28.12 MiB
+~~~
+
+This is a source-level numeric payload bound only; it excludes PostgreSQL
+row/index overhead and is **not** a measured production growth rate. R11/R12
+still own retention and physical reclaim.
+
+Verification evidence:
+
+~~~text
+TARGETED R8c + CONSUMER SET         = 61 / 61 PASS
+FULL PANEL PARITY                   = 699 / 699 PATH CHECKS PASS
+COMPACT INSERT COLUMNS              = 105
+SQL / ROW KEY PARITY                = 105 / 105 PASS
+DASHBOARD SQL PARAMETER STATIC      = PASS
+DASHBOARD RUFF BASELINE             = 42 -> 42 / 0 NEW
+RUFF TARGETED                       = PASS
+PY_COMPILE                          = PASS
+INSTALLER BASH SYNTAX               = PASS
+DIFF CHECK                          = PASS
+DESTRUCTIVE R8c SQL                 = NONE
+FULL PYTEST                         = 1915 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES           = CONFIRMED
+NEW TEST FAILURES                   = 0
+~~~
+
+Status after R8c:
+
+~~~text
+R8 SOURCE IMPLEMENTATION            = DONE THROUGH R8c
+R8 PRODUCTION DB APPLY              = NO
+R8 DEPLOY                           = NO
+R8 RUNTIME BEHAVIOR VERIFIED        = NO
+R8 KNOWN ANALYTICAL COVERAGE        = 233 / 233 IN SOURCE
+R9 DUAL-READ / PARITY / RESTART     = NEXT
+R10 LEGACY-PATH RETIREMENT          = NOT STARTED
+R11 RETENTION / DELETE              = NOT STARTED
+R12 PHYSICAL RECLAIM                = NOT STARTED
+OLD JSONB / COIN_MINUTE DELETE      = NOT AUTHORIZED
 ~~~
 
 Documentation topology is unchanged: active document set, paths, base pre-read,
