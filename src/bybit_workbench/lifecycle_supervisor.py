@@ -332,7 +332,7 @@ class LifecycleSupervisor:
                       claimed_at,bound_at,released_at,release_reason
                  FROM runtime.exchange_position_slot_claims
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (trading_account_id=%s AND identity_status='PROVEN')
                       OR identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -409,7 +409,7 @@ class LifecycleSupervisor:
                       updated_at,state,strategy_position_id
                  FROM runtime.capital_reservations
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (trading_account_id=%s AND identity_status='PROVEN')
                       OR identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -602,9 +602,11 @@ class LifecycleSupervisor:
                       d.capital_reservation_id,d.exchange_position_slot_claim_id,
                       d.position_mode_state_ref
                  FROM strategy_entry.execution_dispatches d
+                 JOIN strategy_entry.execution_requests r
+                   ON r.execution_request_id=d.execution_request_id
                 WHERE d.state='DISPATCHED'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
                        OR r.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -652,7 +654,7 @@ class LifecycleSupervisor:
                 WHERE c.exchange_commitment_ref IS NOT NULL
                   AND c.exchange_commitment_at IS NOT NULL
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (c.trading_account_id=%s AND c.identity_status='PROVEN')
                        OR c.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -702,7 +704,7 @@ class LifecycleSupervisor:
                    ON r.execution_request_id=p.entry_execution_request_id
                 WHERE p.bot_instance_id='universal-entry'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                        OR p.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -788,7 +790,7 @@ class LifecycleSupervisor:
                    ON p.position_id=c.strategy_position_id
                 WHERE c.status='CLAIMED'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                        OR p.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -815,7 +817,7 @@ class LifecycleSupervisor:
                  JOIN runtime.position_ownership p
                    ON p.position_id=d.strategy_position_id
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                       OR p.identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -840,7 +842,7 @@ class LifecycleSupervisor:
                       exit_plan_fingerprint,requested_at
                  FROM strategy_exit.execution_requests
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (trading_account_id=%s AND identity_status='PROVEN')
                       OR identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -902,7 +904,7 @@ class LifecycleSupervisor:
                   AND tc.state='completed'
                   AND tc.finished_at_epoch_ms IS NOT NULL
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
                        OR r.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -944,7 +946,7 @@ class LifecycleSupervisor:
                  JOIN runtime.position_ownership p ON p.position_id=a.position_id
                 WHERE p.bot_instance_id='universal-entry'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                        OR p.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -1060,7 +1062,7 @@ class LifecycleSupervisor:
                       LIMIT 1
                  ) latest_request_state ON true
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
                       OR r.identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -1101,7 +1103,7 @@ class LifecycleSupervisor:
                  FROM runtime.capital_reservations
                 WHERE state='RECONCILIATION_REQUIRED'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (trading_account_id=%s AND identity_status='PROVEN')
                        OR identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -1131,7 +1133,7 @@ class LifecycleSupervisor:
                  FROM runtime.capital_reservations
                 WHERE state='RESERVED' AND pre_dispatch_expires_at <= %s
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (trading_account_id=%s AND identity_status='PROVEN')
                        OR identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -1173,7 +1175,7 @@ class LifecycleSupervisor:
                 WHERE p.bot_instance_id='universal-entry'
                   AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                        OR p.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -1278,7 +1280,7 @@ class LifecycleSupervisor:
                           AND product_category='LINEAR'
                           AND instrument=%s
                           AND (
-                               %s IS NULL
+                               %s::text IS NULL
                                OR (trading_account_id=%s AND identity_status='PROVEN')
                           )
                         ORDER BY observed_at DESC,created_at DESC
@@ -1408,7 +1410,7 @@ class LifecycleSupervisor:
                  LEFT JOIN strategy_exit.execution_dispatches d
                    ON d.execution_request_id=r.execution_request_id
                 WHERE (
-                      %s IS NULL
+                      %s::text IS NULL
                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
                       OR r.identity_status='LEGACY_UNKNOWN'
                 )""",
@@ -1451,7 +1453,7 @@ class LifecycleSupervisor:
                 WHERE p.state='RECONCILIATION_REQUIRED'
                   AND d.state='DISPATCHED'
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
                        OR p.identity_status='LEGACY_UNKNOWN'
                   )""",
@@ -1477,11 +1479,11 @@ class LifecycleSupervisor:
                    ON r.execution_request_id=d.execution_request_id
                 WHERE d.state='BLOCKED'
                   AND (
-                    d.reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%'
-                    OR d.reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%'
+                    d.reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%%'
+                    OR d.reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%%'
                   )
                   AND (
-                       %s IS NULL
+                       %s::text IS NULL
                        OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
                        OR r.identity_status='LEGACY_UNKNOWN'
                   )""",
