@@ -11,6 +11,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    bybit_instrument_lineage,
+)
+
 from .coin_stress import build_coin_stress_inputs
 
 
@@ -1049,9 +1054,12 @@ class LiveMayakEngine:
                     "availability": availability,
                 },
             }
+            instrument_lineage = bybit_instrument_lineage(symbol)
             provenance = {
                 "source": "mayak_v2",
                 "venue": "current_exchange_adapter",
+                "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                "instrument_lineage": instrument_lineage,
                 "trading_command": False,
                 "exact_liquidations": self.exact_liquidations,
                 "config_fingerprint": config_fingerprint,
@@ -1074,6 +1082,9 @@ class LiveMayakEngine:
             context_id = f"CMC-{digest[:32]}"
             contexts[symbol] = {
                 "coin_context_id": context_id,
+                "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                "spot_instrument_id": instrument_lineage["spot"],
+                "linear_instrument_id": instrument_lineage["linear"],
                 "symbol": symbol,
                 "observed_at": observed_at,
                 "schema_version": "coin-market-context-v2",
@@ -1480,11 +1491,17 @@ class LiveMayakEngine:
             "event.importance": feature(None, available=False),
             **anchor_features,
         }
+        instrument_lineage = {
+            symbol: bybit_instrument_lineage(symbol)
+            for symbol in sorted(coins)
+        }
         identity = json.dumps(
             {
                 "observed_at": observed_at,
                 "engine_version": snapshot["engine_version"],
                 "architecture_version": snapshot["architecture_version"],
+                "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                "instrument_lineage": instrument_lineage,
                 "dispatcher_features": features,
             },
             ensure_ascii=False,
@@ -1495,6 +1512,8 @@ class LiveMayakEngine:
         return {
             "snapshot_id": snapshot_id,
             "market_context_id": f"MC-{snapshot_id}",
+            "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+            "instrument_lineage": instrument_lineage,
             "market_context_schema_version": "shared-market-context-v1",
             "observed_at": observed_at,
             "engine_version": snapshot["engine_version"],
@@ -1503,6 +1522,8 @@ class LiveMayakEngine:
             "dispatcher_features": features,
             "provenance": {
                 "source": "mayak_v2",
+                "market_source_id": BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                "instrument_lineage": instrument_lineage,
                 "config_fingerprint": snapshot["config_fingerprint"],
                 "immutable": True,
                 "trading_command": False,

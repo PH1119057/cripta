@@ -10,6 +10,7 @@ from .contracts import CoinMarketContext, GlobalMarketContext, TradingCapacitySn
 def global_context_record(item: GlobalMarketContext) -> dict[str, Any]:
     return {
         "global_context_id": item.global_context_id,
+        "market_source_id": item.market_source_id,
         "source_market_context_id": item.source_market_context_id,
         "source_mayak_snapshot_id": item.source_mayak_snapshot_id,
         "observed_at": item.observed_at,
@@ -31,6 +32,9 @@ def global_context_record(item: GlobalMarketContext) -> dict[str, Any]:
 def coin_context_record(item: CoinMarketContext) -> dict[str, Any]:
     return {
         "coin_context_id": item.coin_context_id,
+        "market_source_id": item.market_source_id,
+        "spot_instrument_id": item.spot_instrument_id,
+        "linear_instrument_id": item.linear_instrument_id,
         "global_context_id": item.global_context_id,
         "source_coin_context_id": item.source_coin_context_id,
         "source_mayak_snapshot_id": item.source_mayak_snapshot_id,

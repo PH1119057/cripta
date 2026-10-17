@@ -45,8 +45,10 @@ def build_global_market_context(source: Mapping[str, Any], *, now: datetime) -> 
         "source_market_context_schema": str(source["schema_version"]),
         "source_architecture_version": payload.get("architecture_version"),
     }
+    market_source_id = _required_text(source, "market_source_id")
     provenance = {
         "source": "mayak_v2.shared_market_contexts",
+        "market_source_id": market_source_id,
         "source_market_context_id": str(source["market_context_id"]),
         "source_content_hash": str(source["content_hash"]),
         "source_mayak_version": str(source["mayak_version"]),
@@ -56,6 +58,7 @@ def build_global_market_context(source: Mapping[str, Any], *, now: datetime) -> 
         "coin_market_rating": "NOT_IMPLEMENTED",
     }
     canonical = {
+        "market_source_id": market_source_id,
         "source_market_context_id": str(source["market_context_id"]),
         "source_mayak_snapshot_id": int(source["mayak_snapshot_id"]),
         "observed_at": observed_at.isoformat(),
@@ -67,6 +70,7 @@ def build_global_market_context(source: Mapping[str, Any], *, now: datetime) -> 
     content_hash = _stable_hash(canonical)
     return GlobalMarketContext(
         global_context_id=f"DGC-{content_hash[:32]}",
+        market_source_id=market_source_id,
         source_market_context_id=str(source["market_context_id"]),
         source_mayak_snapshot_id=int(source["mayak_snapshot_id"]),
         observed_at=observed_at,
@@ -97,8 +101,16 @@ def build_coin_market_context(
         "source_status": str(source["data_quality"]),
     }
     facts = _plain(payload)
+    market_source_id = _required_text(source, "market_source_id")
+    spot_instrument_id = _required_text(source, "spot_instrument_id")
+    linear_instrument_id = _required_text(source, "linear_instrument_id")
     provenance = {
         "source": "mayak_v2.coin_market_contexts",
+        "market_source_id": market_source_id,
+        "instrument_lineage": {
+            "spot": spot_instrument_id,
+            "linear": linear_instrument_id,
+        },
         "source_coin_context_id": str(source["coin_context_id"]),
         "source_content_hash": str(source["content_hash"]),
         "source_engine_version": str(source["engine_version"]),
@@ -109,6 +121,9 @@ def build_coin_market_context(
         "coin_market_rating": "NOT_IMPLEMENTED",
     }
     canonical = {
+        "market_source_id": market_source_id,
+        "spot_instrument_id": spot_instrument_id,
+        "linear_instrument_id": linear_instrument_id,
         "global_context_id": global_context_id,
         "source_coin_context_id": str(source["coin_context_id"]),
         "source_mayak_snapshot_id": int(source["mayak_snapshot_id"]),
@@ -122,6 +137,9 @@ def build_coin_market_context(
     content_hash = _stable_hash(canonical)
     return CoinMarketContext(
         coin_context_id=f"DCC-{content_hash[:32]}",
+        market_source_id=market_source_id,
+        spot_instrument_id=spot_instrument_id,
+        linear_instrument_id=linear_instrument_id,
         global_context_id=global_context_id,
         source_coin_context_id=str(source["coin_context_id"]),
         source_mayak_snapshot_id=int(source["mayak_snapshot_id"]),
@@ -245,6 +263,13 @@ def _global_coverage(features: Mapping[str, Any]) -> dict[str, Any]:
         "feature_status_counts": dict(sorted(statuses.items())),
         "source_feature_coverage": source_coverage,
     }
+
+
+def _required_text(source: Mapping[str, Any], key: str) -> str:
+    value = source.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"required source identity is missing: {key}")
+    return value
 
 
 def _quality(value: Any) -> DataQuality:

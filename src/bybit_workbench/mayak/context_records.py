@@ -23,6 +23,7 @@ def shared_market_context_record(
     content_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return {
         "market_context_id": str(handoff["market_context_id"]),
+        "market_source_id": str(handoff["market_source_id"]),
         "mayak_snapshot_id": snapshot_id,
         "observed_at": handoff["observed_at"],
         "mayak_version": str(snapshot["engine_version"]),
@@ -48,6 +49,9 @@ def coin_market_context_records(
         rows.append(
             {
                 "coin_context_id": str(context["coin_context_id"]),
+                "market_source_id": str(context["market_source_id"]),
+                "spot_instrument_id": str(context["spot_instrument_id"]),
+                "linear_instrument_id": str(context["linear_instrument_id"]),
                 "mayak_snapshot_id": snapshot_id,
                 "observed_at": context["observed_at"],
                 "symbol": str(context["symbol"]),

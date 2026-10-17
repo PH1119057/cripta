@@ -20,6 +20,7 @@ def test_global_context_is_strategy_agnostic_and_causal() -> None:
     now = datetime(2026, 9, 6, 12, 0, 30, tzinfo=UTC)
     source = {
         "market_context_id": "MC-test",
+        "market_source_id": "ms-bybit-mainnet-public-v1",
         "mayak_snapshot_id": 42,
         "observed_at": now - timedelta(seconds=20),
         "mayak_version": "mayak-v2.2",
@@ -51,6 +52,9 @@ def test_coin_context_preserves_physical_layers_without_rating() -> None:
     now = datetime(2026, 9, 6, 12, 0, 30, tzinfo=UTC)
     source = {
         "coin_context_id": "CMC-test",
+        "market_source_id": "ms-bybit-mainnet-public-v1",
+        "spot_instrument_id": "inst-bybit-spot-linkusdt",
+        "linear_instrument_id": "inst-bybit-linear-linkusdt",
         "mayak_snapshot_id": 42,
         "observed_at": now - timedelta(seconds=10),
         "symbol": "LINKUSDT",
@@ -80,6 +84,26 @@ def test_coin_context_preserves_physical_layers_without_rating() -> None:
     assert item.objective_facts["stress_inputs"]["trading_effect"] == "NONE"
     assert item.schema_version == "dispatcher-coin-context-v2.2"
     assert "score" not in item.objective_facts
+
+
+
+
+def test_market_identity_missing_is_fail_closed() -> None:
+    now = datetime(2026, 9, 6, 12, 0, 30, tzinfo=UTC)
+    source = {
+        "market_context_id": "MC-test",
+        "market_source_id": None,
+        "mayak_snapshot_id": 42,
+        "observed_at": now,
+        "mayak_version": "mayak-v2.2",
+        "schema_version": "shared-market-context-v1",
+        "config_fingerprint": "mayak-config",
+        "data_quality": "HIGH",
+        "content_hash": "source-hash",
+        "payload": {"dispatcher_features": {}},
+    }
+    with pytest.raises(ValueError, match="required source identity"):
+        dispatcher_v2.build_global_market_context(source, now=now)
 
 
 def test_capacity_uses_exchange_reported_free_balance_without_double_subtraction() -> None:
@@ -132,6 +156,7 @@ def test_contract_rejects_trading_effect() -> None:
     with pytest.raises(ValueError, match="trading effect"):
         contracts.GlobalMarketContext(
             global_context_id="x",
+            market_source_id="ms-test",
             source_market_context_id="s",
             source_mayak_snapshot_id=1,
             observed_at=datetime.now(UTC),

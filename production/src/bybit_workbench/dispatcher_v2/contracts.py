@@ -38,6 +38,7 @@ class Freshness:
 @dataclass(frozen=True, slots=True)
 class GlobalMarketContext:
     global_context_id: str
+    market_source_id: str
     source_market_context_id: str
     source_mayak_snapshot_id: int
     observed_at: datetime
@@ -64,8 +65,8 @@ class GlobalMarketContext:
             self.content_hash,
             self.trading_effect,
         )
-        if not self.source_market_context_id:
-            raise ValueError("source market context id is required")
+        if not self.market_source_id or not self.source_market_context_id:
+            raise ValueError("market source and source market context ids are required")
         if self.source_mayak_snapshot_id <= 0:
             raise ValueError("source Mayak snapshot id must be positive")
         object.__setattr__(self, "coverage", _freeze_mapping(self.coverage))
@@ -76,6 +77,9 @@ class GlobalMarketContext:
 @dataclass(frozen=True, slots=True)
 class CoinMarketContext:
     coin_context_id: str
+    market_source_id: str
+    spot_instrument_id: str
+    linear_instrument_id: str
     global_context_id: str
     source_coin_context_id: str
     source_mayak_snapshot_id: int
@@ -104,8 +108,16 @@ class CoinMarketContext:
             self.content_hash,
             self.trading_effect,
         )
-        if not self.global_context_id or not self.source_coin_context_id:
-            raise ValueError("global and source coin context ids are required")
+        if not all(
+            (
+                self.market_source_id,
+                self.spot_instrument_id,
+                self.linear_instrument_id,
+                self.global_context_id,
+                self.source_coin_context_id,
+            )
+        ):
+            raise ValueError("market/instrument and source coin context ids are required")
         if self.source_mayak_snapshot_id <= 0 or not self.symbol:
             raise ValueError("source snapshot id and symbol are required")
         object.__setattr__(self, "coverage", _freeze_mapping(self.coverage))

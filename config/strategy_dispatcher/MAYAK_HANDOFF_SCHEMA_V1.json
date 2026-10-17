@@ -6,6 +6,8 @@
   "required": [
     "snapshot_id",
     "market_context_id",
+    "market_source_id",
+    "instrument_lineage",
     "market_context_schema_version",
     "provenance",
     "observed_at",
@@ -23,17 +25,83 @@
       "type": "string",
       "pattern": "^MC-"
     },
+    "market_source_id": {
+      "const": "ms-bybit-mainnet-public-v1"
+    },
+    "instrument_lineage": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "spot",
+          "linear"
+        ],
+        "properties": {
+          "spot": {
+            "type": "string",
+            "pattern": "^inst-bybit-spot-"
+          },
+          "linear": {
+            "type": "string",
+            "pattern": "^inst-bybit-linear-"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "market_context_schema_version": {
       "const": "shared-market-context-v1"
     },
     "provenance": {
       "type": "object",
-      "required": ["source", "config_fingerprint", "immutable", "trading_command"],
+      "required": [
+        "source",
+        "instrument_lineage",
+        "market_source_id",
+        "config_fingerprint",
+        "immutable",
+        "trading_command"
+      ],
       "properties": {
-        "source": {"const": "mayak_v2"},
-        "config_fingerprint": {"type": "string", "minLength": 1},
-        "immutable": {"const": true},
-        "trading_command": {"const": false}
+        "source": {
+          "const": "mayak_v2"
+        },
+        "market_source_id": {
+          "const": "ms-bybit-mainnet-public-v1"
+        },
+        "instrument_lineage": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "spot",
+              "linear"
+            ],
+            "properties": {
+              "spot": {
+                "type": "string",
+                "pattern": "^inst-bybit-spot-"
+              },
+              "linear": {
+                "type": "string",
+                "pattern": "^inst-bybit-linear-"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "config_fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "immutable": {
+          "const": true
+        },
+        "trading_command": {
+          "const": false
+        }
       },
       "additionalProperties": false
     },

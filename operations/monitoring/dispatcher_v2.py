@@ -78,15 +78,18 @@ def _source_global_rows(
                    ), latest_source AS (
                        SELECT max(mayak_snapshot_id) AS mayak_snapshot_id
                        FROM mayak_v2.shared_market_contexts
+                       WHERE market_source_id IS NOT NULL
                    )
-                   SELECT source.market_context_id,source.mayak_snapshot_id,
-                          source.observed_at,source.mayak_version,source.schema_version,
+                   SELECT source.market_context_id,source.market_source_id,
+                          source.mayak_snapshot_id,source.observed_at,
+                          source.mayak_version,source.schema_version,
                           source.config_fingerprint,source.data_quality,source.payload,
                           source.provenance,source.content_hash
                    FROM mayak_v2.shared_market_contexts source
                    CROSS JOIN watermark
                    CROSS JOIN latest_source
-                   WHERE (
+                   WHERE source.market_source_id IS NOT NULL
+                     AND (
                        watermark.source_mayak_snapshot_id IS NULL
                        AND source.mayak_snapshot_id=latest_source.mayak_snapshot_id
                    ) OR (
@@ -105,11 +108,16 @@ def _source_coin_rows(
     with connection.cursor(row_factory=dict_row) as cursor:
         return list(
             cursor.execute(
-                """SELECT coin_context_id,mayak_snapshot_id,observed_at,symbol,
+                """SELECT coin_context_id,market_source_id,spot_instrument_id,
+                          linear_instrument_id,mayak_snapshot_id,observed_at,symbol,
                           schema_version,engine_version,feature_version,
                           config_fingerprint,data_quality,payload,provenance,content_hash
                    FROM mayak_v2.coin_market_contexts
-                   WHERE mayak_snapshot_id=%s ORDER BY symbol""",
+                   WHERE mayak_snapshot_id=%s
+                     AND market_source_id IS NOT NULL
+                     AND spot_instrument_id IS NOT NULL
+                     AND linear_instrument_id IS NOT NULL
+                   ORDER BY symbol""",
                 (mayak_snapshot_id,),
             ).fetchall()
         )
@@ -118,14 +126,16 @@ def _source_coin_rows(
 def _insert_global(connection: psycopg.Connection[Any], record: Mapping[str, Any]) -> None:
     connection.execute(
         """INSERT INTO dispatcher_v2.global_market_contexts(
-            global_context_id,source_market_context_id,source_mayak_snapshot_id,
-            observed_at,created_at,dispatcher_version,schema_version,config_fingerprint,
+            global_context_id,market_source_id,source_market_context_id,
+            source_mayak_snapshot_id,observed_at,created_at,dispatcher_version,
+            schema_version,config_fingerprint,
             data_quality,freshness_status,freshness_age_seconds,coverage,payload,
             provenance,content_hash,trading_effect)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT(global_context_id) DO NOTHING""",
         (
             record["global_context_id"],
+            record["market_source_id"],
             record["source_market_context_id"],
             record["source_mayak_snapshot_id"],
             record["observed_at"],
@@ -148,14 +158,18 @@ def _insert_global(connection: psycopg.Connection[Any], record: Mapping[str, Any
 def _insert_coin(connection: psycopg.Connection[Any], record: Mapping[str, Any]) -> None:
     connection.execute(
         """INSERT INTO dispatcher_v2.coin_market_contexts(
-            coin_context_id,global_context_id,source_coin_context_id,
-            source_mayak_snapshot_id,symbol,observed_at,created_at,dispatcher_version,
+            coin_context_id,market_source_id,spot_instrument_id,linear_instrument_id,
+            global_context_id,source_coin_context_id,source_mayak_snapshot_id,symbol,
+            observed_at,created_at,dispatcher_version,
             schema_version,config_fingerprint,data_quality,freshness_status,
             freshness_age_seconds,coverage,payload,provenance,content_hash,trading_effect)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT(coin_context_id) DO NOTHING""",
         (
             record["coin_context_id"],
+            record["market_source_id"],
+            record["spot_instrument_id"],
+            record["linear_instrument_id"],
             record["global_context_id"],
             record["source_coin_context_id"],
             record["source_mayak_snapshot_id"],

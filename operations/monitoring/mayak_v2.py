@@ -16,6 +16,11 @@ from typing import Any
 import psycopg
 import websocket
 
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    BYBIT_VENUE_ID,
+    bybit_instrument_id,
+)
 from bybit_workbench.mayak.context_records import (
     coin_market_context_records,
     shared_market_context_record,
@@ -213,8 +218,52 @@ class Collector:
                 provenance JSONB NOT NULL,
                 content_hash TEXT UNIQUE NOT NULL)""")
             db.commit()
+        self._validate_market_identity_registry()
         self._backfill_snapshot_continuity_gaps()
         self._load_persistence_checkpoint()
+
+    def _validate_market_identity_registry(self) -> None:
+        expected = {
+            bybit_instrument_id(market, symbol): (market.upper(), symbol)
+            for symbol in self.symbols
+            for market in ("spot", "linear")
+        }
+        with psycopg.connect(DSN) as db:
+            source = db.execute(
+                """SELECT venue_id,provider_ref,environment,market_scope,status
+                     FROM identity.market_sources
+                    WHERE market_source_id=%s""",
+                (BYBIT_PUBLIC_MARKET_SOURCE_ID,),
+            ).fetchone()
+            if source != (
+                BYBIT_VENUE_ID,
+                "BYBIT_PUBLIC_V5",
+                "MAINNET",
+                "SPOT+LINEAR",
+                "ACTIVE",
+            ):
+                raise RuntimeError("MAYAK_MARKET_SOURCE_IDENTITY_MISMATCH")
+            rows = db.execute(
+                """SELECT instrument_id,product_category,external_symbol,status
+                     FROM identity.instruments
+                    WHERE instrument_id = ANY(%s)""",
+                (list(expected),),
+            ).fetchall()
+        actual = {
+            str(instrument_id): (
+                str(product_category),
+                str(external_symbol),
+                str(status),
+            )
+            for instrument_id, product_category, external_symbol, status in rows
+        }
+        for instrument_id, (market, symbol) in expected.items():
+            row = actual.get(instrument_id)
+            if row != (market, symbol, "ACTIVE"):
+                raise RuntimeError(
+                    "MAYAK_INSTRUMENT_IDENTITY_MISMATCH "
+                    f"instrument_id={instrument_id} actual={row}"
+                )
 
     def _backfill_snapshot_continuity_gaps(self) -> None:
         """Materialize historical missing minute buckets without inventing snapshots."""
@@ -655,10 +704,19 @@ class Collector:
         with psycopg.connect(DSN) as db:
             db.cursor().executemany(
                 """INSERT INTO mayak_v2.liquidations(
-                    occurred_at,symbol,position_side,bankruptcy_price,executed_size,notional_usd)
-                    VALUES(to_timestamp(%s),%s,%s,%s,%s,%s)
+                    occurred_at,symbol,position_side,bankruptcy_price,executed_size,notional_usd,
+                    market_source_id,instrument_id)
+                    VALUES(to_timestamp(%s),%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT DO NOTHING""",
-                [(*row, row[3] * row[4]) for row in pending],
+                [
+                    (
+                        *row,
+                        row[3] * row[4],
+                        BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                        bybit_instrument_id("linear", row[1]),
+                    )
+                    for row in pending
+                ],
             )
             db.commit()
         with self.liquidation_lock:
@@ -726,14 +784,30 @@ class Collector:
                     get(linear, "large_buy_usd"),
                     get(linear, "large_sell_usd"),
                     json.dumps(coin.get("quality") or {}, default=str),
+                    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+                    bybit_instrument_id("spot", symbol),
+                    bybit_instrument_id("linear", symbol),
                 )
             )
         if rows:
             with psycopg.connect(DSN) as db:
                 db.cursor().executemany(
-                    """INSERT INTO mayak_v2.coin_minutes VALUES(
+                    """INSERT INTO mayak_v2.coin_minutes(
+                    observed_at,snapshot_id,symbol,
+                    spot_buy_usd,spot_sell_usd,spot_net_usd,spot_turnover_usd,
+                    derivatives_buy_usd,derivatives_sell_usd,derivatives_net_usd,
+                    derivatives_turnover_usd,return_5m_pct,open_interest,
+                    open_interest_change_pct,funding_rate,mark_price,index_price,
+                    long_ratio,short_ratio,spot_bid_usd,spot_ask_usd,
+                    spot_bid_change_pct,spot_ask_change_pct,derivatives_bid_usd,
+                    derivatives_ask_usd,derivatives_bid_change_pct,
+                    derivatives_ask_change_pct,large_spot_buy_usd,large_spot_sell_usd,
+                    large_derivatives_buy_usd,large_derivatives_sell_usd,source_quality,
+                    market_source_id,spot_instrument_id,linear_instrument_id)
+                    VALUES(
                     %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s)
                     ON CONFLICT(observed_at,symbol) DO NOTHING""",
                     rows,
                 )
@@ -748,6 +822,9 @@ class Collector:
         rows = [
             (
                 record["coin_context_id"],
+                record["market_source_id"],
+                record["spot_instrument_id"],
+                record["linear_instrument_id"],
                 record["mayak_snapshot_id"],
                 record["observed_at"],
                 record["symbol"],
@@ -775,10 +852,11 @@ class Collector:
         with psycopg.connect(DSN) as db:
             db.cursor().executemany(
                 """INSERT INTO mayak_v2.coin_market_contexts(
-                    coin_context_id,mayak_snapshot_id,observed_at,symbol,schema_version,
-                    engine_version,feature_version,config_fingerprint,data_quality,
-                    payload,provenance,content_hash)
-                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    coin_context_id,market_source_id,spot_instrument_id,linear_instrument_id,
+                    mayak_snapshot_id,observed_at,symbol,schema_version,engine_version,
+                    feature_version,config_fingerprint,data_quality,payload,provenance,
+                    content_hash)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT(coin_context_id) DO NOTHING""",
                 rows,
             )
@@ -844,13 +922,14 @@ class Collector:
         with psycopg.connect(DSN) as db:
             db.execute(
                 """INSERT INTO mayak_v2.shared_market_contexts(
-                    market_context_id,mayak_snapshot_id,observed_at,mayak_version,
-                    schema_version,config_fingerprint,data_quality,payload,provenance,
-                    content_hash)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    market_context_id,market_source_id,mayak_snapshot_id,observed_at,
+                    mayak_version,schema_version,config_fingerprint,data_quality,payload,
+                    provenance,content_hash)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT(market_context_id) DO NOTHING""",
                 (
                     record["market_context_id"],
+                    record["market_source_id"],
                     record["mayak_snapshot_id"],
                     record["observed_at"],
                     record["mayak_version"],

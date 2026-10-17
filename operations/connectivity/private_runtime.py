@@ -35,6 +35,7 @@ from runtime_schema import (
 )
 from safety_observer import api_get as safety_api_get
 
+from bybit_workbench.market_identity import bybit_instrument_id
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -3610,8 +3611,9 @@ def collect_position_mode_states(
         else:
             mode = "UNKNOWN"
             position_idx = None
+        instrument_id = bybit_instrument_id("linear", symbol)
         state_ref = "pmode-" + hashlib.sha256(
-            f"BYBIT|BYBIT:UNIFIED|LINEAR|{symbol}|{mode}|{indexes}|{now_ms}".encode()
+            f"BYBIT|BYBIT:UNIFIED|LINEAR|{instrument_id}|{mode}|{indexes}|{now_ms}".encode()
         ).hexdigest()[:32]
         result.append(
             {
@@ -3620,6 +3622,7 @@ def collect_position_mode_states(
                 "account_ref": "BYBIT:UNIFIED",
                 "product_category": "LINEAR",
                 "instrument": symbol,
+                "instrument_id": instrument_id,
                 "position_mode": mode,
                 "position_idx": position_idx,
                 "observed_at": observed_at,
@@ -3645,8 +3648,9 @@ def persist_position_mode_states(
             """INSERT INTO runtime.position_mode_states(
                    position_mode_state_ref,exchange,account_ref,trading_account_id,
                    account_connector_id,identity_status,product_category,instrument,
-                   position_mode,position_idx,observed_at,received_at,fresh_until,provenance
-               ) VALUES(%s,%s,%s,%s,%s,'PROVEN',%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
+                   instrument_id,position_mode,position_idx,observed_at,received_at,
+                   fresh_until,provenance
+               ) VALUES(%s,%s,%s,%s,%s,'PROVEN',%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)
                ON CONFLICT(position_mode_state_ref) DO NOTHING""",
             (
                 item["position_mode_state_ref"],
@@ -3656,6 +3660,7 @@ def persist_position_mode_states(
                 ACCOUNT_CONNECTOR_ID,
                 item["product_category"],
                 item["instrument"],
+                item["instrument_id"],
                 item["position_mode"],
                 item["position_idx"],
                 item["observed_at"],

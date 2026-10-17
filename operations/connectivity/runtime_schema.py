@@ -6,7 +6,7 @@ from typing import Any
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-16-account-keys-r5-prep"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-17-market-instrument-r7a"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -89,6 +89,19 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("runtime", "position_mode_states", "trading_account_id"),
     ("runtime", "position_mode_states", "account_connector_id"),
     ("runtime", "position_mode_states", "instrument_id"),
+    ("mayak_v2", "coin_minutes", "market_source_id"),
+    ("mayak_v2", "coin_minutes", "spot_instrument_id"),
+    ("mayak_v2", "coin_minutes", "linear_instrument_id"),
+    ("mayak_v2", "liquidations", "market_source_id"),
+    ("mayak_v2", "liquidations", "instrument_id"),
+    ("mayak_v2", "coin_market_contexts", "market_source_id"),
+    ("mayak_v2", "coin_market_contexts", "spot_instrument_id"),
+    ("mayak_v2", "coin_market_contexts", "linear_instrument_id"),
+    ("mayak_v2", "shared_market_contexts", "market_source_id"),
+    ("dispatcher_v2", "global_market_contexts", "market_source_id"),
+    ("dispatcher_v2", "coin_market_contexts", "market_source_id"),
+    ("dispatcher_v2", "coin_market_contexts", "spot_instrument_id"),
+    ("dispatcher_v2", "coin_market_contexts", "linear_instrument_id"),
     ("dispatcher_v2", "trading_capacity_snapshots", "trading_account_id"),
     ("dispatcher_v2", "trading_capacity_snapshots", "account_connector_id"),
     ("runtime", "account_state_generations", "identity_status"),
