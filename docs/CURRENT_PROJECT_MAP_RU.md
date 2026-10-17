@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.16
+**Версия:** 12.17
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2761,14 +2761,16 @@ R6 STRATEGY EXECUTION BINDING   = SOURCE IMPLEMENTED THROUGH R6d / NOT DEPLOYED
   R6c UNIVERSAL EXIT LINEAGE    = DONE IN SOURCE
   R6d COMMAND ACCOUNT PROOF     = DONE IN SOURCE
 
-R7 MARKET/INSTRUMENT CUTOVER    = PARTIAL / R7a IDENTITY FOUNDATION + DUAL-WRITE DONE IN SOURCE
+R7 MARKET/INSTRUMENT CUTOVER    = SOURCE IMPLEMENTED THROUGH R7b / NOT DEPLOYED
   R7a EXACT CURRENT INSTRUMENT REGISTRY = DONE IN SOURCE
   R7a MAYAK/DISPATCHER IDENTITY LINEAGE = DONE IN SOURCE
   R7a POSITION-MODE INSTRUMENT LINEAGE  = DONE IN SOURCE
-  R7b READER CUTOVER / RESIDUAL AUDIT   = NEXT
+  R7b ACTIVE/SCHEDULED READER CUTOVER    = DONE IN SOURCE
+  R7b PUBLIC ARCHIVE PROVENANCE          = DONE IN SOURCE
   HISTORICAL PUBLIC ID BACKFILL         = NOT PERFORMED
-  DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER PARITY GATES
-R8 COMPACT ANALYTICS CUTOVER    = NOT IMPLEMENTED
+  INACTIVE LEGACY CORRELATOR RETIREMENT = DEFERRED TO R10
+  DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER R9-R10 GATES
+R8 COMPACT ANALYTICS CUTOVER    = NEXT / NOT IMPLEMENTED
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2793,12 +2795,13 @@ cb1423df  scope residual private report readers
 99278812  finish active private reader account scope
 bee199d7  prepare account-scoped physical keys
 4ae7e138  add R7 market/instrument identity lineage
+ae54cfec  cut active market readers to exact identity
 ~~~
 
-The next bounded source task is R7b reader cutover / residual public-market
-identity audit. R7a is deliberately dual-write/backward-compatible: current
-symbol fields and legacy physical keys remain until parity/restart/recovery and
-legacy-path retirement gates allow exact cutover.
+The next bounded source task is R8 compact analytics cutover. R7 remains
+source-only and deliberately preserves historical LEGACY_UNKNOWN rows plus
+legacy symbol columns until the later parity/restart/recovery and retirement
+gates permit DB enforcement and legacy-field removal.
 
 Documentation maintenance gate:
 
@@ -3132,6 +3135,122 @@ R7 RUNTIME BEHAVIOR VERIFIED FOR NEW SOURCE  = NO
 R7b READER CUTOVER / RESIDUAL PUBLIC AUDIT   = NEXT
 R8 COMPACT ANALYTICS                         = NOT IMPLEMENTED
 MULTI_ACCOUNT / MULTI-VENUE LIVE READY       = NO
+~~~
+
+Documentation maintenance gate remains unchanged:
+
+~~~text
+ACTIVE DOCUMENT SET             = UNCHANGED
+DOCUMENT PATHS                  = UNCHANGED
+BASE PRE-READ                   = UNCHANGED
+ROUTING                         = UNCHANGED
+PROJECT SOURCE FILE COUNT       = 11 / UNCHANGED
+README / AGENTS                 = NO TOPOLOGY CHANGE / NO UPDATE REQUIRED
+PROJECT INSTRUCTIONS TEMPLATE   = NO BOOTSTRAP CHANGE / NO UPDATE REQUIRED
+TRADING BEHAVIOR                = UNCHANGED
+~~~
+
+No deploy, PostgreSQL mutation, historical rewrite/delete, Exchange mutation or
+LIVE re-arm is performed by this documentation checkpoint.
+
+
+## 37.11 R7b active/scheduled reader cutover checkpoint — CHECKED HERE 2026-10-17
+
+Pre-publication implementation/runtime identity for this checkpoint:
+
+~~~text
+REMOTE_HEAD             = ae54cfecb2f3fb345ed08880ffdddb07504e720f
+SOURCE_HEAD             = ae54cfecb2f3fb345ed08880ffdddb07504e720f
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Source commit `ae54cfec...` completes the bounded R7b source reader cutover:
+
+- Universal Entry objective-context reads now require the exact current
+  `MarketSource` and exact LINEAR `InstrumentIdentity`; returned mixed
+  CoinMarketContext lineage is verified against both expected SPOT and LINEAR
+  identities before use;
+- Universal Entry source_refs now preserve MarketSource and InstrumentIdentity
+  provenance instead of exposing only legacy context IDs;
+- Dispatcher V2 context correlator creates new immutable event links only from
+  exact R7 market-source rows and resolves SPOT/LINEAR identities through the
+  registry with an ambiguity fail-closed `HAVING count(*)=1` condition;
+- existing immutable historical event links are not rewritten;
+- MAYAK restart recovery restores only liquidation rows whose
+  `market_source_id + instrument_id` resolve to the exact active LINEAR
+  instrument metadata; legacy/no-identity liquidation rows are not injected
+  into a new runtime context;
+- Dashboard current shared-market context and causal signal exports use exact
+  MarketSource/InstrumentIdentity lineage; old rows without identity are not
+  silently treated as current exact context;
+- archive_v2 now exports the Venue/MarketSource/InstrumentIdentity registry and
+  records public-market provenance counts; complete exact rows are recorded as
+  PROVEN, all-null historical rows as LEGACY_UNKNOWN, while partial identity is
+  rejected;
+- the active daily and weekly MAYAK report timers remain enabled, and their
+  source now separates PROVEN and LEGACY_UNKNOWN coin-minute rows instead of
+  grouping them together under one raw symbol; partial public identity is
+  fail-closed.
+
+Runtime/residual audit:
+
+~~~text
+cripta-mayak-v2.service                       = ACTIVE
+cripta-dispatcher-v2.service                  = ACTIVE
+cripta-dispatcher-v2-context-correlator       = ACTIVE
+cripta-universal-entry-observer               = ACTIVE
+cripta-mayak-v2-report.timer                  = ACTIVE / ENABLED
+cripta-mayak-v2-weekly-report.timer           = ACTIVE / ENABLED
+cripta-causal-context-correlator.service      = INACTIVE
+~~~
+
+The inactive legacy `operations/monitoring/causal_context_correlator.py`
+remains a historical path and is not converted into current R7 authority.
+Its retirement proof is deferred to R10 together with other legacy-path
+retirement. This does not authorize reactivation.
+
+Historical public rows remain unchanged:
+
+~~~text
+HISTORICAL PUBLIC ID UPDATE/BACKFILL = NONE
+LEGACY_UNKNOWN PRESERVED             = YES
+OLD SYMBOL COLUMNS RETIRED           = NO
+DB NON-NULL ENFORCEMENT              = NO
+~~~
+
+Verification evidence:
+
+~~~text
+TARGETED R7b SET                     = 81 / 81 PASS
+PY_COMPILE                           = PASS
+RUFF TARGETED                        = PASS
+UNIVERSAL ENTRY RUFF BASELINE        = SAME 2 FINDINGS / 0 NEW
+DASHBOARD RUFF BASELINE              = SAME 42 FINDINGS / 0 NEW
+SQL PARAMETER STATIC CHECK           = PASS
+DIFF CHECK                           = PASS
+FULL PYTEST                          = 1897 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES            = CONFIRMED
+NEW TEST FAILURES                    = 0
+DESTRUCTIVE SQL                      = NONE
+~~~
+
+Status after R7b:
+
+~~~text
+R7 SOURCE IMPLEMENTATION             = DONE THROUGH R7b
+R7 PRODUCTION DB APPLY               = NO
+R7 DEPLOY                            = NO
+R7 RUNTIME BEHAVIOR VERIFIED         = NO
+R9 PARITY / RESTART / RECOVERY       = NOT STARTED
+R10 LEGACY RETIREMENT / ENFORCEMENT  = NOT STARTED
+NEXT BOUNDED SOURCE STAGE            = R8 COMPACT ANALYTICS
+MULTI_ACCOUNT / MULTI-VENUE LIVE READY = NO
 ~~~
 
 Documentation maintenance gate remains unchanged:
