@@ -27,6 +27,15 @@ class ConnectionLike(Protocol):
     def transaction(self) -> AbstractContextManager[object]: ...
 
 
+def _proven_identity(row: Mapping[str, object]) -> str:
+    status = str(row.get("identity_status") or "")
+    if status != "PROVEN":
+        raise RuntimeError(f"R10 Universal Exit requires PROVEN identity, got {status or 'EMPTY'}")
+    if not str(row.get("trading_account_id") or "").strip():
+        raise RuntimeError("R10 Universal Exit PROVEN row is missing trading_account_id")
+    return status
+
+
 def _request_from_row(row: Mapping[str, object]) -> ExitExecutionRequest:
     requested_at = row.get("requested_at")
     expires_at = row.get("expires_at")
@@ -63,7 +72,7 @@ def _request_from_row(row: Mapping[str, object]) -> ExitExecutionRequest:
             None if row.get("trading_account_id") is None
             else str(row.get("trading_account_id"))
         ),
-        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
+        identity_status=_proven_identity(row),
     )
 
 
@@ -256,7 +265,7 @@ def exact_open_position(
             None if row.get("trading_account_id") is None
             else str(row.get("trading_account_id"))
         ),
-        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
+        identity_status=_proven_identity(row),
     )
     expected = (
         request.strategy_position_id,
@@ -299,31 +308,20 @@ def mutation_in_flight(
     connection: ConnectionLike,
     request: ExitExecutionRequest,
 ) -> str | None:
-    if request.identity_status == "PROVEN":
-        row = connection.execute(
-            """SELECT command_id,state
-                 FROM runtime.trade_commands
-                WHERE command_type='strategy_exit'
-                  AND state IN ('queued','running')
-                  AND payload_json::jsonb->>'strategy_position_id'=%s
-                  AND trading_account_id=%s
-                  AND identity_status='PROVEN'
-                ORDER BY requested_at_epoch_ms,command_id
-                LIMIT 1""",
-            (request.strategy_position_id, request.trading_account_id),
-        ).fetchone()
-    else:
-        row = connection.execute(
-            """SELECT command_id,state
-                 FROM runtime.trade_commands
-                WHERE command_type='strategy_exit'
-                  AND state IN ('queued','running')
-                  AND payload_json::jsonb->>'strategy_position_id'=%s
-                  AND identity_status='LEGACY_UNKNOWN'
-                ORDER BY requested_at_epoch_ms,command_id
-                LIMIT 1""",
-            (request.strategy_position_id,),
-        ).fetchone()
+    if request.identity_status != "PROVEN" or not request.trading_account_id:
+        raise RuntimeError("R10 Universal Exit mutation lookup requires PROVEN account identity")
+    row = connection.execute(
+        """SELECT command_id,state
+             FROM runtime.trade_commands
+            WHERE command_type='strategy_exit'
+              AND state IN ('queued','running')
+              AND payload_json::jsonb->>'strategy_position_id'=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY requested_at_epoch_ms,command_id
+            LIMIT 1""",
+        (request.strategy_position_id, request.trading_account_id),
+    ).fetchone()
     if row is None:
         return None
     return f"{row['command_id']}:{row['state']}"

@@ -76,11 +76,10 @@ def test_historical_private_writer_is_not_the_installed_service_execstart() -> N
     assert "research/server/connectivity/private_runtime.py" not in PRIVATE_UNIT
 
 
-def test_r10a_does_not_claim_legacy_reader_gate_complete() -> None:
+def test_r10a_history_is_preserved_while_r10b_removes_dashboard_reader() -> None:
     archive = (ROOT / "operations/dashboard/archive_v2.py").read_text(
         encoding="utf-8"
     )
     dashboard = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
-    # These are explicit remaining R10b/R11 inventory items, not hidden PASS.
     assert "mayak_v2.coin_minutes" in archive
-    assert "mayak_v2.coin_minutes" in dashboard
+    assert "mayak_v2.coin_minutes" not in dashboard

@@ -12,11 +12,19 @@ def test_live_wallet_positions_and_orders_require_exact_proven_account() -> None
     assert APP.count("identity_status='PROVEN'") >= 22
 
 
-def test_live_historical_private_evidence_preserves_explicit_legacy_transition() -> None:
+def test_live_historical_private_evidence_preserves_unowned_closed_history() -> None:
     assert "runtime.exchange_order_history h" in APP
     assert "runtime.executions x" in APP
-    assert "identity_status='LEGACY_UNKNOWN'" in APP
-    assert "JOIN runtime.capital_reservations r" in APP
+    prefix, tail = APP.split("        exact_exit_rows = []", 1)
+    preservation, suffix = tail.split("        lifecycle_rows = []", 1)
+    assert "LEGACY_UNKNOWN" not in prefix
+    assert "LEGACY_UNKNOWN" not in suffix
+    assert preservation.count("LEGACY_UNKNOWN") == 5
+    recovered = preservation.split("recovered_closed_rows = connection.execute(", 1)[1].split(
+        "control_entry_rows = connection.execute(", 1
+    )[0]
+    assert "FROM runtime.recovered_closed_entry_cycles rc" in recovered
+    assert "JOIN runtime.capital_reservations r" not in recovered
 
 
 def test_dashboard_lifecycle_and_exit_history_are_scoped_through_position_or_account_identity() -> None:

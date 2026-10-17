@@ -492,8 +492,7 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state='running'
              AND error LIKE 'EXCHANGE_MUTATION_BARRIER:%'
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')
+             AND (trading_account_id=%s AND identity_status='PROVEN')
            LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
@@ -503,8 +502,7 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         """SELECT 1 FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
              AND requested_at_epoch_ms < %s
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')
+             AND (trading_account_id=%s AND identity_status='PROVEN')
            LIMIT 1""",
         (PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     ).fetchone()
@@ -617,10 +615,8 @@ def protect_recovered_bot_positions(
            FROM runtime.trade_commands c
            JOIN runtime.executions e ON e.order_link_id=c.command_id
            WHERE c.command_type='entry'
-             AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
-                  OR c.identity_status='LEGACY_UNKNOWN')
-             AND ((e.trading_account_id=%s AND e.identity_status='PROVEN')
-                  OR e.identity_status='LEGACY_UNKNOWN')
+             AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
+             AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
              AND COALESCE(
                    (e.payload_json::jsonb->>'closedSize')::numeric,
                    0
@@ -756,8 +752,7 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
         """SELECT command_id,state FROM runtime.trade_commands
            WHERE command_type='entry' AND state IN ('queued','running')
              AND requested_at_epoch_ms < %s
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')""",
+             AND (trading_account_id=%s AND identity_status='PROVEN')""",
         (PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     ).fetchall()
     now_ms = int(time.time() * 1000)
@@ -803,8 +798,7 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
         execution = connection.execute(
             """SELECT 1 FROM runtime.executions
                WHERE order_link_id=%s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                LIMIT 1""",
             (str(command_id)[:36], TRADING_ACCOUNT_ID),
         ).fetchone()
@@ -821,8 +815,7 @@ def resolve_prestart_entry_commands(connection: psycopg.Connection) -> None:
         history = connection.execute(
             """SELECT order_id FROM runtime.exchange_order_history
                WHERE order_link_id=%s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                  AND order_status IN ('Cancelled','Rejected','Deactivated')
                ORDER BY updated_at_epoch_ms DESC LIMIT 1""",
             (str(command_id)[:36], TRADING_ACCOUNT_ID),
@@ -861,8 +854,7 @@ def resolve_prestart_non_entry_running_commands(
                error='RESTART_DISARMED: mutation not replayed; exchange truth reconciled'
            WHERE command_type<>'entry' AND state='running'
              AND requested_at_epoch_ms < %s
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')""",
+             AND (trading_account_id=%s AND identity_status='PROVEN')""",
         (int(time.time() * 1000), PROCESS_STARTED_AT_MS, TRADING_ACCOUNT_ID),
     )
     connection.commit()
@@ -1340,8 +1332,7 @@ def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) 
         """SELECT side,exec_qty,exec_fee,payload_json
              FROM runtime.executions
             WHERE symbol=%s
-              AND ((trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN')
+              AND (trading_account_id=%s AND identity_status='PROVEN')
             ORDER BY exec_time_ms,exec_id""",
         (symbol, TRADING_ACCOUNT_ID),
     ).fetchall()
@@ -1512,8 +1503,7 @@ def record_protection_or_owner_event(
                     (%s<>'' AND entry_command_id=%s)
                     OR (%s='' AND symbol=%s AND state='OPEN')
                  )
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')
+             AND (trading_account_id=%s AND identity_status='PROVEN')
            ORDER BY fill_at DESC LIMIT 1""",
         (entry_command_id, entry_command_id, entry_command_id, symbol, TRADING_ACCOUNT_ID),
     ).fetchone()
@@ -1663,8 +1653,7 @@ def _universal_exit_position(
                   exit_plan_fingerprint,symbol,side,state
              FROM runtime.position_ownership
             WHERE position_id=%s
-              AND ((trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN')""",
+              AND (trading_account_id=%s AND identity_status='PROVEN')""",
         (position_id, TRADING_ACCOUNT_ID),
     ).fetchone()
     if owner is None:
@@ -1729,8 +1718,7 @@ def assert_legacy_automated_exit_ownership(
             """SELECT position_id,bot_instance_id FROM runtime.position_ownership
                WHERE entry_command_id=%s
                  AND state IN ('OPEN','RECONCILIATION_REQUIRED')
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                ORDER BY fill_at DESC""",
             (entry_command_id, TRADING_ACCOUNT_ID),
         ).fetchall()
@@ -1739,8 +1727,7 @@ def assert_legacy_automated_exit_ownership(
             """SELECT position_id,bot_instance_id FROM runtime.position_ownership
                WHERE symbol=%s
                  AND state IN ('OPEN','RECONCILIATION_REQUIRED')
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                ORDER BY fill_at DESC""",
             (symbol, TRADING_ACCOUNT_ID),
         ).fetchall()
@@ -2708,10 +2695,8 @@ def command_worker_loop(key: str, secret: str) -> None:
                  FROM runtime.trade_commands c
                  JOIN runtime.executions e ON e.order_link_id=c.command_id
                 WHERE c.command_type='entry' AND c.state='completed'
-                  AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
-                       OR c.identity_status='LEGACY_UNKNOWN')
-                  AND ((e.trading_account_id=%s AND e.identity_status='PROVEN')
-                       OR e.identity_status='LEGACY_UNKNOWN')
+                  AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
+                  AND (e.trading_account_id=%s AND e.identity_status='PROVEN')
                   AND COALESCE((e.payload_json::jsonb->>'closedSize')::numeric,0)=0
                 GROUP BY c.command_id,c.symbol,c.payload_json""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
@@ -2744,8 +2729,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                 """SELECT exec_id,order_id,order_link_id,exec_time_ms
                    FROM runtime.executions
                   WHERE order_link_id=%s
-                    AND ((trading_account_id=%s AND identity_status='PROVEN')
-                         OR identity_status='LEGACY_UNKNOWN')
+                    AND (trading_account_id=%s AND identity_status='PROVEN')
                    ORDER BY exec_time_ms,exec_id""",
                 (entry_id, TRADING_ACCOUNT_ID),
             ).fetchall()
@@ -2851,8 +2835,7 @@ def command_worker_loop(key: str, secret: str) -> None:
             """SELECT command_id,command_type,symbol,payload_json
                  FROM runtime.trade_commands
                 WHERE state='queued'
-                  AND ((trading_account_id=%s AND identity_status='PROVEN')
-                       OR identity_status='LEGACY_UNKNOWN')
+                  AND (trading_account_id=%s AND identity_status='PROVEN')
                 ORDER BY (left(command_id,4)='web-') DESC, requested_at_epoch_ms
                 LIMIT 1""",
             (TRADING_ACCOUNT_ID,),
@@ -2962,8 +2945,7 @@ def reconcile_position_ownership(
                   entry_execution_request_id,exchange_position_key
            FROM runtime.position_ownership
            WHERE (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
-             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN')
+             AND (trading_account_id=%s AND identity_status='PROVEN')
            ORDER BY fill_at""",
         (TRADING_ACCOUNT_ID,),
     ).fetchall()
@@ -3024,16 +3006,14 @@ def reconcile_position_ownership(
                FROM runtime.position_ownership
                WHERE symbol=%s AND position_idx=%s
                  AND fill_at>to_timestamp(%s/1000.0)
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')""",
+                 AND (trading_account_id=%s AND identity_status='PROVEN')""",
             (symbol, position_idx, fill_ms, TRADING_ACCOUNT_ID),
         ).fetchone()[0]
         interval_sql = """SELECT exec_id,order_id,order_link_id,side,exec_qty,exec_price,
                                  exec_fee,exec_time_ms,payload_json
                           FROM runtime.executions
                           WHERE symbol=%s AND exec_time_ms>=%s
-                            AND ((trading_account_id=%s AND identity_status='PROVEN')
-                                 OR identity_status='LEGACY_UNKNOWN')"""
+                            AND (trading_account_id=%s AND identity_status='PROVEN')"""
         interval_args: tuple[object, ...] = (symbol, fill_ms, TRADING_ACCOUNT_ID)
         if next_fill is not None:
             interval_sql += " AND exec_time_ms<%s"
@@ -3088,8 +3068,7 @@ def reconcile_position_ownership(
             """SELECT command_id,result_json FROM runtime.trade_commands
                WHERE command_type='close'
                  AND payload_json::jsonb->>'position_id'=%s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')""",
+                 AND (trading_account_id=%s AND identity_status='PROVEN')""",
             (position_id, TRADING_ACCOUNT_ID),
         ).fetchall()
         commands = [
@@ -3116,8 +3095,7 @@ def reconcile_position_ownership(
             """SELECT coalesce(sum(abs(exec_fee::numeric)),0)
                FROM runtime.executions
               WHERE order_link_id=%s
-                AND ((trading_account_id=%s AND identity_status='PROVEN')
-                     OR identity_status='LEGACY_UNKNOWN')""",
+                AND (trading_account_id=%s AND identity_status='PROVEN')""",
             (str(row[8]), TRADING_ACCOUNT_ID),
         ).fetchone()[0]
         gross = close.gross_pnl or Decimal(0)
@@ -3251,12 +3229,9 @@ def reconcile_orphan_closed_entry_cycles(
                ON h.order_id=c.exchange_commitment_ref
               AND h.symbol=s.symbol
             WHERE c.account_ref=%s
-              AND ((c.trading_account_id=%s AND c.identity_status='PROVEN')
-                   OR c.identity_status='LEGACY_UNKNOWN')
-              AND ((s.trading_account_id=%s AND s.identity_status='PROVEN')
-                   OR s.identity_status='LEGACY_UNKNOWN')
-              AND ((h.trading_account_id=%s AND h.identity_status='PROVEN')
-                   OR h.identity_status='LEGACY_UNKNOWN')
+              AND (c.trading_account_id=%s AND c.identity_status='PROVEN')
+              AND (s.trading_account_id=%s AND s.identity_status='PROVEN')
+              AND (h.trading_account_id=%s AND h.identity_status='PROVEN')
               AND c.state='RECONCILIATION_REQUIRED'
               AND c.strategy_position_id IS NULL
               AND s.claim_state='RECONCILIATION_REQUIRED'
@@ -3283,8 +3258,7 @@ def reconcile_orphan_closed_entry_cycles(
         if connection.execute(
             """SELECT 1 FROM runtime.position_ownership
                WHERE entry_command_id=%s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                LIMIT 1""",
             (str(entry_command_id), TRADING_ACCOUNT_ID),
         ).fetchone():
@@ -3293,8 +3267,7 @@ def reconcile_orphan_closed_entry_cycles(
             """SELECT exec_id,order_id,order_link_id,symbol,side,
                       exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
                FROM runtime.executions WHERE order_id=%s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                ORDER BY exec_time_ms,exec_id""",
             (str(entry_order_id), TRADING_ACCOUNT_ID),
         ).fetchall()
@@ -3311,8 +3284,7 @@ def reconcile_orphan_closed_entry_cycles(
                       exec_qty,exec_price,exec_fee,payload_json,exec_time_ms
                FROM runtime.executions
                WHERE symbol=%s AND exec_time_ms >= %s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')
+                 AND (trading_account_id=%s AND identity_status='PROVEN')
                ORDER BY exec_time_ms,exec_id""",
             (str(symbol), started_ms, TRADING_ACCOUNT_ID),
         ).fetchall()
@@ -3328,8 +3300,7 @@ def reconcile_orphan_closed_entry_cycles(
         orders = connection.execute(
             """SELECT order_id,payload_json FROM runtime.exchange_order_history
                WHERE symbol=%s AND updated_at_epoch_ms >= %s
-                 AND ((trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN')""",
+                 AND (trading_account_id=%s AND identity_status='PROVEN')""",
             (str(symbol), started_ms, TRADING_ACCOUNT_ID),
         ).fetchall()
         terminal: dict[str, dict[str, object]] = {}
@@ -3694,8 +3665,7 @@ def reconcile(
                     for row in connection.execute(
                         """SELECT symbol,position_idx FROM runtime.position_ownership
                            WHERE state='OPEN' AND close_link_status='OPEN'
-                             AND ((trading_account_id=%s AND identity_status='PROVEN')
-                                  OR identity_status='LEGACY_UNKNOWN')""",
+                             AND (trading_account_id=%s AND identity_status='PROVEN')""",
                         (TRADING_ACCOUNT_ID,),
                     ).fetchall()
                 }
@@ -3881,8 +3851,7 @@ def upsert_position(connection: psycopg.Connection, item: dict[str, object], now
     existing = connection.execute(
         """SELECT payload_json FROM runtime.hot_positions
             WHERE symbol=%s AND position_idx=%s
-              AND ((trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN')""",
+              AND (trading_account_id=%s AND identity_status='PROVEN')""",
         (
             item.get("symbol", ""),
             int(item.get("positionIdx") or 0),
@@ -3980,8 +3949,7 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
                 connection.execute(
                     """DELETE FROM runtime.hot_positions
                         WHERE symbol=%s AND position_idx=%s
-                          AND ((trading_account_id=%s AND identity_status='PROVEN')
-                               OR identity_status='LEGACY_UNKNOWN')""",
+                          AND (trading_account_id=%s AND identity_status='PROVEN')""",
                     (
                         item.get("symbol", ""),
                         int(item.get("positionIdx") or 0),
@@ -4002,8 +3970,7 @@ def handle_private(connection: psycopg.Connection, message: dict[str, object]) -
                 connection.execute(
                     """DELETE FROM runtime.hot_orders
                         WHERE order_id=%s
-                          AND ((trading_account_id=%s AND identity_status='PROVEN')
-                               OR identity_status='LEGACY_UNKNOWN')""",
+                          AND (trading_account_id=%s AND identity_status='PROVEN')""",
                     (item.get("orderId", ""), TRADING_ACCOUNT_ID),
                 )
                 if order_status in {"Cancelled", "Rejected", "Deactivated"}:

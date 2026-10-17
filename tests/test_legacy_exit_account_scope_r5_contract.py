@@ -4,10 +4,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "operations/monitoring/exit_runtime.py").read_text(encoding="utf-8")
 
 
-def test_legacy_exit_private_evidence_is_account_scoped_with_transition() -> None:
+def test_exit_private_evidence_is_exact_proven_account_scoped_after_r10b() -> None:
     assert "FROM runtime.executions" in SOURCE
     assert "FROM runtime.private_events" in SOURCE
-    assert SOURCE.count("identity_status='LEGACY_UNKNOWN'") >= 4
+    assert "LEGACY_UNKNOWN" not in SOURCE
+    assert SOURCE.count("identity_status='PROVEN'") >= 4
     assert SOURCE.count("trading_account_id=%s") >= 4
 
 

@@ -54,7 +54,9 @@ def load_exit_binding(
               AND ep.strategy_config_fingerprint=p.strategy_config_fingerprint
             WHERE p.position_id=%s
               AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
-              AND p.bot_instance_id='universal-entry'""",
+              AND p.bot_instance_id='universal-entry'
+              AND p.identity_status='PROVEN'
+              AND p.trading_account_id IS NOT NULL""",
         (strategy_position_id,),
     ).fetchone()
     if row is None:
@@ -111,7 +113,7 @@ def load_exit_binding(
             None if row.get("trading_account_id") is None
             else str(row.get("trading_account_id"))
         ),
-        identity_status=str(row.get("identity_status") or "LEGACY_UNKNOWN"),
+        identity_status=_required_text(row, "identity_status"),
     )
 
     raw_plan = _mapping(row.get("plan_json"), "ExitPlan.plan_json")

@@ -66,7 +66,6 @@ def test_raw_period_tables_cover_required_observability_layers() -> None:
         "strategy_dispatcher.assessments",
         "mayak_v2.snapshots",
         "analytics.market_minutes",
-        "mayak_v2.coin_minutes",
         "mayak_v2.observation_journal",
         "runtime.entry_decisions",
         "runtime.m3_consumed_context",

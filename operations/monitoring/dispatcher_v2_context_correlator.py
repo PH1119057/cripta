@@ -25,54 +25,11 @@ SOURCE_COMMIT = os.environ.get("DISPATCHER_V2_CORRELATOR_SOURCE_COMMIT", "UNSPEC
 CORRELATOR_VERSION = "dispatcher-v2-context-correlator-v2"
 
 EVENT_SOURCE_SQL = r"""
-SELECT 'SIGNAL'::text AS event_type,
-       o.signal_id::text AS reference_id,
-       to_timestamp(o.signal_at_epoch_ms / 1000.0) AS occurred_at,
-       o.signal_id::text AS signal_id,
-       NULL::text AS strategy_attempt_id,
-       NULL::text AS position_id,
-       NULL::text AS trade_id,
-       o.symbol::text AS symbol,
-       o.direction::text AS side,
-       NULL::text AS trading_account_id,
-       'LEGACY_UNKNOWN'::text AS identity_status,
-       jsonb_build_object(
-           'source_table','monitoring.opportunities',
-           'decision',o.decision,
-           'state',o.state
-       ) AS event_payload
-FROM monitoring.opportunities o
-
-UNION ALL
-
-SELECT 'ENTRY_DECISION',
-       e.signal_id,
-       to_timestamp(e.decided_at_epoch_ms / 1000.0),
-       e.signal_id,
-       NULL::text,
-       NULL::text,
-       NULL::text,
-       e.symbol,
-       e.direction,
-       NULL::text,
-       'LEGACY_UNKNOWN'::text,
-       jsonb_build_object(
-           'source_table','runtime.entry_decisions',
-           'decision',e.decision,
-           'reason',e.reason,
-           'entry_policy',e.entry_policy,
-           'policy_version',e.policy_version,
-           'settings_version',e.settings_version
-       )
-FROM runtime.entry_decisions e
-
-UNION ALL
-
-SELECT 'TRADE_COMMAND',
-       c.command_id,
-       to_timestamp(c.requested_at_epoch_ms / 1000.0),
+SELECT 'TRADE_COMMAND'::text AS event_type,
+       c.command_id::text AS reference_id,
+       to_timestamp(c.requested_at_epoch_ms / 1000.0) AS occurred_at,
        COALESCE(NULLIF(c.payload_json::jsonb ->> 'signal_id',''), p.signal_id),
-       NULL::text,
+       NULL::text AS strategy_attempt_id,
        p.position_id,
        p.trade_id,
        c.symbol,
@@ -83,31 +40,22 @@ SELECT 'TRADE_COMMAND',
            'source_table','runtime.trade_commands',
            'command_type',c.command_type,
            'processing_state',c.state
-       )
+       ) AS event_payload
 FROM runtime.trade_commands c
 LEFT JOIN runtime.position_ownership p
   ON (
        p.entry_command_id=c.command_id
        OR p.entry_command_id=NULLIF(c.payload_json::jsonb ->> 'entry_command_id','')
      )
- AND (
-       (c.identity_status='PROVEN'
-        AND p.identity_status='PROVEN'
-        AND p.trading_account_id=c.trading_account_id)
-       OR
-       (c.identity_status='LEGACY_UNKNOWN'
-        AND p.identity_status='LEGACY_UNKNOWN'
-        AND p.trading_account_id IS NULL)
-     )
+ AND p.identity_status='PROVEN'
+ AND p.trading_account_id=c.trading_account_id
+WHERE c.identity_status='PROVEN'
+  AND c.trading_account_id IS NOT NULL
 
 UNION ALL
 
 SELECT 'EXECUTION',
-       CASE
-         WHEN x.identity_status='PROVEN' AND x.trading_account_id IS NOT NULL
-           THEN x.trading_account_id || ':' || x.exec_id
-         ELSE x.exec_id
-       END,
+       x.trading_account_id || ':' || x.exec_id,
        to_timestamp(COALESCE(x.exec_time_ms,x.received_at_epoch_ms) / 1000.0),
        COALESCE(p.signal_id, NULLIF(c.payload_json::jsonb ->> 'signal_id','')),
        NULL::text,
@@ -127,30 +75,18 @@ SELECT 'EXECUTION',
 FROM runtime.executions x
 LEFT JOIN runtime.trade_commands c
   ON c.command_id=x.order_link_id
- AND (
-       (x.identity_status='PROVEN'
-        AND c.identity_status='PROVEN'
-        AND c.trading_account_id=x.trading_account_id)
-       OR
-       (x.identity_status='LEGACY_UNKNOWN'
-        AND c.identity_status='LEGACY_UNKNOWN'
-        AND c.trading_account_id IS NULL)
-     )
+ AND c.identity_status='PROVEN'
+ AND c.trading_account_id=x.trading_account_id
 LEFT JOIN runtime.position_ownership p
   ON (
        p.execution_ids ? x.exec_id
        OR p.exit_execution_ids ? x.exec_id
        OR p.entry_command_id=c.command_id
      )
- AND (
-       (x.identity_status='PROVEN'
-        AND p.identity_status='PROVEN'
-        AND p.trading_account_id=x.trading_account_id)
-       OR
-       (x.identity_status='LEGACY_UNKNOWN'
-        AND p.identity_status='LEGACY_UNKNOWN'
-        AND p.trading_account_id IS NULL)
-     )
+ AND p.identity_status='PROVEN'
+ AND p.trading_account_id=x.trading_account_id
+WHERE x.identity_status='PROVEN'
+  AND x.trading_account_id IS NOT NULL
 
 UNION ALL
 
@@ -164,13 +100,16 @@ SELECT 'POSITION_LIFECYCLE',
        p.symbol,
        p.side,
        p.trading_account_id,
-       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
+       p.identity_status,
        jsonb_build_object(
            'source_table','runtime.position_lifecycle_events',
            'event_type',l.event_type
        )
 FROM runtime.position_lifecycle_events l
-LEFT JOIN runtime.position_ownership p ON p.position_id=l.position_id
+JOIN runtime.position_ownership p
+  ON p.position_id=l.position_id
+ AND p.identity_status='PROVEN'
+ AND p.trading_account_id IS NOT NULL
 
 UNION ALL
 
@@ -184,7 +123,7 @@ SELECT 'SUPERVISOR_TRANSITION',
        s.symbol,
        p.side,
        p.trading_account_id,
-       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
+       p.identity_status,
        jsonb_build_object(
            'source_table','supervisor.transitions',
            'old_state',s.old_state,
@@ -192,7 +131,10 @@ SELECT 'SUPERVISOR_TRANSITION',
            'reason',s.reason
        )
 FROM supervisor.transitions s
-LEFT JOIN runtime.position_ownership p ON p.position_id=s.position_id
+JOIN runtime.position_ownership p
+  ON p.position_id=s.position_id
+ AND p.identity_status='PROVEN'
+ AND p.trading_account_id IS NOT NULL
 
 UNION ALL
 
@@ -206,14 +148,17 @@ SELECT 'EXIT_DECISION',
        d.symbol,
        p.side,
        p.trading_account_id,
-       COALESCE(p.identity_status,'LEGACY_UNKNOWN'),
+       p.identity_status,
        jsonb_build_object(
            'source_table','supervisor.exit_decisions',
            'internal_reason',d.internal_reason,
            'close_command_id',d.close_command_id
        )
 FROM supervisor.exit_decisions d
-LEFT JOIN runtime.position_ownership p ON p.position_id=d.position_id
+JOIN runtime.position_ownership p
+  ON p.position_id=d.position_id
+ AND p.identity_status='PROVEN'
+ AND p.trading_account_id IS NOT NULL
 """
 
 

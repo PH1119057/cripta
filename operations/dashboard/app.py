@@ -867,7 +867,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         """SELECT finished_at_epoch_ms,ok FROM runtime.reconciliation_runs
            WHERE (
                 (trading_account_id=%s AND identity_status='PROVEN')
-                OR identity_status='LEGACY_UNKNOWN'
            )
            ORDER BY id DESC LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
@@ -879,7 +878,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
            WHERE singleton=1
              AND (
                   (trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN'
              )""",
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
@@ -890,7 +888,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
            WHERE command_type='entry' AND state IN ('queued','running')
              AND (
                   (trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN'
              )
            LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
@@ -904,11 +901,9 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
              AND o.order_status IN ('New','PartiallyFilled','Untriggered')
              AND (
                   (o.trading_account_id=%s AND o.identity_status='PROVEN')
-                  OR o.identity_status='LEGACY_UNKNOWN'
              )
              AND (
                   (c.trading_account_id=%s AND c.identity_status='PROVEN')
-                  OR c.identity_status='LEGACY_UNKNOWN'
              )
            LIMIT 1""",
         (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
@@ -919,7 +914,6 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         """SELECT symbol,payload_json FROM runtime.hot_positions
            WHERE (
                 (trading_account_id=%s AND identity_status='PROVEN')
-                OR identity_status='LEGACY_UNKNOWN'
            )""",
         (TRADING_ACCOUNT_ID,),
     ).fetchall():
@@ -1154,13 +1148,10 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                             JOIN runtime.executions e
                               ON e.exec_id=xid.exec_id
                              AND (
-                                  (o.trading_account_id=%s
-                                   AND o.identity_status='PROVEN'
-                                   AND e.trading_account_id=%s
-                                   AND e.identity_status='PROVEN')
-                                  OR
-                                  (o.identity_status='LEGACY_UNKNOWN'
-                                   AND e.identity_status='LEGACY_UNKNOWN')
+                                  o.trading_account_id=%s
+                                  AND o.identity_status='PROVEN'
+                                  AND e.trading_account_id=%s
+                                  AND e.identity_status='PROVEN'
                              )
                       ),0) AS entry_fee_actual
                    FROM runtime.position_ownership o
@@ -1169,7 +1160,6 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                    WHERE o.state='OPEN'
                      AND (
                           (o.trading_account_id=%s AND o.identity_status='PROVEN')
-                          OR o.identity_status='LEGACY_UNKNOWN'
                      )
                    ORDER BY o.created_at DESC""",
                 (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID),
@@ -1214,7 +1204,6 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                  FROM runtime.trade_commands
                 WHERE (
                      (trading_account_id=%s AND identity_status='PROVEN')
-                     OR identity_status='LEGACY_UNKNOWN'
                 )
                 ORDER BY requested_at_epoch_ms DESC
                 LIMIT 20""",
@@ -1297,12 +1286,9 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 WHERE order_id =
                       c.result_json::jsonb->'result'->>'orderId'
                   AND (
-                       (c.identity_status='PROVEN'
-                        AND h.trading_account_id=c.trading_account_id
-                        AND h.identity_status='PROVEN')
-                       OR
-                       (c.identity_status='LEGACY_UNKNOWN'
-                        AND h.identity_status='LEGACY_UNKNOWN')
+                       c.identity_status='PROVEN'
+                       AND h.trading_account_id=c.trading_account_id
+                       AND h.identity_status='PROVEN'
                   )
                 ORDER BY updated_at_epoch_ms DESC
                 LIMIT 1
@@ -1320,18 +1306,14 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 WHERE order_id =
                       c.result_json::jsonb->'result'->>'orderId'
                   AND (
-                       (c.identity_status='PROVEN'
-                        AND x.trading_account_id=c.trading_account_id
-                        AND x.identity_status='PROVEN')
-                       OR
-                       (c.identity_status='LEGACY_UNKNOWN'
-                        AND x.identity_status='LEGACY_UNKNOWN')
+                       c.identity_status='PROVEN'
+                       AND x.trading_account_id=c.trading_account_id
+                       AND x.identity_status='PROVEN'
                   )
             ) x ON true
             WHERE c.command_type='entry'
               AND (
                    (c.trading_account_id=%s AND c.identity_status='PROVEN')
-                   OR c.identity_status='LEGACY_UNKNOWN'
               )
             ORDER BY c.requested_at_epoch_ms DESC
             LIMIT 100""",
@@ -1365,19 +1347,15 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 (TRADING_ACCOUNT_ID, 1000 if include_history else 20),
             ).fetchall()
         # Exchange-evidenced closures without StrategyPosition ownership.
+        # Exchange-evidenced recovered cycles are an operator-ledger source.
+        # They stay visible as RECOVERED_UNOWNED without inventing account ownership.
         recovered_closed_rows = connection.execute(
             """SELECT rc.reservation_id,rc.symbol,rc.side,rc.actual_qty,rc.exit_vwap,
                       rc.entry_fee_actual,rc.exit_fee_actual,rc.gross_pnl,
                       rc.net_without_funding,rc.evidence,rc.recovered_at
                  FROM runtime.recovered_closed_entry_cycles rc
-                 JOIN runtime.capital_reservations r
-                   ON r.reservation_id=rc.reservation_id
-                WHERE (
-                     (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                     OR r.identity_status='LEGACY_UNKNOWN'
-                )
                 ORDER BY rc.recovered_at DESC LIMIT %s""",
-            (TRADING_ACCOUNT_ID, 1000 if include_history else 40),
+            (1000 if include_history else 40,),
         ).fetchall()
         control_entry_rows = connection.execute(
             """SELECT c.command_id,c.symbol,c.payload_json,e.order_id,e.exec_id,
@@ -1443,7 +1421,6 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                        ON o.position_id=l.position_id
                     WHERE (
                          (o.trading_account_id=%s AND o.identity_status='PROVEN')
-                         OR o.identity_status='LEGACY_UNKNOWN'
                     )
                     ORDER BY l.closed_at DESC NULLS LAST
                     LIMIT 500""",
@@ -1937,7 +1914,6 @@ SIGNAL_ANALYSIS_TABLES = (
     ("strategy_dispatcher.runs", "observed_at", "timestamp"),
     ("strategy_dispatcher.assessments", "observed_at", "timestamp"),
     ("mayak_v2.snapshots", "observed_at", "timestamp"),
-    ("mayak_v2.coin_minutes", "observed_at", "timestamp"),
     ("mayak_v2.coin_market_contexts", "observed_at", "timestamp"),
     ("mayak_v2.events", "occurred_at", "timestamp"),
     ("mayak_v2.state_events", "occurred_at", "timestamp"),
@@ -3317,7 +3293,6 @@ def package_project() -> dict[str, object]:
                 "runtime.entry_decisions",
                 "mayak_v2.snapshots",
                 "analytics.market_minutes",
-                "mayak_v2.coin_minutes",
                 "mayak_v2.events",
                 "mayak_v2.state_events",
                 "mayak_v2.observation_journal",
@@ -3900,7 +3875,6 @@ def _u6_prepare_r1_prearm_evidence(
              FROM runtime.reconciliation_runs
             WHERE (
                   (trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN'
             )
             ORDER BY id DESC LIMIT 1""",
         (TRADING_ACCOUNT_ID,),
@@ -3912,7 +3886,6 @@ def _u6_prepare_r1_prearm_evidence(
             WHERE singleton=1
               AND (
                    (trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN'
               )""",
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
@@ -4959,7 +4932,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                            AND NULLIF(size,'')::numeric > 0
                                            AND (
                                                 (trading_account_id=%s AND identity_status='PROVEN')
-                                                OR identity_status='LEGACY_UNKNOWN'
                                            )
                                     )
                                     OR EXISTS(
@@ -4969,7 +4941,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                            AND coalesce((payload_json::jsonb->>'reduceOnly')::boolean,false)=false
                                            AND (
                                                 (trading_account_id=%s AND identity_status='PROVEN')
-                                                OR identity_status='LEGACY_UNKNOWN'
                                            )
                                     )
                                     OR EXISTS(
@@ -4978,7 +4949,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                            AND state IN ('queued','running')
                                            AND (
                                                 (trading_account_id=%s AND identity_status='PROVEN')
-                                                OR identity_status='LEGACY_UNKNOWN'
                                            )
                                     )""",
                                 (

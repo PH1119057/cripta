@@ -38,11 +38,9 @@ def private_identity(row: Any) -> tuple[str, str | None]:
         if not account:
             raise RuntimeError("PROVEN private row is missing trading_account_id")
         return status, account
-    if status == "LEGACY_UNKNOWN":
-        if account is not None:
-            raise RuntimeError("LEGACY_UNKNOWN private row must not claim trading_account_id")
-        return status, None
-    raise RuntimeError(f"unsupported private identity_status: {status or 'EMPTY'}")
+    raise RuntimeError(
+        f"R10 analyst requires PROVEN private identity, got {status or 'EMPTY'}"
+    )
 
 
 def identity_predicate(alias: str, status: str, account: str | None) -> tuple[str, tuple[Any, ...]]:
@@ -53,12 +51,7 @@ def identity_predicate(alias: str, status: str, account: str | None) -> tuple[st
             f"{alias}.identity_status='PROVEN' AND {alias}.trading_account_id=%s",
             (account,),
         )
-    if status == "LEGACY_UNKNOWN":
-        return (
-            f"{alias}.identity_status='LEGACY_UNKNOWN' AND {alias}.trading_account_id IS NULL",
-            (),
-        )
-    raise RuntimeError(f"unsupported private identity_status: {status}")
+    raise RuntimeError(f"R10 analyst requires PROVEN private identity: {status}")
 
 
 def initialize(connection: psycopg.Connection[Any]) -> None:
@@ -99,7 +92,8 @@ def refresh(connection: psycopg.Connection[Any]) -> int:
     entries = connection.execute("""SELECT * FROM runtime.trade_commands
         WHERE command_type='entry'
           AND payload_json::jsonb->>'entry_policy'='m3_full_live_v1'
-          AND identity_status IN ('PROVEN','LEGACY_UNKNOWN')
+          AND identity_status='PROVEN'
+          AND trading_account_id IS NOT NULL
         ORDER BY requested_at_epoch_ms""").fetchall()
     updated = 0
     for entry in entries:

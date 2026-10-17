@@ -14,6 +14,7 @@ def test_current_position_mode_cache_is_exact_account_proven() -> None:
     assert "identity_status='PROVEN'" in SOURCE
     assert "(TRADING_ACCOUNT_ID, cutoff, symbols)" in SOURCE
 
-def test_ws_terminal_deletes_preserve_other_accounts() -> None:
-    assert SOURCE.count("OR identity_status='LEGACY_UNKNOWN'") >= 4
+def test_ws_terminal_deletes_preserve_other_accounts_with_exact_proven_scope() -> None:
+    assert "LEGACY_UNKNOWN" not in SOURCE
+    assert SOURCE.count("identity_status='PROVEN'") >= 20
     assert "TRADING_ACCOUNT_ID" in SOURCE

@@ -175,7 +175,7 @@ def test_fail_closed_when_arm_binding_belongs_to_other_account():
     assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
 
 
-def test_retirement_scopes_local_blockers_to_exact_account_and_preserves_legacy_unknown():
+def test_retirement_scopes_local_blockers_to_exact_proven_account():
     c = FakeDB()
     retire_stale_release_arms(
         c,
@@ -189,7 +189,8 @@ def test_retirement_scopes_local_blockers_to_exact_account_and_preserves_legacy_
     assert "b.execution_leg='PRIMARY'" in joined
     assert "b.allocation_mode='DEDICATED_STRATEGY'" in joined
     assert joined.count("trading_account_id=%s") >= 4
-    assert joined.count("identity_status='LEGACY_UNKNOWN'") >= 4
+    assert "LEGACY_UNKNOWN" not in joined
+    assert joined.count("identity_status='PROVEN'") >= 4
     params = [params for sql, params in c.statements if "SELECT (" in sql][0]
     assert params.count("ta-current") == 4
 

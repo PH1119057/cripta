@@ -18,17 +18,15 @@ def test_entry_and_dispatcher_private_reads_are_exact_account_scoped() -> None:
     assert dispatcher.count("identity_status='PROVEN'") >= 3
 
 
-def test_supervisors_pin_exact_account_but_preserve_legacy_open_ownership_transition() -> None:
+def test_supervisors_pin_exact_account_and_retire_legacy_open_reader() -> None:
     lifecycle = _read("src/bybit_workbench/lifecycle_supervisor.py")
     runtime = _read("operations/monitoring/lifecycle_supervisor_runtime.py")
     position = _read("operations/monitoring/position_supervisor.py")
     exit_runtime = _read("operations/monitoring/exit_runtime.py")
     for source in (lifecycle, runtime, position, exit_runtime):
-        assert "LEGACY_UNKNOWN" in source
-    assert "identity_status='PROVEN'" in lifecycle
+        assert "LEGACY_UNKNOWN" not in source
+        assert "identity_status='PROVEN'" in source
     assert "trading_account_id=TRADING_ACCOUNT_ID" in runtime
-    assert "identity_status='PROVEN'" in position
-    assert "identity_status='PROVEN'" in exit_runtime
 
 
 def test_production_units_pin_current_trading_account() -> None:

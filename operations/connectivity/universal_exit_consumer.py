@@ -93,7 +93,9 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
     return connection.execute(
         """SELECT r.*
              FROM strategy_exit.execution_requests r
-            WHERE NOT EXISTS (
+            WHERE r.identity_status='PROVEN'
+              AND r.trading_account_id IS NOT NULL
+              AND NOT EXISTS (
                 SELECT 1 FROM strategy_exit.execution_dispatches d
                  WHERE d.execution_request_id=r.execution_request_id
             )

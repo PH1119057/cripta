@@ -186,7 +186,6 @@ def exchange_positions(connection: psycopg.Connection) -> list[tuple[ExchangePos
                WHERE symbol=%s AND side=%s AND state='OPEN'
                  AND (
                       (trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN'
                  )
                  AND abs(extract(epoch from (fill_at-to_timestamp(%s/1000.0))))<=10
                ORDER BY fill_at DESC LIMIT 1""",

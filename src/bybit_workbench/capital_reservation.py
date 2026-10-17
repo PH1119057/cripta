@@ -155,8 +155,16 @@ class PostgresCapitalReservationPort:
         self._connection = connection
 
     def reserve(self, request: CapitalReservationRequest) -> CapitalReservation:
+        if (
+            not request.strategy_execution_binding_id
+            or not request.execution_leg
+            or not request.trading_account_id
+        ):
+            raise ValueError(
+                "R10 capital reservation requires PROVEN StrategyExecutionBinding lineage"
+            )
         with self._connection.transaction():
-            lock_identity = request.trading_account_id or request.account_ref
+            lock_identity = request.trading_account_id
             self._connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
                 (lock_identity,),
@@ -177,53 +185,27 @@ class PostgresCapitalReservationPort:
                 self._validate_existing(existing, request)
                 return self._reservation_from_row(existing)
 
-            if request.trading_account_id is not None:
-                row = self._connection.execute(
-                    """SELECT coalesce(sum(requested_amount),0)
-                         FROM runtime.capital_reservations
-                        WHERE (
-                              (trading_account_id=%s AND identity_status='PROVEN')
-                              OR
-                              (account_ref=%s AND identity_status='LEGACY_UNKNOWN')
-                        )
-                          AND (
-                              state = ANY(%s)
-                              OR (
-                                  state='CONSUMED'
-                                  AND (
-                                      exchange_commitment_at IS NULL
-                                      OR exchange_commitment_at > %s
-                                  )
+            row = self._connection.execute(
+                """SELECT coalesce(sum(requested_amount),0)
+                     FROM runtime.capital_reservations
+                    WHERE trading_account_id=%s
+                      AND identity_status='PROVEN'
+                      AND (
+                          state = ANY(%s)
+                          OR (
+                              state='CONSUMED'
+                              AND (
+                                  exchange_commitment_at IS NULL
+                                  OR exchange_commitment_at > %s
                               )
-                          )""",
-                    (
-                        request.trading_account_id,
-                        request.account_ref,
-                        list(self._OUTSTANDING_STATES),
-                        request.capacity_observed_at.astimezone(UTC),
-                    ),
-                ).fetchone()
-            else:
-                row = self._connection.execute(
-                    """SELECT coalesce(sum(requested_amount),0)
-                         FROM runtime.capital_reservations
-                        WHERE account_ref=%s
-                          AND (
-                              state = ANY(%s)
-                              OR (
-                                  state='CONSUMED'
-                                  AND (
-                                      exchange_commitment_at IS NULL
-                                      OR exchange_commitment_at > %s
-                                  )
-                              )
-                          )""",
-                    (
-                        request.account_ref,
-                        list(self._OUTSTANDING_STATES),
-                        request.capacity_observed_at.astimezone(UTC),
-                    ),
-                ).fetchone()
+                          )
+                      )""",
+                (
+                    request.trading_account_id,
+                    list(self._OUTSTANDING_STATES),
+                    request.capacity_observed_at.astimezone(UTC),
+                ),
+            ).fetchone()
             outstanding = Decimal(str(0 if row is None else row[0]))
             effective = max(Decimal("0"), request.capacity_available - outstanding)
             if request.requested_amount > effective:
@@ -262,11 +244,7 @@ class PostgresCapitalReservationPort:
                     request.strategy_execution_binding_id,
                     request.execution_leg,
                     request.trading_account_id,
-                    (
-                        "PROVEN"
-                        if request.strategy_execution_binding_id is not None
-                        else "LEGACY_UNKNOWN"
-                    ),
+                    "PROVEN",
                 ),
             )
             return CapitalReservation(

@@ -19,12 +19,13 @@ INSTALLER = (ROOT / "operations/infrastructure/install_verified_release.sh").rea
 )
 
 
-def test_dispatcher_correlator_keeps_private_capacity_on_exact_proven_account() -> None:
+def test_dispatcher_correlator_is_proven_only_after_r10b() -> None:
     assert "dispatcher-v2-context-correlator-v2" in CORRELATOR
-    assert "e.identity_status='PROVEN'" in CORRELATOR
-    assert "trading_account_id=e.trading_account_id" in CORRELATOR
-    assert "'trading_account_id',e.trading_account_id" in CORRELATOR
-    assert "'identity_status',e.identity_status" in CORRELATOR
+    assert "LEGACY_UNKNOWN" not in CORRELATOR
+    assert "x.identity_status='PROVEN'" in CORRELATOR
+    assert "c.identity_status='PROVEN'" in CORRELATOR
+    assert "p.identity_status='PROVEN'" in CORRELATOR
+    assert "trading_account_id IS NOT NULL" in CORRELATOR
 
 
 def test_execution_event_reference_and_joins_are_account_scoped_when_proven() -> None:
@@ -142,13 +143,13 @@ def test_exact_close_audit_never_crosses_private_account_identity() -> None:
     assert "trading_account_id,identity_status" in audit
 
 
-def test_observer_reverse_transition_does_not_cross_proven_accounts() -> None:
+def test_observer_reverse_transition_is_exact_proven_account_only() -> None:
     observer = (ROOT / "operations/monitoring/universal_entry_shadow.py").read_text(
         encoding="utf-8"
     )
-    assert "trading_account_id=%s AND identity_status='PROVEN'" in observer
-    assert "trading_account_id IS NULL AND identity_status='LEGACY_UNKNOWN'" in observer
-    assert "WHEN trading_account_id=%s AND identity_status='PROVEN' THEN 0" in observer
+    assert "trading_account_id=%s" in observer
+    assert "identity_status='PROVEN'" in observer
+    assert "LEGACY_UNKNOWN" not in observer
 
 
 def test_dispatcher_status_capacity_fallback_is_current_account_only() -> None:

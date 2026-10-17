@@ -611,7 +611,6 @@ def _admission_pre_dispatch_status(
               AND state IN ('queued','running')
               AND (
                    (trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN'
               )
             ORDER BY requested_at_epoch_ms LIMIT 1""",
         (request.symbol, request.trading_account_id),

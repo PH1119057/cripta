@@ -78,7 +78,6 @@ def remaining_entry_fee(connection: psycopg.Connection, symbol: str, side: str) 
             WHERE symbol=%s
               AND (
                    (trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN'
               )
             ORDER BY exec_time_ms,exec_id""",
         (symbol, TRADING_ACCOUNT_ID),
@@ -107,7 +106,6 @@ def observed_adverse_slippage(connection: psycopg.Connection, symbol: str) -> De
             WHERE topic='order.linear'
               AND (
                    (trading_account_id=%s AND identity_status='PROVEN')
-                   OR identity_status='LEGACY_UNKNOWN'
               )
             ORDER BY received_at_epoch_ms DESC LIMIT 5000""",
         (TRADING_ACCOUNT_ID,),
@@ -267,7 +265,6 @@ def queue_trailing(
              AND payload_json::jsonb->>'enabled'='false'
              AND (
                   (trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN'
              )
            ORDER BY requested_at_epoch_ms DESC LIMIT 1""",
         (symbol, open_time, TRADING_ACCOUNT_ID),
@@ -282,7 +279,6 @@ def queue_trailing(
              AND payload_json::jsonb->>'distance_pct'=%s
              AND (
                   (trading_account_id=%s AND identity_status='PROVEN')
-                  OR identity_status='LEGACY_UNKNOWN'
              )
            LIMIT 1""",
         (symbol, open_time, str(trailing_pct), TRADING_ACCOUNT_ID),
@@ -339,7 +335,6 @@ def cycle(connection: psycopg.Connection) -> None:
            WHERE o.state='OPEN' AND o.close_link_status='OPEN'
              AND (
                   (o.trading_account_id=%s AND o.identity_status='PROVEN')
-                  OR o.identity_status='LEGACY_UNKNOWN'
              )
              AND o.bot_instance_id IS NOT NULL
              AND o.bot_instance_id <> 'universal-entry'

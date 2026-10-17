@@ -109,26 +109,22 @@ def retire_stale_release_arms(
                        WHERE symbol=%s AND state<>'CLOSED'
                          AND (
                               (trading_account_id=%s AND identity_status='PROVEN')
-                              OR identity_status='LEGACY_UNKNOWN'
                          ))
                 OR EXISTS(SELECT 1 FROM runtime.exchange_position_slot_claims
                           WHERE symbol=%s AND claim_state<>'RELEASED'
                             AND (
                                  (trading_account_id=%s AND identity_status='PROVEN')
-                                 OR identity_status='LEGACY_UNKNOWN'
                             ))
                 OR EXISTS(SELECT 1 FROM runtime.capital_reservations
                           WHERE strategy_id=%s AND strategy_version=%s
                             AND state<>'RELEASED'
                             AND (
                                  (trading_account_id=%s AND identity_status='PROVEN')
-                                 OR identity_status='LEGACY_UNKNOWN'
                             ))
                 OR EXISTS(SELECT 1 FROM runtime.trade_commands
                           WHERE symbol=%s
                             AND (
                                  (trading_account_id=%s AND identity_status='PROVEN')
-                                 OR identity_status='LEGACY_UNKNOWN'
                             )
                             AND (
                                 state NOT IN ('completed','failed')

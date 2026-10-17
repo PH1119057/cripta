@@ -61,5 +61,6 @@ def test_r6b1_reservation_slot_decision_request_store_lineage() -> None:
         assert field in storage
     assert "'PROVEN'" in admission
     assert "'PROVEN'" in storage
-    assert "lock_identity = request.trading_account_id or request.account_ref" in capital
-    assert "identity_status='LEGACY_UNKNOWN'" in capital
+    assert "lock_identity = request.trading_account_id" in capital
+    assert "R10 capital reservation requires PROVEN StrategyExecutionBinding lineage" in capital
+    assert "LEGACY_UNKNOWN" not in capital

@@ -5,7 +5,7 @@ SOURCE = (ROOT / "src/bybit_workbench/lifecycle_supervisor.py").read_text(encodi
 def test_private_lifecycle_scans_are_account_scoped_in_production_mode() -> None:
     assert SOURCE.count("self._trading_account_id") >= 20
     assert SOURCE.count("identity_status='PROVEN'") >= 12
-    assert SOURCE.count("identity_status='LEGACY_UNKNOWN'") >= 10
+    assert "LEGACY_UNKNOWN" not in SOURCE
 
 def test_position_mode_lookup_has_no_legacy_identity_fallback() -> None:
     marker = "FROM runtime.position_mode_states"

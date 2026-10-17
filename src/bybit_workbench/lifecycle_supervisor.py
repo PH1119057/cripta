@@ -331,11 +331,8 @@ class LifecycleSupervisor:
                       capital_reservation_id,strategy_position_id,claim_state,
                       claimed_at,bound_at,released_at,release_reason
                  FROM runtime.exchange_position_slot_claims
-                WHERE (
-                      %s::text IS NULL
-                      OR (trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE identity_status='PROVEN'
+                  AND (%s::text IS NULL OR trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in slot_claims:
@@ -408,11 +405,8 @@ class LifecycleSupervisor:
                       strategy_version,strategy_config_fingerprint,created_at,
                       updated_at,state,strategy_position_id
                  FROM runtime.capital_reservations
-                WHERE (
-                      %s::text IS NULL
-                      OR (trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE identity_status='PROVEN'
+                  AND (%s::text IS NULL OR trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in reservations:
@@ -605,11 +599,8 @@ class LifecycleSupervisor:
                  JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=d.execution_request_id
                 WHERE d.state='DISPATCHED'
-                  AND (
-                       %s::text IS NULL
-                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                       OR r.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND r.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR r.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in dispatches:
@@ -653,11 +644,8 @@ class LifecycleSupervisor:
                    ON r.capital_reservation_id=c.reservation_id
                 WHERE c.exchange_commitment_ref IS NOT NULL
                   AND c.exchange_commitment_at IS NOT NULL
-                  AND (
-                       %s::text IS NULL
-                       OR (c.trading_account_id=%s AND c.identity_status='PROVEN')
-                       OR c.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND c.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR c.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in acknowledgements:
@@ -703,11 +691,8 @@ class LifecycleSupervisor:
                  LEFT JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=p.entry_execution_request_id
                 WHERE p.bot_instance_id='universal-entry'
-                  AND (
-                       %s::text IS NULL
-                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                       OR p.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND p.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in positions:
@@ -789,11 +774,8 @@ class LifecycleSupervisor:
                  JOIN runtime.position_ownership p
                    ON p.position_id=c.strategy_position_id
                 WHERE c.status='CLAIMED'
-                  AND (
-                       %s::text IS NULL
-                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                       OR p.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND p.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in claims:
@@ -816,11 +798,8 @@ class LifecycleSupervisor:
                  FROM strategy_exit.exit_decisions d
                  JOIN runtime.position_ownership p
                    ON p.position_id=d.strategy_position_id
-                WHERE (
-                      %s::text IS NULL
-                      OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                      OR p.identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE p.identity_status='PROVEN'
+                  AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_decisions:
@@ -841,11 +820,8 @@ class LifecycleSupervisor:
                       strategy_id,strategy_version,strategy_config_fingerprint,
                       exit_plan_fingerprint,requested_at
                  FROM strategy_exit.execution_requests
-                WHERE (
-                      %s::text IS NULL
-                      OR (trading_account_id=%s AND identity_status='PROVEN')
-                      OR identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE identity_status='PROVEN'
+                  AND (%s::text IS NULL OR trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_requests:
@@ -903,11 +879,8 @@ class LifecycleSupervisor:
                 WHERE tc.command_type='strategy_exit'
                   AND tc.state='completed'
                   AND tc.finished_at_epoch_ms IS NOT NULL
-                  AND (
-                       %s::text IS NULL
-                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                       OR r.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND r.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR r.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in mutations:
@@ -945,11 +918,8 @@ class LifecycleSupervisor:
                  FROM runtime.position_exit_attribution a
                  JOIN runtime.position_ownership p ON p.position_id=a.position_id
                 WHERE p.bot_instance_id='universal-entry'
-                  AND (
-                       %s::text IS NULL
-                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                       OR p.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND p.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in economics:
@@ -1061,11 +1031,8 @@ class LifecycleSupervisor:
                                e.request_state_event_id DESC
                       LIMIT 1
                  ) latest_request_state ON true
-                WHERE (
-                      %s::text IS NULL
-                      OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                      OR r.identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE r.identity_status='PROVEN'
+                  AND (%s::text IS NULL OR r.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in entry_requests:
@@ -1102,11 +1069,8 @@ class LifecycleSupervisor:
             """SELECT reservation_id,strategy_attempt_id,strategy_position_id
                  FROM runtime.capital_reservations
                 WHERE state='RECONCILIATION_REQUIRED'
-                  AND (
-                       %s::text IS NULL
-                       OR (trading_account_id=%s AND identity_status='PROVEN')
-                       OR identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND identity_status='PROVEN'
+                      AND (%s::text IS NULL OR trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in ambiguous_entry:
@@ -1132,11 +1096,8 @@ class LifecycleSupervisor:
             """SELECT reservation_id,strategy_attempt_id
                  FROM runtime.capital_reservations
                 WHERE state='RESERVED' AND pre_dispatch_expires_at <= %s
-                  AND (
-                       %s::text IS NULL
-                       OR (trading_account_id=%s AND identity_status='PROVEN')
-                       OR identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND identity_status='PROVEN'
+                      AND (%s::text IS NULL OR trading_account_id=%s)""",
             (now, self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in stuck:
@@ -1174,11 +1135,8 @@ class LifecycleSupervisor:
                    ON c.strategy_position_id=p.position_id
                 WHERE p.bot_instance_id='universal-entry'
                   AND p.state IN ('OPEN','RECONCILIATION_REQUIRED')
-                  AND (
-                       %s::text IS NULL
-                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                       OR p.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND p.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in positions:
@@ -1409,11 +1367,8 @@ class LifecycleSupervisor:
                  FROM strategy_exit.execution_requests r
                  LEFT JOIN strategy_exit.execution_dispatches d
                    ON d.execution_request_id=r.execution_request_id
-                WHERE (
-                      %s::text IS NULL
-                      OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                      OR r.identity_status='LEGACY_UNKNOWN'
-                )""",
+                WHERE r.identity_status='PROVEN'
+                  AND (%s::text IS NULL OR r.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_requests:
@@ -1452,11 +1407,8 @@ class LifecycleSupervisor:
                    ON d.execution_request_id=r.execution_request_id
                 WHERE p.state='RECONCILIATION_REQUIRED'
                   AND d.state='DISPATCHED'
-                  AND (
-                       %s::text IS NULL
-                       OR (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                       OR p.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND p.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR p.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in exit_ambiguous:
@@ -1482,11 +1434,8 @@ class LifecycleSupervisor:
                     d.reason LIKE 'EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN%%'
                     OR d.reason LIKE 'EXCHANGE_POSITION_MODE_MISMATCH%%'
                   )
-                  AND (
-                       %s::text IS NULL
-                       OR (r.trading_account_id=%s AND r.identity_status='PROVEN')
-                       OR r.identity_status='LEGACY_UNKNOWN'
-                  )""",
+                  AND r.identity_status='PROVEN'
+                      AND (%s::text IS NULL OR r.trading_account_id=%s)""",
             (self._trading_account_id, self._trading_account_id),
         ).fetchall()
         for row in entry_safety_blocks:
@@ -1559,10 +1508,8 @@ class LifecycleSupervisor:
                       AND h.identity_status='PROVEN'
                     WHERE p.bot_instance_id='universal-entry'
                       AND p.state='OPEN'
-                      AND (
-                           (p.trading_account_id=%s AND p.identity_status='PROVEN')
-                           OR p.identity_status='LEGACY_UNKNOWN'
-                      )""",
+                      AND p.trading_account_id=%s
+                      AND p.identity_status='PROVEN'""",
                 (self._trading_account_id, self._trading_account_id),
             ).fetchall()
         else:

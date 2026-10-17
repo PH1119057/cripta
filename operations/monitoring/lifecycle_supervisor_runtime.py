@@ -116,7 +116,6 @@ def _account_positions(connection: psycopg.Connection[Any]) -> list[dict[str, An
                 WHERE state='OPEN'
                   AND (
                        (trading_account_id=%s AND identity_status='PROVEN')
-                       OR identity_status='LEGACY_UNKNOWN'
                   )
                 ORDER BY position_id""",
             (TRADING_ACCOUNT_ID,),

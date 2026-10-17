@@ -81,6 +81,8 @@ def _position_ids(connection: psycopg.Connection[Any]) -> tuple[str, ...]:
              FROM runtime.position_ownership
             WHERE bot_instance_id='universal-entry'
               AND state IN ('OPEN','RECONCILIATION_REQUIRED')
+              AND identity_status='PROVEN'
+              AND trading_account_id IS NOT NULL
             ORDER BY fill_at,position_id"""
     ).fetchall()
     return tuple(str(row["position_id"]) for row in rows)

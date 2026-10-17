@@ -168,52 +168,60 @@ class PostgresEntryAdmissionPort:
         self._capital = PostgresCapitalReservationPort(connection)
 
     def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        if (
+            not request.strategy_activation_id
+            or not request.strategy_execution_binding_id
+            or not request.execution_leg
+            or not request.trading_account_id
+        ):
+            raise StrategyExecutionBindingUnavailable(
+                "R10 Entry admission requires PROVEN StrategyExecutionBinding lineage"
+            )
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
-            if request.strategy_execution_binding_id is not None:
-                binding = self._connection.execute(
-                    """SELECT b.strategy_activation_id,b.execution_leg,
-                              b.trading_account_id,b.execution_role,
-                              b.allocation_mode,b.binding_state,
-                              b.effective_from,b.effective_to,ta.status,ta.environment,
-                              a.enabled
-                         FROM strategy_entry.strategy_execution_bindings b
-                         JOIN identity.trading_accounts ta
-                           ON ta.trading_account_id=b.trading_account_id
-                         JOIN strategy_entry.strategy_activations a
-                           ON a.activation_id=b.strategy_activation_id
-                        WHERE b.strategy_execution_binding_id=%s
-                        FOR SHARE""",
-                    (request.strategy_execution_binding_id,),
-                ).fetchone()
-                expected_binding = (
-                    request.strategy_activation_id,
-                    request.execution_leg,
-                    request.trading_account_id,
+            binding = self._connection.execute(
+                """SELECT b.strategy_activation_id,b.execution_leg,
+                          b.trading_account_id,b.execution_role,
+                          b.allocation_mode,b.binding_state,
+                          b.effective_from,b.effective_to,ta.status,ta.environment,
+                          a.enabled
+                     FROM strategy_entry.strategy_execution_bindings b
+                     JOIN identity.trading_accounts ta
+                       ON ta.trading_account_id=b.trading_account_id
+                     JOIN strategy_entry.strategy_activations a
+                       ON a.activation_id=b.strategy_activation_id
+                    WHERE b.strategy_execution_binding_id=%s
+                    FOR SHARE""",
+                (request.strategy_execution_binding_id,),
+            ).fetchone()
+            expected_binding = (
+                request.strategy_activation_id,
+                request.execution_leg,
+                request.trading_account_id,
+            )
+            if binding is None:
+                raise StrategyExecutionBindingUnavailable(
+                    "strategy execution binding disappeared before admission"
                 )
-                if binding is None:
-                    raise StrategyExecutionBindingUnavailable(
-                        "strategy execution binding disappeared before admission"
-                    )
-                actual_binding = (str(binding[0]),str(binding[1]),str(binding[2]))
-                if actual_binding != expected_binding:
-                    raise StrategyExecutionBindingUnavailable(
-                        "strategy execution binding identity changed before admission"
-                    )
-                if (
-                    str(binding[3]) != "PRIMARY"
-                    or str(binding[4]) != "DEDICATED_STRATEGY"
-                    or str(binding[5]) != "ACTIVE"
-                    or binding[6] > now
-                    or (binding[7] is not None and binding[7] <= now)
-                    or str(binding[8]) != "ACTIVE"
-                    or str(binding[9]) != "MAINNET"
-                    or binding[10] is not True
-                ):
-                    raise StrategyExecutionBindingUnavailable(
-                        "strategy execution binding is not active for admission"
-                    )
-            account_lock_identity = request.trading_account_id or request.account_ref
+            actual_binding = (str(binding[0]),str(binding[1]),str(binding[2]))
+            if actual_binding != expected_binding:
+                raise StrategyExecutionBindingUnavailable(
+                    "strategy execution binding identity changed before admission"
+                )
+            if (
+                str(binding[3]) != "PRIMARY"
+                or str(binding[4]) != "DEDICATED_STRATEGY"
+                or str(binding[5]) != "ACTIVE"
+                or binding[6] > now
+                or (binding[7] is not None and binding[7] <= now)
+                or str(binding[8]) != "ACTIVE"
+                or str(binding[9]) != "MAINNET"
+                or binding[10] is not True
+            ):
+                raise StrategyExecutionBindingUnavailable(
+                    "strategy execution binding is not active for admission"
+                )
+            account_lock_identity = request.trading_account_id
             self._connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
                 (account_lock_identity,),
@@ -466,11 +474,7 @@ class PostgresEntryAdmissionPort:
                     request.strategy_execution_binding_id,
                     request.execution_leg,
                     request.trading_account_id,
-                    (
-                        "PROVEN"
-                        if request.strategy_execution_binding_id is not None
-                        else "LEGACY_UNKNOWN"
-                    ),
+                    "PROVEN",
                 ),
             )
 
