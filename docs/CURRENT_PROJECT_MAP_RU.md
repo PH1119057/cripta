@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.17
+**Версия:** 12.18
 **Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -2770,7 +2770,12 @@ R7 MARKET/INSTRUMENT CUTOVER    = SOURCE IMPLEMENTED THROUGH R7b / NOT DEPLOYED
   HISTORICAL PUBLIC ID BACKFILL         = NOT PERFORMED
   INACTIVE LEGACY CORRELATOR RETIREMENT = DEFERRED TO R10
   DB NON-NULL / LEGACY FIELD RETIREMENT = NOT YET / AFTER R9-R10 GATES
-R8 COMPACT ANALYTICS CUTOVER    = NEXT / NOT IMPLEMENTED
+R8 COMPACT ANALYTICS CUTOVER    = PARTIAL / R8a DUAL-WRITE FOUNDATION DONE IN SOURCE
+  R8a EXACT INSTRUMENT-MINUTE TABLE = DONE IN SOURCE
+  R8a MAYAK COMPACT DUAL-WRITE      = DONE IN SOURCE
+  R8a ARCHIVE / SCHEMA CONTRACT     = DONE IN SOURCE
+  R8b FEATURE COVERAGE / EQUIVALENCE = NEXT
+  OLD JSONB / COIN_MINUTES RETIREMENT = NOT AUTHORIZED
 R11 RETENTION / DELETE          = NOT STARTED
 R12 PHYSICAL RECLAIM            = NOT STARTED
 MULTI_ACCOUNT LIVE READY        = NO
@@ -2796,12 +2801,13 @@ cb1423df  scope residual private report readers
 bee199d7  prepare account-scoped physical keys
 4ae7e138  add R7 market/instrument identity lineage
 ae54cfec  cut active market readers to exact identity
+8b7c6b93  add compact market analytics foundation
 ~~~
 
-The next bounded source task is R8 compact analytics cutover. R7 remains
-source-only and deliberately preserves historical LEGACY_UNKNOWN rows plus
-legacy symbol columns until the later parity/restart/recovery and retirement
-gates permit DB enforcement and legacy-field removal.
+The next bounded source task is R8b feature-coverage / compact-reader
+equivalence. R8a is additive dual-write only: the old MAYAK/Dispatcher JSONB
+and mayak_v2.coin_minutes paths remain intact until compact analytical
+coverage/equivalence is proven and later R9-R11 gates authorize retirement.
 
 Documentation maintenance gate:
 
@@ -3268,3 +3274,100 @@ TRADING BEHAVIOR                = UNCHANGED
 
 No deploy, PostgreSQL mutation, historical rewrite/delete, Exchange mutation or
 LIVE re-arm is performed by this documentation checkpoint.
+
+
+## 37.12 R8a compact analytical dual-write foundation — CHECKED HERE 2026-10-17
+
+Pre-publication implementation/runtime identity:
+
+~~~text
+REMOTE_HEAD             = 8b7c6b934b38eb424b37f15489b8ae208df81f4f
+SOURCE_HEAD             = 8b7c6b934b38eb424b37f15489b8ae208df81f4f
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Read-only current PostgreSQL sizing used to bound R8:
+
+~~~text
+dispatcher_v2.coin_market_contexts  ~= 3624 MB
+mayak_v2.snapshots                  ~= 3536 MB
+mayak_v2.coin_market_contexts       ~= 3286 MB
+mayak_v2.coin_minutes               ~=  915 MB
+~~~
+
+These current large tables are evidence for the storage problem; R8a does not
+delete, rewrite or backfill them.
+
+Source commit `8b7c6b93...` adds the first compact analytical path:
+
+- new canonical candidate table `analytics.market_minutes`;
+- physical grain is exactly
+  `MarketSource + InstrumentIdentity + observed_minute`;
+- one mixed symbol row is split into exact SPOT and LINEAR instrument rows;
+- no TradingAccount or Strategy dimension is present in the compact market
+  grain;
+- SPOT rows carry only spot flow/book/return facts and cannot carry LINEAR-only
+  OI/funding/mark/index/positioning fields;
+- LINEAR rows carry derivatives flow/book/return plus available OI, funding,
+  last/mark/index and long/short ratio facts;
+- quality/freshness/availability plus exact source versions and
+  `config_fingerprint` are persisted without full JSONB payload duplication;
+- denormalized `product_category + external_symbol` are DB-constrained to the
+  exact InstrumentIdentity, so they cannot silently disagree with the identity
+  registry;
+- MAYAK dual-writes the new compact rows after the existing
+  `mayak_v2.coin_minutes` write;
+- write identity is idempotent on
+  `market_source_id + instrument_id + observed_minute`;
+- existing exact `mayak_v2.liquidations` remains the compact exact
+  liquidation event family and is not duplicated into another R8 table;
+- archive export and runtime schema validation now know the compact table;
+- installer ordering applies the R8a migration after the R7 identity registry
+  bridge and before service start.
+
+R8a deliberately does not claim full analytical replacement. Current
+CoinMarketContext/flow_context exposes additional rolling-horizon and
+book-dynamics features. Before old JSONB/coin-minute paths can be retired, R8b
+must inventory the exact long-horizon feature set required for replay/research,
+prove compact-reader equivalence, and identify what is recomputable from minute
+facts versus what must be added to the canonical compact representation.
+
+Verification evidence:
+
+~~~text
+TARGETED R8a SET                  = 72 / 72 PASS
+PY_COMPILE                        = PASS
+RUFF TARGETED                     = PASS
+WRITER SQL/ROW KEY PARITY         = 41 / 41 PASS
+INSTALLER BASH SYNTAX             = PASS
+DIFF CHECK                        = PASS
+DESTRUCTIVE R8 SQL                = NONE
+FULL PYTEST                       = 1902 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES         = CONFIRMED
+NEW TEST FAILURES                 = 0
+~~~
+
+Status after R8a:
+
+~~~text
+R8a COMPACT DUAL-WRITE FOUNDATION = DONE IN SOURCE
+R8 PRODUCTION DB APPLY             = NO
+R8 DEPLOY                          = NO
+R8 RUNTIME BEHAVIOR VERIFIED       = NO
+R8b FEATURE COVERAGE / EQUIVALENCE = NEXT
+R9 PARITY / RESTART / RECOVERY     = NOT STARTED
+R11 RETENTION / DELETE             = NOT STARTED
+OLD JSONB / COIN_MINUTE DELETE     = NOT AUTHORIZED
+~~~
+
+Documentation topology is unchanged: active document set, paths, base pre-read,
+routing, README/AGENTS bootstrap and Project Source count remain unchanged.
+
+No deploy, PostgreSQL mutation, historical backfill/rewrite/delete, Exchange
+mutation or LIVE re-arm is performed by this checkpoint.
