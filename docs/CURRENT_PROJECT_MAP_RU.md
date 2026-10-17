@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.14
-**Дата:** 2026-10-16
+**Версия:** 12.15
+**Дата:** 2026-10-17
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -2730,7 +2730,7 @@ DEPLOY                          = NOT PERFORMED
 Current source progress:
 
 ~~~text
-R5 ACCOUNT-SCOPED CURRENT STATE = PARTIAL / ACTIVE IMPLEMENTATION
+R5 ACCOUNT-SCOPED CURRENT STATE = SOURCE IMPLEMENTED THROUGH KEY PREPARATION / NOT DEPLOYED
 
 DONE IN SOURCE:
   REAL ENTRY SLOT SCOPE
@@ -2744,16 +2744,14 @@ DONE IN SOURCE:
   PROTECTION SUPERVISOR PRIVATE EVIDENCE
   DASHBOARD CONTROL / PRE-ARM PRIVATE SCOPE
   DASHBOARD LIVE READ-MODEL PRIVATE SCOPE
+  ACTIVE PRIVATE CONSUMER / WRITER PARITY AUDIT
+  REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE
+  PHYSICAL ACCOUNT-SCOPED PK / UNIQUE PREPARATION
 
-OPEN IN R5:
-  REMAINING PRIVATE CONSUMER / WRITER PARITY AUDIT = DONE IN SOURCE FOR ACTIVE PATHS
-    ACTIVE UNIVERSAL ENTRY REQUEST SELECTION / EXPIRY = DONE IN SOURCE
-    PRIVATE EVENT SLIPPAGE READERS = DONE IN SOURCE
-    STALE-ARM / CONTROL PRIVATE SCOPE = DONE IN SOURCE
-    REPORT / ARCHIVE / REPLAY PRIVATE PROVENANCE AUDIT = DONE IN SOURCE
-    INACTIVE LEGACY WRITER RETIREMENT PROOF = DEFERRED TO R10
-  PHYSICAL ACCOUNT-SCOPED PK / UNIQUE PREPARATION = NEXT
-  OLD PHYSICAL PK / UNIQUE RETIREMENT = NOT YET / AFTER PARITY GATES
+DEFERRED / LATER GATES:
+  INACTIVE LEGACY WRITER RETIREMENT PROOF = R10
+  OLD PHYSICAL PK / UNIQUE RETIREMENT = NOT YET / AFTER R9 PARITY + R10 RETIREMENT
+  WRITER ON CONFLICT COMPOSITE-KEY CUTOVER = NOT YET
   R9/R10 PARITY AND LEGACY PATH RETIREMENT GATES
 
 R6 STRATEGY EXECUTION BINDING   = SOURCE IMPLEMENTED THROUGH R6d / NOT DEPLOYED
@@ -2787,12 +2785,13 @@ c34f4102  scope stale-arm retirement to TradingAccount
 9e867593  scope report/replay private provenance
 cb1423df  scope residual private report readers
 99278812  finish active private reader account scope
+bee199d7  prepare account-scoped physical keys
 ~~~
 
-The next bounded source task is physical account-scoped PK/UNIQUE preparation.
-This next step is additive/preparatory only: old physical PK/UNIQUE constraints
-must remain in place until the later parity/restart/recovery and legacy-path
-retirement gates allow exact cutover.
+The next bounded source task is R7 MarketSource / InstrumentIdentity cutover.
+The R5 physical-key preparation remains additive only: old physical PK/UNIQUE
+constraints and legacy writer conflict targets stay in place until the later
+parity/restart/recovery and legacy-path retirement gates allow exact cutover.
 
 Documentation maintenance gate:
 
@@ -2930,6 +2929,101 @@ INACTIVE LEGACY WRITER RETIREMENT             = DEFERRED TO R10
 PHYSICAL ACCOUNT-SCOPED KEY PREPARATION       = NEXT
 DEPLOYED                                      = NO
 RUNTIME BEHAVIOR VERIFIED FOR NEW SOURCE      = NO
+~~~
+
+No deploy, PostgreSQL mutation, data rewrite/delete, Exchange mutation or LIVE
+re-arm is performed by this documentation checkpoint.
+
+
+## 37.9 Physical account-scoped key preparation checkpoint — CHECKED HERE 2026-10-17
+
+Recovery after delivery timeout confirmed that the implementation publication
+completed before the interruption:
+
+~~~text
+REMOTE_HEAD             = bee199d7c3c38cdc9bbe0b9fccea7cdd5382cf74
+SOURCE_HEAD             = bee199d7c3c38cdc9bbe0b9fccea7cdd5382cf74
+SOURCE_WORKTREE         = CLEAN
+INSTALLED_COMMIT        = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+LOADED_COMMIT           = 88216254e5c0b1cca3c8edf3db9ee0f0ac11f101
+DB MIGRATION APPLY      = NO
+DEPLOY                  = NO
+DELETE                  = NO
+LIVE RE-ARM             = NO
+~~~
+
+Read-only production PostgreSQL inspection confirms that the installed database
+still has the legacy physical keys and does not yet contain the R5 identity
+columns on these five current private tables:
+
+~~~text
+runtime.wallet_latest          PRIMARY KEY (singleton)
+runtime.hot_positions          PRIMARY KEY (symbol, position_idx)
+runtime.hot_orders             PRIMARY KEY (order_id)
+runtime.executions             PRIMARY KEY (exec_id)
+runtime.exchange_order_history PRIMARY KEY (order_id)
+
+trading_account_id / account_connector_id / identity_status on those tables:
+NOT INSTALLED IN CURRENT PRODUCTION DB
+~~~
+
+Source commit `bee199d7...` prepares, but does not activate, the later
+multi-account physical-key cutover:
+
+- adds additive account-scoped UNIQUE indexes for
+  `wallet_latest`, `hot_positions`, `hot_orders`, `executions` and
+  `exchange_order_history`;
+- uses PostgreSQL `NULLS NOT DISTINCT` so the unresolved
+  `LEGACY_UNKNOWN` physical identity remains singular instead of being
+  multiplied by nullable account scope;
+- adds fail-closed identity-consistency checks for new rows:
+  `PROVEN` requires both TradingAccount and AccountConnector, while
+  `LEGACY_UNKNOWN` requires both to remain null;
+- keeps every legacy PRIMARY KEY intact;
+- deliberately keeps current writers on the legacy
+  `ON CONFLICT(singleton|symbol,position_idx|order_id|exec_id)` targets;
+- extends runtime schema validation so the prepared account-scoped indexes must
+  exist with the exact unique/null semantics before the new schema contract can
+  validate;
+- adds the preparation migration to the installer after R5 identity columns are
+  introduced and before later StrategyExecutionBinding migrations.
+
+Therefore this checkpoint does **not** claim that production is multi-account
+physical-write ready. The old keys remain the final collision blocker until
+R9 parity/restart/recovery evidence and R10 legacy-path retirement allow the
+writer conflict-target and physical-key cutover.
+
+Verification evidence for `bee199d7...`:
+
+~~~text
+TARGETED CONTRACT TESTS           = 34 / 34 PASS
+PY_COMPILE                        = PASS
+RUFF                              = PASS
+INSTALLER BASH SYNTAX             = PASS
+DIFF CHECK                        = PASS
+FULL PYTEST                       = 1881 PASS / 70 SKIPPED / 12 FAIL
+BASELINE SAME 12 FAILURES         = CONFIRMED
+NEW TEST FAILURES                 = 0
+MYPY                              = 6 PRE-EXISTING ERRORS / 0 NEW
+DESTRUCTIVE SQL                   = NONE
+OLD PK / UNIQUE RETIREMENT        = NOT PERFORMED
+WRITER COMPOSITE CONFLICT CUTOVER = NOT PERFORMED
+~~~
+
+The separate pre-existing `universal_entry_consumer.py` SQL placeholder finding
+remains open and unchanged; it was not mixed into this R5 physical-key
+preparation.
+
+Status after this checkpoint:
+
+~~~text
+R5 ACTIVE PRIVATE ACCOUNT SCOPE           = DONE IN SOURCE
+R5 REPORT / REPLAY PROVENANCE             = DONE IN SOURCE
+R5 PHYSICAL KEY PREPARATION               = DONE IN SOURCE
+R5 PRODUCTION DB APPLY                    = NO
+R6 STRATEGY EXECUTION BINDING             = SOURCE IMPLEMENTED THROUGH R6d
+NEXT BOUNDED SOURCE STAGE                 = R7 MARKET/INSTRUMENT CUTOVER
+MULTI_ACCOUNT LIVE READY                  = NO
 ~~~
 
 No deploy, PostgreSQL mutation, data rewrite/delete, Exchange mutation or LIVE
