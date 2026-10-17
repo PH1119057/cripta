@@ -8,7 +8,6 @@ from bybit_workbench.mayak.compact_reader import (
     R8B_RECOMPUTABLE_PATHS,
     R8B_REQUIRED_ANALYTICAL_PATHS,
     R8B_UNCOVERED_REQUIRED_PATHS,
-    compact_replacement_ready,
     compare_compact_pair_to_context,
 )
 from bybit_workbench.mayak.core.live import LiveMayakEngine
@@ -96,7 +95,7 @@ def test_r8b_feature_coverage_is_exhaustive_and_fail_closed() -> None:
     assert "money.derivatives.1m.net_usd" in R8B_UNCOVERED_REQUIRED_PATHS
     assert "liquidity.derivatives.bid_depth_10bps_usd" in R8B_UNCOVERED_REQUIRED_PATHS
     assert "positioning.open_interest_change_60m_pct" in R8B_UNCOVERED_REQUIRED_PATHS
-    assert compact_replacement_ready() is False
+    assert len(R8B_UNCOVERED_REQUIRED_PATHS) == 182
 
 
 def test_compact_writer_uses_frozen_coin_context_not_earlier_coin_snapshot() -> None:

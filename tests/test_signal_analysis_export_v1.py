@@ -23,12 +23,14 @@ def test_signal_context_joins_mayak_dispatcher_coin_and_entry_causally() -> None
     assert "event_type='SIGNAL'" in body
     assert "mayak_v2.snapshots" in body
     assert "strategy_dispatcher.assessments" in body
-    assert "mayak_v2.coin_minutes" in body
+    assert "analytics.market_minutes" in body
+    assert "mayak_v2.coin_minutes" not in body
     assert "runtime.entry_decisions" in body
     assert "runtime.m3_consumed_context" in body
     assert "monitoring.entry_geometry_handoffs" in body
     assert "monitoring.entry_dispatcher_shadow_decisions" in body
-    assert "cm.observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)" in body
+    assert "linear.source_observed_at" in body
+    assert "<= to_timestamp(o.signal_at_epoch_ms / 1000.0)" in body
     assert "causal_context_ok" in body
 
 
@@ -63,6 +65,7 @@ def test_raw_period_tables_cover_required_observability_layers() -> None:
         "strategy_dispatcher.runs",
         "strategy_dispatcher.assessments",
         "mayak_v2.snapshots",
+        "analytics.market_minutes",
         "mayak_v2.coin_minutes",
         "mayak_v2.observation_journal",
         "runtime.entry_decisions",

@@ -65,7 +65,7 @@ def test_proven_and_legacy_identity_consistency_is_fail_closed_for_new_rows() ->
 
 
 def test_runtime_schema_requires_exact_unique_nulls_not_distinct_indexes() -> None:
-    assert "runtime-schema-2026-10-17-compact-analytics-r8a" in SCHEMA
+    assert "runtime-schema-2026-10-17-compact-analytics-r8c" in SCHEMA
     assert "REQUIRED_ACCOUNT_KEY_INDEXES" in SCHEMA
     assert "indisunique" in SCHEMA
     assert "indnullsnotdistinct" in SCHEMA

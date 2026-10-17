@@ -34,6 +34,13 @@ def _snapshot() -> dict[str, object]:
         "config_fingerprint": "abc123",
         "coin_market_contexts": {
             "BTCUSDT": {
+                "symbol": "BTCUSDT",
+                "market_source_id": "ms-bybit-mainnet-public-v1",
+                "spot_instrument_id": "inst-bybit-spot-btcusdt",
+                "linear_instrument_id": "inst-bybit-linear-btcusdt",
+                "observed_at": datetime(
+                    2026, 10, 17, 5, 17, 3, tzinfo=UTC
+                ).isoformat(),
                 "payload": {
                     "money": {
                         "spot": {
@@ -139,7 +146,7 @@ def test_r8a_migration_is_additive_compact_and_exact_identity_grained() -> None:
 def test_mayak_dual_writes_compact_rows_after_legacy_coin_minutes() -> None:
     assert "compact_market_minute_rows" in MAYAK
     assert "def _persist_compact_market_minutes" in MAYAK
-    assert "INSERT INTO analytics.market_minutes" in MAYAK
+    assert "compact_market_minute_insert_sql" in MAYAK
     assert MAYAK.index("self._persist_coin_minutes(snapshot_id, snapshot)") < MAYAK.index(
         "self._persist_compact_market_minutes(snapshot_id, snapshot)"
     )
@@ -148,11 +155,12 @@ def test_mayak_dual_writes_compact_rows_after_legacy_coin_minutes() -> None:
 def test_installer_and_runtime_schema_require_compact_analytics() -> None:
     r7 = INSTALLER.index("operations/sql/20261017_market_instrument_identity_r7a.sql")
     r8 = INSTALLER.index("operations/sql/20261017_compact_analytics_r8a.sql")
-    assert r7 < r8
+    r8c = INSTALLER.index("operations/sql/20261017_compact_analytics_r8c.sql")
+    assert r7 < r8 < r8c
     assert '"analytics.market_minutes"' in RUNTIME_SCHEMA
     assert '("analytics", "market_minutes", "market_source_id")' in RUNTIME_SCHEMA
     assert '("analytics", "market_minutes", "instrument_id")' in RUNTIME_SCHEMA
-    assert "compact-analytics-r8a" in RUNTIME_SCHEMA
+    assert "compact-analytics-r8c" in RUNTIME_SCHEMA
 
 
 def test_archive_exports_compact_market_minutes_as_public_market_identity() -> None:

@@ -6,7 +6,7 @@ from typing import Any
 
 import psycopg
 
-EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-17-compact-analytics-r8a"
+EXPECTED_RUNTIME_SCHEMA_VERSION = "runtime-schema-2026-10-17-compact-analytics-r8c"
 LOCK_TIMEOUT_MS = 2000
 STATEMENT_TIMEOUT_MS = 15000
 
@@ -84,6 +84,11 @@ REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("analytics", "market_minutes", "source_snapshot_id"),
     ("analytics", "market_minutes", "config_fingerprint"),
     ("analytics", "market_minutes", "schema_version"),
+    ("analytics", "market_minutes", "flow_60m_acceleration_usd_per_min2"),
+    ("analytics", "market_minutes", "bid_depth_50bps_usd"),
+    ("analytics", "market_minutes", "imbalance_change_15m"),
+    ("analytics", "market_minutes", "open_interest_change_60m_pct"),
+    ("analytics", "market_minutes", "funding_rate_change_from_previous"),
     ("control", "execution_gates", "enabled"),
     ("runtime", "position_ownership", "entry_command_id"),
     ("runtime", "position_ownership", "position_idx"),

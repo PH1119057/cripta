@@ -87,7 +87,7 @@ def test_private_position_mode_proven_rows_carry_linear_instrument_identity() ->
 
 
 def test_runtime_schema_and_installer_require_r7a_before_service_start() -> None:
-    assert "runtime-schema-2026-10-17-compact-analytics-r8a" in SCHEMA
+    assert "runtime-schema-2026-10-17-compact-analytics-r8c" in SCHEMA
     for column in (
         '("mayak_v2", "coin_minutes", "market_source_id")',
         '("mayak_v2", "coin_market_contexts", "linear_instrument_id")',

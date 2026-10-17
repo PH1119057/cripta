@@ -2174,28 +2174,59 @@ def _write_signal_context_csv(
                          THEN 'M3_V1_LONG_ENTRY' ELSE 'M3_V1_SHORT_ENTRY' END
               )
         LEFT JOIN LATERAL (
-            SELECT cm.*
-            FROM mayak_v2.coin_minutes cm
-            JOIN identity.market_sources source_identity
-              ON source_identity.market_source_id=cm.market_source_id
-             AND source_identity.market_source_id=%s
-             AND source_identity.venue_id='venue-bybit'
-             AND source_identity.status='ACTIVE'
-            JOIN identity.instruments spot_identity
-              ON spot_identity.instrument_id=cm.spot_instrument_id
-             AND spot_identity.venue_id='venue-bybit'
-             AND spot_identity.product_category='SPOT'
-             AND spot_identity.external_symbol=o.symbol
-             AND spot_identity.status='ACTIVE'
-            JOIN identity.instruments linear_identity
-              ON linear_identity.instrument_id=cm.linear_instrument_id
-             AND linear_identity.venue_id='venue-bybit'
-             AND linear_identity.product_category='LINEAR'
-             AND linear_identity.external_symbol=o.symbol
-             AND linear_identity.status='ACTIVE'
-            WHERE cm.symbol=o.symbol
-              AND cm.observed_at <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
-            ORDER BY cm.observed_at DESC
+            SELECT
+                linear.source_observed_at AS observed_at,
+                linear.market_source_id,
+                spot.instrument_id AS spot_instrument_id,
+                linear.instrument_id AS linear_instrument_id,
+                spot.net_usd AS spot_net_usd,
+                spot.turnover_usd AS spot_turnover_usd,
+                linear.net_usd AS derivatives_net_usd,
+                linear.turnover_usd AS derivatives_turnover_usd,
+                linear.return_5m_pct,
+                linear.open_interest,
+                linear.open_interest_change_pct,
+                linear.funding_rate,
+                linear.mark_price,
+                linear.index_price,
+                linear.long_ratio,
+                linear.short_ratio,
+                spot.bid_change_pct AS spot_bid_change_pct,
+                spot.ask_change_pct AS spot_ask_change_pct,
+                linear.bid_change_pct AS derivatives_bid_change_pct,
+                linear.ask_change_pct AS derivatives_ask_change_pct,
+                spot.large_buy_usd AS large_spot_buy_usd,
+                spot.large_sell_usd AS large_spot_sell_usd,
+                linear.large_buy_usd AS large_derivatives_buy_usd,
+                linear.large_sell_usd AS large_derivatives_sell_usd,
+                jsonb_build_object(
+                    'spot_trade_quality', spot.trade_quality,
+                    'spot_trade_age_seconds', spot.trade_age_seconds,
+                    'spot_book_quality', spot.book_quality,
+                    'spot_book_age_seconds', spot.book_age_seconds,
+                    'linear_trade_quality', linear.trade_quality,
+                    'linear_trade_age_seconds', linear.trade_age_seconds,
+                    'linear_book_quality', linear.book_quality,
+                    'linear_book_age_seconds', linear.book_age_seconds,
+                    'linear_ticker_quality', linear.ticker_quality,
+                    'linear_ticker_age_seconds', linear.ticker_age_seconds,
+                    'transport_quality', linear.transport_quality
+                ) AS source_quality
+            FROM analytics.market_minutes linear
+            JOIN analytics.market_minutes spot
+              ON spot.market_source_id=linear.market_source_id
+             AND spot.external_symbol=linear.external_symbol
+             AND spot.observed_minute=linear.observed_minute
+             AND spot.source_observed_at=linear.source_observed_at
+             AND spot.config_fingerprint=linear.config_fingerprint
+             AND spot.schema_version=linear.schema_version
+             AND spot.product_category='SPOT'
+            WHERE linear.market_source_id=%s
+              AND linear.product_category='LINEAR'
+              AND linear.external_symbol=o.symbol
+              AND linear.source_observed_at
+                  <= to_timestamp(o.signal_at_epoch_ms / 1000.0)
+            ORDER BY linear.source_observed_at DESC
             LIMIT 1
         ) coin ON TRUE
         LEFT JOIN runtime.entry_decisions entry ON entry.signal_id=o.signal_id
@@ -3285,6 +3316,7 @@ def package_project() -> dict[str, object]:
                 "runtime.trade_settings_history",
                 "runtime.entry_decisions",
                 "mayak_v2.snapshots",
+                "analytics.market_minutes",
                 "mayak_v2.coin_minutes",
                 "mayak_v2.events",
                 "mayak_v2.state_events",

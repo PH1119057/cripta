@@ -41,9 +41,11 @@ def test_correlator_new_links_require_exact_market_and_instrument_identity() -> 
 def test_dashboard_current_and_causal_views_use_exact_market_identity() -> None:
     assert "FROM mayak_v2.shared_market_contexts" in DASHBOARD
     assert "WHERE market_source_id=%s" in DASHBOARD
-    assert "JOIN identity.market_sources source_identity" in DASHBOARD
-    assert "JOIN identity.instruments spot_identity" in DASHBOARD
-    assert "JOIN identity.instruments linear_identity" in DASHBOARD
+    assert "FROM analytics.market_minutes linear" in DASHBOARD
+    assert "JOIN analytics.market_minutes spot" in DASHBOARD
+    assert "linear.market_source_id=%s" in DASHBOARD
+    assert "spot.instrument_id AS spot_instrument_id" in DASHBOARD
+    assert "linear.instrument_id AS linear_instrument_id" in DASHBOARD
     assert "coin_market_source_id" in DASHBOARD
     assert "coin_spot_instrument_id" in DASHBOARD
     assert "coin_linear_instrument_id" in DASHBOARD
