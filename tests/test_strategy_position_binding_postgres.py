@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -16,6 +16,7 @@ from bybit_workbench.strategy_position_binding import (
     persist_universal_strategy_position,
     release_position_capital_reservation,
 )
+
 import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
@@ -25,6 +26,7 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
+
 
 def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
     """Match the consumer account scope to this disposable fixture only."""
