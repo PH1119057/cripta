@@ -55,7 +55,7 @@ def _seed(
     exchange_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
-    trading_account_id = "ta-2122c81ecff14f3b85b102db605212f7"
+    trading_account_id = f"{prefix}-ta"
     binding_id = f"{prefix}-binding"
 
     connection.execute(
@@ -84,6 +84,13 @@ def _seed(
                scope,operator,source,change_reason
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
+    )
+    connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,account_type,
+               environment,status
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')""",
+        (trading_account_id,),
     )
     connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(
