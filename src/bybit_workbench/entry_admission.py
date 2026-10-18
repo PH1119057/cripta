@@ -201,12 +201,20 @@ class PostgresEntryAdmissionPort:
                 raise StrategyExecutionBindingUnavailable(
                     "strategy execution binding identity changed before admission"
                 )
+            effective_from = binding[6]
+            effective_to = binding[7]
+            if not isinstance(effective_from, datetime) or (
+                effective_to is not None and not isinstance(effective_to, datetime)
+            ):
+                raise StrategyExecutionBindingUnavailable(
+                    "strategy execution binding has invalid effective timestamps"
+                )
             if (
                 str(binding[3]) != "PRIMARY"
                 or str(binding[4]) != "DEDICATED_STRATEGY"
                 or str(binding[5]) != "ACTIVE"
-                or binding[6] > now
-                or (binding[7] is not None and binding[7] <= now)
+                or effective_from > now
+                or (effective_to is not None and effective_to <= now)
                 or str(binding[8]) != "ACTIVE"
                 or str(binding[9]) != "MAINNET"
                 or binding[10] is not True
