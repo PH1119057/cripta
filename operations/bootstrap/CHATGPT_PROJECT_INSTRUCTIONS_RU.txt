@@ -23,7 +23,7 @@
 - Project Instructions: не более 8000 символов;
 - Project Source: не более 12 файлов;
 - current Project Source bundle: 11 файлов.
-Не дробить current canonical docs ради удобства. 12-й current file требует owner decision; 13-й — только после консолидации existing docs.
+Не дробить канон. 12-й файл — owner decision, 13-й — после консолидации.
 
 ## 2. Source of truth
 
@@ -75,12 +75,7 @@ Cross-route task -> читать все релевантные routed docs.
 
 Если код расходится с каноном — это FINDING, а не разрешение автоматически менять код или архитектуру.
 
-Если решение удаляет/ослабляет/переносит ранее требуемую capability, до implementation проверить BEFORE/AFTER owner/contract/consumer path. Нет доказанного replacement:
-ARCHITECTURE_CAPABILITY_GAP=YES
-HARD_STOP=YES
-CANON_UPDATE_REQUIRED=YES
-OWNER_DECISION_REQUIRED=YES
-Не деактивировать старую capability молча.
+При переносе capability проверять BEFORE/AFTER owner/consumer; без replacement — HARD_STOP + OWNER_DECISION_REQUIRED.
 
 Если термин отсутствует в `CRIPTA_GLOSSARY_RU*.md` или физически неоднозначен:
 `TERM_AMBIGUOUS=YES`
@@ -104,23 +99,20 @@ Dataset reuse != policy reuse.
 
 Перед архитектурно чувствительной работой повторно проверить GitHub `main`, base pre-read и соответствующий routed contract.
 
-Filesystem contours читать из MAP/DEVELOPMENT/RESEARCH: source=`/srv/cripta/source_checkout`, runtime target=`/srv/cripta/runtime`, research target=`/data/cripta/research`; новые research writes — только на data-disk, runtime не зависит напрямую от research artifacts.
+Filesystem contours — MAP/DEVELOPMENT/RESEARCH; research writes только на data-disk, не в runtime.
 
 Patch/deploy не имеет права молча включать LIVE. Re-arm требует current LIVE-arm contract и explicit owner approval.
 
-Owner-controlled real execution smoke-test — только explicit owner-triggered
-diagnostic; не StrategySignal/EntryDecision и не Strategy statistics.
-Exact current contract: TRADING_CONTOUR §4.8; ARCH §7.1.
+Real execution smoke — только owner-triggered diagnostic по TC §4.8 / ARCH §7.1, не Strategy.
 
-PAPER/REAL canon: ARCH §7.2; TRADING_CONTOUR §4.9; GLOSSARY §11.
+PAPER/REAL: ARCH §7.2, TC §4.9, GLOSSARY §11. R1 SL/TP: TC.
 
-R1 SL/TP: TRADING_CONTOUR.
+Dashboard read-only UI/read-model меняется отдельно от trading runtime; backend может restart только Dashboard. Auth/control/mutation — full release.
 
-Dashboard presentation/read-model deploy отделён от trading runtime: static UI и
-строго read-only projections/aggregations не требуют disarm/Execution OFF или
-restart trading services; backend read-model может restart только Dashboard.
-Auth/control/mutation/trading-decision code идёт через full runtime release.
 
+## 7. Отказы доступа и server-side scripts
+
+При любом отказе: `DEVELOPMENT_RELEASE §19.5–19.6`, `CURRENT_PROJECT_MAP §1.4`; для research — `RESEARCH_COMPUTE`, для сообщения владельцу — `CHATGPT_INTERACTION_RULES §11.1`. Различать: OpenAI tool-security block (upstream), SentinelX `command_not_allowed` (allowlist), Unix `EACCES` (actor/path), job timeout (исход неизвестен), GitHub error. Не называть всё «нет доступа», не выдумывать конкретное правило OpenAI. Не повторять заблокированный вызов циклом, не обходить защиту кодированием/сменой actor, не просить рестарт агента без evidence. `cripta` — обычный read/research actor, `sentinelx` — rail управления. Сначала короткий разрешённый smoke, затем bounded run; после успеха сразу записывать source/result/QC в GitHub.
 
 ## 7. Server-side scripts
 
