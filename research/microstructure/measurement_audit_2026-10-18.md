@@ -82,16 +82,16 @@ Status: **RESEARCH AUDIT / NOT CANON / NO NEW READINESS PROMOTION**. Canon: `doc
 | ARBUSDT | 28 | Trade-Size Distribution | `fill_microstructure_minutes_v1.py` | HISTORICAL_PILOT_PASS | NEW_CONTRACT_QC_PENDING |
 | ARBUSDT | 29 | Bid/Ask Spread | `book_minute_three_v1.py` | HISTORICAL_PILOT_PASS | NEW_CONTRACT_QC_PENDING |
 
-| APTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| APTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| INJUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| INJUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| DOTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| DOTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| LTCUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| LTCUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| ARBUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
-| ARBUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING |
+| APTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| APTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| INJUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| INJUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| DOTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| DOTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| LTCUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| LTCUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| ARBUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
+| ARBUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_REGISTERED_1440_ROW_HASHED_INDEPENDENT_ARTIFACT_PENDING |
 
 ## Audit findings and next verification
 
