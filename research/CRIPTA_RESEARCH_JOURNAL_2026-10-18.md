@@ -448,3 +448,7 @@ CHECKED HERE: SentinelX job `job_b9bd7306e2a6` completed `status=succeeded`, exi
 ## 2026-10-19 — #10 INJ full-day same-price-key book flow
 
 CHECKED HERE: completed SentinelX job `job_f719f7404126` (exit 0, 101.27s, no truncation) running `price_key_book_flow_v1.py` exact GitHub commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9` under `cripta`, Bybit INJUSDT UTC 2026-05-19. 2 book snapshot resets, 733301 delta events, all 1440 minutes with updates. Visible same-price common-top5 change in quote notional: BID +14680789.86 USDT, ASK +29414204.71 USDT, signed difference -14733414.85 USDT. Same APT full-day method previously passed 606835 deltas. **This is NOT strict complete multi-level OFI**, since disappearing/entering top-five price identities are excluded; no fill/cancel attribution or future price label; indicator #10 OPEN. Distinct per-coin history retained; no cross-coin averaging, strategy/LIVE changes.
+
+## 2026-10-19 — #10 DOT full-day fixed-price flow
+
+CHECKED HERE: SentinelX job `job_bee76398049c` succeeded rc=0, no truncated output, duration 87.94s, same immutable `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9` and 2026-05-19 UTC Bybit DOTUSDT. Two snapshots, 631776 delta transitions, 1440 minutes with updates; common exact-price top-five flow Bid -3605825.06 USDT / Ask -5402589.38 USDT, signed +1796764.32 USDT. NOT full multi-level OFI; rank membership entry/exit excluded and no cancellation/fill attribution. #10 OPEN. Research only, no cross-coin averages, no LIVE.
