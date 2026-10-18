@@ -8,6 +8,9 @@ from uuid import uuid4
 import psycopg
 import pytest
 from psycopg.rows import dict_row
+from unittest.mock import patch
+
+from operations.connectivity import universal_entry_consumer as entry_consumer
 
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
@@ -27,6 +30,12 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 14, 0, tzinfo=UTC)
+
+def _run_fixture_once(connection: psycopg.Connection, ids: dict[str, str]) -> str:
+    # Runtime consumer is restricted to one precise account per process.
+    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", ids["trading_account_id"]):
+        return run_once(connection, now=NOW)
+
 
 
 def _seed(
@@ -361,6 +370,12 @@ def _seed(
                 WHERE command_id=%s""",
             (f"{prefix}-binding", f"{prefix}-ta", command_id),
         )
+    connection.execute(
+        """UPDATE runtime.position_mode_states
+              SET trading_account_id=%s,identity_status='PROVEN'
+            WHERE position_mode_state_ref=%s""",
+        (f"{prefix}-ta", position_mode_state_ref),
+    )
     return {
         "strategy_id": strategy_id,
         "strategy_version": version,
@@ -373,6 +388,7 @@ def _seed(
         "execution_request_id": request_id,
         "command_id": command_id,
         "symbol": symbol,
+        "trading_account_id": f"{prefix}-ta",
     }
 
 
@@ -457,7 +473,7 @@ def test_expired_reserved_request_is_released_even_when_gate_is_disarmed() -> No
         _gate(connection, False)
         connection.commit()
 
-        assert run_once(connection, now=NOW) == "EXECUTION_GATE_DISARMED"
+        assert _run_fixture_once(connection, ids) == "EXECUTION_GATE_DISARMED"
         reservation = connection.execute(
             """SELECT state,state_reason
                  FROM runtime.capital_reservations
@@ -495,7 +511,7 @@ def test_missing_live_arm_evidence_blocks_before_exchange_and_releases_admission
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_fixture_once(connection, ids)
         assert result == "BLOCKED:LIVE_ARM_NOT_READY"
 
         reservation = connection.execute(
@@ -541,7 +557,7 @@ def test_structural_pre_exchange_block_releases_reserved_capital() -> None:
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_fixture_once(connection, ids)
         assert result in {
             "BLOCKED:STRUCTURAL_ERROR",
             "BLOCKED:IDENTITY_MISMATCH",
@@ -675,13 +691,15 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0"}),
+                ids["trading_account_id"],
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -737,8 +755,9 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
@@ -749,6 +768,7 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
                         "rejectReason": "EC_PostOnlyWillTakeLiquidity",
                     }
                 ),
+                ids["trading_account_id"],
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -801,13 +821,15 @@ def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0.5"}),
+                ids["trading_account_id"],
             ),
         )
         connection.execute(
