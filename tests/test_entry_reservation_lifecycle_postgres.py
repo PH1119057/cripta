@@ -52,7 +52,7 @@ def _seed(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    exchange_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+    exchange_key = f"BYBIT:{prefix}-ta:LINEAR:USDT:{symbol}:0"
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
 
