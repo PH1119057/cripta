@@ -3,7 +3,7 @@
 Research only: stdout JSON, no filesystem or exchange writes.
 Minute i uses completed fills <= minute boundary, is available AFTER its end.
 """
-import argparse, csv, datetime as dt, gzip, json
+import argparse, csv, datetime as dt, gzip, json, hashlib
 from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
@@ -88,7 +88,12 @@ def calculate(symbol, day="2026-05-19"):
     valid=[Decimal(x["compression_20m_vs_previous_20m"]) for x in rows if x["compression_20m_vs_previous_20m"] is not None]
     valid.sort()
     median=str((valid[(len(valid)-1)//2]+valid[len(valid)//2])/2) if valid else None
+    # Deterministic canonical serialization of every completed-minute row, not only sampled rows.
+    row_hash=hashlib.sha256()
+    for record in rows:
+        row_hash.update((json.dumps(record,sort_keys=True,separators=(",",":"),ensure_ascii=False)+"\\n").encode("utf-8"))
     return {"symbol":symbol,"date":day,"source":str(path),"fills":input_count,
+            "minute_rows_sha256":row_hash.hexdigest(),"row_count_verified":len(rows),
             "minutes_with_trades":sum(v>0 for v in minute_count),
             "rows_count":len(rows),"range_valid_count":len(valid),
             "range_median":median,
