@@ -28,7 +28,8 @@ jobs:
           persist-credentials: false
       - name: Ruff regression gate (NEW_DIAGNOSTICS=0)
         run: .\.venv\Scripts\python.exe operations/quality/ruff_regression_gate.py .ruff-baseline
-      - run: .\.venv\Scripts\python.exe -m mypy src/bybit_workbench
+      - name: mypy regression gate (NEW_ERRORS=0)
+        run: .\.venv\Scripts\python.exe operations/quality/mypy_regression_gate.py .ruff-baseline
       - name: Install server PostgreSQL test driver
         run: uv pip install --python .\.venv\Scripts\python.exe "psycopg[binary]==3.2.10"
       # POSIX-only fcntl archive is covered by the dedicated Linux job below.
