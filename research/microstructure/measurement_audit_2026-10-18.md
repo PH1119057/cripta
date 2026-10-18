@@ -82,15 +82,6 @@ Status: **RESEARCH AUDIT / NOT CANON / NO NEW READINESS PROMOTION**. Canon: `doc
 | ARBUSDT | 28 | Trade-Size Distribution | `fill_microstructure_minutes_v1.py` | HISTORICAL_PILOT_PASS | NEW_CONTRACT_QC_PENDING |
 | ARBUSDT | 29 | Bid/Ask Spread | `book_minute_three_v1.py` | HISTORICAL_PILOT_PASS | NEW_CONTRACT_QC_PENDING |
 
-## Audit findings and next verification
-
-1. Trade indicators (#1–8, #27–28): precise definition of units, fill vs parent order, 0.1ms event grouping, turnover and per-coin prior-window denominators are required; old journal supplies executed counts and several partial formula definitions but not one complete new §21 passport per pair.
-2. Price indicators (#18, #20): explicit minute-close availability, staleness/forward-fill semantics, return units and non-additive aggregation need per-pair registration.
-3. Book indicators (#9, #11, #29): ±5bps dynamic-mid convention, bid/ask notional in USDT, exact snapshot/delta age, schema and QC identity need per-pair registration; book reader produces 1440/1440 minute states across five symbols.
-4. #19 Range Compression and #22 running VWAP/POC remain OPEN; APT-only smoke has already passed but four other full-day results and independent source-unit QC are missing. Quote-weighted old estimator is distinct from base-volume VWAP, not a failed reconciliation of the same formula.
-5. Record source hashes, denominator identity, formula version, output/coverage and manual QC, then promote individual row only on verified §21 gate. Reuse existing executed source evidence where valid; no need to rerun merely to regenerate known numerics. External venues and #26 Cross-Venue Lead–Lag remain deferred last.
-
-**Audit totals:** 75 historical pilot passes, **0 newly attested §21 per-pair passports in this audit**, 75 pending re-audit; this zero is about NEW attestation, not loss of prior work. Remaining 15 indicators still open under the previous 30-candidate checklist.
 | APTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
 | APTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
 | INJUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
@@ -101,6 +92,16 @@ Status: **RESEARCH AUDIT / NOT CANON / NO NEW READINESS PROMOTION**. Canon: `doc
 | LTCUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
 | ARBUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
 | ARBUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+
+## Audit findings and next verification
+
+1. Trade indicators (#1–8, #27–28): precise definition of units, fill vs parent order, 0.1ms event grouping, turnover and per-coin prior-window denominators are required; old journal supplies executed counts and several partial formula definitions but not one complete new §21 passport per pair.
+2. Price indicators (#18, #20): explicit minute-close availability, staleness/forward-fill semantics, return units and non-additive aggregation need per-pair registration.
+3. Book indicators (#9, #11, #29): ±5bps dynamic-mid convention, bid/ask notional in USDT, exact snapshot/delta age, schema and QC identity need per-pair registration; book reader produces 1440/1440 minute states across five symbols.
+4. #19 Range Compression and #22 running VWAP/POC remain OPEN; APT-only smoke has already passed but four other full-day results and independent source-unit QC are missing. Quote-weighted old estimator is distinct from base-volume VWAP, not a failed reconciliation of the same formula.
+5. Record source hashes, denominator identity, formula version, output/coverage and manual QC, then promote individual row only on verified §21 gate. Reuse existing executed source evidence where valid; no need to rerun merely to regenerate known numerics. External venues and #26 Cross-Venue Lead–Lag remain deferred last.
+
+**Audit totals:** 75 historical pilot passes, **0 newly attested §21 per-pair passports in this audit**, 75 pending re-audit; this zero is about NEW attestation, not loss of prior work. Remaining 15 indicators still open under the previous 30-candidate checklist.
 
 ## 2026-10-19 #19/#22 supplement
 
