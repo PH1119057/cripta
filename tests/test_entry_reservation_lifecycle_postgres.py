@@ -116,6 +116,12 @@ def _seed(
         (trading_account_id,),
     )
     connection.execute(
+        """INSERT INTO identity.account_connectors(
+               account_connector_id,trading_account_id,connector_kind,adapter_id,status
+           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE','ACTIVE')""",
+        (f"{prefix}-connector", trading_account_id),
+    )
+    connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(
                strategy_execution_binding_id,strategy_activation_id,
                execution_leg,execution_role,trading_account_id,
