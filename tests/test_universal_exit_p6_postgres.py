@@ -126,6 +126,27 @@ def _seed(
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
     )
+    # R10: a synthetic position is PROVEN only with a concrete account/binding.
+    connection.execute(
+        """INSERT INTO identity.venues(venue_id,venue_kind,display_name,status)
+           VALUES('venue-bybit','CEX','Bybit','ACTIVE')
+           ON CONFLICT (venue_id) DO NOTHING"""
+    )
+    connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,environment,status)
+           VALUES(%s,'venue-bybit','UNIFIED','MAINNET','ACTIVE')""",
+        (f"{prefix}-ta",),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.strategy_execution_bindings(
+               strategy_execution_binding_id,strategy_activation_id,
+               execution_leg,execution_role,trading_account_id,
+               allocation_mode,binding_state,effective_from,operator,source,reason)
+           VALUES(%s,%s,'PRIMARY','PRIMARY',%s,'DEDICATED_STRATEGY',
+                  'ACTIVE',%s,'test','test','synthetic exit fixture')""",
+        (f"{prefix}-binding",activation_id,f"{prefix}-ta",NOW),
+    )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
                entry_plan_fingerprint,strategy_id,strategy_version,
@@ -309,12 +330,13 @@ def _seed(
                strategy_config_fingerprint,strategy_activation_id,
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
                entry_plan_fingerprint,exit_plan_fingerprint,
+               identity_status,strategy_execution_binding_id,execution_leg,trading_account_id,
                exchange_position_slot_claim_id,position_mode_state_ref,
                initial_protection_confirmed_at,initial_protection_evidence,
                emergency_policy
            ) VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,%s,'Buy',10,2,%s,
                     '[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'OPEN',%s,0,
-                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb)""",
+                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,'PROVEN',%s,'PRIMARY',%s)""",
         (
             position_id,
             f"{prefix}-trade",
@@ -343,6 +365,8 @@ def _seed(
                 }
             ),
             json.dumps(exit_plan_json["emergency_policy"]),
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     connection.execute(
