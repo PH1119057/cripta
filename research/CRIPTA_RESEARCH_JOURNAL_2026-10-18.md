@@ -423,3 +423,18 @@ CHECKED HERE: exact GitHub source `research/microstructure/experiments/range_vwa
 | ARBUSDT | 1440 | `3f5727195e3d5f8bcb3c81c1cc9f170846c90293ae5f80ddc8f63c18b4ba39ba` |
 
 Derived passport `research/microstructure/passports/range_vwap_2026-05-19_v1.json` binds the above hashes and exact reader source commit per instrument. NOTE: hash evidence is not a separately persisted full row dataset. Remaining: verify independent full-row causal temporal alignment and output artifact/provenance; `NEW_RESEARCH_READY` not promoted. Historical 15/30 pilot READY stays historical.
+
+
+## 2026-10-19 — #10 strict-price-identity book flow 5×10min smoke
+
+New bounded, read-only script `research/microstructure/experiments/price_key_book_flow_v1.py`, commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, run as `cripta` for 10 minutes of 2026-05-19 on all five symbols (five rc=0). It updates Bybit ob200 snapshots/deltas, tracks **exact price identity** between previous/new top-five sets and sums changes in quote USDT **only for levels appearing in both top-five sets**. This avoids rank-reindexing false quantity deltas but excludes entering/leaving top-five prices; therefore the metric is **visible fixed-price common-level quantity change**, not full strict multi-level OFI, and is neither Pulling Rate nor fills-vs-cancels classification.
+
+| Symbol | First-10-min delta transitions | Bid fixed-price change USDT | Ask fixed-price change USDT | Signed bid-minus-ask USDT |
+|---|---:|---:|---:|---:|
+| APTUSDT | 4825 | -74739.32 | -27956.60 | -46782.72 |
+| INJUSDT | 5561 | +599152.70 | +383812.64 | +215340.06 |
+| DOTUSDT | 4861 | -22937.21 | +8541.90 | -31479.11 |
+| LTCUSDT | 4377 | -115294.18 | -187887.38 | +72593.21 |
+| ARBUSDT | 4547 | +69191.71 | +97220.47 | -28028.76 |
+
+These are **descriptive signed book-liquidity changes**, not price direction predictions; numbers are symbol-specific, no cross-coin averaging. Five smoke checks passed. Full-day APT run launched as bounded isolated SentinelX job `job_b9bd7306e2a6`: at the time of launch job continued in background; outcome **NOT VERIFIED** until notification/result; do NOT mark complete from process existence. #10 stays OPEN; no strategy, deployment or LIVE changes.
