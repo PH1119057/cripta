@@ -475,3 +475,18 @@ Last ARBUSDT job `job_7b045cb3beef` succeeded exit=0 after 86.44s, output not tr
 **Physical meaning:** sum of signed price×quantity changes solely at exact price keys present in both previous and current top five on their own side. Entering/exiting the top five is excluded, so this is not complete strict multi-level OFI and must not be so named in the Analytical Cube. It cannot separate quote cancellation from executed depletion. Large absolute sums reflect repeated book updates, not traded money, price movement, PnL, or strategy edge. #10 remains OPEN pending comprehensive strict OFI method and verification. This stage **does close full-day five-coin coverage for the narrower fixed-price book-change metric**.
 
 No second venue, Strategy, DB, runtime deployment, or LIVE mutation.
+
+
+## 2026-10-19 — #10 top-five membership decomposition 5×10-minute smoke
+
+CHECKED HERE: read-only `research/microstructure/experiments/book_top5_membership_v1.py`, GitHub commit `de93b95502244cc62c7fed9429de2a61c95fdd24`, ran under `cripta`, all five symbols, first 10 minutes of May 19 2026 UTC, return code 0. The source reconstructs ob200, explicitly decomposes changes at common exact price keys and **entry/exit of top-five membership**. It further distinguishes membership shifts that had price keys already present in the broader book from newly appearing/disappearing price keys. These are **stock changes**, not standard OFI and not cancellation/filled quantity attribution.
+
+| Symbol | Delta events | Common-price bid change USDT | Bid top-five net stock change USDT | Common-price ask change USDT | Ask top-five net stock change USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 4825 | -74739.32 | +2651.71 | -27956.60 | +1585.76 |
+| INJUSDT | 5561 | +599152.70 | -1314.91 | +383812.64 | +66.96 |
+| DOTUSDT | 4861 | -22937.21 | +4693.56 | +8541.90 | +2131.38 |
+| LTCUSDT | 4377 | -115294.18 | +2187.22 | -187887.38 | +2466.78 |
+| ARBUSDT | 4547 | +69191.71 | -48.97 | +97220.47 | +1118.48 |
+
+Physical FINDING: using only common-price changes can grossly misrepresent **change of total top-five visible stock** because of rank-boundary entry/exit. Net top-five stock movement is near zero on some instruments despite large opposing component changes. These are distinct valid measurements with distinct definitions, **not interchangeable trading signals**. Causal data are descriptive after event update, timestamps/latency and full-day/independent QC remain to verify. #10 OPEN until a properly defined multi-level OFI is implemented and verified. No other venues, trading mutation or LIVE.
