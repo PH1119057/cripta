@@ -10,14 +10,13 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+import operations.connectivity.universal_entry_consumer as entry_consumer
 from bybit_workbench.strategy_position_binding import (
     exchange_position_key,
     load_universal_entry_lineage,
     persist_universal_strategy_position,
     release_position_capital_reservation,
 )
-
-import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
