@@ -319,6 +319,21 @@ def _seed_request(
                 position_mode_state_ref,
             ),
         )
+    if dispatched:
+        connection.execute(
+            """INSERT INTO runtime.trade_commands(
+                   command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+                   strategy_execution_binding_id,execution_leg,trading_account_id,
+                   identity_status
+               ) VALUES(%s,'entry',%s,'{}','queued',%s,%s,'PRIMARY',%s,'PROVEN')""",
+            (
+                command_id,
+                symbol,
+                int(NOW.timestamp() * 1000),
+                binding_id,
+                trading_account_id,
+            ),
+        )
     if permission:
         connection.execute(
             """INSERT INTO strategy_entry.execution_permissions(
