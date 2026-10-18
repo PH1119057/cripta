@@ -23,8 +23,6 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
-TEST_TRADING_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
-
 
 def _seed_request(
     connection: psycopg.Connection,
@@ -47,7 +45,8 @@ def _seed_request(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    exchange_key = exchange_position_key(TEST_TRADING_ACCOUNT_ID, symbol, 0)
+    trading_account_id = f"{prefix}-ta"
+    exchange_key = exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"{prefix}-command"
     binding_id = f"{prefix}-binding"
@@ -80,6 +79,13 @@ def _seed_request(
         (activation_id, strategy_id, version, strategy_fp, NOW),
     )
     connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,account_type,
+               environment,status
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')""",
+        (trading_account_id,),
+    )
+    connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(
                strategy_execution_binding_id,strategy_activation_id,
                execution_leg,execution_role,trading_account_id,
@@ -87,7 +93,7 @@ def _seed_request(
                operator,source,reason
            ) VALUES(%s,%s,'PRIMARY','PRIMARY',%s,'DEDICATED_STRATEGY',
                     'ACTIVE',%s,'test','test','integration fixture')""",
-        (binding_id, activation_id, TEST_TRADING_ACCOUNT_ID, NOW),
+        (binding_id, activation_id, trading_account_id, NOW),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
@@ -193,7 +199,7 @@ def _seed_request(
             NOW,
             NOW,
             binding_id,
-            TEST_TRADING_ACCOUNT_ID,
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -220,7 +226,7 @@ def _seed_request(
             NOW,
             NOW,
             binding_id,
-            TEST_TRADING_ACCOUNT_ID,
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -242,7 +248,7 @@ def _seed_request(
             slot_claim_id,
             position_mode_state_ref,
             binding_id,
-            TEST_TRADING_ACCOUNT_ID,
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -272,7 +278,7 @@ def _seed_request(
             slot_claim_id,
             position_mode_state_ref,
             binding_id,
-            TEST_TRADING_ACCOUNT_ID,
+            trading_account_id,
         ),
     )
     if dispatched:
@@ -328,7 +334,7 @@ def _seed_request(
         "request_id": request_id,
         "command_id": command_id,
         "binding_id": binding_id,
-        "trading_account_id": TEST_TRADING_ACCOUNT_ID,
+        "trading_account_id": trading_account_id,
         "symbol": symbol,
     }
 
@@ -411,7 +417,7 @@ def test_confirmed_fill_binds_exact_strategy_position_and_consumes_reservation()
             ids["entry_fp"],
             ids["exit_fp"],
             "BYBIT:UNIFIED",
-            exchange_position_key(TEST_TRADING_ACCOUNT_ID, "UNIUSDT", 0),
+            exchange_position_key(ids["trading_account_id"], "UNIUSDT", 0),
         )
         reservation = connection.execute(
             """SELECT state,strategy_position_id,exchange_commitment_ref
@@ -529,7 +535,7 @@ def test_consumer_detects_post_admission_slot_invariant_and_keeps_resources_for_
                 f"{prefix}-old-signal",
                 f"{prefix}-old-command",
                 NOW,
-                exchange_position_key(TEST_TRADING_ACCOUNT_ID, "ETHUSDT", 0),
+                exchange_position_key(ids["trading_account_id"], "ETHUSDT", 0),
             ),
         )
         connection.commit()
