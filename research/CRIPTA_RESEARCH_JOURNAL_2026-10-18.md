@@ -127,3 +127,17 @@ Liquidation file HOURS за день: APT 00,09,11,14,16,17,18; INJ 00,01,02,03,
 - Рассчитывает count/trade-minute coverage, USD notional, signed Delta/CVD, RVOL относительно предшествующих 60 минут, Delta acceleration, 1m autocorrelation lag1, 20m close range, day/window VWAP и volume POC. Последние два — **ex post**, не causal intraday values.
 - Это **новая проверяемая реализация**, а не байт-точная копия всех однократных команд предыдущего чата. Сравнение чисел с журналом, unit tests, file hashes, performance/long-range validation **NOT CHECKED HERE**. Качество и идентичность результатов ещё должны быть проверены до масштабного повторного запуска.
 - Пока **НЕ сохранены как утверждённые калькуляторы**: Multi-Level OFI, точный Sweep/Reclaim, absorption/replenishment и остальные неполные пункты реестра. Экспериментальные исходники не означают появление общего агрегированного слоя. GitHub commit calculator: `ce2b01a4db619448a00137467a0f650a46893844`.
+
+
+## 2026-10-18 — reproducibility and execution-distribution checkpoint
+
+- `research/microstructure/experiments/public_trades_day_v1.py`: re-read exact published source from GitHub and executed in-memory under `cripta` against all five 2026-05-19 archives; verified fill counts, CVD, RVOL median, ex-post VWAP, 1m autocorrelation matched journal at stated rounding. **REPRODUCIBILITY SMOKE=PASS** for those values only, not OOS/canonical validity.
+- New published source `research/microstructure/experiments/trade_distribution_v1.py` commit `82a40a432afee541085bb74f3a676fa8e234a685`. Read-only stdlib, symbol/date/minutes parameters. Source fetched from GitHub and executed under `cripta` for same five source archives.
+- Results `symbol: executions; fraction adjacent fills same timestamp; fill-notional P99 USD; share of total notional in fills >=P99`:
+  - APT: 116683; 0.745; 697.65; 0.2109
+  - INJ: 368454; 0.737; 1728.77; 0.2651
+  - DOT: 143184; 0.758; 1040.40; 0.1977
+  - LTC: 69495; 0.786; 3912.15; 0.1685
+  - ARB: 154123; 0.749; 833.84; 0.2308
+- P95 fill-notional USD: APT 309.99, INJ 736.81, DOT 500.38, LTC 2091.35, ARB 425.56. Median *positive* interval between distinct timestamps (ms): APT 721.4, INJ 75.9, DOT 319.5, LTC 1715.9, ARB 264.8.
+- **Physical limitation**: exchange fills sharing a timestamp cannot be treated as independent taker orders. P99 full-window quantile is *ex post*, not causal. Long-window/OOS tests still pending. Research-only source; no shared aggregate layer, DB or production mutation.
