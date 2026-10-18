@@ -141,3 +141,20 @@ Liquidation file HOURS за день: APT 00,09,11,14,16,17,18; INJ 00,01,02,03,
   - ARB: 154123; 0.749; 833.84; 0.2308
 - P95 fill-notional USD: APT 309.99, INJ 736.81, DOT 500.38, LTC 2091.35, ARB 425.56. Median *positive* interval between distinct timestamps (ms): APT 721.4, INJ 75.9, DOT 319.5, LTC 1715.9, ARB 264.8.
 - **Physical limitation**: exchange fills sharing a timestamp cannot be treated as independent taker orders. P99 full-window quantile is *ex post*, not causal. Long-window/OOS tests still pending. Research-only source; no shared aggregate layer, DB or production mutation.
+
+
+## 2026-10-18 — causal large trade share + grouped trade streaks
+
+Published reproducible calculator: `research/microstructure/experiments/large_trade_streaks_v1.py`, GitHub commit `6db162295945f3612b7a0bb94c9f6178a0ec6982`. Published source fetched from GitHub and independently re-executed in-memory as `cripta`; outputs match below, read-only, no PostgreSQL.
+
+Definitions:
+- Large Trade Share for minute i: notional proportion of fills >= P99(fill notional) from **previous** 60 minutes; require >=100 historical fills. This threshold is causal as-of minute start. P99 is fill notional, not aggregated parent-order notional.
+- Trade Streak: consecutive timestamp+side groups (adjacent fills with identical timestamp and side are combined). Grouping **does not prove** a single parent order. Streak count is number of consecutive groups in the same direction.
+- Results `symbol: groups, median streak, p90 streak, max streak, median large trade share, p90 large trade share, eligible minutes`:
+  - APT: 29730; 2; 8; 51; 0.0000; 0.3997; 1379
+  - INJ: 97097; 2; 8; 124; 0.0809; 0.3816; 1380
+  - DOT: 34659; 3; 10; 51; 0.0000; 0.4241; 1378
+  - LTC: 14917; 2; 7; 34; 0.0000; 0.2677; 1368
+  - ARB: 38743; 3; 9; 59; 0.0000; 0.4534; 1379
+- Checklist change: #4 Large Trade Share and #8 Trade Streaks now `CALC` **for this one day**; physical-order reconstruction and OOS remain `NOT VERIFIED`.
+- Next open items: #10 strict Multi-Level OFI, #12 Pulling Rate, #17 Exhaustion, then #23 OI coverage, #24 liquidation coverage, #25 Spot/Perp and #26 cross-venue. No Strategy/LIVE policy changes.
