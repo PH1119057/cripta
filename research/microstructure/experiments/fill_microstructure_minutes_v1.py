@@ -76,7 +76,7 @@ def calculate(sym,day="2026-05-19",root=ROOT):
             "rows":result,"fills":n,"source":str(path),
             "warnings":["Per-minute fill quantiles are descriptive after minute close, not predictions.",
                         "Exact 0.1 ms timestamp grouping (Decimal seconds*10000) matches archive precision; not parent orders.",
-                        "Inter-group gap uses exchange rounded millisecond timestamp; same-timestamp opposite-side zero-gap events excluded."]}
+                        "Inter-group gap is measured at native 0.1ms timestamp precision; same-timestamp opposite-side zero gaps are excluded."]}
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("--symbol",choices=SYMS,required=True)
