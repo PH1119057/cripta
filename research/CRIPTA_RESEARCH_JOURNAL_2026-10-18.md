@@ -221,3 +221,20 @@ Read-only evidence CHECKED HERE:
 **CHECKED HERE, not extrapolated from old directories:** Bybit official public OI 5m endpoint successfully paginated for 2026-05-19 UTC: 288/288 timestamps **per each of five coins**, 12 timestamps in every hour, zero missing 5m timestamps, **1440 OI observations total**. Request `category=linear&symbol={SYMBOL}&intervalTime=5min&startTime=1779148800000&endTime=1779235199999&limit=200`, follow `nextPageCursor`. Bybit public Spot daily source `https://public.bybit.com/spot/{SYMBOL}/{SYMBOL}_2026-05-19.csv.gz` was fetched into memory for each coin, parsed successfully with `timestamp` milliseconds. Executions: APT 10074, INJ 24221, DOT 8580, LTC 16860, ARB 10099 (69834 total); **all five have trades in all 24 hours**. Active 1-minute bins: APT 1078, INJ 1302, DOT 1103, LTC 1419, ARB 1151. See exact inventory `research/microstructure/coverage_2026-05-19.md`, commit `5484c99cab5c4f767681522195721e3542e85382`.
 
 Thus earlier statuses #23/#25 as `UNVERIFIED SOURCE` are **superseded as to May19 raw coverage**: now **SOURCE COVERAGE VERIFIED / FACTOR COMPUTATION PENDING**. They are NOT `CALC` until OI delta, Spot/Perp basis and causal data freshness are computed; no OOS or net fee analysis completed. Existing processed liquidation files contain 101 May19 records, but provider capture completeness still unverified. Temporary in-memory retrieval is not durable artifact; next step pin source/payload hashes in a compliant run and implement time-aligned joint multivariate factor matrix, not another list of single-factor anecdotes.
+
+
+## 2026-10-18 — first JOINT pilot: Bybit OI × Spot basis × signed trade flow
+
+Source published and executed from verified GitHub byte content: `research/microstructure/experiments/bybit_joint_oi_spot_flow_v0.py` commit `efdffecf1d8b735c1b5d41a01776e9cfbdeda55f`. Input: exactly 2026-05-19; Bybit linear public-trade local CSV.GZ, real Bybit public spot archive CSV.GZ and 5m OI official API, **no server files or DB changed**. Preliminary joint feature experiment at 5m anchors: previous-bin signed taker notional direction, OI change at T vs T-5m, previous-bin spot/perp last-price basis, label = following-bin derivative close return. Missing spot bins excluded, not silently filled.
+
+| Coin | Valid aligned rows | Flow direction predicts next 5m | OI increase subset | OI decrease subset | Basis against flow subset |
+|---|---:|---:|---:|---:|---:|
+| APT | 281 | 133/281 | 56/119 | 77/162 | 65/144 |
+| INJ | 286 | 144/286 | 64/136 | 80/150 | 76/151 |
+| DOT | 286 | 138/286 | 67/142 | 71/144 | 65/135 |
+| LTC | 286 | 132/286 | 42/120 | 90/166 | 67/141 |
+| ARB | 285 | 142/285 | 63/131 | 79/154 | 67/133 |
+
+TOTAL 1424 aligned anchors, 689/1424 directional matches = 48.38%; OI-increase subset 292/648 = 45.06%; OI-decrease subset 397/776 = 51.16%. These are **NOT returns after fees; NOT independent replicates; NOT evidence of profitability**. No strategy rule authorized. The naïve OI-sign split is directionally heterogeneous and susceptible to regime/time clustering and reverse causality.
+
+**CRITICAL QC BEFORE USING AS RESEARCH FACTOR:** OI API point labeled T may be released after T (availability timestamp unverified). Although T is used as an as-of point in this exploratory run, this is NOT causal-proof. Shift OI to previously proven available snapshot or validate publication latency in next revision. Same-bin spot last price can be stale; mark age/freshness. Basis using raw last trade may include microstructure noise. Future-label close alignment must be independently reviewed; add market regime baseline, independent episodes and OOS. The v0 report is exploratory ONLY and should not be promoted to CALC causal feature or an edge claim.
