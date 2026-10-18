@@ -283,8 +283,9 @@ def _seed(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,payload,
+               strategy_execution_binding_id,execution_leg,trading_account_id,identity_status
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb,%s,'PRIMARY',%s,'PROVEN')""",
         (
             entry_decision_id,
             attempt_id,
@@ -294,6 +295,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     connection.execute(
@@ -302,8 +305,9 @@ def _seed(
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
                exit_plan_fingerprint,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,identity_status
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s,%s,'PRIMARY',%s,'PROVEN')""",
         (
             entry_request_id,
             attempt_id,
@@ -319,6 +323,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     connection.execute(
@@ -371,17 +377,21 @@ def _seed(
     )
     connection.execute(
         """UPDATE runtime.exchange_position_slot_claims
-              SET claim_state='BOUND',strategy_position_id=%s,bound_at=%s,updated_at=%s
+              SET claim_state='BOUND',strategy_position_id=%s,bound_at=%s,updated_at=%s,
+                  strategy_execution_binding_id=%s,execution_leg='PRIMARY',
+                  trading_account_id=%s,identity_status='PROVEN'
             WHERE exchange_position_slot_claim_id=%s""",
-        (position_id, NOW, NOW, slot_claim_id),
+        (position_id, NOW, NOW, f"{prefix}-binding",f"{prefix}-ta",slot_claim_id),
     )
     connection.execute(
         """UPDATE runtime.capital_reservations
               SET state='CONSUMED',state_reason='P6_CONFIRMED_FILL',
                   exchange_commitment_ref=%s,exchange_commitment_at=%s,
-                  strategy_position_id=%s,updated_at=%s
+                  strategy_position_id=%s,updated_at=%s,
+                  strategy_execution_binding_id=%s,execution_leg='PRIMARY',
+                  trading_account_id=%s,identity_status='PROVEN'
             WHERE reservation_id=%s""",
-        (position_id, NOW, position_id, NOW, reservation_id),
+        (position_id, NOW, position_id, NOW,f"{prefix}-binding",f"{prefix}-ta",reservation_id),
     )
     connection.execute(
         """INSERT INTO strategy_entry.execution_request_state_events(
