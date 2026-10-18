@@ -26,6 +26,7 @@ from bybit_workbench.universal_entry import (
     TradeDirection,
     TradingCapacitySnapshot,
     UniversalEntryEngine,
+    StrategyExecutionBindingRef,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.dashboard import archive_v2
@@ -225,6 +226,7 @@ def build_evaluation(*, real: bool = False):
                 "account_ref": "BYBIT:UNIFIED",
                 "entry_admission_port": AcceptingAdmissionPort(),
                 "real_admission_required_for": frozenset({"act-storage"}),
+                "execution_bindings": {"act-storage": StrategyExecutionBindingRef("binding-storage", "act-storage", "PRIMARY", "ta-storage")},
                 "exchange_position_keys": {
                     "XRPUSDT": "BYBIT:UNIFIED:LINEAR:USDT:XRPUSDT:0"
                 },
