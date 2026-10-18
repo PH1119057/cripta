@@ -234,8 +234,9 @@ def _seed(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,payload,
+               strategy_execution_binding_id,execution_leg,trading_account_id,identity_status
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb,%s,'PRIMARY',%s,'PROVEN')""",
         (
             decision_id,
             attempt_id,
@@ -245,6 +246,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     connection.execute(
@@ -253,8 +256,9 @@ def _seed(
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
                exit_plan_fingerprint,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,identity_status
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s,%s,'PRIMARY',%s,'PROVEN')""",
         (
             request_id,
             attempt_id,
@@ -270,6 +274,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     if permission:
@@ -339,8 +345,6 @@ def _seed(
     for table, key_name, key_value in (
         ("runtime.capital_reservations", "reservation_id", reservation_id),
         ("runtime.exchange_position_slot_claims", "exchange_position_slot_claim_id", slot_claim_id),
-        ("strategy_entry.entry_decisions", "entry_decision_id", decision_id),
-        ("strategy_entry.execution_requests", "execution_request_id", request_id),
     ):
         connection.execute(
             f"""UPDATE {table}
