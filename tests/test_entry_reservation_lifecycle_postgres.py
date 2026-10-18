@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -15,12 +15,13 @@ from bybit_workbench.entry_reservation_lifecycle import (
     mark_entry_order_acknowledged,
     resolve_cancelled_entry_reservation_after_reconcile,
 )
-from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.live_arm_readiness import (
     REQUIRED_LIVE_ARM_CHECKS,
     LiveArmContext,
     scope_for_check,
 )
+from bybit_workbench.strategy_position_binding import exchange_position_key
+
 import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
