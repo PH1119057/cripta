@@ -23,7 +23,7 @@ def calculate(sym,day="2026-05-19",root=ROOT):
     path=Path(root)/sym/"public_trades"/f"{sym}{day}.csv.gz"
     minutes=[[] for _ in range(1440)]
     groups=[[] for _ in range(1440)]
-    prev_ts=None;last_key=None; n=0; last_group=None;last_gminute=None
+    prev_ts=None;last_key=None; n=0; last_gminute=None
     with gzip.open(path,"rt",newline="") as f:
         for a in csv.DictReader(f):
             ts=int(round(float(a["timestamp"])*1000))
@@ -50,7 +50,7 @@ def calculate(sym,day="2026-05-19",root=ROOT):
         amt=sum(x)
         # A minute without qualifying large fill has measured zero share,
         # but a missing prior reference distribution remains null.
-        large_share=sum(v for v in x if v>=threshold)/amt if threshold is not None and amt>0 else (0.0 if threshold is not None and x else None)
+        large_share=sum(v for v in x if v>=threshold)/amt if threshold is not None and amt>0 else (0.0 if threshold is not None else None)
         positive_intervals=[]
         lengths=[]
         for sign,notional,fills,ts in gs:
@@ -74,7 +74,7 @@ def calculate(sym,day="2026-05-19",root=ROOT):
     return {"symbol":sym,"algorithm":"fill_microstructure_minutes_v1","read_only":True,
             "rows":result,"fills":n,"source":str(path),
             "warnings":["Per-minute fill quantiles are descriptive after minute close, not predictions.",
-                        "Coinciding timestamps and sides do not prove identical parent orders.",
+                        "Millisecond-rounded timestamp grouping is experimental and differs from full precision grouping; not parent orders.",
                         "Inter-group gap uses exchange rounded millisecond timestamp; same-timestamp opposite-side zero-gap events excluded."]}
 
 if __name__=="__main__":
