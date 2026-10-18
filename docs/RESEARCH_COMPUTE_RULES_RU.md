@@ -1,10 +1,16 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.2 · 2026-10-16
+**Версия:** 2.3 · 2026-10-18
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
 длительными вычислениями и data-forensic.
+
+### Tool refusals и сохранение прогресса
+
+Обязательный маршрут: `DEVELOPMENT_RELEASE §19.5–19.6`, `CURRENT_PROJECT_MAP §1.4`. При OpenAI tool-security block фиксировать `BLOCKED_UPSTREAM_OPENAI`; не считать его Unix EACCES, не просить рестарт SentinelX без evidence. При `command_not_allowed` — `BLOCKED_SENTINELX_POLICY`; при Unix `EACCES` — `BLOCKED_UNIX_PERMISSION`; при job timeout — `JOB_OUTCOME_UNKNOWN` до отдельной проверки. Один и тот же отклонённый вызов не повторять циклом и не пытаться обойти защиту.
+
+Для воспроизводимых исследований: в GitHub хранить версионированный исходник/reader и exact source paths; начинать с ограниченного smoke, далее coin/day bounded jobs; проверенные численные результаты, coverage, hashes, failures и next action сразу сохранять в research journal/manifest. Исследование в памяти без подтверждённого stdout/manifest = `NOT VERIFIED`; GitHub source commit сам по себе не означает executed/QC pass. Не объявлять расчёт завершённым из-за подготовленного кода.
 
 Общие source-of-truth / Hard Stop правила задаёт
 `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
@@ -565,3 +571,73 @@ identity remains private execution lineage, not public market grain.
 Downloaded reconstructible external data still follows bounded-cache and source
 snapshot/provenance rules. This section changes dataset identity only and does
 not create trading policy.
+
+## 21. Единый измерительный контракт исследования и многомерный аналитический куб — OWNER DECISION 2026-10-18
+
+### 21.1 Scope и граница решения
+
+Исследовательские факты хранятся **по каждому точному InstrumentIdentity отдельно**. Первичный фокус текущего 30-индикаторного исследования — Bybit и отдельно APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT за выбранные контрольные периоды. Исследование других Venue, внешних источников и cross-venue lead–lag остаётся последним отдельным этапом; данное решение не запускает его.
+
+Общая схема вычислений универсальна, но результат, coverage, baseline, нормализация, гипотеза, распределение, направленность и статус принадлежат **конкретному инструменту**, а не усреднённой корзине. Ни один найденный на одной монете эффект, числовой порог, результат или торговая трактовка не переносится на другую без её самостоятельного evidence. Рыночный режим/общее движение может добавляться как отдельный контекст; не заменяет индивидуальную диагностику. Внешние факторы не создаются задним числом и не считаются проверенными до отдельного исследования.
+
+### 21.2 Последовательные слои данных
+
+\`\`\`text
+SOURCE (immutable event / exact identity / timestamps / provenance)
+-> PHYSICAL MEASURE (original and verified physical units)
+-> NORMALIZED FEATURE (explicit denominator/window/baseline/version)
+-> ANALYTICAL CUBE (instrument-scoped time series and dimensions)
+\`\`\`
+
+Слои логически раздельны; нельзя перезаписывать исходные физические величины их нормализованными версиями. Нормализация без известного знаменателя и moment-of-availability = NO_DATA, не ноль. Отдельный indicator variant не маскируется под ту же формулу. Контекст/labels будущего записываются отдельно от causal features.
+
+### 21.3 Система единиц и знаменателей
+
+| Физическая величина / derived measure | Хранимое представление | Обязательная семантика |
+|---|---|---|
+| Price | quote currency / 1 base asset (для текущего Bybit USDT-инструмента: USDT/base) | InstrumentIdentity, trade/mid/bid/ask/mark/index type, timestamp, precision |
+| Quantity | base asset или contracts (как объявлено source) | contract multiplier, conversion contract, source type |
+| Executed turnover/notional | quote currency (USDT для USDT-инструмента) | sum(price × base quantity) либо проверенное source notional; side/event semantics |
+| Price return | % или basis points (bps; 1%=100 bps) | reference price, start/end, direction, aggregation window; процентные пункты — только разность двух процентных значений |
+| Buy/Sell delta, imbalance | signed quote notional, count и/или ratio | sign convention; ratio numerator, denominator and zero denominator rule |
+| Open Interest | source contracts/base quantity и optionally quote notional | **only same exact instrument**; publication/availability time; relative change denominator = prior observed OI of this instrument, with explicit unit; no cross-symbol OI denominator |
+| Liquidations | count and observed quote notional | venue/instrument/side/event truth, provider coverage and missingness; no inferred zero |
+| Order-book depth | quote notional within a specified bps distance from defined price | snapshot/delta reconstruction, liquidity side, levels and time |
+| Volatility/range | price % or bps | exact causal window, return/range formula and reference |
+| Coin capacity | **specific coin**, not aggregate cryptocurrency market capacity | mandatory capacity kind: observed coin traded turnover / coin-specific capitalization / available depth / other explicitly defined measure; source, coverage, date and denominator; these kinds are NOT interchangeable |
+| Volume Profile | separately versioned histogram of traded quantity or quote turnover by price | price bins/tick, base-vs-quote weighting, window, as-of cutoff and POC tie-break |
+| VWAP | sum(price × base traded quantity) / sum(base traded quantity) | exact instrument, trade source, window/reset and as-of; quote-notional-weighted price is a DIFFERENT named estimator, not silently VWAP |
+| Trade economics (if applicable) | USDT and % **после комиссий** | notional, execution price, TAKER/TAKER baseline (§13.1), separately recorded slippage assumptions |
+
+Для каждого относительного процента обязательны числитель, знаменатель, единица и дата/время знаменателя. Например, \`liquidations_usdt / coin_market_cap_usd\`, \`liquidations_usdt / coin_turnover_usdt\` и \`liquidations_usdt / instrument_open_interest_usdt\` — три самостоятельных именованных feature, а не одна «доля ликвидаций». Coin market capitalization не равна доступной ликвидности стакана. Сопоставление валют требует явного курса/времени и версии пересчёта.
+
+В исследовательском коде не наследовать старую quote-notional-weighted «VWAP» из \`public_trades_day_v1.py\` под стандартным именем: ранее он считал \`sum(price*foreignNotional)/sum(foreignNotional)\`; текущий causal reader считает \`sum(price*size)/sum(size)\`. Старое значение остаётся историческим evidence отдельного estimator; корректность source quantity/notional проверяется по raw schema. Совпадение POC по двум типам весов не доказывает их эквивалентности.
+
+### 21.4 Время, причинность, качество и направления
+
+Минимальный факт содержит: exact \`market_source_id\`, \`venue_id\`, \`instrument_id\`, \`indicator_id\`, \`formula_version\`, \`event_time\`, \`observed_at\`/source-publication semantics, \`available_after\`, as-of window (включительно/исключительно), value, physical/normalized unit, numerator/denominator lineage, quality/freshness, source/run provenance.
+
+Направление event (BUY/SELL, up/down), направление последующего движения, наблюдаемая угроза/благоприятный исход и любые future labels — **раздельные** поля с точной семантикой и собственным временем доступности. Нельзя сделать будущую реакцию цены входным признаком в момент события. Quality \`NO_DATA\`, \`UNKNOWN\`, \`STALE\`, \`PARTIAL\` не равны нулю или отсутствию риска. Окна одного инструмента не наследуют покрытие другого. Границы UTC и возможные нестандартные разрешения timestamps сохраняются из source, а не округляются до потери event order.
+
+### 21.5 Analytical cube: минимальное зерно и допустимые агрегаты
+
+Минимальные три оси: **INSTRUMENT × TIME × INDICATOR**. Практическое зерно дополнительно включает \`market_source_id\`/\`venue_id\`, exact \`formula_version\`, \`window_id\`, unit/denominator identity, quality, as-of, run/source identity. Direction, regime, feature variant, labels, horizon и quality — дополнительные измерения, но не причина схлопывать инструменты или интерпретации.
+
+У каждого показателя в паспорте декларируется aggregate operator: ADDITIVE, WEIGHTED_WITH_DENOMINATOR, RECOMPUTE_FROM_COMPONENTS или NON_AGGREGATABLE. Сырые денежные обороты могут суммироваться только на непересекающихся событиях и совместимых инструментах/единицах; проценты, VWAP, POC, корреляции, z-score, ratios и доходность **не усреднять автоматически** между монетами, окнами или Venue. Для weighted aggregate сохранять веса и достаточные числитель/знаменатель. Cube поддерживает запросы сравнения монет, но canonical feature остаётся per instrument.
+
+### 21.6 Версионированный паспорт и RESEARCH-READY gate
+
+До присвоения статуса каждой паре \`(exact instrument_id, indicator_id, formula_version, source/window scope)\` должен быть зарегистрирован и QC-проверен паспорт:
+
+1. Однозначное физическое определение, formula_version, source fields/parser/schema, direction/sign.
+2. Unit, price convention, numerator, denominator, conversions, normalization/baseline; distinct variant IDs for distinct estimators.
+3. UTC event/observed/available-after semantics, lookback/window inclusion, reset, late/missing/partial data rules.
+4. Aggregation operator and cube grain; no cross-coin averaging/defaults.
+5. Immutable version-controlled reader/source + raw source provenance; independent sample/manual QC, sufficient source coverage, causal no-leak verification.
+6. **Full requested period on THIS instrument**, count/timestamp/value range/quality QC, source and run manifest; failures and missingness explicit.
+
+Status is **per pair**. Indicator-wide \`RESEARCH-READY\` requires all owner-selected research cohort instruments to pass the same declared scope, without assuming identical numeric outcomes. Existing earlier group status such as \`15/30\` is historical cohort checkpoint, NOT automatically \`75/150\`; old artifacts remain evidence and are audited against this new gate before promotion. A prepared formula or single-symbol smoke is not READY. A new instrument joins with its own untested state and does not inherit readiness. Registration and QC do not create Strategy version, Entry/Exit condition, positive P&L claim, activation or LIVE authorization.
+
+### 21.7 Sequencing and ownership
+
+First register measurement contracts; then implement/verify independently for each coin; then populate multi-dimensional cube and analyze per-coin favorable/adverse signals. Market context is a separate axis with independently established source/causality. The current unfinished Bybit indicators take precedence over external/cross-venue research. Machine-readable feature registry may be added as a **derived, version-controlled implementation artifact**, never a second canonical rule owner. Research/compute methodology remains owned by this §21; shared stable terms by GLOSSARY; DOCUMENTATION_INDEX records the decision.

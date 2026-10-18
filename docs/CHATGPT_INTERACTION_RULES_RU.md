@@ -181,6 +181,10 @@ mainnet gate, Strategy activation или фактических данных с�
 По умолчанию сначала дать прямой ответ, затем только необходимое объяснение.
 Не скрывать существенные ограничения и непроверенные места.
 
+## 11.1 Точная коммуникация об отказах доступа
+
+Сообщать владельцу точный уровень отказа: OpenAI tool-security gate, SentinelX allowlist, Unix EACCES, host/job timeout или GitHub/API error; не заменять всё словами «нет доступа». Без evidence не просить перезапуск агента и не обвинять effective actor. При инструментальной блокировке сохранять уже проверенный прогресс и не обещать последующее завершение без запланированной задачи. Обязательные operational детали — `DEVELOPMENT_RELEASE §19.5–19.6`, `RESEARCH_COMPUTE` и `CURRENT_PROJECT_MAP §1.4`.
+
 # 12. Project Instructions — тонкий bootstrap
 
 Project Instructions должны быть устойчивым загрузчиком канона, а не второй

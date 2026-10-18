@@ -3,6 +3,8 @@
 Вся текущая содержательная документация CRIPTA хранится в `docs/`.
 Этот `AGENTS.md` — только корневой bootstrap и не является отдельным каноном.
 
+При любом tool denial: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`, `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`; для research также `docs/RESEARCH_COMPUTE_RULES_RU.md`. Distinguish OpenAI upstream block, SentinelX policy, Unix EACCES, job timeout; no repeated blocked calls or privilege changes to bypass safety.
+
 ## Mandatory pre-read
 
 Для ChatGPT первым читать:
