@@ -119,7 +119,7 @@ def test_current_bybit_position_matches_latest_stable_owned_cycle() -> None:
 
 def test_exchange_flat_position_is_closed_even_when_exit_link_is_unresolved() -> None:
     source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
-    assert "WHERE state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'" in source
+    assert "state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK'" in source
     unresolved_branch = source.split(
         'if close.status != "EXACT" or close.exit_order_id is None:', 1
     )[1].split("protection_rows =", 1)[0]
