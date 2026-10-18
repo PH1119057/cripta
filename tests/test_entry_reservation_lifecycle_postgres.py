@@ -83,6 +83,27 @@ def _seed(
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
     )
+    # R10 provenance: explicit synthetic account and active execution binding.
+    connection.execute(
+        """INSERT INTO identity.venues(venue_id,venue_kind,display_name,status)
+           VALUES('venue-bybit','CEX','Bybit','ACTIVE')
+           ON CONFLICT (venue_id) DO NOTHING"""
+    )
+    connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,environment,status)
+           VALUES(%s,'venue-bybit','UNIFIED','MAINNET','ACTIVE')""",
+        (f"{prefix}-ta",),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.strategy_execution_bindings(
+               strategy_execution_binding_id,strategy_activation_id,
+               execution_leg,execution_role,trading_account_id,
+               allocation_mode,binding_state,effective_from,operator,source,reason)
+           VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                  'DEDICATED_STRATEGY','ACTIVE',%s,'test','test','R10 fixture')""",
+        (f"{prefix}-binding",activation_id,f"{prefix}-ta",NOW),
+    )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
                entry_plan_fingerprint,strategy_id,strategy_version,
@@ -305,12 +326,36 @@ def _seed(
             "position_mode_state_ref": position_mode_state_ref,
             "strategy_activation_id": activation_id,
             "bot_instance_id": "universal-entry",
+            "trading_account_id": f"{prefix}-ta",
         }
         connection.execute(
             """INSERT INTO runtime.trade_commands(
                    command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms
                ) VALUES(%s,'entry',%s,%s,'queued',%s)""",
             (command_id, symbol, json.dumps(payload), int(NOW.timestamp() * 1000)),
+        )
+    # Upgrade the seeded row lineage atomically to PROVEN; no production
+    # authorization or protective runtime validation is bypassed.
+    for table, key_name, key_value in (
+        ("runtime.capital_reservations", "reservation_id", reservation_id),
+        ("runtime.exchange_position_slot_claims", "exchange_position_slot_claim_id", slot_claim_id),
+        ("strategy_entry.entry_decisions", "entry_decision_id", decision_id),
+        ("strategy_entry.execution_requests", "execution_request_id", request_id),
+    ):
+        connection.execute(
+            f"""UPDATE {table}
+                   SET strategy_execution_binding_id=%s,execution_leg='PRIMARY',
+                       trading_account_id=%s,identity_status='PROVEN'
+                 WHERE {key_name}=%s""",
+            (f"{prefix}-binding", f"{prefix}-ta", key_value),
+        )
+    if command:
+        connection.execute(
+            """UPDATE runtime.trade_commands
+                  SET strategy_execution_binding_id=%s,execution_leg='PRIMARY',
+                      trading_account_id=%s,identity_status='PROVEN'
+                WHERE command_id=%s""",
+            (f"{prefix}-binding", f"{prefix}-ta", command_id),
         )
     return {
         "strategy_id": strategy_id,
