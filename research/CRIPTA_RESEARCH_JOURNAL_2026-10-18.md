@@ -158,3 +158,22 @@ Definitions:
   - ARB: 38743; 3; 9; 59; 0.0000; 0.4534; 1379
 - Checklist change: #4 Large Trade Share and #8 Trade Streaks now `CALC` **for this one day**; physical-order reconstruction and OOS remain `NOT VERIFIED`.
 - Next open items: #10 strict Multi-Level OFI, #12 Pulling Rate, #17 Exhaustion, then #23 OI coverage, #24 liquidation coverage, #25 Spot/Perp and #26 cross-venue. No Strategy/LIVE policy changes.
+
+
+## 2026-10-18 — first-hour rank OFI, visible reductions, preliminary exhaustion
+
+Published read-only calculator `research/microstructure/experiments/rank_ofi_v1.py` commit `e867338e54b0217de4bed6f04cdd498b9247f290`; fetched GitHub source, re-executed under cripta for all 5, outputs reproduced. First hour 2026-05-19 UTC:
+- APT OFI levels 1..5 (base units): +14496.6, +30394.6, -129058.0, -40390.8, -30382.7; same best-price volume reductions bid/ask 474439.7/485542.1.
+- INJ: +17433.8, +518945.9, +354063.7, +272038.7, +298629.9; reductions 182311.5/153656.1.
+- DOT: -124430.5, -235591.1, -338504.5, -302770.2, -256348.0; reductions 681553.6/776799.8.
+- LTC: +1038.1, +4613.0, +1078.4, +10388.3, +10224.5; reductions 44471.0/37913.2.
+- ARB: -110342.6, -947012.9, -921174.6, -1798559.4, +1160540.2; reductions 2869763.9/3521381.7.
+OFI = conditional quantity delta on current and prior price per rank, aggregated all book updates. Caveat: deeper rank re-indexing can contaminate interpretation; therefore **#10 PARTIAL**, not validated multi-level OFI. Visible top-price reductions conflate fills + cancellations; **#12 PARTIAL**, NOT Pulling Rate.
+
+Exhaustion prototype: prior 5-minute price change in agreement with latest 5-minute signed trade flow; both successive 5-minute flows same sign; latest absolute flow <50% preceding = candidate for exhaustion. Non-overlapping starting anchors stepped 5m, future 5m price direction measured. Reversal count `decay / non-decay`:
+- APT: 14/27 versus 29/53;
+- INJ: 11/19 versus 30/70;
+- DOT: 19/30 versus 28/58;
+- LTC: 15/29 versus 27/44;
+- ARB: 14/31 versus 33/59.
+No consistent directional advantage across coins; same-day descriptive only; exhaustion threshold arbitrary, **#17 PARTIAL**, not a proven rule. Prototype executed in-memory, source not yet committed. No OOS/fees, no Strategy changes.
