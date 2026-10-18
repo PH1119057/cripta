@@ -33,7 +33,10 @@ NOW = datetime(2026, 9, 18, 14, 0, tzinfo=UTC)
 
 def _run_fixture_once(connection: psycopg.Connection, ids: dict[str, str]) -> str:
     # Runtime consumer is restricted to one precise account per process.
-    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", ids["trading_account_id"]):
+    with (
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", ids["trading_account_id"]),
+        patch.object(entry_consumer, "LOADED_RELEASE_COMMIT", TEST_RELEASE_COMMIT),
+    ):
         return run_once(connection, now=NOW)
 
 
@@ -103,6 +106,12 @@ def _seed(
                trading_account_id,venue_id,account_kind,environment,status)
            VALUES(%s,'venue-bybit','UNIFIED','MAINNET','ACTIVE')""",
         (f"{prefix}-ta",),
+    )
+    connection.execute(
+        """INSERT INTO identity.account_connectors(
+               account_connector_id,trading_account_id,connector_kind,adapter_id,status)
+           VALUES(%s,%s,'BYBIT_PRIVATE','bybit','ACTIVE')""",
+        (f"{prefix}-connector",f"{prefix}-ta"),
     )
     connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(
@@ -530,8 +539,10 @@ def test_missing_live_arm_evidence_blocks_before_exchange_and_releases_admission
         assert claim["release_reason"] == "PRE_EXCHANGE_BLOCK:LIVE_ARM_NOT_READY"
 
         command_count = connection.execute(
-            "SELECT count(*) AS count FROM runtime.trade_commands WHERE symbol=%s",
-            (ids["symbol"],),
+            """SELECT count(*) AS count
+                 FROM runtime.trade_commands
+                WHERE symbol=%s AND trading_account_id=%s""",
+            (ids["symbol"], ids["trading_account_id"]),
         ).fetchone()
         assert command_count == {"count": 0}
 
@@ -687,14 +698,15 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
                    updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
-                   trading_account_id,identity_status
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
+                   trading_account_id,identity_status,account_connector_id
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN',%s)""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0"}),
                 ids["trading_account_id"],
+                f"{ids['trading_account_id'][:-3]}-connector",
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -751,8 +763,8 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
                    updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
-                   trading_account_id,identity_status
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
+                   trading_account_id,identity_status,account_connector_id
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN',%s)""",
             (
                 order_id,
                 ids["command_id"][:36],
@@ -764,6 +776,7 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
                     }
                 ),
                 ids["trading_account_id"],
+                f"{ids['trading_account_id'][:-3]}-connector",
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -817,14 +830,15 @@ def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
                    updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
-                   trading_account_id,identity_status
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
+                   trading_account_id,identity_status,account_connector_id
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN',%s)""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0.5"}),
                 ids["trading_account_id"],
+                f"{ids['trading_account_id'][:-3]}-connector",
             ),
         )
         connection.execute(
