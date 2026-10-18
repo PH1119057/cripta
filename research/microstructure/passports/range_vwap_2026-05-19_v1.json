@@ -5,7 +5,9 @@
   "source_venue": "Bybit",
   "primary_reader": {
     "path": "research/microstructure/experiments/range_vwap_profile_v1.py",
-    "commit": "f4d26b2ac7282d412493c37679b0b4f42b5a472a"
+    "commit": "f4d26b2ac7282d412493c37679b0b4f42b5a472a",
+    "row_hash_commit": "23aa752c4e32c874ea1d72fb76f9969e96b2b5a5",
+    "row_hash_method": "SHA256 over json.dumps(record,sort_keys=True,separators=(',',':'),ensure_ascii=False) plus escaped newline string, all 1440 records in minute order"
   },
   "independent_reader": {
     "path": "research/microstructure/experiments/range_vwap_independent_qc_v1.py",
@@ -52,8 +54,9 @@
       "vwap": "0.94019884785873968",
       "poc": "0.9385",
       "source_and_scalar_qc": "PASS",
-      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
-      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+      "temporal_row_provenance": "FULL_DAY_ROW_HASH_EXECUTED",
+      "readiness": "PASSPORT_REGISTERED_PHYSICAL_QC_PASS_ROW_HASHED_DATASET_ARTIFACT_PENDING",
+      "minute_rows_sha256": "9a5bdc9060f969f6bfc0008e429b7d4f80c0852ef63c72b88eb1bc154c41a06c"
     },
     {
       "symbol": "INJUSDT",
@@ -67,8 +70,9 @@
       "vwap": "5.062793211591095",
       "poc": "4.9100",
       "source_and_scalar_qc": "PASS",
-      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
-      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+      "temporal_row_provenance": "FULL_DAY_ROW_HASH_EXECUTED",
+      "readiness": "PASSPORT_REGISTERED_PHYSICAL_QC_PASS_ROW_HASHED_DATASET_ARTIFACT_PENDING",
+      "minute_rows_sha256": "32eec25aefb7a268d0fa108634fad05cb1622ca69e4c14cbf0c7695c2df31c43"
     },
     {
       "symbol": "DOTUSDT",
@@ -82,8 +86,9 @@
       "vwap": "1.2362712840392992",
       "poc": "1.2274",
       "source_and_scalar_qc": "PASS",
-      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
-      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+      "temporal_row_provenance": "FULL_DAY_ROW_HASH_EXECUTED",
+      "readiness": "PASSPORT_REGISTERED_PHYSICAL_QC_PASS_ROW_HASHED_DATASET_ARTIFACT_PENDING",
+      "minute_rows_sha256": "93b0c4de532cbbd80c6da77db52cf011c35ffc6f3f0e95f685f760a896f4b193"
     },
     {
       "symbol": "LTCUSDT",
@@ -97,8 +102,9 @@
       "vwap": "54.06578642076478",
       "poc": "54.12",
       "source_and_scalar_qc": "PASS",
-      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
-      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+      "temporal_row_provenance": "FULL_DAY_ROW_HASH_EXECUTED",
+      "readiness": "PASSPORT_REGISTERED_PHYSICAL_QC_PASS_ROW_HASHED_DATASET_ARTIFACT_PENDING",
+      "minute_rows_sha256": "54052a27f736f41f05e8dbbd39628512a6d8b72e8d0c9da6f76e49e3ac529252"
     },
     {
       "symbol": "ARBUSDT",
@@ -112,8 +118,9 @@
       "vwap": "0.11585221791119729",
       "poc": "0.11661",
       "source_and_scalar_qc": "PASS",
-      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
-      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+      "temporal_row_provenance": "FULL_DAY_ROW_HASH_EXECUTED",
+      "readiness": "PASSPORT_REGISTERED_PHYSICAL_QC_PASS_ROW_HASHED_DATASET_ARTIFACT_PENDING",
+      "minute_rows_sha256": "3f5727195e3d5f8bcb3c81c1cc9f170846c90293ae5f80ddc8f63c18b4ba39ba"
     }
   ]
 }
