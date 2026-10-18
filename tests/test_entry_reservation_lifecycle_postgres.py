@@ -178,15 +178,16 @@ def _seed(
         """INSERT INTO runtime.position_mode_states(
                position_mode_state_ref,exchange,account_ref,product_category,
                instrument,position_mode,position_idx,observed_at,received_at,
-               fresh_until,provenance
+               fresh_until,provenance,trading_account_id,identity_status
            ) VALUES(%s,'BYBIT','BYBIT:UNIFIED','LINEAR',%s,'ONE_WAY',0,
-                    %s,%s,%s,'{}'::jsonb)""",
+                    %s,%s,%s,'{}'::jsonb,%s,'PROVEN')""",
         (
             position_mode_state_ref,
             symbol,
             NOW,
             NOW,
             NOW + timedelta(minutes=10),
+            f"{prefix}-ta",
         ),
     )
     connection.execute(
@@ -370,12 +371,6 @@ def _seed(
                 WHERE command_id=%s""",
             (f"{prefix}-binding", f"{prefix}-ta", command_id),
         )
-    connection.execute(
-        """UPDATE runtime.position_mode_states
-              SET trading_account_id=%s,identity_status='PROVEN'
-            WHERE position_mode_state_ref=%s""",
-        (f"{prefix}-ta", position_mode_state_ref),
-    )
     return {
         "strategy_id": strategy_id,
         "strategy_version": version,
