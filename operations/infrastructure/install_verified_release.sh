@@ -410,6 +410,7 @@ migration_files=(
   operations/sql/20261016_execution_evidence_r5b.sql
   operations/sql/20261016_account_scoped_key_preparation_r5.sql
   operations/sql/20261016_strategy_execution_binding_r6a.sql
+  operations/sql/20261018_r10_binding_lock_acl.sql
   operations/sql/20261016_binding_lineage_r6b1.sql
   operations/sql/20261016_command_position_lineage_r6b2.sql
   operations/sql/20261016_exit_account_lineage_r6c.sql
