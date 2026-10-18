@@ -114,12 +114,12 @@ CREATE TABLE runtime.trade_commands (
     command_id text PRIMARY KEY,
     command_type text NOT NULL,
     symbol text NOT NULL,
-    payload_json jsonb NOT NULL,
+    payload_json text NOT NULL,
     state text NOT NULL,
     requested_at_epoch_ms bigint NOT NULL,
     started_at_epoch_ms bigint,
     finished_at_epoch_ms bigint,
-    result_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    result_json text NOT NULL DEFAULT '{}',
     error text NOT NULL DEFAULT ''
 );
 
