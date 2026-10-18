@@ -14,6 +14,7 @@ from bybit_workbench.entry_reservation_lifecycle import (
     mark_entry_order_acknowledged,
     resolve_cancelled_entry_reservation_after_reconcile,
 )
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.live_arm_readiness import (
     REQUIRED_LIVE_ARM_CHECKS,
     LiveArmContext,
@@ -52,7 +53,7 @@ def _seed(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    exchange_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+    exchange_key = exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
     trading_account_id = f"{prefix}-ta"
