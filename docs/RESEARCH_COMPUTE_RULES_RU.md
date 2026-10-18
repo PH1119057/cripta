@@ -6,6 +6,12 @@
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
 длительными вычислениями и data-forensic.
 
+### Tool refusals и сохранение прогресса
+
+Обязательный маршрут: `DEVELOPMENT_RELEASE §19.5–19.6`, `CURRENT_PROJECT_MAP §1.4`. При OpenAI tool-security block фиксировать `BLOCKED_UPSTREAM_OPENAI`; не считать его Unix EACCES, не просить рестарт SentinelX без evidence. При `command_not_allowed` — `BLOCKED_SENTINELX_POLICY`; при Unix `EACCES` — `BLOCKED_UNIX_PERMISSION`; при job timeout — `JOB_OUTCOME_UNKNOWN` до отдельной проверки. Один и тот же отклонённый вызов не повторять циклом и не пытаться обойти защиту.
+
+Для воспроизводимых исследований: в GitHub хранить версионированный исходник/reader и exact source paths; начинать с ограниченного smoke, далее coin/day bounded jobs; проверенные численные результаты, coverage, hashes, failures и next action сразу сохранять в research journal/manifest. Исследование в памяти без подтверждённого stdout/manifest = `NOT VERIFIED`; GitHub source commit сам по себе не означает executed/QC pass. Не объявлять расчёт завершённым из-за подготовленного кода.
+
 Общие source-of-truth / Hard Stop правила задаёт
 `docs/CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`.
 
