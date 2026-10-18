@@ -3,7 +3,12 @@
 CREATE SCHEMA IF NOT EXISTS runtime AUTHORIZATION postgres;
 CREATE SCHEMA IF NOT EXISTS control AUTHORIZATION postgres;
 CREATE SCHEMA IF NOT EXISTS analytics AUTHORIZATION postgres;
-GRANT USAGE ON SCHEMA runtime, control, analytics TO cripta;
+CREATE SCHEMA IF NOT EXISTS dispatcher_v2 AUTHORIZATION postgres;
+GRANT USAGE ON SCHEMA runtime, control, analytics, dispatcher_v2 TO cripta;
+
+CREATE TABLE dispatcher_v2.trading_capacity_snapshots (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+);
 
 CREATE OR REPLACE FUNCTION runtime.reject_immutable_change()
 RETURNS trigger
