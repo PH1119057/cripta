@@ -4,6 +4,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
+from unittest.mock import patch
 
 import psycopg
 import pytest
@@ -15,6 +16,7 @@ from bybit_workbench.strategy_position_binding import (
     persist_universal_strategy_position,
     release_position_capital_reservation,
 )
+import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -23,6 +25,12 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
+
+def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
+    """Match the consumer account scope to this disposable fixture only."""
+    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id):
+        return run_once(connection, now=NOW)
+
 
 def _seed_request(
     connection: psycopg.Connection,
@@ -539,7 +547,7 @@ def test_consumer_detects_post_admission_slot_invariant_and_keeps_resources_for_
             ),
         )
         connection.commit()
-        result = run_once(connection, now=NOW)
+        result = _run_once_for_fixture_account(connection, ids["trading_account_id"])
         assert result == "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
         dispatch = connection.execute(
             """SELECT state,command_id,reason
