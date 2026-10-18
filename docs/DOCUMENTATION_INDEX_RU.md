@@ -319,6 +319,10 @@ Strategy/Entry/Exit policy и не разрешает real execution.
   changeset обновляет INDEX + README + AGENTS + Project Instructions/bootstrap,
   если их фактический текст затронут.
 
+## 17.1.1 Canonical tool-failure routing (2026-10-18)
+
+Owner for refusal classification, correct actor/tool path and retry policy: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`. Research execution/checkpoint discipline: `docs/RESEARCH_COMPUTE_RULES_RU.md`. Owner-facing communication: `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`. Current dated server actor snapshot: `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. This documentation cycle adds no files to the 11-member Project Source set and changes no role, allowlist, permissions, LIVE or architecture ownership.
+
 ## 17.2 Нумерация и ссылки
 
 Перед renumber section обязателен search по current tree на все ссылки на
