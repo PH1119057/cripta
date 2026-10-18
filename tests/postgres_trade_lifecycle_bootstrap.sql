@@ -2,7 +2,8 @@
 -- This file is never installed by the production release rail.
 CREATE SCHEMA IF NOT EXISTS runtime AUTHORIZATION postgres;
 CREATE SCHEMA IF NOT EXISTS control AUTHORIZATION postgres;
-GRANT USAGE ON SCHEMA runtime, control TO cripta;
+CREATE SCHEMA IF NOT EXISTS analytics AUTHORIZATION postgres;
+GRANT USAGE ON SCHEMA runtime, control, analytics TO cripta;
 
 CREATE OR REPLACE FUNCTION runtime.reject_immutable_change()
 RETURNS trigger
