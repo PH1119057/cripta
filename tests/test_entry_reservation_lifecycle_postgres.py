@@ -4,6 +4,7 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+from unittest.mock import patch
 
 import psycopg
 import pytest
@@ -20,6 +21,7 @@ from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     scope_for_check,
 )
+import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -28,6 +30,12 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 14, 0, tzinfo=UTC)
+
+
+def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
+    """Match the consumer account scope to this disposable fixture only."""
+    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id):
+        return run_once(connection, now=NOW)
 
 
 def _seed(
@@ -460,7 +468,7 @@ def test_expired_reserved_request_is_released_even_when_gate_is_disarmed() -> No
         _gate(connection, False)
         connection.commit()
 
-        assert run_once(connection, now=NOW) == "EXECUTION_GATE_DISARMED"
+        assert _run_once_for_fixture_account(connection, ids["trading_account_id"]) == "EXECUTION_GATE_DISARMED"
         reservation = connection.execute(
             """SELECT state,state_reason
                  FROM runtime.capital_reservations
@@ -498,7 +506,7 @@ def test_missing_live_arm_evidence_blocks_before_exchange_and_releases_admission
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_once_for_fixture_account(connection, ids["trading_account_id"])
         assert result == "BLOCKED:LIVE_ARM_NOT_READY"
 
         reservation = connection.execute(
@@ -544,7 +552,7 @@ def test_structural_pre_exchange_block_releases_reserved_capital() -> None:
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_once_for_fixture_account(connection, ids["trading_account_id"])
         assert result in {
             "BLOCKED:STRUCTURAL_ERROR",
             "BLOCKED:IDENTITY_MISMATCH",
