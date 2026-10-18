@@ -7,6 +7,7 @@ same-side groups are a heuristic, never asserted as parent taker orders.
 No output writes, trading action, models or future labels.
 """
 import argparse,csv,datetime as dt,gzip,json,math,statistics
+from decimal import Decimal
 from collections import deque
 from pathlib import Path
 SYMS=("APTUSDT","INJUSDT","DOTUSDT","LTCUSDT","ARBUSDT")
@@ -19,17 +20,17 @@ def quantile(a,p):
 
 def calculate(sym,day="2026-05-19",root=ROOT):
     if sym not in SYMS:raise ValueError("symbol")
-    lo=int(dt.datetime.strptime(day,"%Y-%m-%d").replace(tzinfo=dt.timezone.utc).timestamp()*1000)
+    lo=int(dt.datetime.strptime(day,"%Y-%m-%d").replace(tzinfo=dt.timezone.utc).timestamp()*10000)
     path=Path(root)/sym/"public_trades"/f"{sym}{day}.csv.gz"
     minutes=[[] for _ in range(1440)]
     groups=[[] for _ in range(1440)]
     prev_ts=None;last_key=None; n=0; last_gminute=None
     with gzip.open(path,"rt",newline="") as f:
         for a in csv.DictReader(f):
-            ts=int(round(float(a["timestamp"])*1000))
+            ts=int(Decimal(a["timestamp"])*10000)
             if prev_ts is not None and ts<prev_ts:raise ValueError("out of order")
             prev_ts=ts
-            k=(ts-lo)//60000
+            k=(ts-lo)//600000
             if not 0<=k<1440:continue
             if a["symbol"]!=sym or a["side"] not in ("Buy","Sell"):raise ValueError("identity")
             qty=float(a["foreignNotional"])
@@ -59,14 +60,14 @@ def calculate(sym,day="2026-05-19",root=ROOT):
             last_sign=sign;lengths.append(current_streak)
             if previous_gts is not None and ts>previous_gts:positive_intervals.append(ts-previous_gts)
             previous_gts=ts
-        record={"minute_index":i,"available_after_utc":dt.datetime.fromtimestamp((lo+(i+1)*60000)/1000,dt.timezone.utc).isoformat(),
+        record={"minute_index":i,"available_after_utc":dt.datetime.fromtimestamp((lo+(i+1)*600000)/10000,dt.timezone.utc).isoformat(),
                 "fill_count":len(x),"timestamp_side_groups":len(gs),
                 "large_fill_share_prior60m_p99":large_share,
                 "fill_notional_p50_usd":quantile(x,.5),"fill_notional_p90_usd":quantile(x,.9),
                 "fill_notional_p99_usd":quantile(x,.99),
                 "streak_end_groups":current_streak if gs else None,
                 "streak_max_within_minute":max(lengths) if lengths else None,
-                "positive_intergroup_gap_median_ms":statistics.median(positive_intervals) if positive_intervals else None,
+                "positive_intergroup_gap_median_ms":statistics.median(positive_intervals)/10 if positive_intervals else None,
                 "zero_adjacent_fill_ts_fraction":(sum(g[2]-1 for g in gs)/max(1,len(x)-1)) if len(x)>1 else None,
                 "threshold_prior_fills":len(prior)}
         result.append(record);history.append(x)
@@ -74,7 +75,7 @@ def calculate(sym,day="2026-05-19",root=ROOT):
     return {"symbol":sym,"algorithm":"fill_microstructure_minutes_v1","read_only":True,
             "rows":result,"fills":n,"source":str(path),
             "warnings":["Per-minute fill quantiles are descriptive after minute close, not predictions.",
-                        "Millisecond-rounded timestamp grouping is experimental and differs from full precision grouping; not parent orders.",
+                        "Exact 0.1 ms timestamp grouping (Decimal seconds*10000) matches archive precision; not parent orders.",
                         "Inter-group gap uses exchange rounded millisecond timestamp; same-timestamp opposite-side zero-gap events excluded."]}
 
 if __name__=="__main__":
