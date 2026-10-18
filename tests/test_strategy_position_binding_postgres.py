@@ -42,6 +42,7 @@ def _seed_request(
     dispatched: bool,
     permission: bool = False,
     symbol: str = "UNIUSDT",
+    account_id: str | None = None,
 ) -> dict[str, str]:
     strategy_id = f"{prefix}-strategy"
     version = "1"
@@ -55,7 +56,7 @@ def _seed_request(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    trading_account_id = f"{prefix}-ta"
+    trading_account_id = account_id or f"{prefix}-ta"
     exchange_key = exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"{prefix}-command"
@@ -92,7 +93,8 @@ def _seed_request(
         """INSERT INTO identity.trading_accounts(
                trading_account_id,venue_id,account_kind,account_type,
                environment,status
-           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')""",
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')
+           ON CONFLICT(trading_account_id) DO NOTHING""",
         (trading_account_id,),
     )
     connection.execute(
@@ -518,6 +520,7 @@ def test_second_active_slot_claim_same_exchange_position_is_rejected_before_fill
                 reservation_state="DISPATCHED",
                 dispatched=True,
                 symbol="BTCUSDT",
+                account_id=ids_a["trading_account_id"],
             )
         row = connection.execute(
             """SELECT exchange_position_slot_claim_id,claim_state
