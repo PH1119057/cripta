@@ -1,0 +1,121 @@
+# CRIPTA — журнал исследований рыночной микроструктуры
+
+**Зафиксировано 2026-10-18.** Данные: **2026-05-19, 00:00–24:00 UTC**. Статус: **RESEARCH EVIDENCE / NOT CANON / NOT LIVE POLICY**.  
+**Исследуемая торговая пятёрка:** APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT (сверено с `docs/TRADING_CONTOUR_RU.md`). TRXUSDT исключён из торгового исследования, может оставаться в панели наблюдения.
+**Authority:** GitHub `PH1119057/cripta:main`, текущие canonical docs в `docs/`. Этот журнал не добавляется в Project Source и не меняет канон.
+
+## Для нового чата
+Прочитать обязательные canonical docs и `docs/RESEARCH_COMPUTE_RULES_RU.md`; затем **этот журнал**. Цель: инвентаризация и воспроизводимый расчёт **всех 30 кандидатов** для каждой из пяти монет одновременно, собственные причинные нормы, общий рынок, LONG/SHORT отдельно, OOS и результаты **после комиссий**. Не возвращаться к бесконечным однопоказательным исследованиям до закрытия чек-листа. Выполненные в старом чате Python-команды были **одноразовыми, в памяти**: постоянных исходных скриптов или полной матрицы 7200 строк пока не создавали.
+
+## Источники и временные границы
+- Book 200 ZIP JSONL: `/data/cripta/datasets/raw/20260518_20260816/{SYMBOL}/orderbook/2026-05-19_{SYMBOL}_ob200.data.zip`; поля `type=snapshot|delta`, `ts`, `cts`, `data.u`, `data.b/a`. Snapshot **заменяет** весь book, не суммирует.
+- Trades CSV GZ: `/data/cripta/datasets/raw/20260518_20260816/{SYMBOL}/public_trades/{SYMBOL}2026-05-19.csv.gz`; `timestamp` seconds, aggressor `side`, `price`, `foreignNotional`, `trdMatchID`.
+- Liquidations: `/data/cripta/datasets/external/cryptohftdata/bybit_liquidations_v1/raw/2026-05-19/{HH}/{SYMBOL}_liquidations.parquet.zst`. Только наличие, **не** полнота покрытия подтверждены.
+- Строгие границы `[2026-05-19T00:00Z, 2026-05-20T00:00Z)`, 1440 минут × 5. Book state берётся **в конце** минуты, после всех delta, переносится через границы часов; отдельные сообщения в начале 20 мая отбрасывать. `cts` и timestamp trades использовать для порядка событий, не смешивать с публикационным `ts`.
+- Historical OI, Spot/Perp, cross-venue именно за 19 мая **не подтверждены**. Нет файла ≠ нулевое событие.
+
+## Суточное покрытие, все 5 монет
+
+| Symbol | Book msgs за день | Book минут | Trade rows | Минут со сделками | Оборот USD | Медиана spread bps | Медиана imbalance ±5bps |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| APT | 606837 | 1440 | 116683 | 1439 | 6.63m | 1.0636 | +0.0235 |
+| INJ | 733303 | 1440 | 368454 | 1440 | 57.89m | 2.0103 | -0.0024 |
+| DOT | 631778 | 1440 | 143184 | 1438 | 13.96m | 0.8102 | +0.0166 |
+| LTC | 542094 | 1440 | 69495 | 1428 | 27.02m | 1.8459 | +0.0484 |
+| ARB | 616466 | 1440 | 154123 | 1439 | 12.32m | 0.8656 | -0.0360 |
+| **TOTAL** | **3130478** | **7200** | **851939** | — | — | — | — |
+
+При проверке `data.u` 0 разрывов; 3 snapshots на архив, включая границу следующего дня; это не гарантия наличия всех физических событий. Глубина ±5bps относительно **движущегося mid**, чувствительна к дрейфу уровня.
+
+## Рассчитанные факторы исполнения и цены
+
+| Symbol | RVOL p50 (текущая минута / средняя из предыдущих 60m) | RVOL p90 | CVD USD за день | Autocorr 1m lag1 | Median 20m close range % | VWAP day | POC price |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| APT | 0.419 | 2.488 | +43222 | -0.0360 | 0.3894 | 0.940239 | 0.9385 |
+| INJ | 0.497 | 2.069 | -4714464 | -0.0343 | 0.8157 | 5.067505 | 4.91 |
+| DOT | 0.559 | 2.516 | -224835 | -0.0336 | 0.3499 | 1.236346 | 1.2274 |
+| LTC | 0.292 | 2.074 | +299290 | -0.0464 | 0.2400 | 54.066551 | 54.12 |
+| ARB | 0.541 | 2.287 | -458836 | -0.0495 | 0.4004 | 0.115864 | 0.11661 |
+
+Медиана Delta acceleration USD (разность signed delta соседних минут): APT -15.8, INJ -500.09, DOT +61.7, LTC -44.05, ARB -62.27. **Day VWAP/POC — ex post; нельзя использовать на внутридневном моменте без as-of пересчёта.** Полный rolling CVD и rolling Volume Profile ещё не верифицированы.
+
+Range compression prototype = 20m close-range / 100m предшествующего close-range (окна разной длины, структурно занижает отношение). Median: APT 0.3850, INJ 0.3768, DOT 0.3953, LTC 0.4146, ARB 0.3965. Это не финальная self-normalized мера.
+
+Минутные кандидаты Sweep/Reclaim от prior-60m high/low, полный начальный тест `high breaches/reclaims; low breaches/reclaims`:
+APT 51/23;64/24, INJ 54/24;86/52, DOT 52/27;60/21, LTC 51/22;52/18, ARB 43/20;74/25. **При изменении начальной границы окна low-значения меняются; не смешивать результаты.** Точная внутриминутная последовательность ещё не подтверждена.
+
+Top-of-book OFI 1h, единиц базовой монеты: APT +18389, INJ +17433.3, DOT -124443.1, LTC +1008.1, ARB -110342.6. Сэмплированный Top1/Top5 `Δbid USD - Δask USD` (каждое 10-е сообщение) был APT +1275/-7298; INJ +298/+2632; DOT +1042/+508; LTC -4076/+11170; ARB -254/-3403. **НЕ строгий multi-level OFI** — изменение цены уровней не обработано корректно.
+
+## Совместные исследования (НЕ OOS, НЕ торговая стратегия)
+
+Условия: 5m неперекрывающиеся start intervals, предыдущее направление цены согласовано с направлением aggressor flow; `continuation/reversal`.
+
+| Coin | Total depth increased | Depth not increased | Increased + rate acceleration |
+|---|---:|---:|---:|
+| APT | 42/24 | 39/37 | 30/17 |
+| INJ | 40/28 | 45/46 | 23/15 |
+| DOT | 37/43 | 44/30 | 20/21 |
+| LTC | 33/43 | 29/34 | 21/26 |
+| ARB | 36/34 | 48/36 | 21/22 |
+
+Раздельно LONG/SHORT, взаимно исключающие состояния `Only Bid / Only Ask / Both / Neither`, продолжение/разворот:
+
+| Coin | LONG Bid | LONG Ask | LONG Both | LONG Neither | SHORT Bid | SHORT Ask | SHORT Both | SHORT Neither |
+|---|---|---|---|---|---|---|---|---|
+| APT | 12/7 | 14/9 | 8/5 | 8/9 | 14/11 | 9/7 | 7/3 | 9/10 |
+| INJ | 20/12 | 11/11 | 7/7 | 8/9 | 9/5 | 14/16 | 6/4 | 10/10 |
+| DOT | 16/19 | 15/6 | 5/8 | 3/3 | 17/13 | 15/18 | 4/4 | 6/2 |
+| LTC | 18/11 | 11/13 | 3/7 | 3/5 | 9/14 | 10/8 | 3/11 | 5/8 |
+| ARB | 11/11 | 14/11 | 3/5 | 6/6 | 19/12 | 16/14 | 7/4 | 8/7 |
+
+**Предупреждение**: один предыдущий расчёт APT некорректно сделал группы перекрывающимися. Выше приведены согласованные disjoint buckets, но нужен независимый QC при переносе в воспроизводимый код. Универсальная закономерность по монетам не подтверждена; выборки малы.
+
+Секундные кандидаты сокращения Bid после SELL / Ask после BUY (первые 15m): APT 39/60, INJ 100/101, DOT 46/44, LTC 12/19, ARB 37/33. По сдвигу book-depth нельзя строго доказать отмены, поглощение или восстановление тех же уровней; `±5bps` пересчитывается от динамического mid.
+После введения разреживания событий минимум 30 сек остаётся `SELL no_recovery/recovery; BUY no_recovery/recovery`: APT 4/2;3/9, INJ 3/4;5/7, DOT 0/6;2/9, LTC 1/4;3/4, ARB 1/7;3/5. Пятиминутные future outcomes всё ещё могут пересекаться. Сильные доли вроде INJ BUY 95/101 без разреживания — **псевдорепликация и тренд**, не торговый edge. Контрольные моменты с тем же рыночным контекстом не завершены.
+
+Liquidation file HOURS за день: APT 00,09,11,14,16,17,18; INJ 00,01,02,03,04,05,09,10,11,14,16,17,18,19,22; DOT 14; LTC 00,14; ARB 14,16,22,23. Отсутствие файла НЕ=0 ликвидаций.
+
+## Реестр 30 кандидатов — только статус исследования
+
+`CALC` = вычислялся хотя бы на одной выборке, но не validated/OOS. `PARTIAL` = приближённый показатель или неполное покрытие. `NOT_CHECKED` = нет подтверждённого расчёта. Реестр **не утверждён как canonical strategy feature set**.
+
+| # | Factor | Status | Что ещё проверить |
+|---:|---|---|---|
+| 1 | RVOL | CALC | multiday causal self-baseline |
+| 2 | Trade Rate | CALC | per-coin rolling norms |
+| 3 | Trade Rate Acceleration | CALC | horizons and QC |
+| 4 | Large Trade Share | PARTIAL | all 5, as-of thresholds |
+| 5 | Buy/Sell Delta | CALC | time alignment |
+| 6 | CVD | CALC | rolling/as-of |
+| 7 | Delta Acceleration | CALC | rolling time series |
+| 8 | Trade Streaks | PARTIAL | group split fills properly |
+| 9 | Queue Imbalance | CALC | normalize depth |
+| 10 | Multi-Level OFI | PARTIAL | true price-aware per-level OFI |
+| 11 | Order Book Depth | CALC | depth by side, self-baseline |
+| 12 | Pulling Rate | PARTIAL | fills/cancels/price drift |
+| 13 | Depth Recovery | PARTIAL | same-level recovery |
+| 14 | Price Impact | PARTIAL | signed lag causal impact |
+| 15 | Effort / Result | PARTIAL | normalized metric |
+| 16 | Absorption | PARTIAL | verified event chain |
+| 17 | Exhaustion | NOT_CHECKED | decay of flow/impact |
+| 18 | Short-Term Autocorrelation | CALC | lag variants and OOS |
+| 19 | Range Compression | PARTIAL | comparable baseline |
+| 20 | Local Extremes | CALC | causal rolling reference |
+| 21 | Sweep / Reclaim | PARTIAL | distinct intraminute sequence |
+| 22 | VWAP / Volume Profile | PARTIAL | live as-of rolling profile |
+| 23 | OI Change | NOT_CHECKED | historical coverage |
+| 24 | Liquidation Spikes | PARTIAL | file coverage QC + values |
+| 25 | Spot / Perpetual Divergence | NOT_CHECKED | spot archive May19 |
+| 26 | Cross-Venue Lead–Lag | NOT_CHECKED | venue coverage and latency |
+| 27 | Inter-Trade Duration | PARTIAL | across all 5 coins |
+| 28 | Trade-Size Distribution | PARTIAL | rolling quantiles |
+| 29 | Bid/Ask Spread | CALC | rolling distribution |
+| 30 | Replenishment / Resiliency | PARTIAL | same-level causal replenish |
+
+## Continuation and safeguards
+
+1. Before changes, check current `main` and relevant research / release / security contracts; source of truth remains canonical `docs/`. Journal is evidence, not authority.
+2. Build stable, **read-only, version-controlled calculators** in existing research layout, reusing ingestion and one parsed book/trade stream across 30 physically distinct metrics; don't create 30 redundant source readers. Pin algorithm version, source paths, data coverage, input hashes, symbol/time window and UTC conventions. Same code for 5 min, 1h, day, multi-day. Do not simply copy ephemeral snippets without auditing known mistakes.
+3. No server filesystem mutation before exact actor/path/owner/group/mode/ACL/systemd and canonical `CURRENT_PROJECT_MAP §1.4`, `DEVELOPMENT_RELEASE §5.1, §19.1–19.4`; no DB writes, no silent LIVE.
+4. Finish unavailable partial metrics and coverage OI/liquidations/Spot/venues with explicit `NO_DATA` (not zero). Validate causality, event deduplication, self-baselines, market control, LONG/SHORT separately, OOS and returns **после комиссий**.
+5. This research journal does not authorize new thresholds, signal parameters, Strategy versions, production deployment or MAYAK behavior changes; require explicit owner decision and canonical pathway.
