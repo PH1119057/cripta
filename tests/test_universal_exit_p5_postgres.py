@@ -69,6 +69,8 @@ def _seed(
     position_id = f"{prefix}-position"
     command_id = f"{prefix}-entry-command"
     symbol = "P5" + prefix.replace("-", "").upper()[-8:] + "USDT"
+    trading_account_id = "ta-2122c81ecff14f3b85b102db605212f7"
+    binding_id = f"{prefix}-binding"
 
     exit_policy: dict[str, object] = {"exit_plan_version": "1"}
     if rules is not None:
@@ -114,6 +116,16 @@ def _seed(
                scope,operator,source,change_reason
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.strategy_execution_bindings(
+               strategy_execution_binding_id,strategy_activation_id,
+               execution_leg,execution_role,trading_account_id,
+               allocation_mode,binding_state,effective_from,
+               operator,source,reason
+           ) VALUES(%s,%s,'PRIMARY','PRIMARY',%s,'DEDICATED_STRATEGY',
+                    'ACTIVE',%s,'test','test','integration fixture')""",
+        (binding_id, activation_id, trading_account_id, NOW),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
@@ -212,10 +224,13 @@ def _seed(
                exchange_position_key,position_idx,account_ref,
                strategy_config_fingerprint,strategy_activation_id,
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
-               entry_plan_fingerprint,exit_plan_fingerprint
+               entry_plan_fingerprint,exit_plan_fingerprint,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
            ) VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,%s,'Buy',10,2,%s,
                     '[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'OPEN',%s,0,
-                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s)""",
+                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             position_id,
             f"{prefix}-trade",
@@ -233,6 +248,8 @@ def _seed(
             request_id,
             entry_fp,
             exit_fp,
+            binding_id,
+            trading_account_id,
         ),
     )
     connection.commit()
