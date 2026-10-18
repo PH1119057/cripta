@@ -367,3 +367,20 @@ CHECKED HERE: current GitHub source `research/microstructure/experiments/book_mi
 CHECKED HERE by reading both exact sources from current GitHub main: historical `public_trades_day_v1.py` computes `vwap_ex_post=sum(price*foreignNotional)/sum(foreignNotional)`, i.e. quote-notional-weighted mean price, and its POC accumulates `foreignNotional` by price. New `range_vwap_profile_v1.py` computes `running_vwap=sum(price*size)/sum(size)`, i.e. standard base-quantity-weighted VWAP, and accumulates base quantity by exact price for POC. Hence the two VWAP definitions are not equal, and APT 0.940239 old vs 0.9401988479 new is not an arithmetic reproducibility failure of the same estimator. This resolves the *algorithm-definition* discrepancy, but does not replace independent raw `size` / `foreignNotional` consistency QC, source unit validation, or 5/5 runs. APT end-of-day POC matching at 0.9385 is coincidental until equal weighting semantics are established.
 
 No new server execution attempted after prior `BLOCKED_UPSTREAM_OPENAI`. Status remains 15/30 RESEARCH-READY; #19/#22 OPEN with APT smoke only. No policy/runtime/LIVE changes.
+
+
+## 2026-10-18 — #19/#22 five-symbol full-day execution PASS; independent measurement QC PENDING
+
+CHECKED HERE against GitHub source `research/microstructure/experiments/range_vwap_profile_v1.py` exact commit `f4d26b2ac7282d412493c37679b0b4f42b5a472a`, executed as actual Unix `cripta` under SentinelX for UTC 2026-05-19. APT smoke was previously executed; INJ/DOT/LTC/ARB each now executed separately as bounded read-only single-symbol jobs, returncode 0, no host filesystem/DB writes. Earlier multi-invocation security block was not reissued. Units in this version: per-fill `price` × `size`, VWAP quote/base; POC highest cumulative base quantity per exact traded price; compression ratio two adjacent non-overlapping 20×1m observed close windows, valid only after minute end, null for missing minute/zero preceding range.
+
+| Coin | Fills | Minutes with fills | Output rows | #19 valid windows | #19 median ratio | #22 end VWAP base-quantity weighted | #22 end POC |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 116683 | 1439 | 1440 | 1361 | 0.9833333333 | 0.9401988478587397 | 0.9385 |
+| INJUSDT | 368454 | 1440 | 1440 | 1401 | 0.9821428571 | 5.062793211591095 | 4.9100 |
+| DOTUSDT | 143184 | 1438 | 1440 | 1358 | 0.9534632035 | 1.236271284039299 | 1.2274 |
+| LTCUSDT | 69495 | 1428 | 1440 | 1058 | 1.0000000000 | 54.06578642076478 | 54.12 |
+| ARBUSDT | 154123 | 1439 | 1440 | 1361 | 0.9677419355 | 0.1158522179111973 | 0.11661 |
+
+VALIDATION BOUNDARY: 7200 output minute records exist across five instruments, but this script returns sampled rows and summaries; complete 7200-row durable cube artifact has **NOT** been created. Source quantities (`size` units; `foreignNotional` consistency), mathematical independent sample, full input hashes/run manifests, timestamp edge validations, formula-version per-pair passports and output QA remain to be separately attested under new `RESEARCH_COMPUTE §21.6`. 1m no-trade windows explicitly prevent #19 continuity; no filling forward for compression. Ex-post day-end VWAP cannot be used intraday. Prior quote-notional-weighted descriptive VWAP is a **different estimator**, not a direct QC baseline.
+
+Current status: `#19 FULL_DAY_EXECUTED_5_OF_5 / INDEPENDENT_QC_PENDING`; `#22 FULL_DAY_EXECUTED_5_OF_5 / INDEPENDENT_QC_PENDING`. Do NOT count either as newly RESEARCH-READY before per-pair passport/source-QC gate. Historical 15/30 group passes and 75-row audit remain distinct from new §21 attestation. No cross-venue, Strategy/LIVE or joined analysis.
