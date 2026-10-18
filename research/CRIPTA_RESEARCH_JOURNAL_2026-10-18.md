@@ -408,3 +408,18 @@ Per new `RESEARCH_COMPUTE §21`: physical-unit, denominator, as-of-end-of-minute
 The owner-approved `RESEARCH_COMPUTE §21` now has a machine-readable derived passport at `research/microstructure/passports/range_vwap_2026-05-19_v1.json` (published and corrected exact half-open/inclusive window description by commit `88090916b4ee700e2b6606fd294168671fca7548`). It covers five exact Bybit instruments × two distinct indicators, preserving source SHA256, full-day counts, each coin's scalar independently checked #19 and #22 values, formula/denominator units, previous/current **non-overlapping** close windows [i-39..i-20] and [i-19..i], end-minute timing, missingness and aggregate operators.
 
 10/10 pairs now `PASSPORT_REGISTERED + PHYSICAL_QC_PASS`. The source produces the minute-level 1440 rows internally but existing stdout summary sampled only four per coin; complete output row lineage and separately attested full cube artifacts are still `NOT CHECKED HERE`. **No new per-pair RESEARCH-READY promotion** from merely registering passports. Original 15/30 historical READY remains only the old pilot cohort gate. Next: complete row-level provenance/QC for #19/#22 or continue #10 as independent unfinished candidate; do not pretend that a rank-shifted OFI is strict physical multi-level OFI. No other exchanges, Strategy, release or LIVE modifications.
+
+
+## 2026-10-19 — #19/#22 per-minute complete-row fingerprints
+
+CHECKED HERE: exact GitHub source `research/microstructure/experiments/range_vwap_profile_v1.py` commit `23aa752c4e32c874ea1d72fb76f9969e96b2b5a5` was executed read-only as actor `cripta`, one symbol per invocation, on each of the five May-19 archives. Source remains no-write; it now hashes every one of 1440 minute records with deterministic sorted-key JSON serialization (including escaped record separator). Existing per-coin fills, medians, day-end base-weighted VWAP and POC match previously independent scalar QC.
+
+| Symbol | Rows hashed | Full-minute-series SHA256 |
+|---|---:|---|
+| APTUSDT | 1440 | `9a5bdc9060f969f6bfc0008e429b7d4f80c0852ef63c72b88eb1bc154c41a06c` |
+| INJUSDT | 1440 | `32eec25aefb7a268d0fa108634fad05cb1622ca69e4c14cbf0c7695c2df31c43` |
+| DOTUSDT | 1440 | `93b0c4de532cbbd80c6da77db52cf011c35ffc6f3f0e95f685f760a896f4b193` |
+| LTCUSDT | 1440 | `54052a27f736f41f05e8dbbd39628512a6d8b72e8d0c9da6f76e49e3ac529252` |
+| ARBUSDT | 1440 | `3f5727195e3d5f8bcb3c81c1cc9f170846c90293ae5f80ddc8f63c18b4ba39ba` |
+
+Derived passport `research/microstructure/passports/range_vwap_2026-05-19_v1.json` binds the above hashes and exact reader source commit per instrument. NOTE: hash evidence is not a separately persisted full row dataset. Remaining: verify independent full-row causal temporal alignment and output artifact/provenance; `NEW_RESEARCH_READY` not promoted. Historical 15/30 pilot READY stays historical.
