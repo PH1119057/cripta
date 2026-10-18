@@ -698,13 +698,15 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0"}),
+                ids["trading_account_id"],
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -760,8 +762,9 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
@@ -772,6 +775,7 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
                         "rejectReason": "EC_PostOnlyWillTakeLiquidity",
                     }
                 ),
+                ids["trading_account_id"],
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -824,25 +828,29 @@ def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0.5"}),
+                ids["trading_account_id"],
             ),
         )
         connection.execute(
             """INSERT INTO runtime.executions(
                    exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
-                   exec_fee,exec_time_ms,received_at_epoch_ms,payload_json
-               ) VALUES(%s,%s,%s,%s,'Buy','0.5','1','0',1,1,'{}')""",
+                   exec_fee,exec_time_ms,received_at_epoch_ms,payload_json,
+                   trading_account_id,identity_status
+               ) VALUES(%s,%s,%s,%s,'Buy','0.5','1','0',1,1,'{}',%s,'PROVEN')""",
             (
                 f"{prefix}-exec",
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
+                ids["trading_account_id"],
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
