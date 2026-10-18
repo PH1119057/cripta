@@ -67,7 +67,7 @@ def test_r1_parity_attestation_matches_verified_modules() -> None:
         source_root=ROOT,
         runtime_root=ROOT,
     )
-    assert evidence["parity_baseline"] == "R1_TERMINAL_RELEASE_PARITY_VERIFIED_2026-10-08"
+    assert evidence["parity_baseline"] == "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED"
     assert evidence["module_sha256"] == app.R1_PARITY_ATTESTED_MODULE_SHA256
 
 
