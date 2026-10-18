@@ -29,7 +29,9 @@ def test_r6b1_schema_adds_binding_lineage_without_key_rewrite() -> None:
 def test_r6b1_atomic_admission_rechecks_binding_before_reservation() -> None:
     source = ADMISSION.read_text(encoding="utf-8")
     transaction = source[source.index("def admit("):source.index("def _capital_request")]
-    assert transaction.index("FROM strategy_entry.strategy_execution_bindings") < transaction.index("self._capital.reserve")
+    binding_lock = transaction.index("FROM strategy_entry.lock_strategy_execution_binding(%s)")
+    capital_reservation = transaction.index("self._capital.reserve")
+    assert binding_lock < capital_reservation
     assert "StrategyExecutionBindingUnavailable" in transaction
     assert "strategy execution binding disappeared before admission" in transaction
     assert "strategy execution binding is not active for admission" in transaction
