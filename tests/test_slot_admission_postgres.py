@@ -68,6 +68,28 @@ def _seed_attempts(prefix: str, *, count: int = 2) -> dict[str, str]:
                ) VALUES(%s,%s,%s,%s,'1',%s::jsonb)""",
             (entry_fp, strategy_id, strategy_version, strategy_fp, "{}"),
         )
+        connection.execute(
+            """INSERT INTO identity.venues(venue_id,venue_kind,display_name,status)
+               VALUES('venue-bybit','CEX','Bybit','ACTIVE')
+               ON CONFLICT (venue_id) DO NOTHING"""
+        )
+        connection.execute(
+            """INSERT INTO identity.trading_accounts(
+                   trading_account_id,venue_id,account_kind,environment,status)
+               VALUES(%s,'venue-bybit','UNIFIED','MAINNET','ACTIVE')""",
+            (f"{prefix}-ta",),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_execution_bindings(
+                   strategy_execution_binding_id,strategy_activation_id,
+                   execution_leg,execution_role,trading_account_id,
+                   allocation_mode,binding_state,effective_from,
+                   operator,source,reason)
+               VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                      'DEDICATED_STRATEGY','ACTIVE',%s,
+                      'test','test','integration fixture')""",
+            (f"{prefix}-binding",activation_id,f"{prefix}-ta",NOW),
+        )
         for index in range(count):
             signal_id = f"{prefix}-signal-{index}"
             attempt_id = f"{prefix}-attempt-{index}"
@@ -175,6 +197,10 @@ def _request(
         capacity_available=capacity_available,
         requested_at=NOW,
         pre_dispatch_expires_at=NOW + timedelta(seconds=30),
+        strategy_activation_id=f"{prefix}-activation",
+        strategy_execution_binding_id=f"{prefix}-binding",
+        execution_leg="PRIMARY",
+        trading_account_id=f"{prefix}-ta",
     )
 
 
@@ -396,6 +422,7 @@ def test_runtime_role_has_minimal_new_schema_privileges() -> None:
     expected = {
         "runtime.position_mode_states": (True, True, False, False),
         "runtime.exchange_position_slot_claims": (True, True, True, False),
+        "strategy_entry.strategy_execution_bindings": (True, False, False, False),
         "runtime.lifecycle_fault_deliveries": (True, True, True, False),
         "strategy_entry.execution_request_state_events": (True, True, False, False),
         "control.live_arm_evidence": (True, True, False, False),
@@ -439,3 +466,17 @@ def test_runtime_role_has_minimal_new_schema_privileges() -> None:
         for row in rows
     }
     assert actual == expected
+    with psycopg.connect(DSN) as connection:
+        function_rights = connection.execute(
+            """SELECT has_function_privilege(
+                         'cripta',
+                         'strategy_entry.lock_strategy_execution_binding(text)',
+                         'EXECUTE'
+                       ),
+                      pg_has_role(
+                         'cripta',
+                         'cripta_entry_binding_locker',
+                         'MEMBER'
+                       )"""
+        ).fetchone()
+    assert function_rights == (True, False)

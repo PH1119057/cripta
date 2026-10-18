@@ -1,0 +1,174 @@
+name: strategy-binding-lock-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261018_strategy_execution_binding_lock_v1.sql"
+      - "src/bybit_workbench/entry_admission.py"
+      - "operations/infrastructure/install_verified_release.sh"
+      - "tests/test_strategy_execution_binding_lock_contract.py"
+      - "tests/test_slot_admission_postgres.py"
+      - ".github/workflows/strategy-binding-lock-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  binding-lock:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: binding_lock_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d binding_lock_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: binding_lock_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare exact disposable R6a baseline
+        shell: bash
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cripta LOGIN PASSWORD 'runtime_ci_only'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          CREATE SCHEMA strategy_entry AUTHORIZATION postgres;
+          CREATE SCHEMA identity AUTHORIZATION postgres;
+          GRANT USAGE ON SCHEMA strategy_entry, identity TO cripta;
+          CREATE TABLE strategy_entry.strategy_activations (
+              activation_id text PRIMARY KEY,
+              enabled boolean NOT NULL
+          );
+          CREATE TABLE identity.trading_accounts (
+              trading_account_id text PRIMARY KEY,
+              status text NOT NULL,
+              environment text NOT NULL
+          );
+          SQL
+          psql -X -v ON_ERROR_STOP=1             -f operations/sql/20261016_strategy_execution_binding_r6a.sql
+          psql -X -v ON_ERROR_STOP=1             -f operations/sql/20261018_strategy_execution_binding_lock_v1.sql
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO strategy_entry.strategy_activations
+              VALUES ('activation-ci',true);
+          INSERT INTO identity.trading_accounts
+              VALUES ('account-ci','ACTIVE','MAINNET');
+          INSERT INTO strategy_entry.strategy_execution_bindings(
+              strategy_execution_binding_id,strategy_activation_id,
+              execution_leg,execution_role,trading_account_id,
+              allocation_mode,binding_state,effective_from,
+              operator,source,reason
+          ) VALUES (
+              'binding-ci','activation-ci','PRIMARY','PRIMARY','account-ci',
+              'DEDICATED_STRATEGY','ACTIVE',now()-interval '1 minute',
+              'ci','ci','seed'
+          );
+          SQL
+      - name: Prove least privilege and transaction-scoped concurrency lock
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE
+            owner_name text;
+          BEGIN
+            IF has_table_privilege(
+                'cripta','strategy_entry.strategy_execution_bindings','UPDATE'
+            ) THEN
+              RAISE EXCEPTION 'cripta unexpectedly has binding UPDATE';
+            END IF;
+            IF NOT has_function_privilege(
+                'cripta',
+                'strategy_entry.lock_strategy_execution_binding(text)',
+                'EXECUTE'
+            ) THEN
+              RAISE EXCEPTION 'cripta lacks helper EXECUTE';
+            END IF;
+            IF pg_has_role('cripta','cripta_entry_binding_locker','MEMBER') THEN
+              RAISE EXCEPTION 'cripta unexpectedly inherits helper owner';
+            END IF;
+            SELECT pg_get_userbyid(p.proowner)
+              INTO owner_name
+              FROM pg_proc p
+             WHERE p.oid='strategy_entry.lock_strategy_execution_binding(text)'::regprocedure;
+            IF owner_name <> 'cripta_entry_binding_locker' THEN
+              RAISE EXCEPTION 'unexpected helper owner %', owner_name;
+            END IF;
+            IF EXISTS (
+              SELECT 1 FROM pg_roles
+               WHERE rolname='cripta_entry_binding_locker'
+                 AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
+                      OR rolreplication OR rolbypassrls)
+            ) THEN
+              RAISE EXCEPTION 'helper owner role has forbidden attributes';
+            END IF;
+          END $$;
+          SQL
+
+          set +e
+          PGPASSWORD=runtime_ci_only psql -X -v ON_ERROR_STOP=1             -U cripta -d binding_lock_ci             -c "UPDATE strategy_entry.strategy_execution_bindings SET reason='forbidden' WHERE strategy_execution_binding_id='binding-ci'"             > /tmp/direct-update.log 2>&1
+          direct_rc=$?
+          set -e
+          if [[ "$direct_rc" -eq 0 ]]; then
+            cat /tmp/direct-update.log
+            echo "RUNTIME_DIRECT_UPDATE_UNEXPECTEDLY_SUCCEEDED=YES"
+            exit 1
+          fi
+
+          PGAPPNAME=binding-lock-holder PGPASSWORD=runtime_ci_only             psql -X -v ON_ERROR_STOP=1 -U cripta -d binding_lock_ci             -c "BEGIN; SELECT count(*) FROM strategy_entry.lock_strategy_execution_binding('binding-ci'); SELECT pg_sleep(4); COMMIT;"             > /tmp/lock-holder.log 2>&1 &
+          holder_pid=$!
+
+          holder_ready=0
+          for _ in {1..50}; do
+            state="$(psql -X -Atqc "SELECT coalesce(wait_event,'') FROM pg_stat_activity WHERE application_name='binding-lock-holder' LIMIT 1")"
+            if [[ "$state" == "PgSleep" ]]; then
+              holder_ready=1
+              break
+            fi
+            sleep 0.1
+          done
+          if [[ "$holder_ready" -ne 1 ]]; then
+            cat /tmp/lock-holder.log || true
+            echo "LOCK_HOLDER_READY=NO"
+            kill "$holder_pid" 2>/dev/null || true
+            exit 1
+          fi
+
+          set +e
+          psql -X -v ON_ERROR_STOP=1             -c "SET lock_timeout='500ms'; UPDATE strategy_entry.strategy_execution_bindings SET reason='must-timeout' WHERE strategy_execution_binding_id='binding-ci'"             > /tmp/blocked-update.log 2>&1
+          blocked_rc=$?
+          set -e
+          if [[ "$blocked_rc" -eq 0 ]]; then
+            cat /tmp/blocked-update.log
+            echo "CONCURRENT_BINDING_UPDATE_BLOCKED=NO"
+            kill "$holder_pid" 2>/dev/null || true
+            exit 1
+          fi
+          if ! grep -qi "lock timeout" /tmp/blocked-update.log; then
+            cat /tmp/blocked-update.log
+            echo "CONCURRENT_BINDING_UPDATE_BLOCK_REASON=UNEXPECTED"
+            kill "$holder_pid" 2>/dev/null || true
+            exit 1
+          fi
+
+          wait "$holder_pid"
+
+          psql -X -v ON_ERROR_STOP=1             -c "SET lock_timeout='2s'; UPDATE strategy_entry.strategy_execution_bindings SET reason='after-lock' WHERE strategy_execution_binding_id='binding-ci'"
+          result="$(psql -X -Atqc "SELECT reason FROM strategy_entry.strategy_execution_bindings WHERE strategy_execution_binding_id='binding-ci'")"
+          [[ "$result" == "after-lock" ]]
+
+          echo "RUNTIME_DIRECT_UPDATE=DENIED"
+          echo "CONCURRENT_BINDING_UPDATE_BLOCKED=PASS"
+          echo "POST_TRANSACTION_BINDING_UPDATE=PASS"

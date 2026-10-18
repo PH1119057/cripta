@@ -78,6 +78,28 @@ def _seed_attempts(prefix: str, *, count: int = 3) -> dict[str, str]:
                 '{"entry_plan_fingerprint":"' + entry_fp + '"}',
             ),
         )
+        connection.execute(
+            """INSERT INTO identity.venues(venue_id,venue_kind,display_name,status)
+               VALUES('venue-bybit','CEX','Bybit','ACTIVE')
+               ON CONFLICT (venue_id) DO NOTHING"""
+        )
+        connection.execute(
+            """INSERT INTO identity.trading_accounts(
+                   trading_account_id,venue_id,account_kind,environment,status)
+               VALUES(%s,'venue-bybit','UNIFIED','MAINNET','ACTIVE')""",
+            (f"{prefix}-ta",),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_execution_bindings(
+                   strategy_execution_binding_id,strategy_activation_id,
+                   execution_leg,execution_role,trading_account_id,
+                   allocation_mode,binding_state,effective_from,
+                   operator,source,reason)
+               VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                      'DEDICATED_STRATEGY','ACTIVE',%s,
+                      'test','test','integration fixture')""",
+            (f"{prefix}-binding",activation_id,f"{prefix}-ta",now),
+        )
         for index in range(count):
             signal_id = f"{prefix}-signal-{index}"
             attempt_id = f"{prefix}-attempt-{index}"
@@ -141,6 +163,9 @@ def _request(prefix: str, index: int, identity: dict[str, str]) -> CapitalReserv
         capacity_available=Decimal("10"),
         requested_at=observed_at,
         pre_dispatch_expires_at=observed_at.replace(second=30),
+        strategy_execution_binding_id=f"{prefix}-binding",
+        execution_leg="PRIMARY",
+        trading_account_id=f"{prefix}-ta",
     )
 
 

@@ -180,18 +180,11 @@ class PostgresEntryAdmissionPort:
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
             binding = self._connection.execute(
-                """SELECT b.strategy_activation_id,b.execution_leg,
-                          b.trading_account_id,b.execution_role,
-                          b.allocation_mode,b.binding_state,
-                          b.effective_from,b.effective_to,ta.status,ta.environment,
-                          a.enabled
-                     FROM strategy_entry.strategy_execution_bindings b
-                     JOIN identity.trading_accounts ta
-                       ON ta.trading_account_id=b.trading_account_id
-                     JOIN strategy_entry.strategy_activations a
-                       ON a.activation_id=b.strategy_activation_id
-                    WHERE b.strategy_execution_binding_id=%s
-                    FOR SHARE""",
+                """SELECT strategy_activation_id,execution_leg,trading_account_id,
+                          execution_role,allocation_mode,binding_state,
+                          effective_from,effective_to,trading_account_status,
+                          environment,activation_enabled
+                     FROM strategy_entry.lock_strategy_execution_binding(%s)""",
                 (request.strategy_execution_binding_id,),
             ).fetchone()
             expected_binding = (
