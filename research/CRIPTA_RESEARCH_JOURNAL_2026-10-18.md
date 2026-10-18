@@ -401,3 +401,77 @@ CHECKED HERE: independent version-controlled source `research/microstructure/exp
 All 851939 included fills: 0 quote-notional unit mismatches above 1e-6, 0 unsorted timestamps, 0 outside-day rows in those date-scoped archives, 0 sub-0.1ms-precision violations. 1440 one-minute buckets per symbol. Source schema: timestamp/symbol/side/size/price/tickDirection/trdMatchID/grossValue/homeNotional/foreignNotional/RPI. Input SHA256 reproducibility and independent scalar QC **PASS**; observed no-trade minutes remain absent from #19 valid 40-minute windows.
 
 Per new `RESEARCH_COMPUTE §21`: physical-unit, denominator, as-of-end-of-minute and full-day independent calculation evidence is present for #19 and #22 across 5/5; per-pair status may be marked `PHYSICAL_QC_PASS`. Remaining scope: persist exact separate indicator passports and verify all required §21.6 metadata, output row provenance/aggregator contracts before NEW `RESEARCH-READY` attestation. Historical 15/30 remains historical, with no automatic retroactive promotion of any indicator. No OOS, profitability, Strategy or cross-venue claim.
+
+
+## 2026-10-19 — per-instrument #19/#22 measurement passports registered, not yet READY
+
+The owner-approved `RESEARCH_COMPUTE §21` now has a machine-readable derived passport at `research/microstructure/passports/range_vwap_2026-05-19_v1.json` (published and corrected exact half-open/inclusive window description by commit `88090916b4ee700e2b6606fd294168671fca7548`). It covers five exact Bybit instruments × two distinct indicators, preserving source SHA256, full-day counts, each coin's scalar independently checked #19 and #22 values, formula/denominator units, previous/current **non-overlapping** close windows [i-39..i-20] and [i-19..i], end-minute timing, missingness and aggregate operators.
+
+10/10 pairs now `PASSPORT_REGISTERED + PHYSICAL_QC_PASS`. The source produces the minute-level 1440 rows internally but existing stdout summary sampled only four per coin; complete output row lineage and separately attested full cube artifacts are still `NOT CHECKED HERE`. **No new per-pair RESEARCH-READY promotion** from merely registering passports. Original 15/30 historical READY remains only the old pilot cohort gate. Next: complete row-level provenance/QC for #19/#22 or continue #10 as independent unfinished candidate; do not pretend that a rank-shifted OFI is strict physical multi-level OFI. No other exchanges, Strategy, release or LIVE modifications.
+
+
+## 2026-10-19 — #19/#22 per-minute complete-row fingerprints
+
+CHECKED HERE: exact GitHub source `research/microstructure/experiments/range_vwap_profile_v1.py` commit `23aa752c4e32c874ea1d72fb76f9969e96b2b5a5` was executed read-only as actor `cripta`, one symbol per invocation, on each of the five May-19 archives. Source remains no-write; it now hashes every one of 1440 minute records with deterministic sorted-key JSON serialization (including escaped record separator). Existing per-coin fills, medians, day-end base-weighted VWAP and POC match previously independent scalar QC.
+
+| Symbol | Rows hashed | Full-minute-series SHA256 |
+|---|---:|---|
+| APTUSDT | 1440 | `9a5bdc9060f969f6bfc0008e429b7d4f80c0852ef63c72b88eb1bc154c41a06c` |
+| INJUSDT | 1440 | `32eec25aefb7a268d0fa108634fad05cb1622ca69e4c14cbf0c7695c2df31c43` |
+| DOTUSDT | 1440 | `93b0c4de532cbbd80c6da77db52cf011c35ffc6f3f0e95f685f760a896f4b193` |
+| LTCUSDT | 1440 | `54052a27f736f41f05e8dbbd39628512a6d8b72e8d0c9da6f76e49e3ac529252` |
+| ARBUSDT | 1440 | `3f5727195e3d5f8bcb3c81c1cc9f170846c90293ae5f80ddc8f63c18b4ba39ba` |
+
+Derived passport `research/microstructure/passports/range_vwap_2026-05-19_v1.json` binds the above hashes and exact reader source commit per instrument. NOTE: hash evidence is not a separately persisted full row dataset. Remaining: verify independent full-row causal temporal alignment and output artifact/provenance; `NEW_RESEARCH_READY` not promoted. Historical 15/30 pilot READY stays historical.
+
+
+## 2026-10-19 — #10 strict-price-identity book flow 5×10min smoke
+
+New bounded, read-only script `research/microstructure/experiments/price_key_book_flow_v1.py`, commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, run as `cripta` for 10 minutes of 2026-05-19 on all five symbols (five rc=0). It updates Bybit ob200 snapshots/deltas, tracks **exact price identity** between previous/new top-five sets and sums changes in quote USDT **only for levels appearing in both top-five sets**. This avoids rank-reindexing false quantity deltas but excludes entering/leaving top-five prices; therefore the metric is **visible fixed-price common-level quantity change**, not full strict multi-level OFI, and is neither Pulling Rate nor fills-vs-cancels classification.
+
+| Symbol | First-10-min delta transitions | Bid fixed-price change USDT | Ask fixed-price change USDT | Signed bid-minus-ask USDT |
+|---|---:|---:|---:|---:|
+| APTUSDT | 4825 | -74739.32 | -27956.60 | -46782.72 |
+| INJUSDT | 5561 | +599152.70 | +383812.64 | +215340.06 |
+| DOTUSDT | 4861 | -22937.21 | +8541.90 | -31479.11 |
+| LTCUSDT | 4377 | -115294.18 | -187887.38 | +72593.21 |
+| ARBUSDT | 4547 | +69191.71 | +97220.47 | -28028.76 |
+
+These are **descriptive signed book-liquidity changes**, not price direction predictions; numbers are symbol-specific, no cross-coin averaging. Five smoke checks passed. Full-day APT run launched as bounded isolated SentinelX job `job_b9bd7306e2a6`: at the time of launch job continued in background; outcome **NOT VERIFIED** until notification/result; do NOT mark complete from process existence. #10 stays OPEN; no strategy, deployment or LIVE changes.
+
+
+## 2026-10-19 — #10 APT full-day exact-price visible book-flow execution
+
+CHECKED HERE: SentinelX job `job_b9bd7306e2a6` completed `status=succeeded`, exit code 0, no truncated output, duration 77.43 s. Single-symbol full-day 2026-05-19 UTC APTUSDT `price_key_book_flow_v1.py` source commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`; snapshot resets=2, delta transitions=606835 (source book messages previously recorded 606837 including two snapshots), updated minute buckets 1440. Exact-price common-top5 visible quote-notional changes: bid -5170483.52 USDT, ask -468018.80 USDT, signed bid-minus-ask -4702464.73 USDT. This measures changes in visible book quantities, NOT net taker flow, cannot distinguish fills/cancellations, excludes top-five membership transitions and has not demonstrated strict comprehensive multi-level OFI. Symbol APT pilot-day full pass is a **RESEARCH RESULT**, indicator #10 remains OPEN pending physical definition/coverage/5-coin full day QC. Full-day run was automatically backgrounded under same job; result was retrieved and verified, not rerun. No host writes, trading rules or LIVE.
+
+
+## 2026-10-19 — #10 INJ full-day same-price-key book flow
+
+CHECKED HERE: completed SentinelX job `job_f719f7404126` (exit 0, 101.27s, no truncation) running `price_key_book_flow_v1.py` exact GitHub commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9` under `cripta`, Bybit INJUSDT UTC 2026-05-19. 2 book snapshot resets, 733301 delta events, all 1440 minutes with updates. Visible same-price common-top5 change in quote notional: BID +14680789.86 USDT, ASK +29414204.71 USDT, signed difference -14733414.85 USDT. Same APT full-day method previously passed 606835 deltas. **This is NOT strict complete multi-level OFI**, since disappearing/entering top-five price identities are excluded; no fill/cancel attribution or future price label; indicator #10 OPEN. Distinct per-coin history retained; no cross-coin averaging, strategy/LIVE changes.
+
+## 2026-10-19 — #10 DOT full-day fixed-price flow
+
+CHECKED HERE: SentinelX job `job_bee76398049c` succeeded rc=0, no truncated output, duration 87.94s, same immutable `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9` and 2026-05-19 UTC Bybit DOTUSDT. Two snapshots, 631776 delta transitions, 1440 minutes with updates; common exact-price top-five flow Bid -3605825.06 USDT / Ask -5402589.38 USDT, signed +1796764.32 USDT. NOT full multi-level OFI; rank membership entry/exit excluded and no cancellation/fill attribution. #10 OPEN. Research only, no cross-coin averages, no LIVE.
+
+## 2026-10-19 — #10 LTC full-day fixed-price flow
+
+CHECKED HERE: SentinelX single bounded read-only exec succeeded rc=0, duration 41.88s, exact `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, Bybit LTCUSDT 2026-05-19 UTC. Two snapshots, 542092 delta transitions, 1440 minutes with updates; same-price common-top5 Bid -9288709.74 USDT / Ask -12962898.43 USDT, signed +3674188.69 USDT. Not full strict OFI (top-five membership changes excluded). #10 remains OPEN.
+
+
+## 2026-10-19 — #10 price-identity common-top5 book flow: 5/5 full-day executions
+
+CHECKED HERE: immutable research-only `research/microstructure/experiments/price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, separate `cripta` actor runs for Bybit 2026-05-19, 1440 minutes each, all exit zero, each with two snapshots. Five complete per-coin observed outcomes, independently preserved with no cross-symbol averaging:
+
+| Symbol | Delta transitions | Bid change USD | Ask change USD | Bid minus Ask USD |
+|---|---:|---:|---:|---:|
+| APTUSDT | 606835 | -5170483.52 | -468018.80 | -4702464.73 |
+| INJUSDT | 733301 | +14680789.86 | +29414204.71 | -14733414.85 |
+| DOTUSDT | 631776 | -3605825.06 | -5402589.38 | +1796764.32 |
+| LTCUSDT | 542092 | -9288709.74 | -12962898.43 | +3674188.69 |
+| ARBUSDT | 616464 | +4663839.36 | +6081975.47 | -1418136.11 |
+
+Last ARBUSDT job `job_7b045cb3beef` succeeded exit=0 after 86.44s, output not truncated. Previous APT `job_b9bd7306e2a6`, INJ `job_f719f7404126`, DOT `job_bee76398049c` succeeded; LTC completed synchronously exit=0 in 41.88s. Book event totals reconcile to prior message inventory minus two in-day snapshots per symbol; minute coverage 1440/1440.
+
+**Physical meaning:** sum of signed price×quantity changes solely at exact price keys present in both previous and current top five on their own side. Entering/exiting the top five is excluded, so this is not complete strict multi-level OFI and must not be so named in the Analytical Cube. It cannot separate quote cancellation from executed depletion. Large absolute sums reflect repeated book updates, not traded money, price movement, PnL, or strategy edge. #10 remains OPEN pending comprehensive strict OFI method and verification. This stage **does close full-day five-coin coverage for the narrower fixed-price book-change metric**.
+
+No second venue, Strategy, DB, runtime deployment, or LIVE mutation.
