@@ -115,7 +115,7 @@ def _seed(
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
     )
-    # R10: a synthetic position is PROVEN only with a concrete account/binding.
+    # R10 exact identity chain for a synthetic confirmed position.
     connection.execute(
         """INSERT INTO identity.venues(venue_id,venue_kind,display_name,status)
            VALUES('venue-bybit','CEX','Bybit','ACTIVE')
@@ -223,8 +223,6 @@ def _seed(
             symbol,
             NOW,
             exit_fp,
-            f"{prefix}-binding",
-            f"{prefix}-ta",
         ),
     )
     connection.execute(
@@ -236,10 +234,10 @@ def _seed(
                strategy_config_fingerprint,strategy_activation_id,
                strategy_attempt_id,entry_decision_id,entry_execution_request_id,
                entry_plan_fingerprint,exit_plan_fingerprint,
-               identity_status,strategy_exec) VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,%s,'Buy',10,2,%s,
+               identity_status,strategy_execution_binding_id,execution_leg,trading_account_id
+           ) VALUES(%s,%s,'universal-entry',%s,%s,%s,%s,%s,'Buy',10,2,%s,
                     '[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'OPEN',%s,0,
-                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,'PROVEN',%s,'PRIMARY',%s),0,
-                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s)""",
+                    'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,%s,'PROVEN',%s,'PRIMARY',%s)""",
         (
             position_id,
             f"{prefix}-trade",
@@ -257,6 +255,8 @@ def _seed(
             request_id,
             entry_fp,
             exit_fp,
+            f"{prefix}-binding",
+            f"{prefix}-ta",
         ),
     )
     connection.commit()
