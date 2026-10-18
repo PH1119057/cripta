@@ -1,0 +1,119 @@
+{
+  "schema": "cripta-research-feature-passport-v1",
+  "canonical_contract": "docs/RESEARCH_COMPUTE_RULES_RU.md §21",
+  "date_utc": "2026-05-19",
+  "source_venue": "Bybit",
+  "primary_reader": {
+    "path": "research/microstructure/experiments/range_vwap_profile_v1.py",
+    "commit": "f4d26b2ac7282d412493c37679b0b4f42b5a472a"
+  },
+  "independent_reader": {
+    "path": "research/microstructure/experiments/range_vwap_independent_qc_v1.py",
+    "commit": "96543f1f119618cacb657be4230524fcb3c8b2d2"
+  },
+  "feature_definitions": [
+    {
+      "id": 19,
+      "name": "Range Compression",
+      "version": "range_vwap_profile_v1",
+      "unit": "dimensionless ratio",
+      "numerator": "max(close prices of current 20 completed consecutive UTC minutes)-min(same)",
+      "denominator": "max(close prices of preceding 20 completed consecutive UTC minutes)-min(same)",
+      "window": "[minute i-39,i-19] compared to [i-19,i] zero-based, each exactly 20 closes",
+      "missing": "null when any of 40 1m closes missing or previous range zero",
+      "aggregation": "NON_AGGREGATABLE",
+      "time": "available AFTER current minute end UTC",
+      "normalization": "self prior equal-duration window, per exact instrument"
+    },
+    {
+      "id": 22,
+      "name": "VWAP / Volume Profile",
+      "version": "range_vwap_profile_v1",
+      "unit": "quote USDT per base unit for VWAP; base units per exact price for volume histogram; quote/base for POC price",
+      "numerator": "running sum of price * size",
+      "denominator": "running sum of base size",
+      "window": "UTC day start to each completed UTC minute",
+      "missing": "null until at least one valid fill; no synthetic fills",
+      "aggregation": "RECOMPUTE_FROM_COMPONENTS",
+      "time": "available AFTER current minute end UTC",
+      "normalization": "no external normalization; base-quantity weighting; hist exact price; POC tie lowest price"
+    }
+  ],
+  "instruments": [
+    {
+      "symbol": "APTUSDT",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-19.csv.gz",
+      "source_sha256": "da6e6c5b9a2593e0024a95d7207f98c6e7ba836d741dd928dc2e9fae4639c66f",
+      "fills": 116683,
+      "active_minutes": 1439,
+      "minute_rows": 1440,
+      "range_valid": 1361,
+      "range_median": "0.9833333333333333",
+      "vwap": "0.94019884785873968",
+      "poc": "0.9385",
+      "source_and_scalar_qc": "PASS",
+      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
+      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+    },
+    {
+      "symbol": "INJUSDT",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-19.csv.gz",
+      "source_sha256": "a673d0a44a94c4b8dd284e05e89105f48ea52f03be0c6ef7f42d2a198b7c7eab",
+      "fills": 368454,
+      "active_minutes": 1440,
+      "minute_rows": 1440,
+      "range_valid": 1401,
+      "range_median": "0.9821428571428571",
+      "vwap": "5.062793211591095",
+      "poc": "4.9100",
+      "source_and_scalar_qc": "PASS",
+      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
+      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-19.csv.gz",
+      "source_sha256": "0289003c4ba98d3e6dc6a5a009ef8aefcd341a8f142cb3b4701cf768d0491839",
+      "fills": 143184,
+      "active_minutes": 1438,
+      "minute_rows": 1440,
+      "range_valid": 1358,
+      "range_median": "0.9534632034632035",
+      "vwap": "1.2362712840392992",
+      "poc": "1.2274",
+      "source_and_scalar_qc": "PASS",
+      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
+      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-19.csv.gz",
+      "source_sha256": "d1533d0559bb4efd9ebde77c85200c2aeb35a95ddd8f42e07b85614e5dc11e4b",
+      "fills": 69495,
+      "active_minutes": 1428,
+      "minute_rows": 1440,
+      "range_valid": 1058,
+      "range_median": "1",
+      "vwap": "54.06578642076478",
+      "poc": "54.12",
+      "source_and_scalar_qc": "PASS",
+      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
+      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-19.csv.gz",
+      "source_sha256": "1f055f174242858ac3d1ab6933385375b44fffac65e683c7c03295bf491c8121",
+      "fills": 154123,
+      "active_minutes": 1439,
+      "minute_rows": 1440,
+      "range_valid": 1361,
+      "range_median": "0.967741935483871",
+      "vwap": "0.11585221791119729",
+      "poc": "0.11661",
+      "source_and_scalar_qc": "PASS",
+      "temporal_row_provenance": "PENDING_FULL_ROW_ARTIFACT",
+      "readiness": "QC_PASSED_PASSPORT_REGISTERED_ROW_PROVENANCE_PENDING"
+    }
+  ]
+}
