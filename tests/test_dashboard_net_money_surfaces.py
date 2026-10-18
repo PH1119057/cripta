@@ -35,6 +35,8 @@ def test_dashboard_read_model_computes_net_from_fee_facts() -> None:
     assert "PAPER_TAKER_FEE_RATE = 0.00055" in APP
     assert "REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055" in APP
     assert "def _paper_net_pnl_usdt(" in APP
-    assert 'JOIN runtime.executions e ON e.exec_id=xid.exec_id' in APP
+    assert "JOIN runtime.executions e" in APP
+    assert "ON e.exec_id=xid.exec_id" in APP
+    assert "e.trading_account_id=%s" in APP
     assert '"net_pnl_to_close": net_to_close' in APP
     assert '"pnl_basis": "AFTER_COMMISSIONS"' in APP

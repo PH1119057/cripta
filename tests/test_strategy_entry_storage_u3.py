@@ -26,6 +26,7 @@ from bybit_workbench.universal_entry import (
     TradeDirection,
     TradingCapacitySnapshot,
     UniversalEntryEngine,
+    StrategyExecutionBindingRef,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.dashboard import archive_v2
@@ -225,6 +226,7 @@ def build_evaluation(*, real: bool = False):
                 "account_ref": "BYBIT:UNIFIED",
                 "entry_admission_port": AcceptingAdmissionPort(),
                 "real_admission_required_for": frozenset({"act-storage"}),
+                "execution_bindings": {"act-storage": StrategyExecutionBindingRef("binding-storage", "act-storage", "PRIMARY", "ta-storage")},
                 "exchange_position_keys": {
                     "XRPUSDT": "BYBIT:UNIFIED:LINEAR:USDT:XRPUSDT:0"
                 },
@@ -405,6 +407,42 @@ def test_store_persists_real_decision_request_and_admission_lineage() -> None:
     assert "cap-storage" in request_insert
     assert "slot-storage" in request_insert
     assert "pmode-storage" in request_insert
+
+
+
+def test_same_causal_fact_produces_identical_paper_real_entry_intent() -> None:
+    """Compare actual engine evaluations, not a source-code string or SHA alone."""
+    paper_card, paper_activation, paper_plan, paper_eval = build_evaluation(real=False)
+    real_card, real_activation, real_plan, real_eval = build_evaluation(real=True)
+
+    assert paper_card.strategy_config_fingerprint == real_card.strategy_config_fingerprint
+    assert paper_activation.strategy_id == real_activation.strategy_id
+    assert paper_plan.entry_plan_fingerprint == real_plan.entry_plan_fingerprint
+
+    paper = paper_eval.execution_intent
+    real = real_eval.execution_intent
+    for attribute in (
+        "strategy_id",
+        "strategy_version",
+        "strategy_config_fingerprint",
+        "entry_plan_fingerprint",
+        "exit_plan_fingerprint",
+        "symbol",
+        "direction",
+        "observed_at",
+        "payload",
+    ):
+        assert getattr(paper, attribute) == getattr(real, attribute), attribute
+    assert paper_eval.signal.direction == real_eval.signal.direction
+    assert paper_eval.signal.strategy_id == real_eval.signal.strategy_id
+    assert paper_eval.signal.strategy_config_fingerprint == real_eval.signal.strategy_config_fingerprint
+    assert paper_eval.execution_request is None
+    assert paper_eval.decision is None
+    assert real_eval.execution_request is not None
+    assert real_eval.decision is not None
+    assert real_eval.execution_request.strategy_execution_binding_id == "binding-storage"
+    assert real_eval.execution_request.trading_account_id == "ta-storage"
+
 
 
 def test_store_keeps_context_requirement_key_separate_from_snapshot_id() -> None:

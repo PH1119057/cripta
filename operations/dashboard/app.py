@@ -91,12 +91,12 @@ PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
 OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
 R1_PARITY_ATTESTED_MODULE_SHA256 = {
-    "operations/monitoring/universal_entry_shadow.py": "d8a1c0d92e46a4526386c212eccf751c6aab9a6d266e203ec33549c6fb3b2a2d",
-    "src/bybit_workbench/universal_entry/engine.py": "9d09e1d8d8432631ae55fea1dd5524a1689805ea1d1adc19a6f511ae5ab2347d",
+    "operations/monitoring/universal_entry_shadow.py": "8c4c0e92abcc00b769b59ad8388108fd9e8be5549fac31533060ce17912d76a0",
+    "src/bybit_workbench/universal_entry/engine.py": "ab0507ce45644e01725e5aefc566f3a148190cd993247a5db0c6f0ab7424453c",
     "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
     "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
     "src/bybit_workbench/universal_exit/engine.py": "d93f18b9ba63ba46e80d1cdd643d85f7cbe688dfc85e213495185b84fbad1d18",
-    "src/bybit_workbench/universal_exit/execution_bridge.py": "259d7c6972666e05b5d9c4ae3ee602e5f16440e28183ed87740365ca4299c2c2",
+    "src/bybit_workbench/universal_exit/execution_bridge.py": "409f7baa5a260d32bcb5b4b07cbfde71af7b42342728c64712ca7156bbcc09eb",
 }
 
 
@@ -3764,8 +3764,11 @@ def _r1_paper_real_parity_attestation(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
             )
         hashes[relative] = source_hash
+    # Hash equality is a release-integrity check, not independent PAPER/REAL proof.
+    # Keep real arm blocked until an evidence-backed verified parity baseline exists.
+    raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY independent proof is pending")
     return {
-        "parity_baseline": "R1_TERMINAL_RELEASE_PARITY_VERIFIED_2026-10-08",
+        "parity_baseline": "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED",
         "release_commit": release_commit,
         "module_sha256": hashes,
     }
