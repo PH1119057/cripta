@@ -308,3 +308,19 @@ Input source bytes hashed read-only (SHA256):
 - ARB 5837918 bytes: `1f055f174242858ac3d1ab6933385375b44fffac65e683c7c03295bf491c8121`
 
 Caveats: Readiness gate is defined narrowly on verified **one full UTC day per coin**. Multiday windows and OOS still PENDING, planned after 30/30 indicator inventory closes. Future joins may only use a factor after `available_after_utc`; no current-minute peek. No joint analytics performed in this step. 
+
+ 
+## 2026-10-18 — indicator readiness second batch: 8/30 (two newly passed)
+
+**CHECKED HERE:** Published, read back and executed `research/microstructure/experiments/fill_microstructure_minutes_v1.py`, GitHub fix commit `ab3e54eee1e514b205d7723b6a94ba80611838e5`. Bybit 2026-05-19 public trades, full 1440 minute rows for each of five trading coins, stdout JSON only, no server disk/DB changes. Prior-60-minute P99 fill-notional threshold (never current-day global P99), per-completed-minute fill-notional quantiles. Empty minute is measured zero for large trade share if threshold exists; missing history remains null. Source count reconciles to earlier verified archive counts.
+
+**Additional research-readiness PASS: #4 Large Trade Share, #28 Trade-Size Distribution** (current-minute completed values and rolling causal prior threshold). Ready does NOT mean predictive/OOS validation. Total now **8/30** ready under this pilot-day data-feature gate: #1,#2,#3,#4,#5,#6,#7,#28.
+
+Per coin `fills; minutes with valid large-fill share; minutes with fill quantile P99`:
+- APT 116683; 1439; 1439.
+- INJ 368454; 1439; 1440.
+- DOT 143184; 1439; 1438.
+- LTC 69495; 1438; 1428.
+- ARB 154123; 1439; 1439.
+
+**#8 Trade Streaks and #27 Inter-Trade Duration still OPEN/PARTIAL.** Earlier grouping by native floating timestamp and new grouping by rounded integer milliseconds are non-equivalent (for APT 29730 vs 28691 groups; INJ 97097 vs 88957; DOT 34659 vs 32851; LTC 14917 vs 14141; ARB 38743 vs 36396). Need verify source timestamp precision and grouping semantics; never infer independent parent orders from fills. Note minor sampling caveat: within-minute P99 is as-of-minute-end descriptive, and requires separate lagging if used at minute start. No joint models until 30-indicator owner gate.
