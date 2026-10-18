@@ -119,3 +119,11 @@ Liquidation file HOURS за день: APT 00,09,11,14,16,17,18; INJ 00,01,02,03,
 3. No server filesystem mutation before exact actor/path/owner/group/mode/ACL/systemd and canonical `CURRENT_PROJECT_MAP §1.4`, `DEVELOPMENT_RELEASE §5.1, §19.1–19.4`; no DB writes, no silent LIVE.
 4. Finish unavailable partial metrics and coverage OI/liquidations/Spot/venues with explicit `NO_DATA` (not zero). Validate causality, event deduplication, self-baselines, market control, LONG/SHORT separately, OOS and returns **после комиссий**.
 5. This research journal does not authorize new thresholds, signal parameters, Strategy versions, production deployment or MAYAK behavior changes; require explicit owner decision and canonical pathway.
+
+
+## GitHub reproducible source checkpoint — 2026-10-18
+
+- `research/microstructure/experiments/public_trades_day_v1.py` — первый версионированный **read-only** stdlib Python калькулятор исторических Public Trades. Параметры `--symbol`, `--date`, `--minutes`, `--root`; единый код для пяти монет, первых 5/60 минут и полного дня; вывод JSON в stdout.
+- Рассчитывает count/trade-minute coverage, USD notional, signed Delta/CVD, RVOL относительно предшествующих 60 минут, Delta acceleration, 1m autocorrelation lag1, 20m close range, day/window VWAP и volume POC. Последние два — **ex post**, не causal intraday values.
+- Это **новая проверяемая реализация**, а не байт-точная копия всех однократных команд предыдущего чата. Сравнение чисел с журналом, unit tests, file hashes, performance/long-range validation **NOT CHECKED HERE**. Качество и идентичность результатов ещё должны быть проверены до масштабного повторного запуска.
+- Пока **НЕ сохранены как утверждённые калькуляторы**: Multi-Level OFI, точный Sweep/Reclaim, absorption/replenishment и остальные неполные пункты реестра. Экспериментальные исходники не означают появление общего агрегированного слоя. GitHub commit calculator: `ce2b01a4db619448a00137467a0f650a46893844`.
