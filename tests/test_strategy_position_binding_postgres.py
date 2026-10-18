@@ -26,7 +26,6 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
-TEST_TRADING_ACCOUNT_ID = "ta-test"
 
 
 def _seed_request(
@@ -37,6 +36,7 @@ def _seed_request(
     dispatched: bool,
     permission: bool = False,
     symbol: str = "UNIUSDT",
+    slot_key_override: str | None = None,
 ) -> dict[str, str]:
     strategy_id = f"{prefix}-strategy"
     version = "1"
@@ -51,7 +51,7 @@ def _seed_request(
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
     trading_account_id = f"{prefix}-ta"
-    exchange_key = exchange_position_key(trading_account_id, symbol, 0)
+    exchange_key = slot_key_override or exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"{prefix}-command"
 
@@ -434,7 +434,7 @@ def test_confirmed_fill_binds_exact_strategy_position_and_consumes_reservation()
             ids["entry_fp"],
             ids["exit_fp"],
             "BYBIT:UNIFIED",
-            exchange_position_key(TEST_TRADING_ACCOUNT_ID, "UNIUSDT", 0),
+            ids["exchange_key"],
         )
         reservation = connection.execute(
             """SELECT state,strategy_position_id,exchange_commitment_ref
@@ -510,6 +510,8 @@ def test_second_active_slot_claim_same_exchange_position_is_rejected_before_fill
                 reservation_state="DISPATCHED",
                 dispatched=True,
                 symbol="BTCUSDT",
+                # Deliberate invalid duplicate key; the DB must reject it.
+                slot_key_override=ids_a["exchange_key"],
             )
         row = connection.execute(
             """SELECT exchange_position_slot_claim_id,claim_state
@@ -552,11 +554,12 @@ def test_consumer_detects_post_admission_slot_invariant_and_keeps_resources_for_
                 f"{prefix}-old-signal",
                 f"{prefix}-old-command",
                 NOW,
-                exchange_position_key(TEST_TRADING_ACCOUNT_ID, "ETHUSDT", 0),
+                ids["exchange_key"],
             ),
         )
         connection.commit()
-        result = run_once(connection, now=NOW)
+        with patch.object(entry_consumer, 'TRADING_ACCOUNT_ID', ids['trading_account_id']):
+            result = run_once(connection, now=NOW)
         assert result == "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
         dispatch = connection.execute(
             """SELECT state,command_id,reason
@@ -584,7 +587,8 @@ def test_consumer_detects_post_admission_slot_invariant_and_keeps_resources_for_
         assert claim is not None
         assert claim["claim_state"] == "RECONCILIATION_REQUIRED"
         command_count = connection.execute(
-            "SELECT count(*) FROM runtime.trade_commands WHERE symbol='ETHUSDT'"
+            "SELECT count(*) FROM runtime.trade_commands WHERE symbol='ETHUSDT' AND trading_account_id=%s",
+            (ids["trading_account_id"],)
         ).fetchone()
         assert command_count is not None and command_count["count"] == 0
 
