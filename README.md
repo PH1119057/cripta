@@ -88,6 +88,8 @@ from research. Exact contract: `DEVELOPMENT_RELEASE §42`,
 `RESEARCH_COMPUTE §17`; current migration state: `CURRENT_PROJECT_MAP §1.5`.
 
 
+Для OpenAI/SentinelX/Unix refusals обязательно: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.6`; исследовательский checkpoint: `docs/RESEARCH_COMPUTE_RULES_RU.md`; owner communication: `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`. Не принимать upstream tool-security отказ за Unix EACCES и не повторять заблокированные вызовы циклом.
+
 Для серверной диагностики сначала применять `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5`: отдельно SentinelX allowlist, Unix/DB effective actor и проектное разрешение на операцию. Проверенные read-only маршруты/actor snapshot — `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. Отказ `command_not_allowed` не является Unix `EACCES`.
 
 ## Root bootstrap invariant
