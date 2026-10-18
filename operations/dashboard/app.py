@@ -3764,6 +3764,9 @@ def _r1_paper_real_parity_attestation(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
             )
         hashes[relative] = source_hash
+    # Hash equality is a release-integrity check, not independent PAPER/REAL proof.
+    # Keep real arm blocked until an evidence-backed verified parity baseline exists.
+    raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY independent proof is pending")
     return {
         "parity_baseline": "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED",
         "release_commit": release_commit,
