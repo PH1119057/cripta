@@ -324,3 +324,10 @@ Per coin `fills; minutes with valid large-fill share; minutes with fill quantile
 - ARB 154123; 1439; 1439.
 
 **#8 Trade Streaks and #27 Inter-Trade Duration still OPEN/PARTIAL.** Earlier grouping by native floating timestamp and new grouping by rounded integer milliseconds are non-equivalent (for APT 29730 vs 28691 groups; INJ 97097 vs 88957; DOT 34659 vs 32851; LTC 14917 vs 14141; ARB 38743 vs 36396). Need verify source timestamp precision and grouping semantics; never infer independent parent orders from fills. Note minor sampling caveat: within-minute P99 is as-of-minute-end descriptive, and requires separate lagging if used at minute start. No joint models until 30-indicator owner gate.
+
+
+## 2026-10-18 — precision forensic for #8 / #27; execution verification pending
+
+CHECKED HERE via exact Bybit public-trades 2026-05-19 raw CSV.GZ for the five symbols: timestamps are decimal Unix seconds with 4 fractional digits (0.1ms), rather than pure 1ms. Examples include `1779148800.3047` and `1779148800.3052`. Native distinct timestamp count vs incorrectly rounded-ms distinct timestamps: APT 29718 / 28639; INJ 96966 / 88412; DOT 34649 / 32818; LTC 14902 / 14089; ARB 38728 / 36343. Earlier rounded-ms group data were inaccurate for event grouping. A separate `timestamp + side` group count may exceed distinct timestamp count if both sides occur at the same instant; neither represents verified parent orders.
+
+FIX COMMITTED: `research/microstructure/experiments/fill_microstructure_minutes_v1.py` commit `666277d1b799f59476ec4ef2a04b4237caecd05b`, parsing timestamp with `Decimal(seconds)*10000`, 0.1ms integer ticks, minute bucketing 600000 ticks, positive gap converted to milliseconds /10, warning updated. This corrects an identified precision defect; it is **NOT yet independently executed against all five sources in this turn**, since SentinelX execution attempts were tool-security-blocked after initial read-only forensic. Therefore #8 Trade Streaks and #27 Inter-Trade Duration remain **OPEN**, 8/30 ready remains unchanged. No joint analytics or trading behavior changed.
