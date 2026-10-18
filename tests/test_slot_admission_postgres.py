@@ -457,6 +457,7 @@ def test_runtime_role_has_minimal_new_schema_privileges() -> None:
                     ('runtime','exchange_position_slot_claims'),
                     ('runtime','lifecycle_fault_deliveries'),
                     ('strategy_entry','execution_request_state_events'),
+                    ('strategy_entry','strategy_execution_bindings'),
                     ('control','live_arm_evidence'),
                     ('control','live_arm_sessions')
                 )"""
