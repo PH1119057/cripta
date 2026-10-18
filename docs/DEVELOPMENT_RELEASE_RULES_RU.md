@@ -1508,3 +1508,13 @@ backup/cold evidence appropriate to that data class.
 
 All normal actor/path/DB-role, backup, release, service and LIVE-arm rules in
 this document still apply. Migration/deploy never re-arms LIVE automatically.
+
+## 49. One-time emergency PostgreSQL System SSD recovery — OWNER DECISION 2026-10-18
+
+ARCH §50 permits a one-time physical cold-copy and clean operational PostgreSQL rebuild before logical R10b/R11/R12 completion. Not permission for row deletion, strategy/source changes, identity/key reinterpretation or LIVE.
+
+Mandatory BEFORE mutations: fresh GitHub main; installed/loaded release and operational deltas; exact OS mount/volume/path inventory; all systemd service/timer/job writers and dependencies; independently verified Bybit open positions and orders with fail-closed Exit owner shutdown; mainnet gate=0 and zero active LIVE-arm; tested logical backup AND separately tested full physical cluster rollback including WAL, roles, configs, tablespaces, owner/mode/ACL; exact writer/path/sandbox permissions under §5.1 and §19.1–19.4; sufficient Data capacity with margin; explicit minimal operational DB table/role/consumer/recovery manifest and rollback trigger. Missing gate is HARD STOP.
+
+Sequence: (1) disarm writers and timers in dependency order; prove no writes/clients; stop production PostgreSQL cleanly. (2) remove only verified stopped validation PGDATA under /data/cripta/pg_restore_validation_20261018, retain checked logical archive. (3) copy full stopped production PGDATA from /var/lib/postgresql/16/main plus external configuration under /etc/postgresql/16/main and all required WAL/tablespaces to Data; preserve metadata, verify bytes/hashes and isolated boot/rollback. (4) only after complete recovery proof, retire original System SSD cluster reversibly and make room. (5) build new minimal operational PG on System SSD; transfer only fully inventoried indispensable state, irreplaceable history/fees/ownership/audit and correct roles, grants, constraints, triggers; test consumer equivalence and restart/recovery. (6) restart passive/read-only CRIPTA services in dependency order, verify liveness AND behavior, then remaining permitted services; observe storage for seven days. LIVE remains OFF pending separate explicit owner arm.
+
+Never move running PGDATA, drop unique history, change Strategy/Entry/Exit/analytics code, use uncontrolled root/recursive permission escalation or silently deploy a different release. Archive and new operational DB are distinct. Source sync is not deploy. R10b/R11/R12 status remains NOT COMPLETE until independent canonical gates PASS.

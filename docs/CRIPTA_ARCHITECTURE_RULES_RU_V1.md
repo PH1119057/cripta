@@ -1062,3 +1062,9 @@ retention lifecycles.
 ARCH §48 storage/recoverability rules remain controlling. This section changes
 identity/ownership only and does not authorize DB migration, deletion, deploy,
 LIVE arm or Exchange mutation.
+
+## 50. One-time PostgreSQL physical offload — OWNER DECISION 2026-10-18
+
+Approved bounded infrastructure recovery: after safely quiescing all CRIPTA writers and PostgreSQL, preserve the complete current production cluster as a verified cold rollback on the Data SSD, then establish a separately verified minimal operational PostgreSQL on the System SSD. This may precede unfinished R10b/R11/R12 ONLY as physical storage recovery; it does not constitute R11 historical purge, logical retention, historical account reassignment or R12 retirement. ARCH §48–49 remain binding.
+
+Never discard irreplaceable trading, execution, fee, ownership, operator, safety, strategy or event-linked audit evidence. No trading/analytics/statistics source code, Strategy policy or LIVE state changes are approved by this decision. Independence of exchange position/order checks before stopping Exit owner, complete physical rollback, full writer/service/timer inventory, exact actor/path preflight, enough disk headroom, complete minimal-DB consumer contract, permissions and tested recovery are mandatory. Unknowns are HARD STOP. Historical original PGDATA may leave System SSD only AFTER an independently tested complete physical copy is secured; isolated validation copy may be deleted after positive identification and backup verification. Restart only verified services in safe sequence; no LIVE arm. R10–R13 remain open independently.

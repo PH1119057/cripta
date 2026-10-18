@@ -4107,3 +4107,9 @@ retirement.
 
 Documentation topology is unchanged: active document set, paths, mandatory
 pre-read/routing and Project Source count remain unchanged.
+
+## 2026-10-18 PostgreSQL physical offload — OWNER DECISION, NOT IMPLEMENTED
+
+ARCH §50 and DEVELOPMENT_RELEASE §49 govern the one-time exception. Last observed: production PostgreSQL 16 runs from /var/lib/postgresql/16/main on System SSD; isolated restored test cluster at /data/cripta/pg_restore_validation_20261018 is STOPPED, not a physical rollback. Verified logical dump is under /data/cripta/script_archive/postgresql_preclean_20261018. Data filesystem mount is /data/cripta; /data itself is System SSD. Last free space approx. 90–100 MB System and 13 GB Data; refresh before action. CRIPTA production services remain running; mainnet gate=0 and active LIVE arm=0; independent Bybit open position/order check NOT CHECKED HERE. Full physical rollback NOT VERIFIED. All owner/path, available space and consumer gates require current evidence.
+
+MIGRATION PREPARED=NO; MIGRATION IMPLEMENTED=NO; CUTOVER=NO. R10b/R11/R12 remain open. LIVE UNCHANGED.

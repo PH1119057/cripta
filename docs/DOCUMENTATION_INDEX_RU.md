@@ -1183,3 +1183,7 @@ Documentation maintenance gate:
 - this documentation revision contains no Python/SQL/runtime mutation;
 - DB migration, data deletion, deploy, LIVE arm and Exchange mutation remain
   separate future implementation steps.
+
+## 2026-10-18 PostgreSQL storage emergency amendment
+
+ARCH §50 owns one-time bounded physical PostgreSQL storage exception; DEVELOPMENT_RELEASE §49 owns actor/preflight, quiesce, rollback, restore and runtime gates; CURRENT_PROJECT_MAP records the time-bounded observed host state. This does not amend ARCH §48–49 retention/identity or close R10b/R11/R12. Current 11-document set, routing, root README/AGENTS and Project Instructions topology unchanged. LIVE is not authorized.
