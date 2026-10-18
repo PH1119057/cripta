@@ -858,3 +858,16 @@ to CEX and DEX alike, Venue is the broader canonical term.
 Existing **Exchange position slot** is now understood as exact
 TradingAccount-scoped physical inventory:
 TradingAccount + product/category + InstrumentIdentity + position-mode identity.
+
+
+## 34. Research measurement contract / analytical cube — OWNER DECISION 2026-10-18
+
+**Research Measurement Contract** — канонический для исследования способ определения физической величины, формулы, единицы измерения, числителя/знаменателя, normalizer, окна и времени доступности. Единственный procedural owner — `RESEARCH_COMPUTE §21`; словарь не дублирует формулы.
+
+**Per-Instrument Feature** — наблюдаемая или производная feature одного exact `InstrumentIdentity`, `MarketSource`, периода, окна и версии алгоритма. Общая формула не означает общую нормализацию, распределение, порог или торговую интерпретацию для разных монет.
+
+**Analytical Cube / аналитический куб** — многомерное представление с обязательными осями Instrument × Time × Indicator и сохраняемыми source/venue, quality, direction, formula/window version, provenance и causal timing; допускает сравнение, но не автоматическое усреднение значений по монетам.
+
+**Feature Passport** — версионированная регистрация measurement contract и QC/evidence для точной пары инструмент × индикатор × версия × data scope. Статус `RESEARCH-READY` присваивается отдельно по каждой паре только после gate из `RESEARCH_COMPUTE §21.6`. Не равен торговой готовности, Strategy policy или LIVE.
+
+**Coin capacity / ёмкость монеты** — не один универсальный знаменатель, а семейство строго типизированных мер конкретной монеты: капитализация, торговый оборот, доступная глубина и другие независимо определённые физические величины. Всегда называть exact kind/source/units/time; это не общая ликвидность крипторынка.
