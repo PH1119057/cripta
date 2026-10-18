@@ -19,7 +19,7 @@
       "unit": "dimensionless ratio",
       "numerator": "max(close prices of current 20 completed consecutive UTC minutes)-min(same)",
       "denominator": "max(close prices of preceding 20 completed consecutive UTC minutes)-min(same)",
-      "window": "[minute i-39,i-19] compared to [i-19,i] zero-based, each exactly 20 closes",
+      "window": "previous 20 closes indices [i-39..i-20] inclusive; current 20 closes [i-19..i] inclusive; no overlap",
       "missing": "null when any of 40 1m closes missing or previous range zero",
       "aggregation": "NON_AGGREGATABLE",
       "time": "available AFTER current minute end UTC",
