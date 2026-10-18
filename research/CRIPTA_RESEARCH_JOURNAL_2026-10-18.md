@@ -188,3 +188,29 @@ Read-only evidence CHECKED HERE:
 - Existing research `/data/cripta/research/runs/l53_marketstate_liq_spot_15coins_2w_20260602_0616` found. Name and files are evidence of earlier separate-period work, NOT historical May 19 raw Spot/OI coverage.
 - Liquidation parquet.zst files are present for hours in `research/microstructure/coverage_2026-05-19.md`. Python actor `cripta` currently lacks `pyarrow`, `zstandard`, `pandas`, `duckdb` modules; content/schema decoding NOT CHECKED HERE; do not install dependencies without approved compute preflight.
 - Further order: Bybit historical OI, Spot, liquidation semantics/coverage; complete 30-indicator registry using actual available one-exchange data; multi-period validation and results after fees; **cross-venue last**. Missing file != zero observation.
+
+
+## 2026-10-18 — OWNER DIRECTIVE: stop repeated file hunts, build joint 30-factor research
+
+**OWNER DECISION / RESEARCH SEQUENCING:** preserve every discovered historical data path, existence test, available date range, reader/parser and missingness in THIS journal and `research/microstructure/coverage_2026-05-19.md`. Investigate Bybit one exchange first; other exchanges absolutely last. If required May 19 evidence cannot be located, perform bounded one-day Bybit availability/backfill feasibility check rather than repeatedly searching all server trees. No download or server write until exact actor/path/source/provenance and research contracts preflight. Historical API retention limits may prevent retroactive availability: **do not assume** Bybit can supply any requested past day.
+
+### Consolidated current checklist (source status, not predictive validation)
+
+13 `CALC`: #1 RVOL; #2 Trade Rate; #3 Trade Rate Acceleration; #4 Large Trade Share (as-of 60m P99 first day); #5 Buy/Sell Delta; #6 CVD; #7 Delta Acceleration; #8 Trade Streaks (grouped fill heuristic); #9 Queue Imbalance; #11 Book Depth; #18 Short-Term Autocorrelation; #20 Local Extremes; #29 Spread.
+
+14 `PARTIAL`: #10 Multi-Level OFI (rank-aware first hour, re-indexing); #12 Pulling Rate (visible removal != cancel); #13 Depth Recovery; #14 Price Impact; #15 Effort/Result; #16 Absorption; #17 Exhaustion (exploratory test, inconsistent signs); #19 Range Compression; #21 Sweep/Reclaim; #22 VWAP/Profile (ex-post only); #24 Liquidation Spikes (101 processed records May 19 across five symbols, provider capture completeness unknown); #27 Inter-Trade Duration (fill timestamp duplication); #28 Trade-size Distribution (ex-post P99 + basic sample); #30 Replenishment/Resiliency.
+
+2 `UNVERIFIED FOR MAY 19`: #23 OI Change; #25 Spot / Perpetual Divergence. **Do not interpret missing snapshots as zero**.
+
+1 `DEFERRED LAST`: #26 Cross-Venue Lead-Lag.
+
+**30/30 registered; 13 initial calculations, 14 method/data partial, 2 unknown, 1 deferred; 0 of 30 validated as incremental profitable predictors after fees and OOS.** Earlier base table remains the original historical log; this summary supersedes obsolete checklist status #4/#8/#17 without editing history.
+
+### Joint multivariate study — execution contract, research only
+
+- **Analysis grain:** five symbols × UTC 1-minute as-of states (first day 7200 symbol-minutes), then 5-minute independent anchor subset and multiple days/OOS; STRICT one source observation processed once, no duplicate executions from split fills; distinguish unknown/no-source vs measured zero.
+- **Feature blocks:** trade flow (#1-8,#27-28); book liquidity (#9-13,#29-30); market response (#14-22); derivatives/spot (#23-25); #26 later. Store standardized causal scores against each coin's own prior history, plus raw units, sample count, freshness and coverage. No future leakage from full-day P99, POC, VWAP or daily extrema.
+- **Labels:** future signed continuation/reversal and realized excursion/returns by 5/15/30/60m, LONG vs SHORT separately. Outcomes must not leak into features. For strategy-level economics evaluate entry/exit costs, slippage and net returns **после комиссий**, not gross direction accuracy.
+- **Cross-study first:** interactions among signed Delta/CVD acceleration, rate/RVOL, best/deep OFI, queue imbalance, depth/spread, price efficiency/absorption, then add confirmed OI, liquidations, and Spot. Compare joint model to isolated-feature and price/volatility-only baselines using time-blocked holdout and coin-specific benchmarks, with correlated features grouped to avoid false independence.
+- **Dependence guard:** use independent time blocks/episode dedup, walk-forward/OOS, avoid picking thresholds after seeing test labels, stratify by UTC session, trend/volatility/market regime, and include data-quality masks.
+- **Output:** one research matrix with columns `symbol, t_utc, feature_version, raw_factors, normalized_asof_factors, coverage_mask, future_labels`; per-symbol × direction interaction report, uncertainty and evidence status. Do not build permanent heavy aggregation architecture until validated source/readers, reuse existing canonical source facts wherever appropriate.
