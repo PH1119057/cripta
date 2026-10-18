@@ -241,3 +241,47 @@ TOTAL 1424 aligned anchors, 689/1424 directional matches = 48.38%; OI-increase s
 
 ## 2026-10-18 — book/flow/liquidation joint pilot
 Published code: research/microstructure/experiments/joint_book_flow_liq_v0.py, commit ca6db98d75f7bec86bed091cdcebbdd4b283be8e. Ran on five Bybit symbols for first two hours of 2026-05-19 UTC, read-only. Each symbol had 23 completed-bin anchors. Flow-direction matches next-bin return: APT 13/23, INJ 14/23, DOT 9/23, LTC 6/23, ARB 14/23; total 56/115. Flow and book imbalance agree: 27/64 matches. Disagree: 29/51. Observed-liq subsets: APT 1/2, INJ 5/9, DOT 0/0, LTC 0/2, ARB 0/0. These are descriptive only, not OOS, causal publication-time validated, or results after fees. Critically OI and Spot are NOT integrated with this book pilot on identical rows yet; a unified multi-factor matrix remains PENDING. Cross-venue last.
+
+
+## 2026-10-18 — OWNER DECISION: 30/30 INDICATOR INVENTORY FIRST; JOINT ANALYTICS FROZEN
+
+**Owner correction supersedes prior joint-model next-step plan.** We do **not** have all 30 indicators ready. All cross-indicator combinations, models, joint matrices, OOS model comparisons and new analytical constructions are **ON HOLD** until the indicator readiness checklist is independently closed. Prior joint pilots remain evidence only. Bybit-only; cross-venue #26 is **last** and must not block completion of the other 29.
+
+**Readiness gate per indicator**: precise physical definition, as-of timestamp/causality, actual source and absence semantics, version-controlled read-only calculator, successful execution on all 5 current coins over same requested test period, output+provenance/QC documented, no known semantic defects. A calculation on one hour or a descriptive ex-post number **does not close** an indicator. OOS profitability/interaction testing begins after this readiness gate, not before it.
+
+**CHECKLIST REALITY NOW: READY 0/30 VERIFIED HERE**. Existing preliminary CALC/PARTIAL values do not meet this stricter full-five/all-period gate. #26 is deferred by owner; count 29 Bybit items + 1 deferred cross-venue. This is a new *readiness* status, not a retraction of earlier descriptive calculations. All 30 have names and prior notes; 30/30 names registered; 0/30 certified research-ready.
+
+| # | Indicator | Existing evidence | Readiness issue |
+|---:|---|---|---|
+| 1 | RVOL | CALC | Repeatable complete per-minute as-of series + QC |
+| 2 | Trade Rate | CALC | Time-series output + coverage/QC |
+| 3 | Trade Rate Acceleration | CALC | Explicit intervals and timestamp test |
+| 4 | Large Trade Share | CALC preliminary | Causal threshold and versioned series QC |
+| 5 | Buy/Sell Delta | CALC | Full causal series, side semantics |
+| 6 | CVD | CALC | Cumulative origin and resets documented |
+| 7 | Delta Acceleration | CALC | Time-indexed versioned output |
+| 8 | Trade Streaks | CALC preliminary | Timestamp-side group heuristic + QC |
+| 9 | Queue Imbalance | CALC | As-of sampling and stable depth frame |
+| 10 | Multi-Level OFI | PARTIAL | Book rank reindexing, update semantics |
+| 11 | Book Depth | CALC | Comparable side and level definitions |
+| 12 | Pulling Rate | PARTIAL | Cancel vs execution cannot be inferred from visible decrease |
+| 13 | Depth Recovery | PARTIAL | Same-price level matching, elapsed-time causality |
+| 14 | Price Impact | PARTIAL | Event horizon, matched execution-price times |
+| 15 | Effort / Result | PARTIAL | Causal normalized effort / displacement |
+| 16 | Absorption | PARTIAL | Same-price/fill evidence and controls |
+| 17 | Exhaustion | PARTIAL | Non-arbitrary physical definition and QC |
+| 18 | Short-Term Autocorrelation | CALC | Lag choice and valid price sequence |
+| 19 | Range Compression | PARTIAL | Equal-length / causal window normalization |
+| 20 | Local Extremes | CALC | Prior-only extrema, no lookahead |
+| 21 | Sweep / Reclaim | PARTIAL | Actual intraminute order, not candle-only |
+| 22 | VWAP / Volume Profile | PARTIAL | Running as-of values, never day-end peek |
+| 23 | OI Change | Source fetched May19 | Validate OI effective/publication timestamp + series |
+| 24 | Liquidation Spikes | 101 May19 records | Capture completeness and unknown-vs-zero masks |
+| 25 | Spot / Perpetual Divergence | Source fetched May19 | As-of spot freshness and perp synchronization |
+| 26 | Cross-Venue Lead-Lag | DEFERRED LAST | Owner: only after Bybit 29 done |
+| 27 | Inter-Trade Duration | PARTIAL | Co-timestamp fill handling + as-of series |
+| 28 | Trade-size Distribution | PARTIAL | Rolling prior-only quantiles + series |
+| 29 | Bid/Ask Spread | CALC | Series/QC and timestamp |
+| 30 | Replenishment / Resiliency | PARTIAL | Same-level recovery, true physical event meaning |
+
+The operational next action is **NOT joint analytics**: close each indicator's calculator and evidence in the checklist, with work focused on reusable readers and standard as-of QC only (no cross-factor modeling). Publish each verified gate result to GitHub immediately, no repeated server archaeology. Previous exploratory pilot results are explicitly not considered readiness closure.
