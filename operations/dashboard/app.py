@@ -3765,7 +3765,7 @@ def _r1_paper_real_parity_attestation(
             )
         hashes[relative] = source_hash
     return {
-        "parity_baseline": "R1_TERMINAL_RELEASE_PARITY_VERIFIED_2026-10-08",
+        "parity_baseline": "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED",
         "release_commit": release_commit,
         "module_sha256": hashes,
     }
