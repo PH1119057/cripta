@@ -7,10 +7,11 @@ from pathlib import Path
 START=1779148800000
 SYMS=("APTUSDT","INJUSDT","DOTUSDT","LTCUSDT","ARBUSDT")
 ROOT=Path("/data/cripta/datasets/raw/20260518_20260816")
-def calculate(sym):
+def calculate(sym,limit_minutes=1440):
+    if not 1<=limit_minutes<=1440:raise ValueError("limit_minutes")
     if sym not in SYMS:raise ValueError("symbol")
     file=ROOT/sym/"orderbook"/("2026-05-19_"+sym+"_ob200.data.zip")
-    b={};a={};last=[None]*1440;msgs=0;snaps=0;prev=-1
+    b={};a={};last=[None]*limit_minutes;msgs=0;snaps=0;prev=-1
     with zipfile.ZipFile(file) as z:
         for name in z.namelist():
             if not name.endswith((".data",".jsonl")):continue
@@ -18,7 +19,7 @@ def calculate(sym):
                 for line in f:
                     e=json.loads(line);ts=int(e["ts"])
                     if ts<START:continue
-                    if ts>=START+86400000:break
+                    if ts>=START+limit_minutes*60000:break
                     if ts<prev:raise ValueError("timestamp reversal")
                     prev=ts
                     if e["type"]=="snapshot":
@@ -48,7 +49,7 @@ def calculate(sym):
       "max_age_ms":max(x["age_ms"] for x in valid),
       "output_semantics":"value available strictly after that UTC minute closes","minutes":last}
 if __name__=="__main__":
-    p=argparse.ArgumentParser();p.add_argument("--symbol",choices=SYMS,required=True);p.add_argument("--summary",action="store_true")
-    v=p.parse_args();r=calculate(v.symbol)
+    p=argparse.ArgumentParser();p.add_argument("--symbol",choices=SYMS,required=True);p.add_argument("--summary",action="store_true");p.add_argument("--minutes",type=int,default=1440)
+    v=p.parse_args();r=calculate(v.symbol,v.minutes)
     if v.summary:r.pop("minutes")
     print(json.dumps(r))
