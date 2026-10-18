@@ -69,7 +69,7 @@ def _seed(
     position_id = f"{prefix}-position"
     command_id = f"{prefix}-entry-command"
     symbol = "P5" + prefix.replace("-", "").upper()[-8:] + "USDT"
-    trading_account_id = "ta-2122c81ecff14f3b85b102db605212f7"
+    trading_account_id = f"{prefix}-ta"
     binding_id = f"{prefix}-binding"
 
     exit_policy: dict[str, object] = {"exit_plan_version": "1"}
@@ -116,6 +116,13 @@ def _seed(
                scope,operator,source,change_reason
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
+    )
+    connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,account_type,
+               environment,status
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')""",
+        (trading_account_id,),
     )
     connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(
