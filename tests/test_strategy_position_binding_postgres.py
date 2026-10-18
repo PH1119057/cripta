@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
-TEST_TRADING_ACCOUNT_ID = "ta-test"
+TEST_TRADING_ACCOUNT_ID = "ta-2122c81ecff14f3b85b102db605212f7"
 
 
 def _seed_request(
@@ -50,6 +50,7 @@ def _seed_request(
     exchange_key = exchange_position_key(TEST_TRADING_ACCOUNT_ID, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"{prefix}-command"
+    binding_id = f"{prefix}-binding"
 
     connection.execute(
         """INSERT INTO strategy_entry.strategy_cards(
@@ -77,6 +78,16 @@ def _seed_request(
                scope,operator,source,change_reason
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.strategy_execution_bindings(
+               strategy_execution_binding_id,strategy_activation_id,
+               execution_leg,execution_role,trading_account_id,
+               allocation_mode,binding_state,effective_from,
+               operator,source,reason
+           ) VALUES(%s,%s,'PRIMARY','PRIMARY',%s,'DEDICATED_STRATEGY',
+                    'ACTIVE',%s,'test','test','integration fixture')""",
+        (binding_id, activation_id, TEST_TRADING_ACCOUNT_ID, NOW),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
@@ -161,9 +172,12 @@ def _seed_request(
                strategy_attempt_id,requested_amount,amount_currency,
                capacity_snapshot_id,capacity_observed_at,
                capacity_available_at_reservation,pre_dispatch_expires_at,
-               state,state_reason,created_at,updated_at
+               state,state_reason,created_at,updated_at,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
            ) VALUES(%s,'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,10,'USDT',
-                    %s,%s,10,%s,%s,'TEST_SEED',%s,%s)""",
+                    %s,%s,10,%s,%s,'TEST_SEED',%s,%s,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             reservation_id,
             strategy_id,
@@ -178,6 +192,8 @@ def _seed_request(
             reservation_state,
             NOW,
             NOW,
+            binding_id,
+            TEST_TRADING_ACCOUNT_ID,
         ),
     )
     connection.execute(
@@ -186,9 +202,10 @@ def _seed_request(
                symbol,position_idx,strategy_attempt_id,strategy_id,strategy_version,
                strategy_config_fingerprint,entry_plan_fingerprint,direction,
                position_mode_state_ref,capital_reservation_id,claim_state,
-               claimed_at,updated_at
+               claimed_at,updated_at,strategy_execution_binding_id,
+               execution_leg,trading_account_id,identity_status
            ) VALUES(%s,%s,'BYBIT:UNIFIED',%s,0,%s,%s,%s,%s,%s,'LONG',
-                    %s,%s,'CLAIMED',%s,%s)""",
+                    %s,%s,'CLAIMED',%s,%s,%s,'PRIMARY',%s,'PROVEN')""",
         (
             slot_claim_id,
             exchange_key,
@@ -202,14 +219,19 @@ def _seed_request(
             reservation_id,
             NOW,
             NOW,
+            binding_id,
+            TEST_TRADING_ACCOUNT_ID,
         ),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,payload,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             decision_id,
             attempt_id,
@@ -219,6 +241,8 @@ def _seed_request(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            binding_id,
+            TEST_TRADING_ACCOUNT_ID,
         ),
     )
     connection.execute(
@@ -227,8 +251,11 @@ def _seed_request(
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
                exit_plan_fingerprint,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             request_id,
             attempt_id,
@@ -244,6 +271,8 @@ def _seed_request(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            binding_id,
+            TEST_TRADING_ACCOUNT_ID,
         ),
     )
     if dispatched:
@@ -298,6 +327,8 @@ def _seed_request(
         "exchange_key": exchange_key,
         "request_id": request_id,
         "command_id": command_id,
+        "binding_id": binding_id,
+        "trading_account_id": TEST_TRADING_ACCOUNT_ID,
         "symbol": symbol,
     }
 
@@ -317,6 +348,9 @@ def _payload(ids: dict[str, str]) -> dict[str, object]:
         "capital_reservation_id": ids["reservation_id"],
         "exchange_position_slot_claim_id": ids["slot_claim_id"],
         "position_mode_state_ref": ids["position_mode_state_ref"],
+        "strategy_execution_binding_id": ids["binding_id"],
+        "execution_leg": "PRIMARY",
+        "trading_account_id": ids["trading_account_id"],
         "emergency_policy": {
             "enabled": True,
             "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
