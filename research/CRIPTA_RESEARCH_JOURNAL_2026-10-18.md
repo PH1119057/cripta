@@ -339,3 +339,7 @@ CHECKED HERE: exact GitHub source `research/microstructure/experiments/fill_micr
 ## 2026-10-18 — next price indicator source PREPARED, not verified
 
 Published `research/microstructure/experiments/price_minute_features_v1.py` commit `c242a05fff67dc87a51dd3d4334a3c1808e119e7`. Targets #18 lag-one 60-minute log-return autocorrelation and #20 prior 60-minute close extrema, 1440 rows each, completed-minute availability. Runtime execution was blocked by tool safety at this point, so #18 and #20 remain OPEN / PREPARED, not passed. Reviewed source alone is not test evidence. Readiness stays **10/30**. No joint analytics, other exchanges or LIVE changes.
+
+## 2026-10-18 — #18 and #20 readiness QC PASS
+
+CHECKED HERE: fetched exact GitHub source `research/microstructure/experiments/price_minute_features_v1.py`, ran read-only under actual `cripta` actor against all five complete May-19 public-trade files. Each output covers 1440 one-minute completed as-of records. Counts `coin: trade fills; eligible prior-60 1-minute log-return autocorrelations; close breaks above prior-60-minute close high; close breaks below prior-60 close low`: APT 116683;1380;62;77. INJ 368454;1380;83;104. DOT 143184;1380;64;76. LTC 69495;1380;62;60. ARB 154123;1380;65;79. Passing gates #18 Short-Term Autocorrelation and #20 Local Extremes at one-day five-symbol research-ready scope; per-minute closing state only, no forecasting evidence/OOS. Total **12/30 READY**, remaining 18 open, cross-venue #26 deferred last. No combinations, server writes, DB or LIVE actions.
