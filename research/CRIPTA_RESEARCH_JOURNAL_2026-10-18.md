@@ -438,3 +438,8 @@ New bounded, read-only script `research/microstructure/experiments/price_key_boo
 | ARBUSDT | 4547 | +69191.71 | +97220.47 | -28028.76 |
 
 These are **descriptive signed book-liquidity changes**, not price direction predictions; numbers are symbol-specific, no cross-coin averaging. Five smoke checks passed. Full-day APT run launched as bounded isolated SentinelX job `job_b9bd7306e2a6`: at the time of launch job continued in background; outcome **NOT VERIFIED** until notification/result; do NOT mark complete from process existence. #10 stays OPEN; no strategy, deployment or LIVE changes.
+
+
+## 2026-10-19 — #10 APT full-day exact-price visible book-flow execution
+
+CHECKED HERE: SentinelX job `job_b9bd7306e2a6` completed `status=succeeded`, exit code 0, no truncated output, duration 77.43 s. Single-symbol full-day 2026-05-19 UTC APTUSDT `price_key_book_flow_v1.py` source commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`; snapshot resets=2, delta transitions=606835 (source book messages previously recorded 606837 including two snapshots), updated minute buckets 1440. Exact-price common-top5 visible quote-notional changes: bid -5170483.52 USDT, ask -468018.80 USDT, signed bid-minus-ask -4702464.73 USDT. This measures changes in visible book quantities, NOT net taker flow, cannot distinguish fills/cancellations, excludes top-five membership transitions and has not demonstrated strict comprehensive multi-level OFI. Symbol APT pilot-day full pass is a **RESEARCH RESULT**, indicator #10 remains OPEN pending physical definition/coverage/5-coin full day QC. Full-day run was automatically backgrounded under same job; result was retrieved and verified, not rerun. No host writes, trading rules or LIVE.
