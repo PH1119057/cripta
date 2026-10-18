@@ -177,3 +177,14 @@ Exhaustion prototype: prior 5-minute price change in agreement with latest 5-min
 - LTC: 15/29 versus 27/44;
 - ARB: 14/31 versus 33/59.
 No consistent directional advantage across coins; same-day descriptive only; exhaustion threshold arbitrary, **#17 PARTIAL**, not a proven rule. Prototype executed in-memory, source not yet committed. No OOS/fees, no Strategy changes.
+
+
+## 2026-10-18 — explicit owner research priority: ONE EXCHANGE FIRST
+
+**OWNER DECISION (research sequencing, no strategy/canon trading policy change):** investigate and complete the 30 indicators using **Bybit sources only** first. **Cross-venue / other exchanges is the very last research stage**, to be revisited only after one-exchange indicators, coverage, causal/QC and assessment are completed. Do not spend current runs searching other exchanges or their archives.
+
+Read-only evidence CHECKED HERE:
+- Bybit historical raw first-five symbols under `/data/cripta/datasets/raw/20260518_20260816/{SYMBOL}/` each contain `orderbook/` and `public_trades/` directories. No additional OI/Spot directory was found in those exact per-symbol raw locations; that alone does NOT prove missing OI/Spot elsewhere.
+- Existing research `/data/cripta/research/runs/l53_marketstate_liq_spot_15coins_2w_20260602_0616` found. Name and files are evidence of earlier separate-period work, NOT historical May 19 raw Spot/OI coverage.
+- Liquidation parquet.zst files are present for hours in `research/microstructure/coverage_2026-05-19.md`. Python actor `cripta` currently lacks `pyarrow`, `zstandard`, `pandas`, `duckdb` modules; content/schema decoding NOT CHECKED HERE; do not install dependencies without approved compute preflight.
+- Further order: Bybit historical OI, Spot, liquidation semantics/coverage; complete 30-indicator registry using actual available one-exchange data; multi-period validation and results after fees; **cross-venue last**. Missing file != zero observation.
