@@ -701,6 +701,22 @@ SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
 не доказывает Unix write permission. Успешный read-only smoke
 не считается разрешением на mutation.
 
+## 19.6 Ошибки tool access — обязательная классификация, не server permission
+
+Для каждого отказа фиксировать: точную операцию, actor, exit/returncode, исходное сообщение, достигла ли команда host, и `CHECKED HERE` либо `NOT CHECKED HERE`. Не говорить «SentinelX не дал доступ», если фактически ошибку вернул защитный уровень OpenAI.
+
+| Наблюдаемый отказ | Доказанный уровень | Допустимое действие |
+|---|---|---|
+| `Этот вызов инструмента был заблокирован системами безопасности OpenAI` | OpenAI tool-security gate; host execution НЕ доказано | Записать факт; без обхода защит, без предположений о конкретном сработавшем правиле |
+| `command_not_allowed` | SentinelX command allowlist / parser | Проверить capabilities/§19.5 и точную форму уже разрешённой команды; не расширять policy самостоятельно |
+| `Permission denied` / `EACCES` из реального host stdout/stderr | Unix filesystem gate для конкретного effective actor/path | Read-only actor/path preflight; до mutation §5.1, §19.1–19.4 |
+| `agent did not respond` / timeout / job_id | Неопределённый транспорт/исполнение; не доказан ни отказ Unix, ни падение host | Проверить job notifications, host/PID/result manifest; не дублировать тяжёлый job |
+| `returncode=0` с корректным output | Конкретная команда завершилась | Не распространять этот PASS на другие paths/actors/mutations |
+
+Повторять **тот же отклонённый вызов многократно запрещено**. Однократный повтор после подтверждённого восстановления/изменения условий допустим в рамках утверждённого маршрута. Не перекодировать payload, дробить/маскировать команды или менять actor/privileges ради обхода OpenAI/SentinelX gate. Не рекомендовать владельцу перезагрузку агента, пока не подтверждён сбой агента, а не upstream OpenAI gate.
+
+Проверенная схема read-only: `sentinel_capabilities` → одна allowlisted `sudo -u cripta python3 -c '...'` команда → точный результат. Пример smoke: `sudo -u cripta python3 -c 'import os; print(os.geteuid())'`; ожидаемый uid проверять фактически, не считать постоянным. Длинные исследования — через утверждённый job/compute contract, короткий smoke и версионированный source; без нового обходного transport. Если OpenAI повторно блокирует разрешённую работу, сохранять обезличенные evidence для owner/support escalation; внутреннее правило блокировки неизвестно.
+
 ## 20. Git sync — только exact changeset
 
 Запрещено `git add -A` и `git add .`.
