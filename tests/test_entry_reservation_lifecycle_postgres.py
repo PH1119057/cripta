@@ -488,7 +488,10 @@ def test_expired_reserved_request_is_released_even_when_gate_is_disarmed() -> No
         _gate(connection, False)
         connection.commit()
 
-        assert _run_once_for_fixture_account(connection, ids["trading_account_id"]) == "EXECUTION_GATE_DISARMED"
+        assert (
+            _run_once_for_fixture_account(connection, ids["trading_account_id"])
+            == "EXECUTION_GATE_DISARMED"
+        )
         reservation = connection.execute(
             """SELECT state,state_reason
                  FROM runtime.capital_reservations
