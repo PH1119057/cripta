@@ -1191,3 +1191,21 @@ Documentation maintenance gate:
 ## 2026-10-18 PostgreSQL storage emergency amendment
 
 ARCH §50 owns one-time bounded physical PostgreSQL storage exception; DEVELOPMENT_RELEASE §49 owns actor/preflight, quiesce, rollback, restore and runtime gates; CURRENT_PROJECT_MAP records the time-bounded observed host state. This does not amend ARCH §48–49 retention/identity or close R10b/R11/R12. Current 11-document set, routing, root README/AGENTS and Project Instructions topology unchanged. LIVE is not authorized.
+
+
+# 38. Per-instrument research measurement and analytical cube — OWNER DECISION 2026-10-18
+
+Owner approves one research-wide measurement contract and a multidimensional cube, preserving separately every exact coin/instrument and its favorable/adverse event evidence. Research features are not silently averaged or normalized across symbols; the minimum axes are Instrument × Time × Indicator, with version, window, quality, direction and provenance as additional dimensions. Research of the five Bybit coins remains first; other venues/external signals/cross-venue are deferred until after the current Bybit research.
+
+Canonical ownership:
+- `RESEARCH_COMPUTE §21` owns physical units, denominators, coin-specific capacity and OI, VWAP vs quote-weighted estimators, temporal semantics, layer separation, aggregation and the per-(instrument, indicator, version, scope) RESEARCH-READY gate.
+- `CRIPTA_GLOSSARY §34` owns stable terms, not duplicate formulas.
+- `ARCH §48–49` continues to own storage/market-source/instrument architecture. This research-only measurement contract does not migrate data or alter runtime schema.
+- This INDEX records decision and document membership; RESEARCH journal records executed evidence rather than policy.
+
+Documentation maintenance gate:
+- Existing 11 current Project Source docs; no twelfth file, no splitting, no path/routing/base pre-read change.
+- `README.md`, `AGENTS.md` and `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt` not altered: bootstrap/topology content unchanged.
+- No existing section renumbered; new `RESEARCH_COMPUTE §21`, `GLOSSARY §34` and INDEX §38 are additive.
+- Historical 15/30 READY is not retroactively converted to 75/150; re-QC per pair before promotion.
+- No new trading threshold/Strategy behavior, market data acquisition, server filesystem/DB write, release/deploy or LIVE authorization.
