@@ -36,7 +36,17 @@ NOW = datetime(2026, 9, 18, 14, 0, tzinfo=UTC)
 def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
     """Match the consumer account scope to this disposable fixture only."""
     with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id):
-        return run_once(connection, now=NOW)
+        result = run_once(connection, now=NOW)
+    if result == "BLOCKED:STRATEGY_EXECUTION_BINDING_NOT_READY":
+        reasons = connection.execute(
+            """SELECT d.reason FROM strategy_entry.execution_dispatches d
+               JOIN strategy_entry.execution_requests r
+                 ON r.execution_request_id=d.execution_request_id
+              WHERE r.trading_account_id=%s ORDER BY d.dispatch_id""",
+            (trading_account_id,),
+        ).fetchall()
+        print("INTEGRATION_BINDING_DIAGNOSTIC", reasons)
+    return result
 
 
 def _seed(
