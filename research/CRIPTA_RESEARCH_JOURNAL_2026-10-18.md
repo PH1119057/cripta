@@ -452,3 +452,7 @@ CHECKED HERE: completed SentinelX job `job_f719f7404126` (exit 0, 101.27s, no tr
 ## 2026-10-19 — #10 DOT full-day fixed-price flow
 
 CHECKED HERE: SentinelX job `job_bee76398049c` succeeded rc=0, no truncated output, duration 87.94s, same immutable `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9` and 2026-05-19 UTC Bybit DOTUSDT. Two snapshots, 631776 delta transitions, 1440 minutes with updates; common exact-price top-five flow Bid -3605825.06 USDT / Ask -5402589.38 USDT, signed +1796764.32 USDT. NOT full multi-level OFI; rank membership entry/exit excluded and no cancellation/fill attribution. #10 OPEN. Research only, no cross-coin averages, no LIVE.
+
+## 2026-10-19 — #10 LTC full-day fixed-price flow
+
+CHECKED HERE: SentinelX single bounded read-only exec succeeded rc=0, duration 41.88s, exact `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, Bybit LTCUSDT 2026-05-19 UTC. Two snapshots, 542092 delta transitions, 1440 minutes with updates; same-price common-top5 Bid -9288709.74 USDT / Ask -12962898.43 USDT, signed +3674188.69 USDT. Not full strict OFI (top-five membership changes excluded). #10 remains OPEN.
