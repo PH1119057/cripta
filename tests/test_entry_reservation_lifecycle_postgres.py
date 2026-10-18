@@ -10,6 +10,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+import operations.connectivity.universal_entry_consumer as entry_consumer
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
     mark_entry_order_acknowledged,
@@ -21,8 +22,6 @@ from bybit_workbench.live_arm_readiness import (
     scope_for_check,
 )
 from bybit_workbench.strategy_position_binding import exchange_position_key
-
-import operations.connectivity.universal_entry_consumer as entry_consumer
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
