@@ -91,6 +91,14 @@ CREATE TABLE runtime.wallet_latest (
     payload_json jsonb NOT NULL
 );
 
+CREATE TABLE runtime.private_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+);
+
+CREATE TABLE runtime.connection_events (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+);
+
 CREATE TABLE runtime.reconciliation_runs (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     started_at_epoch_ms bigint NOT NULL,
