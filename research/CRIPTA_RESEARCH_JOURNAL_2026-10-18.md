@@ -384,3 +384,20 @@ CHECKED HERE against GitHub source `research/microstructure/experiments/range_vw
 VALIDATION BOUNDARY: 7200 output minute records exist across five instruments, but this script returns sampled rows and summaries; complete 7200-row durable cube artifact has **NOT** been created. Source quantities (`size` units; `foreignNotional` consistency), mathematical independent sample, full input hashes/run manifests, timestamp edge validations, formula-version per-pair passports and output QA remain to be separately attested under new `RESEARCH_COMPUTE §21.6`. 1m no-trade windows explicitly prevent #19 continuity; no filling forward for compression. Ex-post day-end VWAP cannot be used intraday. Prior quote-notional-weighted descriptive VWAP is a **different estimator**, not a direct QC baseline.
 
 Current status: `#19 FULL_DAY_EXECUTED_5_OF_5 / INDEPENDENT_QC_PENDING`; `#22 FULL_DAY_EXECUTED_5_OF_5 / INDEPENDENT_QC_PENDING`. Do NOT count either as newly RESEARCH-READY before per-pair passport/source-QC gate. Historical 15/30 group passes and 75-row audit remain distinct from new §21 attestation. No cross-venue, Strategy/LIVE or joined analysis.
+
+
+## 2026-10-19 — #19/#22 independent physical QC across five Bybit symbols
+
+CHECKED HERE: independent version-controlled source `research/microstructure/experiments/range_vwap_independent_qc_v1.py`, commit `96543f1f119618cacb657be4230524fcb3c8b2d2`, executed read-only, one symbol/job, on all five Bybit raw trade archives for UTC 2026-05-19 as Unix `cripta`, all rc=0. Independent VWAP accumulator uses CSV `foreignNotional / size`, not the primary reader's `sum(price*size)/sum(size)`. Compression independently rebuilds both adjacent 20-minute close windows. Tolerances: absolute per-fill `foreignNotional - price*size` <= 1e-6 quote units; result comparisons at full printed precision subject to floating/decimal source rounding.
+
+| Instrument | Raw archive SHA256 | Fills | Active minutes | #19 valid | #19 median | #22 independent VWAP | POC base qty | Max `foreignNotional` discrepancy |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | `da6e6c5b9a2593e0024a95d7207f98c6e7ba836d741dd928dc2e9fae4639c66f` | 116683 | 1439 | 1361 | 0.9833333333333333 | 0.94019884785873968 | 0.9385 | 1E-12 |
+| INJUSDT | `a673d0a44a94c4b8dd284e05e89105f48ea52f03be0c6ef7f42d2a198b7c7eab` | 368454 | 1440 | 1401 | 0.9821428571428571 | 5.062793211591095 | 4.9100 | 2E-11 |
+| DOTUSDT | `0289003c4ba98d3e6dc6a5a009ef8aefcd341a8f142cb3b4701cf768d0491839` | 143184 | 1438 | 1358 | 0.9534632034632035 | 1.2362712840392992 | 1.2274 | 2E-12 |
+| LTCUSDT | `d1533d0559bb4efd9ebde77c85200c2aeb35a95ddd8f42e07b85614e5dc11e4b` | 69495 | 1428 | 1058 | 1 | 54.06578642076478 | 54.12 | 3E-12 |
+| ARBUSDT | `1f055f174242858ac3d1ab6933385375b44fffac65e683c7c03295bf491c8121` | 154123 | 1439 | 1361 | 0.967741935483871 | 0.11585221791119729 | 0.11661 | 5E-12 |
+
+All 851939 included fills: 0 quote-notional unit mismatches above 1e-6, 0 unsorted timestamps, 0 outside-day rows in those date-scoped archives, 0 sub-0.1ms-precision violations. 1440 one-minute buckets per symbol. Source schema: timestamp/symbol/side/size/price/tickDirection/trdMatchID/grossValue/homeNotional/foreignNotional/RPI. Input SHA256 reproducibility and independent scalar QC **PASS**; observed no-trade minutes remain absent from #19 valid 40-minute windows.
+
+Per new `RESEARCH_COMPUTE §21`: physical-unit, denominator, as-of-end-of-minute and full-day independent calculation evidence is present for #19 and #22 across 5/5; per-pair status may be marked `PHYSICAL_QC_PASS`. Remaining scope: persist exact separate indicator passports and verify all required §21.6 metadata, output row provenance/aggregator contracts before NEW `RESEARCH-READY` attestation. Historical 15/30 remains historical, with no automatic retroactive promotion of any indicator. No OOS, profitability, Strategy or cross-venue claim.
