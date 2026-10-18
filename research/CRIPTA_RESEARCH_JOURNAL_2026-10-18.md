@@ -456,3 +456,22 @@ CHECKED HERE: SentinelX job `job_bee76398049c` succeeded rc=0, no truncated outp
 ## 2026-10-19 — #10 LTC full-day fixed-price flow
 
 CHECKED HERE: SentinelX single bounded read-only exec succeeded rc=0, duration 41.88s, exact `price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, Bybit LTCUSDT 2026-05-19 UTC. Two snapshots, 542092 delta transitions, 1440 minutes with updates; same-price common-top5 Bid -9288709.74 USDT / Ask -12962898.43 USDT, signed +3674188.69 USDT. Not full strict OFI (top-five membership changes excluded). #10 remains OPEN.
+
+
+## 2026-10-19 — #10 price-identity common-top5 book flow: 5/5 full-day executions
+
+CHECKED HERE: immutable research-only `research/microstructure/experiments/price_key_book_flow_v1.py` commit `b9bbef84f73a09b46fe9de174cb04346ff5bd6e9`, separate `cripta` actor runs for Bybit 2026-05-19, 1440 minutes each, all exit zero, each with two snapshots. Five complete per-coin observed outcomes, independently preserved with no cross-symbol averaging:
+
+| Symbol | Delta transitions | Bid change USD | Ask change USD | Bid minus Ask USD |
+|---|---:|---:|---:|---:|
+| APTUSDT | 606835 | -5170483.52 | -468018.80 | -4702464.73 |
+| INJUSDT | 733301 | +14680789.86 | +29414204.71 | -14733414.85 |
+| DOTUSDT | 631776 | -3605825.06 | -5402589.38 | +1796764.32 |
+| LTCUSDT | 542092 | -9288709.74 | -12962898.43 | +3674188.69 |
+| ARBUSDT | 616464 | +4663839.36 | +6081975.47 | -1418136.11 |
+
+Last ARBUSDT job `job_7b045cb3beef` succeeded exit=0 after 86.44s, output not truncated. Previous APT `job_b9bd7306e2a6`, INJ `job_f719f7404126`, DOT `job_bee76398049c` succeeded; LTC completed synchronously exit=0 in 41.88s. Book event totals reconcile to prior message inventory minus two in-day snapshots per symbol; minute coverage 1440/1440.
+
+**Physical meaning:** sum of signed price×quantity changes solely at exact price keys present in both previous and current top five on their own side. Entering/exiting the top five is excluded, so this is not complete strict multi-level OFI and must not be so named in the Analytical Cube. It cannot separate quote cancellation from executed depletion. Large absolute sums reflect repeated book updates, not traded money, price movement, PnL, or strategy edge. #10 remains OPEN pending comprehensive strict OFI method and verification. This stage **does close full-day five-coin coverage for the narrower fixed-price book-change metric**.
+
+No second venue, Strategy, DB, runtime deployment, or LIVE mutation.
