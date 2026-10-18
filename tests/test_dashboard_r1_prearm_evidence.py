@@ -61,14 +61,13 @@ def test_r1_prearm_writes_all_required_pre_owner_evidence() -> None:
     assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in source
 
 
-def test_r1_parity_attestation_matches_verified_modules() -> None:
-    evidence = app._r1_paper_real_parity_attestation(
-        "a" * 40,
-        source_root=ROOT,
-        runtime_root=ROOT,
-    )
-    assert evidence["parity_baseline"] == "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED"
-    assert evidence["module_sha256"] == app.R1_PARITY_ATTESTED_MODULE_SHA256
+def test_r1_parity_attestation_blocks_unverified_candidate_even_with_matching_hashes() -> None:
+    with pytest.raises(ValueError, match="independent proof is pending"):
+        app._r1_paper_real_parity_attestation(
+            "a" * 40,
+            source_root=ROOT,
+            runtime_root=ROOT,
+        )
 
 
 def test_r1_parity_attestation_fails_closed_on_module_drift(monkeypatch) -> None:
