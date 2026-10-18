@@ -91,3 +91,17 @@ Status: **RESEARCH AUDIT / NOT CANON / NO NEW READINESS PROMOTION**. Canon: `doc
 5. Record source hashes, denominator identity, formula version, output/coverage and manual QC, then promote individual row only on verified §21 gate. Reuse existing executed source evidence where valid; no need to rerun merely to regenerate known numerics. External venues and #26 Cross-Venue Lead–Lag remain deferred last.
 
 **Audit totals:** 75 historical pilot passes, **0 newly attested §21 per-pair passports in this audit**, 75 pending re-audit; this zero is about NEW attestation, not loss of prior work. Remaining 15 indicators still open under the previous 30-candidate checklist.
+| APTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| APTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| INJUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| INJUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| DOTUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| DOTUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| LTCUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| LTCUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| ARBUSDT | 19 | Range Compression | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+| ARBUSDT | 22 | VWAP / Volume Profile | `range_vwap_profile_v1.py` + independent QC | FULL_DAY_5_OF_5 + PHYSICAL_QC_PASS | PASSPORT_COMPLETION_PENDING |
+
+## 2026-10-19 #19/#22 supplement
+
+Ten new pairs are listed above with full-day and independent physical QC evidence in the journal. Not yet a formal §21.6 per-pair RESEARCH-READY promotion. Distinct first-day quote-notional-weighted legacy VWAP remains historical separate estimator.
