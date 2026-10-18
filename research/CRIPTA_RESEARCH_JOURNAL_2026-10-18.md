@@ -285,3 +285,26 @@ Published code: research/microstructure/experiments/joint_book_flow_liq_v0.py, c
 | 30 | Replenishment / Resiliency | PARTIAL | Same-level recovery, true physical event meaning |
 
 The operational next action is **NOT joint analytics**: close each indicator's calculator and evidence in the checklist, with work focused on reusable readers and standard as-of QC only (no cross-factor modeling). Publish each verified gate result to GitHub immediately, no repeated server archaeology. Previous exploratory pilot results are explicitly not considered readiness closure.
+
+ 
+## 2026-10-18 — first 6 Bybit indicators RESEARCH-READY, NOT OOS-VALIDATED
+
+Implemented `research/microstructure/experiments/trade_minute_factors_v1.py` (commit `f5c6cd03ea756a4eb8b0ab08c0e22d55a91a7644`). Read back exact GitHub source and executed in memory under `cripta` against 2026-05-19 Bybit public trades for all five coins; standard library, stdout only, no server writes. Produces **1440 time-indexed 1-minute rows per coin**, clear minute-closed `available_after_utc`, optional full row JSON, checks count consistency / first 60m warmup; trade no-trade is explicitly count zero; carries close staleness field.
+
+**RESEARCH READINESS GATE PASS for 6/30** (#1 RVOL, #2 Trade Rate, #3 Trade Rate Acceleration, #5 Buy/Sell Delta, #6 CVD, #7 Delta Acceleration); readiness only to provide causally indexed source features for future study, **not** claim of predictive OOS significance or net profitability. The 24 other indicators (including #26 explicitly deferred last) remain open. All six are derived from just Bybit taker-trade records and source timestamps; `CVD` origin = day start UTC and first minute acceleration undefined. Cross-day CVD continuity not promised.
+
+Observed source fill count / active minutes / eligible 60m RVOL minutes / end CVD USD:
+- APT 116683 / 1439 / 1380 / +43222
+- INJ 368454 / 1440 / 1380 / -4714464
+- DOT 143184 / 1438 / 1380 / -224835
+- LTC 69495 / 1428 / 1380 / +299290
+- ARB 154123 / 1439 / 1380 / -458836
+
+Input source bytes hashed read-only (SHA256):
+- APT 4493588 bytes: `da6e6c5b9a2593e0024a95d7207f98c6e7ba836d741dd928dc2e9fae4639c66f`
+- INJ 13386017 bytes: `a673d0a44a94c4b8dd284e05e89105f48ea52f03be0c6ef7f42d2a198b7c7eab`
+- DOT 5334455 bytes: `0289003c4ba98d3e6dc6a5a009ef8aefcd341a8f142cb3b4701cf768d0491839`
+- LTC 2390073 bytes: `d1533d0559bb4efd9ebde77c85200c2aeb35a95ddd8f42e07b85614e5dc11e4b`
+- ARB 5837918 bytes: `1f055f174242858ac3d1ab6933385375b44fffac65e683c7c03295bf491c8121`
+
+Caveats: Readiness gate is defined narrowly on verified **one full UTC day per coin**. Multiday windows and OOS still PENDING, planned after 30/30 indicator inventory closes. Future joins may only use a factor after `available_after_utc`; no current-minute peek. No joint analytics performed in this step. 
