@@ -85,7 +85,7 @@ jobs:
       - name: Run 58 lifecycle PostgreSQL integration tests
         shell: bash
         run: |
-          .venv/bin/python -m pytest -q             tests/test_account_state_generation_postgres.py             tests/test_capital_reservation_postgres.py             tests/test_counterfactual_p8_postgres.py             tests/test_entry_reservation_lifecycle_postgres.py             tests/test_fault_delivery_postgres.py             tests/test_lifecycle_supervisor_p7_postgres.py             tests/test_live_arm_readiness_postgres.py             tests/test_slot_admission_postgres.py             tests/test_strategy_position_binding_postgres.py             tests/test_trade_lifecycle_p9_postgres.py             tests/test_universal_exit_p5_postgres.py             tests/test_universal_exit_p6_postgres.py
+          .venv/bin/python -m pytest -q             tests/test_universal_exit_p6_postgres.py             tests/test_account_state_generation_postgres.py             tests/test_capital_reservation_postgres.py             tests/test_counterfactual_p8_postgres.py             tests/test_entry_reservation_lifecycle_postgres.py             tests/test_fault_delivery_postgres.py             tests/test_lifecycle_supervisor_p7_postgres.py             tests/test_live_arm_readiness_postgres.py             tests/test_slot_admission_postgres.py             tests/test_strategy_position_binding_postgres.py             tests/test_trade_lifecycle_p9_postgres.py             tests/test_universal_exit_p5_postgres.py
 
   release-arm-1:
     runs-on: ubuntu-latest
