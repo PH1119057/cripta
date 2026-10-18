@@ -62,10 +62,10 @@ def _seed(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
+    trading_account_id = f"{prefix}-ta"
     exchange_key = exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
-    trading_account_id = f"{prefix}-ta"
     binding_id = f"{prefix}-binding"
 
     connection.execute(
