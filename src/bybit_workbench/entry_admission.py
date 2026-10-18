@@ -179,6 +179,12 @@ class PostgresEntryAdmissionPort:
             )
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
+            # The fixed, privilege-isolated function holds a row lock until
+            # this transaction ends. The runtime role never receives UPDATE.
+            self._connection.execute(
+                "SELECT strategy_entry.lock_execution_binding_for_admission(%s)",
+                (request.strategy_execution_binding_id,),
+            )
             binding = self._connection.execute(
                 """SELECT b.strategy_activation_id,b.execution_leg,
                           b.trading_account_id,b.execution_role,
@@ -191,7 +197,7 @@ class PostgresEntryAdmissionPort:
                      JOIN strategy_entry.strategy_activations a
                        ON a.activation_id=b.strategy_activation_id
                     WHERE b.strategy_execution_binding_id=%s
-                    FOR SHARE""",
+                    """,
                 (request.strategy_execution_binding_id,),
             ).fetchone()
             expected_binding = (
