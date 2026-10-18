@@ -490,3 +490,14 @@ CHECKED HERE: read-only `research/microstructure/experiments/book_top5_membershi
 | ARBUSDT | 4547 | +69191.71 | -48.97 | +97220.47 | +1118.48 |
 
 Physical FINDING: using only common-price changes can grossly misrepresent **change of total top-five visible stock** because of rank-boundary entry/exit. Net top-five stock movement is near zero on some instruments despite large opposing component changes. These are distinct valid measurements with distinct definitions, **not interchangeable trading signals**. Causal data are descriptive after event update, timestamps/latency and full-day/independent QC remain to verify. #10 OPEN until a properly defined multi-level OFI is implemented and verified. No other venues, trading mutation or LIVE.
+
+
+## 2026-10-19 — #10 top-five decomposition APT full-day verified
+
+CHECKED HERE: same immutable `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24` executed actor `cripta` for full UTC 2026-05-19 APTUSDT, SentinelX job `job_8f20b4a23ebb` succeeded exit=0 in 80.54s, output not truncated. 2 snapshots, 606835 delta events, 1440 updated minute buckets.
+
+- BID: common exact-price changes **-5170483.52 USDT**, top-five entering-price stocks **+49111003.15**, leaving-price stocks **-43934713.49**, resulting net top-five visible-stock change **+5806.13**.
+- ASK: common exact-price changes **-468018.80 USDT**, top-five entering-price stocks **+47223143.50**, leaving-price stocks **-46749875.00**, resulting net **+5249.70**.
+- Of BID entering-price stock, +36573239.04 was already elsewhere in the broader reconstructed book before entry into top-five; ASK +34499443.68 similarly. Thus membership changes are not directly new quote placement, cancellation or executions.
+
+This is a physical **component decomposition** of top-five visible stock and not strict multi-level OFI, predictive direction, or net traded flow. Next independent source coverage and complete five-coin runs remain open. No Strategy/LIVE changes.
