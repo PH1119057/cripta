@@ -64,3 +64,11 @@ def test_d8_archive_and_signal_export_are_registered() -> None:
     assert "research_context.dispatcher_v2_event_links" in archive
     assert "dispatcher_v2_event_links.jsonl" in archive
     assert "cripta-dispatcher-v2-context-correlator.service" in archive
+
+
+def test_d8_event_source_names_all_fields_consumed_by_eligible_cte() -> None:
+    body = CORRELATOR.read_text(encoding="utf-8")
+    assert "p.signal_id) AS signal_id," in body
+    assert "c.payload_json::jsonb ->> 'side' AS side," in body
+    assert "e.signal_id,e.strategy_attempt_id" in body
+    assert "e.position_id,e.trade_id,e.symbol,e.side" in body
