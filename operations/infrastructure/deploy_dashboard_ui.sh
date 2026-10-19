@@ -47,7 +47,8 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 as_repo_owner git -C "$SOURCE" show "$previous_commit:operations/dashboard/index.html" > "$tmp/old.html"
 as_repo_owner git -C "$SOURCE" show "$UI_COMMIT:operations/dashboard/index.html" > "$tmp/new.html"
-as_repo_owner git -C "$SOURCE" show "$previous_commit:operations/dashboard/app.py" > "$tmp/old_app.py"
+[[ -f "$current_runtime/operations/dashboard/app.py" && ! -L "$current_runtime/operations/dashboard/app.py" ]] || die "running Dashboard backend baseline is invalid"
+cp "$current_runtime/operations/dashboard/app.py" "$tmp/old_app.py"
 as_repo_owner git -C "$SOURCE" show "$UI_COMMIT:operations/dashboard/app.py" > "$tmp/new_app.py"
 [[ -s "$tmp/new.html" && -s "$tmp/new_app.py" ]] || die "Dashboard bundle is incomplete"
 
