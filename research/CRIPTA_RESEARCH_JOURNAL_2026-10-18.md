@@ -1261,3 +1261,18 @@ Following verified v1 APT exact timestamp defect (`1a68bf4098691174708282d535f45
 CHECKED HERE: five independent read-only actor `cripta` runs for `2026-05-20`, each all 1440 rows × 8 numeric QC columns (minute fills, rate accel, buy/sell notional, signed delta, cumulative CVD, delta acceleration, prior60 RVOL), with exact integer matches and floating tolerance relative `1e-10`/absolute `1e-6`. **5/5 PASS; 0 mismatches in all tested columns including APT**, where v1 previously failed because 3 Buy fills at 23:26:59.9995 UTC rolled into 23:27. Exogenous observed/receipt timestamps not tested; full source custody still as previously recorded.
 
 STATUS: `RESEARCH RESULT - CANDIDATE V2 INDEPENDENT FULL-ROW QC PASS`, NOT `RESEARCH-READY` nor canonical change. Per-pair §21.6 passport, timing as-of/capture and owner measurement formula scope not formally approved. No v1 rewrite, Strategy, DB, service, deployment or LIVE change. Preserve historical v1 failure alongside v2 verified correction; do not pretend old numbers were retroactively valid.
+
+
+## 2026-10-19 — #4 Large Trade Share + #8 Trade Streaks independent Decimal cohort QC 5/5
+
+CHECKED HERE: independent algorithm `research/microstructure/experiments/large_trade_streaks_independent_decimal_qc_v1.py`, immutable source GitHub `c437056b60278e0d78c3b01157164ed52cc05269`, versus current `large_trade_streaks_v1.py` pinned to same immutable commit, ten separate standard read-only actor `cripta` runs `2026-05-20`, all rc=0. Both independently scan all fills and calculate minute previous60 99th-percentile large-fill turnover share and same-timestamp+side heuristic streak summary. Coin-level total groups, grouped multi-fill counts, streak count/median/p90/max, eligible 1m large-share windows, large-share median/p90 match 5/5 to reported float/Decimal precision. Independent timestamp reader uses exact Decimal source timestamp, primary uses float, yet aggregates match on this measured day. **These are complete-cohort summary statistics, NOT full 1440 per-minute row parity** and NOT verified parent-order identity.
+
+| Symbol | Timestamp+side groups | Streak episodes | Max streak length | Large-share eligible minutes | Median share | p90 share |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 31374 | 8975 | 91 | 1380 | 0 | 0.434549 |
+| INJUSDT | 69908 | 20642 | 88 | 1380 | 0.067603 | 0.397946 |
+| DOTUSDT | 36002 | 8768 | 63 | 1376 | 0 | 0.447097 |
+| LTCUSDT | 19917 | 6584 | 50 | 1363 | 0 | 0.283868 |
+| ARBUSDT | 51785 | 12752 | 117 | 1380 | 0 | 0.470020 |
+
+No OOS, parent order attribution, causal clock confirmation, independent row equivalence or per-pair §21.6 READY. Future returns not studied, profitability after fees not claimed. No Strategy/DB/deploy/LIVE mutation.
