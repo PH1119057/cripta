@@ -509,3 +509,7 @@ CHECKED HERE: job `job_0f20795619d1`, exit 0, 104.72s; `book_top5_membership_v1.
 ## 2026-10-19 — #10 DOT full-day top-five membership decomposition
 
 CHECKED HERE: job `job_cdcadb8bc9e1` succeeded, rc=0, 92.07s, no truncated output. Versioned `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24`; `cripta` actor read-only, DOTUSDT 2026-05-19 UTC; 631776 deltas, 2 snapshots, updated 1440/1440 minutes. BID common-price -3605825.06 USDT, entry +89343130.74, exit -85732274.93, total top-five stock +5030.76. ASK common-price -5402589.38, entry +87451908.76, exit -82056742.55, top-five stock -7423.17. Inside previously broader book: entered BID 61036285.77, ASK 58154317.53 USDT; these are reclassification, not direct order creation. #10 strict multi-level OFI OPEN; this is bounded descriptive membership decomposition, not fill/cancel or PnL.
+
+## 2026-10-19 — #10 LTC full-day top-five membership decomposition
+
+CHECKED HERE: actor `cripta` read-only script `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24`, LTCUSDT 2026-05-19 UTC, completed rc=0 in 44.53s, two snapshots, 542092 deltas, 1440 minutes. BID common -9288709.74 USDT, entry +102974252.68, exit -93635617.09, net top-five stock +49925.85. ASK common -12962898.43, entry +102409340.71, exit -89464220.29, stock -17778.01. Entry from already present deeper levels: BID +75623378.10 USDT, ASK +79222245.16. This is a top5 stock decomposition; strict OFI, cancel/fill attribution, OOS and predictive conclusions remain OPEN.
