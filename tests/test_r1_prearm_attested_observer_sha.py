@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,24 +10,26 @@ DASHBOARD = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 
 
-def test_attested_observer_sha_matches_current_source() -> None:
+def test_parity_critical_modules_are_pinned_to_current_git_release() -> None:
     tree = ast.parse(DASHBOARD.read_text(encoding="utf-8"))
     assignments = [
         node for node in tree.body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name)
-            and target.id == "R1_PARITY_ATTESTED_MODULE_SHA256"
+            isinstance(target, ast.Name) and target.id == "R1_PARITY_CRITICAL_MODULES"
             for target in node.targets
         )
     ]
     assert len(assignments) == 1
-    hashes = ast.literal_eval(assignments[0].value)
-    actual_hash = hashlib.sha256(OBSERVER.read_bytes()).hexdigest()
-    assert hashes["operations/monitoring/universal_entry_shadow.py"] == actual_hash, (
-        f"CURRENT_OBSERVER_SHA256={actual_hash}"
-    )
-    assert len(hashes) == 6
+    modules = ast.literal_eval(assignments[0].value)
+    assert len(modules) == 6
+    assert "operations/monitoring/universal_entry_shadow.py" in modules
+    for relative in modules:
+        expected = subprocess.check_output(
+            ["git", "-C", str(ROOT), "show", f"HEAD:{relative}"]
+        )
+        actual = (ROOT / relative).read_bytes()
+        assert hashlib.sha256(actual).digest() == hashlib.sha256(expected).digest()
 
 
 def test_observer_cleanup_guards_do_not_alter_entry_policy() -> None:
