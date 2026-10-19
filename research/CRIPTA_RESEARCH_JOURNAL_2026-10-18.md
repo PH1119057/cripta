@@ -633,3 +633,18 @@ CHECKED HERE: versioned `research/microstructure/experiments/exact_price_recover
 | ARBUSDT | 241467 | 148240 | 93064 | 163 | 6700 | 198615 | 121185 | 77311 | 119 | 6000 |
 
 **Causality/limit:** this is a same-price **visible-size reappearance proxy**, not verified same order/provider recovery, market resiliency edge, or proof that depletion came from cancellations. A price may disappear and later reappear; episode logic does not prove continuous queue identity. Median times are for recovered events only (selection conditional), not unconditional hazard/survival. Complete-day executed coverage = 5/5; independent QC and a formal per-pair §21 passport remain pending. **#13 FULL_DAY_PHYSICAL_PROXY_5_OF_5, RESEARCH-READY NOT PROMOTED**. No trading policy, DB, deployment or LIVE mutations.
+
+
+## 2026-10-19 — #16 high-flow / price-resistance candidate, completed day 5/5
+
+CHECKED HERE: read-only `research/microstructure/experiments/absorption_prior60_candidate_v1.py`, GitHub commit `3ffd9594f0aa950cfaf4ec438c36c6d4888bb636`, actor `cripta`, all five Bybit public-trades sources 2026-05-19 full UTC day; five successful rc=0. Current **completed** one-minute signed aggressor `foreignNotional` (USDT) qualifies as unusually high when absolute signed flow exceeds per-instrument p90 of **prior 60 nonempty minutes only**. Within that same already-completed minute, record signed price response (last-minus-first trade price), and separately count aligned, opposite, unchanged. Current-minute information is not known until minute close. This is a *resisted-flow candidate*, **not proven physical absorption** by passive order flow.
+
+| Coin | Eligible minute buckets (after initial 60) | Unusually high flow | Price against flow | Price with flow | No price change | NO_DATA | Opposite move after buy/sell dominant flow |
+|---|---:|---:|---:|---:|---:|---:|---|
+| APTUSDT | 1379 | 151 | 29 | 117 | 5 | 1 | 18/11 |
+| INJUSDT | 1380 | 154 | 16 | 133 | 5 | 0 | 8/8 |
+| DOTUSDT | 1378 | 159 | 24 | 128 | 7 | 2 | 14/10 |
+| LTCUSDT | 1368 | 163 | 20 | 129 | 14 | 12 | 14/6 |
+| ARBUSDT | 1379 | 151 | 27 | 122 | 2 | 1 | 14/13 |
+
+QC five of five: every unusually-high-flow count = aligned+against+flat. No cross-coin normalization, no future lookahead in baseline; per-coin results differ. **Critical**: high signed flow and weak/opposite minute endpoint change does not identify passive absorbers, true hidden liquidity, traded order origins, microstructure economics, OOS advantage or fee-adjusted returns. This version has no matched controls. #16 `FULL_DAY_CAUSAL_PROXY_5_OF_5 / PHYSICAL_ABSORPTION_NOT_PROVEN`; RESEARCH-READY not promoted. No trading, service, DB or LIVE mutations.
