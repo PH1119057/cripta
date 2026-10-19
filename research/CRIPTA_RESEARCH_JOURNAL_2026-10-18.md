@@ -938,3 +938,18 @@ CHECKED HERE: new separately coded read-only independent `research/microstructur
 | ARBUSDT | fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c | 1401 | PASS |
 
 This resolves the pending **independent full-minute-row agreement** for the five 2026-05-20 #19 and #22 physical measurement streams. It is not a proof of separate exchange feed capture nor of profitable OOS signals. Original 2026-05-19 passport is historical; no silent retroactive mutation. Formal §21 per-instrument version/date passport and OOS/latency must be assessed independently; no `RESEARCH-READY` promotion at this step. No Strategy, DB, deploy or LIVE change.
+
+
+## 2026-10-19 — #19/#22 second-day exact input integrity sealed 5/5
+
+CHECKED HERE: read-only historical independent QC `range_vwap_independent_qc_v2.py` source pinned `fa683e2a27e50a1a18360c5c894d1ab2352bdf4a`, actor `cripta`, five successful second-day 2026-05-20 UTC source-file reads. Every gzipped public-trades source SHA256, byte count, monotonic trade timestamp check and trade `foreignNotional` consistency check registered in `research/microstructure/passports/range_vwap_2026-05-20_independent_v1.json` via commit `4c7730bb1dfb9f3d70fa81949c6149ebbd96661f`.
+
+| Coin | Raw compressed source SHA256 | Bytes | Trades | Unsorted | Notional mismatches |
+|---|---|---:|---:|---:|---:|
+| APTUSDT | 6a589dc5afbc064a577f9d08bb921008e1518da42540fb5c15e4ea05a1144b02 | 4549721 | 117069 | 0 | 0 |
+| INJUSDT | 7e2d2716b34167d65b43ca64fcd767aae902267f3d5f20ca3d2e90a3066a5a6e | 9464084 | 260994 | 0 | 0 |
+| DOTUSDT | 39831bb5b07974f5de407efa8a2aa8ef2b32f257d67796aa7dc532b680fd477f | 5656864 | 151067 | 0 | 0 |
+| LTCUSDT | b6e784e82918cf0e2c7b9f7d9464dc49478c7077eff0317f7a50be27764ee84e | 3213522 | 93645 | 0 | 0 |
+| ARBUSDT | 7d8de412077e6f51eb46d1b3e1055af43dd228ec3d24da41a36c9e5f16cb254a | 8019377 | 209152 | 0 | 0 |
+
+All five full-minute independent row hashes already matched byte-for-byte in prior checkpoint. **This closes previously open raw source SHA256 for May 20;** still do not call formal `RESEARCH-READY` until §21.6 fields and exact version/scope for each paired metric fully certified, including as-of availability and retained cube/result QC. No strategy or LIVE mutation.
