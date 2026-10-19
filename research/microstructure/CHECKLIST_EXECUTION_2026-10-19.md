@@ -216,3 +216,12 @@ This is an operational access/outcome problem, not a confirmed algorithm mismatc
 - [ ] #15 and #16 still require per-pair §21 source and availability contracts, full row/threshold QC, OOS after-fee validation.
 
 Independent book 1440-row job `job_cb166e3a8aa1` remains UNKNOWN after agent nonresponse, with no fresh result notifications observed. No retry. Prior OpenAI upstream-blocked routes also not invoked. No production/runtime mutation.
+
+
+## 2026-10-19 — #17 independent second-day QC
+
+- [x] Independent `flow_decay_5m_independent_qc_v1.py` GitHub `806f8a9386f515ce51c86b246d1ca4924f5ea73e` independently reconstructs 288 five-minute blocks, current flow ratios and **separate future-label** counts; all five coins rc=0, exact primary parity at summary/group level May20.
+- [x] All five count partitions valid (eligible anchors, flow-decay and nondecay, future reversal/continuation/flat), journal `8378ed63698ccf5c1e963f244d60036b35e31d42`, progress register `cadddabe4c2871292d728e5c241336092171fcc0`.
+- [ ] Full event/row hashes, nonoverlapping OOS, independent capture/available-after proof and per-pair §21.6 gate remain OPEN. Next 5m price direction is a future outcome label only, not an as-of signal.
+
+Prior #9/#11/#29 APT agent no-response outcome still unknown and not retried. No blocked #14/#18/#20/#25 execution route invoked. No production trading runtime, DB or LIVE mutation.
