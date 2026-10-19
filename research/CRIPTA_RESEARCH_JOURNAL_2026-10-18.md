@@ -678,3 +678,10 @@ CHECKED HERE: read-only `research/microstructure/experiments/sweep_reclaim_order
 | ARBUSDT | 1319 | 61 | 43 | 24 | 65 | 37 |
 
 All 5/5 QC `reclaims <= sweeps` true. LTC valid coverage much lower because exact complete preceding 60-minute trade windows prohibit silent gap filling. Values are distinct from old journal prior60-close-extrema or intra-minute-OHLC prototypes, **not their regression replacement**: source estimator and inclusion rules differ. Trade-print sequence does NOT establish a physical orderbook liquidity sweep or unique ordering of identical timestamp fills; those need additional source/source-sequence QC. #21 `ORDERED_TRADE_TAPE_PROXY_FULL_DAY_5_OF_5`, strict Sweep/Reclaim OPEN. No Strategy/LIVE changes.
+
+
+## 2026-10-19 — #23 historical Open Interest bounded inventory, five coins
+
+CHECKED HERE via `research/microstructure/experiments/oi_coverage_probe_v1.py`, exact GitHub commit `d57cc29ebb631fe96f3f1ed714327bb4e4c42ed1`, read-only `cripta` actor, five return codes 0. For 2026-05-19, no symbol-specific OI/open_interest-named child was found by shallow inspection of the known raw dataset symbol directories or obvious external provider family names. Per APT, INJ, DOT, LTC, ARB: `HISTORICAL_OI_NOT_ESTABLISHED`, `exact_day_valid_oi_series_verified=false`, 0 shallow candidate matches. **This is NOT exhaustive filesystem search and does NOT prove historical OI is nonexistent** in all server databases, vendor layouts, or older archives; it does prove no verified OI dataset was recovered by this bounded path probe.
+
+#23 remains `OPEN / SOURCE_COVERAGE_NOT_VERIFIED`; absent evidence is `NO_DATA`, not zero OI or a zero-change signal. No trading rule, DB, service or LIVE changes. Next is #24 liquidation coverage (source provenance and hourly holes).
