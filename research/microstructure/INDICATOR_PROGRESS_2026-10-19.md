@@ -24,10 +24,10 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 16 | Absorption | `HIGH_FLOW_PRICE_RESISTANCE_PROXY_FULL_DAY_5_OF_5` | Not proved passive absorption or OOS |
 | 17 | Exhaustion | `FIVE_MINUTE_DECAY_FUTURE_LABEL_FULL_DAY_5_OF_5` | Overlapping study anchors, no OOS |
 | 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 19 | Range Compression | `PILOT_DAY_QC_5_OF_5 + SECOND_DAY_INDEPENDENT_SUMMARY_QC_5_OF_5_PASS` | Historical v1 independent source recovered at 96543f1; date-parameter v2 published fa683e2; 2026-05-20 fills, active minute counts, range medians and POC exact agree; VWAP near-equal (different notional fields). Full per-minute independent QC/§21 readiness passport pending, see journal fbbb3fc |
+| 19 | Range Compression | `SECOND_DAY_INDEPENDENT_FULL_1440_ROW_HASH_5_OF_5_PASS` | Two independent readers agree byte-for-byte on all minute rows 2026-05-20 for five instruments (journal 5cc60c0, source 876ccaa). §21 updated date/instrument passport and formal readiness gate pending; historical v1 pointer remains historical |
 | 20 | Local Extremes | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 21 | Sweep / Reclaim | `ORDERED_TRADE_PRINT_PROXY_FULL_DAY_5_OF_5` | Not proved book liquidity sweep; same timestamp ordering QC |
-| 22 | VWAP / Volume Profile | `PILOT_DAY_QC_5_OF_5 + SECOND_DAY_INDEPENDENT_SUMMARY_QC_5_OF_5_PASS` | Historical v1 independent source recovered at 96543f1; date-parameter v2 published fa683e2; 2026-05-20 fills, active minute counts, range medians and POC exact agree; VWAP near-equal (different notional fields). Full per-minute independent QC/§21 readiness passport pending, see journal fbbb3fc |
+| 22 | VWAP / Volume Profile | `SECOND_DAY_INDEPENDENT_FULL_1440_ROW_HASH_5_OF_5_PASS` | Two independent readers agree byte-for-byte on all minute rows 2026-05-20 for five instruments (journal 5cc60c0, source 876ccaa). §21 updated date/instrument passport and formal readiness gate pending; historical v1 pointer remains historical |
 | 23 | OI Change | `HISTORICAL_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified 2026-05-19 series; missing=NO_DATA |
 | 24 | Liquidation Spikes | `PARTIAL_HOURLY_FILES_5_OF_5` | No verified full-day event completeness; alternate interpreter probe stopped by SentinelX command_not_allowed (2026-10-19) |
 | 25 | Spot / Perpetual Divergence | `SPOT_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified same-day Spot series |
