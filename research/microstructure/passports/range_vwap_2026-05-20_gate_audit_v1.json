@@ -1,0 +1,67 @@
+{
+  "review_type": "source-evidence-to-canon-gate",
+  "date": "2026-10-19",
+  "scope": "Bybit five symbols 2026-05-20 #19/#22",
+  "canon": "docs/RESEARCH_COMPUTE_RULES_RU.md §21.6",
+  "reviewed_git_head": "4e54e25e558d57cdc703fb3ecb2a16c6ff49d782",
+  "evidence": {
+    "per_coin_raw_source_sha256": true,
+    "all_1440_independent_hashes": true,
+    "per_coin_source_order_qc": true,
+    "source_file_readers_versioned": true,
+    "completed_minute_available_after": "DECLARED_IN_SOURCE_CODE_NOT_OBSERVED_FEED_PUBLICATION",
+    "method_missing_rules": "DEFINED_FOR_19_AND_22",
+    "precise_source_capture_latency": "NOT_CHECKED",
+    "persisted_canonical_minute_cube": "NOT_VERIFIED",
+    "cross_day_oos_after_fees": "NOT_CHECKED",
+    "formal_per_pair_gate": "OPEN"
+  },
+  "per_symbol": [
+    {
+      "symbol": "APTUSDT",
+      "raw_sha256": "6a589dc5afbc064a577f9d08bb921008e1518da42540fb5c15e4ea05a1144b02",
+      "minute_row_sha256": "db43bdc14a4054bd03d1252010a96b8f7ce7be6db9128631231c8977d806c0de",
+      "raw_source_qc": "PASS",
+      "independent_minute_rows": "PASS",
+      "readiness": "OPEN"
+    },
+    {
+      "symbol": "INJUSDT",
+      "raw_sha256": "7e2d2716b34167d65b43ca64fcd767aae902267f3d5f20ca3d2e90a3066a5a6e",
+      "minute_row_sha256": "34e751c86f85f47773eb39fe7b0faaacacc7892120948b914b97ed2480ea59f3",
+      "raw_source_qc": "PASS",
+      "independent_minute_rows": "PASS",
+      "readiness": "OPEN"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "raw_sha256": "39831bb5b07974f5de407efa8a2aa8ef2b32f257d67796aa7dc532b680fd477f",
+      "minute_row_sha256": "226e018fae1b43b11c7d7c230db868b59acbcaebc8e9564cd205ffdb5f0efac6",
+      "raw_source_qc": "PASS",
+      "independent_minute_rows": "PASS",
+      "readiness": "OPEN"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "raw_sha256": "b6e784e82918cf0e2c7b9f7d9464dc49478c7077eff0317f7a50be27764ee84e",
+      "minute_row_sha256": "33f3bacef04cfb3dd38407cb4940c8b7c2555057929ad05cf7635b03c1e56797",
+      "raw_source_qc": "PASS",
+      "independent_minute_rows": "PASS",
+      "readiness": "OPEN"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "raw_sha256": "7d8de412077e6f51eb46d1b3e1055af43dd228ec3d24da41a36c9e5f16cb254a",
+      "minute_row_sha256": "fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c",
+      "raw_source_qc": "PASS",
+      "independent_minute_rows": "PASS",
+      "readiness": "OPEN"
+    }
+  ],
+  "restrictions": [
+    "This is a derived research status report, not canon, not a READY grant",
+    "Do not assert observed feed publication from event timestamps",
+    "Do not classify May 20 as OOS profit evidence",
+    "No server writes or blocked route calls"
+  ]
+}
