@@ -1075,3 +1075,12 @@ CHECKED HERE: existing `research/microstructure/experiments/price_minute_feature
 | ARBUSDT | NOT EXECUTED | — | — | — | — | — |
 
 The next call was **blocked by OpenAI upstream tool-security system**. This is not a SentinelX `command_not_allowed`, Unix EACCES or confirmed host Python error; its request did not yield a server result. In accordance with `DEVELOPMENT_RELEASE §19.5–19.6`, no replay, alternative actor, obfuscated command or workaround was attempted. **HARD_STOP=YES for this attempted route; OWNER_DECISION_REQUIRED=YES before further execution via any newly approved route.** Physical second-day #18/#20 cohort status **PARTIAL_3_OF_5**. Previously verified #9/#11/#29 independent full-day summary QC 5/5 remains independently valid. No claims of new trading advantage or after-fee P&L, no Strategy/deploy/DB/LIVE modifications.
+
+
+## 2026-10-19 — nine indicator proxy/identity GitHub audit, immutable #10 source recovered
+
+CHECKED HERE: GitHub `main` tree and current source definitions for #10, #12, #13, #14, #15, #16, #17, #21, #30; machine-readable gap audit `research/microstructure/passports/proxy_identity_gate_audit_2026-10-19_v1.json` first committed `082df27f903d57b6b51758652af2a7a0eb7fcec2`. All nine have existing current-main physical/proxy source, but strict names not silently inferred from proxies. #14/#17 incorporate future labels, never as-of signals; #12 cannot attribute cancellation; #16 passive absorption unproven; #21 true liquidity sweep unproven; #30 same-order refill unproven. Per-coin §21 formal readiness still OPEN.
+
+**#10 source identity:** current main has `rank_ofi_v1.py` and `book_top5_membership_v1.py`, but not `top1_price_transition_ofi_v1.py` named in historical day journal. The latter was positively fetched by exact **immutable historical GitHub commit** `f5485b7cb729195e8ef6ea394d31f9ae94acf444`: `research/microstructure/experiments/top1_price_transition_ofi_v1.py`, whose header defines exact best-price-transition top-of-book OFI. Recorded historical source pointer in audit commit `c6734dfe1ab651f2ce0619ad010fff507314cdd1`. Recovery resolves locating historical source, NOT algorithm equivalence to current `rank_ofi_v1.py`, NOT strict multi-level price-aware OFI.
+
+No server tools, filesystem writes or alternate interpreter invoked. #18/#20 upstream-blocked route not retried. Trading/DB/deploy/LIVE unchanged.
