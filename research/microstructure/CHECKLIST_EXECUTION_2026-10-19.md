@@ -94,3 +94,17 @@ CHECKED HERE: исторический `top1_price_transition_ofi_v1.py` и ак
 - [ ] Execution-level проверка на сервере не выполнялась: upstream-blocked route #18/#20 не повторять. Research design ≠ implemented/QC/READY.
 
 Пока решение по strict multi-level formula не принято, разрешено продолжать только документарный source/QC gap review других индикаторов, не придумывая canonical scalar по собственной инициативе.
+
+
+## Большой проход 2026-10-19: следующие четыре независимые задачи #15/#16/#17/#21
+
+CHECKED HERE: date-parametrized read-only primary implementations committed separately to GitHub: `#15 effort_result_minute_v2.py` `10fe631`; `#16 absorption_prior60_candidate_v2.py` `4ab1848`; `#17 flow_decay_5m_v2.py` `277458d`; `#21 sweep_reclaim_ordered_trades_v2.py` `efd5d50`. Five instruments each, May20 source, **20/20 server runs rc=0**. Commits with observed results: #15 journal `7b3be4c`, #16/#17 journal `15e4d54`, #21 journal `ef20ee3`; indicator index updated. The #16 original output string incorrectly labeled May19 despite May20 path/start; corrected string-only GitHub commit `42cfa21`, no re-execution of revised file, not a change to calculated evidence.
+
+- [x] #15 second physical day 5/5 (minute turnover-denominator proxy, not causal impact).
+- [x] #16 second physical day 5/5 (prior60 signed-flow p90 against-price proxy, not proved passive absorption).
+- [x] #17 second physical day 5/5 (future reversal as outcome label only, no lookahead as feature).
+- [x] #21 second physical day 5/5 (prior60 print-extrema sweeps/reclaims, not orderbook sweep).
+- [ ] All four: independent per-minute QC, §21.6 formal measurement passports, as-of source-capture gate and OOS after-fee tests.
+- [ ] #16: run repaired output label reader for QA on an approved later visit, **not claimed tested yet**.
+
+Route blocked upstream on #18/#20 was not used; no execution through alternate interpreter or privilege change. No Strategy/DB/deploy/LIVE change. This checkpoint is historical physical coverage and versioned source provenance, not RESEARCH-READY or trading edge.
