@@ -45,8 +45,8 @@ stop и TP как fixed percent либо exact Strategy-owned price/fact referen
 динамической Exit policy.
 
 Для current R1 initial protection состоит из catastrophic SL `-10%` и
-price-based TP на `fact.r1_opposite_inner_target`:
-LONG -> current L5-3 `resistance_bottom`, SHORT -> current L5-3 `support_top`.
+price-based TP на Exit-owned RAW структурном экстремуме L5-3:
+LONG -> `max(high36)`, SHORT -> `min(low36)` по полностью закрытым 5m свечам, без ATR200.
 После Entry последующее изменение TP принадлежит Universal Exit.
 
 **Экспериментальная Strategy version** — owner-approved immutable снимок
@@ -220,8 +220,9 @@ H3 сейчас не является условием Entry текущего п
 `range_low=min(low36)`, Wilder ATR200, `half_width=ATR×0.5`. Нижняя и верхняя
 граничные зоны строятся вокруг `range_low`/`range_high`; рабочий диапазон L5-3
 — пространство между их внутренними границами. Для LONG Entry целевая точка
-лимитного входа — внутренняя граница нижней зоны, initial TP — внутренняя
-граница верхней зоны; для SHORT — зеркально. После confirmed fill Entry snapshot
+лимитного входа — внутренняя граница нижней зоны, а initial TP
+для LONG — сырой противоположный структурный экстремум `max(high36)` без ATR200;
+для SHORT — зеркально (`min(low36)` как initial TP). После confirmed fill Entry snapshot
 не двигает protection: актуальную L5-3 геометрию может использовать только
 owner-approved ExitPlan той же Strategy version.
 
