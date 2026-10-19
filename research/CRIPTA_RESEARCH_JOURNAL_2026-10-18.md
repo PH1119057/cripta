@@ -528,3 +528,18 @@ CHECKED HERE: research-only `book_top5_membership_v1.py` immutable commit `de93b
 | ARBUSDT | 616464 | +4663839.36 | +64575468.50 | -69241160.96 | -1853.11 | +6081975.47 | -6044.35 |
 
 ASK entering/exiting values, respectively: APT +47223143.50/-46749875.00; INJ +247420034.46/-276819714.04; DOT +87451908.76/-82056742.55; LTC +102409340.71/-89464220.29; ARB +71742337.37/-77830357.19. All components belong to **that exact coin**, not shared denominators. Enormous gross transitions with far smaller net visible top-five stock changes show reclassification/rank-boundary effects, not equal actual trades. This is a fully executed **book stock decomposition**, NOT validated strict multi-level OFI, NOT cancellation/fill attribution, and NOT OOS/predictive profitability. #10 remains OPEN with narrower variant FULL_DAY_5_OF_5. No DB, deployment or LIVE change.
+
+
+## 2026-10-19 — strict best-price transition OFI: 5-coin 10m pilot
+
+CHECKED HERE: new read-only algorithm `research/microstructure/experiments/top1_price_transition_ofi_v1.py` published at GitHub commit `f5485b7cb729195e8ef6ea394d31f9ae94acf444`, executed under actor `cripta`, Bybit orderbook first ten minutes 2026-05-19 UTC for all five instruments, separately and successfully rc=0. For each delta, exact best-price bid effect is +new bid quantity if bid price rises, quantity difference if unchanged, -old quantity if bid price falls. Ask effect is +new ask quantity if ask price falls, difference if unchanged, -old ask quantity if ask price rises. OFI = bid effect minus ask effect in each **instrument's base units**, with snapshot resetting previous state.
+
+| Coin | Paired transitions | Bid contribution (base) | Ask contribution (base) | Top1 OFI (base) |
+|---|---:|---:|---:|---:|
+| APTUSDT | 4824 | +90041.74 | +120062.94 | -30021.20 |
+| INJUSDT | 5560 | +3574.9 | -521.6 | +4096.5 |
+| DOTUSDT | 4860 | +156953.0 | +194314.2 | -37361.2 |
+| LTCUSDT | 4376 | +3674.8 | +2987.0 | +687.8 |
+| ARBUSDT | 4546 | +331587.6 | +223614.1 | +107973.5 |
+
+This is a legitimate **best-price transition OFI prototype only**. It is NOT proven strict multi-level OFI, NOT a buy/sell aggressor measurement, not classified cancel-vs-fill, not a prediction or OOS. Absolute base quantities cannot be compared across coins. Snapshot boundary contributes no pairwise delta. First 10-minute source coverage is 5/5; full-day validation and independent QC still pending. Indicator #10 remains OPEN; no Strategy/LIVE mutation.
