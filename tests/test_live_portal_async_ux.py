@@ -77,7 +77,7 @@ def test_live_state_requests_only_data_for_visible_trade_view() -> None:
     assert "def _live_trading_state(*, include_history: bool)" in app
     assert '_live_trading_state(include_history=view == "closed")' in app
     assert 'opportunity_state()\n                    if view == "signals"' in app
-    assert 'strategy_monitor_state() if view == "monitor" else None' in app
+    assert 'strategy_monitor_state() if view in {"open", "monitor"} else None' in app
     assert '"entry_shadow": None' in app
     assert 'mayak_v2_state() if view == "open" else None' in app
     assert "if include_history and not has_exact_exit_table" in app

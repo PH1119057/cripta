@@ -4424,7 +4424,7 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "signal_monitor": strategy_signal_monitor_state()
                     if view == "signals"
                     else None,
-                    "strategy_monitor": strategy_monitor_state() if view == "monitor" else None,
+                    "strategy_monitor": strategy_monitor_state() if view in {"open", "monitor"} else None,
                     "trade_strategy_monitor": strategy_trade_monitor_state()
                     if view == "open"
                     else None,
