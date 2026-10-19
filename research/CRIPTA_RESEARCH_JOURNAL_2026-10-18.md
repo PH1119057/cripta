@@ -558,3 +558,18 @@ Immutable source `research/microstructure/experiments/top1_price_transition_ofi_
 | ARBUSDT | 616462 | 24466568.1 | 25842902.3 | -1376334.2 |
 
 These quantities are BASE ASSET quantities specific to each instrument, not USDT; no coin-averaging, not inferred cancellations/execution, not returns or profitability. Status for this narrow indicator: `TOP1_FULL_DAY_5_OF_5_EXECUTED`; independent formula QC, per-minute lineage and §21 registration still to be checked. **#10 strict multi-level OFI remains OPEN** until its complete methodology and verification are finished. No trading deployment or LIVE changes.
+
+
+## 2026-10-19 — #12 visible same-price depletion 5-coin 10m smoke
+
+CHECKED HERE: source `research/microstructure/experiments/same_price_depletion_v1.py` commit `fa52681ecc380fa8ca74f678b40f67d25eb58137`, five separate read-only server runs actor `cripta`, 2026-05-19 00:00–00:10 UTC, five rc=0. For already present exact orderbook prices, sums all **positive gross visible reductions** `price×(old_qty-new_qty)` and separately gross increases of same-price quantities; both quote-USDT per coin; no aggregation across coins.
+
+| Symbol | Book deltas | Bid gross visible reduction USDT | Ask gross visible reduction USDT | Bid same-price gross increase USDT | Ask same-price gross increase USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 4825 | 16867943.08 | 15615408.15 | 16183518.76 | 14706392.56 |
+| INJUSDT | 5561 | 96059928.65 | 93221996.54 | 94453472.08 | 92472721.63 |
+| DOTUSDT | 4861 | 36694272.68 | 38217841.41 | 33260970.77 | 34469015.56 |
+| LTCUSDT | 4377 | 21167331.71 | 19216312.71 | 21104504.68 | 19373482.32 |
+| ARBUSDT | 4547 | 14377294.74 | 13464815.34 | 13851893.86 | 12155745.50 |
+
+**Important limitation**: shrinking visible level quantity can be a cancellation, a filled passive order, or exchange book aggregation and cannot be positively labeled `Pulling Rate` without validated trade/book causal attribution. Gross flows re-count liquidity churn, not P&L or unique money; new level additions are excluded. Status: **#12 PHYSICAL_DEPLETION_CANDIDATE_SMOKE_5_OF_5**, strict `Pulling Rate` remains OPEN. Next bounded investigation is reconciliation of observed trade fills vs per-price book deltas with timestamp availability; preserve uncertainty rather than fabricate cancellations. Source is stdout-only, no DB, deploy, Strategy or LIVE.
