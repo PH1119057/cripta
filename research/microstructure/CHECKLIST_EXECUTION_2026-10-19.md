@@ -124,3 +124,13 @@ Date-selectable `signed_flow_next_minute_v2.py` was committed `33b71227`. Bybit 
 - [ ] Both require host/job evidence reconciliation before an authorized re-run. Same-order order resiliency is not proved from top-five aggregate stock. Independent per-episode QC/§21 research readiness still OPEN.
 
 No changes to Strategy, DB, services, LIVE or execution. The prior OpenAI blocked routes #14/#18/#20 were not invoked.
+
+
+## 2026-10-19 — #12 second-day five-coin chronology bound
+
+- [x] Created date-selectable `book_trade_clock_sample_v2.py` in GitHub `5236c5aaf103286daa66d767a72aa42c54794a6c`. All 5 read-only server samples of **first 500 public trades and first 500 ob200 messages** for May20 completed with rc=0.
+- [x] `seq` and `u` nondecreasing **inside sampled 500-message windows** on each coin. Observed sampled `ts−cts`: APT 1–99ms; INJ 1–98ms; DOT 1–123ms; LTC 1–100ms; ARB 1–99ms. Journal `6cc3322aa2b7aed44e9692cca882ad1fc5c8ebde`; indicator tracker `d491603398251f33e6761711dd90dc9c30d614c7`.
+- [ ] Cross-feed actual arrival/availability common-clock reconstruction remains absent; sampled `ts−cts` is not publication latency. Cannot promote observed same-price book loss to verified order cancellations.
+- [ ] Formal instrument×indicator §21 QC and strict Pulling Rate remains OPEN. Historical timed-out LTC long scan from previous pilot not rerun.
+
+No blocked #14/#18/#20 route used; no unexpected server writes, Strategy/DB/deploy/LIVE mutations.
