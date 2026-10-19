@@ -236,3 +236,11 @@ Prior #9/#11/#29 APT agent no-response outcome still unknown and not retried. No
 - [ ] Both require §21.6 per-pair passport, source coverage/latency and OOS predictive testing after fees. Neither has authority to alter trading rules.
 
 No retry of blocked OpenAI command routes (#14/#18/#20/#25), no retry of unknown SentinelX outcome (#9/#11/#29/#30), no changes to live runtime, services, DB or Strategy.
+
+
+## 2026-10-19 — #15 second-day all-minute algebraic QC
+
+- [x] `effort_result_minute_allrow_qc_v1.py` committed `3b6d9ea8da2fc0daead3967f7b291ea01d40af31`, five separate read-only May20 runs rc=0, zero mismatches between two independently aggregated and algebraically rearranged Decimal minute formulas on all valid rows: 1440/1440/1436/1423/1440.
+- [x] Explicit missing counts APT 0, INJ 0, DOT 4, LTC 17, ARB 0; no-data not zero; journal `c23cd552cc125f8f46cb1e2d0b217b52941a0da1`, indicator register `073d9078ed2653185ee5691517371e6b67e43889`.
+- [ ] **Not** direct primary-per-row equivalence: diagnostic script loads but does not invoke primary reader, though independent primary summary agreement was separately checked. Source/observed availability gate, independent raw hash manifest and per-instrument §21.6 READY still OPEN.
+- [ ] OOS/performance after fees not tested; no runtime/Strategy/LIVE modification.
