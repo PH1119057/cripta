@@ -722,3 +722,8 @@ CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_
 | ARBUSDT | 43 | 37/5/1 | 901 | 48 | 43/4/1 | 2101 |
 
 Episode accounting `episodes=recovered+expired+censored` PASS all ten side-series. Caveats: repricing/re-ranking can move top-five totals without actual same-order restoration, repeated falls within an open episode are not independent, and fast recovery rates here do not prove exchange resilience or any profitable feature. Status #30: `TOP5_STOCK_RECOVERY_10M_SMOKE_5_OF_5`, full-day independent QC, causality/latency and strict replenishment remain OPEN. No trading/DB/deploy/LIVE changes.
+
+
+## 2026-10-19 — #30 APT full-day top-five stock resilience result
+
+CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_v1.py` commit `014f4f162b113d36a03398863a19ac385319263b`, read-only actor `cripta`, 2026-05-19 UTC APTUSDT, rc=0, duration 42.73s, two snapshots, 606835 book deltas. BID: 5281 top-five-depth fall episodes, 4468 recovered within 60s, 811 expired, 2 right-censored, median time **among recovered** 1800ms. ASK: 5416 episodes, 4623 recovered, 791 expired, 2 censored, median recovered 1500ms. Both episode partitions PASS. The same top-five quote-depth proxy remains vulnerable to re-ranking, and neither identical liquidity provider nor cancel/fill causation is established. Other four full-day runs NOT CHECKED HERE at this checkpoint. #30 full-day coverage 1/5.
