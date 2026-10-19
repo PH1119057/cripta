@@ -849,3 +849,20 @@ CHECKED HERE: pinned source `research/microstructure/experiments/depletion_trade
 | ARBUSDT | 2133614 | 140 | 45686 | 62221 | 78656 | 182819 | 46822 | 35528 |
 
 CHECKED HERE: symmetric matches monotone with widening time windows for all five; ±1000ms exactly equal to prior five-coin full-day `depletion_trade_temporal_join_v1` outputs. Past-only and future-only can overlap; their sum is NOT necessarily symmetric because different trades can appear on either side of one book update. Reported source event time is not verified publication/observed time and orderbook decreases are not proven cancellations. Future window is hindsight, never an as-of feature. A single trade may match many book updates; quantity allocation and unique causality unverified. **#12 remains OPEN, indicator Pulling Rate not physically identified.** Remaining research: source timing/availability calibration, event-sequence identity, true cancellation-vs-fill identification; no Strategy or LIVE changes.
+
+
+## 2026-10-19 — #12 timestamp QC pilot and bounded timeout checkpoint
+
+CHECKED HERE: source `research/microstructure/experiments/trade_book_timestamp_qc_v1.py` published commit `130db7d3e1a6d362a17db4605edcc6a38de8fe54`. Exact 10-minute read-only Bybit public trades and ob200 inventories, actor `cripta`:
+
+| Coin | Trade rows | Trade adjacent same-ms timestamps | Trade backward | Book messages | Book adjacent same-ms | Book backward | Result |
+|---|---:|---:|---:|---:|---:|---:|---|
+| APTUSDT | 1277 | 886 | 0 | 4826 | 0 | 0 | PASS |
+| INJUSDT | 5549 | 4250 | 0 | 5562 | 0 | 0 | PASS |
+| DOTUSDT | 1474 | 1069 | 0 | 4862 | 0 | 0 | PASS |
+| LTCUSDT | NOT VERIFIED | — | — | NOT VERIFIED | — | — | TIMEOUT |
+| ARBUSDT | NOT CHECKED | — | — | NOT CHECKED | — | — | NOT RUN |
+
+These 3 verified book feeds expose top-level `cts,ts,type,data,topic` and book data `a,b,s,seq,u`; public trade fields include `trdMatchID` and `timestamp`. These fields are useful for a later explicit physical timing/sequencing study, **but mere presence does not prove that cross-feed arrival/order semantics align**. The book sequence has zero adjacent equal millisecond ts in this 10m sample, unlike trades. Multiplicity of same millisecond trade timestamps creates ambiguity for naïve trade↔book joins. No cancellation-vs-fill attribution.
+
+For LTC same command hit SentinelX bounded `duration=30.87s, returncode=-1, timed_out=true`, reported process killed. Per `DEVELOPMENT_RELEASE §19.6` timeout is **NOT** Unix EACCES or confirmed successful research. Did not immediately retry same compute, did not label LTC PASS, and did not invoke a parallel actor. ARB was not run after timeout. `#12_SOURCE_TIMESTAMP_QC` = PARTIAL 3/5. Original prior full-day #12 results remain verified independently. No LIVE/Strategy/DB mutation.
