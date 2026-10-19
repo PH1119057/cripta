@@ -3808,6 +3808,21 @@ def _r1_paper_real_parity_attestation(
     }
 
 
+def _r1_trading_source_delta(changed_paths: list[str]) -> list[str]:
+    """Exclude independent docs/research, block unknown runtime-affecting changes.
+
+    Operational and security code remain protected. Unknown roots fail closed
+    until classified in the canonical release contract.
+    """
+    non_trading_prefixes = ("docs/", "research/", "tests/", "operations/dashboard/")
+    non_trading_root_files = {"README.md", "AGENTS.md"}
+    return [
+        path for path in changed_paths
+        if path not in non_trading_root_files
+        and not any(path.startswith(prefix) for prefix in non_trading_prefixes)
+    ]
+
+
 def _u6_prepare_r1_prearm_evidence(
     connection: psycopg.Connection,
     *,
@@ -3854,17 +3869,7 @@ def _u6_prepare_r1_prearm_evidence(
         ["git", "-C", "/srv/cripta/source_checkout", "diff", "--name-only",
          release, source_commit], text=True,
     ).splitlines()
-    # Research is filesystem-isolated from trading runtime by canonical contract.
-    # A new top-level code or config directory is NOT silently exempted.
-    non_trading_prefixes = (
-        "docs/", "research/", "tests/", "operations/dashboard/",
-    )
-    non_trading_root_files = {"README.md", "AGENTS.md"}
-    trading_delta = [
-        path for path in delta
-        if path not in non_trading_root_files
-        and not any(path.startswith(prefix) for prefix in non_trading_prefixes)
-    ]
+    trading_delta = _r1_trading_source_delta(delta)
     if trading_delta:
         raise ValueError(
             "R1 PREARM: trading runtime source differs from loaded release: "
