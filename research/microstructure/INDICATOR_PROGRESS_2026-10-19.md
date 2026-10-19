@@ -20,7 +20,7 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 12 | Pulling Rate | `FULL_DAY_TRADE_BOOK_TIMING_SENSITIVITY_5_OF_5; TIMESTAMP_QC_10M_4_OF_5; BOUNDED_BOOK_CLOCK_SAMPLE_5_OF_5` | APT/INJ/DOT/ARB 10m timestamps checked, former LTC full-scan timeout remains unresolved; different first-500-message clock sample 5/5 checked, ts-cts ~1–112 ms and seq/u nondecreasing only within sample; still no cross-feed causal ordering or cancellation attribution (journal 8394cf0) |
 | 13 | Depth Recovery | `SAME_PRICE_RECOVERY_FULL_DAY_5_OF_5` | Independent QC, temporal availability and per-pair passport remain |
 | 14 | Price Impact | `FLOW_TO_NEXT_MINUTE_LABEL_FULL_DAY_5_OF_5` | Future label not causal feature; actual trade-level price impact OPEN |
-| 15 | Effort / Result | `ONE_MINUTE_EFFORT_RESULT_PROXY_FULL_DAY_5_OF_5` | Further own-coin normalization and independent QC required |
+| 15 | Effort / Result | `ONE_MINUTE_EFFORT_RESULT_PROXY_FULL_DAY_5_OF_5 + SECOND_DAY_CALC_5_OF_5` | May20 1440 rows each with explicit empty minutes; per-coin turnover-normalized median and p90, source v2 10fe631, journal 7b3be4c; independent per-row QC, §21 passport/OOS still OPEN |
 | 16 | Absorption | `HIGH_FLOW_PRICE_RESISTANCE_PROXY_FULL_DAY_5_OF_5` | Not proved passive absorption or OOS |
 | 17 | Exhaustion | `FIVE_MINUTE_DECAY_FUTURE_LABEL_FULL_DAY_5_OF_5` | Overlapping study anchors, no OOS |
 | 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
