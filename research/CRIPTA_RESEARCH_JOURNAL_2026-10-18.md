@@ -1351,3 +1351,8 @@ CHECKED HERE: independent source `research/microstructure/experiments/sweep_recl
 | ARBUSDT | 1380 | 0 | 49 / 35 | 67 / 40 |
 
 IMPORTANT: counts represent source print-sequence events, not independently verified liquidity sweeps through resting orderbook; same-timestamp fill order remains unsupported. Independent **cohort summary QC**, not saved minute-event row hashes, no §21 READY/OOS/after-fees inference. No Strategy/DB/services/LIVE changes.
+
+
+## 2026-10-19 — #15 full 1440-minute formula-rearrangement row QC 5/5
+
+CHECKED HERE: new source `research/microstructure/experiments/effort_result_minute_allrow_qc_v1.py`, immutable commit `3b6d9ea8da2fc0daead3967f7b291ea01d40af31`. Five read-only `cripta` server runs on exact May20 public-trades gz, all rc=0. Every eligible minute re-aggregated twice from same raw source by two independent code paths and algebraically rearranged Decimal formula for relative first/last price change divided by turnover; 5/5 PASS zero mismatches (relative tolerance 1e-9). APT 1440 valid, INJ 1440, DOT 1436 (4 empty), LTC 1423 (17 empty), ARB 1440. Crucial scope clarification: the script loads the historical primary module source but **does not invoke its run function**; therefore, this is **two-path all-minute formula/aggregation parity**, not a direct all-row equality check against primary implementation. Independent primary summary agreement was separately observed `633b84e`. Don't overstate as primary full-row equivalence. No observed source publication-time/latency, per-pair §21.6 READY or OOS after-fees validation. No Strategy/DB/services/runtime/LIVE changes.
