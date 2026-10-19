@@ -3754,13 +3754,19 @@ def _r1_paper_real_parity_attestation(
         source_path = source_root / relative
         runtime_path = runtime_root / relative
         try:
-            source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
-            runtime_hash = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+            source_bytes = source_path.read_bytes()
+            runtime_bytes = runtime_path.read_bytes()
+            source_hash = hashlib.sha256(source_bytes).hexdigest()
+            runtime_hash = hashlib.sha256(runtime_bytes).hexdigest()
             release_bytes = subprocess.check_output(
                 ["git", "-C", str(source_root), "show", f"{release_commit}:{relative}"],
                 stderr=subprocess.DEVNULL,
             )
-            release_hash = hashlib.sha256(release_bytes).hexdigest()
+            # Python source uses universal-newline semantics. Windows checkout
+            # may rewrite CRLF while preserving exactly the same Python program.
+            source_canonical = source_bytes.replace(b"\r\n", b"\n")
+            release_canonical = release_bytes.replace(b"\r\n", b"\n")
+            release_hash = hashlib.sha256(release_canonical).hexdigest()
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ValueError(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY release module unreadable {relative}: {exc}"
@@ -3769,7 +3775,7 @@ def _r1_paper_real_parity_attestation(
             raise ValueError(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY source/live mismatch {relative}"
             )
-        if source_hash != release_hash:
+        if hashlib.sha256(source_canonical).hexdigest() != release_hash:
             raise ValueError(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY release Git-object mismatch {relative}"
             )
