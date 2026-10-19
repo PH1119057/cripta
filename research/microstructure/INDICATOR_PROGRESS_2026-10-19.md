@@ -37,6 +37,10 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 29 | Bid/Ask Spread | `FULL_DAY_BOOK_MINUTE_5_OF_5_PASS + INDEPENDENT_FULL_DAY_SUMMARY_QC_5_OF_5` | May 19 1440 minute states each coin, snapshots+delta count reconciled; single-reader ±5bp depth/imbalance and top spread physical measurements, independent full-day rounded medians/coverage/counts agree (journal 2043539); full 1440-row independent QC and §21 passport pending (journal 5aaf62b) |
 | 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED` | APT/INJ/DOT/LTC/ARB full-day results verified; strict same-order resilience OPEN. Evidence GitHub journal full-day #30 checkpoint 2026-10-19. |
 
+## Execution checklist
+
+- [30-indicator execution checklist](CHECKLIST_EXECUTION_2026-10-19.md) (GitHub-committed, owner scope, #26 last, active route hard stops and unclosed gates).
+
 ## Evidence / checkpoints
 
 - Main appended chronologically, including exact source commit and per-symbol counts after each indicator: `research/CRIPTA_RESEARCH_JOURNAL_2026-10-18.md`
