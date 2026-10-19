@@ -28,9 +28,9 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 20 | Local Extremes | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
 | 21 | Sweep / Reclaim | `ORDERED_TRADE_PRINT_PROXY_FULL_DAY_5_OF_5 + SECOND_DAY_CALC_5_OF_5` | May20 prior60 print sweep/reclaim candidate: eligible 1380/1380/1193/872/1380 by APT/INJ/DOT/LTC/ARB; reclaim≤sweep QC PASS 5/5; not book liquidity sweep, tie ordering unresolved, §21/OOS OPEN (journal ef20ee3) |
 | 22 | VWAP / Volume Profile | `SECOND_DAY_ALL_ROWS_INDEPENDENT_HASH_5_OF_5 + RAW_SHA256_QC_5_OF_5` | 2026-05-20 exact source gz SHA256, size, trade order and notional checks registered; 1440-row independent exact-hash 5/5 PASS; §21.6 formal per-pair READY gate still pending (journal bae0826) |
-| 23 | OI Change | `HISTORICAL_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified 2026-05-19 series; missing=NO_DATA |
+| 23 | OI Change | `SHALLOW_SOURCE_INVENTORY_SECOND_DAY_5_OF_5_NO_CANDIDATES` | May20 shallow known roots 5/5 no OI candidates, not exhaustive source absence; exact-day OI unverified; NO_DATA ≠ zero. Journal 31f79a8 |
 | 24 | Liquidation Spikes | `PARTIAL_HOURLY_FILES_5_OF_5` | No verified full-day event completeness; alternate interpreter probe stopped by SentinelX command_not_allowed (2026-10-19) |
-| 25 | Spot / Perpetual Divergence | `SPOT_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified same-day Spot series |
+| 25 | Spot / Perpetual Divergence | `SPOT_SOURCE_UNVERIFIED_5_OF_5; SECOND_DAY_PROBE_PREPARED_NOT_EXECUTED` | May20 probe source v2 exists but first run blocked upstream OpenAI, 0/5; no retry, route HARD_STOP, source unverified (journal 31f79a8) |
 | 26 | Cross-Venue Lead–Lag | `OWNER_DEFERRED_LAST` | Do not run until Bybit indicator work complete |
 | 27 | Inter-Trade Duration | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 28 | Trade-Size Distribution | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
