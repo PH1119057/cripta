@@ -1123,3 +1123,18 @@ CHECKED HERE: read-only `cripta` 10 physical runs May 20 using date-parameterize
 | ARBUSDT | 1380 | 145 | 23 | PASS | 96 | 50 | 22 |
 
 #16 prior60m percentile baseline uses previous minutes, but flow/price reaction exists only after current minute close; price-opposition ≠ proof of passive limit absorption. #17 **future next-block reversal is a LABEL**, unavailable at current block close; no predictive or OOS result. #17 partition QC 5/5 true. Independent per-row QC and formal per-pair §21 gates remain OPEN. No Strategy, execution, DB, service or LIVE changes.
+
+
+## 2026-10-19 — #21 May20 ordered trade-print sweep/reclaim 5/5
+
+CHECKED HERE: `research/microstructure/experiments/sweep_reclaim_ordered_trades_v2.py`, immutable source `efd5d509d67b3d747345bc2375f788f9eba93698`. Five physical read-only `cripta` runs `--date 2026-05-20`, all rc=0, 1440 minute timeline, prior60 closed-minute high/low references. Missing or incomplete windows explicitly excluded, not zero.
+
+| Coin | Eligible mins | Missing/incomplete windows | High print sweeps | High reclaims after print | Low print sweeps | Low reclaims after print |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1380 | 0 | 55 | 40 | 60 | 34 |
+| INJUSDT | 1380 | 0 | 80 | 68 | 62 | 47 |
+| DOTUSDT | 1193 | 187 | 50 | 31 | 53 | 31 |
+| LTCUSDT | 872 | 508 | 32 | 22 | 31 | 18 |
+| ARBUSDT | 1380 | 0 | 49 | 35 | 67 | 40 |
+
+All 5/5 reclaim counts bounded by same-side sweep counts (QC PASS). **Caveat:** prints above/below previous 60m extrema are NOT demonstrated orderbook liquidity sweeps. Same-timestamp tie ordering and as-of exchange message publication not independently established; no independent row QC, OOS, after-fee PnL or §21 READY. No Strategy/DB/LIVE changes.
