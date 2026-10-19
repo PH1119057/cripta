@@ -35,7 +35,7 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 27 | Inter-Trade Duration | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 28 | Trade-Size Distribution | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 29 | Bid/Ask Spread | `FULL_DAY_BOOK_MINUTE_5_OF_5_PASS + INDEPENDENT_FULL_DAY_SUMMARY_QC_5_OF_5` | May 19 1440 minute states each coin, snapshots+delta count reconciled; single-reader ±5bp depth/imbalance and top spread physical measurements, independent full-day rounded medians/coverage/counts agree (journal 2043539); full 1440-row independent QC and §21 passport pending (journal 5aaf62b) |
-| 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED + SECOND_DAY_PARTIAL_1_OF_5` | May20 APT rc=0; INJ timed out in SentinelX job_e2201594f884, result UNKNOWN/no retry; rest not yet executed. Strict same-order resilience OPEN, journal 46afd50 |
+| 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED + SECOND_DAY_VERIFIED_3_OF_5` | May20 APT/DOT/LTC completed with partition QC PASS. INJ job_e2201594f884 timeout (-1), outcome UNKNOWN; ARB job_22c8f6bba901 agent non-response, outcome UNKNOWN. No retries. Strict same-order resiliency OPEN; journal 5089f50 |
 
 ## §21.6 evidence-gate update (2026-10-19)
 
