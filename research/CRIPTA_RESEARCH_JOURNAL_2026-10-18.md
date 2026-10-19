@@ -618,3 +618,18 @@ CHECKED HERE: read-only `research/microstructure/experiments/effort_result_minut
 | ARBUSDT | 1439 | 1 | 880.82341 | 4297.04163 |
 
 Zero-turnover denominators encountered: 0 among nonempty minutes. NO_DATA on empty minute, NOT 0. The large difference per coin reflects this specific ratio's sensitivity to turnover, tick size and liquidity; **not evidence** that one coin is a better trading opportunity. Unit/denominator known; cross-period normalizers, microstructure controls, independent computation QC and OOS are pending. #15 `FULL_DAY_PHYSICAL_PROXY_5_OF_5 / RESEARCH_READY_PENDING`, no Strategy/DB/LIVE changes.
+
+
+## 2026-10-19 — #13 exact-price depth recovery completed 5/5 full UTC day
+
+CHECKED HERE: versioned `research/microstructure/experiments/exact_price_recovery_v1.py` commit `7b24dc2a89a936a8b9a5cbc643f17f13e2f5a200`; read-only under actor `cripta`, UTC 2026-05-19, 5 independent rc=0 completed-day runs. Each has two snapshots, all 1440 minute buckets included. For each symbol, observed same-price visible-size reductions are tracked at most once per still-pending price; outcome RECOVERED within 60s, EXPIRED after 60s, or right-censored OPEN at day/snapshot boundary. Accounting `events = recovered + expired + open` PASS on all ten coin/side groups.
+
+| Symbol | Bid events | Bid recovered | Bid expired | Bid open | Bid median recovery ms | Ask events | Ask recovered | Ask expired | Ask open | Ask median recovery ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 229804 | 143019 | 86596 | 189 | 7200 | 175813 | 104438 | 71242 | 133 | 6099 |
+| INJUSDT | 330990 | 208355 | 122457 | 178 | 6300 | 275054 | 168838 | 106110 | 106 | 5700 |
+| DOTUSDT | 244016 | 151261 | 92578 | 177 | 5700 | 214615 | 132968 | 81516 | 131 | 4900 |
+| LTCUSDT | 135020 | 79756 | 55158 | 106 | 7101 | 102288 | 59686 | 42526 | 76 | 4899 |
+| ARBUSDT | 241467 | 148240 | 93064 | 163 | 6700 | 198615 | 121185 | 77311 | 119 | 6000 |
+
+**Causality/limit:** this is a same-price **visible-size reappearance proxy**, not verified same order/provider recovery, market resiliency edge, or proof that depletion came from cancellations. A price may disappear and later reappear; episode logic does not prove continuous queue identity. Median times are for recovered events only (selection conditional), not unconditional hazard/survival. Complete-day executed coverage = 5/5; independent QC and a formal per-pair §21 passport remain pending. **#13 FULL_DAY_PHYSICAL_PROXY_5_OF_5, RESEARCH-READY NOT PROMOTED**. No trading policy, DB, deployment or LIVE mutations.
