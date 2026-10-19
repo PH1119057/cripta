@@ -509,3 +509,22 @@ CHECKED HERE: job `job_0f20795619d1`, exit 0, 104.72s; `book_top5_membership_v1.
 ## 2026-10-19 — #10 DOT full-day top-five membership decomposition
 
 CHECKED HERE: job `job_cdcadb8bc9e1` succeeded, rc=0, 92.07s, no truncated output. Versioned `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24`; `cripta` actor read-only, DOTUSDT 2026-05-19 UTC; 631776 deltas, 2 snapshots, updated 1440/1440 minutes. BID common-price -3605825.06 USDT, entry +89343130.74, exit -85732274.93, total top-five stock +5030.76. ASK common-price -5402589.38, entry +87451908.76, exit -82056742.55, top-five stock -7423.17. Inside previously broader book: entered BID 61036285.77, ASK 58154317.53 USDT; these are reclassification, not direct order creation. #10 strict multi-level OFI OPEN; this is bounded descriptive membership decomposition, not fill/cancel or PnL.
+
+## 2026-10-19 — #10 LTC full-day top-five membership decomposition
+
+CHECKED HERE: actor `cripta` read-only script `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24`, LTCUSDT 2026-05-19 UTC, completed rc=0 in 44.53s, two snapshots, 542092 deltas, 1440 minutes. BID common -9288709.74 USDT, entry +102974252.68, exit -93635617.09, net top-five stock +49925.85. ASK common -12962898.43, entry +102409340.71, exit -89464220.29, stock -17778.01. Entry from already present deeper levels: BID +75623378.10 USDT, ASK +79222245.16. This is a top5 stock decomposition; strict OFI, cancel/fill attribution, OOS and predictive conclusions remain OPEN.
+
+
+## 2026-10-19 — #10 five-symbol 24h top-five membership decomposition complete
+
+CHECKED HERE: research-only `book_top5_membership_v1.py` immutable commit `de93b95502244cc62c7fed9429de2a61c95fdd24` executed separately as `cripta` on the complete UTC day 2026-05-19 for all five symbols, each returned rc=0. Each has 2 snapshot resets and 1440/1440 minute buckets with updates. New verified jobs: INJ `job_0f20795619d1`, DOT `job_cdcadb8bc9e1`, LTC synchronous rc=0, ARB `job_62731347cfe1`. Earlier APT `job_8f20b4a23ebb`.
+
+| Symbol | Delta events | Common bid USDT | Entered bid stock USDT | Exited bid stock USDT | Top5 bid net stock USDT | Common ask USDT | Top5 ask net stock USDT |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 606835 | -5170483.52 | +49111003.15 | -43934713.49 | +5806.13 | -468018.80 | +5249.70 |
+| INJUSDT | 733301 | +14680789.86 | +220997286.06 | -235672430.95 | +5644.96 | +29414204.71 | +14525.13 |
+| DOTUSDT | 631776 | -3605825.06 | +89343130.74 | -85732274.93 | +5030.76 | -5402589.38 | -7423.17 |
+| LTCUSDT | 542092 | -9288709.74 | +102974252.68 | -93635617.09 | +49925.85 | -12962898.43 | -17778.01 |
+| ARBUSDT | 616464 | +4663839.36 | +64575468.50 | -69241160.96 | -1853.11 | +6081975.47 | -6044.35 |
+
+ASK entering/exiting values, respectively: APT +47223143.50/-46749875.00; INJ +247420034.46/-276819714.04; DOT +87451908.76/-82056742.55; LTC +102409340.71/-89464220.29; ARB +71742337.37/-77830357.19. All components belong to **that exact coin**, not shared denominators. Enormous gross transitions with far smaller net visible top-five stock changes show reclassification/rank-boundary effects, not equal actual trades. This is a fully executed **book stock decomposition**, NOT validated strict multi-level OFI, NOT cancellation/fill attribution, and NOT OOS/predictive profitability. #10 remains OPEN with narrower variant FULL_DAY_5_OF_5. No DB, deployment or LIVE change.
