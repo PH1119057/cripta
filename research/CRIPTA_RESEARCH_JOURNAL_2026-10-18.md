@@ -742,3 +742,20 @@ CHECKED HERE: `research/microstructure/experiments/top5_depth_resilience_v1.py` 
 ## 2026-10-19 — #30 LTC full-day top-five stock resilience result
 
 CHECKED HERE: `top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 LTCUSDT, successful synchronous execution exit=0, duration 22.23s. Two snapshots and 542092 deltas. BID: 6343 top-five depth-fall episodes; 5547 recovered, 795 expired, 1 censored; median 1100ms among recovered. ASK: 6779 episodes; 6016 recovered, 761 expired, 2 censored; median 1000ms. Both episode partitions PASS. #30 top-five-depth-stock proxy full-day coverage 4/5; ARB still pending. Does NOT demonstrate refill of same order/queue or trading edge.
+
+
+## 2026-10-19 — #30 top-five quote-depth stock resilience, full-day 5/5 checkpoint
+
+CHECKED HERE: `research/microstructure/experiments/top5_depth_resilience_v1.py` exact version commit `014f4f162b113d36a03398863a19ac385319263b`; five separately executed read-only jobs under actor `cripta`, complete 2026-05-19 UTC Bybit order-book archives. Each includes two snapshot resets, all in-day delta transitions, and 1440 minute buckets in scope. All five exit codes 0. Last ARB `job_b325280cb123` succeeded duration 45.92s, no truncation.
+
+A **top-five total quote-depth** side reduction starts a single pending episode; recovery means aggregate same-side top-five quote depth at or above pre-reduction target within 60 seconds, with EXPIRED versus censored OPEN distinguished. `events = recovered + expired + censored` PASS for all ten per-coin/side sequences.
+
+| Coin | Bid episodes | Bid recovered | Bid expired | Bid censored | Bid median recovered ms | Ask episodes | Ask recovered | Ask expired | Ask censored | Ask median recovered ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 5281 | 4468 | 811 | 2 | 1800 | 5416 | 4623 | 791 | 2 | 1500 |
+| INJUSDT | 5184 | 4395 | 787 | 2 | 2400 | 5430 | 4639 | 789 | 2 | 2000 |
+| DOTUSDT | 5615 | 4815 | 798 | 2 | 1500 | 5661 | 4865 | 794 | 2 | 1400 |
+| LTCUSDT | 6343 | 5547 | 795 | 1 | 1100 | 6779 | 6016 | 761 | 2 | 1000 |
+| ARBUSDT | 5116 | 4327 | 788 | 1 | 2001 | 5087 | 4279 | 806 | 2 | 2001 |
+
+This closes 5/5 **full-day computations of the explicitly scoped top-five quote-depth stock recovery proxy**, and is **NOT** proof of same-price replenishment, same liquidity owner, true event-driven shock causation, predictive efficacy, an order-level resiliency indicator, or economic advantage. Repricing, re-ranking and churn can restore aggregate depth without restoring any original order. Reference #13 separately tracks exact price-level recovery and is NOT interchangeable. Independent replay/QC and §21 per-pair passports still pending. #30 strict Replenishment/Resiliency remains OPEN; no promotion to RESEARCH-READY, no trading or LIVE changes.
