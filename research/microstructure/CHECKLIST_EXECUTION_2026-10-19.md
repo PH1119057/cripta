@@ -206,3 +206,13 @@ GitHub journal `01b5e8798596efa37725ef879a7e371c4d0f6ff6`, progress registry `40
 - [ ] Obtain authorized host/job evidence; only then decide on bounded next execution if permitted. Formal §21.6 passports and actual exchange observed/available-after validation still OPEN.
 
 This is an operational access/outcome problem, not a confirmed algorithm mismatch or approval to change service, privileges or runtime. No LIVE change.
+
+
+## 2026-10-19 — independent #15 summary QC and #16 label-fix proof
+
+- [x] #15 Effort/Result: independent Decimal reader `effort_result_decimal_independent_qc_v1.py` GitHub `af16f88d25b5b6bdd03cd53da0cf3760adb045b1`, source May20 five coins, valid/missing count and independently reconstructed median and p90 match earlier primary 5/5. Journal `633b84e4caad70348b1cfd4b296dbd252e61059f`, registry `860a5fb0a333efa55171bf5c2f7b51898da0134b`. Full 1440-minute *per-row* QC still OPEN.
+- [x] #16 revised `absorption_prior60_candidate_v2.py` corrected output date label re-executed on APT with rc=0, window `2026-05-20 full UTC day` and same partition counts 1380/152/15/128/9 as pre-fix primary. Journal `186929a06f5fb74d1ae4ccc1357643d7c0842d9b`.
+- [ ] #16 other four label-fix re-executions are NOT claimed; no independent implementation yet.
+- [ ] #15 and #16 still require per-pair §21 source and availability contracts, full row/threshold QC, OOS after-fee validation.
+
+Independent book 1440-row job `job_cb166e3a8aa1` remains UNKNOWN after agent nonresponse, with no fresh result notifications observed. No retry. Prior OpenAI upstream-blocked routes also not invoked. No production/runtime mutation.
