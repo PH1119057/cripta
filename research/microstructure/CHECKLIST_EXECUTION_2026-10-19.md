@@ -244,3 +244,13 @@ No retry of blocked OpenAI command routes (#14/#18/#20/#25), no retry of unknown
 - [x] Explicit missing counts APT 0, INJ 0, DOT 4, LTC 17, ARB 0; no-data not zero; journal `c23cd552cc125f8f46cb1e2d0b217b52941a0da1`, indicator register `073d9078ed2653185ee5691517371e6b67e43889`.
 - [ ] **Not** direct primary-per-row equivalence: diagnostic script loads but does not invoke primary reader, though independent primary summary agreement was separately checked. Source/observed availability gate, independent raw hash manifest and per-instrument §21.6 READY still OPEN.
 - [ ] OOS/performance after fees not tested; no runtime/Strategy/LIVE modification.
+
+
+## 2026-10-20 — #13 endpoint-expiration independent synthetic QC
+
+- [x] Immutable synthetic no-write audit `depth_recovery_synthetic_endpoint_audit_v1.py`, GitHub `d7c661ffb7b00c12c89803133fbab621c5422241`, ran actor `cripta` rc=0. Cases recovery on time, expiry after another delta, and no-delta-after-reduction all classified by prototype; no primary-raw reread.
+- [x] Primary `exact_price_recovery_v2.py` currently ages pending only on a later delta, and carries all remaining to `open` at end even when pending age exceeds 60 seconds. Synthetic old-at-end case classified `censored=1, pending_older_than_window_at_end=1`; code-level finding registered in journal `2b0218456ba8a9d2b0abf81f7989f9899bf545d6`.
+- [ ] Determine formal expiry-vs-right-censor measurement contract and source uptime coverage, implement separate version and independently remeasure May20 5-coin raw episode age distribution. Current all-episode integer partitions PASS do NOT establish correct 60s endpoint classification or research-ready gate.
+- [ ] Strict parent-order replenishment, independently timestamped availability, §21.6 per-pair passports and OOS after fees remain OPEN.
+
+Earlier blocked action on creating a variant of #15 was not retried. No restart, privileged action, Strategy, services, DB or LIVE mutation.
