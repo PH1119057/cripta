@@ -21,8 +21,8 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 13 | Depth Recovery | `SAME_PRICE_RECOVERY_FULL_DAY_5_OF_5` | Independent QC, temporal availability and per-pair passport remain |
 | 14 | Price Impact | `FLOW_TO_NEXT_MINUTE_LABEL_FULL_DAY_5_OF_5` | Future label not causal feature; actual trade-level price impact OPEN |
 | 15 | Effort / Result | `ONE_MINUTE_EFFORT_RESULT_PROXY_FULL_DAY_5_OF_5 + SECOND_DAY_CALC_5_OF_5` | May20 1440 rows each with explicit empty minutes; per-coin turnover-normalized median and p90, source v2 10fe631, journal 7b3be4c; independent per-row QC, §21 passport/OOS still OPEN |
-| 16 | Absorption | `HIGH_FLOW_PRICE_RESISTANCE_PROXY_FULL_DAY_5_OF_5` | Not proved passive absorption or OOS |
-| 17 | Exhaustion | `FIVE_MINUTE_DECAY_FUTURE_LABEL_FULL_DAY_5_OF_5` | Overlapping study anchors, no OOS |
+| 16 | Absorption | `SECOND_DAY_PHYSICAL_PROXY_5_OF_5` | May20 5/5: prior60 baseline, against-flow proxy 15/26/24/20/23; first v2 output date label stale (fixed in 42cfa21, not rerun); see journal 15e4d54; independent per-row QC/§21/OOS OPEN |
+| 17 | Exhaustion | `SECOND_DAY_PHYSICAL_PROXY_5_OF_5` | May20 5/5: 5m decay anchors 55/46/46/55/50; future reversal separate noncausal label; see journal 15e4d54; independent per-row QC/§21/OOS OPEN |
 | 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
 | 19 | Range Compression | `SECOND_DAY_ALL_ROWS_INDEPENDENT_HASH_5_OF_5 + RAW_SHA256_QC_5_OF_5` | 2026-05-20 exact source gz SHA256, size, trade order and notional checks registered; 1440-row independent exact-hash 5/5 PASS; §21.6 formal per-pair READY gate still pending (journal bae0826) |
 | 20 | Local Extremes | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
