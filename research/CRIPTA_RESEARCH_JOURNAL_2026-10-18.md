@@ -1000,3 +1000,18 @@ CHECKED HERE: source `research/microstructure/experiments/book_minute_three_v1.p
 | ARBUSDT | 4548 | 10 | 0.8498 | -0.0878 | 389 |
 
 Important: near-mid ±5bp depth is a **specific bounded book estimator**, NOT all-depth liquidity or executable fill liquidity. Book timestamps are not independently validated observed/publication time. No as-of backtest, independent full-minute checksum, formal §21 passport or after-fee PnL. Historical full-day pilot is a separate earlier evidence record. #9/#11/#29 remain OPEN for new canonical readiness gate. No LIVE/Strategy/DB mutation.
+
+
+## 2026-10-19 — #9/#11/#29 expanded first-60-minute cohort 5/5
+
+CHECKED HERE: immutable `book_minute_three_v1.py` source pinned `e238c71cbe19e2e89669c946e3b2117ef4ed7d54`, read-only actor `cripta` five separate rc=0 first hour 2026-05-19 UTC, all five 60/60 last-observation-per-minute states present, one initial snapshot per symbol, no claim of entire day.
+
+| Symbol | Book messages | Minute states | Median spread (bps) | Median near-mid ±5bps imbalance | Maximum book state age at minute close (ms) |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 27262 | 60 | 1.0519 | -0.0678 | 568 |
+| INJUSDT | 34093 | 60 | 1.8857 | 0.0304 | 316 |
+| DOTUSDT | 27982 | 60 | 0.798 | -0.0855 | 572 |
+| LTCUSDT | 23561 | 60 | 1.8391 | 0.078 | 481 |
+| ARBUSDT | 26974 | 60 | 0.8462 | 0.0369 | 488 |
+
+FINDING: imbalance medians can change sign or magnitude from first 10m to first 60m (LTC -0.0536 → +0.078), so never transfer one sampling-window metric into a universal signal threshold. Scope is bounded physical per-symbol book state, **not independent reader or formal §21 RESEARCH-READY**. No trading/live changes.
