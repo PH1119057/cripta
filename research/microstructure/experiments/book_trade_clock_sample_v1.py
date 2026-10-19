@@ -32,6 +32,6 @@ def run(sym,limit):
     n+=1
     if n>=limit:break
  ordered=lambda xs: all(x<=y for x,y in zip(xs,xs[1:])) if all(isinstance(x,(int,float)) for x in xs) else None
- return {"symbol":sym,"max_rows_each":limit,"trade_rows":len(timestamps),"book_rows":n,"first_trade_records":trades,"first_book_records":book,"cts_minus_ts_ms_minmax":[min(ctsdiff),max(ctsdiff)] if ctsdiff else None,"book_seq_monotonic":ordered(seq),"book_update_id_monotonic":ordered(updates),"status":"BOUNDED_SAMPLE_ONLY","limitations":["No validated cross-feed publish/receive time","Sampling first N does not prove whole-day continuity"]}
+ return {"symbol":sym,"max_rows_each":limit,"trade_rows":len(timestamps),"book_rows":n,"first_trade_records":trades,"first_book_records":book,"ts_minus_cts_ms_minmax":[min(ctsdiff),max(ctsdiff)] if ctsdiff else None,"book_seq_monotonic":ordered(seq),"book_update_id_monotonic":ordered(updates),"status":"BOUNDED_SAMPLE_ONLY","limitations":["No validated cross-feed publish/receive time","Sampling first N does not prove whole-day continuity"]}
 if __name__=="__main__":
  p=argparse.ArgumentParser();p.add_argument("--symbol",choices=S,required=True);p.add_argument("--limit",type=int,default=500);a=p.parse_args();print(json.dumps(run(a.symbol,a.limit)))
