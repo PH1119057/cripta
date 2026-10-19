@@ -819,3 +819,18 @@ CHECKED HERE: immutable `research/microstructure/experiments/depletion_trade_tem
 | ARBUSDT | 154123 | 616464 | 2133614 | 78656 | 2054958 |
 
 Absence of a nearby trade is NOT proof of cancellation: separate publication latencies, delayed fills, unrepresented executions, book semantics and exchange chronology are unresolved. A nearby trade is also NOT proof the trade caused the observed book reduction. Do not convert these counts into cancellation rate, inferred pulling, profitability or Strategy. These full-day joins are evidence for **coverage and feed-alignment hypothesis**, not #12 Pulling Rate `RESEARCH-READY`. Neither rejected alternative interpreter nor access policy bypass was used. Trading/LIVE unchanged.
+
+
+## 2026-10-19 — #12 timing sensitivity 5×10m, individual coin diagnostic
+
+CHECKED HERE: new read-only `research/microstructure/experiments/depletion_trade_timing_sensitivity_v1.py`, immutable source commit `9736ac82c18cc512036ad5a1d76b3dadc5a85943`, actor `cripta`, first 10 minutes 2026-05-19 UTC five Bybit instruments, 5/5 exit=0. All five reduction counts reconcile to previous exact-price trade/book join. Match definition: any exact-price+passive-side public trade within 0 / 100 / 500 / 1000 / 5000 milliseconds of orderbook quantity decrease, using reported source timestamps. Separately count (a) symmetric ±window, (b) trade timestamp no later than book message, (c) trade timestamp later than book message. Past/future columns overlap when trades exist on both sides; not additive. **None is validated observation/publication time.**
+
+| Symbol | Reduction events | Symmetric 0ms | Symmetric ±100ms | Symmetric ±500ms | Symmetric ±1000ms | Symmetric ±5000ms | Past timestamp within 1000ms | Future timestamp within 1000ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 17350 | 3 | 469 | 668 | 858 | 1944 | 463 | 463 |
+| INJUSDT | 33614 | 10 | 1384 | 2175 | 2872 | 5777 | 1795 | 1490 |
+| DOTUSDT | 19793 | 0 | 430 | 664 | 934 | 2138 | 413 | 556 |
+| LTCUSDT | 9538 | 0 | 108 | 171 | 246 | 660 | 129 | 124 |
+| ARBUSDT | 16837 | 0 | 436 | 617 | 765 | 1774 | 445 | 340 |
+
+QC: 5/5 monotone symmetric window counts PASS. The source can produce overlaps and reuses trade prints; these counts **MUST NOT** be interpreted as share of fills or cancellation rate. A +100ms/+5000ms *future* print relative to book event is a retrospective association and is never a permissible as-of Strategy feature. Exposure to latent exchange-feed publication lag remains open. Do not infer pulling from unmatched reductions. #12 is still OPEN; daily timing comparison next, no LIVE.
