@@ -17,7 +17,7 @@ def run(symbol,minutes):
   for row in csv.DictReader(f):
    ts=int(Decimal(row["timestamp"])*1000)
    if not start<=ts<start+minutes*60000:continue
-   key=(("a" if row["side"]=="Buy" else "b"),row["price"])
+   key=(("a" if row["side"]=="Buy" else "b"),Decimal(row["price"]))
    trades[key].append(ts);ntrades+=1
  for arr in trades.values():arr.sort()
  b={};a={};snap=0;events=0;drops=0;matched=0;unmatched=0
@@ -39,7 +39,7 @@ def run(symbol,minutes):
       p=Decimal(pp);q=Decimal(qq);old=book.get(p,Decimal(0))
       if old>q:
        drops+=1;byside[side]["decrease_events"]+=1
-       arr=trades.get((side,str(p)),[])
+       arr=trades.get((side,p),[])
        j=bisect.bisect_left(arr,ts-1000)
        present=j<len(arr) and arr[j]<=ts+1000
        if present:matched+=1;byside[side]["same_price_trade_within_1000ms"]+=1
