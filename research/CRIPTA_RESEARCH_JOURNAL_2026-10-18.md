@@ -1306,3 +1306,18 @@ FINDING: this is **relative first/last fill price change per contemporaneous tra
 ## 2026-10-19 — #16 fixed date-label code APT smoke, exact May20 results retained
 
 CHECKED HERE: corrected `research/microstructure/experiments/absorption_prior60_candidate_v2.py`, immutable GitHub main at `860a5fb0a333efa55171bf5c2f7b51898da0134b`; one read-only `cripta` APT 2026-05-20 full-day rc=0. Correct `window="2026-05-20 full UTC day"`, eligible=1380, unusual_flow=152, against=15, aligned=128, flat=9, unusual_partition PASS. This matches pre-label-fix calculation from earlier journal `15e4d54` for APT; script fix affects output date label only. **Other four symbols not rerun for this label smoke** and this is not a new independent implementation or §21 READY.
+
+
+## 2026-10-19 — #17 independent second-day 5-minute flow-decay future-label QC 5/5
+
+CHECKED HERE: independent `research/microstructure/experiments/flow_decay_5m_independent_qc_v1.py` pinned GitHub `806f8a9386f515ce51c86b246d1ca4924f5ea73e`. Five separate read-only `cripta` May20 executions rc=0; recomputed source grouping, 288 five-minute blocks per coin, candidate eligible anchors, ratio medians, decay/nondecay partitions, and future reversal/continuation/flat counts agree with earlier primary `flow_decay_5m_v2.py` results (journal `15e4d54`) exactly 5/5.
+
+| Coin | Eligible | Decay | Future reversal among decay | Nondecay | Median ratio |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 106 | 55 | 28 | 51 | 0.830110 |
+| INJUSDT | 89 | 46 | 27 | 43 | 0.874424 |
+| DOTUSDT | 88 | 46 | 25 | 42 | 0.899185 |
+| LTCUSDT | 98 | 55 | 27 | 43 | 0.906999 |
+| ARBUSDT | 96 | 50 | 22 | 46 | 0.900507 |
+
+QC: all five partition checks true. This is an independent **summary recomputation**, not per-event persisted cube or OOS inference; `future_reversal` is strictly a NEXT-5m **FUTURE LABEL** and cannot be used as an as-of feature. Neither exhaustion physics nor after-fee edge established. §21 READY remains OPEN, no Strategy/DB/runtime/LIVE changes.
