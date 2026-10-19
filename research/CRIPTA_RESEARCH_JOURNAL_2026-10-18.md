@@ -588,3 +588,18 @@ CHECKED HERE: read-only `research/microstructure/experiments/exact_price_recover
 | ARBUSDT | 2059 | 1277/712/70 | 6800 | 1647 | 1001/586/60 | 8199 |
 
 All ten bid/ask `events = recovered + expired + open` episode accounting checks PASS. This is only a **same-price visible-size recovery** proxy; levels can reprice/recycle and source does not prove identity of liquidity provider, causal provider availability, predictive usefulness or 60-second coverage completeness. Censored OPEN episodes MUST NOT be treated as failure. Status: #13 `RECOVERY_EPISODE_CANDIDATE_SMOKE_5_OF_5`; full-day, independent QC and passport remain OPEN. No Strategy/LIVE changes.
+
+
+## 2026-10-19 — #14 minute-level signed flow vs future price-response pilot, 5/5 full UTC day
+
+CHECKED HERE: immutable research-only `research/microstructure/experiments/signed_flow_next_minute_v1.py` commit `abdd8f6939c2e356b5641adffdd09536efa314ac`, five successful separate actor-`cripta` computations on public Bybit fills for 2026-05-19 1440 minute buckets per instrument. Physical source field `foreignNotional` (quote USDT) signed by aggressor side to construct **current completed-minute** delta; future *label* is next minute's close-to-close return from last transaction of minute i to minute i+1, multiplied by sign of minute-i delta. A causal feature is available at close i, while the future label is only available after close i+1. This is NOT same-event microstructural price impact; future leakage forbidden.
+
+| Symbol | Valid pairs / 1439 | Favorable | Adverse | Flat | NO_DATA | Median directional next-minute return bps |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1437 | 693 | 650 | 94 | 2 | 0 |
+| INJUSDT | 1439 | 639 | 721 | 79 | 0 | -1.88288458 |
+| DOTUSDT | 1435 | 660 | 662 | 113 | 4 | 0 |
+| LTCUSDT | 1415 | 550 | 566 | 299 | 24 | 0 |
+| ARBUSDT | 1437 | 684 | 676 | 77 | 2 | 0 |
+
+These are within-one-day **exploratory direction-conditioned labels** only. In particular the INJ negative median does not establish an edge; no baseline/control, OOS, causal physical trade-impact attribution, strategy threshold, or after-fee PnL has been tested. #14 remains OPEN as a strict Price Impact indicator. Separately retained per-coin outcome counts, no across-symbol pooling. No exchange mutation, DB, runtime or LIVE change.
