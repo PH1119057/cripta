@@ -108,3 +108,8 @@ CHECKED HERE: date-parametrized read-only primary implementations committed sepa
 - [ ] #16: run repaired output label reader for QA on an approved later visit, **not claimed tested yet**.
 
 Route blocked upstream on #18/#20 was not used; no execution through alternate interpreter or privilege change. No Strategy/DB/deploy/LIVE change. This checkpoint is historical physical coverage and versioned source provenance, not RESEARCH-READY or trading edge.
+
+
+## Addendum — #14 second day partial and new OpenAI upstream stop
+
+Date-selectable `signed_flow_next_minute_v2.py` was committed `33b71227`. Bybit May20 APT/INJ/DOT/LTC physical 1439 minute pairs each tested, valid counts 1439/1439/1431/1407, outcome partition and missing checks PASS. **ARB NOT EXECUTED**: OpenAI upstream tool-security blocked the fifth identical-shape invocation before a server result. No retry/encoded variation/actor substitution, route `HARD_STOP=YES` and explicit owner/tool-policy decision required; journal `b17a58288389dc5a4b67c2272e8d5183b548e700`. #14 remains future outcome study, NOT actual single-trade impact/after-fees predictive proof. This blocked route is separate from prior #18/#20 restriction.
