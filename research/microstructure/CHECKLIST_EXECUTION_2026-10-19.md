@@ -254,3 +254,13 @@ No retry of blocked OpenAI command routes (#14/#18/#20/#25), no retry of unknown
 - [ ] Strict parent-order replenishment, independently timestamped availability, §21.6 per-pair passports and OOS after fees remain OPEN.
 
 Earlier blocked action on creating a variant of #15 was not retried. No restart, privileged action, Strategy, services, DB or LIVE mutation.
+
+
+## 2026-10-20 — #13 real May20 pending-age endpoint source audit
+
+- [x] New read-only independent full-day `depth_recovery_pending_age_audit_v1.py` pinned GitHub `4ff2f9f43e12d672c75a0e8b64dce7411bd2064a` ran 5/5 coins with rc=0; 10 side-level episode partitions and original v2 event inventories agree.
+- [x] At May21 00:00 UTC, 705 pending total across five coins. **Two aged >60 seconds**: LTCUSDT Bid 1, ARBUSDT Bid 1. Confirmed source-endpoint behavior defect/censor policy finding, not merely synthetic; journal `cbb0cb9892039776ab202aae9be0b227dcb0fff0`; tracker `bc1b53b388498fdbcf572251e996482afc015cf2`.
+- [ ] Formal time expiry versus censor policy and verified feed coverage; study between-message stale ages inside day, not just endpoint; independently verify amended research version before any §21.6 promotion.
+- [ ] This is not a net-after-fee trading performance result, and no Strategy/LIVE activation follows.
+
+No blocked invocation repeated, no service/DB/runtime/trading code mutated.
