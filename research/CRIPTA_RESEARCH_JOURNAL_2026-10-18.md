@@ -732,3 +732,8 @@ CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_
 ## 2026-10-19 — #30 INJ full-day top-five stock resilience result
 
 CHECKED HERE: `top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 INJUSDT, SentinelX job `job_7dcc675b32b0` succeeded exit 0, duration 56.23s, no truncated output. 2 snapshots, 733301 delta transitions. BID: 5184 episodes, 4395 recovered within 60s, 787 expired, 2 right-censored; median recovery among recovered 2400ms. ASK: 5430 episodes, 4639 recovered, 789 expired, 2 censored; median 2000ms. Both episode partitions PASS. Strict physical same-order resiliency and attribution remain OPEN; current result is top-five depth-stock proxy. #30 full-day coverage now 2/5, other symbols DOT/LTC/ARB not yet counted.
+
+
+## 2026-10-19 — #30 DOT full-day top-five stock resilience result
+
+CHECKED HERE: `research/microstructure/experiments/top5_depth_resilience_v1.py` exact commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 DOTUSDT, SentinelX job `job_e398ecf07535` succeeded exit 0, 47.5s, no truncation. 2 snapshots, 631776 book deltas. BID: 5615 episodes, 4815 recovered, 798 expired, 2 right-censored; median 1500ms among recovered. ASK: 5661 episodes, 4865 recovered, 794 expired, 2 right-censored; median 1400ms. Both episode partitions PASS. #30 top-five-stock full-day verified 3/5; LTC/ARB still pending here. Physical liquidity owner, repricing and true order-level restoration remain unverified; not strict replenishment.
