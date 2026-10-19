@@ -1015,3 +1015,18 @@ CHECKED HERE: immutable `book_minute_three_v1.py` source pinned `e238c71cbe19e2e
 | ARBUSDT | 26974 | 60 | 0.8462 | 0.0369 | 488 |
 
 FINDING: imbalance medians can change sign or magnitude from first 10m to first 60m (LTC -0.0536 → +0.078), so never transfer one sampling-window metric into a universal signal threshold. Scope is bounded physical per-symbol book state, **not independent reader or formal §21 RESEARCH-READY**. No trading/live changes.
+
+
+## 2026-10-19 — #9 / #11 / #29 full UTC day physical book-minute measurement 5/5
+
+CHECKED HERE: independent successful bounded read-only `sudo -u cripta python3` source `research/microstructure/experiments/book_minute_three_v1.py` pinned GitHub source commit `c0f16233c14d9ba436cfe084b6881f081ec51c34` executed separately for five Bybit ob200 files UTC 2026-05-19 00:00–24:00 with `--minutes 1440 --summary`. All rc=0, each 1440/1440 nonempty completed-minute states and 2 snapshots. Event counts reconcile with previous inventory: snapshots + delta events, 5/5 QC PASS. Near-mid depths are ±5bps quote-notional based on current reconstructed book, not all-book depth or executable liquidity.
+
+| Coin | Total book events | Book snapshots | Completed-minute states | Median top spread bps | Median ±5bps near-mid imbalance | Max minute-end observation age ms |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 606837 | 2 | 1440 | 1.0636 | 0.0235 | 2468 |
+| INJUSDT | 733303 | 2 | 1440 | 2.0103 | -0.0024 | 917 |
+| DOTUSDT | 631778 | 2 | 1440 | 0.8102 | 0.0166 | 1473 |
+| LTCUSDT | 542094 | 2 | 1440 | 1.8459 | 0.0484 | 1881 |
+| ARBUSDT | 616466 | 2 | 1440 | 0.8656 | -0.0360 | 1088 |
+
+FINDING: daily imbalance median shifts signs relative to previous first-hour values for several coins; window scope cannot be transferred unexamined. This is a full-day one-reader physical measurement with correct per-coin source-count reconciliation, NOT independent full-minute hash QC or §21.6 research readiness. Clock field `ts` is source reported; publication / availability semantics not externally proven. Do not promote to Strategy or report after-fee return. No trading/DB/deploy/LIVE mutation.
