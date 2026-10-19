@@ -17,7 +17,7 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 9 | Queue Imbalance | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 10 | Multi-Level OFI | `TOP1_OFI_FULL_DAY_5_OF_5 + TOP5_STOCK_DECOMPOSITION_5_OF_5` | Strict complete multi-level OFI still OPEN; rank reindexing must not be mislabeled |
 | 11 | Order Book Depth | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 12 | Pulling Rate | `VISIBLE_DEPLETION_5_OF_5_FULL_DAY + TRADE_BOOK_TEMPORAL_JOIN_AND_TIMING_SENSITIVITY_5_OF_5_FULL_DAY` | Exact-price/side source-timestamp windows ±0/100/500/1000/5000ms done, monotonicity and prior ±1s reproduction PASS; no unique trade allocation or cancellation attribution (journal 1307d060) |
+| 12 | Pulling Rate | `FULL_DAY_TRADE_BOOK_TIMING_SENSITIVITY_5_OF_5; TIMESTAMP_QC_10M_3_OF_5` | Timestamp QC APT/INJ/DOT PASS, LTC timed out (process killed), ARB not checked; book cts/seq fields identified but global trade/book ordering unverified; see journal commit 76f2ce46 |
 | 13 | Depth Recovery | `SAME_PRICE_RECOVERY_FULL_DAY_5_OF_5` | Independent QC, temporal availability and per-pair passport remain |
 | 14 | Price Impact | `FLOW_TO_NEXT_MINUTE_LABEL_FULL_DAY_5_OF_5` | Future label not causal feature; actual trade-level price impact OPEN |
 | 15 | Effort / Result | `ONE_MINUTE_EFFORT_RESULT_PROXY_FULL_DAY_5_OF_5` | Further own-coin normalization and independent QC required |
