@@ -165,9 +165,11 @@ def _exit_case(
         paper.status is ExitEvaluationStatus.DECISION_CREATED,
         f"{case_key} Exit not executable",
     )
-    _require(paper.decision is not None, f"{case_key} ExitDecision missing")
+    decision = paper.decision
+    if decision is None:
+        raise IndependentParityFailure(f"{case_key} ExitDecision missing")
     _require(
-        paper.decision.requested_mutation.to_dict() == {
+        decision.requested_mutation.to_dict() == {
             "take_profit_price": "101" if direction is TradeDirection.LONG else "99",
             "order_type": "LIMIT",
             "time_in_force": "POST_ONLY",
@@ -295,6 +297,8 @@ def run_r1_independent_decision_parity() -> dict[str, object]:
                 case + " offline REAL admission failed",
             )
             request = real.execution_request
+            if request is None:
+                raise IndependentParityFailure(case + " REAL request missing")
             _require(
                 request.payload == paper.execution_intent.payload,
                 case + " request policy differs",
@@ -324,13 +328,22 @@ def run_r1_independent_decision_parity() -> dict[str, object]:
                     paper_payload.get(key) == real_payload.get(key),
                     case + " PAPER/REAL adapter mismatch " + key,
                 )
+            paper_validity = paper_payload.get("entry_validity")
+            real_validity = real_payload.get("entry_validity")
+            _require(
+                isinstance(paper_validity, dict) and isinstance(real_validity, dict),
+                case + " entry validity structure missing",
+            )
+            if not isinstance(paper_validity, dict) or not isinstance(real_validity, dict):
+                raise IndependentParityFailure(case + " invalid entry validity")
             for key in ("operator", "signal_entry_price", "signal_target_price"):
                 _require(
-                    paper_payload["entry_validity"][key] == real_payload["entry_validity"][key],
+                    paper_validity[key] == real_validity[key],
                     case + " entry validity mismatch " + key,
                 )
             _require(
-                real_payload["entry_validity"]["history_limit"] >= 205,
+                isinstance(real_validity.get("history_limit"), int)
+                and real_validity["history_limit"] >= 205,
                 case + " real causal-history validity unavailable",
             )
             reference = Decimal(str(paper_payload["price"]))
