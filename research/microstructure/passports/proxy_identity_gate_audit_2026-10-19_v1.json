@@ -11,10 +11,15 @@
         "research/microstructure/experiments/book_top5_membership_v1.py"
       ],
       "status": "OPEN",
-      "finding": "Prior journal pinned top1_price_transition_ofi_v1.py is not present in current main tree; do not replace source identity with rank_ofi_v1.py without algorithm/commit reconciliation",
+      "finding": "Historical top1 source RECOVERED by exact GitHub commit and inspected. Main tree still excludes this specific file; rank_ofi_v1.py equivalence is NOT established.",
       "gap": "Strict multi-level price-aware OFI not attested",
       "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
-      "formal_research_ready": false
+      "formal_research_ready": false,
+      "historical_source": {
+        "path": "research/microstructure/experiments/top1_price_transition_ofi_v1.py",
+        "commit": "f5485b7cb729195e8ef6ea394d31f9ae94acf444",
+        "status": "FETCHED_FROM_IMMUTABLE_GITHUB_COMMIT; NOT_CURRENT_MAIN"
+      }
     },
     {
       "id": 12,
@@ -101,7 +106,7 @@
   ],
   "checks": {
     "main_tree_file_inventory": "CHECKED",
-    "historical_script_identity_reconciliation": "OPEN_FOR_10",
+    "historical_script_identity_reconciliation": "HISTORICAL_SOURCE_RECOVERED; equivalence with main rank_ofi NOT_CHECKED",
     "independent_replay_per_pair": "NOT_COMPLETE",
     "full_model_causal_asof": "NOT_ATTESTED"
   },
