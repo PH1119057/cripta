@@ -196,3 +196,13 @@ No runtime, DB, service, exchange, production Strategy or LIVE mutation. No earl
 - [ ] Full minute-level large-share row equivalence, as-of publication timing and independent source/row hashes; same-timestamp+side grouping does NOT identify parent orders; formal per-pair §21.6 passports and OOS performance after fees remain OPEN.
 
 GitHub journal `01b5e8798596efa37725ef879a7e371c4d0f6ff6`, progress registry `40eeeeb1067c3b7e60a6c162bc2caa84cc59e9fd`. No blocked command retry; trading runtime and LIVE unchanged.
+
+
+## 2026-10-19 — #9/#11/#29 full-minute independent book QC attempt
+
+- [x] New independent Decimal book reconstruction `book_minute_full_row_independent_qc_v1.py` committed `8dfa76d5a5a78666c382b702a90a897a15443984`, covering bid/ask near-mid depth, queue imbalance and spread across 1440 minute slots, primary pinned `b1862ab`.
+- [ ] APT first full-day independent row run `job_cb166e3a8aa1` returned **SentinelX agent non-response, exit_code null** on event notification; on-host outcome UNKNOWN, **0/5 newly verified full-minute row checks**, NO RETRY. Journal checkpoint `9be5812a6ce549a6f8aa5946544c3390226f9ce1`.
+- [x] Earlier independent **rounded daily summary QC** 5/5 remains valid and unchanged; cannot promote to all-row equality.
+- [ ] Obtain authorized host/job evidence; only then decide on bounded next execution if permitted. Formal §21.6 passports and actual exchange observed/available-after validation still OPEN.
+
+This is an operational access/outcome problem, not a confirmed algorithm mismatch or approval to change service, privileges or runtime. No LIVE change.
