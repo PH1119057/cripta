@@ -1,0 +1,110 @@
+{
+  "title": "Bybit indicators #10 #12-17 #21 #30 source-and-identity gate audit",
+  "date": "2026-10-19",
+  "type": "RESEARCH_EVIDENCE_NOT_CANON",
+  "git_head_checked": "2efceb37d7cb659623a5f87193b38b27e2a14676",
+  "rows": [
+    {
+      "id": 10,
+      "source_files": [
+        "research/microstructure/experiments/rank_ofi_v1.py",
+        "research/microstructure/experiments/book_top5_membership_v1.py"
+      ],
+      "status": "OPEN",
+      "finding": "Prior journal pinned top1_price_transition_ofi_v1.py is not present in current main tree; do not replace source identity with rank_ofi_v1.py without algorithm/commit reconciliation",
+      "gap": "Strict multi-level price-aware OFI not attested",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 12,
+      "source_files": [
+        "research/microstructure/experiments/same_price_depletion_v1.py",
+        "research/microstructure/experiments/depletion_trade_temporal_join_v1.py",
+        "research/microstructure/experiments/depletion_trade_timing_sensitivity_v1.py"
+      ],
+      "status": "OPEN",
+      "gap": "Cannot identify cancellation as distinct from execution",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 13,
+      "source_files": [
+        "research/microstructure/experiments/exact_price_recovery_v1.py"
+      ],
+      "status": "PROXY_QC_PENDING",
+      "gap": "Recovery does not identify same participant/order, independent QC pending",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 14,
+      "source_files": [
+        "research/microstructure/experiments/signed_flow_next_minute_v1.py"
+      ],
+      "status": "FUTURE_LABEL_ONLY",
+      "gap": "Not per-trade causal price impact",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 15,
+      "source_files": [
+        "research/microstructure/experiments/effort_result_minute_v1.py"
+      ],
+      "status": "PROXY_QC_PENDING",
+      "gap": "Coin-scoped denominator and independent QC",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 16,
+      "source_files": [
+        "research/microstructure/experiments/absorption_prior60_candidate_v1.py"
+      ],
+      "status": "PROXY_ONLY",
+      "gap": "Signed-flow resistance does not prove passive absorption",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 17,
+      "source_files": [
+        "research/microstructure/experiments/flow_decay_5m_v1.py"
+      ],
+      "status": "FUTURE_LABEL_ONLY",
+      "gap": "Next-period response not available as-of feature",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 21,
+      "source_files": [
+        "research/microstructure/experiments/sweep_reclaim_ordered_trades_v1.py"
+      ],
+      "status": "PROXY_ONLY",
+      "gap": "Trade extrema sweep not proven liquidity/book sweep",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    },
+    {
+      "id": 30,
+      "source_files": [
+        "research/microstructure/experiments/top5_depth_resilience_v1.py"
+      ],
+      "status": "PROXY_ONLY",
+      "gap": "Top-five book stock recovery not same-order replenishment",
+      "physical_full_day_result": "CHECKED_IN_PRIOR_GITHUB_JOURNAL_2026-05-19",
+      "formal_research_ready": false
+    }
+  ],
+  "checks": {
+    "main_tree_file_inventory": "CHECKED",
+    "historical_script_identity_reconciliation": "OPEN_FOR_10",
+    "independent_replay_per_pair": "NOT_COMPLETE",
+    "full_model_causal_asof": "NOT_ATTESTED"
+  },
+  "blocked_route": "OpenAI upstream security stop on #18/#20 remains; no reattempt",
+  "venue_sequence": "#26 last"
+}
