@@ -15,7 +15,7 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 7 | Delta Acceleration | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 8 | Trade Streaks | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 9 | Queue Imbalance | `FULL_DAY_BOOK_MINUTE_5_OF_5_PASS + INDEPENDENT_FULL_DAY_SUMMARY_QC_5_OF_5` | May 19 1440 minute states each coin, snapshots+delta count reconciled; single-reader ±5bp depth/imbalance and top spread physical measurements, independent full-day rounded medians/coverage/counts agree (journal 2043539); full 1440-row independent QC and §21 passport pending (journal 5aaf62b) |
-| 10 | Multi-Level OFI | `TOP1_OFI_FULL_DAY_5_OF_5 + TOP5_STOCK_DECOMPOSITION_5_OF_5` | Strict complete multi-level OFI still OPEN; rank reindexing must not be mislabeled |
+| 10 | Multi-Level OFI | `TOP1_OFI_FULL_DAY_5_OF_5 + TOP5_STOCK_DECOMPOSITION_5_OF_5; HISTORIC_TOP1_SOURCE_RECOVERED` | Historical exact top1 source exists at commit f5485b7 (not main); rank_ofi current-main equivalence not established; strict multi-level OFI remains OPEN (journal 1aa2f60) |
 | 11 | Order Book Depth | `FULL_DAY_BOOK_MINUTE_5_OF_5_PASS + INDEPENDENT_FULL_DAY_SUMMARY_QC_5_OF_5` | May 19 1440 minute states each coin, snapshots+delta count reconciled; single-reader ±5bp depth/imbalance and top spread physical measurements, independent full-day rounded medians/coverage/counts agree (journal 2043539); full 1440-row independent QC and §21 passport pending (journal 5aaf62b) |
 | 12 | Pulling Rate | `FULL_DAY_TRADE_BOOK_TIMING_SENSITIVITY_5_OF_5; TIMESTAMP_QC_10M_4_OF_5; BOUNDED_BOOK_CLOCK_SAMPLE_5_OF_5` | APT/INJ/DOT/ARB 10m timestamps checked, former LTC full-scan timeout remains unresolved; different first-500-message clock sample 5/5 checked, ts-cts ~1–112 ms and seq/u nondecreasing only within sample; still no cross-feed causal ordering or cancellation attribution (journal 8394cf0) |
 | 13 | Depth Recovery | `SAME_PRICE_RECOVERY_FULL_DAY_5_OF_5` | Independent QC, temporal availability and per-pair passport remain |
@@ -62,3 +62,8 @@ The five-coin historical source-file manifest for #24 is already published and r
 ## Current hard stop — 2026-10-19 later stage
 
 During #18/#20 second-day extension, 3/5 read-only runs succeeded (APT/INJ/DOT) then OpenAI upstream tool security blocked the next execution. No SentinelX server-side denial was proven. No repeated/obfuscated call or actor change. The failed route is stopped; owner decision required for an authorized alternative. Checkpoint: research journal commit `23a4de7d6a2aba83618261c88d16076971b8766c`. #9/#11/#29 full-day independent rounded summary 5/5 remains confirmed. No LIVE.
+
+
+## 2026-10-19 source identity audit
+
+Nine-instrument-indicator family audit for #10/#12–17/#21/#30, source identity and strict-vs-proxy boundaries: `research/microstructure/passports/proxy_identity_gate_audit_2026-10-19_v1.json`. Historical #10 top1 reader recovered from exact immutable commit; current-main equivalent NOT established. All formal §21.6 gates remain distinct from pilot measurement. No blocked server execution retried.
