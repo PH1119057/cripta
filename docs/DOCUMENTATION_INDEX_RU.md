@@ -375,6 +375,10 @@ production state не сведён к одному exact verified release compos
 представлять как самоссылочный SHA содержащего его commit. После публикации
 current GitHub/source identity проверяется внешним runtime/Git evidence.
 
+## 17.5.1 OWNER DECISION 2026-10-19 — documentary HEAD independence
+
+R1 pre-arm игнорирует документальные изменения вне торгового runtime в пределах явно классифицированных путей. Authority и fail-closed граница путей — DEVELOPMENT_RELEASE §26.2; полные `REMOTE_HEAD`, `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT` продолжают отдельно фиксироваться. Это не разрешение source code drift в торговом контуре и не расширение LIVE-arm.
+
 ## 17.6 Open architecture decisions не закрываются редакционной правкой
 
 Известная открытая ownership/architecture boundary (например physical owner
