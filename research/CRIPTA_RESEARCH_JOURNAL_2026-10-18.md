@@ -774,3 +774,18 @@ message="contains shell operator ';'. the operator ';' is part of a shell pipeli
 Per `DEVELOPMENT_RELEASE §19.5–19.6`, this is **SentinelX policy/parser refusal**, NOT OpenAI upstream tool-security, NOT Unix EACCES, NOT a host Python package failure and NOT proof that the command reached the host. The proposed command used a semicolon inside quoted Python code, which the SentinelX parser rejected before execution. The **default allowlisted system Python** has already completed many successful read-only research tasks; this refusal concerns the *alternate-interpreter probe only*.
 
 Decision in this run: NO retries/re-encoding/actor changes/allowlist changes, no installation, no server mutation. `#24_FULL_EVENT_CONTENT_QC` remains `NOT_CHECKED_HERE`; prior per-coin file presence/hour manifest remains verified evidence, but liquidations event completeness unknown. `HARD_STOP=YES` for the blocked alternate interpreter probe under current method. `OWNER_DECISION_REQUIRED=YES` **only if** an exception/new tool command policy or approved interpreter route is needed; this is not a request to grant privileges or modify agent configuration without evidence. Trading services, DB and LIVE unchanged. Latest all-30 checkpoint registry is `research/microstructure/INDICATOR_PROGRESS_2026-10-19.md`.
+
+
+## 2026-10-19 — #12 same-price visible book-depletion complete day, five instruments
+
+CHECKED HERE: independent bounded server executions (five rc=0) of immutable GitHub `research/microstructure/experiments/same_price_depletion_v1.py`, source commit `fa52681ecc380fa8ca74f678b40f67d25eb58137`, actual actor `cripta`, complete Bybit UTC 2026-05-19 ob200 event histories. All five symbols, 2 snapshots each, same full-day delta totals reconciled to prior #10/#30 inventories. Observed per-exact-price existing-level gross reduction and increase use `price*(old_qty-new_qty)` / `price*(new_qty-old_qty)` in USDT; newly appearing price levels are excluded from the increase statistic. These are gross repeated changes, NOT unique traded notional, cancellation-only pull, or net flow.
+
+| Symbol | Delta events | Bid gross depletion USDT | Bid gross increase USDT | Ask gross depletion USDT | Ask gross increase USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 606835 | 1701661974.315956 | 1637183919.560335 | 1447067552.556300 | 1391739813.827868 |
+| INJUSDT | 733301 | 7951935026.27380 | 7849636871.75960 | 7611646408.93350 | 7499672805.22730 |
+| DOTUSDT | 631776 | 4131251277.88466 | 3831085106.72139 | 4127829259.44416 | 3756269821.75760 |
+| LTCUSDT | 542092 | 2014476802.914 | 1976796144.875 | 1775664181.997 | 1737975267.169 |
+| ARBUSDT | 616464 | 1663437867.415008 | 1554128642.627728 | 1451256210.057091 | 1347944067.073256 |
+
+Causality boundary: the visible decrement at a book price is observed after a book delta; such decrements can reflect passive fills, cancellation, aggregation or unknown effects. There is NO safe direct conversion of these sums to `Pulling Rate`. All five full-day **narrow physical measurements** complete; separate event-level trade/book alignment, measurement passport, independent replay and attribution remain OPEN. `#12_VISIBLE_DEPLETION_FULL_DAY_5_OF_5` but strict #12 Pulling Rate `RESEARCH-READY=NO`. No trading/DB/runtime/LIVE mutations. Server alternate-interpreter denial recorded earlier does not affect these approved standard Python executions.
