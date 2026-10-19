@@ -543,8 +543,10 @@ def test_materialize_request_is_exact_and_gate_independent() -> None:
         assert row["exit_plan_fingerprint"] == ids["exit_fp"]
         assert row["requested_at"] == NOW
         assert row["expires_at"] == NOW + timedelta(seconds=30)
-        dispatched = dispatch_once(connection, now=NOW)
-        assert dispatched.startswith("DISPATCHED:")
+        dispatched = _dispatch_target(
+            connection, execution_request_id=request_id, now=NOW
+        )
+        assert dispatched["state"] == "DISPATCHED"
         count = connection.execute(
             """SELECT count(*) FROM runtime.trade_commands
                 WHERE command_type='strategy_exit'
@@ -567,8 +569,10 @@ def test_dispatch_is_atomic_and_duplicate_publish_is_idempotent() -> None:
             now=NOW,
         )
 
-        result = dispatch_once(connection, now=NOW)
-        assert result.startswith("DISPATCHED:")
+        result = _dispatch_target(
+            connection, execution_request_id=request_id, now=NOW
+        )
+        assert result["state"] == "DISPATCHED"
         request = load_exit_execution_request(
             connection,
             execution_request_id=request_id,
