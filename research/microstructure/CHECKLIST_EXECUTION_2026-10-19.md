@@ -85,3 +85,12 @@ CHECKED HERE: исторический `top1_price_transition_ofi_v1.py` и ак
 - [ ] Зарегистрировать per-instrument §21.6 passport; не объявлять новые ранговые значения multi-level OFI без evidence
 
 Только GitHub/code review. Нет серверного запуска или обхода заблокированного маршрута №18/20.
+
+
+## №10 OFI — exact-price identity design checkpoint
+
+- [x] Подготовлен отдельный `RESEARCH DESIGN v0` `research/microstructure/passports/ofi_exact_price_identity_design_v0.md` (GitHub `04fd75b350146816b092e41bdda53e783e96e0be`) с Decimal price keys, отделением изменений размера уровня от смены top-K membership, snapshot resets, units and timestamp QC.
+- [ ] Строгая итоговая multi-level OFI scalar формула **не выбрана**; пока неоднозначны сравниваемая price cohort, weight/signed aggregation и handling новых/исчезнувших цен. `TERM_AMBIGUOUS=YES; HARD_STOP=YES; OWNER_DECISION_REQUIRED=YES` **для канонического определения/продвижения strict multi-level OFI**.
+- [ ] Execution-level проверка на сервере не выполнялась: upstream-blocked route #18/#20 не повторять. Research design ≠ implemented/QC/READY.
+
+Пока решение по strict multi-level formula не принято, разрешено продолжать только документарный source/QC gap review других индикаторов, не придумывая canonical scalar по собственной инициативе.
