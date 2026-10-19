@@ -2,7 +2,7 @@
 
 ## 1. Роль Project Instructions
 
-Это тонкий bootstrap к актуальному канону, а не вторая копия архитектуры.
+Это bootstrap актуального канона, не копия архитектуры.
 Перед каждым содержательным ответом учитывать `CHATGPT_INTERACTION_RULES_RU*.md`.
 
 Документы определяются по смысловому семейству, а не по версии/UI-суффиксу:
@@ -58,7 +58,7 @@ Routed pre-read:
 Любой server-side script/service/job, который пишет на filesystem или меняет effective actor, дополнительно требует `DEVELOPMENT_RELEASE §5.1 + §19.1–19.4` и `CURRENT_PROJECT_MAP §1.4` независимо от primary route.
 
 Cross-route task -> читать все релевантные routed docs.
-Перед обычными промежуточными ответами полный pre-read не повторять.
+Промежуточные ответы не требуют повторного pre-read.
 
 ## 4. Канон и Hard Stop
 
@@ -73,7 +73,7 @@ Cross-route task -> читать все релевантные routed docs.
 Остановиться, назвать точный конфликт и требуемый canonical change.
 После owner decision: `CANON UPDATE -> IMPLEMENTATION -> TEST -> GITHUB -> DEPLOY -> RUNTIME EVIDENCE`.
 
-Если код расходится с каноном — это FINDING, а не разрешение автоматически менять код или архитектуру.
+Расхождение кода с каноном — FINDING, не разрешение менять код или архитектуру.
 
 При переносе capability проверять BEFORE/AFTER owner/consumer; без replacement — HARD_STOP + OWNER_DECISION_REQUIRED.
 
@@ -94,12 +94,11 @@ Dataset reuse != policy reuse.
 
 ## 6. Текущая архитектура
 
-Не дублировать её в Project Instructions.
-Читать текущую архитектуру и ownership из ARCH / TRADING_CONTOUR / OBSERVATION_ANALYTICS / GLOSSARY / MAP.
+Не дублировать архитектуру. Читать ownership из ARCH / TRADING_CONTOUR / OBSERVATION_ANALYTICS / GLOSSARY / MAP.
 
 Перед архитектурно чувствительной работой повторно проверить GitHub `main`, base pre-read и соответствующий routed contract.
 
-Filesystem contours — MAP/DEVELOPMENT/RESEARCH; research writes только на data-disk, не в runtime.
+Filesystem contours — MAP/DEVELOPMENT/RESEARCH; runtime не зависит напрямую от research artifacts; research writes только на data-disk.
 
 Patch/deploy не имеет права молча включать LIVE. Re-arm требует current LIVE-arm contract и explicit owner approval.
 

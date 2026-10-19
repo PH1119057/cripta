@@ -1,0 +1,116 @@
+name: trade-lifecycle-postgres
+
+on:
+  pull_request:
+    paths:
+      - "src/bybit_workbench/**"
+      - "operations/connectivity/**"
+      - "operations/sql/**"
+      - "tests/test_*_postgres.py"
+      - "tests/postgres_trade_lifecycle_bootstrap.sql"
+      - ".github/workflows/trade-lifecycle-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle-58:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: cripta_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cripta_integration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: cripta_integration
+      CRIPTA_TRADE_LIFECYCLE_TEST_DSN: postgresql://postgres:disposable_ci_only@127.0.0.1:5432/cripta_integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --all-extras --python 3.12
+      - run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
+      - name: Build disposable production-like schema
+        shell: bash
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -c "CREATE ROLE cripta LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS"
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres_trade_lifecycle_bootstrap.sql
+          migrations=(
+            operations/sql/20260901_exact_position_closure_exit_attribution_v1.sql
+            operations/sql/20260908_strategy_entry_u3.sql
+            operations/sql/20260912_strategy_monitoring_execution_permission.sql
+            operations/sql/20260912_universal_entry_dormant_consumer.sql
+            operations/sql/20260918_trade_lifecycle_v1.sql
+            operations/sql/20260920_slot_admission_v1.sql
+            operations/sql/20261004_r1_live_arm_waiver.sql
+            operations/sql/20261004_r1_reverse_transitions.sql
+            operations/sql/20261006_account_state_generation_v1.sql
+            operations/sql/20261007_live_arm_parity_gate.sql
+            operations/sql/20261008_exchange_closed_entry_recovery.sql
+            operations/sql/20261008_r1_entry_cancel_intents.sql
+            operations/sql/20261009_release_arm_incidents.sql
+            operations/sql/20261012_effective_protection_evidence_v1.sql
+            operations/sql/20261015_live_arm_retirement_events_v1.sql
+            operations/sql/20261016_identity_registry_r1.sql
+            operations/sql/20261016_identity_registry_r2_seed.sql
+            operations/sql/20261016_identity_bridge_r3_r4.sql
+            operations/sql/20261016_private_current_state_r5a.sql
+            operations/sql/20261016_execution_evidence_r5b.sql
+            operations/sql/20261016_account_scoped_key_preparation_r5.sql
+            operations/sql/20261016_strategy_execution_binding_r6a.sql
+            operations/sql/20261018_strategy_execution_binding_lock_v1.sql
+            operations/sql/20261016_binding_lineage_r6b1.sql
+            operations/sql/20261016_command_position_lineage_r6b2.sql
+            operations/sql/20261016_exit_account_lineage_r6c.sql
+            operations/sql/20261016_trade_command_account_identity_r6d.sql
+          )
+          for migration in "${migrations[@]}"; do
+            echo "APPLY=$migration"
+            psql -X -v ON_ERROR_STOP=1 -f "$migration"
+          done
+      - name: Run 58 lifecycle PostgreSQL integration tests
+        shell: bash
+        run: |
+          .venv/bin/python -m pytest -q             tests/test_universal_exit_p6_postgres.py             tests/test_account_state_generation_postgres.py             tests/test_capital_reservation_postgres.py             tests/test_counterfactual_p8_postgres.py             tests/test_entry_reservation_lifecycle_postgres.py             tests/test_fault_delivery_postgres.py             tests/test_lifecycle_supervisor_p7_postgres.py             tests/test_live_arm_readiness_postgres.py             tests/test_slot_admission_postgres.py             tests/test_strategy_position_binding_postgres.py             tests/test_trade_lifecycle_p9_postgres.py             tests/test_universal_exit_p5_postgres.py
+
+  release-arm-1:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: release_arm_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d release_arm_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CRIPTA_RELEASE_ARM_TEST_DSN: postgresql://postgres:disposable_ci_only@127.0.0.1:5432/release_arm_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.11.33
+      - run: uv sync --locked --all-extras --python 3.12
+      - run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
+      - name: Run release-arm PostgreSQL integration test
+        run: .venv/bin/python -m pytest -q tests/test_release_arm_postgres.py

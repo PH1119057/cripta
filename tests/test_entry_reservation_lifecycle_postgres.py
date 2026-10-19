@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+import operations.connectivity.universal_entry_consumer as entry_consumer
 from bybit_workbench.entry_reservation_lifecycle import (
     finalize_failed_entry_command_reservation,
     mark_entry_order_acknowledged,
@@ -19,6 +21,7 @@ from bybit_workbench.live_arm_readiness import (
     LiveArmContext,
     scope_for_check,
 )
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from operations.connectivity.universal_entry_consumer import run_once
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -27,6 +30,25 @@ pytestmark = pytest.mark.skipif(
     reason="set CRIPTA_TRADE_LIFECYCLE_TEST_DSN to an explicitly disposable PostgreSQL DB",
 )
 NOW = datetime(2026, 9, 18, 14, 0, tzinfo=UTC)
+
+
+def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
+    """Match the consumer account scope to this disposable fixture only."""
+    with (
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id),
+        patch.object(entry_consumer, "LOADED_RELEASE_COMMIT", TEST_RELEASE_COMMIT),
+    ):
+        result = run_once(connection, now=NOW)
+    if result == "BLOCKED:STRATEGY_EXECUTION_BINDING_NOT_READY":
+        reasons = connection.execute(
+            """SELECT d.reason FROM strategy_entry.execution_dispatches d
+               JOIN strategy_entry.execution_requests r
+                 ON r.execution_request_id=d.execution_request_id
+              WHERE r.trading_account_id=%s ORDER BY d.dispatch_id""",
+            (trading_account_id,),
+        ).fetchall()
+        print("INTEGRATION_BINDING_DIAGNOSTIC", reasons)
+    return result
 
 
 def _seed(
@@ -52,9 +74,11 @@ def _seed(
     reservation_id = f"{prefix}-reservation"
     slot_claim_id = f"{prefix}-slot"
     position_mode_state_ref = f"{prefix}-pmode"
-    exchange_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0"
+    trading_account_id = f"{prefix}-ta"
+    exchange_key = exchange_position_key(trading_account_id, symbol, 0)
     request_id = f"{prefix}-request"
     command_id = f"ue-{prefix}"[:36]
+    binding_id = f"{prefix}-binding"
 
     connection.execute(
         """INSERT INTO strategy_entry.strategy_cards(
@@ -82,6 +106,29 @@ def _seed(
                scope,operator,source,change_reason
            ) VALUES(%s,%s,%s,%s,true,%s,NULL,'{}'::jsonb,'test','test','')""",
         (activation_id, strategy_id, version, strategy_fp, NOW),
+    )
+    connection.execute(
+        """INSERT INTO identity.trading_accounts(
+               trading_account_id,venue_id,account_kind,account_type,
+               environment,status
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')""",
+        (trading_account_id,),
+    )
+    connection.execute(
+        """INSERT INTO identity.account_connectors(
+               account_connector_id,trading_account_id,connector_kind,adapter_id,status
+           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE','ACTIVE')""",
+        (f"{prefix}-connector", trading_account_id),
+    )
+    connection.execute(
+        """INSERT INTO strategy_entry.strategy_execution_bindings(
+               strategy_execution_binding_id,strategy_activation_id,
+               execution_leg,execution_role,trading_account_id,
+               allocation_mode,binding_state,effective_from,
+               operator,source,reason
+           ) VALUES(%s,%s,'PRIMARY','PRIMARY',%s,'DEDICATED_STRATEGY',
+                    'ACTIVE',%s,'test','test','integration fixture')""",
+        (binding_id, activation_id, trading_account_id, NOW),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_plans(
@@ -148,15 +195,16 @@ def _seed(
         """INSERT INTO runtime.position_mode_states(
                position_mode_state_ref,exchange,account_ref,product_category,
                instrument,position_mode,position_idx,observed_at,received_at,
-               fresh_until,provenance
+               fresh_until,provenance,trading_account_id,identity_status
            ) VALUES(%s,'BYBIT','BYBIT:UNIFIED','LINEAR',%s,'ONE_WAY',0,
-                    %s,%s,%s,'{}'::jsonb)""",
+                    %s,%s,%s,'{}'::jsonb,%s,'PROVEN')""",
         (
             position_mode_state_ref,
             symbol,
             NOW,
             NOW,
             NOW + timedelta(minutes=10),
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -166,9 +214,12 @@ def _seed(
                strategy_attempt_id,requested_amount,amount_currency,
                capacity_snapshot_id,capacity_observed_at,
                capacity_available_at_reservation,pre_dispatch_expires_at,
-               state,state_reason,created_at,updated_at
+               state,state_reason,created_at,updated_at,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
            ) VALUES(%s,'BYBIT:UNIFIED',%s,%s,%s,%s,%s,%s,10,'USDT',
-                    %s,%s,10,%s,%s,'TEST_SEED',%s,%s)""",
+                    %s,%s,10,%s,%s,'TEST_SEED',%s,%s,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             reservation_id,
             strategy_id,
@@ -183,6 +234,8 @@ def _seed(
             reservation_state,
             NOW,
             NOW,
+            binding_id,
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -191,9 +244,10 @@ def _seed(
                symbol,position_idx,strategy_attempt_id,strategy_id,strategy_version,
                strategy_config_fingerprint,entry_plan_fingerprint,direction,
                position_mode_state_ref,capital_reservation_id,claim_state,
-               claimed_at,updated_at
+               claimed_at,updated_at,strategy_execution_binding_id,
+               execution_leg,trading_account_id,identity_status
            ) VALUES(%s,%s,'BYBIT:UNIFIED',%s,0,%s,%s,%s,%s,%s,'LONG',
-                    %s,%s,'CLAIMED',%s,%s)""",
+                    %s,%s,'CLAIMED',%s,%s,%s,'PRIMARY',%s,'PROVEN')""",
         (
             slot_claim_id,
             exchange_key,
@@ -207,14 +261,19 @@ def _seed(
             reservation_id,
             NOW,
             NOW,
+            binding_id,
+            trading_account_id,
         ),
     )
     connection.execute(
         """INSERT INTO strategy_entry.entry_decisions(
                entry_decision_id,strategy_attempt_id,signal_id,decision_code,
                reason,decided_at,capacity_snapshot_id,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref,payload
-           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,payload,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,%s,%s,'ACCEPTED','test',%s,%s,%s,%s,%s,'{}'::jsonb,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             decision_id,
             attempt_id,
@@ -224,6 +283,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            binding_id,
+            trading_account_id,
         ),
     )
     connection.execute(
@@ -232,8 +293,11 @@ def _seed(
                strategy_id,strategy_version,strategy_config_fingerprint,
                entry_plan_fingerprint,symbol,direction,requested_at,payload,
                exit_plan_fingerprint,capital_reservation_id,
-               exchange_position_slot_claim_id,position_mode_state_ref
-           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s)""",
+               exchange_position_slot_claim_id,position_mode_state_ref,
+               strategy_execution_binding_id,execution_leg,trading_account_id,
+               identity_status
+           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,'LONG',%s,'{}'::jsonb,%s,%s,%s,%s,
+                    %s,'PRIMARY',%s,'PROVEN')""",
         (
             request_id,
             attempt_id,
@@ -249,6 +313,8 @@ def _seed(
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
+            binding_id,
+            trading_account_id,
         ),
     )
     if permission:
@@ -304,13 +370,25 @@ def _seed(
             "exchange_position_slot_claim_id": slot_claim_id,
             "position_mode_state_ref": position_mode_state_ref,
             "strategy_activation_id": activation_id,
+            "strategy_execution_binding_id": binding_id,
+            "execution_leg": "PRIMARY",
+            "trading_account_id": trading_account_id,
             "bot_instance_id": "universal-entry",
         }
         connection.execute(
             """INSERT INTO runtime.trade_commands(
-                   command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms
-               ) VALUES(%s,'entry',%s,%s,'queued',%s)""",
-            (command_id, symbol, json.dumps(payload), int(NOW.timestamp() * 1000)),
+                   command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms,
+                   strategy_execution_binding_id,execution_leg,trading_account_id,
+                   identity_status
+               ) VALUES(%s,'entry',%s,%s,'queued',%s,%s,'PRIMARY',%s,'PROVEN')""",
+            (
+                command_id,
+                symbol,
+                json.dumps(payload),
+                int(NOW.timestamp() * 1000),
+                binding_id,
+                trading_account_id,
+            ),
         )
     return {
         "strategy_id": strategy_id,
@@ -323,6 +401,8 @@ def _seed(
         "request_id": request_id,
         "execution_request_id": request_id,
         "command_id": command_id,
+        "binding_id": binding_id,
+        "trading_account_id": trading_account_id,
         "symbol": symbol,
     }
 
@@ -408,7 +488,10 @@ def test_expired_reserved_request_is_released_even_when_gate_is_disarmed() -> No
         _gate(connection, False)
         connection.commit()
 
-        assert run_once(connection, now=NOW) == "EXECUTION_GATE_DISARMED"
+        assert (
+            _run_once_for_fixture_account(connection, ids["trading_account_id"])
+            == "EXECUTION_GATE_DISARMED"
+        )
         reservation = connection.execute(
             """SELECT state,state_reason
                  FROM runtime.capital_reservations
@@ -446,7 +529,7 @@ def test_missing_live_arm_evidence_blocks_before_exchange_and_releases_admission
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_once_for_fixture_account(connection, ids["trading_account_id"])
         assert result == "BLOCKED:LIVE_ARM_NOT_READY"
 
         reservation = connection.execute(
@@ -492,7 +575,7 @@ def test_structural_pre_exchange_block_releases_reserved_capital() -> None:
         _gate(connection, True)
         connection.commit()
 
-        result = run_once(connection, now=NOW)
+        result = _run_once_for_fixture_account(connection, ids["trading_account_id"])
         assert result in {
             "BLOCKED:STRUCTURAL_ERROR",
             "BLOCKED:IDENTITY_MISMATCH",
@@ -626,13 +709,16 @@ def test_confirmed_zero_fill_ttl_cancel_releases_pending_capital() -> None:
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0"}),
+                ids["trading_account_id"],
+                f"{prefix}-connector",
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -688,8 +774,9 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
@@ -700,6 +787,8 @@ def test_confirmed_zero_fill_cancel_releases_even_before_acknowledgement() -> No
                         "rejectReason": "EC_PostOnlyWillTakeLiquidity",
                     }
                 ),
+                ids["trading_account_id"],
+                f"{prefix}-connector",
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
@@ -752,25 +841,31 @@ def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None
         connection.execute(
             """INSERT INTO runtime.exchange_order_history(
                    order_id,order_link_id,symbol,side,order_status,
-                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms
-               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1)""",
+                   updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,%s,'PROVEN')""",
             (
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
                 json.dumps({"cumExecQty": "0.5"}),
+                ids["trading_account_id"],
+                f"{prefix}-connector",
             ),
         )
         connection.execute(
             """INSERT INTO runtime.executions(
                    exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
-                   exec_fee,exec_time_ms,received_at_epoch_ms,payload_json
-               ) VALUES(%s,%s,%s,%s,'Buy','0.5','1','0',1,1,'{}')""",
+                   exec_fee,exec_time_ms,received_at_epoch_ms,payload_json,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,%s,%s,%s,'Buy','0.5','1','0',1,1,'{}',%s,%s,'PROVEN')""",
             (
                 f"{prefix}-exec",
                 order_id,
                 ids["command_id"][:36],
                 ids["symbol"],
+                ids["trading_account_id"],
+                f"{prefix}-connector",
             ),
         )
         state = resolve_cancelled_entry_reservation_after_reconcile(
