@@ -59,3 +59,17 @@ CHECKED HERE: a separate **derived, non-canonical** evidence audit for #19 Range
 - [ ] Out-of-sample trading result after fees — **NOT CHECKED**, distinct from physical measurement readiness
 
 Machine-readable audit is an inventory of verified source evidence and exact missing gates, not a new research experiment. Blocked upstream server route (#18/#20) was not invoked or retried.
+
+
+## Проверка источников для №10/12–17/21/30 — 2026-10-19
+
+CHECKED HERE: `research/microstructure/passports/proxy_identity_gate_audit_2026-10-19_v1.json` saved in GitHub commit `082df27f903d57b6b51758652af2a7a0eb7fcec2`. Audit covers nine unfinished indicator IDs and maps current main source files, physical proxy identities and strict §21 gates without rerunning blocked server operations.
+
+- [x] Найдены в текущем main существующие исходники proxy/physical измерений всех девяти ID.
+- [ ] №10: `top1_price_transition_ofi_v1.py`, закреплённый в историческом журнале, **отсутствует** в текущем GitHub main tree. Есть отдельный `rank_ofi_v1.py`; они **не объявляются эквивалентными** без проверки алгоритма и historical-source SHA/commit. Strict multi-level OFI остаётся OPEN.
+- [ ] №12: снятие ликвидности vs исполнение не разделены; verified trade-window proximity не делает cancellation observable.
+- [ ] №13/15/16/21/30: измеряются только заявленные физические proxy, независимый QC и строгая identity открыты.
+- [ ] №14/17: future labels не могут использоваться как as-of features.
+- [ ] Все девять: instrument-scoped full §21.6 passports, independent replay, source/availability gates OPEN.
+
+**Этот этап — аудит GitHub source identity, не новая серверная проверка и не RESEARCH-READY.** Ранее блокированный OpenAI route #18/20 не использовался. Выявленный source mismatch №10 требует source/commit reconciliation; не исправлять его догадкой.
