@@ -923,3 +923,18 @@ CHECKED HERE: five independent read-only `cripta` runs of v2 on **2026-05-20 UTC
 Primary vs independently derived valid counts, medians, active minutes, fills and POC all **EXACT MATCH (5/5)**. Independent end-day VWAP sourced from CSV `foreignNotional`, primary VWAP recomputed from `price * size`; tiny Decimal differences occur (APT 0.9445962380876828737592046803 vs primary 0.9445962380876828726150498456; other four differences same ~1e-18 order). Independent `foreign_notional_mismatches=0` with source threshold 0.000001 per fill. Thus report **VWAP NUMERIC CLOSE, NOT BITWISE EQUAL**. Independence limited to different reader implementations, same source file and dataset; does not prove OOS utility, trade fill/PnL, or complete minute-row agreement (v2 does not independently hash every feature row).
 
 #19/#22 now **SECOND_DAY_INDEPENDENT_SUMMARY_QC_5_OF_5_PASS**, still `RESEARCH-READY` conditional on §21 per-pair passport, full minute-row independent spot checks and formal readiness gate. No Strategy/DB/deploy/LIVE modification.
+
+
+## 2026-10-19 — #19/#22 second-day all-minute independent exact hash QC PASS 5/5
+
+CHECKED HERE: new separately coded read-only independent `research/microstructure/experiments/range_vwap_minute_row_independent_v1.py` source commit `876ccaa41cb1962c3513b27764f1fc64fe0ceac8`, five `sudo -u cripta python3` successful rc=0 on 2026-05-20 Bybit public-trades archives. Computes all 1440 minute records per coin from grouped price×size fills, previous 20 completed minute close range vs current 20, accumulated per-price volume POC and running VWAP, then canonical JSON serialization SHA256. This is distinct source from primary `range_vwap_profile_v1.py`, and uses no imported primary algorithm. **Independent hashes match primary 2026-05-20 all-1440-minute row hashes byte-for-byte in all five coins** (as recorded at journal second-day primary execution).
+
+| Instrument | Independent 1440-minute-row SHA256 (exact match primary) | Range-valid count | QC |
+|---|---|---:|---|
+| APTUSDT | db43bdc14a4054bd03d1252010a96b8f7ce7be6db9128631231c8977d806c0de | 1401 | PASS |
+| INJUSDT | 34e751c86f85f47773eb39fe7b0faaacacc7892120948b914b97ed2480ea59f3 | 1401 | PASS |
+| DOTUSDT | 226e018fae1b43b11c7d7c230db868b59acbcaebc8e9564cd205ffdb5f0efac6 | 1277 | PASS |
+| LTCUSDT | 33f3bacef04cfb3dd38407cb4940c8b7c2555057929ad05cf7635b03c1e56797 | 1010 | PASS |
+| ARBUSDT | fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c | 1401 | PASS |
+
+This resolves the pending **independent full-minute-row agreement** for the five 2026-05-20 #19 and #22 physical measurement streams. It is not a proof of separate exchange feed capture nor of profitable OOS signals. Original 2026-05-19 passport is historical; no silent retroactive mutation. Formal §21 per-instrument version/date passport and OOS/latency must be assessed independently; no `RESEARCH-READY` promotion at this step. No Strategy, DB, deploy or LIVE change.
