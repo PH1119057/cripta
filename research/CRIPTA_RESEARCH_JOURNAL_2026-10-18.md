@@ -1336,3 +1336,18 @@ CHECKED HERE: independent source `research/microstructure/experiments/absorption
 | ARBUSDT | 1380 | 145 | 23 | 120 | 2 | 0 |
 
 All `unusual=against+aligned+flat` partition QC PASS. This is an independent full-day **summary**, not independently persisted per-minute/event row equivalence or proof of physical passive absorption. Flow and price outcome available at current minute close only. §21.6 passport, observed-time and OOS after-fees gates OPEN. No trading runtime/LIVE changes.
+
+
+## 2026-10-19 — #21 independent prior-60 trade-print sweep/reclaim QC 5/5
+
+CHECKED HERE: independent source `research/microstructure/experiments/sweep_reclaim_print_independent_qc_v1.py` pinned GitHub commit `30199a0f3058be61e51a14ff781c65166da21641`, five separate read-only `cripta` executions `--date 2026-05-20`, all rc=0. Independent deque-based prior-60 completed 1m print-price extrema and sequential within-minute crossing/reclaim counting reproduced previous `sweep_reclaim_ordered_trades_v2.py` May20 full-day counts (journal `ef20ee3`) exactly 5/5, including missing/incomplete window exclusions.
+
+| Coin | Eligible | Incomplete | High prints over prior max / reclaim | Low prints under prior min / reclaim |
+|---|---:|---:|---|---|
+| APTUSDT | 1380 | 0 | 55 / 40 | 60 / 34 |
+| INJUSDT | 1380 | 0 | 80 / 68 | 62 / 47 |
+| DOTUSDT | 1193 | 187 | 50 / 31 | 53 / 31 |
+| LTCUSDT | 872 | 508 | 32 / 22 | 31 / 18 |
+| ARBUSDT | 1380 | 0 | 49 / 35 | 67 / 40 |
+
+IMPORTANT: counts represent source print-sequence events, not independently verified liquidity sweeps through resting orderbook; same-timestamp fill order remains unsupported. Independent **cohort summary QC**, not saved minute-event row hashes, no §21 READY/OOS/after-fees inference. No Strategy/DB/services/LIVE changes.
