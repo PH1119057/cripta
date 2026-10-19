@@ -22,8 +22,9 @@ def test_parity_critical_modules_are_pinned_to_current_git_release() -> None:
     ]
     assert len(assignments) == 1
     modules = ast.literal_eval(assignments[0].value)
-    assert len(modules) == 6
+    assert len(modules) == 7
     assert "operations/monitoring/universal_entry_shadow.py" in modules
+    assert "src/bybit_workbench/universal_entry/r1_independent_parity.py" in modules
     for relative in modules:
         expected = subprocess.check_output(
             ["git", "-C", str(ROOT), "show", f"HEAD:{relative}"]
