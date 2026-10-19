@@ -30,6 +30,8 @@ def test_parity_critical_modules_are_pinned_to_current_git_release() -> None:
             ["git", "-C", str(ROOT), "show", f"HEAD:{relative}"]
         )
         actual = (ROOT / relative).read_bytes()
+        actual = actual.replace(b"\r\n", b"\n")
+        expected = expected.replace(b"\r\n", b"\n")
         assert hashlib.sha256(actual).digest() == hashlib.sha256(expected).digest()
 
 
