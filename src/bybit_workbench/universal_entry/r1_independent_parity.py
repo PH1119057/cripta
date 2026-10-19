@@ -115,7 +115,9 @@ def _candles(symbol: str) -> tuple[Candle, ...]:
     )
 
 
-def _engine(registry: ActivePlanRegistry, symbol: str, candles: tuple[Candle, ...]) -> UniversalEntryEngine:
+def _engine(
+    registry: ActivePlanRegistry, symbol: str, candles: tuple[Candle, ...]
+) -> UniversalEntryEngine:
     engine = UniversalEntryEngine(registry)
     engine.load_watch_history(
         symbol, {"5": candles}, (), observed_at=candles[-1].closed_at,
@@ -152,10 +154,17 @@ def _exit_case(
         source_refs=("parity-replay",),
     )
     # Two independent evaluations from separately assembled PAPER and REAL contexts.
-    paper = UniversalExitEngine().evaluate(SimpleNamespace(**position_fields), exit_plan, observation)
-    real = UniversalExitEngine().evaluate(SimpleNamespace(**position_fields), exit_plan, observation)
+    paper = UniversalExitEngine().evaluate(
+        SimpleNamespace(**position_fields), exit_plan, observation
+    )
+    real = UniversalExitEngine().evaluate(
+        SimpleNamespace(**position_fields), exit_plan, observation
+    )
     _require(paper == real, f"{case_key} ExitDecision mismatch")
-    _require(paper.status is ExitEvaluationStatus.DECISION_CREATED, f"{case_key} Exit not executable")
+    _require(
+        paper.status is ExitEvaluationStatus.DECISION_CREATED,
+        f"{case_key} Exit not executable",
+    )
     _require(paper.decision is not None, f"{case_key} ExitDecision missing")
     _require(
         paper.decision.requested_mutation.to_dict() == {
@@ -181,7 +190,10 @@ def _exit_case(
     blocked = UniversalExitEngine().evaluate(
         SimpleNamespace(**position_fields), exit_plan, bad_observation,
     )
-    _require(blocked.status is ExitEvaluationStatus.BLOCKED, f"{case_key} missing Exit fact did not block")
+    _require(
+        blocked.status is ExitEvaluationStatus.BLOCKED,
+        f"{case_key} missing Exit fact did not block",
+    )
 
 
 def run_r1_independent_decision_parity() -> dict[str, object]:
@@ -283,11 +295,17 @@ def run_r1_independent_decision_parity() -> dict[str, object]:
                 case + " offline REAL admission failed",
             )
             request = real.execution_request
-            _require(request.payload == paper.execution_intent.payload, case + " request policy differs")
+            _require(
+                request.payload == paper.execution_intent.payload,
+                case + " request policy differs",
+            )
             paper_db = _OfflinePaperDB()
             paper_runtime = PaperTradeRuntime(paper_db, bundles=(bundle,))
             paper_id = paper_runtime.create_order(paper, bundle, now=now)
-            _require(paper_id is not None and len(paper_db.inserted_orders) == 1, case + " PAPER order missing")
+            _require(
+                paper_id is not None and len(paper_db.inserted_orders) == 1,
+                case + " PAPER order missing",
+            )
             paper_row = paper_db.inserted_orders[0]
             paper_payload = json.loads(str(paper_row[-1]))
             real_command = prepare_runtime_entry_command(request, bridge_bundle, now=now)
@@ -353,7 +371,9 @@ def run_r1_independent_decision_parity() -> dict[str, object]:
                 paper.execution_intent,
                 strategy_activation_id=activation.activation_id,
                 from_direction=(
-                    TradeDirection.SHORT if direction is TradeDirection.LONG else TradeDirection.LONG
+                    TradeDirection.SHORT
+                    if direction is TradeDirection.LONG
+                    else TradeDirection.LONG
                 ),
                 lifecycle_policy=card.lifecycle_policy.to_dict(),
                 capital_policy=card.capital_policy.to_dict(),
@@ -362,7 +382,9 @@ def run_r1_independent_decision_parity() -> dict[str, object]:
                 real.execution_intent,
                 strategy_activation_id=activation.activation_id,
                 from_direction=(
-                    TradeDirection.SHORT if direction is TradeDirection.LONG else TradeDirection.LONG
+                    TradeDirection.SHORT
+                    if direction is TradeDirection.LONG
+                    else TradeDirection.LONG
                 ),
                 lifecycle_policy=card.lifecycle_policy.to_dict(),
                 capital_policy=card.capital_policy.to_dict(),
