@@ -96,6 +96,7 @@ R1_PARITY_CRITICAL_MODULES = (
     "operations/monitoring/universal_entry_shadow.py",
     "src/bybit_workbench/universal_entry/engine.py",
     "src/bybit_workbench/universal_entry/paper_runtime.py",
+    "src/bybit_workbench/universal_entry/r1_independent_parity.py",
     "src/bybit_workbench/universal_entry/reverse_intent.py",
     "src/bybit_workbench/universal_exit/engine.py",
     "src/bybit_workbench/universal_exit/execution_bridge.py",
