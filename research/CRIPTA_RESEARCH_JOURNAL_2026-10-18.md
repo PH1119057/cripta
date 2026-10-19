@@ -1213,3 +1213,18 @@ The book `ts`−`cts` time difference is **not independently verified publish or
 CHECKED HERE: new date-field source-discovery probes `research/microstructure/experiments/oi_coverage_probe_v2.py` GitHub `9952dfdd36f36154516cad0beef8477df1226493`, `spot_perp_source_probe_v2.py` GitHub `d6f2cd947e289e2888d5f72af3ccf1b40dd559d0`. #23 OI five read-only actor `cripta` runs on exact candidate-root shallow path inventory rc=0; 5/5 `shallow_candidate_paths=[]`, `exact_day_valid_oi_series_verified=false`. **This is shallow path candidate absence, NOT exhaustive proof of absent historical OI**; no real OI values, missing=NO_DATA not zero.
 
 The subsequent #25 spot source probe server invocation was **blocked at OpenAI upstream tool security**, no host result returned, **0/5 spot probes attempted successfully**. Route blocked, not retried/re-coded/actor-switched; `HARD_STOP=YES` for that route and `OWNER_DECISION_REQUIRED=YES` before authorized execution. New v2 script in GitHub is *PREPARED not EXECUTED*. Prior #25 May19 source status remains, no fresh May20 Spot series verified. No Strategy/DB/services/deploy/LIVE modifications.
+
+
+## 2026-10-19 — #1/#2/#3/#5/#6/#7 second-day independent Decimal QC, 5/5
+
+CHECKED HERE: independent stdlib Decimal implementation `research/microstructure/experiments/trade_minute_decimal_independent_qc_v1.py` immutable GitHub commit `16043cbeaff5df865bf6c4df646863622e0ee1f5`, compared against existing primary `trade_minute_factors_v1.py` loaded from the same pinned GitHub commit, on read-only actor `cripta`, UTC `2026-05-20`, five individual runs of each (10/10 rc=0). Both read the same underlying coin/day gzip trade source, but implement minute aggregation separately (independent Decimal vs primary binary float). For 5/5 coins, full-day fill counts, active minute counts, eligible RVOL minute counts, and minute 0/60/1439 trade-rate, rate-acceleration, signed flow delta, delta-acceleration, CVD and RVOL agree at displayed tolerances (exact integer counts, floating-number differences from expected float accumulation). This is aggregate-and-**three sampled minutes** independent verification, NOT full 1440-row hash parity.
+
+| Coin | Total fills | Active minutes | RVOL eligible | Exact Decimal end-of-day CVD USDT | QC |
+|---|---:|---:|---:|---:|---|
+| APTUSDT | 117069 | 1440 | 1380 | +16223.501513 | 5/5 PASS |
+| INJUSDT | 260994 | 1440 | 1380 | -1174482.000300 | 5/5 PASS |
+| DOTUSDT | 151067 | 1436 | 1380 | -71302.993570 | 5/5 PASS |
+| LTCUSDT | 93645 | 1423 | 1380 | -3408885.439000 | 5/5 PASS |
+| ARBUSDT | 209152 | 1440 | 1380 | +32862.930714 | 5/5 PASS |
+
+QC scope: physical aggregation source and 3 samples/coin. No independent full-minute complete-row checksum/§21.6 instrument-factor READY, exchange publication observed time or trading profitability. Missing-minute semantics retained. This does not constitute Strategy threshold, LIVE activation, or after-fees performance.
