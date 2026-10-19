@@ -6,13 +6,13 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 
 | # | Indicator | Latest verified stage | Remaining gate / limit |
 |---:|---|---|---|
-| 1 | RVOL | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 2 | Trade Rate | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 3 | Trade Rate Acceleration | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 1 | RVOL | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
+| 2 | Trade Rate | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
+| 3 | Trade Rate Acceleration | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 4 | Large Trade Share | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 5 | Buy/Sell Delta | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 6 | CVD | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 7 | Delta Acceleration | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 5 | Buy/Sell Delta | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
+| 6 | CVD | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
+| 7 | Delta Acceleration | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 8 | Trade Streaks | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 9 | Queue Imbalance | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 10 | Multi-Level OFI | `TOP1_OFI_FULL_DAY_5_OF_5 + TOP5_STOCK_DECOMPOSITION_5_OF_5` | Strict complete multi-level OFI still OPEN; rank reindexing must not be mislabeled |
