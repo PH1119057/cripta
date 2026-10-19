@@ -1108,3 +1108,18 @@ CHECKED HERE: source `research/microstructure/experiments/effort_result_minute_v
 | ARBUSDT | 1440 | 0 | 648.2438 | 2772.1177 |
 
 Units: **bps per 1 million USDT traded**, not direct bps price movement. May20 proxy measures intraminute absolute first-to-last endpoint change / contemporaneous turnover, not causal trade impact. Large ratios at thin volumes can amplify; neither cross-coin calibrated signal nor after-fee edge. Independent per-minute QC, as-of source capture, §21.6 passports, OOS remain OPEN. No Strategy/runtime/DB/LIVE modifications.
+
+
+## 2026-10-19 — #16 absorption proxy and #17 5-minute exhaustion label: May20 full five-coin execution
+
+CHECKED HERE: read-only `cripta` 10 physical runs May 20 using date-parameterized primary-reader logic at immutable commit `277458d12c66df0ce8d005ed3470431e8af92462`; all rc=0, 5/5 each. `absorption_prior60_candidate_v2.py` had a **static output `window="2026-05-19 full UTC day"` label** inherited from v1 despite dynamic May20 source path/start. The actual data date for these five calls is May20 from `--date` and paths; label fixed without algorithm change in GitHub `42cfa21aaa4406c5e43c9dd206870d775f379d1a`. Label fix itself NOT rerun, so evidence is tied to original executed v2 commit and explicit source path proof. #17 script had no static window label.
+
+| Instrument | #16 baseline-eligible minutes | Unusual signed flow | Against-flow move proxy | #16 partition QC | #17 eligible 5m anchors | Decay anchors | Next-5m reversal labels among decay |
+|---|---:|---:|---:|---|---:|---:|---:|
+| APTUSDT | 1380 | 152 | 15 | PASS | 106 | 55 | 28 |
+| INJUSDT | 1380 | 170 | 26 | PASS | 89 | 46 | 27 |
+| DOTUSDT | 1376 | 152 | 24 | PASS | 88 | 46 | 25 |
+| LTCUSDT | 1362 | 152 | 20 | PASS | 98 | 55 | 27 |
+| ARBUSDT | 1380 | 145 | 23 | PASS | 96 | 50 | 22 |
+
+#16 prior60m percentile baseline uses previous minutes, but flow/price reaction exists only after current minute close; price-opposition ≠ proof of passive limit absorption. #17 **future next-block reversal is a LABEL**, unavailable at current block close; no predictive or OOS result. #17 partition QC 5/5 true. Independent per-row QC and formal per-pair §21 gates remain OPEN. No Strategy, execution, DB, service or LIVE changes.
