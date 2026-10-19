@@ -1365,3 +1365,20 @@ CHECKED HERE: read-only source inspection of current `research/microstructure/ex
 The current primary reader expires pending episodes only on **later book delta messages** (`if ts-t>window_ms` in the message loop), and at end of requested analysis period blindly adds remaining pending to `open` irrespective of how long ago the loss was observed. Its `qc_episode_partition` may be PASS even if episodes that already exceeded the stated 60,000 ms deadline are retained as open. That is not by itself proof of the amount of bias on May20 5-coin full-day results, because the raw end-of-period pending-age inventory was not separately measured.
 
 **FINDING:** measurement and censoring contract must distinguish (a) genuinely end-window right-censored losses younger than 60s from (b) observation-horizon-expired losses with no later book update (assuming source coverage/clock validated). Existing #13 results remain useful descriptive evidence but **not formal 60s recovery-rate QC**. No primary algorithm rewrite, no silently changed research policy, no Strategy, DB, services or LIVE mutation. Owner measurement contract / corrected reader version and independent raw replay remain open.
+
+
+## 2026-10-20 — #13 raw May20 pending-age endpoint audit 5/5; two physically observed aged pending episodes
+
+CHECKED HERE: new read-only `research/microstructure/experiments/depth_recovery_pending_age_audit_v1.py` pinned immutable GitHub `4ff2f9f43e12d672c75a0e8b64dce7411bd2064a`, separately reconstructed exact-price book reductions and later recovery/expiration using all May20 orderbook records for APT/INJ/DOT/LTC/ARB; five `cripta` rc=0. Counts reproduce original #13 v2 May20 summaries exactly for new/recovered/expired/open and source snapshots/deltas. Endpoint `2026-05-21T00:00:00Z` distinguishes remaining pending younger/equal 60000ms from pending older than 60000ms. Table each bid/ask pending and aged:
+| Coin | Bid pending / aged | Ask pending / aged | Total pending | Total aged |
+|---|---|---|---:|---:|
+| APTUSDT | 79 / 0 | 49 / 0 | 128 | 0 |
+| INJUSDT | 77 / 0 | 79 / 0 | 156 | 0 |
+| DOTUSDT | 79 / 0 | 69 / 0 | 148 | 0 |
+| LTCUSDT | 63 / 1 | 46 / 0 | 109 | 1 |
+| ARBUSDT | 104 / 1 | 60 / 0 | 164 | 1 |
+| **TOTAL** | **402 / 2** | **303 / 0** | **705** | **2** |
+
+All 10 bid/ask partitions `new=recovered+expired_on_next_delta+snapshot_censored+open` PASS. Last source timestamps were within ~0.5s of end on all five coins; this does not independently prove continuous capture or delivery. The two raw aged episodes establish that the synthetic endpoint finding `2b02184` applies physically to May20 LTC and ARB, not only to code-level hypothetical cases. They were categorized `open` in v2 despite observation-window age >60s. A straightforward alternative timer rule would classify these as expired at horizon, **conditional** on measured source continuity/measurement-policy approval. Do not silently change original v2 or claim recovery-rate bias fully quantified before source uptime and mid-day age QC.
+
+STATUS `FINDING + RAW_ENDPOINT_REPRODUCTION_5_OF_5`, not research-ready or canonical redefinition. No trading runtime/DB/services/Strategy/LIVE mutation.
