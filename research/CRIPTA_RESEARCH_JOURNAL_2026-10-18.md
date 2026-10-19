@@ -1093,3 +1093,18 @@ CHECKED HERE: exact immutable GitHub `research/microstructure/experiments/top1_p
 **Research finding:** historical top1 and current `rank_ofi_v1.py` rank-index 0 implement algebraically the same best-price conditional transition (when same events pass snapshot/complete-depth gates); **not proven numerically or over full event coverage**: historical uses Decimal, rank reader float, and rank reader requires complete `levels` depth. The deeper rank 1..4 `rank_ofi` counters are *rank-index* features, subject to reindexing during best-price shifts, NOT strictly price-identity multi-level OFI. Current `book_top5_membership_v1.py` uses exact-price Decimal quote-notional membership decomposition and is explicitly NOT traditional multi-level OFI. Hence neither current version proves strict #10 multi-level OFI. Historical source absence from current main was confirmed earlier, but immutable source now verified.
 
 This is a code/source **algebraic audit**, no server replay, no numeric equivalence claimed, no §21 RESEARCH-READY grant, no trading/runtime/DB/LIVE change. Earlier upstream-blocked #18/20 route not retried.
+
+
+## 2026-10-19 — #15 Effort/Result May20 five-symbol complete calculation
+
+CHECKED HERE: source `research/microstructure/experiments/effort_result_minute_v2.py`, immutable GitHub source `10fe631c6cdd8d58c8dfda1c30cd07e865109808`, five individual read-only runs as actor `cripta` `--date 2026-05-20` rc=0. New v2 is only date-parametrized v1 (same measure, fields and denominators), not a new trading policy. 1440 calendar minute rows each, empty calendar minutes excluded as NO_DATA.
+
+| Symbol | Valid minute | Empty | Median abs(first-to-last 1m price bps) / 1m USDT turnover (millions) | P90 same |
+|---|---:|---:|---:|---:|
+| APTUSDT | 1440 | 0 | 1776.5666 | 10902.8376 |
+| INJUSDT | 1440 | 0 | 679.6845 | 3281.7942 |
+| DOTUSDT | 1436 | 4 | 647.5316 | 3683.0975 |
+| LTCUSDT | 1423 | 17 | 329.5791 | 3565.0464 |
+| ARBUSDT | 1440 | 0 | 648.2438 | 2772.1177 |
+
+Units: **bps per 1 million USDT traded**, not direct bps price movement. May20 proxy measures intraminute absolute first-to-last endpoint change / contemporaneous turnover, not causal trade impact. Large ratios at thin volumes can amplify; neither cross-coin calibrated signal nor after-fee edge. Independent per-minute QC, as-of source capture, §21.6 passports, OOS remain OPEN. No Strategy/runtime/DB/LIVE modifications.
