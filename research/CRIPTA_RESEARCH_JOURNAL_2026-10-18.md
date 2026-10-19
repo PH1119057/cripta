@@ -759,3 +759,18 @@ A **top-five total quote-depth** side reduction starts a single pending episode;
 | ARBUSDT | 5116 | 4327 | 788 | 1 | 2001 | 5087 | 4279 | 806 | 2 | 2001 |
 
 This closes 5/5 **full-day computations of the explicitly scoped top-five quote-depth stock recovery proxy**, and is **NOT** proof of same-price replenishment, same liquidity owner, true event-driven shock causation, predictive efficacy, an order-level resiliency indicator, or economic advantage. Repricing, re-ranking and churn can restore aggregate depth without restoring any original order. Reference #13 separately tracks exact price-level recovery and is NOT interchangeable. Independent replay/QC and §21 per-pair passports still pending. #30 strict Replenishment/Resiliency remains OPEN; no promotion to RESEARCH-READY, no trading or LIVE changes.
+
+
+## 2026-10-19 — STOP checkpoint: #24 extended parquet row-level reader access denied by SentinelX command policy
+
+CHECKED HERE: while attempting to inspect optional Parquet support for source-content QC on #24 historical liquidation files, system `python3` under `cripta` was verified to have **no** importable `pyarrow`, `pandas`, `duckdb`. A read-only existence smoke confirmed `/data/cripta/research/cache/test_gate_venv/bin/python` exists, but **NOT** that it has the requested packages.
+
+Attempt to invoke that alternate interpreter via SentinelX `sentinel_exec` under `sudo -u cripta` with `-B -c` inline package introspection received:
+```text
+ok=false
+error=command_not_allowed
+message="contains shell operator ';'. the operator ';' is part of a shell pipeline or redirection..."
+```
+Per `DEVELOPMENT_RELEASE §19.5–19.6`, this is **SentinelX policy/parser refusal**, NOT OpenAI upstream tool-security, NOT Unix EACCES, NOT a host Python package failure and NOT proof that the command reached the host. The proposed command used a semicolon inside quoted Python code, which the SentinelX parser rejected before execution. The **default allowlisted system Python** has already completed many successful read-only research tasks; this refusal concerns the *alternate-interpreter probe only*.
+
+Decision in this run: NO retries/re-encoding/actor changes/allowlist changes, no installation, no server mutation. `#24_FULL_EVENT_CONTENT_QC` remains `NOT_CHECKED_HERE`; prior per-coin file presence/hour manifest remains verified evidence, but liquidations event completeness unknown. `HARD_STOP=YES` for the blocked alternate interpreter probe under current method. `OWNER_DECISION_REQUIRED=YES` **only if** an exception/new tool command policy or approved interpreter route is needed; this is not a request to grant privileges or modify agent configuration without evidence. Trading services, DB and LIVE unchanged. Latest all-30 checkpoint registry is `research/microstructure/INDICATOR_PROGRESS_2026-10-19.md`.
