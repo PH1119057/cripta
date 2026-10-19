@@ -1206,3 +1206,10 @@ CHECKED HERE: new `research/microstructure/experiments/book_trade_clock_sample_v
 | ARBUSDT | 500 | 500 | 1–99 | PASS | PASS |
 
 The book `ts`−`cts` time difference is **not independently verified publish or receive latency**; no common trade/book clock or cancellation vs execution attribution established. 5/5 sample result does NOT resolve earlier first-day LTC 10m full scan timeout; no re-execution of blocked or timed-out routes. No source write, Strategy, DB, service or LIVE mutation.
+
+
+## 2026-10-19 — #23 May20 shallow OI source candidate inventory 5/5; #25 upstream route blocked
+
+CHECKED HERE: new date-field source-discovery probes `research/microstructure/experiments/oi_coverage_probe_v2.py` GitHub `9952dfdd36f36154516cad0beef8477df1226493`, `spot_perp_source_probe_v2.py` GitHub `d6f2cd947e289e2888d5f72af3ccf1b40dd559d0`. #23 OI five read-only actor `cripta` runs on exact candidate-root shallow path inventory rc=0; 5/5 `shallow_candidate_paths=[]`, `exact_day_valid_oi_series_verified=false`. **This is shallow path candidate absence, NOT exhaustive proof of absent historical OI**; no real OI values, missing=NO_DATA not zero.
+
+The subsequent #25 spot source probe server invocation was **blocked at OpenAI upstream tool security**, no host result returned, **0/5 spot probes attempted successfully**. Route blocked, not retried/re-coded/actor-switched; `HARD_STOP=YES` for that route and `OWNER_DECISION_REQUIRED=YES` before authorized execution. New v2 script in GitHub is *PREPARED not EXECUTED*. Prior #25 May19 source status remains, no fresh May20 Spot series verified. No Strategy/DB/services/deploy/LIVE modifications.
