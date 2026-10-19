@@ -44,3 +44,18 @@
 - [ ] **OOS и доходность после комиссий**: не выполнены, доходность не заявлять.
 
 Этот этап — документарная сверка уже сохранённого GitHub evidence, а **не новый серверный расчёт**. Блокированная операция №18/20 не повторялась. В работе следующими допустимыми действиями остаются проверка существующих документов и source-code definitions через GitHub и подготовка явных QC gaps; server-side execution заблокированного маршрута ждёт owner/tool-policy разрешения.
+
+
+## §21.6 machine-readable per-instrument gate audit — 2026-10-19
+
+CHECKED HERE: a separate **derived, non-canonical** evidence audit for #19 Range Compression and #22 running VWAP/POC, on five instruments for May 20, was committed to `research/microstructure/passports/range_vwap_2026-05-20_gate_audit_v1.json` in GitHub `42183051b9aad0d31b9597454cb5b2ab3087a05c`.
+
+- [x] 5/5 per-instrument compressed raw source SHA256 and source QC already present in prior passport
+- [x] 5/5 1440-row independent checksum parity already attested
+- [x] Formula and completed-minute availability **declared by versioned source**, with missingness rules
+- [ ] Independent measurement of actual exchange publication / receiver observation time — **NOT CHECKED**; declaration alone cannot prove causal visibility
+- [ ] Persisted full-minute analytical dataset/cube with independent file-manifest QC — **NOT VERIFIED**
+- [ ] Formal READY proof for all `(instrument,indicator,version,scope)` pairs — **OPEN**; no automatic promotion
+- [ ] Out-of-sample trading result after fees — **NOT CHECKED**, distinct from physical measurement readiness
+
+Machine-readable audit is an inventory of verified source evidence and exact missing gates, not a new research experiment. Blocked upstream server route (#18/#20) was not invoked or retried.
