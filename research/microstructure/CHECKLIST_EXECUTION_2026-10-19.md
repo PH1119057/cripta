@@ -175,3 +175,14 @@ The current large batch now contains independent source QC for #1/#2/#3/#5/#6/#7
 - [ ] §21 as-of/publication-clock, per-instrument passport and OOS after fees still OPEN.
 
 This is a **confirmed data-boundary bug in existing research calculation**, not a new Strategy rule or trading runtime change. No existing blocked route retried. Earlier 5/5 summary QC was too coarse to detect this defect and must not be represented as all-row QC.
+
+
+## 2026-10-19 — candidate v2 exact timestamp floor replay closes six-factor physical row QC
+
+- [x] New **research-only candidate version**, old v1 preserved: `trade_minute_factors_v2_exact_timestamp_floor.py` GitHub `48fd2e2aedae9e9d49df4f8be346ae01879b9bfe`.
+- [x] Independent complete-row comparator `trade_minute_full_row_crosscheck_v2.py` GitHub `0864c79b53a74d8bc916bfc83441f456e4881954` gave **5/5 exact instrument passes**, 1440 rows × 8 tested fields each, zero differences outside explicit float tolerance. Journal `b81280e64c2a7c549f563a9aa1cc49af875c0bad`; tracker `67480e1fb8d344d3c7edb9b66fe19111b5da1769`.
+- [x] APT defect cause proven raw source: three fills at 23:26:59.9995 UTC belong minute 1406, previously rounded by v1 to 1407; candidate floor v2 fixes. V1 remains **FAILED** on APT to preserve audit trail.
+- [ ] §21.6 per instrument/formula/source-scope READY still OPEN: actual observed/received publication time, formal version selection, per-pair artifact+manifest. 5/5 numeric QC is not owner approval for Strategy or canonical threshold.
+- [ ] OOS/favorable-adverse after-fee trading assessments not performed.
+
+No runtime, DB, service, exchange, production Strategy or LIVE mutation. No earlier tool-security route retries.
