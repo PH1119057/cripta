@@ -648,3 +648,18 @@ CHECKED HERE: read-only `research/microstructure/experiments/absorption_prior60_
 | ARBUSDT | 1379 | 151 | 27 | 122 | 2 | 1 | 14/13 |
 
 QC five of five: every unusually-high-flow count = aligned+against+flat. No cross-coin normalization, no future lookahead in baseline; per-coin results differ. **Critical**: high signed flow and weak/opposite minute endpoint change does not identify passive absorbers, true hidden liquidity, traded order origins, microstructure economics, OOS advantage or fee-adjusted returns. This version has no matched controls. #16 `FULL_DAY_CAUSAL_PROXY_5_OF_5 / PHYSICAL_ABSORPTION_NOT_PROVEN`; RESEARCH-READY not promoted. No trading, service, DB or LIVE mutations.
+
+
+## 2026-10-19 — #17 completed 5-minute flow decay and next-block reaction: 5/5 day
+
+CHECKED HERE: source `research/microstructure/experiments/flow_decay_5m_v1.py` GitHub commit `5e17415ac7ffaf5c9056bba7833a3fa2845176ae`; five read-only `cripta` runs, 5 rc=0 on Bybit trades UTC 2026-05-19. Each day has 288 nonoverlapping five-minute blocks. For study anchor i, previous completed price movement (block i-2 last close to block i-1 last close) agrees with last two signed flow blocks; latest/previous absolute signed USDT flow ratio is reported, with `<1` meaning physical decrease, NOT a Strategy threshold. **Future** block i+1 close is a separate outcome label only available at its close. Study anchors step every five minutes and have overlapping history/label exposures; do NOT treat them as independent OOS samples.
+
+| Coin | Eligible anchors | Median latest/prior absolute flow | Decreasing-flow events | Next reversal/continuation/flat after decay | Nondecreasing events | Next reversal/continuation/flat otherwise |
+|---|---:|---:|---:|---|---:|---|
+| APTUSDT | 103 | 0.9951 | 52 | 22/27/3 | 51 | 27/24/0 |
+| INJUSDT | 101 | 1.3106 | 46 | 23/21/2 | 55 | 24/31/0 |
+| DOTUSDT | 101 | 1.0298 | 49 | 27/22/0 | 52 | 25/26/1 |
+| LTCUSDT | 101 | 0.6978 | 57 | 29/26/2 | 44 | 27/15/2 |
+| ARBUSDT | 104 | 0.6795 | 59 | 28/31/0 | 45 | 23/22/0 |
+
+Five QC partition checks passed. Exploratory per-coin outcomes are mixed; **no universal exhaustion prediction** established, and no controls, independent samples, OOS, fee-adjusted P&L, or physical order attribution. #17 `FULL_DAY_FLOW_DECAY_FUTURE_LABELS_5_OF_5`, strict Exhaustion `RESEARCH-READY` remains OPEN. No trading, deploy, or LIVE mutation.
