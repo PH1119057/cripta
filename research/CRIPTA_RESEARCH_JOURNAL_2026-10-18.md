@@ -885,3 +885,18 @@ CHECKED HERE: read-only `research/microstructure/experiments/book_trade_clock_sa
 | ARBUSDT | 500 | 500 | 1..112 | yes | yes |
 
 The numeric expression is **`ts - cts`** (not reversed). The output field at first execution was mistakenly labeled `cts_minus_ts_ms_minmax`; the value computation was correct and code label immediately fixed in subsequent GitHub commit. Book data had `seq,u` and top-level `cts,ts`. Nondecreasing sequence in a 500-message slice does NOT prove no missing updates over the day; publication clock, feed order and trade/book causality are still unverified. A trade after book event in source timestamp remains unavailable to any causal as-of feature. Strict Pulling Rate #12 stays OPEN; no trading/runtime/DB/LIVE changes.
+
+
+## 2026-10-19 — #19 Range Compression / #22 VWAP-Volume Profile: independent second day, 5/5 source coverage
+
+CHECKED HERE: read-only `research/microstructure/experiments/range_vwap_profile_v1.py`, exact source version resolved from main commit `ae8c45517dbee1056f36714db7809153c59d9b27`, executed as effective actor `cripta` for five Bybit instrument trade files on **2026-05-20 UTC**, separate successful rc=0 each. This is **a second calendar day**, not the prior control-day 2026-05-19 reused. All 5 result rows contain deterministic SHA256 for the 1440 serialized minute records. Full 20m/previous20m range compression requires 40 successive traded-minute closes; missing minutes stay null and cannot be counted as zero. Running VWAP/POC are computed with data available up to each completed minute; end-day summaries are **ex-post diagnostics**, not historical earlier-as-of features.
+
+| Symbol | Trade prints | Minutes with trades /1440 | Valid range-compression minutes | Median range ratio | End-day running VWAP (quote) | End-day exact-price POC (quote) | SHA256 all 1440 minute rows |
+|---|---:|---:|---:|---:|---:|---:|---|
+| APTUSDT | 117069 | 1440 | 1401 | 0.96875 | 0.9445962380876828726150498456 | 0.9491 | db43bdc14a4054bd03d1252010a96b8f7ce7be6db9128631231c8977d806c0de |
+| INJUSDT | 260994 | 1440 | 1401 | 1.035087719298245614035087719 | 4.997061870279427281673446231 | 4.8080 | 34e751c86f85f47773eb39fe7b0faaacacc7892120948b914b97ed2480ea59f3 |
+| DOTUSDT | 151067 | 1436 | 1277 | 1.033333333333333333333333333 | 1.241365570440215917996754777 | 1.2544 | 226e018fae1b43b11c7d7c230db868b59acbcaebc8e9564cd205ffdb5f0efac6 |
+| LTCUSDT | 93645 | 1423 | 1010 | 0.923076923076923076923076923 | 53.96085386015687462062675412 | 54.19 | 33f3bacef04cfb3dd38407cb4940c8b7c2555057929ad05cf7635b03c1e56797 |
+| ARBUSDT | 209152 | 1440 | 1401 | 0.972222222222222222222222222 | 0.1124200047801860609436016683 | 0.11330 | fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c |
+
+FINDING: missing trades in DOT/LTC reduce eligible contiguous 40-minute windows considerably; correctly distinct from ZERO compression. This is a **second-day 5/5 calculator execution with row hashes**, not an independent implementation agreement on 2026-05-20, not a no-leak end-to-end system proof, and not OOS trading validation or after-fee PnL. #19/#22 per-instrument second-day source-and-calculation coverage now checked; independent reader second-day QC and §21 passport update remain OPEN. #26 cross-venue still last. No Strategy/Execution/DB/deploy/LIVE mutations.
