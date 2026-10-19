@@ -68,6 +68,7 @@ def test_ui_verifier_allows_only_stage7c_parity_prearm_extension() -> None:
     assert '"_r1_paper_real_parity_attestation"' in UI_DEPLOY
     assert '"_u6_prepare_r1_prearm_evidence"' in UI_DEPLOY
     assert '"R1_PARITY_ATTESTED_MODULE_SHA256"' in UI_DEPLOY
+    assert '"R1_PARITY_CRITICAL_MODULES"' in UI_DEPLOY
     assert 'name == "_u6_prepare_r1_prearm_evidence"' in UI_DEPLOY
     assert '"INSERT INTO control.live_arm_evidence" not in value' in UI_DEPLOY
     assert "parity evidence missing from prearm" in UI_DEPLOY
