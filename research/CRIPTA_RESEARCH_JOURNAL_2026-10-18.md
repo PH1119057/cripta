@@ -1286,3 +1286,18 @@ CHECKED HERE: versioned read-only independent Decimal book reconstruction vs pri
 ## 2026-10-19 — #9/#11/#29 APT book full-row QC async result: host agent non-response
 
 Event-driven SentinelX `notifications_check` for `job_cb166e3a8aa1`: `status=failed`, `exit_code=null`, error **agent did not respond to exec in 60.0s**. No verified stdout result, no proof that the Python computation completed or failed on-host. **OUTCOME_UNKNOWN**, no PASS; not OpenAI upstream security, not a verified server-side application failure, not Unix EACCES nor SentinelX `command_not_allowed`. No restart/duplicate job, no timeout evasion, no change of actor. New source remains pinned `8dfa76d5a5a78666c382b702a90a897a15443984`; previous rounded daily summary QC remains independently supported. Host access/job result reconciliation required before computing this full-row work under approved constraints.
+
+
+## 2026-10-19 — #15 independent Decimal summary QC second day 5/5
+
+CHECKED HERE: independent alternative formula `abs(last-first)/first × 10000 × 1000000 / minute_USDT_notional`, implemented in `research/microstructure/experiments/effort_result_decimal_independent_qc_v1.py`, immutable GitHub commit `af16f88d25b5b6bdd03cd53da0cf3760adb045b1`. Read-only `cripta` 5 separate 2026-05-20 executions rc=0, source fills/eligible/empty minute counts and sorted median/p90 independently compared against prior primary `effort_result_minute_v2.py` May20 output (journal `7b3be4c`). 5/5 summary parity at Decimal numerical precision. Not independently attested 1440 per-minute rows, and denominator may amplify thin liquidity.
+
+| Coin | Fills | Valid minutes | Empty | Median bps per 1M USDT | P90 same |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 117069 | 1440 | 0 | 1776.566560 | 10902.837565 |
+| INJUSDT | 260994 | 1440 | 0 | 679.684506 | 3281.794193 |
+| DOTUSDT | 151067 | 1436 | 4 | 647.531607 | 3683.097531 |
+| LTCUSDT | 93645 | 1423 | 17 | 329.579149 | 3565.046374 |
+| ARBUSDT | 209152 | 1440 | 0 | 648.243807 | 2772.117715 |
+
+FINDING: this is **relative first/last fill price change per contemporaneous traded notional**, not individual order impact or net-after-fees return. Main source revision unchanged; no Strategy/DB/services/deploy/LIVE mutation. §21.6 per-pair gate and independent full-row equality remain OPEN.
