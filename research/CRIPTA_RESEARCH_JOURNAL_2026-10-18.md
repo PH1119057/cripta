@@ -528,3 +528,249 @@ CHECKED HERE: research-only `book_top5_membership_v1.py` immutable commit `de93b
 | ARBUSDT | 616464 | +4663839.36 | +64575468.50 | -69241160.96 | -1853.11 | +6081975.47 | -6044.35 |
 
 ASK entering/exiting values, respectively: APT +47223143.50/-46749875.00; INJ +247420034.46/-276819714.04; DOT +87451908.76/-82056742.55; LTC +102409340.71/-89464220.29; ARB +71742337.37/-77830357.19. All components belong to **that exact coin**, not shared denominators. Enormous gross transitions with far smaller net visible top-five stock changes show reclassification/rank-boundary effects, not equal actual trades. This is a fully executed **book stock decomposition**, NOT validated strict multi-level OFI, NOT cancellation/fill attribution, and NOT OOS/predictive profitability. #10 remains OPEN with narrower variant FULL_DAY_5_OF_5. No DB, deployment or LIVE change.
+
+
+## 2026-10-19 — strict best-price transition OFI: 5-coin 10m pilot
+
+CHECKED HERE: new read-only algorithm `research/microstructure/experiments/top1_price_transition_ofi_v1.py` published at GitHub commit `f5485b7cb729195e8ef6ea394d31f9ae94acf444`, executed under actor `cripta`, Bybit orderbook first ten minutes 2026-05-19 UTC for all five instruments, separately and successfully rc=0. For each delta, exact best-price bid effect is +new bid quantity if bid price rises, quantity difference if unchanged, -old quantity if bid price falls. Ask effect is +new ask quantity if ask price falls, difference if unchanged, -old ask quantity if ask price rises. OFI = bid effect minus ask effect in each **instrument's base units**, with snapshot resetting previous state.
+
+| Coin | Paired transitions | Bid contribution (base) | Ask contribution (base) | Top1 OFI (base) |
+|---|---:|---:|---:|---:|
+| APTUSDT | 4824 | +90041.74 | +120062.94 | -30021.20 |
+| INJUSDT | 5560 | +3574.9 | -521.6 | +4096.5 |
+| DOTUSDT | 4860 | +156953.0 | +194314.2 | -37361.2 |
+| LTCUSDT | 4376 | +3674.8 | +2987.0 | +687.8 |
+| ARBUSDT | 4546 | +331587.6 | +223614.1 | +107973.5 |
+
+This is a legitimate **best-price transition OFI prototype only**. It is NOT proven strict multi-level OFI, NOT a buy/sell aggressor measurement, not classified cancel-vs-fill, not a prediction or OOS. Absolute base quantities cannot be compared across coins. Snapshot boundary contributes no pairwise delta. First 10-minute source coverage is 5/5; full-day validation and independent QC still pending. Indicator #10 remains OPEN; no Strategy/LIVE mutation.
+
+
+## 2026-10-19 — #10 Top1 price-transition OFI, full-day 5/5 CHECKED HERE
+
+Immutable source `research/microstructure/experiments/top1_price_transition_ofi_v1.py` commit `f5485b7cb729195e8ef6ea394d31f9ae94acf444`; separate read-only execution under Unix `cripta` for each of five Bybit symbols, complete UTC 2026-05-19, five exit codes 0. Two snapshots reset reference, one prior-state-less delta after each snapshot excluded from paired transitions. This computes price-conditional best-bid/ask OFI, NOT full multi-level OFI.
+
+| Symbol | Paired deltas | Bid component (base) | Ask component (base) | Top1 OFI bid-minus-ask (base units) |
+|---|---:|---:|---:|---:|
+| APTUSDT | 606833 | 7975632.48 | 7271140.10 | +704492.38 |
+| INJUSDT | 733299 | 353182.1 | 546674.4 | -193492.3 |
+| DOTUSDT | 631774 | 12192153.8 | 11585271.6 | +606882.2 |
+| LTCUSDT | 542090 | 310152.9 | 266852.8 | +43300.1 |
+| ARBUSDT | 616462 | 24466568.1 | 25842902.3 | -1376334.2 |
+
+These quantities are BASE ASSET quantities specific to each instrument, not USDT; no coin-averaging, not inferred cancellations/execution, not returns or profitability. Status for this narrow indicator: `TOP1_FULL_DAY_5_OF_5_EXECUTED`; independent formula QC, per-minute lineage and §21 registration still to be checked. **#10 strict multi-level OFI remains OPEN** until its complete methodology and verification are finished. No trading deployment or LIVE changes.
+
+
+## 2026-10-19 — #12 visible same-price depletion 5-coin 10m smoke
+
+CHECKED HERE: source `research/microstructure/experiments/same_price_depletion_v1.py` commit `fa52681ecc380fa8ca74f678b40f67d25eb58137`, five separate read-only server runs actor `cripta`, 2026-05-19 00:00–00:10 UTC, five rc=0. For already present exact orderbook prices, sums all **positive gross visible reductions** `price×(old_qty-new_qty)` and separately gross increases of same-price quantities; both quote-USDT per coin; no aggregation across coins.
+
+| Symbol | Book deltas | Bid gross visible reduction USDT | Ask gross visible reduction USDT | Bid same-price gross increase USDT | Ask same-price gross increase USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 4825 | 16867943.08 | 15615408.15 | 16183518.76 | 14706392.56 |
+| INJUSDT | 5561 | 96059928.65 | 93221996.54 | 94453472.08 | 92472721.63 |
+| DOTUSDT | 4861 | 36694272.68 | 38217841.41 | 33260970.77 | 34469015.56 |
+| LTCUSDT | 4377 | 21167331.71 | 19216312.71 | 21104504.68 | 19373482.32 |
+| ARBUSDT | 4547 | 14377294.74 | 13464815.34 | 13851893.86 | 12155745.50 |
+
+**Important limitation**: shrinking visible level quantity can be a cancellation, a filled passive order, or exchange book aggregation and cannot be positively labeled `Pulling Rate` without validated trade/book causal attribution. Gross flows re-count liquidity churn, not P&L or unique money; new level additions are excluded. Status: **#12 PHYSICAL_DEPLETION_CANDIDATE_SMOKE_5_OF_5**, strict `Pulling Rate` remains OPEN. Next bounded investigation is reconciliation of observed trade fills vs per-price book deltas with timestamp availability; preserve uncertainty rather than fabricate cancellations. Source is stdout-only, no DB, deploy, Strategy or LIVE.
+
+
+## 2026-10-19 — #13 same-exact-price depth recovery episodes five-coin 10m smoke
+
+CHECKED HERE: read-only `research/microstructure/experiments/exact_price_recovery_v1.py` commit `7b24dc2a89a936a8b9a5cbc643f17f13e2f5a200`, five 10-minute single-coin Bybit 2026-05-19 UTC runs under actor `cripta`, 5/5 exit 0. After an observed size decrease at a known exact price, one episode is followed for at most 60s, ending RECOVERED if visible size again reaches at least its **pre-decrease** quantity, EXPIRED if window elapsed, or OPEN if right-censored by sample end/snapshot. Repeated decreases while an episode is pending are not double-counted.
+
+| Coin | Bid episodes | Bid recovered/expired/open | Bid median recovered ms | Ask episodes | Ask recovered/expired/open | Ask median recovered ms |
+|---|---:|---|---:|---:|---|---:|
+| APTUSDT | 2033 | 1299/668/66 | 6700 | 1570 | 941/592/37 | 6900 |
+| INJUSDT | 3368 | 2258/963/147 | 4300 | 2765 | 1837/823/105 | 4500 |
+| DOTUSDT | 2058 | 1279/698/81 | 4800 | 1788 | 1113/612/63 | 5900 |
+| LTCUSDT | 1112 | 670/393/49 | 8102 | 824 | 495/299/30 | 7000 |
+| ARBUSDT | 2059 | 1277/712/70 | 6800 | 1647 | 1001/586/60 | 8199 |
+
+All ten bid/ask `events = recovered + expired + open` episode accounting checks PASS. This is only a **same-price visible-size recovery** proxy; levels can reprice/recycle and source does not prove identity of liquidity provider, causal provider availability, predictive usefulness or 60-second coverage completeness. Censored OPEN episodes MUST NOT be treated as failure. Status: #13 `RECOVERY_EPISODE_CANDIDATE_SMOKE_5_OF_5`; full-day, independent QC and passport remain OPEN. No Strategy/LIVE changes.
+
+
+## 2026-10-19 — #14 minute-level signed flow vs future price-response pilot, 5/5 full UTC day
+
+CHECKED HERE: immutable research-only `research/microstructure/experiments/signed_flow_next_minute_v1.py` commit `abdd8f6939c2e356b5641adffdd09536efa314ac`, five successful separate actor-`cripta` computations on public Bybit fills for 2026-05-19 1440 minute buckets per instrument. Physical source field `foreignNotional` (quote USDT) signed by aggressor side to construct **current completed-minute** delta; future *label* is next minute's close-to-close return from last transaction of minute i to minute i+1, multiplied by sign of minute-i delta. A causal feature is available at close i, while the future label is only available after close i+1. This is NOT same-event microstructural price impact; future leakage forbidden.
+
+| Symbol | Valid pairs / 1439 | Favorable | Adverse | Flat | NO_DATA | Median directional next-minute return bps |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1437 | 693 | 650 | 94 | 2 | 0 |
+| INJUSDT | 1439 | 639 | 721 | 79 | 0 | -1.88288458 |
+| DOTUSDT | 1435 | 660 | 662 | 113 | 4 | 0 |
+| LTCUSDT | 1415 | 550 | 566 | 299 | 24 | 0 |
+| ARBUSDT | 1437 | 684 | 676 | 77 | 2 | 0 |
+
+These are within-one-day **exploratory direction-conditioned labels** only. In particular the INJ negative median does not establish an edge; no baseline/control, OOS, causal physical trade-impact attribution, strategy threshold, or after-fee PnL has been tested. #14 remains OPEN as a strict Price Impact indicator. Separately retained per-coin outcome counts, no across-symbol pooling. No exchange mutation, DB, runtime or LIVE change.
+
+
+## 2026-10-19 — #15 explicit 1m effort/result physical proxy, five full days
+
+CHECKED HERE: read-only `research/microstructure/experiments/effort_result_minute_v1.py` at GitHub commit `0fb8d91b442c3096247013e0cbe85b89e848ef25`, actor `cripta`, five successful full-day UTC 2026-05-19 executions. Definition: `abs(last_trade_price / first_trade_price - 1) × 10000 bps / (sum(foreignNotional) / 1,000,000 USDT)` per **completed one-minute** Bybit trade bucket. This is a named **endpoint-move-per-turnover physical proxy** in bps per million USDT, not a marginal execution-impact estimator, not true high-low range and not cross-coin-normalized liquidity state.
+
+| Coin | Valid of 1440 minutes | No-trade minutes | Median bps per 1m USDT | P90 bps per 1m USDT |
+|---|---:|---:|---:|---:|
+| APTUSDT | 1439 | 1 | 2024.08999 | 11877.34759 |
+| INJUSDT | 1440 | 0 | 481.59572 | 2006.35740 |
+| DOTUSDT | 1438 | 2 | 630.71074 | 3323.15659 |
+| LTCUSDT | 1428 | 12 | 458.56195 | 3076.42518 |
+| ARBUSDT | 1439 | 1 | 880.82341 | 4297.04163 |
+
+Zero-turnover denominators encountered: 0 among nonempty minutes. NO_DATA on empty minute, NOT 0. The large difference per coin reflects this specific ratio's sensitivity to turnover, tick size and liquidity; **not evidence** that one coin is a better trading opportunity. Unit/denominator known; cross-period normalizers, microstructure controls, independent computation QC and OOS are pending. #15 `FULL_DAY_PHYSICAL_PROXY_5_OF_5 / RESEARCH_READY_PENDING`, no Strategy/DB/LIVE changes.
+
+
+## 2026-10-19 — #13 exact-price depth recovery completed 5/5 full UTC day
+
+CHECKED HERE: versioned `research/microstructure/experiments/exact_price_recovery_v1.py` commit `7b24dc2a89a936a8b9a5cbc643f17f13e2f5a200`; read-only under actor `cripta`, UTC 2026-05-19, 5 independent rc=0 completed-day runs. Each has two snapshots, all 1440 minute buckets included. For each symbol, observed same-price visible-size reductions are tracked at most once per still-pending price; outcome RECOVERED within 60s, EXPIRED after 60s, or right-censored OPEN at day/snapshot boundary. Accounting `events = recovered + expired + open` PASS on all ten coin/side groups.
+
+| Symbol | Bid events | Bid recovered | Bid expired | Bid open | Bid median recovery ms | Ask events | Ask recovered | Ask expired | Ask open | Ask median recovery ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 229804 | 143019 | 86596 | 189 | 7200 | 175813 | 104438 | 71242 | 133 | 6099 |
+| INJUSDT | 330990 | 208355 | 122457 | 178 | 6300 | 275054 | 168838 | 106110 | 106 | 5700 |
+| DOTUSDT | 244016 | 151261 | 92578 | 177 | 5700 | 214615 | 132968 | 81516 | 131 | 4900 |
+| LTCUSDT | 135020 | 79756 | 55158 | 106 | 7101 | 102288 | 59686 | 42526 | 76 | 4899 |
+| ARBUSDT | 241467 | 148240 | 93064 | 163 | 6700 | 198615 | 121185 | 77311 | 119 | 6000 |
+
+**Causality/limit:** this is a same-price **visible-size reappearance proxy**, not verified same order/provider recovery, market resiliency edge, or proof that depletion came from cancellations. A price may disappear and later reappear; episode logic does not prove continuous queue identity. Median times are for recovered events only (selection conditional), not unconditional hazard/survival. Complete-day executed coverage = 5/5; independent QC and a formal per-pair §21 passport remain pending. **#13 FULL_DAY_PHYSICAL_PROXY_5_OF_5, RESEARCH-READY NOT PROMOTED**. No trading policy, DB, deployment or LIVE mutations.
+
+
+## 2026-10-19 — #16 high-flow / price-resistance candidate, completed day 5/5
+
+CHECKED HERE: read-only `research/microstructure/experiments/absorption_prior60_candidate_v1.py`, GitHub commit `3ffd9594f0aa950cfaf4ec438c36c6d4888bb636`, actor `cripta`, all five Bybit public-trades sources 2026-05-19 full UTC day; five successful rc=0. Current **completed** one-minute signed aggressor `foreignNotional` (USDT) qualifies as unusually high when absolute signed flow exceeds per-instrument p90 of **prior 60 nonempty minutes only**. Within that same already-completed minute, record signed price response (last-minus-first trade price), and separately count aligned, opposite, unchanged. Current-minute information is not known until minute close. This is a *resisted-flow candidate*, **not proven physical absorption** by passive order flow.
+
+| Coin | Eligible minute buckets (after initial 60) | Unusually high flow | Price against flow | Price with flow | No price change | NO_DATA | Opposite move after buy/sell dominant flow |
+|---|---:|---:|---:|---:|---:|---:|---|
+| APTUSDT | 1379 | 151 | 29 | 117 | 5 | 1 | 18/11 |
+| INJUSDT | 1380 | 154 | 16 | 133 | 5 | 0 | 8/8 |
+| DOTUSDT | 1378 | 159 | 24 | 128 | 7 | 2 | 14/10 |
+| LTCUSDT | 1368 | 163 | 20 | 129 | 14 | 12 | 14/6 |
+| ARBUSDT | 1379 | 151 | 27 | 122 | 2 | 1 | 14/13 |
+
+QC five of five: every unusually-high-flow count = aligned+against+flat. No cross-coin normalization, no future lookahead in baseline; per-coin results differ. **Critical**: high signed flow and weak/opposite minute endpoint change does not identify passive absorbers, true hidden liquidity, traded order origins, microstructure economics, OOS advantage or fee-adjusted returns. This version has no matched controls. #16 `FULL_DAY_CAUSAL_PROXY_5_OF_5 / PHYSICAL_ABSORPTION_NOT_PROVEN`; RESEARCH-READY not promoted. No trading, service, DB or LIVE mutations.
+
+
+## 2026-10-19 — #17 completed 5-minute flow decay and next-block reaction: 5/5 day
+
+CHECKED HERE: source `research/microstructure/experiments/flow_decay_5m_v1.py` GitHub commit `5e17415ac7ffaf5c9056bba7833a3fa2845176ae`; five read-only `cripta` runs, 5 rc=0 on Bybit trades UTC 2026-05-19. Each day has 288 nonoverlapping five-minute blocks. For study anchor i, previous completed price movement (block i-2 last close to block i-1 last close) agrees with last two signed flow blocks; latest/previous absolute signed USDT flow ratio is reported, with `<1` meaning physical decrease, NOT a Strategy threshold. **Future** block i+1 close is a separate outcome label only available at its close. Study anchors step every five minutes and have overlapping history/label exposures; do NOT treat them as independent OOS samples.
+
+| Coin | Eligible anchors | Median latest/prior absolute flow | Decreasing-flow events | Next reversal/continuation/flat after decay | Nondecreasing events | Next reversal/continuation/flat otherwise |
+|---|---:|---:|---:|---|---:|---|
+| APTUSDT | 103 | 0.9951 | 52 | 22/27/3 | 51 | 27/24/0 |
+| INJUSDT | 101 | 1.3106 | 46 | 23/21/2 | 55 | 24/31/0 |
+| DOTUSDT | 101 | 1.0298 | 49 | 27/22/0 | 52 | 25/26/1 |
+| LTCUSDT | 101 | 0.6978 | 57 | 29/26/2 | 44 | 27/15/2 |
+| ARBUSDT | 104 | 0.6795 | 59 | 28/31/0 | 45 | 23/22/0 |
+
+Five QC partition checks passed. Exploratory per-coin outcomes are mixed; **no universal exhaustion prediction** established, and no controls, independent samples, OOS, fee-adjusted P&L, or physical order attribution. #17 `FULL_DAY_FLOW_DECAY_FUTURE_LABELS_5_OF_5`, strict Exhaustion `RESEARCH-READY` remains OPEN. No trading, deploy, or LIVE mutation.
+
+
+## 2026-10-19 — #21 trade-tape price sweep and ordered reclaim 5/5 full-day pilot
+
+CHECKED HERE: read-only `research/microstructure/experiments/sweep_reclaim_ordered_trades_v1.py` commit `b0b5d2c05d488ed34ff0d5f0c6b5cfe7b5d13c63`, five successful actor-`cripta` Bybit 2026-05-19 full-day executions. For minute i, reference high/low is the highest/lowest **transaction price** in **exactly previous 60 fully populated minute buckets** (strictly before i), no filling of empty buckets. Within i ordered trade prints must first pass >high or <low and then print back <=high or >=low **later** to count a reclaim. Same-minute reclaim is a sequence, not merely a high/low summary.
+
+| Coin | Eligible minutes | Missing/incomplete windows | High sweeps | High sweep→reclaim | Low sweeps | Low sweep→reclaim |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1319 | 61 | 51 | 30 | 56 | 34 |
+| INJUSDT | 1380 | 0 | 54 | 41 | 86 | 73 |
+| DOTUSDT | 1316 | 64 | 49 | 28 | 59 | 29 |
+| LTCUSDT | 958 | 422 | 30 | 15 | 41 | 21 |
+| ARBUSDT | 1319 | 61 | 43 | 24 | 65 | 37 |
+
+All 5/5 QC `reclaims <= sweeps` true. LTC valid coverage much lower because exact complete preceding 60-minute trade windows prohibit silent gap filling. Values are distinct from old journal prior60-close-extrema or intra-minute-OHLC prototypes, **not their regression replacement**: source estimator and inclusion rules differ. Trade-print sequence does NOT establish a physical orderbook liquidity sweep or unique ordering of identical timestamp fills; those need additional source/source-sequence QC. #21 `ORDERED_TRADE_TAPE_PROXY_FULL_DAY_5_OF_5`, strict Sweep/Reclaim OPEN. No Strategy/LIVE changes.
+
+
+## 2026-10-19 — #23 historical Open Interest bounded inventory, five coins
+
+CHECKED HERE via `research/microstructure/experiments/oi_coverage_probe_v1.py`, exact GitHub commit `d57cc29ebb631fe96f3f1ed714327bb4e4c42ed1`, read-only `cripta` actor, five return codes 0. For 2026-05-19, no symbol-specific OI/open_interest-named child was found by shallow inspection of the known raw dataset symbol directories or obvious external provider family names. Per APT, INJ, DOT, LTC, ARB: `HISTORICAL_OI_NOT_ESTABLISHED`, `exact_day_valid_oi_series_verified=false`, 0 shallow candidate matches. **This is NOT exhaustive filesystem search and does NOT prove historical OI is nonexistent** in all server databases, vendor layouts, or older archives; it does prove no verified OI dataset was recovered by this bounded path probe.
+
+#23 remains `OPEN / SOURCE_COVERAGE_NOT_VERIFIED`; absent evidence is `NO_DATA`, not zero OI or a zero-change signal. No trading rule, DB, service or LIVE changes. Next is #24 liquidation coverage (source provenance and hourly holes).
+
+
+## 2026-10-19 — #24 liquidation files: five-coin hourly coverage explicitly incomplete
+
+CHECKED HERE: read-only `research/microstructure/experiments/liquidation_hour_coverage_v1.py` GitHub commit `89ba8fe2eb2a13e62dfe8f260e1cd89b88d375d3`, five successful `cripta` actor executions, target CryptoHFTData Bybit path `/data/cripta/datasets/external/cryptohftdata/bybit_liquidations_v1/raw/2026-05-19/{HH}/{SYMBOL}_liquidations.parquet.zst`.
+
+| Coin | Hours with nonempty files / 24 | Present hours UTC | Sum of compressed bytes | Missing hours |
+|---|---:|---|---:|---:|
+| APTUSDT | 7 | 00,09,11,14,16,17,18 | 10697 | 17 |
+| INJUSDT | 15 | 00,01,02,03,04,05,09,10,11,14,16,17,18,19,22 | 24831 | 9 |
+| DOTUSDT | 1 | 14 | 1637 | 23 |
+| LTCUSDT | 2 | 00,14 | 3162 | 22 |
+| ARBUSDT | 4 | 14,16,22,23 | 6197 | 20 |
+
+Physical file presence and byte length are **not proof** that ALL true exchange liquidation events were captured even in present hours; file absence can reflect no events OR missing capture, unresolved until provider's completeness semantics established. Entire missing hours must be `NO_DATA` for unbiased event-rate claims, never zero counts. Thus #24 has `SOURCE_FILES_PRESENT_PARTIAL_HOURLY_COVERAGE`, `Liquidation Spikes` predictive indicator still OPEN, no 5/5 full-day event denominator acceptance, no trade/LIVE change.
+
+
+## 2026-10-19 — #25 bounded historical Spot/Perpetual source inspection
+
+CHECKED HERE: read-only `research/microstructure/experiments/spot_perp_source_probe_v1.py` GitHub commit `7bb42e8e4e3dac9470b7bf34b596090b82baccdf`, five successful actor-`cripta` probes for 2026-05-19 APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT. Inspected only obvious spot-named sibling directories under `/data/cripta/datasets/raw/20260518_20260816`, spot-named children under each symbol and top-level spot-named external providers; **no candidate path found** and no valid causal Spot series verified. This is a bounded physical-path scan, not exhaustive proof of nonexistence in other files, vendor layouts or PostgreSQL.
+
+#25 remains `OPEN / SPOT_SOURCE_UNVERIFIED`, cannot compute actual Spot/Perp divergence or assign zero spread from perpetual-only data. Missing historical Spot observations are `NO_DATA`. No cross-venue investigation was started; #26 remains explicitly deferred last. No trading, database or LIVE change.
+
+
+## 2026-10-19 — #30 top-five total-depth shock/recovery, five-symbol 10m smoke
+
+CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, five separate read-only `cripta` executions, rc=0, first 10 minutes of 2026-05-19 UTC. Distinct from #13 exact-price recovery: here a **total top-five visible-depth** fall per Bid/Ask side starts one pending event, and restoration of same side's cumulative `sum(price×quantity)` in quote USDT to its pre-fall stock within 60s marks RECOVERED. Otherwise EXPIRED or right-censored. Snapshot causes reset. One pending event per side by design; no queue ownership/fill attribution.
+
+| Coin | Bid episodes | Bid recovered/expired/censored | Bid median recovered ms | Ask episodes | Ask recovered/expired/censored | Ask median recovered ms |
+|---|---:|---|---:|---:|---|---:|
+| APTUSDT | 40 | 34/5/1 | 2300 | 43 | 35/7/1 | 800 |
+| INJUSDT | 44 | 39/4/1 | 4100 | 46 | 40/5/1 | 2001 |
+| DOTUSDT | 38 | 32/5/1 | 1399 | 41 | 35/5/1 | 4100 |
+| LTCUSDT | 46 | 40/5/1 | 2800 | 59 | 54/4/1 | 1299 |
+| ARBUSDT | 43 | 37/5/1 | 901 | 48 | 43/4/1 | 2101 |
+
+Episode accounting `episodes=recovered+expired+censored` PASS all ten side-series. Caveats: repricing/re-ranking can move top-five totals without actual same-order restoration, repeated falls within an open episode are not independent, and fast recovery rates here do not prove exchange resilience or any profitable feature. Status #30: `TOP5_STOCK_RECOVERY_10M_SMOKE_5_OF_5`, full-day independent QC, causality/latency and strict replenishment remain OPEN. No trading/DB/deploy/LIVE changes.
+
+
+## 2026-10-19 — #30 APT full-day top-five stock resilience result
+
+CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_v1.py` commit `014f4f162b113d36a03398863a19ac385319263b`, read-only actor `cripta`, 2026-05-19 UTC APTUSDT, rc=0, duration 42.73s, two snapshots, 606835 book deltas. BID: 5281 top-five-depth fall episodes, 4468 recovered within 60s, 811 expired, 2 right-censored, median time **among recovered** 1800ms. ASK: 5416 episodes, 4623 recovered, 791 expired, 2 censored, median recovered 1500ms. Both episode partitions PASS. The same top-five quote-depth proxy remains vulnerable to re-ranking, and neither identical liquidity provider nor cancel/fill causation is established. Other four full-day runs NOT CHECKED HERE at this checkpoint. #30 full-day coverage 1/5.
+
+
+## 2026-10-19 — #30 INJ full-day top-five stock resilience result
+
+CHECKED HERE: `top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 INJUSDT, SentinelX job `job_7dcc675b32b0` succeeded exit 0, duration 56.23s, no truncated output. 2 snapshots, 733301 delta transitions. BID: 5184 episodes, 4395 recovered within 60s, 787 expired, 2 right-censored; median recovery among recovered 2400ms. ASK: 5430 episodes, 4639 recovered, 789 expired, 2 censored; median 2000ms. Both episode partitions PASS. Strict physical same-order resiliency and attribution remain OPEN; current result is top-five depth-stock proxy. #30 full-day coverage now 2/5, other symbols DOT/LTC/ARB not yet counted.
+
+
+## 2026-10-19 — #30 DOT full-day top-five stock resilience result
+
+CHECKED HERE: `research/microstructure/experiments/top5_depth_resilience_v1.py` exact commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 DOTUSDT, SentinelX job `job_e398ecf07535` succeeded exit 0, 47.5s, no truncation. 2 snapshots, 631776 book deltas. BID: 5615 episodes, 4815 recovered, 798 expired, 2 right-censored; median 1500ms among recovered. ASK: 5661 episodes, 4865 recovered, 794 expired, 2 right-censored; median 1400ms. Both episode partitions PASS. #30 top-five-stock full-day verified 3/5; LTC/ARB still pending here. Physical liquidity owner, repricing and true order-level restoration remain unverified; not strict replenishment.
+
+
+## 2026-10-19 — #30 LTC full-day top-five stock resilience result
+
+CHECKED HERE: `top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 LTCUSDT, successful synchronous execution exit=0, duration 22.23s. Two snapshots and 542092 deltas. BID: 6343 top-five depth-fall episodes; 5547 recovered, 795 expired, 1 censored; median 1100ms among recovered. ASK: 6779 episodes; 6016 recovered, 761 expired, 2 censored; median 1000ms. Both episode partitions PASS. #30 top-five-depth-stock proxy full-day coverage 4/5; ARB still pending. Does NOT demonstrate refill of same order/queue or trading edge.
+
+
+## 2026-10-19 — #30 top-five quote-depth stock resilience, full-day 5/5 checkpoint
+
+CHECKED HERE: `research/microstructure/experiments/top5_depth_resilience_v1.py` exact version commit `014f4f162b113d36a03398863a19ac385319263b`; five separately executed read-only jobs under actor `cripta`, complete 2026-05-19 UTC Bybit order-book archives. Each includes two snapshot resets, all in-day delta transitions, and 1440 minute buckets in scope. All five exit codes 0. Last ARB `job_b325280cb123` succeeded duration 45.92s, no truncation.
+
+A **top-five total quote-depth** side reduction starts a single pending episode; recovery means aggregate same-side top-five quote depth at or above pre-reduction target within 60 seconds, with EXPIRED versus censored OPEN distinguished. `events = recovered + expired + censored` PASS for all ten per-coin/side sequences.
+
+| Coin | Bid episodes | Bid recovered | Bid expired | Bid censored | Bid median recovered ms | Ask episodes | Ask recovered | Ask expired | Ask censored | Ask median recovered ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 5281 | 4468 | 811 | 2 | 1800 | 5416 | 4623 | 791 | 2 | 1500 |
+| INJUSDT | 5184 | 4395 | 787 | 2 | 2400 | 5430 | 4639 | 789 | 2 | 2000 |
+| DOTUSDT | 5615 | 4815 | 798 | 2 | 1500 | 5661 | 4865 | 794 | 2 | 1400 |
+| LTCUSDT | 6343 | 5547 | 795 | 1 | 1100 | 6779 | 6016 | 761 | 2 | 1000 |
+| ARBUSDT | 5116 | 4327 | 788 | 1 | 2001 | 5087 | 4279 | 806 | 2 | 2001 |
+
+This closes 5/5 **full-day computations of the explicitly scoped top-five quote-depth stock recovery proxy**, and is **NOT** proof of same-price replenishment, same liquidity owner, true event-driven shock causation, predictive efficacy, an order-level resiliency indicator, or economic advantage. Repricing, re-ranking and churn can restore aggregate depth without restoring any original order. Reference #13 separately tracks exact price-level recovery and is NOT interchangeable. Independent replay/QC and §21 per-pair passports still pending. #30 strict Replenishment/Resiliency remains OPEN; no promotion to RESEARCH-READY, no trading or LIVE changes.
+
+
+## 2026-10-19 — STOP checkpoint: #24 extended parquet row-level reader access denied by SentinelX command policy
+
+CHECKED HERE: while attempting to inspect optional Parquet support for source-content QC on #24 historical liquidation files, system `python3` under `cripta` was verified to have **no** importable `pyarrow`, `pandas`, `duckdb`. A read-only existence smoke confirmed `/data/cripta/research/cache/test_gate_venv/bin/python` exists, but **NOT** that it has the requested packages.
+
+Attempt to invoke that alternate interpreter via SentinelX `sentinel_exec` under `sudo -u cripta` with `-B -c` inline package introspection received:
+```text
+ok=false
+error=command_not_allowed
+message="contains shell operator ';'. the operator ';' is part of a shell pipeline or redirection..."
+```
+Per `DEVELOPMENT_RELEASE §19.5–19.6`, this is **SentinelX policy/parser refusal**, NOT OpenAI upstream tool-security, NOT Unix EACCES, NOT a host Python package failure and NOT proof that the command reached the host. The proposed command used a semicolon inside quoted Python code, which the SentinelX parser rejected before execution. The **default allowlisted system Python** has already completed many successful read-only research tasks; this refusal concerns the *alternate-interpreter probe only*.
+
+Decision in this run: NO retries/re-encoding/actor changes/allowlist changes, no installation, no server mutation. `#24_FULL_EVENT_CONTENT_QC` remains `NOT_CHECKED_HERE`; prior per-coin file presence/hour manifest remains verified evidence, but liquidations event completeness unknown. `HARD_STOP=YES` for the blocked alternate interpreter probe under current method. `OWNER_DECISION_REQUIRED=YES` **only if** an exception/new tool command policy or approved interpreter route is needed; this is not a request to grant privileges or modify agent configuration without evidence. Trading services, DB and LIVE unchanged. Latest all-30 checkpoint registry is `research/microstructure/INDICATOR_PROGRESS_2026-10-19.md`.
