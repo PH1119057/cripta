@@ -225,3 +225,14 @@ Independent book 1440-row job `job_cb166e3a8aa1` remains UNKNOWN after agent non
 - [ ] Full event/row hashes, nonoverlapping OOS, independent capture/available-after proof and per-pair §21.6 gate remain OPEN. Next 5m price direction is a future outcome label only, not an as-of signal.
 
 Prior #9/#11/#29 APT agent no-response outcome still unknown and not retried. No blocked #14/#18/#20/#25 execution route invoked. No production trading runtime, DB or LIVE mutation.
+
+
+## 2026-10-19 — next independent QC block #16 + #21 on May20
+
+- [x] #16 Absorption proxy: independent `absorption_prior60_independent_decimal_qc_v1.py`, commit `407a848c576bc8ce3a90ef3a4d457d850fe1faf0`, May20 `5/5` read-only rc=0 and exact unusual/against/aligned/flat/unavailable partition parity. Research journal `fbb306810257fe0585aa2ebec4e5be7969c7a889`; indicator register `720b68f9ae46ef7cdbe644e02d16d3ac34fe08d1`.
+- [x] #21 Sweep/Reclaim print candidate: independent `sweep_reclaim_print_independent_qc_v1.py`, commit `30199a0f3058be61e51a14ff781c65166da21641`, May20 `5/5` read-only rc=0, exact prior60 print-extrema event and missing-window totals, research journal `8ee1c7a768ea710b84c62afedd7e875ec251fc90`, indicator register `587587091802a1d3e4c6e9befd67b99e864a74aa`.
+- [ ] #16 still flow/price simultaneous minute-close proxy, not demonstrated actual passive order absorption; full per-minute independent hash and as-of capture provenance pending.
+- [ ] #21 still print-tape extrema candidate, not proven orderbook sweep; same-timestamp ordering and full per-event independent row QC pending.
+- [ ] Both require §21.6 per-pair passport, source coverage/latency and OOS predictive testing after fees. Neither has authority to alter trading rules.
+
+No retry of blocked OpenAI command routes (#14/#18/#20/#25), no retry of unknown SentinelX outcome (#9/#11/#29/#30), no changes to live runtime, services, DB or Strategy.
