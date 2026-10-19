@@ -1321,3 +1321,18 @@ CHECKED HERE: independent `research/microstructure/experiments/flow_decay_5m_ind
 | ARBUSDT | 96 | 50 | 22 | 46 | 0.900507 |
 
 QC: all five partition checks true. This is an independent **summary recomputation**, not per-event persisted cube or OOS inference; `future_reversal` is strictly a NEXT-5m **FUTURE LABEL** and cannot be used as an as-of feature. Neither exhaustion physics nor after-fee edge established. §21 READY remains OPEN, no Strategy/DB/runtime/LIVE changes.
+
+
+## 2026-10-19 — #16 Absorption proxy independent Decimal day-two five-symbol summary QC
+
+CHECKED HERE: independent source `research/microstructure/experiments/absorption_prior60_independent_decimal_qc_v1.py` pinned GitHub commit `407a848c576bc8ce3a90ef3a4d457d850fe1faf0`. Five separate read-only `cripta` 2026-05-20 full-day executions rc=0. Independent rolling 60 previous completed minutes, nonempty signed USDT-flow 90th percentile, current-minute trade-flow opposition categories, and unavailable-data accounting reproduce the primary historical `absorption_prior60_candidate_v2.py` May20 results in journal `15e4d54` exactly 5/5.
+
+| Coin | Prior60 eligible | Unusual flow | Against-flow price move | Aligned | Flat | Unavailable |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1380 | 152 | 15 | 128 | 9 | 0 |
+| INJUSDT | 1380 | 170 | 26 | 140 | 4 | 0 |
+| DOTUSDT | 1376 | 152 | 24 | 125 | 3 | 4 |
+| LTCUSDT | 1362 | 152 | 20 | 121 | 11 | 18 |
+| ARBUSDT | 1380 | 145 | 23 | 120 | 2 | 0 |
+
+All `unusual=against+aligned+flat` partition QC PASS. This is an independent full-day **summary**, not independently persisted per-minute/event row equivalence or proof of physical passive absorption. Flow and price outcome available at current minute close only. §21.6 passport, observed-time and OOS after-fees gates OPEN. No trading runtime/LIVE changes.
