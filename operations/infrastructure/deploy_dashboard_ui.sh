@@ -279,14 +279,16 @@ for kind, name in changed:
         new_get = ast.get_source_segment(new_app, new_methods["do_GET"]) or ""
         previous_monitor = '"strategy_monitor": strategy_monitor_state() if view == "monitor" else None,'
         corrected_monitor = '"strategy_monitor": strategy_monitor_state() if view in {"open", "monitor"} else None,'
-        if changed_methods == ["do_GET"]:
-            if (
+        if "do_GET" in changed_methods:
+            if not (
                 old_get.count(previous_monitor) == 1
                 and new_get == old_get.replace(previous_monitor, corrected_monitor, 1)
             ):
-                print("DASHBOARD_READ_ONLY_OPEN_MONITOR_EXACT_CHANGE=PASS")
+                raise SystemExit("Dashboard verifier failed: unauthorized Handler.do_GET change")
+            print("DASHBOARD_READ_ONLY_OPEN_MONITOR_EXACT_CHANGE=PASS")
+            changed_methods.remove("do_GET")
+            if not changed_methods:
                 continue
-            raise SystemExit("Dashboard verifier failed: unauthorized Handler.do_GET change")
         if changed_methods != ["do_POST"]:
             raise SystemExit(
                 "Dashboard verifier failed: unexpected Handler method change: "
