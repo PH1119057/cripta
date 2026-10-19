@@ -1045,3 +1045,18 @@ CHECKED HERE: source `research/microstructure/experiments/book_spread_imbalance_
 | ARBUSDT | 26974 | 60 | 0.8462 | 0.0369 | PASS |
 
 The independent check is **summary-level for first hour** only. It does not yet compare unrounded per-minute values or prove 1440-minute agreement; it also does not establish physical exchange publication latency or §21 full passport readiness. Source book depth is within ±5bps, not all visible liquidity. No trading/DB/deploy/LIVE changes.
+
+
+## 2026-10-19 — #9/#11/#29 independent full-day Decimal summary QC 5/5
+
+CHECKED HERE: independent `research/microstructure/experiments/book_spread_imbalance_independent_v1.py` pinned to GitHub commit `68f665348b48796a03d9eba36dd7edbe2dab523e`, standard read-only `cripta` actor, full Bybit UTC 2026-05-19 day, all five completed successfully. INJ/DOT long runs returned asynchronous SentinelX job ids and were verified completed successfully from `notifications_check` with exit_code=0, never restarted or polled in a loop. These five independent full-day Decimal-calculation rounded summary medians and inventory counts exactly agree with primary `book_minute_three_v1.py` full-day observations in earlier checkpoint `5aaf62b05d12530b52e6f2bd7836909f003a0848`.
+
+| Symbol | Book messages | Snapshots | Completed minute states | Median spread bps | Median near-mid ±5bps imbalance | Full-day independent summary QC |
+|---|---:|---:|---:|---:|---:|---|
+| APTUSDT | 606837 | 2 | 1440 | 1.0636 | +0.0235 | PASS |
+| INJUSDT | 733303 | 2 | 1440 | 2.0103 | -0.0024 | PASS |
+| DOTUSDT | 631778 | 2 | 1440 | 0.8102 | +0.0166 | PASS |
+| LTCUSDT | 542094 | 2 | 1440 | 1.8459 | +0.0484 | PASS |
+| ARBUSDT | 616466 | 2 | 1440 | 0.8656 | -0.0360 | PASS |
+
+QC scope is source-count/snapshot/minute count and **rounded summary median equality**. This is NOT independent byte-for-byte full-1440-row equality nor exact independent per-minute depth equality; those remain OPEN. Public/exchange source clocks and publication/availability semantics remain unverified; no causal as-of trading signal or after-fee profitability assessment. Do not promote #9/#11/#29 to §21.6 RESEARCH-READY solely on this evidence. No DB/service/Strategy/LIVE mutation.
