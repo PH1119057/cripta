@@ -1,0 +1,91 @@
+{
+  "schema": "cripta-research-indicator-day2-checkpoint-v1",
+  "day_utc": "2026-05-20",
+  "source_venue": "Bybit",
+  "canonical_contract": "docs/RESEARCH_COMPUTE_RULES_RU.md §21",
+  "scope": "Independent complete-minute row equality for #19 and #22; five exact instrument identities",
+  "features": [
+    {
+      "id": 19,
+      "name": "Range Compression",
+      "unit": "current_20m_close_range/previous_20m_close_range",
+      "asof": "after close of completed UTC minute",
+      "missing": "null when any of 40 completed minute closes absent or denominator zero"
+    },
+    {
+      "id": 22,
+      "name": "VWAP / Volume Profile",
+      "unit": "quote price with base-unit weights",
+      "asof": "after close of completed UTC minute",
+      "missing": "null until first valid fill",
+      "poc_tie": "lowest exact price"
+    }
+  ],
+  "primary": {
+    "path": "research/microstructure/experiments/range_vwap_profile_v1.py",
+    "verified_commit": "ae8c45517dbee1056f36714db7809153c59d9b27"
+  },
+  "independent": {
+    "path": "research/microstructure/experiments/range_vwap_minute_row_independent_v1.py",
+    "source_commit": "876ccaa41cb1962c3513b27764f1fc64fe0ceac8"
+  },
+  "rows": [
+    {
+      "symbol": "APTUSDT",
+      "fills": 117069,
+      "active_minutes": 1440,
+      "range_valid": 1401,
+      "minute_rows": 1440,
+      "minute_rows_sha256": "db43bdc14a4054bd03d1252010a96b8f7ce7be6db9128631231c8977d806c0de",
+      "full_row_independent_qc": "PASS",
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "fills": 260994,
+      "active_minutes": 1440,
+      "range_valid": 1401,
+      "minute_rows": 1440,
+      "minute_rows_sha256": "34e751c86f85f47773eb39fe7b0faaacacc7892120948b914b97ed2480ea59f3",
+      "full_row_independent_qc": "PASS",
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "fills": 151067,
+      "active_minutes": 1436,
+      "range_valid": 1277,
+      "minute_rows": 1440,
+      "minute_rows_sha256": "226e018fae1b43b11c7d7c230db868b59acbcaebc8e9564cd205ffdb5f0efac6",
+      "full_row_independent_qc": "PASS",
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "fills": 93645,
+      "active_minutes": 1423,
+      "range_valid": 1010,
+      "minute_rows": 1440,
+      "minute_rows_sha256": "33f3bacef04cfb3dd38407cb4940c8b7c2555057929ad05cf7635b03c1e56797",
+      "full_row_independent_qc": "PASS",
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "fills": 209152,
+      "active_minutes": 1440,
+      "range_valid": 1401,
+      "minute_rows": 1440,
+      "minute_rows_sha256": "fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c",
+      "full_row_independent_qc": "PASS",
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+    }
+  ],
+  "limitations": [
+    "Both methods process identical physical Bybit trade source, not independent venue or recorder",
+    "No per-minute artifact persisted on server in this cycle: GitHub contains algorithm and full-row SHA256 evidence",
+    "No OOS predictive test nor after-fees financial result",
+    "Source SHA256 for 2026-05-20 not checked in this cycle; coverage verified by success and row hashes",
+    "Original historical 2026-05-19 v1 passport kept unchanged"
+  ]
+}
