@@ -23,9 +23,9 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 15 | Effort / Result | `ONE_MINUTE_EFFORT_RESULT_PROXY_FULL_DAY_5_OF_5` | Further own-coin normalization and independent QC required |
 | 16 | Absorption | `HIGH_FLOW_PRICE_RESISTANCE_PROXY_FULL_DAY_5_OF_5` | Not proved passive absorption or OOS |
 | 17 | Exhaustion | `FIVE_MINUTE_DECAY_FUTURE_LABEL_FULL_DAY_5_OF_5` | Overlapping study anchors, no OOS |
-| 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
 | 19 | Range Compression | `SECOND_DAY_ALL_ROWS_INDEPENDENT_HASH_5_OF_5 + RAW_SHA256_QC_5_OF_5` | 2026-05-20 exact source gz SHA256, size, trade order and notional checks registered; 1440-row independent exact-hash 5/5 PASS; §21.6 formal per-pair READY gate still pending (journal bae0826) |
-| 20 | Local Extremes | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 20 | Local Extremes | `HISTORICAL_PILOT_PASS + SECOND_DAY_PARTIAL_3_OF_5` | APT/INJ/DOT May 20 checked; LTC/ARB NOT EXECUTED after OpenAI upstream tool-security block; HARD_STOP route; see journal 23a4de7 |
 | 21 | Sweep / Reclaim | `ORDERED_TRADE_PRINT_PROXY_FULL_DAY_5_OF_5` | Not proved book liquidity sweep; same timestamp ordering QC |
 | 22 | VWAP / Volume Profile | `SECOND_DAY_ALL_ROWS_INDEPENDENT_HASH_5_OF_5 + RAW_SHA256_QC_5_OF_5` | 2026-05-20 exact source gz SHA256, size, trade order and notional checks registered; 1440-row independent exact-hash 5/5 PASS; §21.6 formal per-pair READY gate still pending (journal bae0826) |
 | 23 | OI Change | `HISTORICAL_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified 2026-05-19 series; missing=NO_DATA |
@@ -49,3 +49,8 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 ## Latest bounded access stop — 2026-10-19
 
 The five-coin historical source-file manifest for #24 is already published and remains valid. During optional deeper parquet content QC, a read-only attempt to invoke an alternate Python interpreter returned SentinelX `command_not_allowed` because its parser detected a shell `;` operator; the host execution was not demonstrated. No bypass, re-encoding, privileges changes or installation attempted. **HARD_STOP for this alternate-interpreter route**, not a claim that all server research access is unavailable. See exact journal entry. `#24` remains OPEN / file coverage verified / actual event completeness unverified. Continuing this blocked route requires an explicitly approved tool-policy path or an already authorized separate reader; do not improvise. No LIVE.
+
+
+## Current hard stop — 2026-10-19 later stage
+
+During #18/#20 second-day extension, 3/5 read-only runs succeeded (APT/INJ/DOT) then OpenAI upstream tool security blocked the next execution. No SentinelX server-side denial was proven. No repeated/obfuscated call or actor change. The failed route is stopped; owner decision required for an authorized alternative. Checkpoint: research journal commit `23a4de7d6a2aba83618261c88d16076971b8766c`. #9/#11/#29 full-day independent rounded summary 5/5 remains confirmed. No LIVE.
