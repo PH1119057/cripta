@@ -804,3 +804,18 @@ CHECKED HERE: new read-only `research/microstructure/experiments/depletion_trade
 | ARBUSDT | 1568 | 4547 | 16837 | 765 | 16072 |
 
 5/5 partition QC: reduction events = matched + unmatched. **Not cancellation attribution**: unmatched can be unmatched fills, cross-feed latency, missing events or changes not known; matching can be coincidental, count one trade multiple times, and price/time ordering may be ambiguous. The numerical match shares should NOT be read as cancellation shares or execution share. This is an explicit research diagnostic for improving source availability and alignment, not `RESEARCH-READY` for #12 Pulling Rate. No additional Python interpreter used; earlier denied interpreter route not retried. No LIVE/DB/deploy changes.
+
+
+## 2026-10-19 — #12 full-day five-instrument book/depletion vs trade-proximity diagnostic
+
+CHECKED HERE: immutable `research/microstructure/experiments/depletion_trade_temporal_join_v1.py` source commit `1c0c6beaca1e3959af2650cdf334a39c03462a2a`, standard allowlisted `sudo -u cripta python3`, five rc=0, full 2026-05-19 UTC archives. Joined each **positive-previous-quantity price-level reduction** in ob200 against same exact Decimal price, passive book side and any opposite aggressor public trade within ±1000ms. Result is an **exploratory association with hindsight**, NOT causal attribution; post-event trades are included. A single trade can match multiple reductions. Exact source counts match previously attested five-coin book delta and trade totals, plus independent earlier `same_price_depletion_v1.py` side decrease-event counts; all five `reductions=matched+unmatched` QC PASS.
+
+| Symbol | Trade prints | Book deltas | Price-level reductions | With nearby trade ±1s | Without nearby trade ±1s |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 116683 | 606835 | 1883472 | 61235 | 1822237 |
+| INJUSDT | 368454 | 733301 | 3058923 | 170014 | 2888909 |
+| DOTUSDT | 143184 | 631776 | 2264922 | 76262 | 2188660 |
+| LTCUSDT | 69495 | 542092 | 1049895 | 27128 | 1022767 |
+| ARBUSDT | 154123 | 616464 | 2133614 | 78656 | 2054958 |
+
+Absence of a nearby trade is NOT proof of cancellation: separate publication latencies, delayed fills, unrepresented executions, book semantics and exchange chronology are unresolved. A nearby trade is also NOT proof the trade caused the observed book reduction. Do not convert these counts into cancellation rate, inferred pulling, profitability or Strategy. These full-day joins are evidence for **coverage and feed-alignment hypothesis**, not #12 Pulling Rate `RESEARCH-READY`. Neither rejected alternative interpreter nor access policy bypass was used. Trading/LIVE unchanged.
