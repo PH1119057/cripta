@@ -37,6 +37,10 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 29 | Bid/Ask Spread | `FULL_DAY_BOOK_MINUTE_5_OF_5_PASS + INDEPENDENT_FULL_DAY_SUMMARY_QC_5_OF_5` | May 19 1440 minute states each coin, snapshots+delta count reconciled; single-reader ±5bp depth/imbalance and top spread physical measurements, independent full-day rounded medians/coverage/counts agree (journal 2043539); full 1440-row independent QC and §21 passport pending (journal 5aaf62b) |
 | 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED` | APT/INJ/DOT/LTC/ARB full-day results verified; strict same-order resilience OPEN. Evidence GitHub journal full-day #30 checkpoint 2026-10-19. |
 
+## §21.6 evidence-gate update (2026-10-19)
+
+Checked main passport for #19/#22: exact raw SHA256 and independent full-minute hashes already present for 5/5, but per-pair formal §21.6 and available-after/source-capture, persistent dataset/cube QC still OPEN. See `research/microstructure/CHECKLIST_EXECUTION_2026-10-19.md`. No blocked server route retried. This is documentary review only.
+
 ## Execution checklist
 
 - [30-indicator execution checklist](CHECKLIST_EXECUTION_2026-10-19.md) (GitHub-committed, owner scope, #26 last, active route hard stops and unclosed gates).
