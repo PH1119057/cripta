@@ -3764,13 +3764,31 @@ def _r1_paper_real_parity_attestation(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
             )
         hashes[relative] = source_hash
-    # Hash equality is a release-integrity check, not independent PAPER/REAL proof.
-    # Keep real arm blocked until an evidence-backed verified parity baseline exists.
-    raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY independent proof is pending")
+    # SHA equality proves release integrity only. Independently replay actual
+    # causal watch -> PAPER adapter and REAL bridge (without Exchange/DB writes).
+    from bybit_workbench.universal_entry.r1_independent_parity import (
+        IndependentParityFailure,
+        run_r1_independent_decision_parity,
+    )
+
+    try:
+        proof = run_r1_independent_decision_parity()
+    except IndependentParityFailure as exc:
+        raise ValueError(
+            "R1 PREARM: PAPER_REAL_DECISION_PARITY independent replay failed: "
+            + str(exc)
+        ) from exc
+    if (
+        proof.get("status") != "PASS"
+        or proof.get("cases") != 10
+        or proof.get("real_exchange_mutation") is not False
+    ):
+        raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY proof incomplete")
     return {
-        "parity_baseline": "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED",
+        "parity_baseline": "R1_CAUSAL_PAPER_REAL_ADAPTER_PARITY_V1",
         "release_commit": release_commit,
         "module_sha256": hashes,
+        "independent_replay": proof,
     }
 
 
