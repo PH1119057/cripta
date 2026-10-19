@@ -1,6 +1,6 @@
 # CRIPTA — verified 30-indicator research checkpoint index
 
-**Generated from checked GitHub journal/source evidence on 2026-10-19.** Evidence, **NOT CANON**, no Strategy or LIVE policy. Authority: `PH1119057/cripta:main`. This file captures status at creation and is *not* an automated live dashboard.
+**Updated from checked GitHub journal/source evidence on 2026-10-19, after #30 full-day 5/5.** Evidence, **NOT CANON**, no Strategy or LIVE policy. Authority: `PH1119057/cripta:main`. This file captures status at creation and is *not* an automated live dashboard.
 
 Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 pilot day. Pilot-day successful computation is **not** OOS nor §21 RESEARCH-READY. Old 15/30 is a historical narrow research gate; no 150 instrument×factor pair attestation is implied. Use `docs/RESEARCH_COMPUTE_RULES_RU.md §21` for the required measurement passport and no-leak contract.
 
@@ -35,7 +35,7 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 27 | Inter-Trade Duration | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 28 | Trade-Size Distribution | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 29 | Bid/Ask Spread | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_2_OF_5_CHECKED` | APT/INJ verified, DOT running at index creation; strict same-order resilience OPEN |
+| 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED` | APT/INJ/DOT/LTC/ARB full-day results verified; strict same-order resilience OPEN. Evidence GitHub journal full-day #30 checkpoint 2026-10-19. |
 
 ## Evidence / checkpoints
 
