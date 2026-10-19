@@ -1186,3 +1186,8 @@ CHECKED HERE: `top5_depth_resilience_v2.py` from immutable GitHub `b88acafc4cfcd
 | LTCUSDT | 552514 | 6323 / 5554 | 6886 / 6134 | 1 |
 
 Prior APT day2 rc=0, INJ timed out and remains UNKNOWN with NO RETRY. ARB attempted separately and moved to SentinelX job `job_22c8f6bba901`, status RUNNING at evidence checkpoint: outcome **NOT VERIFIED YET**. Do not mark ARB success until event notification confirms exit. These are total top-five quote-notional stock recovery proxies, not same-order resiliency, independent QC or trading results.
+
+
+## 2026-10-19 — #30 ARB asynchronous host-agent no-response, outcome unknown
+
+Event-triggered SentinelX `notifications_check` for job `job_22c8f6bba901` returned `status=failed, exit_code=null`, error: **"agent did not respond to exec in 60.0s"**. This is distinct from the earlier INJ job's `timeout,exit_code=-1`, OpenAI upstream block, Unix EACCES or SentinelX command_not_allowed. Whether ARB on-host calculation completed is **UNKNOWN**; no reliable stdout, no PASS, no auto-retry / background alternative initiated. #30 May20 physically verified 3/5: APT, DOT, LTC. INJ timed out unknown; ARB agent non-response unknown. Reconcile host/job evidence under approved access procedure before any re-execution. No Strategy/DB/runtime/LIVE changes.
