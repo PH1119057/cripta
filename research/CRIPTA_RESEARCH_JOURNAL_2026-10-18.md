@@ -1228,3 +1228,18 @@ CHECKED HERE: independent stdlib Decimal implementation `research/microstructure
 | ARBUSDT | 209152 | 1440 | 1380 | +32862.930714 | 5/5 PASS |
 
 QC scope: physical aggregation source and 3 samples/coin. No independent full-minute complete-row checksum/§21.6 instrument-factor READY, exchange publication observed time or trading profitability. Missing-minute semantics retained. This does not constitute Strategy threshold, LIVE activation, or after-fees performance.
+
+
+## 2026-10-19 — #27/#28 second-day independent Decimal ex-post distribution QC 5/5
+
+CHECKED HERE: independent reader `research/microstructure/experiments/trade_distribution_decimal_independent_qc_v1.py` immutable GitHub `da4bed3f4cdcb013786ffb74a5a2481ce95f780b` vs primary `trade_distribution_v1.py` from same pinned commit. Five independent and five primary read-only `cripta` runs, 2026-05-20, all 10 rc=0. Full-day input trades, exact buy/sell fill counts, same-timestamp share, positive trade inter-timestamp interval median, ex-post p95/p99 fill notional and top-p99 proportion of total notional numerically agree 5/5. Minor interval median float differences (sub-millisecond, due to binary timestamp arithmetic; independent Decimal is exact to raw reported timestamp).
+
+| Symbol | Fills | Same-timestamp consecutive fills (%) | Median positive inter-fill gap, ms (Decimal) | Ex-post p95 notional USDT | Ex-post p99 notional USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 117069 | 73.2173 | 624.4500 | 367.269504 | 788.054760 |
+| INJUSDT | 260994 | 73.2579 | 122.5000 | 657.025200 | 1499.152800 |
+| DOTUSDT | 151067 | 76.1793 | 244.6000 | 515.769330 | 1032.415160 |
+| LTCUSDT | 93645 | 78.7578 | 688.8500 | 2042.052000 | 3868.932000 |
+| ARBUSDT | 209152 | 75.2710 | 101.0000 | 534.880566 | 1199.138003 |
+
+Measured executions are fill records, NOT separate taker orders. Ex-post daily p95/p99 are lookahead if used within day: NO intraday signal claim. No independent all-per-fill row hash/§21.6 READY, external clock availability, OOS or profitability after fees. No trading runtime/LIVE change.
