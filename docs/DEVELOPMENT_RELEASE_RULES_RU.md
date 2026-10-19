@@ -824,7 +824,7 @@ release и bytes исполняемого торгового контура**, �
 - `REMOTE_HEAD == SOURCE_HEAD` проверяется отдельно; `INSTALLED_COMMIT == LOADED_COMMIT
   == release state` обязателен и не подменяется документальным коммитом.
 - Delta между установленным release и GitHub `main` по `docs/**`,
-  `research/**`, `tests/**`, `operations/dashboard/**`, `README.md`,
+  `research/**`, `tests/**`, `README.md`,
   `AGENTS.md` не запрещает новые входы **при сохранении прочих LIVE gates**.
   Research не может непосредственно исполняться или загружаться trading runtime.
 - Любой delta в `src/**`, trading `operations/**`, release dependencies,
@@ -835,8 +835,8 @@ release и bytes исполняемого торгового контура**, �
   commits **не** разрешает обойти `PAPER_REAL_DECISION_PARITY`, reconciliation,
   position ownership, risk gates либо owner LIVE-arm.
 - Presentation-only Dashboard changes, затрагивающие auth/control/mutation,
-  не входят в исключение и требуют full release; классификация применяется
-  только к неисполняемому presentation/read-model по проверенному contract.
+  не входят в исключение и требуют full release; любые изменения
+  `operations/dashboard/**` остаются blocked до verified release.
   При сомнении классификации — `HARD_STOP=YES`.
 
 Canonical owner классификации пути — этот раздел; Trading Contour §4.7
