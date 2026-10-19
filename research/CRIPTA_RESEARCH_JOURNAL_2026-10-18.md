@@ -603,3 +603,18 @@ CHECKED HERE: immutable research-only `research/microstructure/experiments/signe
 | ARBUSDT | 1437 | 684 | 676 | 77 | 2 | 0 |
 
 These are within-one-day **exploratory direction-conditioned labels** only. In particular the INJ negative median does not establish an edge; no baseline/control, OOS, causal physical trade-impact attribution, strategy threshold, or after-fee PnL has been tested. #14 remains OPEN as a strict Price Impact indicator. Separately retained per-coin outcome counts, no across-symbol pooling. No exchange mutation, DB, runtime or LIVE change.
+
+
+## 2026-10-19 — #15 explicit 1m effort/result physical proxy, five full days
+
+CHECKED HERE: read-only `research/microstructure/experiments/effort_result_minute_v1.py` at GitHub commit `0fb8d91b442c3096247013e0cbe85b89e848ef25`, actor `cripta`, five successful full-day UTC 2026-05-19 executions. Definition: `abs(last_trade_price / first_trade_price - 1) × 10000 bps / (sum(foreignNotional) / 1,000,000 USDT)` per **completed one-minute** Bybit trade bucket. This is a named **endpoint-move-per-turnover physical proxy** in bps per million USDT, not a marginal execution-impact estimator, not true high-low range and not cross-coin-normalized liquidity state.
+
+| Coin | Valid of 1440 minutes | No-trade minutes | Median bps per 1m USDT | P90 bps per 1m USDT |
+|---|---:|---:|---:|---:|
+| APTUSDT | 1439 | 1 | 2024.08999 | 11877.34759 |
+| INJUSDT | 1440 | 0 | 481.59572 | 2006.35740 |
+| DOTUSDT | 1438 | 2 | 630.71074 | 3323.15659 |
+| LTCUSDT | 1428 | 12 | 458.56195 | 3076.42518 |
+| ARBUSDT | 1439 | 1 | 880.82341 | 4297.04163 |
+
+Zero-turnover denominators encountered: 0 among nonempty minutes. NO_DATA on empty minute, NOT 0. The large difference per coin reflects this specific ratio's sensitivity to turnover, tick size and liquidity; **not evidence** that one coin is a better trading opportunity. Unit/denominator known; cross-period normalizers, microstructure controls, independent computation QC and OOS are pending. #15 `FULL_DAY_PHYSICAL_PROXY_5_OF_5 / RESEARCH_READY_PENDING`, no Strategy/DB/LIVE changes.
