@@ -24,10 +24,10 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 16 | Absorption | `HIGH_FLOW_PRICE_RESISTANCE_PROXY_FULL_DAY_5_OF_5` | Not proved passive absorption or OOS |
 | 17 | Exhaustion | `FIVE_MINUTE_DECAY_FUTURE_LABEL_FULL_DAY_5_OF_5` | Overlapping study anchors, no OOS |
 | 18 | Short-Term Autocorrelation | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 19 | Range Compression | `PHYSICAL_QC_PASS_5_OF_5 + PASSPORTS_REGISTERED + SECOND_DAY_FULL_CALC_5_OF_5` | 2026-05-20 all five full 1440-row serializations hashed, primary reader only; independent second-day QC and §21 passport extension pending (journal commit 69b247a) |
+| 19 | Range Compression | `PHYSICAL_QC_PASS_5_OF_5 + PASSPORTS_REGISTERED + SECOND_DAY_FULL_CALC_5_OF_5` | 2026-05-20 all five full 1440-row serializations hashed, primary reader only; independent reader declared path returns 404 on current main, needs reconciliation before second-day QC; §21 passport extension pending (journal commit 69b247a) |
 | 20 | Local Extremes | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 21 | Sweep / Reclaim | `ORDERED_TRADE_PRINT_PROXY_FULL_DAY_5_OF_5` | Not proved book liquidity sweep; same timestamp ordering QC |
-| 22 | VWAP / Volume Profile | `PHYSICAL_QC_PASS_5_OF_5 + PASSPORTS_REGISTERED + SECOND_DAY_FULL_CALC_5_OF_5` | 2026-05-20 all five full 1440-row serializations hashed, primary reader only; independent second-day QC and §21 passport extension pending (journal commit 69b247a) |
+| 22 | VWAP / Volume Profile | `PHYSICAL_QC_PASS_5_OF_5 + PASSPORTS_REGISTERED + SECOND_DAY_FULL_CALC_5_OF_5` | 2026-05-20 all five full 1440-row serializations hashed, primary reader only; independent reader declared path returns 404 on current main, needs reconciliation before second-day QC; §21 passport extension pending (journal commit 69b247a) |
 | 23 | OI Change | `HISTORICAL_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified 2026-05-19 series; missing=NO_DATA |
 | 24 | Liquidation Spikes | `PARTIAL_HOURLY_FILES_5_OF_5` | No verified full-day event completeness; alternate interpreter probe stopped by SentinelX command_not_allowed (2026-10-19) |
 | 25 | Spot / Perpetual Divergence | `SPOT_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified same-day Spot series |
