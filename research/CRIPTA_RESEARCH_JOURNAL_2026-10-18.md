@@ -1138,3 +1138,20 @@ CHECKED HERE: `research/microstructure/experiments/sweep_reclaim_ordered_trades_
 | ARBUSDT | 1380 | 0 | 49 | 35 | 67 | 40 |
 
 All 5/5 reclaim counts bounded by same-side sweep counts (QC PASS). **Caveat:** prints above/below previous 60m extrema are NOT demonstrated orderbook liquidity sweeps. Same-timestamp tie ordering and as-of exchange message publication not independently established; no independent row QC, OOS, after-fee PnL or §21 READY. No Strategy/DB/LIVE changes.
+
+
+## 2026-10-19 — #14 May20 flow-to-next-minute label partial 4/5, OpenAI upstream blocked remaining
+
+CHECKED HERE: immutable GitHub source `research/microstructure/experiments/signed_flow_next_minute_v2.py`, SHA commit `33b71227ea912ed06d9941a4ebf00691b62ec57e`, new date parameter for existing historical v1. Read-only `cripta` `--date 2026-05-20`. APT/INJ/DOT/LTC succeeded rc=0; final ARB invocation rejected by OpenAI upstream tool-security *before server results*, no repeat or workaround. Result is **PARTIAL_4_OF_5**, not a cohort PASS.
+
+| Coin | Valid minute pairs | Favorable future label | Unfavorable future label | Flat | NO_DATA |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 1439 | 639 | 694 | 106 | 0 |
+| INJUSDT | 1439 | 653 | 699 | 87 | 0 |
+| DOTUSDT | 1431 | 663 | 657 | 111 | 8 |
+| LTCUSDT | 1407 | 574 | 543 | 290 | 32 |
+| ARBUSDT | NOT EXECUTED | — | — | — | — |
+
+QC PASS for first four: `valid=favorable+unfavorable+flat`; `valid+NO_DATA=1439`. Feature is current completed 1m taker-flow sign; **next completed minute return is only a FUTURE LABEL**, not available at signal time. This is not verified trade-level impact, not OOS or after-fee edge.
+
+**OpenAI upstream security block** on ARB run. `HARD_STOP=YES` for this invocation route; `OWNER_DECISION_REQUIRED=YES` for further authorized execution. No bypass, no retry, no actor change. Existing #18/#20 route remains blocked separately. No Strategy/DB/services/deploy/LIVE changes.
