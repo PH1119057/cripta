@@ -543,3 +543,18 @@ CHECKED HERE: new read-only algorithm `research/microstructure/experiments/top1_
 | ARBUSDT | 4546 | +331587.6 | +223614.1 | +107973.5 |
 
 This is a legitimate **best-price transition OFI prototype only**. It is NOT proven strict multi-level OFI, NOT a buy/sell aggressor measurement, not classified cancel-vs-fill, not a prediction or OOS. Absolute base quantities cannot be compared across coins. Snapshot boundary contributes no pairwise delta. First 10-minute source coverage is 5/5; full-day validation and independent QC still pending. Indicator #10 remains OPEN; no Strategy/LIVE mutation.
+
+
+## 2026-10-19 — #10 Top1 price-transition OFI, full-day 5/5 CHECKED HERE
+
+Immutable source `research/microstructure/experiments/top1_price_transition_ofi_v1.py` commit `f5485b7cb729195e8ef6ea394d31f9ae94acf444`; separate read-only execution under Unix `cripta` for each of five Bybit symbols, complete UTC 2026-05-19, five exit codes 0. Two snapshots reset reference, one prior-state-less delta after each snapshot excluded from paired transitions. This computes price-conditional best-bid/ask OFI, NOT full multi-level OFI.
+
+| Symbol | Paired deltas | Bid component (base) | Ask component (base) | Top1 OFI bid-minus-ask (base units) |
+|---|---:|---:|---:|---:|
+| APTUSDT | 606833 | 7975632.48 | 7271140.10 | +704492.38 |
+| INJUSDT | 733299 | 353182.1 | 546674.4 | -193492.3 |
+| DOTUSDT | 631774 | 12192153.8 | 11585271.6 | +606882.2 |
+| LTCUSDT | 542090 | 310152.9 | 266852.8 | +43300.1 |
+| ARBUSDT | 616462 | 24466568.1 | 25842902.3 | -1376334.2 |
+
+These quantities are BASE ASSET quantities specific to each instrument, not USDT; no coin-averaging, not inferred cancellations/execution, not returns or profitability. Status for this narrow indicator: `TOP1_FULL_DAY_5_OF_5_EXECUTED`; independent formula QC, per-minute lineage and §21 registration still to be checked. **#10 strict multi-level OFI remains OPEN** until its complete methodology and verification are finished. No trading deployment or LIVE changes.
