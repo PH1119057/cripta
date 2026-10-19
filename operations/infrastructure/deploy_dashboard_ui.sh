@@ -131,6 +131,7 @@ allowed_assignments = {
     "REAL_IMMEDIATE_CLOSE_FEE_RATE",
     "OBSERVER_RUNTIME_FAULT_CODE",
     "R1_PARITY_ATTESTED_MODULE_SHA256",
+    "R1_PARITY_CRITICAL_MODULES",
 }
 forbidden_call_tokens = (
     "arm_r1_micro_live",

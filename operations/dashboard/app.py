@@ -90,14 +90,17 @@ PAPER_MAKER_FEE_RATE = 0.00020
 PAPER_TAKER_FEE_RATE = 0.00055
 REAL_IMMEDIATE_CLOSE_FEE_RATE = 0.00055
 OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
-R1_PARITY_ATTESTED_MODULE_SHA256 = {
-    "operations/monitoring/universal_entry_shadow.py": "8c4c0e92abcc00b769b59ad8388108fd9e8be5549fac31533060ce17912d76a0",
-    "src/bybit_workbench/universal_entry/engine.py": "ab0507ce45644e01725e5aefc566f3a148190cd993247a5db0c6f0ab7424453c",
-    "src/bybit_workbench/universal_entry/paper_runtime.py": "a44d2a4ff7bbc2fb46af9d7b8c099b99a85011302bf6703af4c805991284be64",
-    "src/bybit_workbench/universal_entry/reverse_intent.py": "4d942fe169ce2c7ce8eb6b9ef1b3f894fd2f6f1228b0161d295e86ca8b8e3ac3",
-    "src/bybit_workbench/universal_exit/engine.py": "d93f18b9ba63ba46e80d1cdd643d85f7cbe688dfc85e213495185b84fbad1d18",
-    "src/bybit_workbench/universal_exit/execution_bridge.py": "409f7baa5a260d32bcb5b4b07cbfde71af7b42342728c64712ca7156bbcc09eb",
-}
+# Release-critical entry/exit modules verified against the exact Git commit.
+# A new release automatically pins new bytes through Git, not a manual SHA edit.
+R1_PARITY_CRITICAL_MODULES = (
+    "operations/monitoring/universal_entry_shadow.py",
+    "src/bybit_workbench/universal_entry/engine.py",
+    "src/bybit_workbench/universal_entry/paper_runtime.py",
+    "src/bybit_workbench/universal_entry/r1_independent_parity.py",
+    "src/bybit_workbench/universal_entry/reverse_intent.py",
+    "src/bybit_workbench/universal_exit/engine.py",
+    "src/bybit_workbench/universal_exit/execution_bridge.py",
+)
 
 
 def _paper_entry_fee_rate(order_type: object) -> float:
@@ -3742,35 +3745,66 @@ def _r1_paper_real_parity_attestation(
     source_root: Path = Path("/srv/cripta/source_checkout"),
     runtime_root: Path = Path("/srv/cripta/runtime/current"),
 ) -> dict[str, object]:
-    if len(release_commit) != 40:
+    if len(release_commit) != 40 or any(
+        char not in "0123456789abcdef" for char in release_commit
+    ):
         raise ValueError("R1 PREARM: parity attestation release commit is invalid")
     hashes: dict[str, str] = {}
-    for relative, expected in R1_PARITY_ATTESTED_MODULE_SHA256.items():
+    for relative in R1_PARITY_CRITICAL_MODULES:
         source_path = source_root / relative
         runtime_path = runtime_root / relative
         try:
-            source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
-            runtime_hash = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
-        except OSError as exc:
+            source_bytes = source_path.read_bytes()
+            runtime_bytes = runtime_path.read_bytes()
+            source_hash = hashlib.sha256(source_bytes).hexdigest()
+            runtime_hash = hashlib.sha256(runtime_bytes).hexdigest()
+            release_bytes = subprocess.check_output(
+                ["git", "-C", str(source_root), "show", f"{release_commit}:{relative}"],
+                stderr=subprocess.DEVNULL,
+            )
+            # Python source uses universal-newline semantics. Windows checkout
+            # may rewrite CRLF while preserving exactly the same Python program.
+            source_canonical = source_bytes.replace(b"\r\n", b"\n")
+            release_canonical = release_bytes.replace(b"\r\n", b"\n")
+            release_hash = hashlib.sha256(release_canonical).hexdigest()
+        except (OSError, subprocess.CalledProcessError) as exc:
             raise ValueError(
-                f"R1 PREARM: PAPER_REAL_DECISION_PARITY module unreadable {relative}: {exc}"
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY release module unreadable {relative}: {exc}"
             ) from exc
         if source_hash != runtime_hash:
             raise ValueError(
                 f"R1 PREARM: PAPER_REAL_DECISION_PARITY source/live mismatch {relative}"
             )
-        if source_hash != expected:
+        if hashlib.sha256(source_canonical).hexdigest() != release_hash:
             raise ValueError(
-                f"R1 PREARM: PAPER_REAL_DECISION_PARITY stale attestation {relative}"
+                f"R1 PREARM: PAPER_REAL_DECISION_PARITY release Git-object mismatch {relative}"
             )
-        hashes[relative] = source_hash
-    # Hash equality is a release-integrity check, not independent PAPER/REAL proof.
-    # Keep real arm blocked until an evidence-backed verified parity baseline exists.
-    raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY independent proof is pending")
+        hashes[relative] = release_hash
+    # SHA equality proves release integrity only. Independently replay actual
+    # causal watch -> PAPER adapter and REAL bridge (without Exchange/DB writes).
+    from bybit_workbench.universal_entry.r1_independent_parity import (
+        IndependentParityFailure,
+        run_r1_independent_decision_parity,
+    )
+
+    try:
+        proof = run_r1_independent_decision_parity()
+    except IndependentParityFailure as exc:
+        raise ValueError(
+            "R1 PREARM: PAPER_REAL_DECISION_PARITY independent replay failed: "
+            + str(exc)
+        ) from exc
+    if (
+        proof.get("status") != "PASS"
+        or proof.get("cases") != 10
+        or proof.get("real_exchange_mutation") is not False
+    ):
+        raise ValueError("R1 PREARM: PAPER_REAL_DECISION_PARITY proof incomplete")
     return {
-        "parity_baseline": "R1_PARITY_CANDIDATE_2026-10-18_NOT_INDEPENDENTLY_VERIFIED",
+        "parity_baseline": "R1_CAUSAL_PAPER_REAL_ADAPTER_PARITY_V1",
         "release_commit": release_commit,
         "module_sha256": hashes,
+        "independent_replay": proof,
     }
 
 

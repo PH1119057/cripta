@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from operations.dashboard import app
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
 
 
 def test_r1_micro_live_endpoint_builds_prearm_evidence_before_arm() -> None:
@@ -61,23 +63,34 @@ def test_r1_prearm_writes_all_required_pre_owner_evidence() -> None:
     assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in source
 
 
-def test_r1_parity_attestation_blocks_unverified_candidate_even_with_matching_hashes() -> None:
-    with pytest.raises(ValueError, match="independent proof is pending"):
+def test_r1_parity_attestation_runs_independent_replay_with_matching_hashes() -> None:
+    result = app._r1_paper_real_parity_attestation(
+        RELEASE,
+        source_root=ROOT,
+        runtime_root=ROOT,
+    )
+    assert result["parity_baseline"] == "R1_CAUSAL_PAPER_REAL_ADAPTER_PARITY_V1"
+    assert result["release_commit"] == RELEASE
+    assert result["independent_replay"]["status"] == "PASS"
+    assert result["independent_replay"]["cases"] == 10
+
+
+
+def test_r1_parity_attestation_fails_closed_on_module_drift(tmp_path) -> None:
+    for relative in app.R1_PARITY_CRITICAL_MODULES:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / relative).read_bytes())
+    first = app.R1_PARITY_CRITICAL_MODULES[0]
+    (tmp_path / first).write_bytes(b"unauthorized runtime change")
+    with pytest.raises(ValueError, match="PAPER_REAL_DECISION_PARITY source/live mismatch"):
         app._r1_paper_real_parity_attestation(
-            "a" * 40,
-            source_root=ROOT,
-            runtime_root=ROOT,
+            RELEASE, source_root=ROOT, runtime_root=tmp_path,
         )
 
 
-def test_r1_parity_attestation_fails_closed_on_module_drift(monkeypatch) -> None:
-    broken = dict(app.R1_PARITY_ATTESTED_MODULE_SHA256)
-    first = next(iter(broken))
-    broken[first] = "0" * 64
-    monkeypatch.setattr(app, "R1_PARITY_ATTESTED_MODULE_SHA256", broken)
-    with pytest.raises(ValueError, match="PAPER_REAL_DECISION_PARITY stale attestation"):
+def test_r1_parity_attestation_rejects_unknown_git_release() -> None:
+    with pytest.raises(ValueError, match="release module unreadable"):
         app._r1_paper_real_parity_attestation(
-            "a" * 40,
-            source_root=ROOT,
-            runtime_root=ROOT,
+            "0" * 40, source_root=ROOT, runtime_root=ROOT,
         )
