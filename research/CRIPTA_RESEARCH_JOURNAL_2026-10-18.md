@@ -870,3 +870,18 @@ For LTC same command hit SentinelX bounded `duration=30.87s, returncode=-1, time
 ## 2026-10-19 — #12 ARB timestamp QC 10m independently recovered
 
 CHECKED HERE: pinned source `research/microstructure/experiments/trade_book_timestamp_qc_v1.py` commit `130db7d3e1a6d362a17db4605edcc6a38de8fe54`, actor `cripta`, bounded 10-min read-only Bybit 2026-05-19 ARBUSDT, rc=0, 1.3s. 1568 trade rows, 1215 adjacent equal millisecond timestamps, zero backwards; 4548 ob200 messages including one snapshot, 0 adjacent equal millisecond and 0 backwards. Source keys: `cts,ts,type,topic,data`, `data.seq,u,s,a,b`. Cross-feed global ordering, publication latency and cancellation attribution remain unverified. Previous LTC timeout remains unresolved; not inferred pass.
+
+
+## 2026-10-19 — #12 bounded first-500 book/trade clock sample all five
+
+CHECKED HERE: read-only `research/microstructure/experiments/book_trade_clock_sample_v1.py` code commit `81cd4a91e72b6afb610680d0b0778c837d60e033`, key label clarified in `ce57f18694bc011aa2e1cbdc1bbe0ccf57ec8dad`. Five independent actor-`cripta` executions rc=0, capped first 500 book messages and up to 500 first-10-minute trade records for Bybit 2026-05-19. This replaces NO result from earlier LTC full 10m timeout with a **different, bounded sampling method**; it does NOT retrospectively mark the timed-out full-scanning code successful.
+
+| Instrument | Sampled trade rows | Sampled book messages | `ts - cts` min..max (ms) | `seq` nondecreasing | `u` nondecreasing |
+|---|---:|---:|---|---|---|
+| APTUSDT | 500 | 500 | 1..98 | yes | yes |
+| INJUSDT | 500 | 500 | 1..100 | yes | yes |
+| DOTUSDT | 500 | 500 | 1..100 | yes | yes |
+| LTCUSDT | 448 | 500 | 1..101 | yes | yes |
+| ARBUSDT | 500 | 500 | 1..112 | yes | yes |
+
+The numeric expression is **`ts - cts`** (not reversed). The output field at first execution was mistakenly labeled `cts_minus_ts_ms_minmax`; the value computation was correct and code label immediately fixed in subsequent GitHub commit. Book data had `seq,u` and top-level `cts,ts`. Nondecreasing sequence in a 500-message slice does NOT prove no missing updates over the day; publication clock, feed order and trade/book causality are still unverified. A trade after book event in source timestamp remains unavailable to any causal as-of feature. Strict Pulling Rate #12 stays OPEN; no trading/runtime/DB/LIVE changes.
