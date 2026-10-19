@@ -1155,3 +1155,22 @@ CHECKED HERE: immutable GitHub source `research/microstructure/experiments/signe
 QC PASS for first four: `valid=favorable+unfavorable+flat`; `valid+NO_DATA=1439`. Feature is current completed 1m taker-flow sign; **next completed minute return is only a FUTURE LABEL**, not available at signal time. This is not verified trade-level impact, not OOS or after-fee edge.
 
 **OpenAI upstream security block** on ARB run. `HARD_STOP=YES` for this invocation route; `OWNER_DECISION_REQUIRED=YES` for further authorized execution. No bypass, no retry, no actor change. Existing #18/#20 route remains blocked separately. No Strategy/DB/services/deploy/LIVE changes.
+
+
+## 2026-10-19 — #13 exact-price depth recovery, day2 complete 5/5
+
+CHECKED HERE: new date-selectable reader `research/microstructure/experiments/exact_price_recovery_v2.py` committed `6359ada71a2495638bff3aeedf74e9e55174250e`, executed from immutable SHA `b88acafc4cfcd4296b2c2299e38274f3a1b737a3` with `--date 2026-05-20 --minutes 1440`, read-only `cripta`, five successful rc=0. One source snapshot each. Same-price reduction/recovery 60000ms candidate, not proved same order/participant.
+
+| Symbol | Deltas | Bid episodes | Bid recovered | Ask episodes | Ask recovered | Episode partitions |
+|---|---:|---:|---:|---:|---:|---|
+| APTUSDT | 597815 | 225543 | 140377 | 169563 | 101438 | PASS |
+| INJUSDT | 714726 | 283113 | 172120 | 231672 | 138507 | PASS |
+| DOTUSDT | 625682 | 240474 | 148769 | 207109 | 128190 | PASS |
+| LTCUSDT | 552514 | 146608 | 87557 | 109072 | 62835 | PASS |
+| ARBUSDT | 632577 | 261878 | 161801 | 218264 | 135667 | PASS |
+
+`events=recovered+expired+open` for each side 5/5. The May20 orderbook event inventories differ from May19 previous control day and should not be compared directly. No independent row-by-row QC, source publication latency or §21 gate complete.
+
+## 2026-10-19 — #30 second day initial result and runtime timeout
+
+Reader `research/microstructure/experiments/top5_depth_resilience_v2.py` created in immutable GitHub `b88acafc4cfcd4296b2c2299e38274f3a1b737a3`. Bounded first 10 minutes APT smoke rc=0. Full May20 APT run rc=0, deltas 597815, bid episodes 4950 (recovered 4154, expired 796, censored 0), ask episodes 5350 (recovered 4561, expired 788, censored 1), partition PASS. INJ full run moved by SentinelX to job `job_e2201594f884`, subsequently `notifications_check` reported **timeout, exit_code -1 after 50.47s**. **INJ outcome UNKNOWN**, not PASS/FAIL of algorithm. Same operation NOT repeated. No policy bypass, privilege change, service or data write.
