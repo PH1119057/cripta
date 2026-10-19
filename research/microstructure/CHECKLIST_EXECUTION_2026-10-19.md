@@ -186,3 +186,13 @@ This is a **confirmed data-boundary bug in existing research calculation**, not 
 - [ ] OOS/favorable-adverse after-fee trading assessments not performed.
 
 No runtime, DB, service, exchange, production Strategy or LIVE mutation. No earlier tool-security route retries.
+
+
+## 2026-10-19 — #4/#8 independent full-day cohort summary cross-check
+
+- [x] `large_trade_streaks_independent_decimal_qc_v1.py` new independent Decimal reader, immutable GitHub `c437056b60278e0d78c3b01157164ed52cc05269`, ten read-only `cripta` executions of primary+independent full UTC 2026-05-20 source, all rc=0.
+- [x] #4: Large Trade Share rolling previous 60-minute *historical* p99 threshold; resulting median/p90 large share and eligible-minute inventory agree 5/5.
+- [x] #8: Same-timestamp+side **heuristic** fill grouping; group count, multiple-fill groups, streak episodes, median/p90/max agree 5/5.
+- [ ] Full minute-level large-share row equivalence, as-of publication timing and independent source/row hashes; same-timestamp+side grouping does NOT identify parent orders; formal per-pair §21.6 passports and OOS performance after fees remain OPEN.
+
+GitHub journal `01b5e8798596efa37725ef879a7e371c4d0f6ff6`, progress registry `40eeeeb1067c3b7e60a6c162bc2caa84cc59e9fd`. No blocked command retry; trading runtime and LIVE unchanged.
