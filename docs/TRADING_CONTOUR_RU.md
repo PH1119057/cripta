@@ -267,7 +267,7 @@ OCCUPANCY / PING-PONG
   this hard-flip path does not receive maker-delay optimization
 
 EXIT
-  dynamic target = current opposite L5-3 inner boundary
+  dynamic target = opposite RAW structural L5-3 extremum (LONG max(high36), SHORT min(low36)); ATR-free Exit price
   when price reaches an already-resting target -> reduce-only LIMIT maker TP
   when a newly recalculated target is already marketable -> immediate taker close
   any owner-approved hard/forced close remains immediate taker
@@ -378,11 +378,13 @@ not be recorded as a TTL expiration. Once Exchange reconciliation proves
 `Cancelled + zero fill`, reservation/slot/request release evidence uses the
 generic zero-fill cancellation class plus the exact causal reason.
 
+OWNER DECISION 2026-10-19 (separation of geometry ownership): Entry/H9 uses ATR200-inclusive inner-zone geometry for admission, overlap and depth; Exit TP uses the opposite raw structural extreme of the same 36 fully closed 5m candles without ATR200. Changes in ATR alone never move an open TP and never increment the structural TP-move counter. For LONG this Exit target is max(high36), for SHORT min(low36). This decision supersedes older R1 descriptions linking Exit TP to ATR-shifted inner boundary, but does not modify Entry geometry, Entry price, H9 alignment, slot ownership, or hard-stop protections. The 20/30/40/50 structural-shift closures remain experimental replay scenarios, not LIVE policy.
+
 R1 ExitPlan:
 
 ```text
 normal target:
-  current opposite L5-3 inner boundary
+  opposite RAW structural L5-3 extremum (LONG max(high36), SHORT min(low36)), without ATR200
 
 already-resting target price hit:
   reduce-only LIMIT maker TP
@@ -454,16 +456,16 @@ with the opening order itself:
 
 ```text
 initial SL = catastrophic stop at -10.0% from the Entry execution anchor
-initial TP = exact price of the opposite current L5-3 inner boundary
+initial TP = exact RAW opposite L5-3 structural extremum, independent of ATR200
 
-LONG  initial TP = current 5m L5-3 resistance_bottom
-SHORT initial TP = current 5m L5-3 support_top
+LONG  initial TP = max(high36) of fully closed 5m bars
+SHORT initial TP = min(low36) of fully closed 5m bars
 source fact      = fact.r1_opposite_inner_target
 ```
 
 The initial TP is **not** a fixed `+N%` target. It is the causal
-opposite-inner price calculated from the same current working L5-3 geometry
-that produced the Entry signal. Its purpose at Entry is exchange-resident
+opposite structural extremum of the same causal 36 fully closed 5m bars;
+ATR200 remains available for Entry alignment/overlap/depth but does not enter the Exit TP price. Its purpose at Entry is exchange-resident
 autonomous protection: if CRIPTA loses server/network/runtime immediately
 after fill, Bybit must already hold both the catastrophic SL and the
 opposite-zone TP.
@@ -473,7 +475,8 @@ After fill/reconciliation:
 - the Entry-time TP keeps the exact causal opposite-inner target price until an
   Exit decision replaces it;
 - Universal Exit remains the owner of subsequent dynamic TP updates and may
-  replace the resting TP on every causal L5-3 geometry change;
+  replace the resting TP only when the opposite RAW structural L5-3 extremum changes;
+  ATR200-only inner-boundary drift must not change the existing TP;
 - if the opposite target is reached before a pending PostOnly Entry fills, the
   pending Entry is invalidated by the existing exact signal-validity contract.
 
@@ -746,7 +749,8 @@ Exit Engine обязан claim/acknowledge StrategyPosition. Entry больше 
 Exit-side геометрией. Entry один раз передаёт initial protection, рассчитанную
 из Entry snapshot; последующие изменения L5-3 не дают Entry права менять TP/SL.
 Если exact ExitPlan разрешает dynamic L5-3 target, Exit Engine может заменять TP
-по текущей целевой внутренней границе L5-3 (LONG — верхней, SHORT — нижней),
+по противоположному сырому структурному экстремуму L5-3 (LONG — max(high36), SHORT — min(low36)),
+без ATR200 в цене TP и в условии его перестановки,
 сохраняя Entry/Exit ownership boundary.
 
 Если одну и ту же Strategy geometry потребляют Entry, Exit, Position Supervisor
