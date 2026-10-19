@@ -154,3 +154,13 @@ No Strategy/DB/runtime/LIVE changes.
 - [ ] Evaluate predictive usefulness only after separate as-of and OOS study, with fee-adjusted outcomes; this QC does not establish alpha.
 
 Prior blocked upstream routes #14/#18/#20/#25, SentinelX alternate interpreter and unknown #30 long jobs were not retried. No trading, DB, service, deploy or LIVE changes.
+
+
+## 2026-10-19 — second independent QC block, #27/#28
+
+- [x] #27 Inter-Trade Duration and #28 Trade-Size Distribution: five independent full-day Decimal source readers from `trade_distribution_decimal_independent_qc_v1.py` (`da4bed3f4cdcb013786ffb74a5a2481ce95f780b`) and five primary `trade_distribution_v1.py` on May20, all ten rc=0.
+- [x] Fill inventory and buy/sell split, positive inter-fill gap median, adjacent same-timestamp proportion, ex-post notional p95/p99 and upper-p99 notional volume share independently agree 5/5. Minor floating-point sub-ms difference in interval medians documented. Journal `4fd8777af938d70097aa73c61073b2afe04408fc`, progress register `cfbba3ab5fc885b31346900ec28e4881e47b4fc2`.
+- [ ] Full independent per-record hashes, same-timestamp physical maker/taker order identity, independent captured publication timestamps, §21.6 per-pair READY gates still OPEN.
+- [ ] Ex-post p95/p99 cannot serve as minute-by-minute causal thresholds; OOS after-fee edge has not been tested.
+
+The current large batch now contains independent source QC for #1/#2/#3/#5/#6/#7/#27/#28 on 5/5 each (aggregate/sampled-minute or ex-post full-distribution summary, not comprehensive per-minute row QC). No blocked execution paths retried. No Strategy/deploy/runtime/LIVE modifications.
