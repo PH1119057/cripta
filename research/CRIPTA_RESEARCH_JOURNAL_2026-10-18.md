@@ -968,3 +968,20 @@ CHECKED HERE: `research/microstructure/experiments/trade_minute_factors_v1.py` f
 | ARBUSDT | 209152 | 1440 | 1380 | 262/192/36 |
 
 These source trade counts agree with independently SHA256-verified exact gz files in the #19/#22 2026-05-20 passport; 60-minute prior-window RVOL warmup excluded, valid counts 1380/1440 per coin, not 1440 signal values. Feed-valid physical calculation executed across 5/5, but no independent second reader for these six factors, no minute-level output hashes, no per-feature registered §21 gate, OOS economics or after-fee returns. Status `SECOND_DAY_CALC_5_OF_5, RESEARCH_READY_PENDING`. No trading/DB/deploy/LIVE mutation.
+
+
+## 2026-10-19 — next group #4 / #8 and trade-distribution #27/#28 second-day 5/5
+
+CHECKED HERE: two independent read-only existing GitHub-main source readers pinned at `e542682ce64ca06bf934da76e8b373ac918d1f88` and run as actor `cripta` for five symbols on UTC 2026-05-20 (all 10 invocations rc=0):
+- `research/microstructure/experiments/large_trade_streaks_v1.py`: rolling as-of large-trade share and same-side fill-streak descriptive measurement, supporting checklist #4 Large Trade Share / #8 Trade Streaks.
+- `research/microstructure/experiments/trade_distribution_v1.py`: descriptive fill-size distribution and inter-fill timestamp evidence, supporting #27 Inter-Trade Duration / #28 Trade-Size Distribution. Full-day quantile p95 is **ex post**; not as-of a trading feature.
+
+| Symbol | Count of same-side streak episodes | Median streak length (fills) | Large-share eligible minutes | Full-day trade fills | Ex-post p95 single fill notional USDT |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 8975 | 2 | 1380 | 117069 | 367.269504 |
+| INJUSDT | 20642 | 2 | 1380 | 260994 | 657.0252 |
+| DOTUSDT | 8768 | 2 | 1376 | 151067 | 515.7693300000001 |
+| LTCUSDT | 6584 | 2 | 1363 | 93645 | 2042.052 |
+| ARBUSDT | 12752 | 2 | 1380 | 209152 | 534.880566 |
+
+These are distinct source-executed physical measurements, not independently cross-implemented minute-row equivalence, no full independent §21 passport or predictive OOS edge. Co-timestamp fills do not establish unique parent orders and may create zero-time bursts. No inferred universal trade threshold; quote-currency amounts are raw descriptive observations. Readiness for #4,8,27,28 remains OPEN, while second-day physical coverage is 5/5. No Strategy/DB/deploy/LIVE change.
