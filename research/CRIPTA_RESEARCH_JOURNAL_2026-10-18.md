@@ -685,3 +685,18 @@ All 5/5 QC `reclaims <= sweeps` true. LTC valid coverage much lower because exac
 CHECKED HERE via `research/microstructure/experiments/oi_coverage_probe_v1.py`, exact GitHub commit `d57cc29ebb631fe96f3f1ed714327bb4e4c42ed1`, read-only `cripta` actor, five return codes 0. For 2026-05-19, no symbol-specific OI/open_interest-named child was found by shallow inspection of the known raw dataset symbol directories or obvious external provider family names. Per APT, INJ, DOT, LTC, ARB: `HISTORICAL_OI_NOT_ESTABLISHED`, `exact_day_valid_oi_series_verified=false`, 0 shallow candidate matches. **This is NOT exhaustive filesystem search and does NOT prove historical OI is nonexistent** in all server databases, vendor layouts, or older archives; it does prove no verified OI dataset was recovered by this bounded path probe.
 
 #23 remains `OPEN / SOURCE_COVERAGE_NOT_VERIFIED`; absent evidence is `NO_DATA`, not zero OI or a zero-change signal. No trading rule, DB, service or LIVE changes. Next is #24 liquidation coverage (source provenance and hourly holes).
+
+
+## 2026-10-19 — #24 liquidation files: five-coin hourly coverage explicitly incomplete
+
+CHECKED HERE: read-only `research/microstructure/experiments/liquidation_hour_coverage_v1.py` GitHub commit `89ba8fe2eb2a13e62dfe8f260e1cd89b88d375d3`, five successful `cripta` actor executions, target CryptoHFTData Bybit path `/data/cripta/datasets/external/cryptohftdata/bybit_liquidations_v1/raw/2026-05-19/{HH}/{SYMBOL}_liquidations.parquet.zst`.
+
+| Coin | Hours with nonempty files / 24 | Present hours UTC | Sum of compressed bytes | Missing hours |
+|---|---:|---|---:|---:|
+| APTUSDT | 7 | 00,09,11,14,16,17,18 | 10697 | 17 |
+| INJUSDT | 15 | 00,01,02,03,04,05,09,10,11,14,16,17,18,19,22 | 24831 | 9 |
+| DOTUSDT | 1 | 14 | 1637 | 23 |
+| LTCUSDT | 2 | 00,14 | 3162 | 22 |
+| ARBUSDT | 4 | 14,16,22,23 | 6197 | 20 |
+
+Physical file presence and byte length are **not proof** that ALL true exchange liquidation events were captured even in present hours; file absence can reflect no events OR missing capture, unresolved until provider's completeness semantics established. Entire missing hours must be `NO_DATA` for unbiased event-rate claims, never zero counts. Thus #24 has `SOURCE_FILES_PRESENT_PARTIAL_HOURLY_COVERAGE`, `Liquidation Spikes` predictive indicator still OPEN, no 5/5 full-day event denominator acceptance, no trade/LIVE change.
