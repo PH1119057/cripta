@@ -573,3 +573,18 @@ CHECKED HERE: source `research/microstructure/experiments/same_price_depletion_v
 | ARBUSDT | 4547 | 14377294.74 | 13464815.34 | 13851893.86 | 12155745.50 |
 
 **Important limitation**: shrinking visible level quantity can be a cancellation, a filled passive order, or exchange book aggregation and cannot be positively labeled `Pulling Rate` without validated trade/book causal attribution. Gross flows re-count liquidity churn, not P&L or unique money; new level additions are excluded. Status: **#12 PHYSICAL_DEPLETION_CANDIDATE_SMOKE_5_OF_5**, strict `Pulling Rate` remains OPEN. Next bounded investigation is reconciliation of observed trade fills vs per-price book deltas with timestamp availability; preserve uncertainty rather than fabricate cancellations. Source is stdout-only, no DB, deploy, Strategy or LIVE.
+
+
+## 2026-10-19 — #13 same-exact-price depth recovery episodes five-coin 10m smoke
+
+CHECKED HERE: read-only `research/microstructure/experiments/exact_price_recovery_v1.py` commit `7b24dc2a89a936a8b9a5cbc643f17f13e2f5a200`, five 10-minute single-coin Bybit 2026-05-19 UTC runs under actor `cripta`, 5/5 exit 0. After an observed size decrease at a known exact price, one episode is followed for at most 60s, ending RECOVERED if visible size again reaches at least its **pre-decrease** quantity, EXPIRED if window elapsed, or OPEN if right-censored by sample end/snapshot. Repeated decreases while an episode is pending are not double-counted.
+
+| Coin | Bid episodes | Bid recovered/expired/open | Bid median recovered ms | Ask episodes | Ask recovered/expired/open | Ask median recovered ms |
+|---|---:|---|---:|---:|---|---:|
+| APTUSDT | 2033 | 1299/668/66 | 6700 | 1570 | 941/592/37 | 6900 |
+| INJUSDT | 3368 | 2258/963/147 | 4300 | 2765 | 1837/823/105 | 4500 |
+| DOTUSDT | 2058 | 1279/698/81 | 4800 | 1788 | 1113/612/63 | 5900 |
+| LTCUSDT | 1112 | 670/393/49 | 8102 | 824 | 495/299/30 | 7000 |
+| ARBUSDT | 2059 | 1277/712/70 | 6800 | 1647 | 1001/586/60 | 8199 |
+
+All ten bid/ask `events = recovered + expired + open` episode accounting checks PASS. This is only a **same-price visible-size recovery** proxy; levels can reprice/recycle and source does not prove identity of liquidity provider, causal provider availability, predictive usefulness or 60-second coverage completeness. Censored OPEN episodes MUST NOT be treated as failure. Status: #13 `RECOVERY_EPISODE_CANDIDATE_SMOKE_5_OF_5`; full-day, independent QC and passport remain OPEN. No Strategy/LIVE changes.
