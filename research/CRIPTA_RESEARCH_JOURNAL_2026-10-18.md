@@ -1276,3 +1276,8 @@ CHECKED HERE: independent algorithm `research/microstructure/experiments/large_t
 | ARBUSDT | 51785 | 12752 | 117 | 1380 | 0 | 0.470020 |
 
 No OOS, parent order attribution, causal clock confirmation, independent row equivalence or per-pair §21.6 READY. Future returns not studied, profitability after fees not claimed. No Strategy/DB/deploy/LIVE mutation.
+
+
+## 2026-10-19 — #9/#11/#29 new all-minute independent book QC reader, APT run pending
+
+CHECKED HERE: versioned read-only independent Decimal book reconstruction vs primary float minute state for all 1440 UTC minute slots, four fields `bid_depth_usd`, `ask_depth_usd`, `imbalance`, `spread_bps`, source and minute count reconciliation, relative tolerance 1e-10 / absolute 1e-6. New source `research/microstructure/experiments/book_minute_full_row_independent_qc_v1.py` committed `8dfa76d5a5a78666c382b702a90a897a15443984`, primary source pinned immutable `b1862ab491666433a7da49c42e7f403e3cfa791d`. Standard read-only `cripta` APT 2026-05-19 full-day run moved to SentinelX async job `job_cb166e3a8aa1` after 45 seconds. At this checkpoint outcome **PENDING/UNKNOWN**, no QC PASS claimed, no retry, no replacement job. This route is distinct from previously OpenAI blocked routes #14/#18/#20/#25. Source stage PREPARED; no production mutation.
