@@ -303,6 +303,14 @@ Operational finding private-runtime / Dispatcher закрывается отде
 implementation commit и отражается в CURRENT_PROJECT_MAP; это не меняет
 Strategy/Entry/Exit policy и не разрешает real execution.
 
+## OWNER DECISION 2026-10-19 — R1 Entry/Exit geometry separation
+
+- R1 Entry and H9 zone overlap/depth/width retain the existing ATR200-derived zone geometry; their formulas are **not** changed by this decision.
+- R1 Exit initial and dynamic TP price is the opposite raw structural L5-3 extremum (LONG `max(high36)`, SHORT `min(low36)`), without ATR200; TP moves only on changes to that opposite structural extremum.
+- `TP PLUS` and `TP MINUS` are statistical classifications after commissions, not distinct exit orders; R1 has TP and catastrophic hard stop −10% as the researched normal/guard exits, while the existing opposite qualified Entry flip contract is a separate exceptional lifecycle transition.
+- TP caps at 20/30/40/50 actual structural changes are **RESEARCH ONLY**, not activated Strategy defaults. Existing archived ATR-driven TP-cap results do not evaluate these structural caps.
+- Exact contracts are governed by `TRADING_CONTOUR §1.10` and `CRIPTA_GLOSSARY §7`; no production code, release or LIVE mutation is implied.
+
 # 17. Documentation maintenance invariant — 2026-09-28
 
 Это постоянное правило для всех следующих документационных ревизий.
