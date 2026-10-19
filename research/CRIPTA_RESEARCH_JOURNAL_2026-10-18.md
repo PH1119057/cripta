@@ -700,3 +700,10 @@ CHECKED HERE: read-only `research/microstructure/experiments/liquidation_hour_co
 | ARBUSDT | 4 | 14,16,22,23 | 6197 | 20 |
 
 Physical file presence and byte length are **not proof** that ALL true exchange liquidation events were captured even in present hours; file absence can reflect no events OR missing capture, unresolved until provider's completeness semantics established. Entire missing hours must be `NO_DATA` for unbiased event-rate claims, never zero counts. Thus #24 has `SOURCE_FILES_PRESENT_PARTIAL_HOURLY_COVERAGE`, `Liquidation Spikes` predictive indicator still OPEN, no 5/5 full-day event denominator acceptance, no trade/LIVE change.
+
+
+## 2026-10-19 — #25 bounded historical Spot/Perpetual source inspection
+
+CHECKED HERE: read-only `research/microstructure/experiments/spot_perp_source_probe_v1.py` GitHub commit `7bb42e8e4e3dac9470b7bf34b596090b82baccdf`, five successful actor-`cripta` probes for 2026-05-19 APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT. Inspected only obvious spot-named sibling directories under `/data/cripta/datasets/raw/20260518_20260816`, spot-named children under each symbol and top-level spot-named external providers; **no candidate path found** and no valid causal Spot series verified. This is a bounded physical-path scan, not exhaustive proof of nonexistence in other files, vendor layouts or PostgreSQL.
+
+#25 remains `OPEN / SPOT_SOURCE_UNVERIFIED`, cannot compute actual Spot/Perp divergence or assign zero spread from perpetual-only data. Missing historical Spot observations are `NO_DATA`. No cross-venue investigation was started; #26 remains explicitly deferred last. No trading, database or LIVE change.
