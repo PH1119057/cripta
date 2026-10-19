@@ -789,3 +789,18 @@ CHECKED HERE: independent bounded server executions (five rc=0) of immutable Git
 | ARBUSDT | 616464 | 1663437867.415008 | 1554128642.627728 | 1451256210.057091 | 1347944067.073256 |
 
 Causality boundary: the visible decrement at a book price is observed after a book delta; such decrements can reflect passive fills, cancellation, aggregation or unknown effects. There is NO safe direct conversion of these sums to `Pulling Rate`. All five full-day **narrow physical measurements** complete; separate event-level trade/book alignment, measurement passport, independent replay and attribution remain OPEN. `#12_VISIBLE_DEPLETION_FULL_DAY_5_OF_5` but strict #12 Pulling Rate `RESEARCH-READY=NO`. No trading/DB/runtime/LIVE mutations. Server alternate-interpreter denial recorded earlier does not affect these approved standard Python executions.
+
+
+## 2026-10-19 — #12 event-time book-depletion ↔ public-trade proximity, 5×10m smoke
+
+CHECKED HERE: new read-only `research/microstructure/experiments/depletion_trade_temporal_join_v1.py` published, corrected **numeric Decimal exact-price equality** commit `1c0c6beaca1e3959af2650cdf334a39c03462a2a`; executed as actor `cripta` on Bybit public trade tape + ob200 book, UTC 2026-05-19 00:00–00:10 for five symbols separately, five rc=0. Exact price and passive book side: buyer-initiated fill tests Ask, seller-initiated fill tests Bid. Book reduction event counted as `old_qty > new_qty` at any price in a book delta. A symmetric **±1000ms exploratory time window** asks if at least one trade occurred at matching price/passive side, without allocations and without causal ordering. This ±1000ms condition explicitly looks **after** book event and is NOT a permitted as-of input or live trading signal. Books reconstructed from snapshot/delta; each instrument had one snapshot, 10-minute book windows completed.
+
+| Symbol | Trades | Book deltas | Price-level reduction events | With trade ±1s same price/side | Without matching trade ±1s |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 1277 | 4825 | 17350 | 858 | 16492 |
+| INJUSDT | 5549 | 5561 | 33614 | 2872 | 30742 |
+| DOTUSDT | 1474 | 4861 | 19793 | 934 | 18859 |
+| LTCUSDT | 448 | 4377 | 9538 | 246 | 9292 |
+| ARBUSDT | 1568 | 4547 | 16837 | 765 | 16072 |
+
+5/5 partition QC: reduction events = matched + unmatched. **Not cancellation attribution**: unmatched can be unmatched fills, cross-feed latency, missing events or changes not known; matching can be coincidental, count one trade multiple times, and price/time ordering may be ambiguous. The numerical match shares should NOT be read as cancellation shares or execution share. This is an explicit research diagnostic for improving source availability and alignment, not `RESEARCH-READY` for #12 Pulling Rate. No additional Python interpreter used; earlier denied interpreter route not retried. No LIVE/DB/deploy changes.
