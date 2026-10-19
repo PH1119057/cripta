@@ -1174,3 +1174,15 @@ CHECKED HERE: new date-selectable reader `research/microstructure/experiments/ex
 ## 2026-10-19 — #30 second day initial result and runtime timeout
 
 Reader `research/microstructure/experiments/top5_depth_resilience_v2.py` created in immutable GitHub `b88acafc4cfcd4296b2c2299e38274f3a1b737a3`. Bounded first 10 minutes APT smoke rc=0. Full May20 APT run rc=0, deltas 597815, bid episodes 4950 (recovered 4154, expired 796, censored 0), ask episodes 5350 (recovered 4561, expired 788, censored 1), partition PASS. INJ full run moved by SentinelX to job `job_e2201594f884`, subsequently `notifications_check` reported **timeout, exit_code -1 after 50.47s**. **INJ outcome UNKNOWN**, not PASS/FAIL of algorithm. Same operation NOT repeated. No policy bypass, privilege change, service or data write.
+
+
+## 2026-10-19 — #30 second-day additional DOT and LTC full-day checks
+
+CHECKED HERE: `top5_depth_resilience_v2.py` from immutable GitHub `b88acafc4cfcd4296b2c2299e38274f3a1b737a3`; read-only `cripta`, May20 all 1440 minutes. DOT and LTC rc=0, episode partition QC PASS.
+
+| Coin | Book deltas | Bid episodes/recovered | Ask episodes/recovered | Snapshot |
+|---|---:|---:|---:|---:|
+| DOTUSDT | 625682 | 5888 / 5096 | 5924 / 5127 | 1 |
+| LTCUSDT | 552514 | 6323 / 5554 | 6886 / 6134 | 1 |
+
+Prior APT day2 rc=0, INJ timed out and remains UNKNOWN with NO RETRY. ARB attempted separately and moved to SentinelX job `job_22c8f6bba901`, status RUNNING at evidence checkpoint: outcome **NOT VERIFIED YET**. Do not mark ARB success until event notification confirms exit. These are total top-five quote-notional stock recovery proxies, not same-order resiliency, independent QC or trading results.
