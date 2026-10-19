@@ -38,7 +38,12 @@
       "minute_rows": 1440,
       "minute_rows_sha256": "db43bdc14a4054bd03d1252010a96b8f7ce7be6db9128631231c8977d806c0de",
       "full_row_independent_qc": "PASS",
-      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY",
+      "source_sha256": "6a589dc5afbc064a577f9d08bb921008e1518da42540fb5c15e4ea05a1144b02",
+      "source_compressed_bytes": 4549721,
+      "timestamp_order_inversions": 0,
+      "foreign_notional_mismatches": 0,
+      "source_qc": "PASS"
     },
     {
       "symbol": "INJUSDT",
@@ -48,7 +53,12 @@
       "minute_rows": 1440,
       "minute_rows_sha256": "34e751c86f85f47773eb39fe7b0faaacacc7892120948b914b97ed2480ea59f3",
       "full_row_independent_qc": "PASS",
-      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY",
+      "source_sha256": "7e2d2716b34167d65b43ca64fcd767aae902267f3d5f20ca3d2e90a3066a5a6e",
+      "source_compressed_bytes": 9464084,
+      "timestamp_order_inversions": 0,
+      "foreign_notional_mismatches": 0,
+      "source_qc": "PASS"
     },
     {
       "symbol": "DOTUSDT",
@@ -58,7 +68,12 @@
       "minute_rows": 1440,
       "minute_rows_sha256": "226e018fae1b43b11c7d7c230db868b59acbcaebc8e9564cd205ffdb5f0efac6",
       "full_row_independent_qc": "PASS",
-      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY",
+      "source_sha256": "39831bb5b07974f5de407efa8a2aa8ef2b32f257d67796aa7dc532b680fd477f",
+      "source_compressed_bytes": 5656864,
+      "timestamp_order_inversions": 0,
+      "foreign_notional_mismatches": 0,
+      "source_qc": "PASS"
     },
     {
       "symbol": "LTCUSDT",
@@ -68,7 +83,12 @@
       "minute_rows": 1440,
       "minute_rows_sha256": "33f3bacef04cfb3dd38407cb4940c8b7c2555057929ad05cf7635b03c1e56797",
       "full_row_independent_qc": "PASS",
-      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY",
+      "source_sha256": "b6e784e82918cf0e2c7b9f7d9464dc49478c7077eff0317f7a50be27764ee84e",
+      "source_compressed_bytes": 3213522,
+      "timestamp_order_inversions": 0,
+      "foreign_notional_mismatches": 0,
+      "source_qc": "PASS"
     },
     {
       "symbol": "ARBUSDT",
@@ -78,14 +98,22 @@
       "minute_rows": 1440,
       "minute_rows_sha256": "fa8e685c1960e5fb6b85280b40ce0f27fb8908ee3da821b343d21b969f3a2c9c",
       "full_row_independent_qc": "PASS",
-      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY"
+      "readiness": "PHYSICAL_QC_PASS_NOT_RESEARCH_READY",
+      "source_sha256": "7d8de412077e6f51eb46d1b3e1055af43dd228ec3d24da41a36c9e5f16cb254a",
+      "source_compressed_bytes": 8019377,
+      "timestamp_order_inversions": 0,
+      "foreign_notional_mismatches": 0,
+      "source_qc": "PASS"
     }
   ],
   "limitations": [
     "Both methods process identical physical Bybit trade source, not independent venue or recorder",
     "No per-minute artifact persisted on server in this cycle: GitHub contains algorithm and full-row SHA256 evidence",
     "No OOS predictive test nor after-fees financial result",
-    "Source SHA256 for 2026-05-20 not checked in this cycle; coverage verified by success and row hashes",
     "Original historical 2026-05-19 v1 passport kept unchanged"
-  ]
+  ],
+  "source_qc_reader": {
+    "path": "research/microstructure/experiments/range_vwap_independent_qc_v2.py",
+    "version_commit": "fa683e2a27e50a1a18360c5c894d1ab2352bdf4a"
+  }
 }
