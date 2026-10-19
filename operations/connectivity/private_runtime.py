@@ -1680,6 +1680,24 @@ def _universal_exit_position(
     if expected_owner[2] != expected_key:
         raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
 
+    # Never send an Exit mutation after a newer decision superseded it.
+    # The expiry check above remains a separate transport-safety gate.
+    decision_id = str(payload.get("exit_decision_id") or "")
+    if not decision_id:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_ID_MISSING")
+    latest_decision = connection.execute(
+        """SELECT exit_decision_id
+             FROM strategy_exit.exit_decisions
+            WHERE strategy_position_id=%s
+            ORDER BY decided_at DESC, exit_decision_id DESC
+            LIMIT 1""",
+        (position_id,),
+    ).fetchone()
+    if latest_decision is None:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_NOT_FOUND")
+    if str(latest_decision[0]) != decision_id:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_SUPERSEDED")
+
     exchange_position = next(
         (
             item
