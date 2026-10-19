@@ -904,3 +904,22 @@ FINDING: missing trades in DOT/LTC reduce eligible contiguous 40-minute windows 
 ## 2026-10-19 — #19/#22 independent reader path mismatch FINDING
 
 CHECKED HERE: `research/microstructure/passports/range_vwap_2026-05-19_v1.json` names `research/microstructure/experiments/range_vwap_independent_qc_v1.py` as independent reader with historical commit `96543f1f119618cacb657be4230524fcb3c8b2d2`. A GitHub `fetch_file(ref=main)` for **that exact path** returned `NOT_FOUND (404)` during second-day independent-QC preflight. This is a **current-main path/documentation mismatch finding**, not evidence that the independent reader never existed at historical commit, nor authority to invent a replacement or silently rewrite the passport. Independent 2026-05-20 agreement is **NOT CHECKED HERE**; previous primary reader 5/5 results and hashes remain valid narrow evidence. Before RESEARCH-READY promotion, locate the actual GitHub main implementation and reconcile current passport pointer through approved documentation process. No Strategy/LIVE changes.
+
+
+## 2026-10-19 — #19/#22 historical independent reader recovered; second-day independent QC PASS 5/5
+
+CHECKED HERE: GitHub `main` tree recursive inspection confirmed **`range_vwap_independent_qc_v1.py` absent on main**, while historical repository tree at commit `96543f1f119618cacb657be4230524fcb3c8b2d2` contained the file named in the original 2026-05-19 passport. Historical contents fetched and inspected; its `date` was hardcoded to 2026-05-19. A **new separately versioned** `research/microstructure/experiments/range_vwap_independent_qc_v2.py` source was published in `main` commit `fa683e2a27e50a1a18360c5c894d1ab2352bdf4a`; only parameterized exact UTC date and CLI input while preserving independent book-free trade CSV loop/derived calculations. The historical v1 passport pointer was NOT silently modified or claimed resolved for current main; this is a documented new research variant.
+
+CHECKED HERE: five independent read-only `cripta` runs of v2 on **2026-05-20 UTC** returncode=0, same inputs as primary `range_vwap_profile_v1.py` second-day 5/5 execution recorded previously.
+
+| Coin | Independent fills | Active minutes | Independent range valid | Independent median range ratio | Independent POC | Feed order inversions | foreignNotional consistency errors |
+|---|---:|---:|---:|---:|---|---:|---:|
+| APTUSDT | 117069 | 1440 | 1401 | 0.96875 | 0.9491 | 0 | 0 |
+| INJUSDT | 260994 | 1440 | 1401 | 1.035087719298245614035087719 | 4.8080 | 0 | 0 |
+| DOTUSDT | 151067 | 1436 | 1277 | 1.033333333333333333333333333 | 1.2544 | 0 | 0 |
+| LTCUSDT | 93645 | 1423 | 1010 | 0.923076923076923076923076923 | 54.19 | 0 | 0 |
+| ARBUSDT | 209152 | 1440 | 1401 | 0.972222222222222222222222222 | 0.11330 | 0 | 0 |
+
+Primary vs independently derived valid counts, medians, active minutes, fills and POC all **EXACT MATCH (5/5)**. Independent end-day VWAP sourced from CSV `foreignNotional`, primary VWAP recomputed from `price * size`; tiny Decimal differences occur (APT 0.9445962380876828737592046803 vs primary 0.9445962380876828726150498456; other four differences same ~1e-18 order). Independent `foreign_notional_mismatches=0` with source threshold 0.000001 per fill. Thus report **VWAP NUMERIC CLOSE, NOT BITWISE EQUAL**. Independence limited to different reader implementations, same source file and dataset; does not prove OOS utility, trade fill/PnL, or complete minute-row agreement (v2 does not independently hash every feature row).
+
+#19/#22 now **SECOND_DAY_INDEPENDENT_SUMMARY_QC_5_OF_5_PASS**, still `RESEARCH-READY` conditional on §21 per-pair passport, full minute-row independent spot checks and formal readiness gate. No Strategy/DB/deploy/LIVE modification.
