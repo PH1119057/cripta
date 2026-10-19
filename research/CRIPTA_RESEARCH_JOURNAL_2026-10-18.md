@@ -1191,3 +1191,18 @@ Prior APT day2 rc=0, INJ timed out and remains UNKNOWN with NO RETRY. ARB attemp
 ## 2026-10-19 — #30 ARB asynchronous host-agent no-response, outcome unknown
 
 Event-triggered SentinelX `notifications_check` for job `job_22c8f6bba901` returned `status=failed, exit_code=null`, error: **"agent did not respond to exec in 60.0s"**. This is distinct from the earlier INJ job's `timeout,exit_code=-1`, OpenAI upstream block, Unix EACCES or SentinelX command_not_allowed. Whether ARB on-host calculation completed is **UNKNOWN**; no reliable stdout, no PASS, no auto-retry / background alternative initiated. #30 May20 physically verified 3/5: APT, DOT, LTC. INJ timed out unknown; ARB agent non-response unknown. Reconcile host/job evidence under approved access procedure before any re-execution. No Strategy/DB/runtime/LIVE changes.
+
+
+## 2026-10-19 — #12 second day May20 bounded chronology sample 5/5
+
+CHECKED HERE: new `research/microstructure/experiments/book_trade_clock_sample_v2.py` committed immutable `5236c5aaf103286daa66d767a72aa42c54794a6c`, parameterized date only from v1; run read-only actor `cripta` on `2026-05-20`. Five separate executions rc=0; each read first 500 raw trades and first 500 ob200 message records, **bounded sample, not full-day**.
+
+| Coin | Trade rows | Book records | Book ts−cts observed range, ms | seq monotonic in sample | update_id monotonic in sample |
+|---|---:|---:|---|---|---|
+| APTUSDT | 500 | 500 | 1–99 | PASS | PASS |
+| INJUSDT | 500 | 500 | 1–98 | PASS | PASS |
+| DOTUSDT | 500 | 500 | 1–123 | PASS | PASS |
+| LTCUSDT | 500 | 500 | 1–100 | PASS | PASS |
+| ARBUSDT | 500 | 500 | 1–99 | PASS | PASS |
+
+The book `ts`−`cts` time difference is **not independently verified publish or receive latency**; no common trade/book clock or cancellation vs execution attribution established. 5/5 sample result does NOT resolve earlier first-day LTC 10m full scan timeout; no re-execution of blocked or timed-out routes. No source write, Strategy, DB, service or LIVE mutation.
