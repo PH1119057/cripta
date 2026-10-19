@@ -31,7 +31,7 @@ def run(sym,day="2026-05-19"):
    else:short_absorb+=1
   elif effect>0:aligned+=1
   else:flat+=1
- return dict(symbol=sym,window="2026-05-19 full UTC day",prior_rolling_minutes=60,threshold="prior 60 nonempty 1m absolute signed quote-notional p90, no current minute",eligible=eligible,unusual_flow=unusual,
+ return dict(symbol=sym,window=f"{day} full UTC day",prior_rolling_minutes=60,threshold="prior 60 nonempty 1m absolute signed quote-notional p90, no current minute",eligible=eligible,unusual_flow=unusual,
   against_flow_price_move=no_follow,aligned_flow_price_move=aligned,zero_price_move=flat,unavailable=unknown,
   buy_flow_resisted=long_absorb,sell_flow_resisted=short_absorb,
   qc_unusual_partition=unusual==no_follow+aligned+flat,
