@@ -815,6 +815,33 @@ LOADED_COMMIT
 
 Нельзя писать просто «версия установлена», если не доказано, что реально загруженные сервисы соответствуют опубликованному source checkpoint.
 
+## 26.2 OWNER DECISION 2026-10-19 — trading-scoped R1 SOURCE_LIVE_IDENTITY
+
+Для R1 pre-arm торговый release identity определяется **установленным exact Git
+release и bytes исполняемого торгового контура**, а не требованием равенства
+постоянно меняющегося GitHub `main` установленному commit.
+
+- `REMOTE_HEAD == SOURCE_HEAD` проверяется отдельно; `INSTALLED_COMMIT == LOADED_COMMIT
+  == release state` обязателен и не подменяется документальным коммитом.
+- Delta между установленным release и GitHub `main` по `docs/**`,
+  `research/**`, `tests/**`, `operations/dashboard/**`, `README.md`,
+  `AGENTS.md` не запрещает новые входы **при сохранении прочих LIVE gates**.
+  Research не может непосредственно исполняться или загружаться trading runtime.
+- Любой delta в `src/**`, trading `operations/**`, release dependencies,
+  security, config и **неизвестном пути** — fail-closed до проверенного deploy.
+  Это консервативная граница, а не разрешение новых каталогов в обход gate.
+- Изменение исполняемого trading code, runtime control, зависимостей и effective
+  actor всегда проходит обычный release/CI/rollback. Разрешение документальных
+  commits **не** разрешает обойти `PAPER_REAL_DECISION_PARITY`, reconciliation,
+  position ownership, risk gates либо owner LIVE-arm.
+- Presentation-only Dashboard changes, затрагивающие auth/control/mutation,
+  не входят в исключение и требуют full release; классификация применяется
+  только к неисполняемому presentation/read-model по проверенному contract.
+  При сомнении классификации — `HARD_STOP=YES`.
+
+Canonical owner классификации пути — этот раздел; Trading Contour §4.7
+использует результат gate и не дублирует allowlist.
+
 ## 26.1 Operational delta не маскируется под full release
 
 Если отдельный verified file/unit/config был применён из Git commit без полного
