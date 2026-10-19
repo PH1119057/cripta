@@ -164,3 +164,14 @@ Prior blocked upstream routes #14/#18/#20/#25, SentinelX alternate interpreter a
 - [ ] Ex-post p95/p99 cannot serve as minute-by-minute causal thresholds; OOS after-fee edge has not been tested.
 
 The current large batch now contains independent source QC for #1/#2/#3/#5/#6/#7/#27/#28 on 5/5 each (aggregate/sampled-minute or ex-post full-distribution summary, not comprehensive per-minute row QC). No blocked execution paths retried. No Strategy/deploy/runtime/LIVE modifications.
+
+
+## 2026-10-19 — Full 1440-minute independent QC #1/#2/#3/#5/#6/#7: 4/5 PASS, APT FAIL
+
+- [x] Crosscheck reader `trade_minute_full_row_crosscheck_v1.py` committed `4fee6da163a3f43bb2c9c518b12b84a49b0a7a96`, primary pinned to GitHub `3a71473acb7b50e8821ee218af318521e2b3d9af`. Five separate read-only server runs completed rc=0.
+- [x] INJ/DOT/LTC/ARB: all 1440 minute rows × 8 checked data columns per coin agree at precise numeric tolerances (integer counts exact).
+- [ ] APT: **FAIL**, 2 mismatched minute counts (minute 1406/1407). Root cause independently verified: primary rounds `timestamp=1779319619.9995` into subsequent minute; three APT Buy fills 23:26:59.9995 UTC totaling 6.175744 USDT, moved from true minute 1406 into minute 1407. Secondary rate/delta/CVD/RVOL effects. Independent diagnostic readers committed `0ca3e999` and `8eae1820`. Journal `1a68bf4098691174708282d535f45da1633ae77d`.
+- [ ] Explicit measurement-contract owner/canonical timestamp rule, versioned corrected **research reader**, independent rerun and updated passports for #1/#2/#3/#5/#6/#7. Do not silently patch current algorithm or relabel 4/5 as complete 5/5.
+- [ ] §21 as-of/publication-clock, per-instrument passport and OOS after fees still OPEN.
+
+This is a **confirmed data-boundary bug in existing research calculation**, not a new Strategy rule or trading runtime change. No existing blocked route retried. Earlier 5/5 summary QC was too coarse to detect this defect and must not be represented as all-row QC.
