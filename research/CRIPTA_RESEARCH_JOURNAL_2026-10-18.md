@@ -1060,3 +1060,18 @@ CHECKED HERE: independent `research/microstructure/experiments/book_spread_imbal
 | ARBUSDT | 616466 | 2 | 1440 | 0.8656 | -0.0360 | PASS |
 
 QC scope is source-count/snapshot/minute count and **rounded summary median equality**. This is NOT independent byte-for-byte full-1440-row equality nor exact independent per-minute depth equality; those remain OPEN. Public/exchange source clocks and publication/availability semantics remain unverified; no causal as-of trading signal or after-fee profitability assessment. Do not promote #9/#11/#29 to §21.6 RESEARCH-READY solely on this evidence. No DB/service/Strategy/LIVE mutation.
+
+
+## 2026-10-19 — #18/#20 second-day extension partial, OpenAI upstream security hard stop
+
+CHECKED HERE: existing `research/microstructure/experiments/price_minute_features_v1.py` fetched as immutable GitHub source at `6a3c07acc9832165f51d33a1e5d534fc7441b591`; standard actor `cripta` read-only and python command used to invoke date-selectable `calculate(symbol, "2026-05-20")` and summarize 1440 rows. Three individual server runs returned rc=0:
+
+| Symbol | Fills | Minutes | Valid 60-minute lag-1 autocorrelation | Valid prior60 high | Above prior high | Below prior low |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 117069 | 1440 | 1380 | 1439 | 74 | 77 |
+| INJUSDT | 260994 | 1440 | 1380 | 1439 | 81 | 87 |
+| DOTUSDT | 151067 | 1440 | 1380 | 1439 | 65 | 73 |
+| LTCUSDT | NOT EXECUTED | — | — | — | — | — |
+| ARBUSDT | NOT EXECUTED | — | — | — | — | — |
+
+The next call was **blocked by OpenAI upstream tool-security system**. This is not a SentinelX `command_not_allowed`, Unix EACCES or confirmed host Python error; its request did not yield a server result. In accordance with `DEVELOPMENT_RELEASE §19.5–19.6`, no replay, alternative actor, obfuscated command or workaround was attempted. **HARD_STOP=YES for this attempted route; OWNER_DECISION_REQUIRED=YES before further execution via any newly approved route.** Physical second-day #18/#20 cohort status **PARTIAL_3_OF_5**. Previously verified #9/#11/#29 independent full-day summary QC 5/5 remains independently valid. No claims of new trading advantage or after-fee P&L, no Strategy/deploy/DB/LIVE modifications.
