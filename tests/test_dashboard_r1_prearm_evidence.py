@@ -61,13 +61,17 @@ def test_r1_prearm_writes_all_required_pre_owner_evidence() -> None:
     assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in source
 
 
-def test_r1_parity_attestation_blocks_unverified_candidate_even_with_matching_hashes() -> None:
-    with pytest.raises(ValueError, match="independent proof is pending"):
-        app._r1_paper_real_parity_attestation(
-            "a" * 40,
-            source_root=ROOT,
-            runtime_root=ROOT,
-        )
+def test_r1_parity_attestation_runs_independent_replay_with_matching_hashes() -> None:
+    result = app._r1_paper_real_parity_attestation(
+        "a" * 40,
+        source_root=ROOT,
+        runtime_root=ROOT,
+    )
+    assert result["parity_baseline"] == "R1_CAUSAL_PAPER_REAL_ADAPTER_PARITY_V1"
+    assert result["release_commit"] == "a" * 40
+    assert result["independent_replay"]["status"] == "PASS"
+    assert result["independent_replay"]["cases"] == 10
+
 
 
 def test_r1_parity_attestation_fails_closed_on_module_drift(monkeypatch) -> None:
