@@ -953,3 +953,18 @@ CHECKED HERE: read-only historical independent QC `range_vwap_independent_qc_v2.
 | ARBUSDT | 7d8de412077e6f51eb46d1b3e1055af43dd228ec3d24da41a36c9e5f16cb254a | 8019377 | 209152 | 0 | 0 |
 
 All five full-minute independent row hashes already matched byte-for-byte in prior checkpoint. **This closes previously open raw source SHA256 for May 20;** still do not call formal `RESEARCH-READY` until §21.6 fields and exact version/scope for each paired metric fully certified, including as-of availability and retained cube/result QC. No strategy or LIVE mutation.
+
+
+## 2026-10-19 — next group #1/2/3/5/6/7 second-day full-day calculation 5/5
+
+CHECKED HERE: `research/microstructure/experiments/trade_minute_factors_v1.py` from exact GitHub main source commit `c007d5aff378bfaced2e0d1514b8cd625e2132bb`; five successful read-only `cripta` executions on UTC `2026-05-20`, `--summary-only` (1440 records computed internally per coin, not stored on server), metrics returned `trade_rate,trade_rate_accel,buy_sell_delta,CVD,delta_accel,RVOL`. This expands six already historical-pilot indicators to a separately checked next calendar day, not a new Strategy signal.
+
+| Instrument | Source trades | Active minutes | RVOL eligible minutes | First/60th/last minute trade count |
+|---|---:|---:|---:|---|
+| APTUSDT | 117069 | 1440 | 1380 | 111/114/2 |
+| INJUSDT | 260994 | 1440 | 1380 | 143/163/104 |
+| DOTUSDT | 151067 | 1436 | 1380 | 208/139/23 |
+| LTCUSDT | 93645 | 1423 | 1380 | 104/193/18 |
+| ARBUSDT | 209152 | 1440 | 1380 | 262/192/36 |
+
+These source trade counts agree with independently SHA256-verified exact gz files in the #19/#22 2026-05-20 passport; 60-minute prior-window RVOL warmup excluded, valid counts 1380/1440 per coin, not 1440 signal values. Feed-valid physical calculation executed across 5/5, but no independent second reader for these six factors, no minute-level output hashes, no per-feature registered §21 gate, OOS economics or after-fee returns. Status `SECOND_DAY_CALC_5_OF_5, RESEARCH_READY_PENDING`. No trading/DB/deploy/LIVE mutation.
