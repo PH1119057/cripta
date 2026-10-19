@@ -1030,3 +1030,18 @@ CHECKED HERE: independent successful bounded read-only `sudo -u cripta python3` 
 | ARBUSDT | 616466 | 2 | 1440 | 0.8656 | -0.0360 | 1088 |
 
 FINDING: daily imbalance median shifts signs relative to previous first-hour values for several coins; window scope cannot be transferred unexamined. This is a full-day one-reader physical measurement with correct per-coin source-count reconciliation, NOT independent full-minute hash QC or §21.6 research readiness. Clock field `ts` is source reported; publication / availability semantics not externally proven. Do not promote to Strategy or report after-fee return. No trading/DB/deploy/LIVE mutation.
+
+
+## 2026-10-19 — #9/#11/#29 independent Decimal QC first hour 5/5
+
+CHECKED HERE: source `research/microstructure/experiments/book_spread_imbalance_independent_v1.py` independently implemented with Decimal-priced reconstructed bids/asks, price×size depth, minute-last values. Exact GitHub source commit `68f665348b48796a03d9eba36dd7edbe2dab523e`, five successful read-only `cripta` runs on 2026-05-19 UTC first 60 minutes. Results exactly agree **at the reported four-decimal summary precision** with earlier `book_minute_three_v1.py` first-hour outputs for all five coins (including book message count, 60/60 minute coverage, median spread and median ±5bp near-mid imbalance).
+
+| Coin | Events | States | Spread bps | Imbalance | QC |
+|---|---:|---:|---:|---:|---|
+| APTUSDT | 27262 | 60 | 1.0519 | -0.0678 | PASS |
+| INJUSDT | 34093 | 60 | 1.8857 | 0.0304 | PASS |
+| DOTUSDT | 27982 | 60 | 0.7980 | -0.0855 | PASS |
+| LTCUSDT | 23561 | 60 | 1.8391 | 0.0780 | PASS |
+| ARBUSDT | 26974 | 60 | 0.8462 | 0.0369 | PASS |
+
+The independent check is **summary-level for first hour** only. It does not yet compare unrounded per-minute values or prove 1440-minute agreement; it also does not establish physical exchange publication latency or §21 full passport readiness. Source book depth is within ±5bps, not all visible liquidity. No trading/DB/deploy/LIVE changes.
