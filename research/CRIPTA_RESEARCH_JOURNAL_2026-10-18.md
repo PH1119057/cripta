@@ -727,3 +727,8 @@ Episode accounting `episodes=recovered+expired+censored` PASS all ten side-serie
 ## 2026-10-19 — #30 APT full-day top-five stock resilience result
 
 CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_v1.py` commit `014f4f162b113d36a03398863a19ac385319263b`, read-only actor `cripta`, 2026-05-19 UTC APTUSDT, rc=0, duration 42.73s, two snapshots, 606835 book deltas. BID: 5281 top-five-depth fall episodes, 4468 recovered within 60s, 811 expired, 2 right-censored, median time **among recovered** 1800ms. ASK: 5416 episodes, 4623 recovered, 791 expired, 2 censored, median recovered 1500ms. Both episode partitions PASS. The same top-five quote-depth proxy remains vulnerable to re-ranking, and neither identical liquidity provider nor cancel/fill causation is established. Other four full-day runs NOT CHECKED HERE at this checkpoint. #30 full-day coverage 1/5.
+
+
+## 2026-10-19 — #30 INJ full-day top-five stock resilience result
+
+CHECKED HERE: `top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, actor `cripta`, UTC 2026-05-19 INJUSDT, SentinelX job `job_7dcc675b32b0` succeeded exit 0, duration 56.23s, no truncated output. 2 snapshots, 733301 delta transitions. BID: 5184 episodes, 4395 recovered within 60s, 787 expired, 2 right-censored; median recovery among recovered 2400ms. ASK: 5430 episodes, 4639 recovered, 789 expired, 2 censored; median 2000ms. Both episode partitions PASS. Strict physical same-order resiliency and attribution remain OPEN; current result is top-five depth-stock proxy. #30 full-day coverage now 2/5, other symbols DOT/LTC/ARB not yet counted.
