@@ -663,3 +663,18 @@ CHECKED HERE: source `research/microstructure/experiments/flow_decay_5m_v1.py` G
 | ARBUSDT | 104 | 0.6795 | 59 | 28/31/0 | 45 | 23/22/0 |
 
 Five QC partition checks passed. Exploratory per-coin outcomes are mixed; **no universal exhaustion prediction** established, and no controls, independent samples, OOS, fee-adjusted P&L, or physical order attribution. #17 `FULL_DAY_FLOW_DECAY_FUTURE_LABELS_5_OF_5`, strict Exhaustion `RESEARCH-READY` remains OPEN. No trading, deploy, or LIVE mutation.
+
+
+## 2026-10-19 — #21 trade-tape price sweep and ordered reclaim 5/5 full-day pilot
+
+CHECKED HERE: read-only `research/microstructure/experiments/sweep_reclaim_ordered_trades_v1.py` commit `b0b5d2c05d488ed34ff0d5f0c6b5cfe7b5d13c63`, five successful actor-`cripta` Bybit 2026-05-19 full-day executions. For minute i, reference high/low is the highest/lowest **transaction price** in **exactly previous 60 fully populated minute buckets** (strictly before i), no filling of empty buckets. Within i ordered trade prints must first pass >high or <low and then print back <=high or >=low **later** to count a reclaim. Same-minute reclaim is a sequence, not merely a high/low summary.
+
+| Coin | Eligible minutes | Missing/incomplete windows | High sweeps | High sweep→reclaim | Low sweeps | Low sweep→reclaim |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1319 | 61 | 51 | 30 | 56 | 34 |
+| INJUSDT | 1380 | 0 | 54 | 41 | 86 | 73 |
+| DOTUSDT | 1316 | 64 | 49 | 28 | 59 | 29 |
+| LTCUSDT | 958 | 422 | 30 | 15 | 41 | 21 |
+| ARBUSDT | 1319 | 61 | 43 | 24 | 65 | 37 |
+
+All 5/5 QC `reclaims <= sweeps` true. LTC valid coverage much lower because exact complete preceding 60-minute trade windows prohibit silent gap filling. Values are distinct from old journal prior60-close-extrema or intra-minute-OHLC prototypes, **not their regression replacement**: source estimator and inclusion rules differ. Trade-print sequence does NOT establish a physical orderbook liquidity sweep or unique ordering of identical timestamp fills; those need additional source/source-sequence QC. #21 `ORDERED_TRADE_TAPE_PROXY_FULL_DAY_5_OF_5`, strict Sweep/Reclaim OPEN. No Strategy/LIVE changes.
