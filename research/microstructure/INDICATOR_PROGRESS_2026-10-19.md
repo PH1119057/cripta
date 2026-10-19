@@ -9,11 +9,11 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 1 | RVOL | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 2 | Trade Rate | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 3 | Trade Rate Acceleration | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
-| 4 | Large Trade Share | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 4 | Large Trade Share | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 5 | Buy/Sell Delta | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 6 | CVD | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
 | 7 | Delta Acceleration | `HISTORICAL_PILOT_PASS + SECOND_DAY_CALC_5_OF_5` | 2026-05-20 all five physical calculations executed; independent row QC and per-coin §21 passports pending (journal a203f5f) |
-| 8 | Trade Streaks | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 8 | Trade Streaks | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 9 | Queue Imbalance | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 10 | Multi-Level OFI | `TOP1_OFI_FULL_DAY_5_OF_5 + TOP5_STOCK_DECOMPOSITION_5_OF_5` | Strict complete multi-level OFI still OPEN; rank reindexing must not be mislabeled |
 | 11 | Order Book Depth | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
@@ -32,8 +32,8 @@ Data cohort: Bybit APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT; UTC 2026-05-19 p
 | 24 | Liquidation Spikes | `PARTIAL_HOURLY_FILES_5_OF_5` | No verified full-day event completeness; alternate interpreter probe stopped by SentinelX command_not_allowed (2026-10-19) |
 | 25 | Spot / Perpetual Divergence | `SPOT_SOURCE_UNVERIFIED_5_OF_5` | Bounded path search found no verified same-day Spot series |
 | 26 | Cross-Venue Lead–Lag | `OWNER_DEFERRED_LAST` | Do not run until Bybit indicator work complete |
-| 27 | Inter-Trade Duration | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
-| 28 | Trade-Size Distribution | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
+| 27 | Inter-Trade Duration | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
+| 28 | Trade-Size Distribution | `HISTORICAL_PILOT_PASS + SECOND_DAY_PHYSICAL_CALC_5_OF_5` | May 20 all five executed, no independent row equivalence/§21 passport; journal 3c75bb7 |
 | 29 | Bid/Ask Spread | `HISTORICAL_PILOT_PASS` | Per-coin §21 re-attestation pending |
 | 30 | Replenishment / Resiliency | `TOP5_BOOK_STOCK_RECOVERY_FULL_DAY_5_OF_5_CHECKED` | APT/INJ/DOT/LTC/ARB full-day results verified; strict same-order resilience OPEN. Evidence GitHub journal full-day #30 checkpoint 2026-10-19. |
 
