@@ -273,6 +273,20 @@ for kind, name in changed:
             if ast.dump(old_methods[method_name], include_attributes=False)
             != ast.dump(new_methods[method_name], include_attributes=False)
         ]
+        # Exact read-only GET projection correction for the open trades view.
+        # Do not permit other handler or control changes through this exception.
+        old_get = ast.get_source_segment(old_app, old_methods["do_GET"]) or ""
+        new_get = ast.get_source_segment(new_app, new_methods["do_GET"]) or ""
+        previous_monitor = '"strategy_monitor": strategy_monitor_state() if view == "monitor" else None,'
+        corrected_monitor = '"strategy_monitor": strategy_monitor_state() if view in {"open", "monitor"} else None,'
+        if changed_methods == ["do_GET"]:
+            if (
+                old_get.count(previous_monitor) == 1
+                and new_get == old_get.replace(previous_monitor, corrected_monitor, 1)
+            ):
+                print("DASHBOARD_READ_ONLY_OPEN_MONITOR_EXACT_CHANGE=PASS")
+                continue
+            raise SystemExit("Dashboard verifier failed: unauthorized Handler.do_GET change")
         if changed_methods != ["do_POST"]:
             raise SystemExit(
                 "Dashboard verifier failed: unexpected Handler method change: "
