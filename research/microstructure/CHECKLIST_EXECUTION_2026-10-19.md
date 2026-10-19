@@ -113,3 +113,14 @@ Route blocked upstream on #18/#20 was not used; no execution through alternate i
 ## Addendum — #14 second day partial and new OpenAI upstream stop
 
 Date-selectable `signed_flow_next_minute_v2.py` was committed `33b71227`. Bybit May20 APT/INJ/DOT/LTC physical 1439 minute pairs each tested, valid counts 1439/1439/1431/1407, outcome partition and missing checks PASS. **ARB NOT EXECUTED**: OpenAI upstream tool-security blocked the fifth identical-shape invocation before a server result. No retry/encoded variation/actor substitution, route `HARD_STOP=YES` and explicit owner/tool-policy decision required; journal `b17a58288389dc5a4b67c2272e8d5183b548e700`. #14 remains future outcome study, NOT actual single-trade impact/after-fees predictive proof. This blocked route is separate from prior #18/#20 restriction.
+
+
+## 2026-10-19 — #13 and #30 day-two book-depth batch
+
+- [x] #13 versioned second-day reader `exact_price_recovery_v2.py` at commit `6359ada71a2495638bff3aeedf74e9e55174250e`; full May20 5/5 rc=0 and bid/ask episode partition QC PASS. Journal `46afd5053d40e80574f815a2c1fd2985ed06b870`.
+- [x] #30 versioned day-selectable `top5_depth_resilience_v2.py` at commit `b88acafc4cfcd4296b2c2299e38274f3a1b737a3`; full May20 APT/DOT/LTC confirmed 3/5 and partition QC. Journal `d9f0671b6450b5e23704728a0048d210bc441e32`.
+- [ ] #30 May20 INJ: SentinelX `job_e2201594f884` returned timeout exit_code -1, outcome UNKNOWN (not algorithm FAIL, no retry).
+- [ ] #30 May20 ARB: SentinelX `job_22c8f6bba901` returned agent no-response exit_code null, outcome UNKNOWN (not success, no retry). Journal `5089f506fe24fec85ad8032800468a28f3be7e2d`.
+- [ ] Both require host/job evidence reconciliation before an authorized re-run. Same-order order resiliency is not proved from top-five aggregate stock. Independent per-episode QC/§21 research readiness still OPEN.
+
+No changes to Strategy, DB, services, LIVE or execution. The prior OpenAI blocked routes #14/#18/#20 were not invoked.
