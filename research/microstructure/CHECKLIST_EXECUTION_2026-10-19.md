@@ -134,3 +134,13 @@ No changes to Strategy, DB, services, LIVE or execution. The prior OpenAI blocke
 - [ ] Formal instrument×indicator §21 QC and strict Pulling Rate remains OPEN. Historical timed-out LTC long scan from previous pilot not rerun.
 
 No blocked #14/#18/#20 route used; no unexpected server writes, Strategy/DB/deploy/LIVE mutations.
+
+
+## 2026-10-19 — next batch #12 / #23 / #25
+
+- [x] #12: May20 independently bounded first 500 trade + book records each symbol 5/5; within-sample seq/u monotonic and ts−cts 1–123 ms. Reader `book_trade_clock_sample_v2.py` `5236c5a`, journal `6cc3322`, tracker `d491603`. NOT physical pulling/cancel differentiation or full-day chronology.
+- [x] #23: May20 5/5 bounded shallow OI **path candidate inventories**, all empty; reader `oi_coverage_probe_v2.py` `9952dfd`, journal `31f79a8`. Exact-day OI source still NOT VERIFIED. Absence from known shallow paths is NOT proof OI does not exist in other archives; `NO_DATA` is not 0.
+- [ ] #25: May20 date-selectable probe script `spot_perp_source_probe_v2.py` was committed `d6f2cd9`, but its first invocation blocked by OpenAI upstream security; **0/5 executed**, route HARD_STOP; journal `31f79a8`. No bypass/retry.
+- [ ] All three: §21 physical source/causal availability/independent QC, strict indicator identity and full passport OPEN. #26 cross-venue last.
+
+No Strategy/DB/runtime/LIVE changes.
