@@ -985,3 +985,18 @@ CHECKED HERE: two independent read-only existing GitHub-main source readers pinn
 | ARBUSDT | 12752 | 2 | 1380 | 209152 | 534.880566 |
 
 These are distinct source-executed physical measurements, not independently cross-implemented minute-row equivalence, no full independent §21 passport or predictive OOS edge. Co-timestamp fills do not establish unique parent orders and may create zero-time bursts. No inferred universal trade threshold; quote-currency amounts are raw descriptive observations. Readiness for #4,8,27,28 remains OPEN, while second-day physical coverage is 5/5. No Strategy/DB/deploy/LIVE change.
+
+
+## 2026-10-19 — #9 Queue Imbalance / #11 Depth / #29 Spread: bounded five-symbol orderbook QC
+
+CHECKED HERE: source `research/microstructure/experiments/book_minute_three_v1.py` at immutable GitHub commit `e238c71cbe19e2e89669c946e3b2117ef4ed7d54`; actor `cripta`, Bybit 2026-05-19 UTC first 10 minutes, 5 independent rc=0. Reconstruct snapshot + delta; compute at each book message near-mid ±5bps bid and ask quote-depth, imbalance, top-of-book spread, keep last known snapshot state per completed minute. Book message counts reconcile with prior timestamp QC pilot 5/5. Ten completed-minute states per coin, one snapshot each. These are **pilot QC**, not independent implementation nor second day.
+
+| Instrument | Messages incl snapshot | Completed minute states | Median bid/ask spread bps | Median ±5bp near-mid imbalance | Max latest book message age before minute close (ms) |
+|---|---:|---:|---:|---:|---:|
+| APTUSDT | 4826 | 10 | 1.0549 | -0.2998 | 469 |
+| INJUSDT | 5562 | 10 | 1.9374 | 0.0328 | 17 |
+| DOTUSDT | 4862 | 10 | 0.7987 | -0.0882 | 273 |
+| LTCUSDT | 4378 | 10 | 1.8398 | -0.0536 | 281 |
+| ARBUSDT | 4548 | 10 | 0.8498 | -0.0878 | 389 |
+
+Important: near-mid ±5bp depth is a **specific bounded book estimator**, NOT all-depth liquidity or executable fill liquidity. Book timestamps are not independently validated observed/publication time. No as-of backtest, independent full-minute checksum, formal §21 passport or after-fee PnL. Historical full-day pilot is a separate earlier evidence record. #9/#11/#29 remain OPEN for new canonical readiness gate. No LIVE/Strategy/DB mutation.
