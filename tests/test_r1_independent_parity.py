@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from bybit_workbench.universal_entry import r1_independent_parity as parity
 from operations.dashboard import app
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
 
 
 def test_r1_independent_replay_proves_all_five_strategies_and_both_directions() -> None:
@@ -40,7 +42,7 @@ def test_prearm_rejects_incomplete_or_forged_parity_result(monkeypatch) -> None:
     )
     with pytest.raises(ValueError, match="proof incomplete"):
         app._r1_paper_real_parity_attestation(
-            "a" * 40, source_root=ROOT, runtime_root=ROOT,
+            RELEASE, source_root=ROOT, runtime_root=ROOT,
         )
 
 
@@ -51,5 +53,5 @@ def test_prearm_propagates_independent_replay_failure(monkeypatch) -> None:
     monkeypatch.setattr(parity, "run_r1_independent_decision_parity", failed_replay)
     with pytest.raises(ValueError, match="independent replay failed"):
         app._r1_paper_real_parity_attestation(
-            "a" * 40, source_root=ROOT, runtime_root=ROOT,
+            RELEASE, source_root=ROOT, runtime_root=ROOT,
         )
