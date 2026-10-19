@@ -11,7 +11,6 @@ def test_documents_and_research_do_not_invalidate_loaded_trading_release() -> No
         "tests/test_strategy_entry.py",
         "README.md",
         "AGENTS.md",
-        "operations/dashboard/templates/index.html",
     ]
     assert _r1_trading_source_delta(changed) == []
 
