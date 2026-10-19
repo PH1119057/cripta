@@ -1301,3 +1301,8 @@ CHECKED HERE: independent alternative formula `abs(last-first)/first × 10000 ×
 | ARBUSDT | 209152 | 1440 | 0 | 648.243807 | 2772.117715 |
 
 FINDING: this is **relative first/last fill price change per contemporaneous traded notional**, not individual order impact or net-after-fees return. Main source revision unchanged; no Strategy/DB/services/deploy/LIVE mutation. §21.6 per-pair gate and independent full-row equality remain OPEN.
+
+
+## 2026-10-19 — #16 fixed date-label code APT smoke, exact May20 results retained
+
+CHECKED HERE: corrected `research/microstructure/experiments/absorption_prior60_candidate_v2.py`, immutable GitHub main at `860a5fb0a333efa55171bf5c2f7b51898da0134b`; one read-only `cripta` APT 2026-05-20 full-day rc=0. Correct `window="2026-05-20 full UTC day"`, eligible=1380, unusual_flow=152, against=15, aligned=128, flat=9, unusual_partition PASS. This matches pre-label-fix calculation from earlier journal `15e4d54` for APT; script fix affects output date label only. **Other four symbols not rerun for this label smoke** and this is not a new independent implementation or §21 READY.
