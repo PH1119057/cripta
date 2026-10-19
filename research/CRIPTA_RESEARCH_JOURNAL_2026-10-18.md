@@ -707,3 +707,18 @@ Physical file presence and byte length are **not proof** that ALL true exchange 
 CHECKED HERE: read-only `research/microstructure/experiments/spot_perp_source_probe_v1.py` GitHub commit `7bb42e8e4e3dac9470b7bf34b596090b82baccdf`, five successful actor-`cripta` probes for 2026-05-19 APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT. Inspected only obvious spot-named sibling directories under `/data/cripta/datasets/raw/20260518_20260816`, spot-named children under each symbol and top-level spot-named external providers; **no candidate path found** and no valid causal Spot series verified. This is a bounded physical-path scan, not exhaustive proof of nonexistence in other files, vendor layouts or PostgreSQL.
 
 #25 remains `OPEN / SPOT_SOURCE_UNVERIFIED`, cannot compute actual Spot/Perp divergence or assign zero spread from perpetual-only data. Missing historical Spot observations are `NO_DATA`. No cross-venue investigation was started; #26 remains explicitly deferred last. No trading, database or LIVE change.
+
+
+## 2026-10-19 — #30 top-five total-depth shock/recovery, five-symbol 10m smoke
+
+CHECKED HERE: source `research/microstructure/experiments/top5_depth_resilience_v1.py` GitHub commit `014f4f162b113d36a03398863a19ac385319263b`, five separate read-only `cripta` executions, rc=0, first 10 minutes of 2026-05-19 UTC. Distinct from #13 exact-price recovery: here a **total top-five visible-depth** fall per Bid/Ask side starts one pending event, and restoration of same side's cumulative `sum(price×quantity)` in quote USDT to its pre-fall stock within 60s marks RECOVERED. Otherwise EXPIRED or right-censored. Snapshot causes reset. One pending event per side by design; no queue ownership/fill attribution.
+
+| Coin | Bid episodes | Bid recovered/expired/censored | Bid median recovered ms | Ask episodes | Ask recovered/expired/censored | Ask median recovered ms |
+|---|---:|---|---:|---:|---|---:|
+| APTUSDT | 40 | 34/5/1 | 2300 | 43 | 35/7/1 | 800 |
+| INJUSDT | 44 | 39/4/1 | 4100 | 46 | 40/5/1 | 2001 |
+| DOTUSDT | 38 | 32/5/1 | 1399 | 41 | 35/5/1 | 4100 |
+| LTCUSDT | 46 | 40/5/1 | 2800 | 59 | 54/4/1 | 1299 |
+| ARBUSDT | 43 | 37/5/1 | 901 | 48 | 43/4/1 | 2101 |
+
+Episode accounting `episodes=recovered+expired+censored` PASS all ten side-series. Caveats: repricing/re-ranking can move top-five totals without actual same-order restoration, repeated falls within an open episode are not independent, and fast recovery rates here do not prove exchange resilience or any profitable feature. Status #30: `TOP5_STOCK_RECOVERY_10M_SMOKE_5_OF_5`, full-day independent QC, causality/latency and strict replenishment remain OPEN. No trading/DB/deploy/LIVE changes.
