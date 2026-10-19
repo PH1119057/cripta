@@ -73,3 +73,15 @@ CHECKED HERE: `research/microstructure/passports/proxy_identity_gate_audit_2026-
 - [ ] Все девять: instrument-scoped full §21.6 passports, independent replay, source/availability gates OPEN.
 
 **Этот этап — аудит GitHub source identity, не новая серверная проверка и не RESEARCH-READY.** Ранее блокированный OpenAI route #18/20 не использовался. Выявленный source mismatch №10 требует source/commit reconciliation; не исправлять его догадкой.
+
+
+## №10 OFI — следующий проверенный этап GitHub source semantics
+
+CHECKED HERE: исторический `top1_price_transition_ofi_v1.py` и актуальный `rank_ofi_v1.py` сопоставлены по точной формуле bid/ask price transitions. `rank0` совпадает **алгебраически только при одинаковых обработанных событиях и достаточной глубине стакана**; числовое равенство не доказано (Decimal vs float; gating по `levels`). Для более глубоких rank1–rank4 условие same-price identity не соблюдается во всех переходах из-за пересортировки ценовых рангов. `book_top5_membership_v1.py` измеряет decomposition quote-notional, а не строгий OFI. Отчёт: `research/microstructure/passports/ofi_source_semantics_comparison_2026-10-19_v1.json`, commit `76701f94c63474cde6aeec8fb96d24baab68c61f`. Журнал `753ba1e2407056502fb8e4885a7997b2406b49fb`.
+
+- [x] Historical top1 physical formula восстановлена и сравнена с rank0 условно по алгебре
+- [ ] Проверить числовую идентичность на одном exact source/event cohort и выявить влияние float/Decimal
+- [ ] Создать отдельный price-identity multi-level reader и independent QC только по разрешённому маршруту
+- [ ] Зарегистрировать per-instrument §21.6 passport; не объявлять новые ранговые значения multi-level OFI без evidence
+
+Только GitHub/code review. Нет серверного запуска или обхода заблокированного маршрута №18/20.
