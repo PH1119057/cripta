@@ -144,3 +144,13 @@ No blocked #14/#18/#20 route used; no unexpected server writes, Strategy/DB/depl
 - [ ] All three: §21 physical source/causal availability/independent QC, strict indicator identity and full passport OPEN. #26 cross-venue last.
 
 No Strategy/DB/runtime/LIVE changes.
+
+
+## 2026-10-19 — independent QC six trade-minute factors
+
+- [x] #1 RVOL, #2 Trade Rate, #3 Trade Rate Acceleration, #5 Buy/Sell Delta, #6 CVD, #7 Delta Acceleration: on May20 independently reconstructed 1440-minute aggregates from raw gzip per coin using Decimal reader `trade_minute_decimal_independent_qc_v1.py` GitHub `16043cbeaff5df865bf6c4df646863622e0ee1f5`.
+- [x] Five coins, 10 independent + primary reads rc=0, agreement for total fills, nonempty minute coverage, baseline-eligible RVOL, minute0/minute60/last-minute values with float/Decimal numeric tolerance. Journal `c0ae6bad09d4aea99e16f0a7af7de684701be4e5`, progress tracker `89af05491210a114c66065cd381dedf900469241`.
+- [ ] Full 1440-row per-feature independent QC hash / statistical tolerances and immutable per-instrument §21.6 READY gate still OPEN. Decimal vs binary float cannot claim bitwise equality.
+- [ ] Evaluate predictive usefulness only after separate as-of and OOS study, with fee-adjusted outcomes; this QC does not establish alpha.
+
+Prior blocked upstream routes #14/#18/#20/#25, SentinelX alternate interpreter and unknown #30 long jobs were not retried. No trading, DB, service, deploy or LIVE changes.
