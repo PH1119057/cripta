@@ -834,3 +834,18 @@ CHECKED HERE: new read-only `research/microstructure/experiments/depletion_trade
 | ARBUSDT | 16837 | 0 | 436 | 617 | 765 | 1774 | 445 | 340 |
 
 QC: 5/5 monotone symmetric window counts PASS. The source can produce overlaps and reuses trade prints; these counts **MUST NOT** be interpreted as share of fills or cancellation rate. A +100ms/+5000ms *future* print relative to book event is a retrospective association and is never a permissible as-of Strategy feature. Exposure to latent exchange-feed publication lag remains open. Do not infer pulling from unmatched reductions. #12 is still OPEN; daily timing comparison next, no LIVE.
+
+
+## 2026-10-19 — #12 five-coin full-day trade/book timing sensitivity completed
+
+CHECKED HERE: pinned source `research/microstructure/experiments/depletion_trade_timing_sensitivity_v1.py` commit `9736ac82c18cc512036ad5a1d76b3dadc5a85943`, actor `cripta`, five separate rc=0 full-day runs on Bybit 2026-05-19 UTC. Baseline `depletion_trade_temporal_join_v1.py` matched exactly at ±1000ms for all five coins, and reduction counts reconciled against previous #12 physical depletion runs. Each symbol includes 2 book snapshots. Count of price-level reductions with at least one reported same-price/passive-side trade in selected symmetric windows:
+
+| Coin | Reductions | ±0ms | ±100ms | ±500ms | ±1000ms | ±5000ms | Past within 1000ms | Future within 1000ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 1883472 | 127 | 33411 | 47460 | 61235 | 142313 | 34855 | 29056 |
+| INJUSDT | 3058923 | 444 | 88356 | 130838 | 170014 | 355953 | 104851 | 85749 |
+| DOTUSDT | 2264922 | 129 | 39083 | 58990 | 76262 | 177173 | 38410 | 41286 |
+| LTCUSDT | 1049895 | 32 | 13637 | 20632 | 27128 | 63330 | 17243 | 12669 |
+| ARBUSDT | 2133614 | 140 | 45686 | 62221 | 78656 | 182819 | 46822 | 35528 |
+
+CHECKED HERE: symmetric matches monotone with widening time windows for all five; ±1000ms exactly equal to prior five-coin full-day `depletion_trade_temporal_join_v1` outputs. Past-only and future-only can overlap; their sum is NOT necessarily symmetric because different trades can appear on either side of one book update. Reported source event time is not verified publication/observed time and orderbook decreases are not proven cancellations. Future window is hindsight, never an as-of feature. A single trade may match many book updates; quantity allocation and unique causality unverified. **#12 remains OPEN, indicator Pulling Rate not physically identified.** Remaining research: source timing/availability calibration, event-sequence identity, true cancellation-vs-fill identification; no Strategy or LIVE changes.
