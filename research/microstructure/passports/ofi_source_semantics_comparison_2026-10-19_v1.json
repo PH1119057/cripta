@@ -1,0 +1,49 @@
+{
+  "scope": "#10 OFI source semantic comparison from GitHub files only",
+  "checked_head": "9353fa8e24088051134e65ff491beb8fd7ff9d6a",
+  "date": "2026-10-19",
+  "status": "SOURCE_SEMANTICS_CHECKED_NOT_NUMERICAL_REPLAY",
+  "historical": {
+    "file": "research/microstructure/experiments/top1_price_transition_ofi_v1.py",
+    "immutable_commit": "f5485b7cb729195e8ef6ea394d31f9ae94acf444",
+    "precision": "Decimal",
+    "method": "best bid/ask price transitions; computes bid and ask signed increments and bid-minus-ask; prev resets each snapshot",
+    "paired_deltas": "counts transitions after initial post-snapshot delta"
+  },
+  "current_rank": {
+    "file": "research/microstructure/experiments/rank_ofi_v1.py",
+    "precision": "float",
+    "method": "price transition separately for each of 1..10 fixed ranks; rank migration can be mislabeled OFI",
+    "snapshot_handling": "pb=pa=None on snapshot; first post-snapshot update has no paired calculation",
+    "first_rank": "rank index 0 uses same best-price transition algebra as historical top1 when at least 'levels' prices are present and both use same transition eligibility; results not certified numerically equal"
+  },
+  "current_membership": {
+    "file": "research/microstructure/experiments/book_top5_membership_v1.py",
+    "precision": "Decimal",
+    "method": "exact-price price×quantity quote-notional top-5 stock change separated into unchanged, entry, exit and membership effects; NOT OFI"
+  },
+  "strict_multilevel_ready": false,
+  "unresolved": [
+    "rank0 equivalence only algebraic under conditional event coverage; no immutable source-to-source replay, arithmetic float/Decimal precision differs",
+    "rank1..4 scores mix price-rank reindexing with queue change, so not strict price-identity multi-level OFI",
+    "snapshot boundary resets and entire-day paired-event coverage need separate QC",
+    "no source-side verified observed/available timestamps, independent causal measurement QC or per-instrument §21.6 passports"
+  ],
+  "examples": [
+    {
+      "case": "unchanged price, bid size grows 10→12",
+      "historical_bid_increment_base": 2,
+      "current_rank0_bid_increment_base": 2
+    },
+    {
+      "case": "best bid price advances, new best bid size 5",
+      "historical_bid_increment_base": 5,
+      "current_rank0_bid_increment_base": 5
+    },
+    {
+      "case": "best bid price falls, previous best size 10",
+      "historical_bid_increment_base": -10,
+      "current_rank0_bid_increment_base": -10
+    }
+  ]
+}
