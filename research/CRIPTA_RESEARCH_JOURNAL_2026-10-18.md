@@ -501,3 +501,11 @@ CHECKED HERE: same immutable `book_top5_membership_v1.py` commit `de93b95502244c
 - Of BID entering-price stock, +36573239.04 was already elsewhere in the broader reconstructed book before entry into top-five; ASK +34499443.68 similarly. Thus membership changes are not directly new quote placement, cancellation or executions.
 
 This is a physical **component decomposition** of top-five visible stock and not strict multi-level OFI, predictive direction, or net traded flow. Next independent source coverage and complete five-coin runs remain open. No Strategy/LIVE changes.
+
+## 2026-10-19 — #10 INJ complete 24h top-five membership decomposition
+
+CHECKED HERE: job `job_0f20795619d1`, exit 0, 104.72s; `book_top5_membership_v1.py` immutable commit `de93b95502244cc62c7fed9429de2a61c95fdd24` executed read-only under `cripta` for INJUSDT 2026-05-19 UTC. Book deltas 733301, snapshots 2, updated minutes 1440/1440. BID common-level +14680789.86 USDT, entering top-five stock +220997286.06, leaving -235672430.95; net top-five BID stock +5644.96. ASK common-level +29414204.71, entering +247420034.46, leaving -276819714.04; net ASK +14525.13. Of entering BID/ASK stock, +183341586.04/+206774619.10 already existed outside top-five. These entry and exit effects MUST NOT be labeled executed trades or pure cancellations. #10 still OPEN (stock decomposition != strict OFI), remaining DOT/LTC/ARB full-day for this variant pending; no Strategy/LIVE.
+
+## 2026-10-19 — #10 DOT full-day top-five membership decomposition
+
+CHECKED HERE: job `job_cdcadb8bc9e1` succeeded, rc=0, 92.07s, no truncated output. Versioned `book_top5_membership_v1.py` commit `de93b95502244cc62c7fed9429de2a61c95fdd24`; `cripta` actor read-only, DOTUSDT 2026-05-19 UTC; 631776 deltas, 2 snapshots, updated 1440/1440 minutes. BID common-price -3605825.06 USDT, entry +89343130.74, exit -85732274.93, total top-five stock +5030.76. ASK common-price -5402589.38, entry +87451908.76, exit -82056742.55, top-five stock -7423.17. Inside previously broader book: entered BID 61036285.77, ASK 58154317.53 USDT; these are reclassification, not direct order creation. #10 strict multi-level OFI OPEN; this is bounded descriptive membership decomposition, not fill/cancel or PnL.
