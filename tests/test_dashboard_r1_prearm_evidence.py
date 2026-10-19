@@ -21,7 +21,9 @@ def test_r1_micro_live_endpoint_builds_prearm_evidence_before_arm() -> None:
 def test_r1_prearm_requires_exact_release_identity_and_runtime_truth() -> None:
     source = (ROOT / "operations/dashboard/app.py").read_text(encoding="utf-8")
     for token in (
-        "remote/source/runtime/state release identity mismatch",
+        "remote/source release identity mismatch",
+        "runtime/state release identity mismatch",
+        "trading runtime source differs from loaded release",
         "observer is not exact-release ready",
         "private Bybit runtime is not fresh/ready",
         "lifecycle supervisor is not healthy",

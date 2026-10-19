@@ -3808,6 +3808,21 @@ def _r1_paper_real_parity_attestation(
     }
 
 
+def _r1_trading_source_delta(changed_paths: list[str]) -> list[str]:
+    """Exclude independent docs/research, block unknown runtime-affecting changes.
+
+    Operational and security code remain protected. Unknown roots fail closed
+    until classified in the canonical release contract.
+    """
+    non_trading_prefixes = ("docs/", "research/", "tests/")
+    non_trading_root_files = {"README.md", "AGENTS.md"}
+    return [
+        path for path in changed_paths
+        if path not in non_trading_root_files
+        and not any(path.startswith(prefix) for prefix in non_trading_prefixes)
+    ]
+
+
 def _u6_prepare_r1_prearm_evidence(
     connection: psycopg.Connection,
     *,
@@ -3843,17 +3858,23 @@ def _u6_prepare_r1_prearm_evidence(
     state_commit = Path("/var/lib/cripta/release/INSTALLED_COMMIT").read_text(
         encoding="utf-8"
     ).strip()
-    if remote_commit != source_commit or runtime_commit != release or state_commit != release:
-        raise ValueError("R1 PREARM: remote/source/runtime/state release identity mismatch")
-    # Dashboard presentation/docs can advance main independently of the loaded
-    # trading release. Any trading-runtime or uncontrolled source delta fails closed.
+    # Source documentation and isolated research may advance independently.
+    # Only the EXACT installed trading release and source code/dependencies that
+    # can affect decisions, execution or runtime controls need identical bytes.
+    if remote_commit != source_commit:
+        raise ValueError("R1 PREARM: remote/source release identity mismatch")
+    if runtime_commit != release or state_commit != release:
+        raise ValueError("R1 PREARM: runtime/state release identity mismatch")
     delta = subprocess.check_output(
         ["git", "-C", "/srv/cripta/source_checkout", "diff", "--name-only",
          release, source_commit], text=True,
     ).splitlines()
-    allowed_prefixes = ("docs/", "tests/", "operations/dashboard/")
-    if any(not path.startswith(allowed_prefixes) for path in delta):
-        raise ValueError("R1 PREARM: trading runtime source differs from loaded release")
+    trading_delta = _r1_trading_source_delta(delta)
+    if trading_delta:
+        raise ValueError(
+            "R1 PREARM: trading runtime source differs from loaded release: "
+            + ", ".join(trading_delta[:8])
+        )
 
     try:
         observer = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(encoding="utf-8"))
