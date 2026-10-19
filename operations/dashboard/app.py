@@ -3814,7 +3814,7 @@ def _r1_trading_source_delta(changed_paths: list[str]) -> list[str]:
     Operational and security code remain protected. Unknown roots fail closed
     until classified in the canonical release contract.
     """
-    non_trading_prefixes = ("docs/", "research/", "tests/", "operations/dashboard/")
+    non_trading_prefixes = ("docs/", "research/", "tests/")
     non_trading_root_files = {"README.md", "AGENTS.md"}
     return [
         path for path in changed_paths
