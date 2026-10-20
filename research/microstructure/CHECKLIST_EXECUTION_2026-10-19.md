@@ -297,3 +297,12 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] Prior independent Decimal summaries 5/5: #4 prior60 large-fill, #8 timestamp+side heuristic group streaks, #27 positive inter-fill gaps, #28 ex-post fill-size p95/p99. No new server calculation and no READY grant.
 - [ ] Need immutable source SHA256 and per-minute/per-fill explicit parity; source arrival/available-after, requested complete window; distinguish ex-post thresholds from causal streaming thresholds; §21.6 gate remains OPEN.
 - [x] #1/#2/#3/#5/#6/#7 30 prior draft rows separately retained. Tape group has 50 draft rows total, 0 READY.
+
+
+## 2026-10-20 — third-pass price/flow inventory #14–22
+
+- [x] `research/microstructure/passports/price_flow_14_22_2026-05-20_draft_v1.json` commit `9ddc2164629f70ea83444aa98b0a7ecf370b5cc6`: 9 indicators × 5 instruments = **45 draft rows**, explicitly **5 not executed** (#14 ARB, #18/#20 LTC/ARB). May20 numeric evidence DOES NOT fill these missing pairs.
+- [x] #19/#22 raw SHA256 and independent 1440-minute row hashes recorded per instrument from existing gate audit; source arrival/publication clock and §21 gate remain open.
+- [x] #14/#17 next-window return classified FUTURE LABEL; #16 absorption and #21 sweep are mechanism-unverified proxies, #15 numeric proxy is not marginal price impact.
+- [ ] This draft is a **scope/status inventory**, not a proof that 45 fully specified passport formulas are verified. Full source/formula/timing/causality QC and owner decisions remain for deeper phase.
+- [x] Draft rows across tape and price-flow now 95 (=50 +45), formal per-pair RESEARCH-READY 0. No new server jobs or runtime/LIVE actions.
