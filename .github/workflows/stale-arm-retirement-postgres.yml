@@ -57,7 +57,7 @@ jobs:
              (event_id,live_arm_session_id,previous_release_commit,
               loaded_commit,reason,retired_at,evidence)
           VALUES ('retirement-ci','session-ci',repeat('a',40),repeat('b',40),
-                  'EXACT_SCOPE_FLAT_AFTER_RELEASE_CHANGE',now(),'{}');
+                  'RELEASE_SUPERSEDED_ENTRY_AUTHORIZATION_ONLY',now(),'{}');
           RESET ROLE;
           DO $$
           BEGIN
