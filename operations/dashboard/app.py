@@ -21,6 +21,7 @@ import zipfile
 
 import psycopg
 
+from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
 from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
@@ -852,6 +853,14 @@ def _live_arm_context_from_request(request: dict[str, object]) -> LiveArmContext
 def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     reasons: list[str] = []
     now_ms = int(time.time() * 1000)
+    # Independent read-only check; missing/ambiguous account identity is BLOCKED.
+    # This is necessary, never sufficient, for OWNER ARM.
+    try:
+        assignment = read_binding_readiness(connection, now=datetime.now(UTC))
+    except (psycopg.Error, ValueError, TypeError) as exc:
+        reasons.append("STRATEGY_ACCOUNT_BINDING_SNAPSHOT_UNAVAILABLE:" + type(exc).__name__)
+    else:
+        reasons.extend("STRATEGY_ACCOUNT_" + item for item in assignment.reasons)
     try:
         private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
