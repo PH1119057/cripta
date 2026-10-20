@@ -861,6 +861,26 @@ TradingAccount-scoped physical inventory:
 TradingAccount + product/category + InstrumentIdentity + position-mode identity.
 
 
+**Independent Strategy copy / Create based on** — creation-time copy of a
+Strategy configuration into a *new strategy_id* with independent immutable
+versioned policy/configuration, financial results and authorization. Parent
+origin is audit lineage, not runtime inheritance; an unchanged copy may differ
+only by allowed instrument universe or account assignment.
+
+**Strategy fan-out** — one approved EntryPlan selecting multiple eligible
+StrategyExecutionBindings for independent, account-scoped execution. It is
+neither shared-account netting nor cross-Venue atomic execution.
+
+**Strategy capacity** — Strategy-owned limits on allowed instruments,
+concurrent positions and directional sides. The physical slot remains exact
+TradingAccount + instrument/product + position-mode/side scoped; no implicit
+one-position-per-Strategy limit exists.
+
+**Release readiness / READY_FOR_OWNER_ARM** — verified technical/pre-arm
+evidence for the exact deployed release and intended Strategy/account scopes.
+It is *not* ACTIVE LIVE-arm and never enables new REAL Entry. OWNER ARM is
+explicit and rechecks freshness at action time.
+
 ## 34. Research measurement contract / analytical cube — OWNER DECISION 2026-10-18
 
 **Research Measurement Contract** — канонический для исследования способ определения физической величины, формулы, единицы измерения, числителя/знаменателя, normalizer, окна и времени доступности. Единственный procedural owner — `RESEARCH_COMPUTE §21`; словарь не дублирует формулы.
