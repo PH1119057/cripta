@@ -4,7 +4,6 @@ import pytest
 
 from bybit_workbench.entry_account_fanout_db import read_entry_account_fanout
 
-
 NOW = datetime(2026, 10, 20, 11, 0, tzinfo=UTC)
 
 
