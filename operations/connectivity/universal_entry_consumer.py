@@ -819,6 +819,27 @@ def _live_arm_ready(
         )
     except ValueError as exc:
         return False, (f"LIVE_ARM_CONTEXT_INVALID:{exc}",)
+    # Existing LIVE-arm sessions are Strategy/symbol/release-scoped, without
+    # TradingAccount identity. They cannot authorize multiple independently
+    # bound accounts. Refuse fan-out until exact account/release OWNER ARM is
+    # implemented and proven; do not inherit the session from another account.
+    active_account_rows = connection.execute(
+        """SELECT trading_account_id
+             FROM strategy_entry.strategy_execution_bindings
+            WHERE strategy_activation_id=%s
+              AND binding_state='ACTIVE'
+              AND effective_from<=%s
+              AND (effective_to IS NULL OR effective_to>%s)""",
+        (context.strategy_activation_id, now.astimezone(UTC), now.astimezone(UTC)),
+    ).fetchall()
+    if len(active_account_rows) > 1:
+        return False, ("MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",)
+    if (
+        len(active_account_rows) != 1
+        or str(active_account_rows[0]["trading_account_id"])
+        != str(row.get("trading_account_id") or "")
+    ):
+        return False, ("OWNER_ARM_ACCOUNT_BINDING_NOT_PROVEN",)
     # Durable LIVE-arm evidence is the pre-arm authorization contract. Once
     # an exact release-bound arm session exists, per-request safety is enforced
     # by _admission_pre_dispatch_status() and the request's admission lineage.

@@ -78,16 +78,25 @@ def test_real_entry_consumer_uses_active_session_not_expiring_prearm_evidence() 
 
 
 class _SessionCursor:
-    def __init__(self, row: tuple[str] | None) -> None:
+    def __init__(
+        self, row: tuple[str] | None,
+        rows: tuple[dict[str, str], ...] = (),
+    ) -> None:
         self._row = row
+        self._rows = rows
 
     def fetchone(self) -> tuple[str] | None:
         return self._row
+
+    def fetchall(self) -> tuple[dict[str, str], ...]:
+        return self._rows
 
 
 class _ActiveSessionOnlyConnection:
     def execute(self, statement: str, parameters: object = ()) -> _SessionCursor:
         assert "live_arm_evidence" not in statement
+        if "FROM strategy_entry.strategy_execution_bindings" in statement:
+            return _SessionCursor(None, ({"trading_account_id": "test-account"},))
         if "FROM control.live_arm_sessions" in statement:
             return _SessionCursor(("arm-session",))
         raise AssertionError(f"unexpected query: {statement}")
@@ -105,6 +114,7 @@ def test_real_entry_consumer_accepts_exact_active_session_without_prearm_recheck
             "strategy_config_fingerprint": "cfg",
             "activation_id": "activation",
             "symbol": "APTUSDT",
+            "trading_account_id": "test-account",
         },
         now=datetime(2026, 10, 7, 7, 30, tzinfo=UTC),
     )
