@@ -1221,3 +1221,18 @@ Documentation maintenance gate:
 - No existing section renumbered; new `RESEARCH_COMPUTE §21`, `GLOSSARY §34` and INDEX §38 are additive.
 - Historical 15/30 READY is not retroactively converted to 75/150; re-QC per pair before promotion.
 - No new trading threshold/Strategy behavior, market data acquisition, server filesystem/DB write, release/deploy or LIVE authorization.
+
+## 39. Independent Strategy configurations, multi-account fan-out and manual readiness — OWNER DECISION 2026-10-20
+
+Canonical owners: ARCH §49.6 for independent Strategy IDs, DEDICATED_STRATEGY
+TradingAccount isolation and fan-out; TRADING_CONTOUR §7.3.1 for Strategy
+capacity, one-way/hedge and account-scoped physical slot/Exit guarantees;
+GLOSSARY §33 for exact terms; DEVELOPMENT_RELEASE §46.1 for automatic
+post-deploy technical readiness and separate explicit OWNER ARM.
+
+This is target canonical architecture, not evidence of completed schema,
+Entry/Exit/Execution consumers, connectors, tests, Dashboard, deployment or
+LIVE authorization. No current Project Source documents, paths, mandatory
+pre-read or routing are changed; 11-member Project Source remains intact.
+The root README / AGENTS bootstrap are unchanged because routing and document
+membership are unchanged. Documentary commits do not authorize new REAL Entry.

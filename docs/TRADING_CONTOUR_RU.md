@@ -1235,6 +1235,39 @@ existence of multiple bindings does not create an arbitrage policy.
 Sharing one TradingAccount across independent REAL Strategies, internal netting
 or cross-Strategy capital pooling remains forbidden until separately approved.
 
+### 7.3.1 Strategy fan-out, capacity and protected opening — OWNER DECISION 2026-10-20
+
+A saved copy of StrategyCard is an independent Strategy ID and configuration,
+not a runtime child of its source. Strategy-owned configuration sets the coin
+universe, number of concurrent instruments/positions, stake, leverage and
+one-way/hedge permission; merely changing any one setting never changes
+the common Universal Entry/Exit Engine.
+
+For each accepted Strategy signal, the approved EntryPlan may yield one
+independent account-scoped ExecutionRequest for each eligible authorized
+StrategyExecutionBinding. Each account must pass its own capital, exposure,
+slot ownership, account position mode, instrument support, and LIVE-arm checks.
+There is no implicit cross-account atomicity. Per-account partial acceptance,
+rejection, recovery and Exit must remain attributable and auditable. One
+TradingAccount cannot be concurrently bound to two independent REAL Strategy
+activations; one Strategy may use any number of separately proven accounts.
+
+Capacity is Strategy policy, not a hard-coded one-position-per-Strategy or
+one-position-per-connection rule. In one-way, independently opening the same
+occupied physical account/instrument slot is prohibited unless a separately
+approved plan explicitly manages the existing position. In hedge mode, opposite
+sides are possible only if Strategy policy and exchange/account mode both
+support them. An illustrative ten-instrument policy may allow ten one-way
+positions, or up to twenty directional legs if both sides of all ten are
+explicitly authorized and sufficient capital exists; this is not an implicit
+global default.
+
+Entry decision ownership stays with Strategy/EntryPlan. Execution implements
+technical venue placement and confirms exchange-resident protective orders
+according to ExitPlan; it may not declare a newly opened position safely
+protected before confirmation. Fail-closed/recovery paths preserve real Exit,
+reconciliation and exact physical/account ownership.
+
 ## 7.4 Execution and recovery lineage
 
 EntryExecutionRequest / ExitExecutionRequest and durable lifecycle lineage must

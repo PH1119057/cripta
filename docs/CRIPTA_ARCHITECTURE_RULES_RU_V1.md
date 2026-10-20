@@ -1063,6 +1063,53 @@ ARCH §48 storage/recoverability rules remain controlling. This section changes
 identity/ownership only and does not authorize DB migration, deletion, deploy,
 LIVE arm or Exchange mutation.
 
+### 49.6 Independent Strategy configurations and multi-account fan-out — OWNER DECISION 2026-10-20
+
+Strategy duplication is a **creation-time UI operation** ("create based on"), not an
+inheritance relation between running strategies. Saving a copy creates a new
+strategy_id and separately versioned StrategyCard/configuration snapshot even if
+all logic parameters match. Origin/version lineage is audit metadata only;
+changes to the source Strategy never silently mutate its independently saved
+descendants. Strategy display name is operator-friendly, not a primary identity.
+
+One StrategyActivation MAY select many authorized StrategyExecutionBindings,
+each identifying an exact TradingAccount and AccountConnector. Its approved
+EntryPlan may fan out to eligible accounts, producing separately identifiable
+per-account execution requests, orders, protection, position lifecycle and Exit.
+It does not imply atomic multi-Venue fills or synchronized hedge/arbitrage.
+An AccountConnector is technical transport/adapter identity, NOT a pooled
+balance; financial isolation is keyed by TradingAccount. The same TradingAccount
+MUST NOT concurrently serve two independent REAL StrategyActivations. One
+Strategy may have multiple accounts, including several subaccounts at one Venue.
+
+A Strategy configuration owns permitted instruments, stake sizing, leverage,
+capacity/concurrency, direction and separately approved one-way/hedge rules.
+There is NO universal "one instrument per Strategy" or "one position per
+connector" limit. Effective admission enforces the exact account + instrument +
+exchange position-mode/side physical slot and the Strategy-owned policy; existing
+physical slot ownership is not discarded. One-way must not create a second
+independent overlapping position for the same slot. Opposite LONG/SHORT
+execution is allowed only with explicit Strategy hedge policy AND proven
+account/venue support. Execution checks margin, leverage, capacity, available
+capital and exchange-supported protective orders per account, without altering
+Strategy entry decisions. Failure at one permitted account never fabricates
+success at another.
+
+Every physical position/order retains exact StrategyActivation, configuration
+fingerprint, ExecutionLeg, TradingAccount, AccountConnector, EntryPlan and
+ExitPlan lineage. Reports attribute net P&L, fees, funding, losses and capital to
+both the independent Strategy ID and exact account. Changing only TP/SL,
+leverage, stake, permitted coins or connectors in a newly saved Strategy
+does not change other Strategy identities or the shared Universal Entry/Exit
+Engines. Opening is not reported protected until exchange protection evidence
+is confirmed; Exchange stop orders reduce, but cannot eliminate, liquidation,
+gap, outage or execution risk.
+
+No creation, copying, binding or release process automatically enables REAL.
+New REAL authorization is exact-release, exact-Strategy and explicit OWNER ARM.
+This section defines target semantics, not evidence that existing consumers,
+schema, adapters or dashboard implement multi-account fan-out.
+
 ## 50. One-time PostgreSQL physical offload — OWNER DECISION 2026-10-18
 
 Approved bounded infrastructure recovery: after safely quiescing all CRIPTA writers and PostgreSQL, preserve the complete current production cluster as a verified cold rollback on the Data SSD, then establish a separately verified minimal operational PostgreSQL on the System SSD. This may precede unfinished R10b/R11/R12 ONLY as physical storage recovery; it does not constitute R11 historical purge, logical retention, historical account reassignment or R12 retirement. ARCH §48–49 remain binding.
