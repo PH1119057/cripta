@@ -312,6 +312,40 @@ def test_two_concurrent_attempts_cannot_own_one_physical_slot() -> None:
     assert reservations == 1
 
 
+def test_two_accounts_admit_same_symbol_with_independent_physical_slots() -> None:
+    """Same UNIUSDT may occupy distinct TradingAccounts, but not twice per account."""
+    assert DSN is not None
+    token = "slot-two-accounts-" + uuid4().hex
+    first_prefix = token + "-a"
+    second_prefix = token + "-b"
+    first_identity = _seed_attempts(first_prefix, count=2)
+    second_identity = _seed_attempts(second_prefix, count=1)
+    _seed_mode(first_prefix, first_identity)
+    _seed_mode(second_prefix, second_identity)
+
+    with psycopg.connect(DSN) as connection:
+        port = PostgresEntryAdmissionPort(connection)
+        first = port.admit(_request(first_prefix, 0, first_identity))
+        second = port.admit(_request(second_prefix, 0, second_identity))
+        assert first.exchange_position_key != second.exchange_position_key
+        with pytest.raises(SlotOwnershipConflict):
+            port.admit(_request(first_prefix, 1, first_identity))
+        active = connection.execute(
+            """SELECT exchange_position_key,trading_account_id
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_key=ANY(%s)
+                  AND claim_state='CLAIMED'""",
+            ([first.exchange_position_key, second.exchange_position_key],),
+        ).fetchall()
+        assert {str(row[0]): str(row[1]) for row in active} == {
+            first.exchange_position_key: f"{first_prefix}-ta",
+            second.exchange_position_key: f"{second_prefix}-ta",
+        }
+        assert first.capital_reservation.reservation_id != (
+            second.capital_reservation.reservation_id
+        )
+
+
 def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
     assert DSN is not None
     prefix = "slot-stale-" + uuid4().hex
