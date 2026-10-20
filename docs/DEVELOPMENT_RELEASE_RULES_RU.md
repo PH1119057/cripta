@@ -1431,6 +1431,38 @@ sound disabled, failed/incomplete reconciliation and preserved Exit. Never
 claim release readiness merely because systemd reports services active.
 
 
+### 46.1 Automatic post-deploy readiness with manual OWNER ARM — OWNER DECISION 2026-10-20
+
+The owner requires release completion to drive an automatic, bounded
+post-deploy verification using existing owners, rather than leaving stale
+LIVE-arm incidents for the operator to diagnose. Do not move trading-state
+mutation into the canonical installer: it remains release/backup/schema/
+service-only as specified above. Orchestrate through the independent
+owner-authorized control plane / Lifecycle Supervisor.
+
+Report a durable, operator-visible exact-release state:
+DEPLOYED, RECONCILING, BLOCKED(reason, scope, evidence, time), or
+READY_FOR_OWNER_ARM. Validate remote/source/installed/loaded identity,
+required services, schema and consumers, authenticated complete fresh
+Exchange inventory and identity, reconciliation, existing position/Exit
+ownership, ambiguous commands and claims, authorized account bindings,
+per-scope Strategy settings/permissions, release-bound admission and
+exchange/account capabilities before READY. Automatic retirement of old
+LIVE-arm sessions is permitted ONLY under §46's proven-flat conditions.
+Do not clone, migrate or silently open new-release arm sessions.
+
+READY_FOR_OWNER_ARM is a technical pre-arm status, NOT approval of financial
+risk, not LIVE readiness for execution without owner action, and never
+automatically sets the mainnet gate or creates/extends OWNER ARM. The operator
+must explicitly authorize exact Strategy/account/release scopes; re-evaluate
+freshness and safety atomically at that action and reject stale or mismatched
+evidence. A partial, UNKNOWN or failed check is BLOCKED with precise cause;
+existing position protection, Exit and reconciliation continue unchanged.
+Readiness reporting/notifications may not claim delivery unless configured and
+verified. Implementation requires tests across stale arm, missing binding,
+multiple accounts, one-way/hedge policy, lost connection, exit ownership,
+restart, dashboard display and manual authorization boundaries.
+
 ## 47. Parallel development and serialized production deploy — OWNER DECISION 2026-10-11
 
 Parallel development, independent feature branches, tests, review and publication
