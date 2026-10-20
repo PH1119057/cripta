@@ -60,7 +60,10 @@ def test_missing_second_account_rejects_entire_batch():
 def test_cross_account_identity_is_rejected():
     result = prepare_scoped_entry_legs(
         fanout=fanout(),
-        evidence_by_account={"account-1": proof(1), "account-2": proof(2, trading_account_id="account-1")},
+        evidence_by_account={
+            "account-1": proof(1),
+            "account-2": proof(2, trading_account_id="account-1"),
+        },
     )
     assert "ACCOUNT_ADMISSION_IDENTITY_MISMATCH" in result.reasons
 
@@ -68,7 +71,10 @@ def test_cross_account_identity_is_rejected():
 def test_shared_connector_is_not_independent_account_proof():
     result = prepare_scoped_entry_legs(
         fanout=fanout(),
-        evidence_by_account={"account-1": proof(1), "account-2": proof(2, connector_id="connector-1")},
+        evidence_by_account={
+            "account-1": proof(1),
+            "account-2": proof(2, connector_id="connector-1"),
+        },
     )
     assert "ACCOUNT_CONNECTOR_NOT_DISTINCT" in result.reasons
 
@@ -76,7 +82,13 @@ def test_shared_connector_is_not_independent_account_proof():
 def test_unverified_exchange_and_protection_block():
     result = prepare_scoped_entry_legs(
         fanout=fanout(),
-        evidence_by_account={"account-1": proof(1), "account-2": proof(2, private_exchange_verified=False, protection_capability_verified=False)},
+        evidence_by_account={
+            "account-1": proof(1),
+            "account-2": proof(
+                2, private_exchange_verified=False,
+                protection_capability_verified=False,
+            ),
+        },
     )
     assert "ACCOUNT_PRIVATE_EXCHANGE_NOT_VERIFIED" in result.reasons
     assert "ACCOUNT_PROTECTION_CAPABILITY_NOT_VERIFIED" in result.reasons
