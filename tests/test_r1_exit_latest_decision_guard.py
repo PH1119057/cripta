@@ -17,7 +17,9 @@ def test_universal_exit_rejects_superseded_decision_before_exchange_mutation():
     assert "FROM strategy_exit.exit_decisions" in body
     assert "WHERE strategy_position_id=%s" in body
     assert "ORDER BY decided_at DESC, exit_decision_id DESC" in body
-    assert body.index("STRATEGY_EXIT_DECISION_SUPERSEDED") < body.index("exchange_position = next(")
+    assert body.index("STRATEGY_EXIT_DECISION_SUPERSEDED") < body.index(
+        "exchange_position = next("
+    )
 
 
 def test_exit_order_replacement_remains_reduce_only_post_only():
@@ -40,7 +42,9 @@ def test_universal_exit_rejects_superseded_geometry_observation():
     body = ast.get_source_segment(source, func)
     assert "FROM strategy_exit.exit_observations" in body
     assert "STRATEGY_EXIT_OBSERVATION_SUPERSEDED" in body
-    assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index(\n        "exchange_position = next("\n    )
+    assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index(
+        "exchange_position = next("
+    )
 
 
 def test_partial_tp_replacement_failure_forces_exchange_reconciliation():
