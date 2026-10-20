@@ -18,7 +18,7 @@ sql_scalar() { runuser -u postgres -- psql -X -Atqc "$1" cripta; }
   die "CRIPTA_DASHBOARD_UI_VERIFY_ONLY must be 0 or 1"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
 
-exec 9>/run/lock/cripta-dashboard-ui-deploy.lock
+exec 9>/run/lock/cripta-install-verified-release.lock
 flock -n 9 || die "another dashboard UI deploy is running"
 
 remote_main="$(as_repo_owner git -C "$SOURCE" ls-remote origin refs/heads/main | awk 'NR==1{print $1}')"
