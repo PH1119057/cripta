@@ -50,5 +50,5 @@ def read_binding_readiness(connection: Any, *, now: datetime) -> BindingReadines
     )
     return check_binding_readiness(
         active_strategy_ids=[row[0] for row in strategies],
-        active_bindings=[dict(zip(field_names, row)) for row in bindings],
+        active_bindings=[dict(zip(field_names, row, strict=True)) for row in bindings],
     )
