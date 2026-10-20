@@ -1080,6 +1080,8 @@ def main() -> int:
         return 0
     if not TRADING_ACCOUNT_ID:
         raise SystemExit("CRIPTA_TRADING_ACCOUNT_ID is required for Universal Entry consumer")
+    if not ACCOUNT_CONNECTOR_ID:
+        raise SystemExit("CRIPTA_ACCOUNT_CONNECTOR_ID is required for Universal Entry consumer")
     if POLL_SECONDS <= 0:
         raise SystemExit("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS must be positive")
     signal.signal(signal.SIGTERM, _stop)
