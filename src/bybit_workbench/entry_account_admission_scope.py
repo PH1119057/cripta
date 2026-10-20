@@ -5,9 +5,9 @@ execution, reserves capital, writes to DB, or calls an exchange.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Mapping
 
 from bybit_workbench.entry_account_fanout import EntryAccountFanout
 from bybit_workbench.universal_entry.contracts import StrategyExecutionBindingRef
