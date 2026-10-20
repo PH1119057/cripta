@@ -272,3 +272,11 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [ ] First APT May20 full-day job `job_395c5d11489b` moved to async then notification returned **agent did not respond to exec in 60.0s**, `exit_code=null`, status failed at access layer. Computation **OUTCOME UNKNOWN**, 0/5 new full-day audit results verified; no retry.
 - [ ] Before attempting equivalent heavy tasks, reconcile host access and this job status with approved authority and bounded execution, not actor/privilege substitutions. Existing 2 aged-at-end results on LTC and ARB remain valid, but *intra-day additional episode age classification not checked*.
 - [ ] Formal §21 expiry-vs-right-censor policy, independent raw coverage and OOS still OPEN. Journal `7af2604164da628ec4d79f69af46bc85146b5665`.
+
+
+## 2026-10-20 — #13 concrete execution outcome reconciliation
+
+- [x] Read SentinelX full job detail `job_395c5d11489b`: failed at agent response/transport, exit_code=null, started_at=null, no stdout, finished 2026-10-20 07:05:18 UTC. On-host Python execution **NOT VERIFIED**, result **UNKNOWN**, no retry.
+- [x] Identified concurrent distinct `job_d031ae9c1823`: registered RUNNING with started_at=null, no confirmed process/ownership; not altered. Do not conflate it with #13 or infer server CPU use.
+- [ ] Recover on-host outcome/host health using approved read-only diagnostic path before further heavy replay; no restart or actor substitution without evidence/approval. Journal `c5d9ed105a136087c7d2413312c89ecb0fd4652d`.
+- [ ] #13 intraday time-gap, pending-age and timer-contract study remains incomplete; existing boundary evidence (two old Bid pending at end) intact. No Strategy/DB/deployment/LIVE changes.
