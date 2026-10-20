@@ -13,6 +13,9 @@ from bybit_workbench.entry_admission import (
     bind_slot_claim_to_position,
     transition_slot_claim,
 )
+from bybit_workbench.exchange_position_identity import (
+    exchange_position_key as exchange_position_key,
+)
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import TradeDirection
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
@@ -111,22 +114,6 @@ class ConnectionLike(Protocol):
     def execute(self, statement: str, parameters: Sequence[object] = ()) -> CursorLike: ...
 
     def transaction(self) -> AbstractContextManager[object]: ...
-
-
-def exchange_position_key(
-    trading_account_id: str,
-    symbol: str,
-    position_idx: int,
-) -> str:
-    if position_idx < 0:
-        raise ValueError("position_idx cannot be negative")
-    account = trading_account_id.strip()
-    if not account:
-        raise ValueError("trading_account_id is required")
-    normalized = symbol.strip().upper()
-    if not normalized:
-        raise ValueError("symbol is required")
-    return f"BYBIT:{account}:LINEAR:USDT:{normalized}:{position_idx}"
 
 
 def load_universal_entry_lineage(

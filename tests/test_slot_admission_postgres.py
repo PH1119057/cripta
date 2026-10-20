@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from bybit_workbench.entry_admission import (
     PostgresEntryAdmissionPort,
     SlotOwnershipConflict,
 )
+from bybit_workbench.exchange_position_identity import exchange_position_key
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(
@@ -154,8 +156,9 @@ def _seed_mode(
             """INSERT INTO runtime.position_mode_states(
                    position_mode_state_ref,exchange,account_ref,product_category,
                    instrument,position_mode,position_idx,observed_at,received_at,
-                   fresh_until,provenance
-               ) VALUES(%s,'BYBIT',%s,'LINEAR',%s,%s,%s,%s,%s,%s,'{}'::jsonb)""",
+                   fresh_until,provenance,trading_account_id,identity_status
+               ) VALUES(%s,'BYBIT',%s,'LINEAR',%s,%s,%s,%s,%s,%s,'{}'::jsonb,
+                        %s,'PROVEN')""",
             (
                 state_ref,
                 identity["account_ref"],
@@ -165,6 +168,24 @@ def _seed_mode(
                 observed_at,
                 observed_at,
                 fresh_until or (observed_at + timedelta(minutes=5)),
+                f"{prefix}-ta",
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.account_state_generations(
+                   generation_id,account_ref,reason,state,started_at,completed_at,
+                   account_type,total_equity,wallet_balance,available_balance,
+                   positions_count,active_orders_count,position_mode_refs,wallet_payload,
+                   error,trading_account_id,identity_status
+               ) VALUES(%s,%s,'test','COMPLETE',%s,%s,'UNIFIED',100,100,100,
+                        0,0,%s::jsonb,'{}'::jsonb,'',%s,'PROVEN')""",
+            (
+                f"{prefix}-generation",
+                identity["account_ref"],
+                observed_at,
+                observed_at,
+                json.dumps({SYMBOL: state_ref}),
+                f"{prefix}-ta",
             ),
         )
     return state_ref
@@ -176,12 +197,11 @@ def _request(
     identity: dict[str, str],
     *,
     capacity_available: Decimal = Decimal("100"),
+    requested_amount: Decimal = Decimal("10"),
 ) -> EntryAdmissionRequest:
     return EntryAdmissionRequest(
         account_ref=identity["account_ref"],
-        exchange_position_key=(
-            f"BYBIT:{identity['account_ref']}:LINEAR:USDT:{SYMBOL}:0"
-        ),
+        exchange_position_key=exchange_position_key(f"{prefix}-ta", SYMBOL, 0),
         symbol=SYMBOL,
         direction="LONG",
         strategy_id=identity["strategy_id"],
@@ -190,13 +210,14 @@ def _request(
         entry_plan_fingerprint=identity["entry_fp"],
         signal_id=f"{prefix}-signal-{index}",
         strategy_attempt_id=f"{prefix}-attempt-{index}",
-        requested_amount=Decimal("10"),
+        requested_amount=requested_amount,
         amount_currency="USDT",
-        capacity_snapshot_id=f"{prefix}-capacity",
+        capacity_snapshot_id=f"{prefix}-generation",
         capacity_observed_at=NOW,
         capacity_available=capacity_available,
         requested_at=NOW,
         pre_dispatch_expires_at=NOW + timedelta(seconds=30),
+        account_state_generation_id=f"{prefix}-generation",
         strategy_activation_id=f"{prefix}-activation",
         strategy_execution_binding_id=f"{prefix}-binding",
         execution_leg="PRIMARY",
@@ -237,7 +258,7 @@ def test_insufficient_capital_rolls_back_slot_claim_in_same_admission() -> None:
     with psycopg.connect(DSN) as connection:
         with pytest.raises(InsufficientCapital):
             PostgresEntryAdmissionPort(connection).admit(
-                _request(prefix, 0, identity, capacity_available=Decimal("5"))
+                _request(prefix, 0, identity, requested_amount=Decimal("150"))
             )
         claims = connection.execute(
             """SELECT count(*) FROM runtime.exchange_position_slot_claims
@@ -289,6 +310,40 @@ def test_two_concurrent_attempts_cannot_own_one_physical_slot() -> None:
         ).fetchone()[0]
     assert claims == 1
     assert reservations == 1
+
+
+def test_two_accounts_admit_same_symbol_with_independent_physical_slots() -> None:
+    """Same UNIUSDT may occupy distinct TradingAccounts, but not twice per account."""
+    assert DSN is not None
+    token = "slot-two-accounts-" + uuid4().hex
+    first_prefix = token + "-a"
+    second_prefix = token + "-b"
+    first_identity = _seed_attempts(first_prefix, count=2)
+    second_identity = _seed_attempts(second_prefix, count=1)
+    _seed_mode(first_prefix, first_identity)
+    _seed_mode(second_prefix, second_identity)
+
+    with psycopg.connect(DSN) as connection:
+        port = PostgresEntryAdmissionPort(connection)
+        first = port.admit(_request(first_prefix, 0, first_identity))
+        second = port.admit(_request(second_prefix, 0, second_identity))
+        assert first.exchange_position_key != second.exchange_position_key
+        with pytest.raises(SlotOwnershipConflict):
+            port.admit(_request(first_prefix, 1, first_identity))
+        active = connection.execute(
+            """SELECT exchange_position_key,trading_account_id
+                 FROM runtime.exchange_position_slot_claims
+                WHERE exchange_position_key=ANY(%s)
+                  AND claim_state='CLAIMED'""",
+            ([first.exchange_position_key, second.exchange_position_key],),
+        ).fetchall()
+        assert {str(row[0]): str(row[1]) for row in active} == {
+            first.exchange_position_key: f"{first_prefix}-ta",
+            second.exchange_position_key: f"{second_prefix}-ta",
+        }
+        assert first.capital_reservation.reservation_id != (
+            second.capital_reservation.reservation_id
+        )
 
 
 def test_stale_position_mode_creates_no_claim_or_reservation() -> None:

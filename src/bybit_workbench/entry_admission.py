@@ -17,6 +17,7 @@ from bybit_workbench.capital_reservation import (
     CapitalReservationRequest,
     PostgresCapitalReservationPort,
 )
+from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 
 
@@ -177,6 +178,20 @@ class PostgresEntryAdmissionPort:
             raise StrategyExecutionBindingUnavailable(
                 "R10 Entry admission requires PROVEN StrategyExecutionBinding lineage"
             )
+        # A REAL binding is never admitted using the historical unscoped
+        # position-mode fallback. Full private account-state generation and
+        # physical slot identity must agree before any DB lock/write.
+        if not request.account_state_generation_id:
+            raise PositionModeStateUnavailable(
+                "REAL Entry requires PROVEN account_state_generation_id"
+            )
+        canonical_key = exchange_position_key(
+            request.trading_account_id, request.symbol, 0
+        )
+        if request.exchange_position_key != canonical_key:
+            raise SlotOwnershipConflict(
+                "REAL Entry physical slot key does not match TradingAccount"
+            )
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
             binding = self._connection.execute(
@@ -274,7 +289,8 @@ class PostgresEntryAdmissionPort:
                     )
                 if request.trading_account_id is not None:
                     mode = self._connection.execute(
-                        """SELECT position_mode,position_idx
+                        """SELECT position_mode,position_idx,observed_at,received_at,
+                                  fresh_until
                              FROM runtime.position_mode_states
                             WHERE position_mode_state_ref=%s
                               AND account_ref=%s
@@ -291,7 +307,8 @@ class PostgresEntryAdmissionPort:
                     ).fetchone()
                 else:
                     mode = self._connection.execute(
-                        """SELECT position_mode,position_idx
+                        """SELECT position_mode,position_idx,observed_at,received_at,
+                                  fresh_until
                              FROM runtime.position_mode_states
                             WHERE position_mode_state_ref=%s
                               AND account_ref=%s
@@ -305,6 +322,26 @@ class PostgresEntryAdmissionPort:
                     )
                 position_mode = str(mode[0])
                 position_idx = None if mode[1] is None else int(str(mode[1]))
+                observed_at, received_at, fresh_until = mode[2:5]
+                if not (
+                    isinstance(observed_at, datetime)
+                    and isinstance(received_at, datetime)
+                    and isinstance(fresh_until, datetime)
+                    and observed_at.tzinfo is not None
+                    and received_at.tzinfo is not None
+                    and fresh_until.tzinfo is not None
+                ):
+                    raise PositionModeStateUnavailable(
+                        f"generation position mode timestamps invalid: {state_ref}"
+                    )
+                if (
+                    observed_at.astimezone(UTC) > now
+                    or received_at.astimezone(UTC) > now
+                    or fresh_until.astimezone(UTC) < now
+                ):
+                    raise PositionModeStateUnavailable(
+                        f"generation position mode stale/invalid: {state_ref}"
+                    )
             else:
                 # Compatibility path for historical/shadow/integration callers.
                 # Production real Entry must provide account_state_generation_id.
