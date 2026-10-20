@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.8
-**Дата:** 2026-10-16
+**Версия:** 2.9
+**Дата:** 2026-10-21
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1147,19 +1147,28 @@ capital reservation, idempotence and initial protection. Existing Exit/position
 supervision remains independent; unresolved safety faults are not waived by
 this policy. No LIVE re-arm is a side effect of deploy.
 
-## 4.10.1 Owner decision 2026-10-15 — stale LIVE-arm retirement
+## 4.10.1 Owner decision 2026-10-21 — historical LIVE-arm retirement correction
 
-After a deployed release changes, prior-release ACTIVE arm rows must not be
-rewritten to the new commit and never authorize new Entry. The existing
-Lifecycle Supervisor may close old arm rows when the mainnet gate is OFF,
-authenticated fresh Bybit evidence is complete for every affected symbol,
-Exchange positions and open orders are absent, and local open positions,
-pending trade commands, reservations, and physical slot claims are absent.
-This requires durable retirement audit; unknown evidence retains ACTIVE
-historical rows and blocks new REAL Entry. An open position remains under its
-original Exit owner until confirmed closed; no process or timer is created.
-Automated retirement creates no new arm, does not enable permission/gate, and
-does not remove the current release-specific operator readiness checklist.
+The 2026-10-15 requirement to wait for a flat Exchange account before closing
+a prior-release LIVE-arm row is **SUPERSEDED**. It conflicted with §4.10, §6,
+ARCH §46 and DEVELOPMENT_RELEASE §44–46: existing exposure never prevents
+deploy, restart or release supersession. A prior-release arm is authorization
+for **new Entry**, not ownership of the position or its Exit.
+
+After verified LOADED_COMMIT changes, former-release sessions cannot authorize
+new Entry. With global mainnet new-Entry gate OFF, independent Lifecycle/control
+retires their ACTIVE rows with durable exact-release audit, whether Exchange
+positions/orders, local commands/reservations/claims or historical incomplete
+bindings exist or not. This retirement does not inspect, modify, close or
+reassign those resources and never implies that Exchange inventory is flat.
+Existing positions remain protected by already placed Exchange safeguards
+subject to Exchange risks, and the new Execution/Lifecycle/Universal Exit
+runtime must reconcile and resume their exact authorized ExitPlan, including
+when Exit implementation changed without retroactively changing Strategy
+policy. Recovery and fault checks continue independently from installer.
+No automatic mainnet enablement, execution permission or OWNER ARM follows;
+new Entry still requires fresh exact-account/Strategy/release checks and
+explicit owner approval. DEVELOPMENT_RELEASE §46 owns detailed procedure.
 
 ## 4.11 Owner decision 2026-10-09 — R1 dynamic L5-3 Exit TP structural changes and Exchange price steps
 

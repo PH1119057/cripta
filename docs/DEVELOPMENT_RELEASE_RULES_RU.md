@@ -1,6 +1,6 @@
 # CRIPTA — development / release / PostgreSQL rules
 
-**Версия:** 2.0 · 2026-10-16
+**Версия:** 2.1 · 2026-10-21
 **Статус:** routed canonical process contract
 
 Читать перед patch, source mutation, Git, PostgreSQL migration, packaging,
@@ -1382,21 +1382,40 @@ protection, Exit, position supervision, private-runtime reconciliation, or
 resolution of pending/ambiguous commands. It must not manufacture an Exchange
 mutation or relabel an open position as a deployment blocker.
 
-OWNER DECISION 2026-10-15 — stale session lifecycle retirement (not re-arm):
-After application release changes, previous-release LIVE-arm sessions remain
-historical authorization evidence and are never rewritten to a new commit.
-Lifecycle Supervisor may automatically mark an old ACTIVE session CLOSED only
-after fresh authenticated and COMPLETE Exchange account-wide position and
-order evidence, exact same-account identity, no position, open/pending order,
-ambiguous request, reservation or physical slot claim for the session's scope,
-and verified completion of its Exit/reconciliation. UNKNOWN must fail closed.
-An open position remains under its existing Exit owner; retirement waits until
-verified closure. The closure writes durable timestamp/reason and never enables
-mainnet gate, Strategy activation, execution permission, or a new LIVE-arm
-session. A new release requires fresh checklist evidence and explicit OWNER ARM.
-No timer or separate polling service is introduced: use the existing Lifecycle
-Supervisor cycle. Session retirement alone cannot establish real-entry
-readiness.
+OWNER DECISION 2026-10-15 — historical flat-inventory retirement condition:
+**SUPERSEDED by OWNER DECISION 2026-10-21**. Requiring zero Exchange
+positions/orders, zero pending commands, zero reservations/slot claims or a
+current StrategyExecutionBinding before retiring a previous-release LIVE-arm
+session incorrectly coupled **new Entry authorization** to independent
+existing-position/Exit lifecycle. These conditions are not retirement gates.
+The former proven-flat criterion has no current normative effect.
+
+OWNER DECISION 2026-10-21 — superseded Entry authorization on release switch:
+Once a verified application LOADED_COMMIT changes, all prior-release ACTIVE
+LIVE-arm sessions are invalid for **new REAL Entry** immediately by exact
+release identity, irrespective of existing Exchange positions, protection,
+pending orders/commands, reservations, ownership, historical bindings or
+current account inventory. The independent Lifecycle/control plane (never
+the installer) retires these old ACTIVE rows to CLOSED when the global
+mainnet new-Entry gate is OFF and the current exact LOADED_COMMIT is proven.
+For each retirement it durably preserves the original session identity,
+old and current release hashes, timestamp and reason
+`RELEASE_SUPERSEDED_ENTRY_AUTHORIZATION_ONLY`. It neither assigns an
+unproven TradingAccount to a legacy Strategy-level arm nor claims that
+positions/orders were flat. UNKNOWN Exchange exposure does not prevent
+retirement of expired **Entry authorization**.
+
+Retirement is strictly a control-plane/archive action: it cannot close,
+cancel, change or reassign any Exchange order/position, protective stop,
+pending command, capital reservation, physical slot or Exit owner. Execution,
+Lifecycle and Universal Exit continue independent fresh authenticated Exchange
+reconciliation and exact position/ExitPlan recovery under §44–45 and ARCH §46.
+Recovery success or a closed historical arm never auto-enables mainnet,
+execution permissions or Strategy activation and never grants a new LIVE arm.
+Unproven fresh release readiness blocks **new REAL Entry only**, with an
+explicit, scope-specific reason; it does not roll back a successful installer
+merely because an Exchange position is open. No new polling service is added:
+the existing Lifecycle Supervisor performs retirement in its normal cycle.
 
 Once LOADED_COMMIT changes, release-bound LIVE-arm sessions from a different
 application commit are **not transferable**. Reopening new REAL Entry requires
@@ -1445,11 +1464,15 @@ DEPLOYED, RECONCILING, BLOCKED(reason, scope, evidence, time), or
 READY_FOR_OWNER_ARM. Validate remote/source/installed/loaded identity,
 required services, schema and consumers, authenticated complete fresh
 Exchange inventory and identity, reconciliation, existing position/Exit
-ownership, ambiguous commands and claims, authorized account bindings,
+continuity, ambiguous commands and claims, authorized account bindings,
 per-scope Strategy settings/permissions, release-bound admission and
-exchange/account capabilities before READY. Automatic retirement of old
-LIVE-arm sessions is permitted ONLY under §46's proven-flat conditions.
-Do not clone, migrate or silently open new-release arm sessions.
+exchange/account capabilities before READY. Existing exposure is never a
+flat-account prerequisite and must not block the installer; the independent
+runtime may report a specific unresolved protection/Exit fault as BLOCKED
+for new-entry readiness while continuing Exit. Superseded Entry-only LIVE-arm
+sessions retire independently under §46, including with open positions and
+without a current legacy StrategyExecutionBinding. Do not clone, migrate or
+silently open new-release arm sessions.
 
 READY_FOR_OWNER_ARM is a technical pre-arm status, NOT approval of financial
 risk, not LIVE readiness for execution without owner action, and never

@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.23
-**Дата:** 2026-10-17
+**Версия:** 12.24
+**Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -4138,3 +4138,27 @@ Follow-up checked: PR #115 `quality=success` and
 `trade-lifecycle-postgres=success`; safely merged into GitHub main as
 `fda12d5d99c5bba9aad7e8410567ac9a174da9ec`. No production deploy,
 database mutation or LIVE-arm is claimed by this checkpoint.
+
+
+## 2026-10-21 superseded LIVE-arm retirement dependency — SOURCE REPAIR PROPOSED, NOT DEPLOYED
+
+Owner reiterated independent deploy and continued Exit for already opened
+positions. Root cause in prior source: `retire_stale_release_arms()` incorrectly
+required a current `StrategyExecutionBinding` and flat, complete authenticated
+Exchange inventory to close an old-release Entry-only authorization record.
+Observed checkpoint before change (2026-10-20): installed/loaded application
+`3ef144ce58a058ba43d8d1cee23d89e33d8e6a15`, five historical ACTIVE
+arms on `e238c71cbe19e2e89669c946e3b2117ef4ed7d54`, mainnet gate OFF,
+zero effective execution bindings, two unresolved release-arm incidents.
+These historical figures must NOT be represented as fresh current runtime
+without verification. GitHub documentation-only/research HEAD can differ from
+installed application identity under DEVELOPMENT_RELEASE §26.2 / INDEX §17.5.
+
+Target repair: with mainnet new-entry gate already OFF, independent Lifecycle
+retires only superseded Entry authorization by exact release identity and
+durable event; no Exchange inventory, order, Exit, position ownership, or
+historical binding is modified. Post-restart Execution/Lifecycle/Universal Exit
+reconciliation remains independently required; OWNER ARM remains manual.
+No production SQL, deploy, LIVE or Exchange mutation was performed in this
+source-repair preparation. Release/runtime behavior after deployment remains
+NOT VERIFIED until a later explicit checkpoint.

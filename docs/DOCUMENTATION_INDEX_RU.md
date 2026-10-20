@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.28
-**Дата:** 2026-10-18
+**Версия:** 3.29
+**Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1236,3 +1236,22 @@ LIVE authorization. No current Project Source documents, paths, mandatory
 pre-read or routing are changed; 11-member Project Source remains intact.
 The root README / AGENTS bootstrap are unchanged because routing and document
 membership are unchanged. Documentary commits do not authorize new REAL Entry.
+
+
+# 40. Release-bound historical Entry authorization independent of Exit — OWNER DECISION 2026-10-21
+
+The owner reconfirmed the 2026-10-08/09 invariant: routine deploy never waits
+for Exchange account to become flat; after release switching, the new runtime
+continues protection/reconciliation/Exit for existing positions. The 2026-10-15
+proven-flat prerequisite for retiring old LIVE-arm Entry authorization was a
+contradictory later amendment and is superseded, not an exception to the owner
+intent. DEVELOPMENT_RELEASE §44–46.1 owns release/retirement procedure;
+TRADING_CONTOUR §4.10–4.10.1 owns independent Entry/Exit behavior;
+ARCH §46 owns recovery. Explicit OWNER ARM remains required for NEW REAL Entry.
+
+Same-cycle changes: DEVELOPMENT_RELEASE 2.1, TRADING_CONTOUR 2.9,
+CURRENT_PROJECT_MAP 12.24 and source/test corrective proposal. No current
+file count/path, mandatory pre-read, routing or Project Instructions content
+changed; eleven Project Source documents remain. Root README/AGENTS/bootstrap
+requires no topology update. No canonical new-entry authorization, Exchange
+mutation or production deployment is performed by this documentation update.
