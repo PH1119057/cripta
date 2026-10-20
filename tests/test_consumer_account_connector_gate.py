@@ -9,11 +9,11 @@ def test_real_consumer_rechecks_registered_connector_before_dispatch():
     end = source.index("\ndef ", begin + 5)
     check = source[begin:end]
     assert "FROM identity.account_connectors" in check
-    assert "WHERE trading_account_id=%s AND retired_at IS NULL" in check
-    assert '(request.trading_account_id,)' in check
-    assert 'str(connector["status"]) == "ACTIVE"' in check
-    assert "len(active_connectors) != 1" in check
-    assert '"ACCOUNT_CONNECTOR_NOT_UNIQUELY_ACTIVE"' in check
+    assert "WHERE trading_account_id=%s AND account_connector_id=%s" in check
+    assert '(request.trading_account_id, ACCOUNT_CONNECTOR_ID)' in check
+    assert 'str(connector["status"]) != "ACTIVE"' in check
+    assert "if not ACCOUNT_CONNECTOR_ID:" in check
+    assert '"ACCOUNT_CONNECTOR_IDENTITY_NOT_ACTIVE"' in check
     assert check.index("FROM identity.account_connectors") < check.index(
         "account_ref = str(row.get"
     )
