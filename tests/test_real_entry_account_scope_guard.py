@@ -15,7 +15,6 @@ from bybit_workbench.strategy_position_binding import (
     exchange_position_key as original_public_position_key,
 )
 
-
 NOW = datetime(2026, 10, 20, 13, 0, tzinfo=UTC)
 
 
