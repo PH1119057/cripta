@@ -1686,7 +1686,7 @@ def _universal_exit_position(
     if not decision_id:
         raise RuntimeError("STRATEGY_EXIT_DECISION_ID_MISSING")
     latest_decision = connection.execute(
-        """SELECT exit_decision_id
+        """SELECT exit_decision_id, observation_id
              FROM strategy_exit.exit_decisions
             WHERE strategy_position_id=%s
             ORDER BY decided_at DESC, exit_decision_id DESC
@@ -1697,6 +1697,18 @@ def _universal_exit_position(
         raise RuntimeError("STRATEGY_EXIT_DECISION_NOT_FOUND")
     if str(latest_decision[0]) != decision_id:
         raise RuntimeError("STRATEGY_EXIT_DECISION_SUPERSEDED")
+    # A recorded new L5-3 geometry event invalidates the old Exit decision
+    # even if the replacement Exit decision has not yet been compiled.
+    latest_observation = connection.execute(
+        """SELECT observation_id
+             FROM strategy_exit.exit_observations
+            WHERE strategy_position_id=%s
+            ORDER BY observed_at DESC, observation_id DESC
+            LIMIT 1""",
+        (position_id,),
+    ).fetchone()
+    if latest_observation is None or str(latest_observation[0]) != str(latest_decision[1]):
+        raise RuntimeError("STRATEGY_EXIT_OBSERVATION_SUPERSEDED")
 
     exchange_position = next(
         (
