@@ -24,6 +24,7 @@ import psycopg
 from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
 from bybit_workbench.account_connector_db_snapshot import read_account_connector_evidence
 from bybit_workbench.fault_delivery import acknowledge_delivery
+from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
 from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.live_arm_readiness import (
@@ -867,6 +868,14 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         required_accounts = tuple(
             sorted({account for ids in assignment.strategy_accounts.values() for account in ids})
         )
+        # The existing owner-arm session has no TradingAccount key. Until
+        # exact per-account OWNER ARM exists, the current Bybit consumer can
+        # authorize only the single configured TradingAccount for every REAL
+        # activation in scope. Other effective accounts must fail closed.
+        if any(len(accounts) != 1 for accounts in assignment.strategy_accounts.values()):
+            reasons.append("LEGACY_OWNER_ARM_MULTI_ACCOUNT_UNSUPPORTED")
+        if required_accounts and required_accounts != (TRADING_ACCOUNT_ID,):
+            reasons.append("LEGACY_OWNER_ARM_ACCOUNT_SCOPE_UNSUPPORTED")
         if required_accounts:
             try:
                 connector_evidence = read_account_connector_evidence(
@@ -4816,6 +4825,19 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             if not bool(readiness.get("rearm_ready")):
                                 raise ValueError(
                                     "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
+                                )
+                            scope_ready, scope_reasons = (
+                                check_legacy_live_arm_account_scope(
+                                    connection,
+                                    strategy_activation_id=live_context.strategy_activation_id,
+                                    trading_account_id=TRADING_ACCOUNT_ID,
+                                    now=datetime.now(UTC),
+                                )
+                            )
+                            if not scope_ready:
+                                raise ValueError(
+                                    "legacy OWNER ARM account scope blocked: "
+                                    + ", ".join(scope_reasons)
                                 )
                             canonical = evaluate_live_arm(
                                 connection,
