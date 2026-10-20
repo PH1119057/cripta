@@ -1915,24 +1915,34 @@ def _execute_universal_exit_command(
                 accepted_codes=(110001,),
             )
         link_id = (tag + hashlib.sha256(command_id.encode()).hexdigest()[:16])[:36]
-        result = api_post(
-            "/v5/order/create",
-            {
-                "category": "linear",
-                "symbol": symbol,
-                "side": "Sell" if side == "Buy" else "Buy",
-                "orderType": "Limit",
-                "price": str(target),
-                "qty": str(qty),
-                "timeInForce": "PostOnly",
-                "positionIdx": position_idx,
-                "orderLinkId": link_id,
-                "reduceOnly": True,
-                "closeOnTrigger": False,
-            },
-            key,
-            secret,
-        )
+        try:
+            result = api_post(
+                "/v5/order/create",
+                {
+                    "category": "linear",
+                    "symbol": symbol,
+                    "side": "Sell" if side == "Buy" else "Buy",
+                    "orderType": "Limit",
+                    "price": str(target),
+                    "qty": str(qty),
+                    "timeInForce": "PostOnly",
+                    "positionIdx": position_idx,
+                    "orderLinkId": link_id,
+                    "reduceOnly": True,
+                    "closeOnTrigger": False,
+                },
+                key,
+                secret,
+            )
+        except Exception as exc:
+            if existing:
+                # Cancellation may already have removed the last resting TP.
+                # Require Exchange reconciliation and block new Entry; a plain
+                # failed command must not conceal uncertain replacement state.
+                raise ExchangeMutationBarrier(
+                    "dynamic TP replacement failed after existing-order cancellation"
+                ) from exc
+            raise
         exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
         if not exchange_order_id:
             raise ExchangeMutationBarrier(
