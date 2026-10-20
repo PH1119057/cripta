@@ -17,6 +17,7 @@ from bybit_workbench.capital_reservation import (
     CapitalReservationRequest,
     PostgresCapitalReservationPort,
 )
+from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 
 
@@ -176,6 +177,20 @@ class PostgresEntryAdmissionPort:
         ):
             raise StrategyExecutionBindingUnavailable(
                 "R10 Entry admission requires PROVEN StrategyExecutionBinding lineage"
+            )
+        # A REAL binding is never admitted using the historical unscoped
+        # position-mode fallback. Full private account-state generation and
+        # physical slot identity must agree before any DB lock/write.
+        if not request.account_state_generation_id:
+            raise PositionModeStateUnavailable(
+                "REAL Entry requires PROVEN account_state_generation_id"
+            )
+        canonical_key = exchange_position_key(
+            request.trading_account_id, request.symbol, 0
+        )
+        if request.exchange_position_key != canonical_key:
+            raise SlotOwnershipConflict(
+                "REAL Entry physical slot key does not match TradingAccount"
             )
         now = request.requested_at.astimezone(UTC)
         with self._connection.transaction():
