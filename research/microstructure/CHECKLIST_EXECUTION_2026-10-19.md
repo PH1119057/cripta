@@ -323,3 +323,11 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] #24 May19 29 of 120 symbol×hour file-presence, 91/120 unverified; actual event coverage unknown. #23 OI and #25 Spot price streams not confirmed; `NO_DATA` never encoded as zero.
 - [x] Draft/evidence-scope register: 130 measurement drafts +15 source-gap-only worksheets =145 of 150 slots documented; remaining #26 5 slots explicitly **OWNER_DEFERRED_LAST**, not missing silent records. 0 formal READY.
 - [ ] Only approved source-specific provenance+coverage work can close #23–25; blocked upstream/SentinelX execution paths must not be retried or bypassed. No new host invocation, DB or trading mutation performed in this step.
+
+
+## 2026-10-20 — deep §21.6 evidence audit for #19/#22 (10 pair gates)
+
+- [x] `research/microstructure/passports/range_vwap_2026-05-20_per_pair_gate_v2.json` commit `534bdec183eb97e28689ecaa0e2f8003488eb66d`: physical formula, units, aggregation operators and per-instrument raw SHA256 + **joined** 1440-minute row hashes reconciled with existing verified pilot 5/5 for each indicator.
+- [x] Source distinguishes 20 completed-minute close range / previous20 for #19, and UTC-day running VWAP plus exact-price POC for #22; missing close and zero denominator rules checked in source. Hash is of the joined row, **not** a separate hash for each feature.
+- [ ] Full §21.6 passport still OPEN: observed receipt/publication time not proven, provenance/run manifest incomplete, full owner-selected period scope not proven beyond May20, and formal per-pair READY gate not granted. OOS after fees is a later distinct research stage.
+- [x] Status remains 0 RESEARCH-READY. No server job/DB/Strategy/LIVE changes.
