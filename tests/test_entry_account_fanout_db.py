@@ -29,8 +29,8 @@ class DB:
 
 def test_multiple_active_accounts_select_deterministically():
     db = DB([
-        ("b2", "act", "LEG_B", "ta-2"),
-        ("b1", "act", "LEG_A", "ta-1"),
+        ("b2", "act", "LEG_B", "ta-2", "DEDICATED_STRATEGY"),
+        ("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"),
     ])
     result = read_entry_account_fanout(
         db, strategy_activation_id="act",
@@ -54,7 +54,7 @@ def test_missing_binding_blocks():
 
 
 def test_unauthorized_leg_blocks_every_leg():
-    db = DB([("b1", "act", "LEG_A", "ta-1"), ("b2", "act", "LEG_B", "ta-2")])
+    db = DB([("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"), ("b2", "act", "LEG_B", "ta-2", "DEDICATED_STRATEGY")])
     result = read_entry_account_fanout(
         db, strategy_activation_id="act",
         authorized_binding_ids=frozenset({"b1"}), now=NOW,
@@ -64,7 +64,7 @@ def test_unauthorized_leg_blocks_every_leg():
 
 
 def test_duplicate_account_blocks():
-    db = DB([("b1", "act", "LEG_A", "ta-1"), ("b2", "act", "LEG_B", "ta-1")])
+    db = DB([("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"), ("b2", "act", "LEG_B", "ta-1", "DEDICATED_STRATEGY")])
     result = read_entry_account_fanout(
         db, strategy_activation_id="act",
         authorized_binding_ids=frozenset({"b1", "b2"}), now=NOW,
@@ -88,3 +88,23 @@ def test_naive_timestamp_rejected():
             DB([]), strategy_activation_id="act",
             authorized_binding_ids=frozenset(), now=datetime(2026, 10, 20),
         )
+
+
+def test_active_non_dedicated_leg_is_not_silently_filtered():
+    db = DB([("b1", "act", "LEG_A", "ta-1", "SHARED")])
+    result = read_entry_account_fanout(
+        db, strategy_activation_id="act",
+        authorized_binding_ids=frozenset({"b1"}), now=NOW,
+    )
+    assert not result.legs
+    assert "BINDING_NOT_DEDICATED" in result.reasons
+
+
+def test_authorized_binding_missing_from_effective_snapshot_blocks():
+    db = DB([("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY")])
+    result = read_entry_account_fanout(
+        db, strategy_activation_id="act",
+        authorized_binding_ids=frozenset({"b1", "b2"}), now=NOW,
+    )
+    assert not result.legs
+    assert "AUTHORIZED_BINDING_SET_NOT_EXACT" in result.reasons
