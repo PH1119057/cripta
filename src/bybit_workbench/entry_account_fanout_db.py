@@ -19,7 +19,7 @@ def read_entry_account_fanout(
     authorized_binding_ids: frozenset[str],
     now: datetime,
 ) -> EntryAccountFanout:
-    """Resolve ACTIVE, exact-time bindings; selection rejects ambiguous legs."""
+    """Resolve exact-time bindings; never silently drop incompatible active legs."""
     if now.tzinfo is None:
         raise ValueError("fan-out snapshot requires timezone-aware instant")
     activation = strategy_activation_id.strip()
@@ -31,19 +31,27 @@ def read_entry_account_fanout(
     instant = now.astimezone(UTC)
     rows = connection.execute(
         """SELECT strategy_execution_binding_id,strategy_activation_id,
-                  execution_leg,trading_account_id
+                  execution_leg,trading_account_id,allocation_mode
              FROM strategy_entry.strategy_execution_bindings
             WHERE strategy_activation_id=%s
               AND binding_state='ACTIVE'
-              AND allocation_mode='DEDICATED_STRATEGY'
               AND effective_from<=%s
               AND (effective_to IS NULL OR effective_to>%s)
             ORDER BY execution_leg,trading_account_id,strategy_execution_binding_id""",
         (activation, instant, instant),
     ).fetchall()
-    bindings = tuple(StrategyExecutionBindingRef(*row) for row in rows)
-    return select_entry_account_legs(
+    invalid_modes = any(str(row[4]) != "DEDICATED_STRATEGY" for row in rows)
+    bindings = tuple(StrategyExecutionBindingRef(*row[:4]) for row in rows)
+    result = select_entry_account_legs(
         strategy_activation_id=activation,
         bindings=bindings,
         authorized_binding_ids=authorized_binding_ids,
     )
+    reasons = set(result.reasons)
+    if invalid_modes:
+        reasons.add("BINDING_NOT_DEDICATED")
+    if {row[0] for row in rows} != set(authorized_binding_ids):
+        reasons.add("AUTHORIZED_BINDING_SET_NOT_EXACT")
+    if reasons:
+        return EntryAccountFanout(activation, (), tuple(sorted(reasons)))
+    return result
