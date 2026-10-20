@@ -1,0 +1,1080 @@
+{
+  "status": "RESEARCH EVIDENCE / DERIVED PASS2 DRAFT, NOT CANON",
+  "source_head": "75ed4e6b191b91a552ee17f956115319e5ec34a1",
+  "date_utc": "2026-05-20",
+  "cohort": [
+    "APTUSDT",
+    "INJUSDT",
+    "DOTUSDT",
+    "LTCUSDT",
+    "ARBUSDT"
+  ],
+  "indicator_ids": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7
+  ],
+  "pairs_count": 30,
+  "requires": "docs/RESEARCH_COMPUTE_RULES_RU.md §21.6",
+  "notes": [
+    "All 30 pairs are *draft measurement worksheets*, NOT completed canonical passports or READY promotion.",
+    "V1 source had known APT timestamp rollover failure; v2 candidate is separate source and independent numerical QC 5/5.",
+    "Some fields express proposed measurement details derived from source inspection; observed feed-time and raw hashes remain NOT VERIFIED.",
+    "No OOS, trading policy, LIVE, after-fee signal analysis."
+  ],
+  "pairs": [
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregation_operator": "NON_AGGREGATABLE",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregation_operator": "NON_AGGREGATABLE",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregation_operator": "NON_AGGREGATABLE",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregation_operator": "NON_AGGREGATABLE",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregation_operator": "NON_AGGREGATABLE",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregation_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregation_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregation_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregation_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregation_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregation_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregation_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregation_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregation_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregation_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC midnight cumulative reset",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC midnight cumulative reset",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC midnight cumulative reset",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC midnight cumulative reset",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC midnight cumulative reset",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source_window": "2026-05-20 UTC / public_trades",
+      "measurement": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregation_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "source_fields": [
+        "timestamp",
+        "symbol",
+        "side",
+        "price",
+        "foreignNotional"
+      ],
+      "event_clock": "exchange trade timestamp floor to millisecond then UTC minute",
+      "available_after": "claimed after completed UTC minute; actual capture/receipt/publication NOT VERIFIED",
+      "missing_rule": "zero fills count 0; missing raw file is NO_DATA and not zero; RVOL first 60 minutes null; denominator zero yields null",
+      "reset_rule": "UTC completed-minute buckets",
+      "independent_numeric_qc": "2026-05-20 all 1440 rows PASS on 5 coins, integer exact, floats tolerance 1e-10 rel/1e-6 abs",
+      "source_reader_commit": "48fd2e2aedae9e9d49df4f8be346ae01879b9bfe",
+      "independent_checker_commit": "0864c79b53a74d8bc916bfc83441f456e4881954",
+      "gate_status": "PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY",
+      "open_gates": [
+        "exact raw file SHA256/run manifest not yet registered in this pair",
+        "observed/received/available-after clock unverified",
+        "full requested research period beyond May20 not verified",
+        "per-pair source coverage and §21 manual sign/denominator evidence still required"
+      ],
+      "limitations": [
+        "fill records are not parent orders",
+        "numeric comparison is not exchange-timestamp publication timing audit"
+      ]
+    }
+  ]
+}
