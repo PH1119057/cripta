@@ -289,7 +289,8 @@ class PostgresEntryAdmissionPort:
                     )
                 if request.trading_account_id is not None:
                     mode = self._connection.execute(
-                        """SELECT position_mode,position_idx
+                        """SELECT position_mode,position_idx,observed_at,received_at,
+                                  fresh_until
                              FROM runtime.position_mode_states
                             WHERE position_mode_state_ref=%s
                               AND account_ref=%s
@@ -306,7 +307,8 @@ class PostgresEntryAdmissionPort:
                     ).fetchone()
                 else:
                     mode = self._connection.execute(
-                        """SELECT position_mode,position_idx
+                        """SELECT position_mode,position_idx,observed_at,received_at,
+                                  fresh_until
                              FROM runtime.position_mode_states
                             WHERE position_mode_state_ref=%s
                               AND account_ref=%s
@@ -320,6 +322,22 @@ class PostgresEntryAdmissionPort:
                     )
                 position_mode = str(mode[0])
                 position_idx = None if mode[1] is None else int(str(mode[1]))
+                observed_at, received_at, fresh_until = mode[2:5]
+                if not all(
+                    isinstance(value, datetime) and value.tzinfo is not None
+                    for value in (observed_at, received_at, fresh_until)
+                ):
+                    raise PositionModeStateUnavailable(
+                        f"generation position mode timestamps invalid: {state_ref}"
+                    )
+                if (
+                    observed_at.astimezone(UTC) > now
+                    or received_at.astimezone(UTC) > now
+                    or fresh_until.astimezone(UTC) < now
+                ):
+                    raise PositionModeStateUnavailable(
+                        f"generation position mode stale/invalid: {state_ref}"
+                    )
             else:
                 # Compatibility path for historical/shadow/integration callers.
                 # Production real Entry must provide account_state_generation_id.
