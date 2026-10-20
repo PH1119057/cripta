@@ -1,7 +1,7 @@
-"""Fail-closed retirement of old release arm sessions.
+"""Retirement of superseded Entry authorization after an application release.
 
-This closes historical authorization only. It never migrates, creates, or
-authorizes new-release LIVE arm; no Exchange mutation is performed.
+This is NOT position or Exit lifecycle management. No Exchange snapshot,
+current account binding, pending order or position flatness is required.
 """
 from __future__ import annotations
 
@@ -10,40 +10,22 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+RETIREMENT_REASON = "RELEASE_SUPERSEDED_ENTRY_AUTHORIZATION_ONLY"
+
 
 def retire_stale_release_arms(
-    connection: Any,
-    *,
-    loaded_commit: str,
-    account_snapshot: Mapping[str, object] | None,
-    trading_account_id: str,
-    now: datetime,
+    connection: Any, *, loaded_commit: str, now: datetime
 ) -> tuple[str, ...]:
+    """Close only historical Entry rights; never re-arm or mutate Exchange.
+
+    The caller supplies a verified exact LOADED_COMMIT and owns the transaction.
+    Mainnet new Entry must already be OFF. Exit/reconciliation is independent.
+    """
+    if now.tzinfo is None:
+        return ()
     instant = now.astimezone(UTC)
-    if (
-        len(loaded_commit) != 40
-        or account_snapshot is None
-        or not str(trading_account_id).strip()
-    ):
-        return ()
-    if (
-        account_snapshot.get("source") != "BYBIT_AUTHENTICATED_ACCOUNT_GET"
-        or account_snapshot.get("complete") is not True
-        or account_snapshot.get("account_ref") != "BYBIT:UNIFIED"
-        or not str(account_snapshot.get("account_user_id") or "").strip()
-    ):
-        return ()
-    try:
-        observed = datetime.fromisoformat(str(account_snapshot["observed_at"]))
-    except (KeyError, TypeError, ValueError):
-        return ()
-    if observed.tzinfo is None:
-        return ()
-    age = (instant - observed.astimezone(UTC)).total_seconds()
-    if age < 0 or age > 15:
-        return ()
-    inventory = account_snapshot.get("symbols")
-    if not isinstance(inventory, Mapping):
+    commit = loaded_commit.strip().lower()
+    if len(commit) != 40 or any(ch not in "0123456789abcdef" for ch in commit):
         return ()
 
     gate = connection.execute(
@@ -54,132 +36,52 @@ def retire_stale_release_arms(
         return ()
 
     rows = connection.execute(
-        """SELECT a.live_arm_session_id,a.strategy_id,a.strategy_version,
-                  a.symbol,a.release_commit,a.strategy_activation_id,
-                  b.strategy_execution_binding_id,b.trading_account_id
-             FROM control.live_arm_sessions a
-             LEFT JOIN strategy_entry.strategy_execution_bindings b
-               ON b.strategy_activation_id=a.strategy_activation_id
-              AND b.execution_leg='PRIMARY'
-              AND b.allocation_mode='DEDICATED_STRATEGY'
-              AND b.binding_state='ACTIVE'
-              AND b.effective_from<=%s
-              AND (b.effective_to IS NULL OR b.effective_to>%s)
-            WHERE a.state='ACTIVE' AND a.release_commit<>%s
-            ORDER BY a.live_arm_session_id FOR UPDATE OF a""",
-        (instant, instant, loaded_commit),
+        """SELECT live_arm_session_id,strategy_id,strategy_version,
+                  symbol,release_commit,strategy_activation_id
+             FROM control.live_arm_sessions
+            WHERE state='ACTIVE' AND release_commit<>%s
+            ORDER BY live_arm_session_id FOR UPDATE""",
+        (commit,),
     ).fetchall()
 
-    def value(row: Any, index: int, key: str) -> str:
-        return str(row[key] if isinstance(row, Mapping) else row[index])
+    def value(row: Any, index: int, name: str) -> str:
+        return str(row[name] if isinstance(row, Mapping) else row[index])
 
     retired: list[str] = []
     for row in rows:
         session_id = value(row, 0, "live_arm_session_id")
-        strategy_id = value(row, 1, "strategy_id")
-        strategy_version = value(row, 2, "strategy_version")
-        symbol = value(row, 3, "symbol")
-        prior_release = value(row, 4, "release_commit")
-        binding_id = value(row, 6, "strategy_execution_binding_id")
-        bound_account = value(row, 7, "trading_account_id")
-        if (
-            not binding_id
-            or bound_account != trading_account_id
-        ):
-            continue
-        scope = inventory.get(symbol)
-        if not isinstance(scope, Mapping):
-            continue
-        positions = scope.get("positions")
-        orders = scope.get("orders")
-        if not isinstance(positions, list) or not isinstance(orders, list) or orders:
-            continue
-        try:
-            if any(
-                not isinstance(p, Mapping)
-                or float(p["size"]) != 0
-                for p in positions
-            ):
-                continue
-        except (KeyError, ValueError, TypeError):
-            continue
-        blocked = connection.execute(
-            """SELECT (
-                EXISTS(SELECT 1 FROM runtime.position_ownership
-                       WHERE symbol=%s AND state<>'CLOSED'
-                         AND (
-                              (trading_account_id=%s AND identity_status='PROVEN')
-                         ))
-                OR EXISTS(SELECT 1 FROM runtime.exchange_position_slot_claims
-                          WHERE symbol=%s AND claim_state<>'RELEASED'
-                            AND (
-                                 (trading_account_id=%s AND identity_status='PROVEN')
-                            ))
-                OR EXISTS(SELECT 1 FROM runtime.capital_reservations
-                          WHERE strategy_id=%s AND strategy_version=%s
-                            AND state<>'RELEASED'
-                            AND (
-                                 (trading_account_id=%s AND identity_status='PROVEN')
-                            ))
-                OR EXISTS(SELECT 1 FROM runtime.trade_commands
-                          WHERE symbol=%s
-                            AND (
-                                 (trading_account_id=%s AND identity_status='PROVEN')
-                            )
-                            AND (
-                                state NOT IN ('completed','failed')
-                                OR (state='failed' AND
-                                    coalesce(error,'') LIKE 'EXCHANGE_MUTATION_BARRIER%%')
-                            ))
-            )""",
-            (
-                symbol,
-                trading_account_id,
-                symbol,
-                trading_account_id,
-                strategy_id,
-                strategy_version,
-                trading_account_id,
-                symbol,
-                trading_account_id,
-            ),
-        ).fetchone()
-        if blocked is None or bool(
-            blocked[0] if not isinstance(blocked, Mapping)
-            else next(iter(blocked.values()))
-        ):
-            continue
+        old_commit = value(row, 4, "release_commit")
         updated = connection.execute(
             """UPDATE control.live_arm_sessions
                   SET state='CLOSED',deactivated_at=%s,
                       updated_at=clock_timestamp()
                 WHERE live_arm_session_id=%s AND state='ACTIVE'
                   AND release_commit=%s""",
-            (instant, session_id, prior_release),
+            (instant, session_id, old_commit),
         )
         if updated.rowcount != 1:
             continue
+
+        # The surrounding transaction must roll back if durable audit fails.
+        # No ON CONFLICT DO NOTHING: do not hide an already-retired/reopened arm.
         connection.execute(
             """INSERT INTO control.live_arm_retirement_events(
                    event_id,live_arm_session_id,previous_release_commit,
                    loaded_commit,reason,retired_at,evidence)
-               VALUES(%s,%s,%s,%s,
-                      'EXACT_SCOPE_FLAT_AFTER_RELEASE_CHANGE',%s,%s::jsonb)
-               ON CONFLICT(live_arm_session_id) DO NOTHING""",
+               VALUES(%s,%s,%s,%s,%s,%s,%s::jsonb)""",
             (
                 "stale-arm-retirement-" + session_id,
-                session_id, prior_release, loaded_commit, instant,
+                session_id, old_commit, commit, RETIREMENT_REASON, instant,
                 json.dumps({
-                    "symbol": symbol,
-                    "strategy_id": strategy_id,
-                    "strategy_version": strategy_version,
-                    "strategy_execution_binding_id": binding_id,
-                    "trading_account_id": trading_account_id,
-                    "authenticated_account_read": True,
-                    "observed_at": observed.astimezone(UTC).isoformat(),
-                    "positions_count": len(positions),
-                    "orders_count": len(orders),
+                    "strategy_id": value(row, 1, "strategy_id"),
+                    "strategy_version": value(row, 2, "strategy_version"),
+                    "symbol": value(row, 3, "symbol"),
+                    "strategy_activation_id": value(row, 5, "strategy_activation_id"),
+                    "entry_authorization_only": True,
                     "mainnet_gate_was_closed": True,
+                    "exchange_flatness_not_required": True,
+                    "position_and_exit_ownership_untouched": True,
+                    "trading_account_id": None,
                 }, sort_keys=True),
             ),
         )

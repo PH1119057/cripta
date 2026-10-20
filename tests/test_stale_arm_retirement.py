@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-from bybit_workbench.stale_arm_retirement import retire_stale_release_arms
+from bybit_workbench.stale_arm_retirement import (
+    RETIREMENT_REASON,
+    retire_stale_release_arms,
+)
 
-NOW = datetime(2026, 10, 15, 10, 0, tzinfo=UTC)
+NOW = datetime(2026, 10, 21, 10, 0, tzinfo=UTC)
 CURRENT = "a" * 40
-PRIOR = "b" * 40
+OLD = "b" * 40
 
 
 class Cursor:
@@ -22,10 +25,10 @@ class Cursor:
 
 
 class FakeDB:
-    def __init__(self, *, gate=False, blocked=False, bound_account="ta-current"):
+    def __init__(self, *, gate=False, release=OLD, active=True):
         self.gate = gate
-        self.blocked = blocked
-        self.bound_account = bound_account
+        self.release = release
+        self.active = active
         self.statements = []
 
     def execute(self, sql, params=()):
@@ -33,172 +36,129 @@ class FakeDB:
         if "FROM control.execution_gates" in sql:
             return Cursor([{"enabled": self.gate}])
         if "FROM control.live_arm_sessions" in sql:
+            if not self.active or self.release == params[0]:
+                return Cursor()
             return Cursor([{
                 "live_arm_session_id": "session-a",
                 "strategy_id": "r1_aptusdt",
                 "strategy_version": "1.1-micro-live",
                 "symbol": "APTUSDT",
-                "release_commit": PRIOR,
+                "release_commit": self.release,
                 "strategy_activation_id": "activation-a",
-                "strategy_execution_binding_id": "binding-a",
-                "trading_account_id": self.bound_account,
             }])
-        if "SELECT (" in sql:
-            return Cursor([(self.blocked,)])
-        return Cursor()
+        if sql.lstrip().startswith("UPDATE control.live_arm_sessions"):
+            self.active = False
+            return Cursor(rowcount=1)
+        if "INSERT INTO control.live_arm_retirement_events" in sql:
+            return Cursor()
+        raise AssertionError(f"unexpected inventory/binding SQL: {sql}")
 
 
-def snapshot(*, positions=None, orders=None, observed=NOW):
-    return {
-        "source": "BYBIT_AUTHENTICATED_ACCOUNT_GET",
-        "account_ref": "BYBIT:UNIFIED",
-        "account_user_id": "account-identity-present",
-        "complete": True,
-        "observed_at": observed.isoformat(),
-        "symbols": {
-            "APTUSDT": {
-                "positions": [] if positions is None else positions,
-                "orders": [] if orders is None else orders,
-            }
-        },
-    }
+def _writes(c):
+    return [sql for sql, _ in c.statements if sql.lstrip().startswith(("UPDATE", "INSERT"))]
 
 
-def test_safe_flat_scope_retires_old_authorization_not_rearms():
+def test_superseded_arm_retired_without_inventory_or_account_binding():
     c = FakeDB()
-    result = retire_stale_release_arms(
-        c, loaded_commit=CURRENT, account_snapshot=snapshot(), trading_account_id="ta-current", now=NOW
-    )
-    assert result == ("session-a",)
-    joined = "\n".join(sql for sql, _ in c.statements)
-    assert "UPDATE control.live_arm_sessions" in joined
-    assert "state='CLOSED'" in joined
-    assert "control.live_arm_retirement_events" in joined
-    assert "enabled=true" not in joined
-    assert "INSERT INTO control.live_arm_sessions" not in joined
-    assert "UPDATE strategy_entry.execution_permissions" not in joined
-    assert "UPDATE control.execution_gates" not in joined
+    assert retire_stale_release_arms(c, loaded_commit=CURRENT, now=NOW) == ("session-a",)
+    statements = "\n".join(sql for sql, _ in c.statements)
+    assert "UPDATE control.live_arm_sessions" in statements
+    assert "INSERT INTO control.live_arm_retirement_events" in statements
+    assert "strategy_execution_bindings" not in statements
+    assert "runtime.position_ownership" not in statements
+    assert "runtime.trade_commands" not in statements
+    assert "runtime.capital_reservations" not in statements
+    assert "BYBIT" not in statements
+    audit_params = next(p for sql, p in c.statements
+                        if "INSERT INTO control.live_arm_retirement_events" in sql)
+    assert RETIREMENT_REASON in audit_params
+    assert '"trading_account_id": null' in audit_params[-1]
+    assert '"exchange_flatness_not_required": true' in audit_params[-1]
+    assert "INSERT INTO control.live_arm_sessions" not in statements
+    assert "UPDATE control.execution_gates" not in statements
 
 
-def test_fail_closed_when_gate_open():
+def test_gate_on_must_not_retire_historical_arm():
     c = FakeDB(gate=True)
-    assert not retire_stale_release_arms(
-        c, loaded_commit=CURRENT, account_snapshot=snapshot(), trading_account_id="ta-current", now=NOW
-    )
-    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
+    assert not retire_stale_release_arms(c, loaded_commit=CURRENT, now=NOW)
+    assert not _writes(c)
 
 
-def test_fail_closed_when_exchange_has_position():
+def test_current_release_arm_is_not_retired():
+    c = FakeDB(release=CURRENT)
+    assert not retire_stale_release_arms(c, loaded_commit=CURRENT, now=NOW)
+    assert c.active
+    assert not _writes(c)
+
+
+def test_repeated_lifecycle_supervisor_cycle_is_idempotent():
+    c = FakeDB()
+    assert retire_stale_release_arms(c, loaded_commit=CURRENT, now=NOW)
+    assert not retire_stale_release_arms(c, loaded_commit=CURRENT, now=NOW)
+    assert sum("INSERT INTO control.live_arm_retirement_events" in s
+               for s, _ in c.statements) == 1
+
+
+def test_invalid_release_identity_or_naive_timestamp_is_fail_closed():
+    for sha in ("", "z" * 40, "short"):
+        c = FakeDB()
+        assert not retire_stale_release_arms(c, loaded_commit=sha, now=NOW)
+        assert not c.statements
     c = FakeDB()
     assert not retire_stale_release_arms(
-        c, loaded_commit=CURRENT,
-        account_snapshot=snapshot(positions=[{"size": "0.4"}]),
-        trading_account_id="ta-current", now=NOW
+        c, loaded_commit=CURRENT, now=datetime(2026, 10, 21)
     )
-    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
+    assert not c.statements
 
 
-def test_fail_closed_when_exchange_has_order_or_local_pending():
-    for snap, blocked in (
-        (snapshot(orders=[{"orderId": "pending"}]), False),
-        (snapshot(), True),
-    ):
-        c = FakeDB(blocked=blocked)
-        assert not retire_stale_release_arms(
-            c, loaded_commit=CURRENT, account_snapshot=snap, trading_account_id="ta-current", now=NOW
-        )
-        assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
-
-
-def test_fail_closed_when_account_is_not_fresh_or_complete():
-    for snap in (
-        snapshot(observed=NOW - timedelta(seconds=16)),
-        {**snapshot(), "complete": False},
-        {**snapshot(), "account_user_id": ""},
-        {**snapshot(), "symbols": {}},
-    ):
-        c = FakeDB()
-        assert not retire_stale_release_arms(
-            c, loaded_commit=CURRENT, account_snapshot=snap, trading_account_id="ta-current", now=NOW
-        )
-        assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
-
-
-def test_runtime_supervisor_audits_all_active_arm_symbols():
+def test_supervisor_calls_retirement_without_bybit_or_binding_arguments():
     from pathlib import Path
 
-    source = Path(
-        "operations/monitoring/lifecycle_supervisor_runtime.py"
-    ).read_text(encoding="utf-8")
-    assert "SELECT DISTINCT symbol FROM control.live_arm_sessions" in source
-    assert "retire_stale_release_arms(" in source
-    assert "check_release_arm_invariant(" in source
-    assert "if retired_arms:" in source
+    src = Path("operations/monitoring/lifecycle_supervisor_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    call = src.split("retire_stale_release_arms(", 1)[1].split(")", 1)[0]
+    assert "loaded_commit=loaded_commit" in call
+    assert "account_snapshot=" not in call
+    assert "trading_account_id=" not in call
+    assert "if retired_arms:" in src
+    assert "check_release_arm_invariant(" in src
 
 
-def test_retirement_uses_only_approved_migration_and_release_path():
+def test_installer_does_not_touch_trading_control_or_exchange():
     from pathlib import Path
 
-    migration = Path(
-        "operations/sql/20261015_live_arm_retirement_events_v1.sql"
-    ).read_text(encoding="utf-8")
-    installer = Path(
-        "operations/infrastructure/install_verified_release.sh"
-    ).read_text(encoding="utf-8")
+    installer = Path("operations/infrastructure/install_verified_release.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "UPDATE control.live_arm_sessions" not in installer
+    assert "INSERT INTO control.live_arm_retirement_events" not in installer
+    migration = Path("operations/sql/20261015_live_arm_retirement_events_v1.sql").read_text(
+        encoding="utf-8"
+    )
     assert "control.live_arm_retirement_events" in migration
     assert "GRANT SELECT,INSERT" in migration
-    assert "20261015_live_arm_retirement_events_v1.sql" in installer
+
+
+def test_canon_expressly_supersedes_proven_flat_dependency():
+    from pathlib import Path
+
+    dev = Path("docs/DEVELOPMENT_RELEASE_RULES_RU.md").read_text(encoding="utf-8")
+    tc = Path("docs/TRADING_CONTOUR_RU.md").read_text(encoding="utf-8")
+    assert "SUPERSEDED by OWNER DECISION 2026-10-21" in dev
+    assert "proven-flat criterion has no current normative effect" in dev
+    assert "SUPERSEDED" in tc
+    assert "explicit owner approval" in tc
 
 
 def test_bybit_clock_failure_explains_network_samples_not_host_clock():
     from pathlib import Path
 
-    runtime = Path(
-        "operations/connectivity/private_runtime.py"
-    ).read_text(encoding="utf-8")
+    runtime = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
     assert "BYBIT_TIME_PROBE_MAX_RTT_MS = 1000.0" in runtime
     assert "BYBIT_TIME_PROBE_ATTEMPTS = 3" in runtime
     assert "probe_rtts_ms=" in runtime
     assert "path=/v5/market/time" in runtime
     assert "UNSAFE_BYBIT_CLOCK_OFFSET" not in runtime
-
-
-def test_fail_closed_when_arm_binding_belongs_to_other_account():
-    c = FakeDB(bound_account="ta-other")
-    assert not retire_stale_release_arms(
-        c,
-        loaded_commit=CURRENT,
-        account_snapshot=snapshot(),
-        trading_account_id="ta-current",
-        now=NOW,
-    )
-    assert not any(sql.lstrip().startswith("UPDATE ") for sql, _ in c.statements)
-
-
-def test_retirement_scopes_local_blockers_to_exact_proven_account():
-    c = FakeDB()
-    retire_stale_release_arms(
-        c,
-        loaded_commit=CURRENT,
-        account_snapshot=snapshot(),
-        trading_account_id="ta-current",
-        now=NOW,
-    )
-    joined = "\n".join(sql for sql, _ in c.statements)
-    assert "strategy_execution_bindings" in joined
-    assert "b.execution_leg='PRIMARY'" in joined
-    assert "b.allocation_mode='DEDICATED_STRATEGY'" in joined
-    assert joined.count("trading_account_id=%s") >= 4
-    assert "LEGACY_UNKNOWN" not in joined
-    assert joined.count("identity_status='PROVEN'") >= 4
-    params = [params for sql, params in c.statements if "SELECT (" in sql][0]
-    assert params.count("ta-current") == 4
-
-
-def test_runtime_passes_exact_trading_account_to_stale_arm_retirement():
-    from pathlib import Path
-
-    source = Path(
-        "operations/monitoring/lifecycle_supervisor_runtime.py"
-    ).read_text(encoding="utf-8")
-    assert "trading_account_id=TRADING_ACCOUNT_ID" in source
