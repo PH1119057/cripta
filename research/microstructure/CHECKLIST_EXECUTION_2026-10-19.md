@@ -339,3 +339,12 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] Candidate v2 Decimal timestamp floor independent 1440 × 8 field tolerance comparison 5/5 recorded from existing evidence; original v1 APT known 3 fills 23:26:59.9995Z failure remains explicit. Float tolerance is not an exact per-column source hash.
 - [ ] Raw SHA256 and source/run manifests, event→receipt/observed/available-after, owner requested full period, manual physical sign/denominator QC remain OPEN.
 - [x] 30 strict gate statuses `NO_READY`; no server replay or Strategy/LIVE mutation.
+
+
+## 2026-10-20 — deep per-pair §21.6 audit for #4/#8/#27/#28
+
+- [x] `research/microstructure/passports/trade_tape_4_8_27_28_2026-05-20_gate_v2.json` (commit `307bbbb181d41af4dbb33013fe2b026717fc7f73`) captures **20 pairs**, preserving existing May20 independent Decimal whole-day summary QC 5/5, not claiming per-record/per-minute numeric equality.
+- [x] Source-level limitation: both current primary readers use `float(timestamp)`, unlike Decimal floor v2 trade-minute reader. Minute and fill exact-time boundaries remain NOT independently proved; no silent substitution.
+- [x] #4 previous60 p99 is separate causal descriptive estimator; #8 same-side timestamp grouping not parent orders; #27 intertimestamp gaps not unique trade orders; #28 whole-day percentiles ex-post only.
+- [ ] Per-pair source SHA256, observed receipt clock, full research-period coverage, per-minute/per-fill independent row QC and as-of verification remain OPEN; `RESEARCH-READY=NO` for all 20.
+- [x] GitHub-only analysis; no server replay, trading modifications or LIVE actions.
