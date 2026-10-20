@@ -280,3 +280,12 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] Identified concurrent distinct `job_d031ae9c1823`: registered RUNNING with started_at=null, no confirmed process/ownership; not altered. Do not conflate it with #13 or infer server CPU use.
 - [ ] Recover on-host outcome/host health using approved read-only diagnostic path before further heavy replay; no restart or actor substitution without evidence/approval. Journal `c5d9ed105a136087c7d2413312c89ecb0fd4652d`.
 - [ ] #13 intraday time-gap, pending-age and timer-contract study remains incomplete; existing boundary evidence (two old Bid pending at end) intact. No Strategy/DB/deployment/LIVE changes.
+
+
+## 2026-10-20 — third pass: six trade-minute factors, 30 pair-level passport drafts
+
+- [x] `research/microstructure/passports/trade_minute_six_factors_2026-05-20_draft_v1.json` GitHub commit `1967e7260a5d6b9f2226345df315c2b7bf5b8155` prepared for #1/#2/#3/#5/#6/#7 × APT/INJ/DOT/LTC/ARB: **30 instrument-level DRAFT measurement worksheets**, neither full formal passports nor `RESEARCH-READY`.
+- [x] Each row identifies exact instrument/source/day/reader version, formula, units, aggregation operator, UTC boundary, reset/missing semantics, independent whole-day 1440-minute numeric QC reference and explicit unverified fields. V1 APT timestamp boundary bug remains distinct from candidate v2 5/5 numerical validation.
+- [ ] Per-pair exact raw source SHA256, source/receipt/publication clock and timeliness, full requested period, verified source+run manifests and manual sign/denominator proof remain OPEN; until then `PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY`.
+- [ ] 30 draft rows are NOT an increment in the number of `RESEARCH-READY` indicators or valid after-fee trading evidence; continue #4/#8/#27/#28 related trade tape families next, then price/book groups.
+- [x] No server-side compute or file write, production services/Strategy/LIVE unchanged.
