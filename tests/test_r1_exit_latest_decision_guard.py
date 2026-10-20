@@ -40,4 +40,4 @@ def test_universal_exit_rejects_superseded_geometry_observation():
     body = ast.get_source_segment(source, func)
     assert "FROM strategy_exit.exit_observations" in body
     assert "STRATEGY_EXIT_OBSERVATION_SUPERSEDED" in body
-    assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index("exchange_position = next(")
+    assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index(\n        "exchange_position = next("\n    )
