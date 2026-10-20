@@ -1,0 +1,613 @@
+{
+  "status": "STRICT_21_6_EVIDENCE_AUDIT_NOT_READY",
+  "head": "80174fb21899970ac38598c2fa308c63a8c0a6d2",
+  "scope": "2026-05-20 UTC 5 symbols × 6 indicators",
+  "pairs": [
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregate_operator": "NON_AGGREGATABLE",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregate_operator": "NON_AGGREGATABLE",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregate_operator": "NON_AGGREGATABLE",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregate_operator": "NON_AGGREGATABLE",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 1,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_quote_notional / mean(previous_60_complete_minutes_quote_notional)",
+      "unit": "ratio",
+      "aggregate_operator": "NON_AGGREGATABLE",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregate_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregate_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregate_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregate_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 2,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "count(public_trade_fills_per_completed_UTC_minute)",
+      "unit": "fill_records/min",
+      "aggregate_operator": "ADDITIVE_ON_NONOVERLAPPING_MINUTES_ONLY",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 3,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_fill_count - previous_minute_fill_count",
+      "unit": "fills/min difference",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregate_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregate_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregate_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregate_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 5,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "sum(Buy foreignNotional) - sum(Sell foreignNotional) within minute",
+      "unit": "USDT",
+      "aggregate_operator": "ADDITIVE_ON_DISJOINT_FILLS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 6,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "cumulative_sum(minute_signed_USDT_delta) since UTC day start",
+      "unit": "USDT",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "APTUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/APTUSDT/public_trades/APTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "INJUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/INJUSDT/public_trades/INJUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/DOTUSDT/public_trades/DOTUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/LTCUSDT/public_trades/LTCUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "indicator_id": 7,
+      "formula_version": "trade_minute_factors_v2_exact_timestamp_floor",
+      "source": "/data/cripta/datasets/raw/20260518_20260816/ARBUSDT/public_trades/ARBUSDT2026-05-20.csv.gz",
+      "formula": "current_minute_delta_USDT - previous_minute_delta_USDT",
+      "unit": "USDT change/min",
+      "aggregate_operator": "RECOMPUTE_FROM_COMPONENTS",
+      "gates": {
+        "minute_membership": "PASS_DECIMAL_TIMESTAMP_FLOOR_V2; V1 APT FAIL",
+        "independent_numeric_full_1440": "PASS_5_OF_5_TOLERANCE",
+        "source_file_sha256": "NOT_REGISTERED_PER_PAIR",
+        "capture_receipt_available_after": "NOT_OBSERVED",
+        "canonical_source_run_manifest": "NOT_VERIFIED",
+        "full_requested_period": "MAY20_ONLY_OTHER_DAYS_NOT_VERIFIED",
+        "manual_source_sign_and_denominator": "OPEN",
+        "replay_determinism": "ONE_DAY_NUMERIC_COMPARISON_ONLY"
+      },
+      "decision": "NO_READY"
+    }
+  ],
+  "limitations": [
+    "Checker compared 8 source fields per 1440 minutes using tolerance for floats, not exact hash equality.",
+    "Upstream source timing beyond exchange event timestamps not proven.",
+    "Original v1 three-fill APT 23:26:59.9995Z rounding is a documented failed variant, v2 not to be silently substituted.",
+    "No server computation performed this turn."
+  ]
+}
