@@ -289,3 +289,11 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [ ] Per-pair exact raw source SHA256, source/receipt/publication clock and timeliness, full requested period, verified source+run manifests and manual sign/denominator proof remain OPEN; until then `PHYSICAL_NUMERIC_QC_PASS_NOT_RESEARCH_READY`.
 - [ ] 30 draft rows are NOT an increment in the number of `RESEARCH-READY` indicators or valid after-fee trading evidence; continue #4/#8/#27/#28 related trade tape families next, then price/book groups.
 - [x] No server-side compute or file write, production services/Strategy/LIVE unchanged.
+
+
+## 2026-10-20 — third pass tape distributions: #4/#8/#27/#28 × 5 draft passport records
+
+- [x] `research/microstructure/passports/trade_tape_4_8_27_28_2026-05-20_draft_v1.json`, GitHub commit `34db5d41ff558105a9086323f584ad11e71b4094`: **20 per-pair measurement drafts** for five Bybit instruments and four tape indicators, source/formula/unit/aggregation/window/lack of observed-time recorded.
+- [x] Prior independent Decimal summaries 5/5: #4 prior60 large-fill, #8 timestamp+side heuristic group streaks, #27 positive inter-fill gaps, #28 ex-post fill-size p95/p99. No new server calculation and no READY grant.
+- [ ] Need immutable source SHA256 and per-minute/per-fill explicit parity; source arrival/available-after, requested complete window; distinguish ex-post thresholds from causal streaming thresholds; §21.6 gate remains OPEN.
+- [x] #1/#2/#3/#5/#6/#7 30 prior draft rows separately retained. Tape group has 50 draft rows total, 0 READY.
