@@ -29,7 +29,10 @@ NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
 
 def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
     """Match the consumer account scope to this disposable fixture only."""
-    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id):
+    with (
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id),
+        patch.object(entry_consumer, "ACCOUNT_CONNECTOR_ID", trading_account_id[:-3] + "-connector"),
+    ):
         result = run_once(connection, now=NOW)
     if result == "BLOCKED:STRATEGY_EXECUTION_BINDING_NOT_READY":
         reasons = connection.execute(
