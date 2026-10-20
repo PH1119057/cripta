@@ -4,8 +4,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_new_exchange_position_key_is_trading_account_scoped() -> None:
-    identity_source = (ROOT / "src/bybit_workbench/exchange_position_identity.py").read_text(encoding="utf-8")
-    lineage_source = (ROOT / "src/bybit_workbench/strategy_position_binding.py").read_text(encoding="utf-8")
+    identity_source = (
+        ROOT / "src/bybit_workbench/exchange_position_identity.py"
+    ).read_text(encoding="utf-8")
+    lineage_source = (
+        ROOT / "src/bybit_workbench/strategy_position_binding.py"
+    ).read_text(encoding="utf-8")
     assert "trading_account_id: str" in identity_source
     assert 'return f"BYBIT:{account}:LINEAR:USDT:{normalized}:{position_idx}"' in identity_source
     assert "lineage.trading_account_id" in lineage_source
