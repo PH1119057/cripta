@@ -10,6 +10,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_exit.execution_bridge import (
     prepare_runtime_exit_command,
 )
@@ -51,6 +52,7 @@ def _seed(
     max_age: int = 30,
     action_kind: str = "CLOSE",
     mutation: dict[str, object] | None = None,
+    symbol_override: str | None = None,
 ) -> dict[str, str]:
     strategy_id = f"{prefix}-strategy"
     version = "1"
@@ -69,7 +71,7 @@ def _seed(
     entry_command_id = f"{prefix}-entry-command"
     observation_id = f"{prefix}-exit-observation"
     exit_decision_id = f"{prefix}-exit-decision"
-    symbol = "P6" + prefix.replace("-", "").upper()[-8:] + "USDT"
+    symbol = symbol_override or ("P6" + prefix.replace("-", "").upper()[-8:] + "USDT")
     trading_account_id = f"{prefix}-ta"
     binding_id = f"{prefix}-binding"
     mutation = mutation or {"quantity": "ALL", "order_type": "Market"}
@@ -271,7 +273,7 @@ def _seed(
                     %s,%s,'CLAIMED',%s,%s,%s,'PRIMARY',%s,'PROVEN')""",
         (
             slot_claim_id,
-            f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0",
+            exchange_position_key(trading_account_id, symbol, 0),
             symbol,
             attempt_id,
             strategy_id,
@@ -364,7 +366,7 @@ def _seed(
             entry_command_id,
             symbol,
             NOW - timedelta(minutes=1),
-            f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:0",
+            exchange_position_key(trading_account_id, symbol, 0),
             strategy_fp,
             activation_id,
             attempt_id,
@@ -728,8 +730,8 @@ def test_two_accounts_complete_independent_exit_dispatch_with_entry_disarmed() -
     assert DSN is not None
     prefix = "p6-two-exit-" + uuid4().hex[:8]
     with psycopg.connect(DSN, row_factory=dict_row) as connection:
-        first = _seed(connection, prefix + "-a")
-        second = _seed(connection, prefix + "-b")
+        first = _seed(connection, prefix + "-a", symbol_override="BTCUSDT")
+        second = _seed(connection, prefix + "-b", symbol_override="BTCUSDT")
         assert first["trading_account_id"] != second["trading_account_id"]
         _gate(connection, False)
         connection.commit()
