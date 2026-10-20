@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
+from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.entry_admission import (
     SlotClaimState,
     bind_slot_claim_to_position,
@@ -111,22 +112,6 @@ class ConnectionLike(Protocol):
     def execute(self, statement: str, parameters: Sequence[object] = ()) -> CursorLike: ...
 
     def transaction(self) -> AbstractContextManager[object]: ...
-
-
-def exchange_position_key(
-    trading_account_id: str,
-    symbol: str,
-    position_idx: int,
-) -> str:
-    if position_idx < 0:
-        raise ValueError("position_idx cannot be negative")
-    account = trading_account_id.strip()
-    if not account:
-        raise ValueError("trading_account_id is required")
-    normalized = symbol.strip().upper()
-    if not normalized:
-        raise ValueError("symbol is required")
-    return f"BYBIT:{account}:LINEAR:USDT:{normalized}:{position_idx}"
 
 
 def load_universal_entry_lineage(
