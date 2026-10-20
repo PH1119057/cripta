@@ -1680,6 +1680,36 @@ def _universal_exit_position(
     if expected_owner[2] != expected_key:
         raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
 
+    # Never send an Exit mutation after a newer decision superseded it.
+    # The expiry check above remains a separate transport-safety gate.
+    decision_id = str(payload.get("exit_decision_id") or "")
+    if not decision_id:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_ID_MISSING")
+    latest_decision = connection.execute(
+        """SELECT exit_decision_id, observation_id
+             FROM strategy_exit.exit_decisions
+            WHERE strategy_position_id=%s
+            ORDER BY decided_at DESC, exit_decision_id DESC
+            LIMIT 1""",
+        (position_id,),
+    ).fetchone()
+    if latest_decision is None:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_NOT_FOUND")
+    if str(latest_decision[0]) != decision_id:
+        raise RuntimeError("STRATEGY_EXIT_DECISION_SUPERSEDED")
+    # A recorded new L5-3 geometry event invalidates the old Exit decision
+    # even if the replacement Exit decision has not yet been compiled.
+    latest_observation = connection.execute(
+        """SELECT observation_id
+             FROM strategy_exit.exit_observations
+            WHERE strategy_position_id=%s
+            ORDER BY observed_at DESC, observation_id DESC
+            LIMIT 1""",
+        (position_id,),
+    ).fetchone()
+    if latest_observation is None or str(latest_observation[0]) != str(latest_decision[1]):
+        raise RuntimeError("STRATEGY_EXIT_OBSERVATION_SUPERSEDED")
+
     exchange_position = next(
         (
             item
@@ -1872,37 +1902,56 @@ def _execute_universal_exit_command(
                 },
                 "idempotent": True,
             }
+        cancelled_count = 0
         for item in existing:
-            api_post(
-                "/v5/order/cancel",
+            try:
+                api_post(
+                    "/v5/order/cancel",
+                    {
+                        "category": "linear",
+                        "symbol": symbol,
+                        "orderId": str(item.get("orderId") or ""),
+                    },
+                    key,
+                    secret,
+                    accepted_codes=(110001,),
+                )
+            except Exception as exc:
+                # Even a rejected/ambiguous cancel can conceal a changed
+                # exchange state; never continue with an unverified TP set.
+                raise ExchangeMutationBarrier(
+                    "dynamic TP cancellation outcome needs reconciliation"
+                ) from exc
+            cancelled_count += 1
+        link_id = (tag + hashlib.sha256(command_id.encode()).hexdigest()[:16])[:36]
+        try:
+            result = api_post(
+                "/v5/order/create",
                 {
                     "category": "linear",
                     "symbol": symbol,
-                    "orderId": str(item.get("orderId") or ""),
+                    "side": "Sell" if side == "Buy" else "Buy",
+                    "orderType": "Limit",
+                    "price": str(target),
+                    "qty": str(qty),
+                    "timeInForce": "PostOnly",
+                    "positionIdx": position_idx,
+                    "orderLinkId": link_id,
+                    "reduceOnly": True,
+                    "closeOnTrigger": False,
                 },
                 key,
                 secret,
-                accepted_codes=(110001,),
             )
-        link_id = (tag + hashlib.sha256(command_id.encode()).hexdigest()[:16])[:36]
-        result = api_post(
-            "/v5/order/create",
-            {
-                "category": "linear",
-                "symbol": symbol,
-                "side": "Sell" if side == "Buy" else "Buy",
-                "orderType": "Limit",
-                "price": str(target),
-                "qty": str(qty),
-                "timeInForce": "PostOnly",
-                "positionIdx": position_idx,
-                "orderLinkId": link_id,
-                "reduceOnly": True,
-                "closeOnTrigger": False,
-            },
-            key,
-            secret,
-        )
+        except Exception as exc:
+            if cancelled_count:
+                # Cancellation may already have removed the last resting TP.
+                # Require Exchange reconciliation and block new Entry; a plain
+                # failed command must not conceal uncertain replacement state.
+                raise ExchangeMutationBarrier(
+                    "dynamic TP replacement failed after existing-order cancellation"
+                ) from exc
+            raise
         exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
         if not exchange_order_id:
             raise ExchangeMutationBarrier(
