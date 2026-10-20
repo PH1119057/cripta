@@ -41,3 +41,15 @@ def test_universal_exit_rejects_superseded_geometry_observation():
     assert "FROM strategy_exit.exit_observations" in body
     assert "STRATEGY_EXIT_OBSERVATION_SUPERSEDED" in body
     assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index(\n        "exchange_position = next("\n    )
+
+
+def test_partial_tp_replacement_failure_forces_exchange_reconciliation():
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    start = source.index("if action_kind is ExitActionKind.SET_TP:")
+    end = source.index("if action_kind is ExitActionKind.SET_PROTECTION:", start)
+    block = source[start:end]
+    assert "dynamic TP cancellation outcome needs reconciliation" in block
+    assert "dynamic TP replacement failed after existing-order cancellation" in block
+    assert "cancelled_count += 1" in block
+    assert "raise ExchangeMutationBarrier(" in block
+    assert "except Exception as exc:" in block
