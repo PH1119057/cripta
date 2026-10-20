@@ -37,6 +37,7 @@ CONSUMER_ARM = os.environ.get("CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER", "DISABL
 POLL_SECONDS = float(os.environ.get("CRIPTA_UNIVERSAL_ENTRY_CONSUMER_POLL_SECONDS", "0.25"))
 LOADED_RELEASE_COMMIT = os.environ.get("CRIPTA_RELEASE_COMMIT", "").strip().lower()
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
+ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
 
 running = True
 
@@ -454,23 +455,25 @@ def _admission_pre_dispatch_status(
         or str(binding["environment"]) != "MAINNET"
     ):
         return "BINDING_INVALID", "STRATEGY_EXECUTION_BINDING_NOT_ACTIVE"
-    # A live request must still resolve to one active registered connector
-    # on its exact TradingAccount. Registration is necessary, not proof of
-    # authenticated private connectivity or order/protection capability.
-    connectors = connection.execute(
+    # Match the explicitly configured private-runtime connector identity.
+    # Other registered connectors for this TradingAccount may serve different
+    # roles; never infer which one owns this execution from account alone.
+    if not ACCOUNT_CONNECTOR_ID:
+        return "BINDING_INVALID", "ACCOUNT_CONNECTOR_ID_CONFIG_MISSING"
+    connector = connection.execute(
         """SELECT account_connector_id,adapter_id,credential_ref,status
              FROM identity.account_connectors
-            WHERE trading_account_id=%s AND retired_at IS NULL""",
-        (request.trading_account_id,),
-    ).fetchall()
-    active_connectors = [
-        connector for connector in connectors
-        if str(connector["status"]) == "ACTIVE"
-        and str(connector["adapter_id"] or "").strip()
-        and str(connector["credential_ref"] or "").strip()
-    ]
-    if len(active_connectors) != 1:
-        return "BINDING_INVALID", "ACCOUNT_CONNECTOR_NOT_UNIQUELY_ACTIVE"
+            WHERE trading_account_id=%s AND account_connector_id=%s
+              AND retired_at IS NULL""",
+        (request.trading_account_id, ACCOUNT_CONNECTOR_ID),
+    ).fetchone()
+    if (
+        connector is None
+        or str(connector["status"]) != "ACTIVE"
+        or not str(connector["adapter_id"] or "").strip()
+        or not str(connector["credential_ref"] or "").strip()
+    ):
+        return "BINDING_INVALID", "ACCOUNT_CONNECTOR_IDENTITY_NOT_ACTIVE"
     account_ref = str(row.get("capital_reservation_account_ref") or "")
     if account_ref != CURRENT_ACCOUNT_REF:
         return "INVARIANT_BROKEN", f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
