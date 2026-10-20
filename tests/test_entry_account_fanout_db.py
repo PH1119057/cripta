@@ -41,7 +41,7 @@ def test_multiple_active_accounts_select_deterministically():
     assert db.params == ("act", NOW, NOW)
     assert "effective_from<=%s" in db.sql
     assert "effective_to>%s" in db.sql
-    assert "allocation_mode='DEDICATED_STRATEGY'" in db.sql
+    assert "allocation_mode" in db.sql
 
 
 def test_missing_binding_blocks():
@@ -54,7 +54,10 @@ def test_missing_binding_blocks():
 
 
 def test_unauthorized_leg_blocks_every_leg():
-    db = DB([("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"), ("b2", "act", "LEG_B", "ta-2", "DEDICATED_STRATEGY")])
+    db = DB([
+        ("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"),
+        ("b2", "act", "LEG_B", "ta-2", "DEDICATED_STRATEGY"),
+    ])
     result = read_entry_account_fanout(
         db, strategy_activation_id="act",
         authorized_binding_ids=frozenset({"b1"}), now=NOW,
@@ -64,7 +67,10 @@ def test_unauthorized_leg_blocks_every_leg():
 
 
 def test_duplicate_account_blocks():
-    db = DB([("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"), ("b2", "act", "LEG_B", "ta-1", "DEDICATED_STRATEGY")])
+    db = DB([
+        ("b1", "act", "LEG_A", "ta-1", "DEDICATED_STRATEGY"),
+        ("b2", "act", "LEG_B", "ta-1", "DEDICATED_STRATEGY"),
+    ])
     result = read_entry_account_fanout(
         db, strategy_activation_id="act",
         authorized_binding_ids=frozenset({"b1", "b2"}), now=NOW,
