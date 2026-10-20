@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 import operations.connectivity.universal_entry_consumer as consumer
 
-
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 REQUEST = {
     "strategy_id": "strategy-1",
