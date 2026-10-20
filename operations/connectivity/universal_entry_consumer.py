@@ -454,6 +454,23 @@ def _admission_pre_dispatch_status(
         or str(binding["environment"]) != "MAINNET"
     ):
         return "BINDING_INVALID", "STRATEGY_EXECUTION_BINDING_NOT_ACTIVE"
+    # A live request must still resolve to one active registered connector
+    # on its exact TradingAccount. Registration is necessary, not proof of
+    # authenticated private connectivity or order/protection capability.
+    connectors = connection.execute(
+        """SELECT account_connector_id,adapter_id,credential_ref,status
+             FROM identity.account_connectors
+            WHERE trading_account_id=%s AND retired_at IS NULL""",
+        (request.trading_account_id,),
+    ).fetchall()
+    active_connectors = [
+        connector for connector in connectors
+        if str(connector["status"]) == "ACTIVE"
+        and str(connector["adapter_id"] or "").strip()
+        and str(connector["credential_ref"] or "").strip()
+    ]
+    if len(active_connectors) != 1:
+        return "BINDING_INVALID", "ACCOUNT_CONNECTOR_NOT_UNIQUELY_ACTIVE"
     account_ref = str(row.get("capital_reservation_account_ref") or "")
     if account_ref != CURRENT_ACCOUNT_REF:
         return "INVARIANT_BROKEN", f"ACCOUNT_REF_UNSUPPORTED:{account_ref or 'MISSING'}"
