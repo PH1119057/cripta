@@ -269,8 +269,6 @@ def main() -> int:
                     retired_arms = retire_stale_release_arms(
                         connection,
                         loaded_commit=loaded_commit,
-                        account_snapshot=account,
-                        trading_account_id=TRADING_ACCOUNT_ID,
                         now=now,
                     )
                     if retired_arms:
