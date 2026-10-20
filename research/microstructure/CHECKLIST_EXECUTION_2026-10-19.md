@@ -306,3 +306,12 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] #14/#17 next-window return classified FUTURE LABEL; #16 absorption and #21 sweep are mechanism-unverified proxies, #15 numeric proxy is not marginal price impact.
 - [ ] This draft is a **scope/status inventory**, not a proof that 45 fully specified passport formulas are verified. Full source/formula/timing/causality QC and owner decisions remain for deeper phase.
 - [x] Draft rows across tape and price-flow now 95 (=50 +45), formal per-pair RESEARCH-READY 0. No new server jobs or runtime/LIVE actions.
+
+
+## 2026-10-20 — third pass orderbook group #9–13/#29–30
+
+- [x] `research/microstructure/passports/orderbook_9_13_29_30_draft_v1.json` commit `1909c21486b12df83d227d59d0de35e45997794e`: 7 indicators × five instruments = **35 DRAFT pairs**, source/window/algorithm/evidence and explicit missing clock/proxy distinctions.
+- [x] #9/#11/#29 retain May19 independent summary 5/5; May19 full-row job APT outcome unknown. #10 deep rank shifts ≠ price-identity OFI. #12 visible book decrease ≠ verified cancel. #13 timer/endpoint open. #30 May20 INJ/ARB unknown; no rerun or inferred success.
+- [ ] Exact variants/units (especially #10/#29), publication time, raw manifests/SHA256, per-pair §21.6 proof remain open; 35 rows are **NOT RESEARCH-READY**. OWNER_DECISION_REQUIRED remains for strict variant changes.
+- [x] Total DRAFT registry coverage now 130/150 rows (50 tape +45 price/flow +35 book), but only **0/150 READY**. #23–26 (20 rows) not to be filled as if observed; #26 deferred.
+- [x] No server replay, database or live modifications.
