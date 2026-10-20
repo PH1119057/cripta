@@ -1222,7 +1222,7 @@ Documentation maintenance gate:
 - Historical 15/30 READY is not retroactively converted to 75/150; re-QC per pair before promotion.
 - No new trading threshold/Strategy behavior, market data acquisition, server filesystem/DB write, release/deploy or LIVE authorization.
 
-## 39. Independent Strategy configurations, multi-account fan-out and manual readiness — OWNER DECISION 2026-10-20
+# 39. Independent Strategy configurations, multi-account fan-out and manual readiness — OWNER DECISION 2026-10-20
 
 Canonical owners: ARCH §49.6 for independent Strategy IDs, DEDICATED_STRATEGY
 TradingAccount isolation and fan-out; TRADING_CONTOUR §7.3.1 for Strategy
