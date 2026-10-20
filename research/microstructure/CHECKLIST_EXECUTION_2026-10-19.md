@@ -331,3 +331,11 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [x] Source distinguishes 20 completed-minute close range / previous20 for #19, and UTC-day running VWAP plus exact-price POC for #22; missing close and zero denominator rules checked in source. Hash is of the joined row, **not** a separate hash for each feature.
 - [ ] Full §21.6 passport still OPEN: observed receipt/publication time not proven, provenance/run manifest incomplete, full owner-selected period scope not proven beyond May20, and formal per-pair READY gate not granted. OOS after fees is a later distinct research stage.
 - [x] Status remains 0 RESEARCH-READY. No server job/DB/Strategy/LIVE changes.
+
+
+## 2026-10-20 — deep §21.6 gate six trade-minute indicators
+
+- [x] `research/microstructure/passports/trade_minute_six_factors_2026-05-20_gate_v2.json` commit `51ed1ffd4b7ea2186609e813f613020d67ab5905`: **30 exact indicator×instrument rows** with separate source/time/QC/full-period gates.
+- [x] Candidate v2 Decimal timestamp floor independent 1440 × 8 field tolerance comparison 5/5 recorded from existing evidence; original v1 APT known 3 fills 23:26:59.9995Z failure remains explicit. Float tolerance is not an exact per-column source hash.
+- [ ] Raw SHA256 and source/run manifests, event→receipt/observed/available-after, owner requested full period, manual physical sign/denominator QC remain OPEN.
+- [x] 30 strict gate statuses `NO_READY`; no server replay or Strategy/LIVE mutation.
