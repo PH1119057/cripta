@@ -116,8 +116,10 @@ def _seed(
     )
     connection.execute(
         """INSERT INTO identity.account_connectors(
-               account_connector_id,trading_account_id,connector_kind,adapter_id,status
-           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE','ACTIVE')""",
+               account_connector_id,trading_account_id,connector_kind,adapter_id,
+               credential_ref,status
+           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                    'test-disposable-credential','ACTIVE')""",
         (f"{prefix}-connector", trading_account_id),
     )
     connection.execute(
