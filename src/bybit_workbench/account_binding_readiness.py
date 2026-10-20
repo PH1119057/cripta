@@ -30,7 +30,7 @@ def check_binding_readiness(
     instant. An empty or inconsistent snapshot is BLOCKED, never accepted as
     proof of readiness. Real Entry still requires every existing live safety gate.
     """
-    strategies = tuple(str(x).strip() for x in active_strategy_ids)
+    strategies = tuple(str(x or "").strip() for x in active_strategy_ids)
     reasons: set[str] = set()
     if not strategies or any(not s for s in strategies):
         reasons.add("ACTIVE_STRATEGY_IDENTITY_MISSING")
@@ -41,6 +41,7 @@ def check_binding_readiness(
     by_strategy: dict[str, set[str]] = defaultdict(set)
     by_leg: dict[tuple[str, str], set[str]] = defaultdict(set)
     seen_binding_ids: set[str] = set()
+    account_binding_counts: dict[str, int] = defaultdict(int)
     for binding in active_bindings:
         binding_id = str(binding.get("strategy_execution_binding_id") or "").strip()
         strategy_id = str(binding.get("strategy_activation_id") or "").strip()
@@ -58,9 +59,12 @@ def check_binding_readiness(
             reasons.add("BINDING_NOT_DEDICATED")
         if str(binding.get("binding_state") or "") != "ACTIVE":
             reasons.add("BINDING_NOT_ACTIVE")
+        account_binding_counts[account_id] += 1
         by_account[account_id].add(strategy_id)
         by_strategy[strategy_id].add(account_id)
         by_leg[(strategy_id, leg)].add(account_id)
+    if any(count > 1 for count in account_binding_counts.values()):
+        reasons.add("TRADING_ACCOUNT_MULTIPLE_ACTIVE_BINDINGS")
     if any(len(owners) > 1 for owners in by_account.values()):
         reasons.add("TRADING_ACCOUNT_SHARED_BY_STRATEGIES")
     if any(len(accounts) > 1 for accounts in by_leg.values()):
