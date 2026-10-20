@@ -29,7 +29,13 @@ NOW = datetime(2026, 9, 18, 13, 0, tzinfo=UTC)
 
 def _run_once_for_fixture_account(connection: psycopg.Connection, trading_account_id: str) -> str:
     """Match the consumer account scope to this disposable fixture only."""
-    with patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id):
+    with (
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id),
+        patch.object(
+            entry_consumer, "ACCOUNT_CONNECTOR_ID",
+            trading_account_id[:-3] + "-connector",
+        ),
+    ):
         result = run_once(connection, now=NOW)
     if result == "BLOCKED:STRATEGY_EXECUTION_BINDING_NOT_READY":
         reasons = connection.execute(
@@ -105,6 +111,15 @@ def _seed_request(
            ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')
            ON CONFLICT(trading_account_id) DO NOTHING""",
         (trading_account_id,),
+    )
+    connection.execute(
+        """INSERT INTO identity.account_connectors(
+               account_connector_id,trading_account_id,connector_kind,adapter_id,
+               credential_ref,status
+           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                    'test-disposable-credential','ACTIVE')
+           ON CONFLICT(account_connector_id) DO NOTHING""",
+        (f"{prefix}-connector", trading_account_id),
     )
     connection.execute(
         """INSERT INTO strategy_entry.strategy_execution_bindings(

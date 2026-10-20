@@ -36,6 +36,10 @@ def _run_once_for_fixture_account(connection: psycopg.Connection, trading_accoun
     """Match the consumer account scope to this disposable fixture only."""
     with (
         patch.object(entry_consumer, "TRADING_ACCOUNT_ID", trading_account_id),
+        patch.object(
+            entry_consumer, "ACCOUNT_CONNECTOR_ID",
+            trading_account_id[:-3] + "-connector",
+        ),
         patch.object(entry_consumer, "LOADED_RELEASE_COMMIT", TEST_RELEASE_COMMIT),
     ):
         result = run_once(connection, now=NOW)
@@ -116,8 +120,10 @@ def _seed(
     )
     connection.execute(
         """INSERT INTO identity.account_connectors(
-               account_connector_id,trading_account_id,connector_kind,adapter_id,status
-           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE','ACTIVE')""",
+               account_connector_id,trading_account_id,connector_kind,adapter_id,
+               credential_ref,status
+           ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                    'test-disposable-credential','ACTIVE')""",
         (f"{prefix}-connector", trading_account_id),
     )
     connection.execute(
