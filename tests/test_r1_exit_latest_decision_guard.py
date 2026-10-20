@@ -142,3 +142,96 @@ def test_latest_exit_decision_guard_with_recorded_observation():
         guard(Connection(decision="D2"), **kwargs)
     with pytest.raises(RuntimeError, match="STRATEGY_EXIT_OBSERVATION_SUPERSEDED"):
         guard(Connection(observation="O2"), **kwargs)
+
+
+def test_cancelled_resting_tp_and_failed_create_raise_reconciliation_barrier():
+    import hashlib
+    from decimal import Decimal
+    from enum import Enum
+
+    import pytest
+
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    func = next(
+        node for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_execute_universal_exit_command"
+    )
+    module = ast.Module(
+        body=[
+            ast.ImportFrom(
+                module="__future__", names=[ast.alias(name="annotations")], level=0
+            ),
+            func,
+        ],
+        type_ignores=[],
+    )
+
+    class Action(Enum):
+        SET_TP = "SET_TP"
+        SET_STOP = "SET_STOP"
+        SET_PROTECTION = "SET_PROTECTION"
+        SET_TRAILING = "SET_TRAILING"
+
+    class Barrier(Exception):
+        pass
+
+    calls = []
+    symbol = "APTUSDT"
+    position_id = "POS1"
+    tag = "utp" + hashlib.sha256(position_id.encode()).hexdigest()[:12] + "-"
+    existing = {
+        "orderId": "OLD",
+        "orderStatus": "New",
+        "reduceOnly": True,
+        "orderLinkId": tag + "existing",
+        "price": "10.5",
+        "leavesQty": "1",
+        "qty": "1",
+    }
+
+    def post(path, data, key, secret, **kwargs):
+        calls.append(path)
+        if path == "/v5/order/create":
+            raise RuntimeError("Bybit create failed")
+        return {"retCode": 0}
+
+    namespace = {
+        "Decimal": Decimal,
+        "hashlib": hashlib,
+        "ExitActionKind": Action,
+        "ExchangeMutationBarrier": Barrier,
+        "_universal_exit_position": lambda *args, **kwargs: {
+            "positionIdx": 0, "side": "Buy", "size": "1"
+        },
+        "validate_exit_mutation": lambda action, mutation: mutation,
+        "_normalize_dynamic_tp": lambda price, tick, **kwargs: price,
+        "_step_aligned": lambda price, step, label: price,
+        "executable_close_price": lambda symbol, side: Decimal("10"),
+        "api_get": lambda *args, **kwargs: (
+            {"result": {"list": [existing]}}, None
+        ),
+        "api_post": post,
+    }
+    exec(compile(ast.fix_missing_locations(module), "<exit-replace>", "exec"), namespace)
+    command = namespace["_execute_universal_exit_command"]
+    kwargs = {
+        "command_id": "CMD1",
+        "symbol": symbol,
+        "payload": {
+            "source": "universal_exit",
+            "strategy_position_id": position_id,
+            "action_kind": "SET_TP",
+            "requested_mutation": {
+                "take_profit_price": "11",
+                "order_type": "LIMIT",
+                "tpsl_mode": "Full",
+            },
+        },
+        "positions_payload": {},
+        "tick": Decimal("0.01"),
+        "qty_step": Decimal("1"),
+    }
+    with pytest.raises(Barrier, match="replacement failed"):
+        command(None, "key", "secret", **kwargs)
+    assert calls == ["/v5/order/cancel", "/v5/order/create"]
