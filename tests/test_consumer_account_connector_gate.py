@@ -13,6 +13,8 @@ def test_real_consumer_rechecks_registered_connector_before_dispatch():
     assert '(request.trading_account_id, ACCOUNT_CONNECTOR_ID)' in check
     assert 'str(connector["status"]) != "ACTIVE"' in check
     assert "if not ACCOUNT_CONNECTOR_ID:" in check
+    assert 'str(connector["connector_kind"]) != "CEX_PRIVATE_RUNTIME"' in check
+    assert 'str(connector["adapter_id"]) != "BYBIT_V5_PRIVATE"' in check
     assert '"ACCOUNT_CONNECTOR_IDENTITY_NOT_ACTIVE"' in check
     assert check.index("FROM identity.account_connectors") < check.index(
         "account_ref = str(row.get"

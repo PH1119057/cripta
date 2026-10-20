@@ -461,7 +461,8 @@ def _admission_pre_dispatch_status(
     if not ACCOUNT_CONNECTOR_ID:
         return "BINDING_INVALID", "ACCOUNT_CONNECTOR_ID_CONFIG_MISSING"
     connector = connection.execute(
-        """SELECT account_connector_id,adapter_id,credential_ref,status
+        """SELECT account_connector_id,connector_kind,adapter_id,
+                  credential_ref,status
              FROM identity.account_connectors
             WHERE trading_account_id=%s AND account_connector_id=%s
               AND retired_at IS NULL""",
@@ -470,7 +471,8 @@ def _admission_pre_dispatch_status(
     if (
         connector is None
         or str(connector["status"]) != "ACTIVE"
-        or not str(connector["adapter_id"] or "").strip()
+        or str(connector["connector_kind"]) != "CEX_PRIVATE_RUNTIME"
+        or str(connector["adapter_id"]) != "BYBIT_V5_PRIVATE"
         or not str(connector["credential_ref"] or "").strip()
     ):
         return "BINDING_INVALID", "ACCOUNT_CONNECTOR_IDENTITY_NOT_ACTIVE"
