@@ -1,4 +1,4 @@
-"""Read-only registered account/connector evidence at an exact DB snapshot.
+"""Read-only registered account/connector evidence from PostgreSQL.
 
 Registration evidence alone does not authorize LIVE or prove private Exchange
 connectivity, order support or protective-order capability.
@@ -16,7 +16,11 @@ from bybit_workbench.account_connector_evidence import (
 def read_account_connector_evidence(
     connection: Any, *, required_account_ids: tuple[str, ...]
 ) -> AccountConnectorEvidence:
-    """Query registration data only, without interpolating user IDs into SQL."""
+    """Query registration data only, without interpolating IDs into SQL.
+
+    The caller must supply a consistent transaction snapshot for production
+    readiness; these two SELECTs do not establish transaction isolation.
+    """
     account_ids = tuple(str(value or "").strip() for value in required_account_ids)
     if not account_ids or any(not value for value in account_ids):
         return check_account_connector_evidence(
