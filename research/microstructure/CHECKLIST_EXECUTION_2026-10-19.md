@@ -264,3 +264,11 @@ Earlier blocked action on creating a variant of #15 was not retried. No restart,
 - [ ] This is not a net-after-fee trading performance result, and no Strategy/LIVE activation follows.
 
 No blocked invocation repeated, no service/DB/runtime/trading code mutated.
+
+
+## 2026-10-20 — #13 intra-day pending-age QC attempt
+
+- [x] Independently versioned, nonmutating read-only audit source `depth_recovery_intraday_age_audit_v1.py` pinned GitHub `22d1eb98fd599a6a515015219ba4bd0b25e07b05`. Checks source message time gaps, monotonicity, pending ages immediately before cleanup, end-of-day age and episode partitions.
+- [ ] First APT May20 full-day job `job_395c5d11489b` moved to async then notification returned **agent did not respond to exec in 60.0s**, `exit_code=null`, status failed at access layer. Computation **OUTCOME UNKNOWN**, 0/5 new full-day audit results verified; no retry.
+- [ ] Before attempting equivalent heavy tasks, reconcile host access and this job status with approved authority and bounded execution, not actor/privilege substitutions. Existing 2 aged-at-end results on LTC and ARB remain valid, but *intra-day additional episode age classification not checked*.
+- [ ] Formal §21 expiry-vs-right-censor policy, independent raw coverage and OOS still OPEN. Journal `7af2604164da628ec4d79f69af46bc85146b5665`.
