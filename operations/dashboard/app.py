@@ -22,6 +22,7 @@ import zipfile
 import psycopg
 
 from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
+from bybit_workbench.account_connector_db_snapshot import read_account_connector_evidence
 from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
@@ -861,6 +862,25 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
         reasons.append("STRATEGY_ACCOUNT_BINDING_SNAPSHOT_UNAVAILABLE:" + type(exc).__name__)
     else:
         reasons.extend("STRATEGY_ACCOUNT_" + item for item in assignment.reasons)
+        # Registration is a necessary but insufficient condition. Credential
+        # usability and venue order/protection support require separate proof.
+        required_accounts = tuple(
+            sorted({account for ids in assignment.strategy_accounts.values() for account in ids})
+        )
+        if required_accounts:
+            try:
+                connector_evidence = read_account_connector_evidence(
+                    connection, required_account_ids=required_accounts
+                )
+            except (psycopg.Error, ValueError, TypeError) as exc:
+                reasons.append(
+                    "STRATEGY_ACCOUNT_CONNECTOR_SNAPSHOT_UNAVAILABLE:"
+                    + type(exc).__name__
+                )
+            else:
+                reasons.extend(
+                    "STRATEGY_ACCOUNT_" + item for item in connector_evidence.reasons
+                )
     try:
         private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
