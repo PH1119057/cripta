@@ -1902,18 +1902,27 @@ def _execute_universal_exit_command(
                 },
                 "idempotent": True,
             }
+        cancelled_count = 0
         for item in existing:
-            api_post(
-                "/v5/order/cancel",
-                {
-                    "category": "linear",
-                    "symbol": symbol,
-                    "orderId": str(item.get("orderId") or ""),
-                },
-                key,
-                secret,
-                accepted_codes=(110001,),
-            )
+            try:
+                api_post(
+                    "/v5/order/cancel",
+                    {
+                        "category": "linear",
+                        "symbol": symbol,
+                        "orderId": str(item.get("orderId") or ""),
+                    },
+                    key,
+                    secret,
+                    accepted_codes=(110001,),
+                )
+            except Exception as exc:
+                # Even a rejected/ambiguous cancel can conceal a changed
+                # exchange state; never continue with an unverified TP set.
+                raise ExchangeMutationBarrier(
+                    "dynamic TP cancellation outcome needs reconciliation"
+                ) from exc
+            cancelled_count += 1
         link_id = (tag + hashlib.sha256(command_id.encode()).hexdigest()[:16])[:36]
         try:
             result = api_post(
@@ -1935,7 +1944,7 @@ def _execute_universal_exit_command(
                 secret,
             )
         except Exception as exc:
-            if existing:
+            if cancelled_count:
                 # Cancellation may already have removed the last resting TP.
                 # Require Exchange reconciliation and block new Entry; a plain
                 # failed command must not conceal uncertain replacement state.
