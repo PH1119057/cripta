@@ -315,3 +315,11 @@ No blocked invocation repeated, no service/DB/runtime/trading code mutated.
 - [ ] Exact variants/units (especially #10/#29), publication time, raw manifests/SHA256, per-pair §21.6 proof remain open; 35 rows are **NOT RESEARCH-READY**. OWNER_DECISION_REQUIRED remains for strict variant changes.
 - [x] Total DRAFT registry coverage now 130/150 rows (50 tape +45 price/flow +35 book), but only **0/150 READY**. #23–26 (20 rows) not to be filled as if observed; #26 deferred.
 - [x] No server replay, database or live modifications.
+
+
+## 2026-10-20 — Source-family inventory (#23–25)
+
+- [x] `research/microstructure/passports/source_gaps_23_25_2026-05-19_inventory_v1.json` commit `cf1aeee619ce7b63a84d91571c250d7a47646d79`: 15 `SOURCE_GAP` worksheets for #23 OI/#24 Liq/#25 Spot × five symbols, **not** measurement passports, **not** READY.
+- [x] #24 May19 29 of 120 symbol×hour file-presence, 91/120 unverified; actual event coverage unknown. #23 OI and #25 Spot price streams not confirmed; `NO_DATA` never encoded as zero.
+- [x] Draft/evidence-scope register: 130 measurement drafts +15 source-gap-only worksheets =145 of 150 slots documented; remaining #26 5 slots explicitly **OWNER_DEFERRED_LAST**, not missing silent records. 0 formal READY.
+- [ ] Only approved source-specific provenance+coverage work can close #23–25; blocked upstream/SentinelX execution paths must not be retried or bypassed. No new host invocation, DB or trading mutation performed in this step.
