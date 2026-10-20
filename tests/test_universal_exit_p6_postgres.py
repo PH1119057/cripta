@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -718,5 +719,91 @@ def test_unsupported_mutation_is_blocked_before_runtime_command() -> None:
                 WHERE command_type='strategy_exit'
                   AND payload_json::jsonb->>'strategy_position_id'=%s""",
             (f"{prefix}-position",),
+        ).fetchone()
+        assert count == {"count": 0}
+
+
+def test_two_accounts_complete_independent_exit_dispatch_with_entry_disarmed() -> None:
+    """Exit does not inherit Entry authorization or share per-account ownership."""
+    assert DSN is not None
+    prefix = "p6-two-exit-" + uuid4().hex[:8]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        first = _seed(connection, prefix + "-a")
+        second = _seed(connection, prefix + "-b")
+        assert first["trading_account_id"] != second["trading_account_id"]
+        _gate(connection, False)
+        connection.commit()
+
+        dispatched: dict[str, str] = {}
+        for ids in (first, second):
+            request_id = _materialize_target(
+                connection, exit_decision_id=ids["exit_decision_id"], now=NOW
+            )
+            result = _dispatch_target(
+                connection, execution_request_id=request_id, now=NOW
+            )
+            assert result["state"] == "DISPATCHED"
+            assert result["command_id"] is not None
+            dispatched[ids["trading_account_id"]] = str(result["command_id"])
+
+        command_rows = connection.execute(
+            """SELECT command_id,trading_account_id,
+                      strategy_execution_binding_id,identity_status,payload_json
+                 FROM runtime.trade_commands
+                WHERE command_id = ANY(%s)""",
+            (list(dispatched.values()),),
+        ).fetchall()
+        assert len(command_rows) == 2
+        expected = {
+            first["trading_account_id"]: first,
+            second["trading_account_id"]: second,
+        }
+        for command in command_rows:
+            ids = expected[str(command["trading_account_id"])]
+            assert str(command["command_id"]) == dispatched[ids["trading_account_id"]]
+            assert str(command["strategy_execution_binding_id"]) == ids["binding_id"]
+            assert command["identity_status"] == "PROVEN"
+            payload = command["payload_json"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            assert payload["strategy_position_id"] == ids["position_id"]
+
+        positions = connection.execute(
+            """SELECT position_id,trading_account_id,state
+                 FROM runtime.position_ownership
+                WHERE position_id=ANY(%s)""",
+            ([first["position_id"], second["position_id"]],),
+        ).fetchall()
+        assert {str(row["position_id"]): str(row["trading_account_id"])
+                for row in positions} == {
+                    first["position_id"]: first["trading_account_id"],
+                    second["position_id"]: second["trading_account_id"],
+                }
+        assert all(row["state"] == "OPEN" for row in positions)
+
+
+def test_exit_request_cannot_use_another_trading_account_position() -> None:
+    assert DSN is not None
+    prefix = "p6-cross-account-" + uuid4().hex[:8]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        first = _seed(connection, prefix + "-a")
+        second = _seed(connection, prefix + "-b")
+        connection.commit()
+        request_id = _materialize_target(
+            connection, exit_decision_id=first["exit_decision_id"], now=NOW
+        )
+        request = load_exit_execution_request(
+            connection, execution_request_id=request_id
+        )
+        forged_scope = replace(
+            request, trading_account_id=second["trading_account_id"]
+        )
+        with pytest.raises(RuntimeError, match="exact identity mismatch"):
+            exact_open_position(connection, forged_scope)
+        count = connection.execute(
+            """SELECT count(*) FROM runtime.trade_commands
+                WHERE command_type='strategy_exit'
+                  AND payload_json::jsonb->>'strategy_position_id'=%s""",
+            (first["position_id"],),
         ).fetchone()
         assert count == {"count": 0}
