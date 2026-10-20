@@ -12,7 +12,6 @@ import psycopg
 import pytest
 
 from bybit_workbench.capital_reservation import InsufficientCapital
-from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.entry_admission import (
     EntryAdmissionRequest,
     PositionModeMismatch,
@@ -20,6 +19,7 @@ from bybit_workbench.entry_admission import (
     PostgresEntryAdmissionPort,
     SlotOwnershipConflict,
 )
+from bybit_workbench.exchange_position_identity import exchange_position_key
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(
