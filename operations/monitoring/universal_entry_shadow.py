@@ -35,6 +35,7 @@ from bybit_workbench.counterfactual import (
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.entry_admission import PostgresEntryAdmissionPort
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines, map_ws_klines
+from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
 from bybit_workbench.lifecycle_ack import record_plan_consumption
 from bybit_workbench.market_identity import (
     BYBIT_PUBLIC_MARKET_SOURCE_ID,
@@ -1299,6 +1300,14 @@ def _real_execution_activation_ids(
             bundle.card.strategy_config_fingerprint,
         )
         if identity not in allowed:
+            continue
+        scope_ready, _scope_reasons = check_legacy_live_arm_account_scope(
+            connection,
+            strategy_activation_id=bundle.activation.activation_id,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            now=datetime.now(UTC),
+        )
+        if not scope_ready:
             continue
         symbols = tuple(str(symbol) for symbol in bundle.card.symbols)
         if not symbols:
