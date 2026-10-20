@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from bybit_workbench.entry_account_admission_scope import (
@@ -44,7 +44,7 @@ def fixtures():
         capacity_observed_at=NOW,
         capacity_available=Decimal("100"),
         requested_at=NOW,
-        pre_dispatch_expires_at=NOW,
+        pre_dispatch_expires_at=NOW + timedelta(minutes=2),
         account_state_generation_id="g-1",
         strategy_activation_id="a-1",
         strategy_execution_binding_id="b-1",
