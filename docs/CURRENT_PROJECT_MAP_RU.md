@@ -4113,3 +4113,28 @@ pre-read/routing and Project Source count remain unchanged.
 ARCH §50 and DEVELOPMENT_RELEASE §49 govern the one-time exception. Last observed: production PostgreSQL 16 runs from /var/lib/postgresql/16/main on System SSD; isolated restored test cluster at /data/cripta/pg_restore_validation_20261018 is STOPPED, not a physical rollback. Verified logical dump is under /data/cripta/script_archive/postgresql_preclean_20261018. Data filesystem mount is /data/cripta; /data itself is System SSD. Last free space approx. 90–100 MB System and 13 GB Data; refresh before action. CRIPTA production services remain running; mainnet gate=0 and active LIVE arm=0; independent Bybit open position/order check NOT CHECKED HERE. Full physical rollback NOT VERIFIED. All owner/path, available space and consumer gates require current evidence.
 
 MIGRATION PREPARED=NO; MIGRATION IMPLEMENTED=NO; CUTOVER=NO. R10b/R11/R12 remain open. LIVE UNCHANGED.
+
+
+## 2026-10-20 ChatGPT scheduled CI control not executed — CHECKED HERE
+
+Operator-reported absence of the 16:01 Asia/Almaty notification for GitHub
+PR #115 (head `54e766d2be72d226c3c33bbab90f0cb40952fa50`).
+ChatGPT automation `Проверка CI PR 115`, scheduled
+`2026-10-20T11:01:45Z` (16:01:45 Asia/Almaty), was verified as
+`is_enabled=true`, `last_run_time=null`, `notifications_enabled=false`,
+`email_enabled=false` in its task state at the time of inspection.
+This is evidence of **no recorded execution**, not proof of the underlying
+scheduler failure or root cause; no cause has been confirmed.
+
+Operational follow-up: scheduling success must NOT be reported as confirmed
+notification delivery. Always inspect reminder task state, specifically
+notification capability and actual `last_run_time`; if unavailable, report
+`NOTIFICATION_NOT_CONFIRMED`. A missed scheduled check must be verified
+independently against GitHub CI when the operator returns. Do not promise
+push delivery when notifications are disabled. Exact job/check and terminal
+state must be reported distinctly. Do not create unbounded polling tasks.
+
+Follow-up checked: PR #115 `quality=success` and
+`trade-lifecycle-postgres=success`; safely merged into GitHub main as
+`fda12d5d99c5bba9aad7e8410567ac9a174da9ec`. No production deploy,
+database mutation or LIVE-arm is claimed by this checkpoint.
