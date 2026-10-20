@@ -24,6 +24,8 @@ import psycopg
 from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
 from bybit_workbench.account_connector_db_snapshot import read_account_connector_evidence
 from bybit_workbench.fault_delivery import acknowledge_delivery
+from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
+from bybit_workbench.legacy_owner_arm_binding_gate import legacy_owner_arm_account_reasons
 from bybit_workbench.live_release_alert import project_release_arm_health
 from bybit_workbench.market_identity import BYBIT_PUBLIC_MARKET_SOURCE_ID
 from bybit_workbench.live_arm_readiness import (
@@ -861,7 +863,11 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
     except (psycopg.Error, ValueError, TypeError) as exc:
         reasons.append("STRATEGY_ACCOUNT_BINDING_SNAPSHOT_UNAVAILABLE:" + type(exc).__name__)
     else:
-        reasons.extend("STRATEGY_ACCOUNT_" + item for item in assignment.reasons)
+        reasons.extend(
+            legacy_owner_arm_account_reasons(
+                assignment, configured_trading_account_id=TRADING_ACCOUNT_ID
+            )
+        )
         # Registration is a necessary but insufficient condition. Credential
         # usability and venue order/protection support require separate proof.
         required_accounts = tuple(
@@ -4816,6 +4822,19 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                             if not bool(readiness.get("rearm_ready")):
                                 raise ValueError(
                                     "re-arm blocked: " + "; ".join(readiness.get("reasons", []))
+                                )
+                            scope_ready, scope_reasons = (
+                                check_legacy_live_arm_account_scope(
+                                    connection,
+                                    strategy_activation_id=live_context.strategy_activation_id,
+                                    trading_account_id=TRADING_ACCOUNT_ID,
+                                    now=datetime.now(UTC),
+                                )
+                            )
+                            if not scope_ready:
+                                raise ValueError(
+                                    "legacy OWNER ARM account scope blocked: "
+                                    + ", ".join(scope_reasons)
                                 )
                             canonical = evaluate_live_arm(
                                 connection,
