@@ -323,9 +323,13 @@ class PostgresEntryAdmissionPort:
                 position_mode = str(mode[0])
                 position_idx = None if mode[1] is None else int(str(mode[1]))
                 observed_at, received_at, fresh_until = mode[2:5]
-                if not all(
-                    isinstance(value, datetime) and value.tzinfo is not None
-                    for value in (observed_at, received_at, fresh_until)
+                if not (
+                    isinstance(observed_at, datetime)
+                    and isinstance(received_at, datetime)
+                    and isinstance(fresh_until, datetime)
+                    and observed_at.tzinfo is not None
+                    and received_at.tzinfo is not None
+                    and fresh_until.tzinfo is not None
                 ):
                     raise PositionModeStateUnavailable(
                         f"generation position mode timestamps invalid: {state_ref}"
