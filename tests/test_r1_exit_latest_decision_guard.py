@@ -28,3 +28,16 @@ def test_exit_order_replacement_remains_reduce_only_post_only():
     assert '"reduceOnly": True' in block
     assert '"timeInForce": "PostOnly"' in block
     assert '"dynamic TP already resting"' in block
+
+
+def test_universal_exit_rejects_superseded_geometry_observation():
+    source = Path("operations/connectivity/private_runtime.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    func = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_universal_exit_position"
+    )
+    body = ast.get_source_segment(source, func)
+    assert "FROM strategy_exit.exit_observations" in body
+    assert "STRATEGY_EXIT_OBSERVATION_SUPERSEDED" in body
+    assert body.index("STRATEGY_EXIT_OBSERVATION_SUPERSEDED") < body.index("exchange_position = next(")
