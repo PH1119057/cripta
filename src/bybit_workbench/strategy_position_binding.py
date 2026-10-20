@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
-from bybit_workbench.exchange_position_identity import exchange_position_key
+from bybit_workbench.exchange_position_identity import exchange_position_key as exchange_position_key
 from bybit_workbench.entry_admission import (
     SlotClaimState,
     bind_slot_claim_to_position,
