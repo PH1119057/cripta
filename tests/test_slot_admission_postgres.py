@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,7 @@ import psycopg
 import pytest
 
 from bybit_workbench.capital_reservation import InsufficientCapital
+from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.entry_admission import (
     EntryAdmissionRequest,
     PositionModeMismatch,
@@ -154,8 +156,9 @@ def _seed_mode(
             """INSERT INTO runtime.position_mode_states(
                    position_mode_state_ref,exchange,account_ref,product_category,
                    instrument,position_mode,position_idx,observed_at,received_at,
-                   fresh_until,provenance
-               ) VALUES(%s,'BYBIT',%s,'LINEAR',%s,%s,%s,%s,%s,%s,'{}'::jsonb)""",
+                   fresh_until,provenance,trading_account_id,identity_status
+               ) VALUES(%s,'BYBIT',%s,'LINEAR',%s,%s,%s,%s,%s,%s,'{}'::jsonb,
+                        %s,'PROVEN')""",
             (
                 state_ref,
                 identity["account_ref"],
@@ -165,6 +168,24 @@ def _seed_mode(
                 observed_at,
                 observed_at,
                 fresh_until or (observed_at + timedelta(minutes=5)),
+                f"{prefix}-ta",
+            ),
+        )
+        connection.execute(
+            """INSERT INTO runtime.account_state_generations(
+                   generation_id,account_ref,reason,state,started_at,completed_at,
+                   account_type,total_equity,wallet_balance,available_balance,
+                   positions_count,active_orders_count,position_mode_refs,wallet_payload,
+                   error,trading_account_id,identity_status
+               ) VALUES(%s,%s,'test','COMPLETE',%s,%s,'UNIFIED',100,100,100,
+                        0,0,%s::jsonb,'{}'::jsonb,'',%s,'PROVEN')""",
+            (
+                f"{prefix}-generation",
+                identity["account_ref"],
+                observed_at,
+                observed_at,
+                json.dumps({SYMBOL: state_ref}),
+                f"{prefix}-ta",
             ),
         )
     return state_ref
@@ -176,12 +197,11 @@ def _request(
     identity: dict[str, str],
     *,
     capacity_available: Decimal = Decimal("100"),
+    requested_amount: Decimal = Decimal("10"),
 ) -> EntryAdmissionRequest:
     return EntryAdmissionRequest(
         account_ref=identity["account_ref"],
-        exchange_position_key=(
-            f"BYBIT:{identity['account_ref']}:LINEAR:USDT:{SYMBOL}:0"
-        ),
+        exchange_position_key=exchange_position_key(f"{prefix}-ta", SYMBOL, 0),
         symbol=SYMBOL,
         direction="LONG",
         strategy_id=identity["strategy_id"],
@@ -190,13 +210,14 @@ def _request(
         entry_plan_fingerprint=identity["entry_fp"],
         signal_id=f"{prefix}-signal-{index}",
         strategy_attempt_id=f"{prefix}-attempt-{index}",
-        requested_amount=Decimal("10"),
+        requested_amount=requested_amount,
         amount_currency="USDT",
-        capacity_snapshot_id=f"{prefix}-capacity",
+        capacity_snapshot_id=f"{prefix}-generation",
         capacity_observed_at=NOW,
         capacity_available=capacity_available,
         requested_at=NOW,
         pre_dispatch_expires_at=NOW + timedelta(seconds=30),
+        account_state_generation_id=f"{prefix}-generation",
         strategy_activation_id=f"{prefix}-activation",
         strategy_execution_binding_id=f"{prefix}-binding",
         execution_leg="PRIMARY",
@@ -237,7 +258,7 @@ def test_insufficient_capital_rolls_back_slot_claim_in_same_admission() -> None:
     with psycopg.connect(DSN) as connection:
         with pytest.raises(InsufficientCapital):
             PostgresEntryAdmissionPort(connection).admit(
-                _request(prefix, 0, identity, capacity_available=Decimal("5"))
+                _request(prefix, 0, identity, requested_amount=Decimal("150"))
             )
         claims = connection.execute(
             """SELECT count(*) FROM runtime.exchange_position_slot_claims
