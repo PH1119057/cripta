@@ -148,3 +148,15 @@ def test_fresh_exchange_snapshot_is_not_assumed(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "LIFECYCLE_STATUS", file)
     with pytest.raises(RuntimeError, match="fresh account truth missing"):
         mod.require_fresh_exchange_account(NOW)
+
+
+def test_schema_sensitive_guards_use_actual_claim_and_command_columns():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert '"runtime.exchange_position_slot_claims", "claim_state<>' in source
+    assert "lower(state) NOT IN ('completed','failed','cancelled')" in source
+    assert '"runtime.exchange_position_slot_claims", "state<>' not in source
+    sql = Path("operations/implementation/bind_r1_five_symbols.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "WHERE claim_state<>'RELEASED'" in sql
+    assert "WHERE state<>'RELEASED'" not in sql
