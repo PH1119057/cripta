@@ -83,13 +83,13 @@ def preflight(connection: psycopg.Connection, now: datetime) -> list[tuple[str, 
         "HOT_REAL_POSITION": ("runtime.hot_positions", "TRUE"),
         "HOT_REAL_ORDER": ("runtime.hot_orders", "TRUE"),
         "UNRESOLVED_TRADE_COMMAND": (
-            "runtime.trade_commands", "state NOT IN ('COMPLETED','FAILED','CANCELLED')"
+            "runtime.trade_commands", "lower(state) NOT IN ('completed','failed','cancelled')"
         ),
         "ACTIVE_CAPITAL_RESERVATION": (
             "runtime.capital_reservations", "state<>'RELEASED'"
         ),
         "ACTIVE_POSITION_CLAIM": (
-            "runtime.exchange_position_slot_claims", "state<>'RELEASED'"
+            "runtime.exchange_position_slot_claims", "claim_state<>'RELEASED'"
         ),
         "PREEXISTING_ACCOUNT_BINDING": (
             "strategy_entry.strategy_execution_bindings", "binding_state='ACTIVE'"
