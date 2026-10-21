@@ -76,6 +76,34 @@ def arm_unified_r1(
         if len(contexts) != 5:
             raise ValueError("UNIFIED_R1_FIVE_INSTRUMENT_SCOPES_MISSING")
 
+        # Lock exact binding + TradingAccount + activation using the
+        # canonical SECURITY DEFINER helper (no broad UPDATE grant to cripta).
+        binding_ids = connection.execute(
+            """SELECT strategy_execution_binding_id
+                 FROM strategy_entry.strategy_execution_bindings
+                WHERE strategy_activation_id=%s AND binding_state='ACTIVE'""",
+            (contexts[0].strategy_activation_id,),
+        ).fetchall()
+        if len(binding_ids) != 1:
+            raise ValueError("UNIFIED_R1_EXACT_BINDING_LOCK_ID_NOT_UNIQUE")
+        locked = connection.execute(
+            """SELECT strategy_activation_id,execution_leg,trading_account_id,
+                      execution_role,allocation_mode,binding_state,
+                      trading_account_status,environment,activation_enabled
+                 FROM strategy_entry.lock_strategy_execution_binding(%s)""",
+            (str(binding_ids[0][0]),),
+        ).fetchone()
+        if locked is None or (
+            str(locked[0]), str(locked[1]), str(locked[2]),
+            str(locked[3]), str(locked[4]), str(locked[5]),
+            str(locked[6]), str(locked[7]), locked[8],
+        ) != (
+            contexts[0].strategy_activation_id, "PRIMARY",
+            trading_account_id, "PRIMARY", "DEDICATED_STRATEGY",
+            "ACTIVE", "ACTIVE", "MAINNET", True,
+        ):
+            raise ValueError("UNIFIED_R1_LOCKED_BINDING_IDENTITY_CHANGED")
+
         permissions = connection.execute(
             """SELECT strategy_id FROM strategy_entry.execution_permissions
                 WHERE enabled=true"""
