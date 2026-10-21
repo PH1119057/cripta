@@ -1,7 +1,7 @@
 {
   "schema": "CRIPTA_COIN_RESEARCH_PROPOSAL_V1",
   "storage_approval": "NOT_APPROVED_PROPOSAL_ON_REVIEW_BRANCH_ONLY",
-  "source_status": "PENDING_EXACT_INSTRUMENT_ID_AND_FULL_BACKFILL_QC",
+  "source_status": "CANONICAL_SYMBOL_TO_INSTRUMENT_ID_DERIVED;PHYSICAL_STORE_PENDING_OWNER_DECISION",
   "history_scope": "2026-09-21..2026-10-19 UTC 29 complete days, only L5-3/H9 medianband candidate",
   "record_count": 30,
   "records": [
@@ -13,11 +13,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -73,7 +74,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -92,11 +93,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -152,7 +154,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -171,11 +173,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -231,7 +234,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -250,11 +253,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -310,7 +314,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -329,11 +333,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -389,7 +394,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -408,11 +413,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "LTCUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-ltcusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -468,7 +474,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -487,11 +493,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -547,7 +554,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -566,11 +573,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -626,7 +634,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -645,11 +653,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -705,7 +714,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -724,11 +733,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -784,7 +794,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -803,11 +813,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -863,7 +874,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -882,11 +893,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "APTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-aptusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -942,7 +954,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -961,11 +973,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1021,7 +1034,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1040,11 +1053,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1100,7 +1114,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1119,11 +1133,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1179,7 +1194,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1198,11 +1213,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1258,7 +1274,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1277,11 +1293,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1337,7 +1354,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1356,11 +1373,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "DOTUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-dotusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1416,7 +1434,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1435,11 +1453,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1495,7 +1514,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1514,11 +1533,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1574,7 +1594,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1593,11 +1613,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1653,7 +1674,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1672,11 +1693,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1732,7 +1754,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1751,11 +1773,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1811,7 +1834,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1830,11 +1853,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "ARBUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-arbusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1890,7 +1914,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1909,11 +1933,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -1969,7 +1994,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -1988,11 +2013,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -2048,7 +2074,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -2067,11 +2093,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -2127,7 +2154,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -2146,11 +2173,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -2206,7 +2234,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -2225,11 +2253,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -2285,7 +2314,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
@@ -2304,11 +2333,12 @@
       "completed_at_utc": null,
       "completed_at_quality": "UNKNOWN_FROM_SOURCE",
       "instrument": {
-        "venue_id": "BYBIT",
+        "venue_id": "venue-bybit",
         "product": "LINEAR",
         "symbol": "INJUSDT",
-        "instrument_id": null,
-        "identity_status": "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        "instrument_id": "inst-bybit-linear-injusdt",
+        "identity_status": "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1",
+        "market_source_id": "ms-bybit-mainnet-public-v1"
       },
       "period": {
         "start_utc": "2026-09-21T00:00:00Z",
@@ -2364,7 +2394,7 @@
       },
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
-        "exact_identity_qc": "PENDING",
+        "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
         "publication_qc": "PROPOSAL_ONLY",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
