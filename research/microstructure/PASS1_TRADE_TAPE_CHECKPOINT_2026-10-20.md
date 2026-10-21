@@ -74,3 +74,23 @@ Owner explicitly authorized actual archive access verification. Current GitHub s
 **Resolved:** previous `sentinelx` management-actor `stat` denial is not an archive outage; proper `cripta` read path PASS on APT and SHA256 reads PASS all five. SOURCE SHA256 now independently registered at this checkpoint for the five May20 compressed files. 50 pair scope shares those five source files, but per-pair source manifest linkage/complete period remains OPEN. `observed_at`/receiver publication and causal available-after timing not proven; #4/#8/#27/#28 independent row QC not proven. **0/50 strict §21.6 RESEARCH-READY**, first pass still open.
 
 No server file write, process launch, research job, privilege change, SentinelX policy change, DB mutation, LIVE action. The only change is this GitHub research report.
+
+
+## 2026-10-21 — raw CSV schema and full-day integrity audit, all five instruments
+
+Read-only `sudo -u cripta python3 -c` opened each already SHA256-registered May20 compressed Bybit public trade file and read all records with `gzip/csv/Decimal`. All **10 command invocations** completed `returncode=0` (five initial full-file scans, five independent bounded numeric/day-window scans), no filesystem writes. Source day `2026-05-20T00:00:00Z..2026-05-21T00:00:00Z` [start inclusive, end exclusive]; numeric comparisons use `Decimal` and exact epoch seconds.
+
+Raw CSV column names identical for five symbols: `timestamp,symbol,side,size,price,tickDirection,trdMatchID,grossValue,homeNotional,foreignNotional,RPI`. **No receiver receipt/observed_at/source publication timestamp field** in these raw CSV headers (does not prove no metadata exists in a separate collector). The `timestamp` is source event timestamp, not proven arrival time. Historical as-of semantics still require a specific conservative availability contract.
+
+| Symbol | Fill records | Nonempty UTC minutes / 1440 | Nonmonotone event timestamps | Invalid symbol/side | Outside exact UTC day | Nonpositive price or size / negative foreignNotional |
+|---|---:|---:|---:|---:|---:|---:|
+| APTUSDT | 117069 | 1440 | 0 | 0 | 0 | 0 |
+| INJUSDT | 260994 | 1440 | 0 | 0 | 0 | 0 |
+| DOTUSDT | 151067 | 1436 | 0 | 0 | 0 | 0 |
+| LTCUSDT | 93645 | 1423 | 0 | 0 | 0 | 0 |
+| ARBUSDT | 209152 | 1440 | 0 | 0 | 0 | 0 |
+| **TOTAL** | **831927** | — | **0** | **0** | **0** | **0** |
+
+**Nuance:** four minutes without any recorded trades for DOT, 17 for LTC. Valid empty trade minutes or missing source segments cannot be distinguished by this file-only scan. No automatic `NO_DATA=0` promotion. No proof of exchange-side 100% completeness, uniqueness of `trdMatchID`, quantity×price accounting reconciliation, separate receiver timestamps, full requested multi-day period, per-fill indicator numeric parity, or historical immutable manifest. Those gates remain open.
+
+**Status:** `CHECKED HERE` file identity/raw schema/monotonicity/day-window/numeric basic integrity; `RESEARCH-READY=0/50`; `PASS1=OPEN`. Nothing launched/stopped, no dataset/server mutation, no LIVE. GitHub journal/checkpoint update only.
