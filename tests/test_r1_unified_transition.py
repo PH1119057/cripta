@@ -159,4 +159,4 @@ def test_schema_sensitive_guards_use_actual_claim_and_command_columns():
         encoding="utf-8"
     )
     assert "WHERE claim_state<>'RELEASED'" in sql
-    assert "WHERE state<>'RELEASED'" not in sql
+    assert "FROM runtime.exchange_position_slot_claims\n           WHERE state<>'RELEASED'" not in sql
