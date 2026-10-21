@@ -28,7 +28,11 @@
     "control_30day_numeric_pairs": 30,
     "control_30day_instrument_indicator_source_only_other_pairs": 20,
     "control_30day_minute_field_compared": 1728000,
-    "control_30day_mismatch_count": 0
+    "control_30day_mismatch_count": 0,
+    "control_30day_physical_factor_cube_pairs": 30,
+    "control_30day_physical_factor_cube_rows": 1296000,
+    "control_30day_physical_factor_cube_source_hashes": 150,
+    "control_30day_physical_factor_cube_independent_output_qc_mismatch_count": 0
   },
   "cells": [
     {
@@ -83,6 +87,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -128,6 +145,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -173,6 +203,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -218,6 +261,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -263,6 +319,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -317,6 +386,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -362,6 +444,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -407,6 +502,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -452,6 +560,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -497,6 +618,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -551,6 +685,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -596,6 +743,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -641,6 +801,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -686,6 +859,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -731,6 +917,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1019,6 +1218,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1064,6 +1276,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1109,6 +1334,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1154,6 +1392,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1199,6 +1450,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1253,6 +1517,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1298,6 +1575,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1343,6 +1633,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1388,6 +1691,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1433,6 +1749,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1487,6 +1816,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1532,6 +1874,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1577,6 +1932,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1622,6 +1990,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -1667,6 +2048,19 @@
         "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
         "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
         "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      },
+      "physical_cube": {
+        "status": "30D_PILOT_MATERIALIZED_QC_PASS",
+        "utc_scope": "2026-05-18..2026-06-16",
+        "materialized_minute_rows_for_symbol": 43200,
+        "indicator_rows": 43200,
+        "source_days": 30,
+        "source_archive_sha_matched": 30,
+        "source_and_output_qc_pass": true,
+        "verified_observed_at": false,
+        "verified_available_after": false,
+        "research_ready": false,
+        "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
       }
     },
     {
@@ -4129,7 +4523,8 @@
     "NO_FROZEN_MATERIALIZED_INSTRUMENT_TIME_INDICATOR_CUBE",
     "NO_FUTURE_LABEL_OOS_OR_FEE_ADJUSTED_TRADE_RESULT",
     "CROSS_VENUE_26_OWNER_DEFERRED_LAST",
-    "2026-10-21 new 2-day independent fullrow minute QC for six trade-minute indicator IDs across five symbols; source/trade heuristics for remaining four; §21.6 actual source reception/period gates remain open"
+    "2026-10-21 new 2-day independent fullrow minute QC for six trade-minute indicator IDs across five symbols; source/trade heuristics for remaining four; §21.6 actual source reception/period gates remain open",
+    "Control-month 30d six-factor physical measure cube now materialized and independently output-QCed for six factor IDs × five exact symbols; causal observed/available_after and full study period gates remain OPEN."
   ],
   "sources": [
     "research/microstructure/PASS1_TRADE_TAPE_CHECKPOINT_2026-10-20.md",
