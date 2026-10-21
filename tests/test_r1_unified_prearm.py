@@ -155,3 +155,22 @@ def test_unified_arm_never_inherits_old_five_strategy_critical_delivery_waiver()
     assert "arm_route_enabled" in source
     assert "UPDATE control.execution_gates" not in source
     assert "INSERT INTO control.live_arm_sessions" not in source
+
+
+def test_dashboard_exposes_authenticated_read_only_prearm_route():
+    source = (ROOT / "operations/dashboard/app.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"' in source
+    assert "state = unified_r1_prearm_state(" in source
+    handler = source.split("    def do_GET(self)", 1)[1].split(
+        "    def do_POST(self)", 1
+    )[0]
+    assert "elif self.require_login():" in handler
+    assert "elif path == R1_UNIFIED_PREARM_STATUS_PATH:" in handler
+    assert handler.index("elif self.require_login():") < handler.index(
+        "elif path == R1_UNIFIED_PREARM_STATUS_PATH:"
+    )
+    assert "R1_UNIFIED_PREARM_STATUS_PATH," not in source.split(
+        "U6_STRATEGY_POST_PATHS =", 1
+    )[1].split("}", 1)[0]
