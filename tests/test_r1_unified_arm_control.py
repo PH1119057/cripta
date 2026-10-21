@@ -95,7 +95,7 @@ def _patch(monkeypatch, db, *, fail_symbol=None, fail_owner=False):
     def _proof(connection, *, context, now, require_owner_approval):
         failed = (
             context.symbol == fail_symbol
-            and (not require_owner_approval or fail_owner)
+            and (require_owner_approval if fail_owner else not require_owner_approval)
         )
         return SimpleNamespace(
             ready=not failed,
@@ -198,7 +198,7 @@ def test_unified_arm_is_one_owner_action_one_permission_five_scopes(monkeypatch)
 def test_unified_arm_final_evidence_failure_rolls_back_all_sessions(monkeypatch):
     db = FakeDB()
     _patch(monkeypatch, db, fail_symbol="DOTUSDT", fail_owner=True)
-    # The failure is detected before owner evidence mutation.
+    # Failure after partial evidence inserts must rollback all witnesses.
     with pytest.raises(ValueError, match="CRITICAL_FAULT_DELIVERY"):
         _arm(db)
     assert db.writes == []
@@ -232,3 +232,19 @@ def test_disarm_only_unified_strategy_and_closes_global_gate():
         or "execution_gate_events" in sql
         for sql, args in db.writes
     )
+
+
+def test_unified_route_requires_confirmed_owner_and_protects_generic_gate():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "operations/dashboard/app.py")
+    text = source.read_text(encoding="utf-8")
+    assert 'R1_UNIFIED_MICRO_LIVE_PATH = "/api/r1/unified/micro-live"' in text
+    assert "_u6_r1_unified_micro_live(handler, request)" in text
+    assert "request.get(\"confirmed\") is not True" in text
+    assert "arm_unified_r1(" in text
+    assert "disarm_unified_r1(" in text
+    assert "UNIFIED_R1_MUST_USE_DEDICATED_OWNER_ARM_ENDPOINT" in text
+    assert "R1_UNIFIED_MICRO_LIVE_PATH," in text.split(
+        "U6_STRATEGY_POST_PATHS", 1
+    )[1].split("}", 1)[0]
