@@ -1,0 +1,201 @@
+{
+  "title": "Bybit APT/INJ/DOT/LTC/ARB 30d physical-minute six-factor cube: server-side output provenance and independent QC",
+  "checked_date": "2026-10-21",
+  "source_of_truth": "PH1119057/cripta:main",
+  "precommit_main": "05e714f9cd633e980570d493bc3adc8130b36b55",
+  "status": "PILOT_PHYSICAL_MEASURE_CUBE_COMPLETE_INDEPENDENT_QC_PASS_NOT_RESEARCH_READY",
+  "scope": {
+    "venue": "Bybit",
+    "instrument_scope": [
+      "APTUSDT",
+      "INJUSDT",
+      "DOTUSDT",
+      "LTCUSDT",
+      "ARBUSDT"
+    ],
+    "timeframe_utc": "2026-05-18..2026-06-16 inclusive",
+    "grain": "exact symbol x UTC minute x physical indicator",
+    "indicator_ids": [
+      1,
+      2,
+      3,
+      5,
+      6,
+      7
+    ]
+  },
+  "lineage": {
+    "raw_source_manifest": "research/microstructure/TRADE_TAPE_RAW_30DAY_150_SOURCE_MANIFEST_2026-10-21.json",
+    "raw_source_manifest_blob": "30b87fe11fb3a1bfc6fb59c8866091e92e823203",
+    "prior_8field_fullrow_qc": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+    "materializer": "research/microstructure/experiments/trade_minute_30day_cube_materialize_v1.py",
+    "materializer_git_blob": "a9fbab3ec8f90f0b23c61c51b9ce9fba019754bd",
+    "independent_output_checker": "research/microstructure/experiments/trade_minute_30day_cube_independent_qc_v1.py",
+    "checker_git_blob": "c0620af47af6cef1d789be7e35a9bcdd44dfd46d",
+    "primary_8field_code_blob": "71e4851faebd388fd2a6db3d93dca2ca2cb28c07"
+  },
+  "runtime": {
+    "host": "robot",
+    "effective_actor": "cripta",
+    "euid": 107,
+    "egid": 109,
+    "output_root": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1",
+    "output_directory_owner": 107,
+    "output_directory_group": 109,
+    "directory_mode": "02770",
+    "regular_file_mode": "0660",
+    "all_jobs_status": "SUCCEEDED",
+    "all_jobs_exit_code": 0,
+    "all_checker_exit_code": 0,
+    "live_or_runtime_change": false,
+    "db_write": false,
+    "permissions_changed": false
+  },
+  "counts": {
+    "symbols": 5,
+    "days_per_symbol": 30,
+    "source_archives_sha256_matched": 150,
+    "total_source_fills_from_prior_qc": 37162098,
+    "per_symbol_minutes": 43200,
+    "per_symbol_factor_time_rows": 259200,
+    "derived_factor_rows": 1296000,
+    "independent_qc_mismatches": 0,
+    "output_files": 10,
+    "data_gzip_bytes": 18343133,
+    "sum_nonempty_trade_minutes": 215534,
+    "null_values": {
+      "RVOL_1": 9000,
+      "Trade_Rate_2": 0,
+      "Trade_Rate_Acceleration_3": 150,
+      "Delta_5": 0,
+      "CVD_6": 0,
+      "Delta_Acceleration_7": 150
+    }
+  },
+  "by_symbol": [
+    {
+      "symbol": "APTUSDT",
+      "job_id": "job_39d4e0494606",
+      "sha": "c9416433d51c8d1428816b9c437f6815306bace847dfa7f81b25ea79fb068c50",
+      "bytes": 3739137,
+      "active": 43180,
+      "physical_cube_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/APTUSDT_6factor.csv.gz",
+      "manifest_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/APTUSDT_MANIFEST.json",
+      "source_daily_hashes_matched": 30,
+      "rows": 259200,
+      "minutes": 43200,
+      "null_counts": {
+        "1": 1800,
+        "2": 0,
+        "3": 30,
+        "5": 0,
+        "6": 0,
+        "7": 30
+      },
+      "file_mode": "0660",
+      "owner_euid": 107,
+      "independent_qc_pass": true
+    },
+    {
+      "symbol": "INJUSDT",
+      "job_id": "job_ab375270c5d4",
+      "sha": "63c5c0666e63d5fd62ca9a4180b2730af451612ca1554e5c50abcadbc61e0134",
+      "bytes": 3682608,
+      "active": 43199,
+      "physical_cube_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/INJUSDT_6factor.csv.gz",
+      "manifest_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/INJUSDT_MANIFEST.json",
+      "source_daily_hashes_matched": 30,
+      "rows": 259200,
+      "minutes": 43200,
+      "null_counts": {
+        "1": 1800,
+        "2": 0,
+        "3": 30,
+        "5": 0,
+        "6": 0,
+        "7": 30
+      },
+      "file_mode": "0660",
+      "owner_euid": 107,
+      "independent_qc_pass": true
+    },
+    {
+      "symbol": "DOTUSDT",
+      "job_id": "job_5aa64872bd5d",
+      "sha": "202cf639262d3bdba37d6b0e4cd63c9ff24592c7be41ba08f170507105def548",
+      "bytes": 3713222,
+      "active": 43158,
+      "physical_cube_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/DOTUSDT_6factor.csv.gz",
+      "manifest_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/DOTUSDT_MANIFEST.json",
+      "source_daily_hashes_matched": 30,
+      "rows": 259200,
+      "minutes": 43200,
+      "null_counts": {
+        "1": 1800,
+        "2": 0,
+        "3": 30,
+        "5": 0,
+        "6": 0,
+        "7": 30
+      },
+      "file_mode": "0660",
+      "owner_euid": 107,
+      "independent_qc_pass": true
+    },
+    {
+      "symbol": "LTCUSDT",
+      "job_id": "job_ca0640df0416",
+      "sha": "706da903f4c454cfa510495347d7a50dc6b0c3aab328d88f28cc29e10f6acb21",
+      "bytes": 3433591,
+      "active": 42826,
+      "physical_cube_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/LTCUSDT_6factor.csv.gz",
+      "manifest_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/LTCUSDT_MANIFEST.json",
+      "source_daily_hashes_matched": 30,
+      "rows": 259200,
+      "minutes": 43200,
+      "null_counts": {
+        "1": 1800,
+        "2": 0,
+        "3": 30,
+        "5": 0,
+        "6": 0,
+        "7": 30
+      },
+      "file_mode": "0660",
+      "owner_euid": 107,
+      "independent_qc_pass": true
+    },
+    {
+      "symbol": "ARBUSDT",
+      "job_id": "job_9046c38b9edd",
+      "sha": "acb69465f73ccde84f5018ad50d70590bb28c2fef8d2c27d4ffd42111f085529",
+      "bytes": 3774575,
+      "active": 43171,
+      "physical_cube_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/ARBUSDT_6factor.csv.gz",
+      "manifest_file": "/data/cripta/research/runs/trade_minute_cube_20261021_30d_v1/ARBUSDT_MANIFEST.json",
+      "source_daily_hashes_matched": 30,
+      "rows": 259200,
+      "minutes": 43200,
+      "null_counts": {
+        "1": 1800,
+        "2": 0,
+        "3": 30,
+        "5": 0,
+        "6": 0,
+        "7": 30
+      },
+      "file_mode": "0660",
+      "owner_euid": 107,
+      "independent_qc_pass": true
+    }
+  ],
+  "limitations": [
+    "No independent Bybit full-event completeness proof",
+    "Public trade CSV archive has event timestamp but no verified receiver observed_at or source publication time; derived minute end is NOT verified available_after; those cube columns remain blank",
+    "30-day archive pilot is not automatically owner-selected full research period for all 30 indicators",
+    "The six factors reset daily; RVOL 60-minute initial lookback yields 60 null minutes per day; acceleration initial previous minute yields one null per day",
+    "Independent output check verifies materialized row consistency, labels, source lineage and hash; independent Decimal vs primary full-row comparison completed separately on 37,162,098 public executions, 1,728,000 field checks, zero differences",
+    "No normalized features, forward future-label alignment, OOS/holdout or net after-commission PnL inferred",
+    "All strict formal indicator RESEARCH-READY statuses remain false and other 24 indicators not materialized in this run"
+  ]
+}
