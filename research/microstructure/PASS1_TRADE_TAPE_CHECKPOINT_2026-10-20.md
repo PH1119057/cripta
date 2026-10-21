@@ -53,3 +53,24 @@
 - The *next* independent diagnostic tool invocation in a staged sequence (`id` command) was **BLOCKED_UPSTREAM_OPENAI** before a host result. The batch aborted; `namei` and the planned allowlisted `sudo -u cripta python3 -c` file-read smoke were **NOT EXECUTED / NOT CHECKED HERE**. No guesses about the exact OpenAI block rule. No retry, alternate formatting, actor substitution, privilege/permission change, or tool-policy mutation.
 - Current actor conclusion: `MANAGEMENT_ACTOR=sentinelx CHECKED HERE`; `RESEARCH_ACTOR_SOURCE_READ=UNKNOWN`; source SHA256/receipt clock/full-period checks stay OPEN, 0/50 READY.
 - Route remains **BLOCKED_UPSTREAM_OPENAI** for further host actor/path QC until an independently approved policy route exists. GitHub code review is unaffected. The blocker is not a failure of `cripta`'s proven Unix rights; no server work launched.
+
+
+## 2026-10-21 — owner-authorized correct research actor read-only smoke + source SHA256
+
+Owner explicitly authorized actual archive access verification. Current GitHub source reviewed: `DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`. SentinelX capabilities summary returned operational agent 0.11.14; no tool policy changes.
+
+- `sudo -u cripta python3 -c 'import os; print(os.geteuid())'` → rc0 UID **107**.
+- `sudo -u cripta python3 -c '...os.stat(Apt May20 archive)...os.access(..., os.R_OK)...'` → rc0 UID107, **4549721** bytes, readable True.
+- Five separate read-only `sudo -u cripta python3 -c '...hashlib.sha256(open(p,"rb").read())...'` runs all rc0; no files changed. **These hash values are evidence from the current bytes, not independent verification against an earlier immutable source manifest.**
+
+| Bybit public_trades, UTC date 2026-05-20 | Compressed bytes | SHA256 |
+|---|---:|---|
+| APTUSDT | 4549721 | `6a589dc5afbc064a577f9d08bb921008e1518da42540fb5c15e4ea05a1144b02` |
+| INJUSDT | 9464084 | `7e2d2716b34167d65b43ca64fcd767aae902267f3d5f20ca3d2e90a3066a5a6e` |
+| DOTUSDT | 5656864 | `39831bb5b07974f5de407efa8a2aa8ef2b32f257d67796aa7dc532b680fd477f` |
+| LTCUSDT | 3213522 | `b6e784e82918cf0e2c7b9f7d9464dc49478c7077eff0317f7a50be27764ee84e` |
+| ARBUSDT | 8019377 | `7d8de412077e6f51eb46d1b3e1055af43dd228ec3d24da41a36c9e5f16cb254a` |
+
+**Resolved:** previous `sentinelx` management-actor `stat` denial is not an archive outage; proper `cripta` read path PASS on APT and SHA256 reads PASS all five. SOURCE SHA256 now independently registered at this checkpoint for the five May20 compressed files. 50 pair scope shares those five source files, but per-pair source manifest linkage/complete period remains OPEN. `observed_at`/receiver publication and causal available-after timing not proven; #4/#8/#27/#28 independent row QC not proven. **0/50 strict §21.6 RESEARCH-READY**, first pass still open.
+
+No server file write, process launch, research job, privilege change, SentinelX policy change, DB mutation, LIVE action. The only change is this GitHub research report.
