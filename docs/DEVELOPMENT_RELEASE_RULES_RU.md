@@ -661,6 +661,7 @@ smoke безопасен для данного пути.
 | Состояние сервера, unit, PID | SentinelX `capabilities`, `service_status`, `exec: systemctl show` | `sentinelx` (management reader) | `active` != runtime behavior verified |
 | Git forensic на source mirror | `sudo -u cripta env GIT_OPTIONAL_LOCKS=0 git -C /srv/cripta/source_checkout ...` при allowlist | `cripta` | Не выполнять root Git или команды, меняющие index |
 | Protected runtime state | SentinelX `exec` с allowlisted `sudo -u cripta python3 -c '...'` | `cripta` | Только выборочные read-only операции и безопасный вывод |
+| Research raw archives / dataset provenance (read-only) | SentinelX `exec` только через уже разрешённый `sudo -u cripta python3 -c '...'` с отдельным коротким smoke | `cripta` | Точный dataset path, `os.geteuid()` и `os.stat`/readability проверяются в ОДНОМ effective-actor context до SHA256/QC; обычный `stat` через `sentinelx` не проверяет доступ `cripta`. Не читать секреты, не расширять права, не обходить tool-security block |
 | PostgreSQL read forensic | `sudo -u cripta python3 -c 'import psycopg; ...'` | Unix `cripta`, DB role проверяется `current_user` | Только SELECT/metadata; подключение к `dbname=cripta user=cripta` доказать smoke |
 | PostgreSQL DDL/backfill | Approved migration rail | Exact authorized migration actor/role | Права и backup проверить до DDL; runtime `cripta` не подменяет мигратора |
 | systemd/unit/path mutation | Approved server-management rail | `root` для exact OS steps | Actor/path matrix и explicit deploy approval |
@@ -686,6 +687,8 @@ Python/psycopg доступность, DB schema и права обязаны п
 secrets, env credentials, private tokens и персональные данные. Не открывать
 целиком `/etc/cripta/*.env` ради проверки identity; читать только явно
 утверждённые несекретные поля или использовать status metadata.
+
+Для read-only dataset provenance **сначала выбрать actor из матрицы**, а не выполнять удобный host-level `stat` под actor управления. `whoami` в отдельном host-management вызове доказывает только actor того вызова; он не является проверкой доступности raw archive для `cripta`. Если конкретный `sudo -u cripta ...` вызов заблокирован OpenAI upstream, **не отправлять тот же или переписанный вызов повторно** и не менять actor; классифицировать как `BLOCKED_UPSTREAM_OPENAI / RESEARCH_ACTOR_PATH_NOT_CHECKED` и остановить эту ветвь до разрешённого policy route.
 
 `Permission denied` классифицировать только после определения exact actor
 и target path. Если `sentinelx` не может читать `/var/lib/cripta`,
