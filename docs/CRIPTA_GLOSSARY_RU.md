@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.6
-**Дата:** 2026-10-18
+**Версия:** 3.7
+**Дата:** 2026-10-21
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -892,3 +892,15 @@ explicit and rechecks freshness at action time.
 **Feature Passport** — версионированная регистрация measurement contract и QC/evidence для точной пары инструмент × индикатор × версия × data scope. Статус `RESEARCH-READY` присваивается отдельно по каждой паре только после gate из `RESEARCH_COMPUTE §21.6`. Не равен торговой готовности, Strategy policy или LIVE.
 
 **Coin capacity / ёмкость монеты** — не один универсальный знаменатель, а семейство строго типизированных мер конкретной монеты: капитализация, торговый оборот, доступная глубина и другие независимо определённые физические величины. Всегда называть exact kind/source/units/time; это не общая ликвидность крипторынка.
+
+## 35. Instrument research history / coin reference view — OWNER DECISION 2026-10-21
+
+**InstrumentResearchRecord / запись исследования инструмента** — долговечный compact, отдельно versioned evidence-result для одного exact InstrumentIdentity и одного exact research run/scenario/period. Содержит методику/параметры, размеры выборок, комиссии/номинал, положительные и отрицательные закрытия и чистый P&L, hard stops, QC, provenance и ограничения, **даже если raw research inputs позже удалены**. Это не торговое правило, не прогноз прибыльности и не StrategyCard.
+
+**InstrumentResearchLedger / история исследований монеты** — логический неизменяемый/версионированный справочный ряд InstrumentResearchRecord, включая отрицательные и частично завершённые эксперименты. Привязка по exact instrument/venue, а не только ticker string. Не равен live trade ledger и аналитическому кубу market indicators.
+
+**InstrumentResearchCardView / раздел исследований карточки монеты** — read-only UI/read-model проекция summary + chronological records из InstrumentResearchLedger; отражает результаты, а не исполняет Entry/Exit. Источник истины по цифрам остаётся в Research evidence registry. Физическое DB/API/UI размещение до отдельного implementation decision не считается существующим.
+
+**REPRODUCIBILITY_LIMITED** — запись сохраняет проверенные конкретные цифры и методику, но независимое переисполнение невозможно/непроверено из-за отсутствующих исходных данных либо исходного кода. Не означает QC PASS на новом периоде.
+
+Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/projection boundaries: ARCH §48, §51.

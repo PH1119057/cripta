@@ -4446,3 +4446,9 @@ the semantic incorrectness. The canonical financial parameters are
 approved, but `R1_UNIFIED_REAL_ENTRY_READY=NO`; no mainnet gate,
 execution permissions, LIVE-arm session or Exchange mutation was changed
 as part of this decision.
+
+## 2026-10-21 Coin research history registry / card — OWNER DECISION / NOT IMPLEMENTED
+
+Canonical decision: DOCUMENTATION_INDEX §46, ARCH §51, RESEARCH_COMPUTE §23, GLOSSARY §35. Required future state: durable per-exact-instrument research records with readable numerical economics and versioned parameters; coin-card summary + chronological read-only research history, independent of raw archive purge.
+
+Current evidence checked: GitHub main canonical docs and Dashboard source operations/dashboard/index.html and operations/dashboard/app.py inspected on 2026-10-21; operational coin list and research runs screen exist, but neither proves the requested durable InstrumentResearchRecord store, API or individual history in coin card. **IMPLEMENTED=NO; DEPLOYED=NO; RUNTIME BEHAVIOR VERIFIED=NO; DB/API/UI NOT CHECKED HERE.** Do not import research results into StrategyCard, create live mutations or claim prior existing per-symbol research history has been backfilled. Future implementation needs exact owner/writer/store, restore/retention/fee-schema/identity/QC, read-model and independent release tests. Historical runs require evidence-QC before ingestion.

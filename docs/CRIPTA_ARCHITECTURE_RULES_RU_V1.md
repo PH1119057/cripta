@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.0
-**Дата:** 2026-10-16
+**Версия:** 3.1
+**Дата:** 2026-10-21
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1115,3 +1115,11 @@ schema, adapters or dashboard implement multi-account fan-out.
 Approved bounded infrastructure recovery: after safely quiescing all CRIPTA writers and PostgreSQL, preserve the complete current production cluster as a verified cold rollback on the Data SSD, then establish a separately verified minimal operational PostgreSQL on the System SSD. This may precede unfinished R10b/R11/R12 ONLY as physical storage recovery; it does not constitute R11 historical purge, logical retention, historical account reassignment or R12 retirement. ARCH §48–49 remain binding.
 
 Never discard irreplaceable trading, execution, fee, ownership, operator, safety, strategy or event-linked audit evidence. No trading/analytics/statistics source code, Strategy policy or LIVE state changes are approved by this decision. Independence of exchange position/order checks before stopping Exit owner, complete physical rollback, full writer/service/timer inventory, exact actor/path preflight, enough disk headroom, complete minimal-DB consumer contract, permissions and tested recovery are mandatory. Unknowns are HARD STOP. Historical original PGDATA may leave System SSD only AFTER an independently tested complete physical copy is secured; isolated validation copy may be deleted after positive identification and backup verification. Restart only verified services in safe sequence; no LIVE arm. R10–R13 remain open independently.
+
+## 51. Instrument research evidence ledger and coin-card projection — OWNER DECISION 2026-10-21
+
+Исследовательский результат по инструменту — отдельное versioned evidence, **не поле immutable StrategyCard**, не текущая позиция, не live Exchange-trade ledger и не глобальная Strategy policy. Research/Analyst отвечает за точность individual result/params/provenance и его регистрацию по exact InstrumentIdentity. Карточка монеты / InstrumentResearchCardView — **read-only consumer**, показывающий краткую справку и хронологию результатов; её UI не может подтверждать торговую готовность, менять Strategy, включать LIVE либо исполнять ордера.
+
+В отношении ARCH §48 компактные curated records InstrumentResearchRecord, которые должны пережить удаление первичных raw исследований и несут уникальную project decision/evidence value, требуют устойчивого сохранения в CRIPTA_IRREPLACEABLE_DATA-совместимом storage/retention контуре. Большие market-data files продолжают следовать своему external reconstructible/non-reconstructible class; automatic purge не затрагивает этот per-instrument compact ledger. В записи остаются финальные значения, sampling/QC/fee assumptions, UTC interval, method/source fingerprints, correction lineage и явный status ограниченной воспроизводимости после raw purge.
+
+Физический один writer/store, PostgreSQL schema vs versioned file, миграции/restore/QC, конкретный read API и размещение справочника монеты остаются **NOT IMPLEMENTED / owner-and-implementation decision required** до отдельного exact contract; нельзя объявлять существующий операционный список монет готовой durable карточкой или создавать параллельные несовместимые stores. Research mandatory field/record schema и registration gate — RESEARCH_COMPUTE §23; stable terms — GLOSSARY §35. Additive deployment требует DEVELOPMENT_RELEASE gates; docs-only change не затрагивает production database/runtime/TradingAccount.

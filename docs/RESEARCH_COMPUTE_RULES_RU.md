@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.3 · 2026-10-18
+**Версия:** 2.4 · 2026-10-21
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -657,3 +657,33 @@ Scope: independent research hypothesis only. **No modification of current R1, St
 - Source/manifest/QC must preserve source snapshots and hashes, no look-ahead, full time coverage, missing-data classification, per-symbol LONG/SHORT counts and sampled manual geometric checks. Store research outputs only in /data/cripta/research/ under the actual cripta writer after permission preflight.
 
 Research-specific owner intention is not a silent update of any separate existing Strategy version/canon. Changes to production contracts require their own explicit canon/update gate.
+
+## 23. Долговечная история исследований по инструменту и карточка монеты — OWNER DECISION 2026-10-21
+
+### 23.1 Назначение и ownership
+
+Каждое завершённое исследование, replay, OOS/holdout или отрицательный тест, результат которого анализируется по монете, **обязательно** регистрируется как отдельный InstrumentResearchRecord по каждому exact InstrumentIdentity. InstrumentResearchLedger — append-only / versioned evidence-журнал; исследовательский контур/Analyst является владельцем расчёта и подготовленного результата. InstrumentResearchCardView — read-only справочная проекция этого журнала в карточке монеты; она не владеет расчётом, Strategy settings, Entry/Exit, торговым сигналом, активацией или Exchange mutation. Общие cross-instrument runs связываются общим run ID, но каждая монета имеет собственные цифры.
+
+Карточка монеты должна показывать **две логические области**: (1) краткую сводку последних/выбранных исследований с явными периодом и статусом; (2) хронологию отдельных исследований, включая отрицательные, failed и незакрытые результаты. Никакая UI-сводка не замещает individual immutable record; не смешивать статистику разных методов, периодов, комиссий, направлений и номиналов. Изменение политики нового исследования не удаляет старые результаты.
+
+### 23.2 Обязательный паспорт одной записи
+
+Для каждого exact instrument × run/version × scenario × time scope обязательно сохранять компактный человекочитаемый результат и машинно-валидируемое содержание:
+
+1. Стабильный record_id, research_run_id, scenario/version/fingerprint, время запуска/завершения **UTC** (с возможностью показа локального времени), дата регистрации, версия скрипта и immutable source hash; точный instrument_id, venue/market source и symbol как display label. Strategy Candidate/hypothesis identity, а для real strategy — exact StrategyCard/version отдельно; research не притворяется LIVE.
+2. Исторический период [start_utc, end_utc) и его фактическое coverage, число полных суток, source/dataset identity, completeness/QC, OOS/holdout или in-sample, causal no-lookahead / known lookahead, пропуски и ограничения применимости.
+3. **Полный читаемый снимок тестированных параметров** Entry, Exit, защиты и lifecycle, а не короткий nickname. Пример текущего самостоятельного research: H9-5m = 108 closed 5m, H9-15m = 36 closed 15m, L5-3 = 36 closed 5m, exact side GAP=0, depth 0..15% of H9 working range, STAY6 off, индивидуальная медиана L5-3 по объявленному историческому окну с допуском ±0,5 **процентного пункта**, динамический противоположный RAW L5-3 TP и точный floor (+0,2% или +0,5% gross), защита (+0,5% fixed, BE +0,13% after +0,5%, или trailing 0,35% after +0,5%), hard stop −10%, время удержания/censor и занятость одного слота. Это **пример параметров отдельного исследования, не Strategy defaults и не утверждение о готовности LIVE**.
+4. Направления LONG/SHORT (отдельно и при совместимом контракте итого), число candidate Entry, допущенных/отфильтрованных сигналов, фактически открытых/закрытых позиций, повторных Entry, отклонённых по occupied slot, и открытых/censored на конце; не включать unrealized P&L в realized.
+5. Число и сумма **после комиссии** для TP+, TP−, protected stop+, protected stop−, hard stop и других scenario exit reasons **по факту**, без выдуманного нуля; отдельно все положительные денежные компоненты, все отрицательные денежные компоненты (включая hard stop), итоговый **realized net P&L**, средний/медианный net trade return, optional MFE/MAE и время удержания. Если TP− нет, записать 0 только после QC, а hard stop не скрывать внутри общего Stop−. Результаты NO_DATA, UNKNOWN, PARTIAL не конвертируются в 0.
+6. Номинал сделки, leverage/capital assumptions, суммарная база доходности, расчёт доходности **с объявленным denominator**, fee schedule по входу/каждому типу выхода (taker/maker), funding, spread/slippage, price-fill/order assumptions, отсутствие/наличие latency и модель повторного использования освобождённого слота. Не смешивать money per 10 USDT с per 100 USDT без маркированного пересчёта.
+7. Статус RESEARCH RESULT / QC PASS|FAIL|PARTIAL / OOS verified|not verified / LIVE equivalence verified|not verified, ссылки на manifest/results/source snapshots, file hashes, audit/test evidence, причины failed/blocked/unknown; дата, автор и история коррекций.
+
+### 23.3 Persistence / purge safety / revision
+
+**Итоговый компактный per-coin паспорт и цифры должны переживать удаление больших исходных research files и исторического market-data cache**. Нельзя делать единственным содержимым записи путь, который может исчезнуть. По смыслу ARCH §48 это проектное долговечное evidence; сохраняются идентичность, исходные проценты/деньги, версия и источник, методология и QC. При purge можно удалить воспроизводимые тяжёлые входные файлы только по действующим retention gates, но нельзя удалять compact InstrumentResearchRecord. Если после purge независимое воспроизведение невозможно, явно зафиксировать REPRODUCIBILITY_LIMITED и причину; не выдавать старый replay за повторно проверенный.
+
+Публикация записи — после QC и сохранения run/scenario lineage, с idempotency key для (instrument_id, run_id, scenario_id, version). Ошибки/исправления — **новая версия/связанный correction record**, без молчаливого переписывания чисел. Нельзя создавать одинаковую цифру из нескольких файлов как две разные попытки или объявлять FAILED равным нулевому P&L. Если запись подготовлена, но не сохранена, статус RESEARCH RESULT NOT REGISTERED; исследовательский цикл не считается закрытым как полностью каталогизированный.
+
+### 23.4 Реализация и границы решения
+
+ARCH §51 определяет данные/потребителей и необходимость долговечного retention; GLOSSARY §35 — термины; этот §23 — единственный владелец минимального содержания записей и процесса их фиксации. DOCUMENTATION_INDEX §46 регистрирует OWNER DECISION. Конкретные физические таблицы/files, DB migration, read API, backfill старых runs, права записи и размещение вкладок Dashboard требуют отдельного exact implementation contract, permission preflight, migration/release и runtime QC. Не создавать вторую независимую базу research truth, не записывать результаты исследований в immutable StrategyCard, не менять торговые контуры или LIVE в рамках этой документационной правки.

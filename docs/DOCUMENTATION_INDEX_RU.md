@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.34
+**Версия:** 3.35
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1356,3 +1356,11 @@ as required -> tests/shadow/equivalence -> technical pre-arm
 CI must not be reported as a deployed real execution path.
 The document topology, mandatory pre-read, routing, Source count and
 README/AGENTS/bootstrap paths are unchanged.
+
+# 46. История исследований в карточке монеты — OWNER DECISION 2026-10-21
+
+Владелец утвердил обязательную долговечную, **поинструментную** регистрацию каждого research result и его показ в справочнике монет: (a) краткая сводка с результатами и статусом, (b) история отдельных исследований по дате/времени. Запись должна содержать exact UTC period, идентичность инструмента, versioned Entry/Exit/protection и параметры стратегии (включая медиану/допуск и RAW TP при применимости), counts, положительные/отрицательные денежные итоги **после комиссий**, TP+/TP−, protected stops+/−, catastrophic hard stops и realized net P&L, nominals/fee model, QC/OOS/provenance. Хранение compact result обязательно **независимо от удаления больших исходных файлов**; при утрате источников воспроизводимость отмечается ограниченной.
+
+Canonical ownership: ARCH §48, §51 — storage/data owner и read-only consumer boundary; RESEARCH_COMPUTE §23 — mandatory recording, identity, financial fields, corrections and QC; CRIPTA_GLOSSARY §35 — terms. CURRENT_PROJECT_MAP фиксирует, что actual UI/API/database пока NOT IMPLEMENTED / NOT VERIFIED. Запись исследования не является immutable StrategyCard, разрешением торговли или переносом исторических thresholds в текущую стратегию.
+
+Documentation gate: нынешние 11 current Source docs, файлы/пути, pre-read и routed reading, root README/AGENTS и Project Instructions/bootstrap **не меняются**; разделы только добавлены, старые номера не сдвигаются. Эта ревизия не содержит Python/SQL/runtime mutation, не создаёт PostgreSQL schema и не является deploy или LIVE-arm. Physical writer/storage/API/UI implementation и backfill older history — последующий отдельный разрешённый цикл.
