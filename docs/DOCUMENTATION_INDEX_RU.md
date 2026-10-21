@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.31
+**Версия:** 3.32
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1295,3 +1295,22 @@ The new document section does not change source-file cardinality,
 mandatory pre-read, routing, README/AGENTS/bootstrap or UI capacity.
 Application real trading/Exit takeover and unrelated Observer continuity
 issues are NOT declared verified by a flat-account DB migration.
+
+
+# 43. Observer bounded REST trade-audit recovery production checkpoint — 2026-10-21
+
+Owner-requested stabilization of the publicTrade REST continuity auditor:
+truncated HTTP response body and disconnected transport are now retryable
+only inside the preexisting two-attempt / four-second budget. There is no
+invented trade/OI replay and no relaxation of fail-closed causality.
+GitHub PR #138, all relevant CI PASS, deployment job
+`job_0a149834e6e2` exit_code=0, release
+`aef533b154945e0b2871571796a75848c3f77ebd` loaded and observed
+RUNNING with exact monitor lineage, 1 Strategy, 1 EntryPlan and 10 lanes.
+CURRENT_PROJECT_MAP 12.27 is the dated source/result/QC reference,
+including the first aborted exact-commit install attempt, rollback backup,
+runtime identity, and unresolved historical fault evidence.
+OBS §4 preserves operator-owned explicit resolution; do not auto-clear
+five remaining historical Observer faults merely because the new observer
+runs. No current Project Source count, canonical routing or bootstrap
+topology change was introduced by this checkpoint.
