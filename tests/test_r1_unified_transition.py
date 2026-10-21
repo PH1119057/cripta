@@ -148,3 +148,22 @@ def test_fresh_exchange_snapshot_is_not_assumed(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "LIFECYCLE_STATUS", file)
     with pytest.raises(RuntimeError, match="fresh account truth missing"):
         mod.require_fresh_exchange_account(NOW)
+
+
+def test_terminal_trade_commands_use_actual_lowercase_runtime_states():
+    db = DB()
+    mod.preflight(db, NOW)
+    predicates = [sql for sql, _ in db.sql if "runtime.trade_commands" in sql]
+    assert len(predicates) == 1
+    sql = predicates[0]
+    assert "state NOT IN ('completed','failed')" in sql
+    assert "'COMPLETED'" not in sql
+    assert "'FAILED'" not in sql
+
+
+def test_queued_or_running_commands_are_not_assumed_terminal():
+    for count in (1, 2):
+        db = DB(blockers={"UNRESOLVED_TRADE_COMMAND": count})
+        with pytest.raises(RuntimeError, match="UNRESOLVED_TRADE_COMMAND"):
+            mod.preflight(db, NOW)
+        assert not writes(db)
