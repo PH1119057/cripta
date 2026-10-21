@@ -14,5 +14,9 @@ def test_trade_gate_routes_exact_r1_cohort_to_r1_micro_live_endpoint() -> None:
         "r1_arbusdt",
     ):
         assert strategy_id in source
-    assert "endpoint=r1?'/api/r1/micro-live':'/api/live/gate'" in source
+    assert "function exactUnifiedR1MicroLiveCohort()" in source
+    assert "active.length===1" in source
+    assert "endpoint=unified?" in source
+    assert "'/api/r1/unified/micro-live'" in source
+    assert "r1?'/api/r1/micro-live':'/api/live/gate'" in source
     assert "String(item.strategy_version||'')==='1.1-micro-live'" in source
