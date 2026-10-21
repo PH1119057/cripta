@@ -7,7 +7,9 @@ def test_dashboard_live_actions_use_strategy_owned_symbols_not_monitor_checkbox_
     assert 'id="tradeOperationStatus"' in html
     assert "beginTimedStatus" in html
     assert "gateChanging" in html
-    assert "endpoint=r1?'/api/r1/micro-live':'/api/live/gate'" in html
+    assert "endpoint=unified?" in html
+    assert "'/api/r1/unified/micro-live'" in html
+    assert "r1?'/api/r1/micro-live':'/api/live/gate'" in html
     assert "livePostTimed(endpoint,{enabled,confirmed:" in html
     assert "Список монет задаётся только StrategyCard" in html
     assert "Нельзя открыть шлюз: не выбрана ни одна торговая монета" not in html
