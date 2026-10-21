@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import bybit_workbench.r1_unified_prearm as prearm
+from bybit_workbench.r1_unified_prearm import unified_r1_prearm_state
 from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
 
 
@@ -71,13 +71,12 @@ class ReadOnlyDB:
 def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
     db = ReadOnlyDB()
     monkeypatch.setattr(
-        prearm,
-        "evaluate_live_arm",
+        "bybit_workbench.r1_unified_prearm.evaluate_live_arm",
         lambda *args, **kwargs: SimpleNamespace(
             ready=True, failed_codes=()
         ),
     )
-    result = prearm.unified_r1_prearm_state(
+    result = unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert result["installed"] is True
@@ -115,7 +114,7 @@ def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
 def test_prearm_refuses_ambiguous_identity(attribute, value, reason):
     db = ReadOnlyDB()
     setattr(db, attribute, value)
-    result = prearm.unified_r1_prearm_state(
+    result = unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert result["installed"] is False
@@ -129,12 +128,12 @@ def test_unified_readiness_refuses_preexisting_gate_permission_and_arms(monkeypa
     db.active_permissions = True
     db.active_sessions = True
     monkeypatch.setattr(
-        prearm, "evaluate_live_arm",
+        "bybit_workbench.r1_unified_prearm.evaluate_live_arm",
         lambda *a, **k: SimpleNamespace(
             ready=False, failed_codes=("CRITICAL_FAULT_DELIVERY",)
         ),
     )
-    result = prearm.unified_r1_prearm_state(
+    result = unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert len(result["strategies"]) == 1
