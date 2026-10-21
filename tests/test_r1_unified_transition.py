@@ -159,6 +159,8 @@ def test_schema_sensitive_guards_use_actual_claim_and_command_columns():
         encoding="utf-8"
     )
     assert "WHERE claim_state<>'RELEASED'" in sql
+    assert "WHERE mode='mainnet' AND enabled=0" in sql
+    assert "WHERE mode='mainnet' AND enabled=false" not in sql
     legacy_claim_query = (
         "FROM runtime.exchange_position_slot_claims"
         "\n           WHERE state<>'RELEASED'"

@@ -18,7 +18,7 @@ DECLARE
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM control.execution_gates
-        WHERE mode='mainnet' AND enabled=false
+        WHERE mode='mainnet' AND enabled=0
     ) THEN
         RAISE EXCEPTION 'R1_BINDING_BLOCKED: mainnet new Entry not OFF';
     END IF;
