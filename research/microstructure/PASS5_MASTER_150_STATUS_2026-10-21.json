@@ -20,7 +20,9 @@
     "two_control_day_descriptive_summary_pairs": 20,
     "pilot_two_day_source_fills": 1683866,
     "pilot_two_day_fullrow_field_comparisons": 115200,
-    "pilot_two_day_mismatches": 0
+    "pilot_two_day_mismatches": 0,
+    "apt_30day_source_files_qced": 30,
+    "apt_30day_fills_qced": 6258912
   },
   "cells": [
     {
@@ -54,7 +56,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -219,7 +230,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -384,7 +404,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -549,7 +578,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -714,7 +752,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -879,7 +926,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -1044,7 +1100,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -1209,7 +1274,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -2954,7 +3028,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
@@ -3119,7 +3202,16 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_source_qc": {
+        "period": "2026-05-18..2026-06-16 UTC",
+        "source_files": 30,
+        "source_fills": 6258912,
+        "source_hash_match_manifest": 30,
+        "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
+        "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
+        "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      }
     },
     {
       "instrument_id": "INJUSDT",
