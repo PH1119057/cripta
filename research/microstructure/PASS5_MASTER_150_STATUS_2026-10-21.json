@@ -1,0 +1,2638 @@
+{
+  "title": "CRIPTA 30 indicators x five exact Bybit instruments; derived status matrix, NOT formal passports",
+  "checked_date": "2026-10-21",
+  "authority": "PH1119057/cripta:main",
+  "status": "RESEARCH_EVIDENCE_AUDIT_ONLY_NOT_CANON_NOT_RESEARCH_READY",
+  "scope_warning": "May19 and May20 physical/pilot evidence, one-day source observations and job-unknowns are separate contexts; cells are inventory rows, NOT §21.6 full-period passports, not a synchronous feature cube, not OOS.",
+  "counts": {
+    "total_cells": 150,
+    "by_group": {
+      "1": 50,
+      "2": 45,
+      "3": 35,
+      "4": 20
+    },
+    "research_ready": 0,
+    "day20_unexecuted_upstream": 5,
+    "day20_unknown_job": 2,
+    "deferred": 5
+  },
+  "cells": [
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 1,
+      "indicator_name": "RVOL",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 1,
+      "indicator_name": "RVOL",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 1,
+      "indicator_name": "RVOL",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 1,
+      "indicator_name": "RVOL",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 1,
+      "indicator_name": "RVOL",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 2,
+      "indicator_name": "Trade Rate",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 2,
+      "indicator_name": "Trade Rate",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 2,
+      "indicator_name": "Trade Rate",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 2,
+      "indicator_name": "Trade Rate",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 2,
+      "indicator_name": "Trade Rate",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 3,
+      "indicator_name": "Trade Rate Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 3,
+      "indicator_name": "Trade Rate Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 3,
+      "indicator_name": "Trade Rate Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 3,
+      "indicator_name": "Trade Rate Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 3,
+      "indicator_name": "Trade Rate Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 4,
+      "indicator_name": "Large Trade Share",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 4,
+      "indicator_name": "Large Trade Share",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 4,
+      "indicator_name": "Large Trade Share",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 4,
+      "indicator_name": "Large Trade Share",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 4,
+      "indicator_name": "Large Trade Share",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 5,
+      "indicator_name": "Buy/Sell Delta",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 5,
+      "indicator_name": "Buy/Sell Delta",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 5,
+      "indicator_name": "Buy/Sell Delta",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 5,
+      "indicator_name": "Buy/Sell Delta",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 5,
+      "indicator_name": "Buy/Sell Delta",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 6,
+      "indicator_name": "CVD",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 6,
+      "indicator_name": "CVD",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 6,
+      "indicator_name": "CVD",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 6,
+      "indicator_name": "CVD",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 6,
+      "indicator_name": "CVD",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 7,
+      "indicator_name": "Delta Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 7,
+      "indicator_name": "Delta Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 7,
+      "indicator_name": "Delta Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 7,
+      "indicator_name": "Delta Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 7,
+      "indicator_name": "Delta Acceleration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 8,
+      "indicator_name": "Trade Streaks",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 8,
+      "indicator_name": "Trade Streaks",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 8,
+      "indicator_name": "Trade Streaks",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 8,
+      "indicator_name": "Trade Streaks",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 8,
+      "indicator_name": "Trade Streaks",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 9,
+      "indicator_name": "Queue Imbalance",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 9,
+      "indicator_name": "Queue Imbalance",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 9,
+      "indicator_name": "Queue Imbalance",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 9,
+      "indicator_name": "Queue Imbalance",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 9,
+      "indicator_name": "Queue Imbalance",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 10,
+      "indicator_name": "Multi-Level OFI",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "TOP1_AND_TOP5_RANK_PROXY_5_OF_5_VARIANT_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 10,
+      "indicator_name": "Multi-Level OFI",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "TOP1_AND_TOP5_RANK_PROXY_5_OF_5_VARIANT_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 10,
+      "indicator_name": "Multi-Level OFI",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "TOP1_AND_TOP5_RANK_PROXY_5_OF_5_VARIANT_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 10,
+      "indicator_name": "Multi-Level OFI",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "TOP1_AND_TOP5_RANK_PROXY_5_OF_5_VARIANT_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 10,
+      "indicator_name": "Multi-Level OFI",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "TOP1_AND_TOP5_RANK_PROXY_5_OF_5_VARIANT_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 11,
+      "indicator_name": "Order Book Depth",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 11,
+      "indicator_name": "Order Book Depth",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 11,
+      "indicator_name": "Order Book Depth",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 11,
+      "indicator_name": "Order Book Depth",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 11,
+      "indicator_name": "Order Book Depth",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 12,
+      "indicator_name": "Pulling Rate",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "SAME_PRICE_VISIBLE_DEPLETION_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 12,
+      "indicator_name": "Pulling Rate",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "SAME_PRICE_VISIBLE_DEPLETION_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 12,
+      "indicator_name": "Pulling Rate",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "SAME_PRICE_VISIBLE_DEPLETION_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 12,
+      "indicator_name": "Pulling Rate",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "SAME_PRICE_VISIBLE_DEPLETION_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 12,
+      "indicator_name": "Pulling Rate",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "SAME_PRICE_VISIBLE_DEPLETION_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 13,
+      "indicator_name": "Depth Recovery",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY20_RECOVERY_EPISODES_5_OF_5_CENSOR_POLICY_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 13,
+      "indicator_name": "Depth Recovery",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY20_RECOVERY_EPISODES_5_OF_5_CENSOR_POLICY_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 13,
+      "indicator_name": "Depth Recovery",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY20_RECOVERY_EPISODES_5_OF_5_CENSOR_POLICY_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 13,
+      "indicator_name": "Depth Recovery",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY20_RECOVERY_EPISODES_5_OF_5_CENSOR_POLICY_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 13,
+      "indicator_name": "Depth Recovery",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY20_RECOVERY_EPISODES_5_OF_5_CENSOR_POLICY_OPEN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 14,
+      "indicator_name": "Price Impact",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "NEXT_MINUTE_RETURN_IS_FUTURE_LABEL",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 14,
+      "indicator_name": "Price Impact",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "NEXT_MINUTE_RETURN_IS_FUTURE_LABEL",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 14,
+      "indicator_name": "Price Impact",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "NEXT_MINUTE_RETURN_IS_FUTURE_LABEL",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 14,
+      "indicator_name": "Price Impact",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "NEXT_MINUTE_RETURN_IS_FUTURE_LABEL",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 14,
+      "indicator_name": "Price Impact",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "DAY20_NOT_EXECUTED_UPSTREAM_BLOCK",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "NEXT_MINUTE_RETURN_IS_FUTURE_LABEL",
+      "upstream_route_blocked": true,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 15,
+      "indicator_name": "Effort/Result",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_SUMMARY_5_OF_5_INTERNAL_ALGEBRA_ALL_ROWS_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 15,
+      "indicator_name": "Effort/Result",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_SUMMARY_5_OF_5_INTERNAL_ALGEBRA_ALL_ROWS_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 15,
+      "indicator_name": "Effort/Result",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_SUMMARY_5_OF_5_INTERNAL_ALGEBRA_ALL_ROWS_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 15,
+      "indicator_name": "Effort/Result",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_SUMMARY_5_OF_5_INTERNAL_ALGEBRA_ALL_ROWS_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 15,
+      "indicator_name": "Effort/Result",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_SUMMARY_5_OF_5_INTERNAL_ALGEBRA_ALL_ROWS_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 16,
+      "indicator_name": "Absorption",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "AGAINST_FLOW_PRICE_MOVE_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 16,
+      "indicator_name": "Absorption",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "AGAINST_FLOW_PRICE_MOVE_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 16,
+      "indicator_name": "Absorption",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "AGAINST_FLOW_PRICE_MOVE_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 16,
+      "indicator_name": "Absorption",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "AGAINST_FLOW_PRICE_MOVE_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 16,
+      "indicator_name": "Absorption",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "AGAINST_FLOW_PRICE_MOVE_PROXY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 17,
+      "indicator_name": "Exhaustion",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FLOW_DECAY_5MIN_PROXY_INDEPENDENT_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 17,
+      "indicator_name": "Exhaustion",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FLOW_DECAY_5MIN_PROXY_INDEPENDENT_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 17,
+      "indicator_name": "Exhaustion",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FLOW_DECAY_5MIN_PROXY_INDEPENDENT_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 17,
+      "indicator_name": "Exhaustion",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FLOW_DECAY_5MIN_PROXY_INDEPENDENT_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 17,
+      "indicator_name": "Exhaustion",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FLOW_DECAY_5MIN_PROXY_INDEPENDENT_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 18,
+      "indicator_name": "Short-Term Autocorrelation",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FORWARD_FILLED_TRADE_CLOSES_FLOAT_TIMESTAMP",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 18,
+      "indicator_name": "Short-Term Autocorrelation",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FORWARD_FILLED_TRADE_CLOSES_FLOAT_TIMESTAMP",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 18,
+      "indicator_name": "Short-Term Autocorrelation",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FORWARD_FILLED_TRADE_CLOSES_FLOAT_TIMESTAMP",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 18,
+      "indicator_name": "Short-Term Autocorrelation",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "DAY20_NOT_EXECUTED_UPSTREAM_BLOCK",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FORWARD_FILLED_TRADE_CLOSES_FLOAT_TIMESTAMP",
+      "upstream_route_blocked": true,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 18,
+      "indicator_name": "Short-Term Autocorrelation",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "DAY20_NOT_EXECUTED_UPSTREAM_BLOCK",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "FORWARD_FILLED_TRADE_CLOSES_FLOAT_TIMESTAMP",
+      "upstream_route_blocked": true,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 19,
+      "indicator_name": "Range Compression",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 19,
+      "indicator_name": "Range Compression",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 19,
+      "indicator_name": "Range Compression",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 19,
+      "indicator_name": "Range Compression",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 19,
+      "indicator_name": "Range Compression",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 20,
+      "indicator_name": "Local Extremes",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "STALE_CLOSE_EXTREMA_NOT_PRINT_EXTREMA",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 20,
+      "indicator_name": "Local Extremes",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "STALE_CLOSE_EXTREMA_NOT_PRINT_EXTREMA",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 20,
+      "indicator_name": "Local Extremes",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "STALE_CLOSE_EXTREMA_NOT_PRINT_EXTREMA",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 20,
+      "indicator_name": "Local Extremes",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "DAY20_NOT_EXECUTED_UPSTREAM_BLOCK",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "STALE_CLOSE_EXTREMA_NOT_PRINT_EXTREMA",
+      "upstream_route_blocked": true,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 20,
+      "indicator_name": "Local Extremes",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "DAY20_NOT_EXECUTED_UPSTREAM_BLOCK",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "STALE_CLOSE_EXTREMA_NOT_PRINT_EXTREMA",
+      "upstream_route_blocked": true,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 21,
+      "indicator_name": "Sweep/Reclaim",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "PRINT_EXTREMA_NOT_BOOK_SWEEP_EQ_TIMESTAMP_SENSITIVITY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 21,
+      "indicator_name": "Sweep/Reclaim",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "PRINT_EXTREMA_NOT_BOOK_SWEEP_EQ_TIMESTAMP_SENSITIVITY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 21,
+      "indicator_name": "Sweep/Reclaim",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "PRINT_EXTREMA_NOT_BOOK_SWEEP_EQ_TIMESTAMP_SENSITIVITY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 21,
+      "indicator_name": "Sweep/Reclaim",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "PRINT_EXTREMA_NOT_BOOK_SWEEP_EQ_TIMESTAMP_SENSITIVITY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 21,
+      "indicator_name": "Sweep/Reclaim",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "PRINT_EXTREMA_NOT_BOOK_SWEEP_EQ_TIMESTAMP_SENSITIVITY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 22,
+      "indicator_name": "VWAP/Volume Profile",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 22,
+      "indicator_name": "VWAP/Volume Profile",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 22,
+      "indicator_name": "VWAP/Volume Profile",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 22,
+      "indicator_name": "VWAP/Volume Profile",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 22,
+      "indicator_name": "VWAP/Volume Profile",
+      "pass_group": 2,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_JOINED_1440_ROW_HASH_QC_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_API_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_OI_CHANGE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_288_5MIN_OBSERVATIONS_PER_COIN_API_VALUES_NOT_SNAPSHOTTED",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_observation_count": 288
+      }
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_API_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_OI_CHANGE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_288_5MIN_OBSERVATIONS_PER_COIN_API_VALUES_NOT_SNAPSHOTTED",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_observation_count": 288
+      }
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_API_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_OI_CHANGE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_288_5MIN_OBSERVATIONS_PER_COIN_API_VALUES_NOT_SNAPSHOTTED",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_observation_count": 288
+      }
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_API_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_OI_CHANGE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_288_5MIN_OBSERVATIONS_PER_COIN_API_VALUES_NOT_SNAPSHOTTED",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_observation_count": 288
+      }
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 23,
+      "indicator_name": "OI Change",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_API_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_OI_CHANGE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_288_5MIN_OBSERVATIONS_PER_COIN_API_VALUES_NOT_SNAPSHOTTED",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_observation_count": 288
+      }
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 24,
+      "indicator_name": "Liquidation Spikes",
+      "pass_group": 4,
+      "source_status": "DAY19_LIQ_PROCESSED_ROWS_PARTIAL_91_OF_120_HOURS_UNKNOWN",
+      "calculation_status": "NO_VERIFIED_LIQUIDATION_SPIKE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_PROCESSED_EVENTS_PARTIAL_COVERAGE",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "observed_may19_events": 11,
+        "unknown_hours_not_zero": true
+      }
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 24,
+      "indicator_name": "Liquidation Spikes",
+      "pass_group": 4,
+      "source_status": "DAY19_LIQ_PROCESSED_ROWS_PARTIAL_91_OF_120_HOURS_UNKNOWN",
+      "calculation_status": "NO_VERIFIED_LIQUIDATION_SPIKE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_PROCESSED_EVENTS_PARTIAL_COVERAGE",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "observed_may19_events": 74,
+        "unknown_hours_not_zero": true
+      }
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 24,
+      "indicator_name": "Liquidation Spikes",
+      "pass_group": 4,
+      "source_status": "DAY19_LIQ_PROCESSED_ROWS_PARTIAL_91_OF_120_HOURS_UNKNOWN",
+      "calculation_status": "NO_VERIFIED_LIQUIDATION_SPIKE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_PROCESSED_EVENTS_PARTIAL_COVERAGE",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "observed_may19_events": 4,
+        "unknown_hours_not_zero": true
+      }
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 24,
+      "indicator_name": "Liquidation Spikes",
+      "pass_group": 4,
+      "source_status": "DAY19_LIQ_PROCESSED_ROWS_PARTIAL_91_OF_120_HOURS_UNKNOWN",
+      "calculation_status": "NO_VERIFIED_LIQUIDATION_SPIKE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_PROCESSED_EVENTS_PARTIAL_COVERAGE",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "observed_may19_events": 5,
+        "unknown_hours_not_zero": true
+      }
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 24,
+      "indicator_name": "Liquidation Spikes",
+      "pass_group": 4,
+      "source_status": "DAY19_LIQ_PROCESSED_ROWS_PARTIAL_91_OF_120_HOURS_UNKNOWN",
+      "calculation_status": "NO_VERIFIED_LIQUIDATION_SPIKE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_PROCESSED_EVENTS_PARTIAL_COVERAGE",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "observed_may19_events": 7,
+        "unknown_hours_not_zero": true
+      }
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 25,
+      "indicator_name": "Spot/Perp Divergence",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_SPOT_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_SPOT_PERP_DIVERGENCE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_SPOT_PUBLIC_TRADES_READ_NOT_SNAPSHOTTED_NO_BASIS",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_spot_fills": 10074
+      }
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 25,
+      "indicator_name": "Spot/Perp Divergence",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_SPOT_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_SPOT_PERP_DIVERGENCE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_SPOT_PUBLIC_TRADES_READ_NOT_SNAPSHOTTED_NO_BASIS",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_spot_fills": 24221
+      }
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 25,
+      "indicator_name": "Spot/Perp Divergence",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_SPOT_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_SPOT_PERP_DIVERGENCE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_SPOT_PUBLIC_TRADES_READ_NOT_SNAPSHOTTED_NO_BASIS",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_spot_fills": 8580
+      }
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 25,
+      "indicator_name": "Spot/Perp Divergence",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_SPOT_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_SPOT_PERP_DIVERGENCE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_SPOT_PUBLIC_TRADES_READ_NOT_SNAPSHOTTED_NO_BASIS",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_spot_fills": 16860
+      }
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 25,
+      "indicator_name": "Spot/Perp Divergence",
+      "pass_group": 4,
+      "source_status": "DAY19_BYBIT_SPOT_SOURCE_READ_UNSNAPSHOTTED",
+      "calculation_status": "NO_VERIFIED_SPOT_PERP_DIVERGENCE_FEATURE",
+      "historical_scope": "2026-05-19",
+      "evidence_summary": "DAY19_SPOT_PUBLIC_TRADES_READ_NOT_SNAPSHOTTED_NO_BASIS",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ],
+      "source_observation_context": {
+        "recorded_spot_fills": 10099
+      }
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 26,
+      "indicator_name": "Cross-Venue Lead-Lag",
+      "pass_group": 4,
+      "source_status": "CROSS_VENUE_NOT_COLLECTED_IN_THIS_WORK_PACKAGE",
+      "calculation_status": "OWNER_DEFERRED_LAST",
+      "historical_scope": "NOT_SELECTED",
+      "evidence_summary": "OWNER_DEFERRED_LAST",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 26,
+      "indicator_name": "Cross-Venue Lead-Lag",
+      "pass_group": 4,
+      "source_status": "CROSS_VENUE_NOT_COLLECTED_IN_THIS_WORK_PACKAGE",
+      "calculation_status": "OWNER_DEFERRED_LAST",
+      "historical_scope": "NOT_SELECTED",
+      "evidence_summary": "OWNER_DEFERRED_LAST",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 26,
+      "indicator_name": "Cross-Venue Lead-Lag",
+      "pass_group": 4,
+      "source_status": "CROSS_VENUE_NOT_COLLECTED_IN_THIS_WORK_PACKAGE",
+      "calculation_status": "OWNER_DEFERRED_LAST",
+      "historical_scope": "NOT_SELECTED",
+      "evidence_summary": "OWNER_DEFERRED_LAST",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 26,
+      "indicator_name": "Cross-Venue Lead-Lag",
+      "pass_group": 4,
+      "source_status": "CROSS_VENUE_NOT_COLLECTED_IN_THIS_WORK_PACKAGE",
+      "calculation_status": "OWNER_DEFERRED_LAST",
+      "historical_scope": "NOT_SELECTED",
+      "evidence_summary": "OWNER_DEFERRED_LAST",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 26,
+      "indicator_name": "Cross-Venue Lead-Lag",
+      "pass_group": 4,
+      "source_status": "CROSS_VENUE_NOT_COLLECTED_IN_THIS_WORK_PACKAGE",
+      "calculation_status": "OWNER_DEFERRED_LAST",
+      "historical_scope": "NOT_SELECTED",
+      "evidence_summary": "OWNER_DEFERRED_LAST",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 27,
+      "indicator_name": "Inter-Trade Duration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 27,
+      "indicator_name": "Inter-Trade Duration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 27,
+      "indicator_name": "Inter-Trade Duration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 27,
+      "indicator_name": "Inter-Trade Duration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 27,
+      "indicator_name": "Inter-Trade Duration",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 28,
+      "indicator_name": "Trade-Size Distribution",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 28,
+      "indicator_name": "Trade-Size Distribution",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 28,
+      "indicator_name": "Trade-Size Distribution",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 28,
+      "indicator_name": "Trade-Size Distribution",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 28,
+      "indicator_name": "Trade-Size Distribution",
+      "pass_group": 1,
+      "source_status": "BYBIT_PUBLIC_TRADES_MAY20_SHA256_AND_SCHEMA_VERIFIED",
+      "calculation_status": "PILOT_COMPUTED",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 29,
+      "indicator_name": "Bid/Ask Spread",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 29,
+      "indicator_name": "Bid/Ask Spread",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 29,
+      "indicator_name": "Bid/Ask Spread",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 29,
+      "indicator_name": "Bid/Ask Spread",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 29,
+      "indicator_name": "Bid/Ask Spread",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-19 pilot and/or 2026-05-20; check indicator-specific exact scope",
+      "evidence_summary": "DAY19_FULL_DAY_SUMMARY_5_OF_5_ALL_ROWS_UNKNOWN",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "APTUSDT",
+      "indicator_id": 30,
+      "indicator_name": "Replenishment/Resiliency",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "TOP5_STOCK_RECOVERY_PROXY_NOT_STRICT_RESILIENCY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "indicator_id": 30,
+      "indicator_name": "Replenishment/Resiliency",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "DAY20_JOB_OUTCOME_UNKNOWN",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "TOP5_STOCK_RECOVERY_PROXY_NOT_STRICT_RESILIENCY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "indicator_id": 30,
+      "indicator_name": "Replenishment/Resiliency",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "TOP5_STOCK_RECOVERY_PROXY_NOT_STRICT_RESILIENCY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "indicator_id": 30,
+      "indicator_name": "Replenishment/Resiliency",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "HISTORIC_PHYSICAL_OR_PROXY_SEEN",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "TOP5_STOCK_RECOVERY_PROXY_NOT_STRICT_RESILIENCY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "indicator_id": 30,
+      "indicator_name": "Replenishment/Resiliency",
+      "pass_group": 3,
+      "source_status": "BYBIT_ORDERBOOK_MAY19_MAY20_10_ZIP_SHA256_VERIFIED",
+      "calculation_status": "DAY20_JOB_OUTCOME_UNKNOWN",
+      "historical_scope": "2026-05-20",
+      "evidence_summary": "TOP5_STOCK_RECOVERY_PROXY_NOT_STRICT_RESILIENCY",
+      "upstream_route_blocked": false,
+      "research_ready": false,
+      "readiness_blockers": [
+        "ACTUAL_OBSERVED_OR_PUBLICATION_CLOCK_NOT_PROVEN",
+        "COMPLETE_REQUESTED_PERIOD_NOT_PROVEN",
+        "FORMAL_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC_INCOMPLETE"
+      ]
+    }
+  ],
+  "limitations": [
+    "NO_CONFIRMED_COMPLETE_REQUESTED_MULTI_DAY_SCOPE",
+    "NO_COMPLETE_EVENT_OBSERVED_AVAILABLE_AFTER_CAUSAL_CLOCK",
+    "NO_COMPLETE_PER_PAIR_SOURCE_RUN_MANIFEST_AND_INDEPENDENT_QC",
+    "NO_FROZEN_MATERIALIZED_INSTRUMENT_TIME_INDICATOR_CUBE",
+    "NO_FUTURE_LABEL_OOS_OR_FEE_ADJUSTED_TRADE_RESULT",
+    "CROSS_VENUE_26_OWNER_DEFERRED_LAST"
+  ],
+  "sources": [
+    "research/microstructure/PASS1_TRADE_TAPE_CHECKPOINT_2026-10-20.md",
+    "research/microstructure/PASS2_PRICE_FLOW_CHECKPOINT_2026-10-21.md",
+    "research/microstructure/PASS3_ORDERBOOK_CHECKPOINT_2026-10-21.md",
+    "research/microstructure/PASS4_EXTERNAL_SOURCES_CHECKPOINT_2026-10-21.md",
+    "research/microstructure/coverage_2026-05-19.md",
+    "docs/RESEARCH_COMPUTE_RULES_RU.md §21.6"
+  ]
+}
