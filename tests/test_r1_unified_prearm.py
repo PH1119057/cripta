@@ -35,6 +35,7 @@ class ReadOnlyDB:
         self.gate_enabled = 0
         self.active_permissions = False
         self.active_sessions = False
+        self.active_session_rows = None
         self.card_fingerprint = CARD.strategy_config_fingerprint
 
     def execute(self, statement, args=()):
@@ -60,9 +61,13 @@ class ReadOnlyDB:
         if "FROM strategy_entry.execution_permissions" in statement:
             if "strategy_id=%s" in statement:
                 return Cursor([(1,)] if self.active_permissions else [])
-            return Cursor([("unknown", "1")] if self.active_permissions else [])
+            return Cursor([("unknown", "1", "bad")] if self.active_permissions else [])
         if "FROM control.live_arm_sessions" in statement:
-            return Cursor([("other", "1", "APTUSDT")] if self.active_sessions else [])
+            if self.active_session_rows is not None:
+                return Cursor(self.active_session_rows)
+            return Cursor([
+                ("other", "1", "bad", "other-activation", "APTUSDT", "b" * 40)
+            ] if self.active_sessions else [])
         raise AssertionError("Unexpected query: " + statement)
 
 
@@ -180,3 +185,52 @@ def test_dashboard_exposes_authenticated_read_only_prearm_route():
     )[1].split("}", 1)[0]
 
 
+
+
+def test_armed_label_requires_exact_release_fingerprint_and_activation(monkeypatch):
+    import bybit_workbench.r1_unified_prearm as prearm
+
+    db = ReadOnlyDB()
+    db.gate_enabled = 1
+    db.active_permissions = True
+    db.active_session_rows = [
+        (
+            CARD.strategy_id, CARD.strategy_version,
+            CARD.strategy_config_fingerprint, "activation-unified-r1",
+            symbol, RELEASE,
+        ) for symbol in CARD.symbols
+    ]
+    original_execute = db.execute
+
+    def exact_permissions(statement, args=()):
+        if ("FROM strategy_entry.execution_permissions" in statement
+                and "strategy_id=%s" not in statement):
+            db.query_log.append(statement)
+            return Cursor([(
+                CARD.strategy_id, CARD.strategy_version,
+                CARD.strategy_config_fingerprint,
+            )])
+        return original_execute(statement, args)
+
+    db.execute = exact_permissions
+    monkeypatch.setattr(
+        "bybit_workbench.r1_unified_prearm.evaluate_live_arm",
+        lambda *a, **k: SimpleNamespace(
+            ready=True, failed_codes=()
+        ),
+    )
+    exact = prearm.unified_r1_prearm_state(
+        db, release_commit=RELEASE, now=NOW
+    )
+    assert exact["armed"] is True
+    assert exact["owner_approval_required"] is False
+
+    db.active_session_rows = [
+        (*row[:5], "b" * 40) for row in db.active_session_rows
+    ]
+    stale = prearm.unified_r1_prearm_state(
+        db, release_commit=RELEASE, now=NOW
+    )
+    assert stale["armed"] is False
+    assert stale["ready_to_arm"] is False
+    assert "ACTIVE_OR_LEGACY_ARM_SESSION_REQUIRES_REVIEW" in stale["reasons"]
