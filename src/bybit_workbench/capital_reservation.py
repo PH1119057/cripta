@@ -311,7 +311,7 @@ class PostgresCapitalReservationPort:
         ).fetchone()
         if row is None or len(row) != 2:
             raise ValueError("R1_UNIFIED_CAPITAL_LEDGER_UNAVAILABLE")
-        if int(row[1]) != 0:
+        if int(str(row[1])) != 0:
             raise ValueError("R1_UNIFIED_CAPITAL_LEDGER_IDENTITY_UNPROVEN")
         committed = Decimal(str(row[0]))
         if not committed.is_finite() or committed < 0:
