@@ -94,3 +94,59 @@ def test_r1_cards_materialize_exact_entry_and_exit_plans() -> None:
         assert mutation["time_in_force"] == "POST_ONLY"
         initial = exit_plan.protection_policy.to_dict()["initial_protection"]
         assert initial["stop_loss_pct"] == "10.0"
+
+
+def test_single_r1_strategy_card_owns_five_coins_and_ten_monitor_lanes() -> None:
+    from datetime import UTC, datetime
+
+    from bybit_workbench.universal_entry.r1_strategy import (
+        R1_SYMBOLS,
+        R1_UNIFIED_STRATEGY_ID,
+        R1_UNIFIED_VERSION,
+        build_r1_unified_card,
+    )
+
+    card = build_r1_unified_card(approved_at=datetime(2026, 10, 21, tzinfo=UTC))
+    assert card.strategy_id == R1_UNIFIED_STRATEGY_ID
+    assert card.strategy_version == R1_UNIFIED_VERSION
+    assert set(card.symbols) == set(R1_SYMBOLS)
+    assert set(d.value for d in card.direction_policy) == {"LONG", "SHORT"}
+    activation = StrategyActivation(
+        activation_id="test-activation-r1-five",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        enabled=True,
+        enabled_at=card.approved_at,
+        scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+        operator="owner",
+        source="test",
+    )
+    entry, exit_plan = materialize_plans(card, activation)
+    assert entry.strategy_activation_id == activation.activation_id
+    assert exit_plan.strategy_activation_id == activation.activation_id
+    assert entry.symbols == card.symbols
+    assert len({(entry.entry_plan_fingerprint, symbol, d.value)
+                for symbol in entry.symbols for d in entry.directions}) == 10
+
+
+def test_unified_r1_does_not_rewrite_historical_policy_or_identity() -> None:
+    from datetime import UTC, datetime
+
+    from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
+
+    at = datetime(2026, 10, 21, tzinfo=UTC)
+    unified = build_r1_unified_card(approved_at=at)
+    historical = build_r1_cards(approved_at=at)
+    assert len(historical) == 5
+    for old in historical:
+        assert old.strategy_id != unified.strategy_id
+        assert len(old.symbols) == 1
+        for key in (
+            "entry_policy", "exit_policy", "capital_policy",
+            "protection_policy", "lifecycle_policy", "touch_policy",
+            "direction_policy", "market_sensor_policy",
+            "mayak_context_policy", "dispatcher_context_policy",
+        ):
+            assert getattr(old, key) == getattr(unified, key)
+    assert {card.strategy_id for card in historical} == set(R1_STRATEGY_IDS.values())

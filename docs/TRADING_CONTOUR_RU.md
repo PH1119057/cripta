@@ -1,6 +1,6 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 2.9
+**Версия:** 3.0
 **Дата:** 2026-10-21
 **Статус:** активный канонический контракт торгового контура
 
@@ -1289,3 +1289,35 @@ makes accounting clearer but does not replace exact Strategy ownership lineage.
 
 This revision changes no Entry threshold, Exit rule, stake, leverage, protection
 or LIVE-arm policy.
+
+
+## 7.5 R1 one-Strategy/five-symbol configuration — OWNER DECISION 2026-10-21
+
+The owner clarified R1's intended identity: **one independently versioned R1
+StrategyCard**, permitted symbols APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT;
+both LONG and SHORT, one StrategyActivation and one dedicated TradingAccount
+through one proven StrategyExecutionBinding. The number of instruments does not
+multiply Strategy identity, StrategyActivation, account assignments or OWNER ARM.
+
+The Materializer persists one whole-Strategy EntryPlan and the matching ExitPlan
+per exact activation. The EntryPlan monitor is a read-only projection:
+`EntryPlan × InstrumentIdentity × direction`; five symbols and two directions
+produce ten monitored rows with common plan fingerprint, not ten autonomous
+Strategies nor ten persisted EntryPlans. The Dashboard must distinguish the
+Strategy, whole-plan identity, and per-direction readiness.
+
+The five historical per-symbol R1 Strategy identities created before this owner
+clarification are not rewritten, reused or silently merged. Exact historical
+StrategyCard, StrategyActivation, EntryPlan, ExitPlan, fills, PAPER positions,
+P&L and protective Exit ownership remain attributable to original identities.
+A future transactional activation transition must first prove pending PAPER
+orders and active PAPER/REAL position/Exit continuity. It must stop **new**
+signals/orders on legacy activations without orphaning existing Exit. Existing
+real execution permissions cannot be copied to a new Strategy or a new release.
+An inert new StrategyCard alone does not prove LIVE admission readiness.
+
+This is an architecture alignment, **not a change to R1 trading numbers**.
+The source-only unified R1 constructor changes neither DB activations,
+TradingAccount bindings nor mainnet gate, and does not perform OWNER ARM.
+Implementation, tests, verified deploy and runtime behavior have separate
+statuses in CURRENT_PROJECT_MAP.
