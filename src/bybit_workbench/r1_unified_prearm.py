@@ -129,7 +129,7 @@ def unified_r1_prearm_state(
         "gate_enabled": gate_enabled,
         "gate_reason": gate_reason,
         "ready_to_arm": False,
-        "arm_route_enabled": False,
+        "arm_route_enabled": True,
         "owner_approval_required": True,
         "strategies": [],
         "instrument_scopes": [],
@@ -189,6 +189,18 @@ def unified_r1_prearm_state(
         reasons.extend(sorted(failed))
 
     technical_ready = not reasons
+    expected = {
+        (ctx.strategy_id, ctx.strategy_version, ctx.symbol)
+        for ctx in contexts
+    }
+    observed = {(str(r[0]), str(r[1]), str(r[2])) for r in arms}
+    armed = (
+        gate_enabled
+        and bool(permission and permission[0])
+        and len(all_permissions) == 1
+        and len(arms) == 5
+        and observed == expected
+    )
     # Strategy identity occurs ONCE; the five slots are separate scopes.
     return {
         **base,
@@ -196,10 +208,12 @@ def unified_r1_prearm_state(
         "binding_verified": True,
         "trading_account_id": account,
         "technical_pre_owner_ready": technical_ready,
+        "ready_to_arm": technical_ready and not armed,
+        "owner_approval_required": not armed,
+        "armed": armed,
         "reasons": [
             *reasons,
-            "UNIFIED_OWNER_ARM_ROUTE_NOT_IMPLEMENTED",
-            "EXPLICIT_OWNER_ARM_NOT_GRANTED",
+            *(["EXPLICIT_OWNER_ARM_NOT_GRANTED"] if not armed else []),
         ],
         "strategies": [{
             "strategy_id": contexts[0].strategy_id,
