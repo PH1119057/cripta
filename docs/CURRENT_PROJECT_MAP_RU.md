@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.29
+**Версия:** 12.30
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4452,3 +4452,83 @@ as part of this decision.
 Canonical decision: DOCUMENTATION_INDEX §46, ARCH §51, RESEARCH_COMPUTE §23, GLOSSARY §35. Required future state: durable per-exact-instrument research records with readable numerical economics and versioned parameters; coin-card summary + chronological read-only research history, independent of raw archive purge.
 
 Current evidence checked: GitHub main canonical docs and Dashboard source operations/dashboard/index.html and operations/dashboard/app.py inspected on 2026-10-21; operational coin list and research runs screen exist, but neither proves the requested durable InstrumentResearchRecord store, API or individual history in coin card. **IMPLEMENTED=NO; DEPLOYED=NO; RUNTIME BEHAVIOR VERIFIED=NO; DB/API/UI NOT CHECKED HERE.** Do not import research results into StrategyCard, create live mutations or claim prior existing per-symbol research history has been backfilled. Future implementation needs exact owner/writer/store, restore/retention/fee-schema/identity/QC, read-model and independent release tests. Historical runs require evidence-QC before ingestion.
+
+## 2026-10-21 R1 unified 10/50 USDT atomic capital ceiling — DEPLOYED, SCOPED VERIFIED
+
+OWNER DECISION: TC §7.5.1 approves a single R1 Strategy on APT/ARB/DOT/INJ/LTC
+with 10 USDT per position, aggregate committed exposure <=50 USDT, leverage
+1x and catastrophic exchange-resident SL -10%. This checkpoint verifies
+the **capital reservation admission safeguard**, not a LIVE order.
+
+IMPLEMENTED: GitHub PR #143 merged to main commit
+`c17e0e2ee7ade8fc2a1fd4064cdaf0b8bd920a60`, with production
+release code `src/bybit_workbench/capital_reservation.py`.
+The exact unified R1 identity and version (`r1_five_symbols`,
+`1.0-five-symbols-20261021`) receive a dedicated account- and
+Strategy-transaction-scoped advisory lock. The port requires 10 USDT stake
+and sums **all non-RELEASED reservations** of the same R1 Strategy,
+including CONSUMED open positions, DISPATCHED/pending and
+RECONCILIATION_REQUIRED states. It also rejects unproven identity/currency
+or a reservation on an unexpected account, and additionally preserves
+the existing account-available-capital/physical-slot admission.
+Old/different Strategies are not reparented or granted permission.
+
+TESTED: disposable PostgreSQL CI PASS (62 tests), including one test
+with SIX concurrent R1 10-USDT admission requests and 100-USDT account
+capacity; exactly FIVE admitted and sixth rejected. It verifies idempotence,
+CONSUMED still counts against 50, RELEASED frees 10, invalid 11 USDT rejected.
+All Linux/Windows quality tests PASS; initial Windows mypy objection was
+fixed and the final exact PR head was fully green.
+
+DEPLOYED / CHECKED HERE: Canonical installer job
+`job_59273361c998` returned `exit_code=0`.
+Exact loaded app release
+`c17e0e2ee7ade8fc2a1fd4064cdaf0b8bd920a60`,
+from baseline `aef533b154945e0b2871571796a75848c3f77ebd`.
+Installer markers:
+`DEPLOY_EXACT_VERIFIED_COMMIT=PASS`,
+`RUNTIME_SCHEMA_MIGRATION=PASS`,
+`RUNTIME_SCHEMA_CONTRACT=PASS`,
+`TRADING_CONTROL_UNCHANGED=PASS`,
+`POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS`,
+`GATE=0`. Rollback backup checkpoint at
+`/data/cripta/script_archive/release_backups/20261021_172214_aef533b154945e0b2871571796a75848c3f77ebd_to_c17e0e2ee7ade8fc2a1fd4064cdaf0b8bd920a60`.
+
+Observed systemd `active`, `NRestarts=0` for Private Runtime,
+Universal Entry Observer, Universal Entry Consumer, Lifecycle Supervisor,
+Universal Exit Consumer; the sampled five actual `/proc/PID/cwd`
+all resolved to the new exact release. Fresh Observer status:
+RUNNING, ready=true, `active_strategies=1`, `active_entry_plans=1`,
+10 symbol/direction lanes, loaded source commit c17e0e2,
+facts_received=581 at 2026-10-21T17:26:32.815514Z.
+Production PostgreSQL: `mainnet=0`, reason
+`private WS reconnect: verification pending`;
+sole R1 StrategyActivation + one ACTIVE PRIMARY DEDICATED_STRATEGY
+TradingAccount binding; zero enabled ExecutionPermissions, zero ACTIVE
+LIVE-arm sessions and zero hot positions/orders.
+
+RUNTIME BEHAVIOR VERIFIED: service liveness/loaded identity and Observer
+monitor continuity, plus installer reconciliation. The 50 USDT limit
+was verified under disposable PostgreSQL concurrency; with mainnet OFF and
+no open REAL trades in production, **real Exchange order admission with
+50 USDT saturation is NOT VERIFIED HERE**, and no order was sent.
+
+IMPORTANT role note: `cripta` **must not** be a member of
+`cripta_entry_binding_locker`, by design of
+`operations/sql/20261018_strategy_execution_binding_lock_v1.sql`.
+The installer emitted a role-grant warning, but read-only production
+evidence confirms role membership=false and
+`lock_strategy_execution_binding(text)` SECURITY DEFINER owned by
+`cripta_entry_binding_locker`, EXECUTE privilege for `cripta`=true.
+Do not turn this expected isolation into an unauthorized GRANT.
+
+Current GitHub/source HEAD may advance beyond c17e0e2 with research/docs
+commits after this release; record `REMOTE_HEAD`, `SOURCE_HEAD`,
+`INSTALLED_COMMIT` and `LOADED_COMMIT` separately. No
+`SOURCE_LIVE_IDENTITY=PASS` or READY_FOR_OWNER_ARM is implied by this
+checkpoint; independently verify all operational deltas/equivalence.
+Outstanding: draft PR #141 still models five per-symbol entries in its
+read-only `strategies` projection; the attempt to repair that PR was
+blocked upstream by OpenAI and was NOT bypassed, merged or deployed.
+A correct one-Strategy owner-arm implementation, critical fault delivery
+evidence and a separate explicit owner REAL arm remain REQUIRED.

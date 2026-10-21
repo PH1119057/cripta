@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.35
+**Версия:** 3.36
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1364,3 +1364,17 @@ README/AGENTS/bootstrap paths are unchanged.
 Canonical ownership: ARCH §48, §51 — storage/data owner и read-only consumer boundary; RESEARCH_COMPUTE §23 — mandatory recording, identity, financial fields, corrections and QC; CRIPTA_GLOSSARY §35 — terms. CURRENT_PROJECT_MAP фиксирует, что actual UI/API/database пока NOT IMPLEMENTED / NOT VERIFIED. Запись исследования не является immutable StrategyCard, разрешением торговли или переносом исторических thresholds в текущую стратегию.
 
 Documentation gate: нынешние 11 current Source docs, файлы/пути, pre-read и routed reading, root README/AGENTS и Project Instructions/bootstrap **не меняются**; разделы только добавлены, старые номера не сдвигаются. Эта ревизия не содержит Python/SQL/runtime mutation, не создаёт PostgreSQL schema и не является deploy или LIVE-arm. Physical writer/storage/API/UI implementation и backfill older history — последующий отдельный разрешённый цикл.
+
+# 47. Unified R1 50 USDT capital admission runtime checkpoint — 2026-10-21
+
+CURRENT_PROJECT_MAP 12.30 records the owner-approved TC §7.5.1
+10 USDT per position/50 USDT concurrent per-Strategy financial envelope,
+and the implemented independent transactional reservation check.
+PR #143 and disposable PostgreSQL/Windows/Linux CI PASS; production
+installer job `job_59273361c998` loaded `c17e0e2...` with
+`DEPLOY_EXACT_VERIFIED_COMMIT=PASS`, services liveness and Observer
+RUNNING one Strategy/one EntryPlan/10 lanes. Mainnet=0, execution
+permissions OFF, no OWNER ARM or Exchange order. MAP distinguishes
+CI-proven 50-USDT concurrency from NOT CHECKED HERE real-order execution
+and preserves exact rollback path, loaded/source identity and role isolation.
+No change to Source count, mandatory pre-read, routing or README/AGENTS.
