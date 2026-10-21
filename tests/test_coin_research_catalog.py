@@ -22,7 +22,7 @@ def test_catalog_has_30_independently_balanced_records() -> None:
         r["instrument"]["symbol"] for r in raw["records"]
     } == {"LTCUSDT", "APTUSDT", "DOTUSDT", "ARBUSDT", "INJUSDT"}
     assert all(
-        r["quality"]["publication_qc"] == "MODEL_QC_PASS_CANDIDATE_RECORD"
+        r["quality"]["publication_qc"] == "MODEL_QC_PASS_GIT_REGISTERED"
         and r["quality"]["lookahead"] == "YES"
         and r["quality"]["oos"] == "NOT_VERIFIED"
         and r["instrument"]["instrument_id"] == (
