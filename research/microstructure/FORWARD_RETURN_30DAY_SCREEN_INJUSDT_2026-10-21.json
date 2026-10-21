@@ -1,0 +1,1165 @@
+{
+  "status": "EX_POST_HISTORICAL_ASSOCIATION_ONLY_NOT_RESEARCH_READY_NOT_CAUSAL_SIGNAL",
+  "instrument_id": "INJUSDT",
+  "source": "Bybit linear public trade prints",
+  "source_fills": 12196213,
+  "source_days": 30,
+  "source_sha256_files_verified": 30,
+  "physical_cube_sha256": "63c5c0666e63d5fd62ca9a4180b2730af451612ca1554e5c50abcadbc61e0134",
+  "physical_cube_rows": 259200,
+  "cube_independent_qc_already_passed": true,
+  "physical_indicators": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7
+  ],
+  "horizons_minutes": [
+    5,
+    15,
+    60
+  ],
+  "label_definition": "10000*ln(last_trade_price_in_minute_t_plus_h / last_trade_price_in_minute_t); both minute buckets must have real fills; target within same fold",
+  "train": "2026-05-18..2026-06-06",
+  "validation": "2026-06-07..2026-06-09",
+  "late_holdout": "2026-06-10..2026-06-16",
+  "train_deciles": "q20 q80 fitted on TRAIN features only, no label-dependent threshold fitting",
+  "placebo": "previous-day same-clock-minute feature (holdout last six days), thresholds frozen on train",
+  "folds_purged_at_end_by_horizon": true,
+  "minute_anchor": "ex-post minute last execution price, source event clock only; unknown actual observed_at",
+  "per_horizon_label_coverage": {
+    "5": {
+      "train": 28795,
+      "validation": 4315,
+      "late_holdout": 10073
+    },
+    "15": {
+      "train": 28785,
+      "validation": 4305,
+      "late_holdout": 10063
+    },
+    "60": {
+      "train": 28740,
+      "validation": 4260,
+      "late_holdout": 10018
+    }
+  },
+  "grid": [
+    {
+      "indicator_id": 1,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": 0.259066723,
+      "train_threshold_high_q80": 1.332269161,
+      "train_nonempty_feature_minutes": 27600,
+      "fold": {
+        "train": {
+          "eligible_labels": 27595,
+          "high_count": 5518,
+          "low_count": 5519,
+          "avg_future_ret_bps": 0.24014,
+          "high_mean_bps": 1.69634,
+          "low_mean_bps": -0.58967,
+          "high_minus_low_bps": 2.286,
+          "linear_r": 0.002426,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 11,
+          "day_median_high_minus_low_bps": 0.77472
+        },
+        "validation": {
+          "eligible_labels": 4135,
+          "high_count": 855,
+          "low_count": 739,
+          "avg_future_ret_bps": 1.03925,
+          "high_mean_bps": -1.2175,
+          "low_mean_bps": 2.0733,
+          "high_minus_low_bps": -3.2908,
+          "linear_r": -0.042539,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -1.81871
+        },
+        "late_holdout": {
+          "eligible_labels": 9653,
+          "high_count": 1887,
+          "low_count": 2167,
+          "avg_future_ret_bps": 0.02154,
+          "high_mean_bps": 1.24408,
+          "low_mean_bps": -0.66996,
+          "high_minus_low_bps": 1.91404,
+          "linear_r": 0.001634,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 5,
+          "day_median_high_minus_low_bps": 0.41752
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8273,
+        "high_count": 1558,
+        "low_count": 1872,
+        "avg_future_ret_bps": 0.62721,
+        "high_mean_bps": 1.26031,
+        "low_mean_bps": -0.35608,
+        "high_minus_low_bps": 1.61639,
+        "linear_r": -0.01073,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 5,
+        "day_median_high_minus_low_bps": 1.38491
+      }
+    },
+    {
+      "indicator_id": 1,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": 0.259066723,
+      "train_threshold_high_q80": 1.332269161,
+      "train_nonempty_feature_minutes": 27600,
+      "fold": {
+        "train": {
+          "eligible_labels": 27585,
+          "high_count": 5517,
+          "low_count": 5518,
+          "avg_future_ret_bps": 0.85527,
+          "high_mean_bps": 3.85077,
+          "low_mean_bps": -0.66609,
+          "high_minus_low_bps": 4.51686,
+          "linear_r": 0.012593,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 14,
+          "day_median_high_minus_low_bps": 1.17565
+        },
+        "validation": {
+          "eligible_labels": 4125,
+          "high_count": 855,
+          "low_count": 737,
+          "avg_future_ret_bps": 2.79908,
+          "high_mean_bps": -1.73355,
+          "low_mean_bps": 8.17235,
+          "high_minus_low_bps": -9.90589,
+          "linear_r": -0.037007,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -7.84325
+        },
+        "late_holdout": {
+          "eligible_labels": 9643,
+          "high_count": 1884,
+          "low_count": 2167,
+          "avg_future_ret_bps": 0.12942,
+          "high_mean_bps": 2.40745,
+          "low_mean_bps": -1.83286,
+          "high_minus_low_bps": 4.24032,
+          "linear_r": -0.007193,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 6,
+          "day_median_high_minus_low_bps": 3.7346
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8263,
+        "high_count": 1555,
+        "low_count": 1872,
+        "avg_future_ret_bps": 1.89952,
+        "high_mean_bps": 2.29438,
+        "low_mean_bps": 2.3799,
+        "high_minus_low_bps": -0.08552,
+        "linear_r": -0.008443,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": 0.3529
+      }
+    },
+    {
+      "indicator_id": 1,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": 0.259066723,
+      "train_threshold_high_q80": 1.332269161,
+      "train_nonempty_feature_minutes": 27600,
+      "fold": {
+        "train": {
+          "eligible_labels": 27540,
+          "high_count": 5505,
+          "low_count": 5511,
+          "avg_future_ret_bps": 3.94803,
+          "high_mean_bps": 10.26979,
+          "low_mean_bps": 2.02519,
+          "high_minus_low_bps": 8.24461,
+          "linear_r": 0.015861,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 9,
+          "day_median_high_minus_low_bps": -5.30421
+        },
+        "validation": {
+          "eligible_labels": 4080,
+          "high_count": 844,
+          "low_count": 726,
+          "avg_future_ret_bps": 9.04738,
+          "high_mean_bps": -3.80848,
+          "low_mean_bps": 26.66362,
+          "high_minus_low_bps": -30.47209,
+          "linear_r": -0.022507,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -21.45792
+        },
+        "late_holdout": {
+          "eligible_labels": 9598,
+          "high_count": 1873,
+          "low_count": 2157,
+          "avg_future_ret_bps": 0.68515,
+          "high_mean_bps": 0.71605,
+          "low_mean_bps": 0.53522,
+          "high_minus_low_bps": 0.18083,
+          "linear_r": 0.01111,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": -1.15384
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8218,
+        "high_count": 1553,
+        "low_count": 1856,
+        "avg_future_ret_bps": 7.43755,
+        "high_mean_bps": 4.57105,
+        "low_mean_bps": 9.43076,
+        "high_minus_low_bps": -4.85971,
+        "linear_r": -0.004149,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 4,
+        "day_median_high_minus_low_bps": 1.52875
+      }
+    },
+    {
+      "indicator_id": 2,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": 112,
+      "train_threshold_high_q80": 433,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28795,
+          "high_count": 5770,
+          "low_count": 5776,
+          "avg_future_ret_bps": 0.21901,
+          "high_mean_bps": 0.80842,
+          "low_mean_bps": 0.60722,
+          "high_minus_low_bps": 0.2012,
+          "linear_r": 0.020111,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 9,
+          "day_median_high_minus_low_bps": -0.75944
+        },
+        "validation": {
+          "eligible_labels": 4315,
+          "high_count": 297,
+          "low_count": 1199,
+          "avg_future_ret_bps": 0.79623,
+          "high_mean_bps": -4.34861,
+          "low_mean_bps": 2.66342,
+          "high_minus_low_bps": -7.01203,
+          "linear_r": -0.059738,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -5.71153
+        },
+        "late_holdout": {
+          "eligible_labels": 10073,
+          "high_count": 717,
+          "low_count": 4275,
+          "avg_future_ret_bps": -0.02102,
+          "high_mean_bps": 3.07551,
+          "low_mean_bps": -0.9203,
+          "high_minus_low_bps": 3.99581,
+          "linear_r": -0.01291,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 5,
+          "day_median_high_minus_low_bps": 2.80218
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8633,
+        "high_count": 500,
+        "low_count": 3945,
+        "avg_future_ret_bps": 0.62929,
+        "high_mean_bps": -1.0231,
+        "low_mean_bps": 2.07332,
+        "high_minus_low_bps": -3.09642,
+        "linear_r": -0.031599,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": -1.13067
+      }
+    },
+    {
+      "indicator_id": 2,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": 112,
+      "train_threshold_high_q80": 433,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28785,
+          "high_count": 5770,
+          "low_count": 5768,
+          "avg_future_ret_bps": 0.66631,
+          "high_mean_bps": 1.1871,
+          "low_mean_bps": 0.8667,
+          "high_minus_low_bps": 0.3204,
+          "linear_r": 0.020142,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 10,
+          "day_median_high_minus_low_bps": -0.84004
+        },
+        "validation": {
+          "eligible_labels": 4305,
+          "high_count": 297,
+          "low_count": 1191,
+          "avg_future_ret_bps": 2.46776,
+          "high_mean_bps": -10.49282,
+          "low_mean_bps": 7.48157,
+          "high_minus_low_bps": -17.97439,
+          "linear_r": -0.075305,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -15.49986
+        },
+        "late_holdout": {
+          "eligible_labels": 10063,
+          "high_count": 717,
+          "low_count": 4269,
+          "avg_future_ret_bps": -0.01891,
+          "high_mean_bps": 8.0806,
+          "low_mean_bps": -1.61655,
+          "high_minus_low_bps": 9.69716,
+          "linear_r": 0.000465,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 5,
+          "day_median_high_minus_low_bps": 17.70972
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8623,
+        "high_count": 500,
+        "low_count": 3943,
+        "avg_future_ret_bps": 1.8921,
+        "high_mean_bps": -3.81735,
+        "low_mean_bps": 5.9327,
+        "high_minus_low_bps": -9.75006,
+        "linear_r": -0.035975,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 2,
+        "day_median_high_minus_low_bps": -11.44366
+      }
+    },
+    {
+      "indicator_id": 2,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": 112,
+      "train_threshold_high_q80": 433,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28740,
+          "high_count": 5770,
+          "low_count": 5731,
+          "avg_future_ret_bps": 2.39227,
+          "high_mean_bps": -9.08563,
+          "low_mean_bps": 9.09819,
+          "high_minus_low_bps": -18.18382,
+          "linear_r": -0.007538,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 7,
+          "day_median_high_minus_low_bps": -21.53897
+        },
+        "validation": {
+          "eligible_labels": 4260,
+          "high_count": 297,
+          "low_count": 1165,
+          "avg_future_ret_bps": 10.1433,
+          "high_mean_bps": -13.18457,
+          "low_mean_bps": 32.43553,
+          "high_minus_low_bps": -45.6201,
+          "linear_r": -0.084448,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -35.64248
+        },
+        "late_holdout": {
+          "eligible_labels": 10018,
+          "high_count": 716,
+          "low_count": 4239,
+          "avg_future_ret_bps": 0.78823,
+          "high_mean_bps": 1.55353,
+          "low_mean_bps": -0.27059,
+          "high_minus_low_bps": 1.82413,
+          "linear_r": 0.009769,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 4,
+          "day_median_high_minus_low_bps": 15.05992
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8578,
+        "high_count": 500,
+        "low_count": 3923,
+        "avg_future_ret_bps": 7.64479,
+        "high_mean_bps": -32.75308,
+        "low_mean_bps": 22.66159,
+        "high_minus_low_bps": -55.41467,
+        "linear_r": -0.060528,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 1,
+        "day_median_high_minus_low_bps": -66.09517
+      }
+    },
+    {
+      "indicator_id": 3,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": -113,
+      "train_threshold_high_q80": 107,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28775,
+          "high_count": 5803,
+          "low_count": 5759,
+          "avg_future_ret_bps": 0.21812,
+          "high_mean_bps": 0.30867,
+          "low_mean_bps": 0.33873,
+          "high_minus_low_bps": -0.03006,
+          "linear_r": 0.006452,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 12,
+          "day_median_high_minus_low_bps": 0.12522
+        },
+        "validation": {
+          "eligible_labels": 4312,
+          "high_count": 578,
+          "low_count": 580,
+          "avg_future_ret_bps": 0.8346,
+          "high_mean_bps": -2.27502,
+          "low_mean_bps": -1.66114,
+          "high_minus_low_bps": -0.61388,
+          "linear_r": 0.003589,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": 1.38613
+        },
+        "late_holdout": {
+          "eligible_labels": 10066,
+          "high_count": 1136,
+          "low_count": 1137,
+          "avg_future_ret_bps": -0.02833,
+          "high_mean_bps": 0.99741,
+          "low_mean_bps": 2.56877,
+          "high_minus_low_bps": -1.57136,
+          "linear_r": -0.006935,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": -2.08252
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8627,
+        "high_count": 899,
+        "low_count": 912,
+        "avg_future_ret_bps": 0.62725,
+        "high_mean_bps": -0.95067,
+        "low_mean_bps": -0.48403,
+        "high_minus_low_bps": -0.46664,
+        "linear_r": 0.003083,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": -1.04151
+      }
+    },
+    {
+      "indicator_id": 3,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": -113,
+      "train_threshold_high_q80": 107,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28765,
+          "high_count": 5802,
+          "low_count": 5758,
+          "avg_future_ret_bps": 0.65692,
+          "high_mean_bps": 0.9888,
+          "low_mean_bps": 0.38909,
+          "high_minus_low_bps": 0.59971,
+          "linear_r": 0.008844,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 9,
+          "day_median_high_minus_low_bps": -0.24999
+        },
+        "validation": {
+          "eligible_labels": 4302,
+          "high_count": 578,
+          "low_count": 580,
+          "avg_future_ret_bps": 2.50078,
+          "high_mean_bps": -4.22801,
+          "low_mean_bps": 2.21735,
+          "high_minus_low_bps": -6.44536,
+          "linear_r": -0.00161,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 1,
+          "day_median_high_minus_low_bps": -9.75237
+        },
+        "late_holdout": {
+          "eligible_labels": 10056,
+          "high_count": 1135,
+          "low_count": 1136,
+          "avg_future_ret_bps": -0.02247,
+          "high_mean_bps": 3.02848,
+          "low_mean_bps": 3.56131,
+          "high_minus_low_bps": -0.53283,
+          "linear_r": -0.008699,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": -2.23707
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8617,
+        "high_count": 898,
+        "low_count": 911,
+        "avg_future_ret_bps": 1.88171,
+        "high_mean_bps": -2.2159,
+        "low_mean_bps": 0.08794,
+        "high_minus_low_bps": -2.30384,
+        "linear_r": -0.004424,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 1,
+        "day_median_high_minus_low_bps": -2.57819
+      }
+    },
+    {
+      "indicator_id": 3,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": -113,
+      "train_threshold_high_q80": 107,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28720,
+          "high_count": 5800,
+          "low_count": 5756,
+          "avg_future_ret_bps": 2.39024,
+          "high_mean_bps": -1.12742,
+          "low_mean_bps": -1.37937,
+          "high_minus_low_bps": 0.25195,
+          "linear_r": 0.003898,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 11,
+          "day_median_high_minus_low_bps": 2.27352
+        },
+        "validation": {
+          "eligible_labels": 4257,
+          "high_count": 576,
+          "low_count": 578,
+          "avg_future_ret_bps": 10.20752,
+          "high_mean_bps": -6.23409,
+          "low_mean_bps": 1.58172,
+          "high_minus_low_bps": -7.81581,
+          "linear_r": 0.000072,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": -5.52031
+        },
+        "late_holdout": {
+          "eligible_labels": 10011,
+          "high_count": 1132,
+          "low_count": 1134,
+          "avg_future_ret_bps": 0.80098,
+          "high_mean_bps": 0.10596,
+          "low_mean_bps": 1.8987,
+          "high_minus_low_bps": -1.79274,
+          "linear_r": -0.00374,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": -2.16349
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8572,
+        "high_count": 892,
+        "low_count": 906,
+        "avg_future_ret_bps": 7.64851,
+        "high_mean_bps": -12.35324,
+        "low_mean_bps": -14.13802,
+        "high_minus_low_bps": 1.78478,
+        "linear_r": 0.000304,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": 0.57388
+      }
+    },
+    {
+      "indicator_id": 5,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": -6652.1946,
+      "train_threshold_high_q80": 7144.1472,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28795,
+          "high_count": 5759,
+          "low_count": 5760,
+          "avg_future_ret_bps": 0.21901,
+          "high_mean_bps": 0.23004,
+          "low_mean_bps": 0.88739,
+          "high_minus_low_bps": -0.65735,
+          "linear_r": -0.001169,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 8,
+          "day_median_high_minus_low_bps": -1.27153
+        },
+        "validation": {
+          "eligible_labels": 4315,
+          "high_count": 443,
+          "low_count": 504,
+          "avg_future_ret_bps": 0.79623,
+          "high_mean_bps": -1.61454,
+          "low_mean_bps": -3.53876,
+          "high_minus_low_bps": 1.92422,
+          "linear_r": -0.00602,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": 2.79944
+        },
+        "late_holdout": {
+          "eligible_labels": 10073,
+          "high_count": 1081,
+          "low_count": 1156,
+          "avg_future_ret_bps": -0.02102,
+          "high_mean_bps": 1.58197,
+          "low_mean_bps": 1.21263,
+          "high_minus_low_bps": 0.36935,
+          "linear_r": -0.008341,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": -0.4581
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8633,
+        "high_count": 842,
+        "low_count": 881,
+        "avg_future_ret_bps": 0.62929,
+        "high_mean_bps": -1.08288,
+        "low_mean_bps": 1.89541,
+        "high_minus_low_bps": -2.97829,
+        "linear_r": -0.01724,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 1,
+        "day_median_high_minus_low_bps": -2.7831
+      }
+    },
+    {
+      "indicator_id": 5,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": -6652.1946,
+      "train_threshold_high_q80": 7144.1472,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28785,
+          "high_count": 5759,
+          "low_count": 5760,
+          "avg_future_ret_bps": 0.66631,
+          "high_mean_bps": 1.26879,
+          "low_mean_bps": 2.25867,
+          "high_minus_low_bps": -0.98989,
+          "linear_r": -0.001513,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 11,
+          "day_median_high_minus_low_bps": 0.80181
+        },
+        "validation": {
+          "eligible_labels": 4305,
+          "high_count": 442,
+          "low_count": 504,
+          "avg_future_ret_bps": 2.46776,
+          "high_mean_bps": -2.39302,
+          "low_mean_bps": -7.79186,
+          "high_minus_low_bps": 5.39884,
+          "linear_r": 0.011582,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": 5.40588
+        },
+        "late_holdout": {
+          "eligible_labels": 10063,
+          "high_count": 1080,
+          "low_count": 1154,
+          "avg_future_ret_bps": -0.01891,
+          "high_mean_bps": 3.46861,
+          "low_mean_bps": -1.52076,
+          "high_minus_low_bps": 4.98937,
+          "linear_r": -0.004095,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 4,
+          "day_median_high_minus_low_bps": 2.06353
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8623,
+        "high_count": 840,
+        "low_count": 881,
+        "avg_future_ret_bps": 1.8921,
+        "high_mean_bps": -2.52233,
+        "low_mean_bps": 1.21965,
+        "high_minus_low_bps": -3.74199,
+        "linear_r": -0.011025,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": -0.86216
+      }
+    },
+    {
+      "indicator_id": 5,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": -6652.1946,
+      "train_threshold_high_q80": 7144.1472,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28740,
+          "high_count": 5756,
+          "low_count": 5759,
+          "avg_future_ret_bps": 2.39227,
+          "high_mean_bps": 1.05172,
+          "low_mean_bps": 0.78034,
+          "high_minus_low_bps": 0.27137,
+          "linear_r": -0.002136,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 10,
+          "day_median_high_minus_low_bps": 0.48728
+        },
+        "validation": {
+          "eligible_labels": 4260,
+          "high_count": 436,
+          "low_count": 501,
+          "avg_future_ret_bps": 10.1433,
+          "high_mean_bps": 5.47228,
+          "low_mean_bps": -12.95972,
+          "high_minus_low_bps": 18.432,
+          "linear_r": 0.035455,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": 18.06453
+        },
+        "late_holdout": {
+          "eligible_labels": 10018,
+          "high_count": 1076,
+          "low_count": 1152,
+          "avg_future_ret_bps": 0.78823,
+          "high_mean_bps": 2.93577,
+          "low_mean_bps": -6.06226,
+          "high_minus_low_bps": 8.99804,
+          "linear_r": -0.005385,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 6,
+          "day_median_high_minus_low_bps": 10.11929
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8578,
+        "high_count": 837,
+        "low_count": 876,
+        "avg_future_ret_bps": 7.64479,
+        "high_mean_bps": -12.47929,
+        "low_mean_bps": -2.06605,
+        "high_minus_low_bps": -10.41324,
+        "linear_r": 0.000957,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 0,
+        "day_median_high_minus_low_bps": -6.6182
+      }
+    },
+    {
+      "indicator_id": 6,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": -1449977.917899998,
+      "train_threshold_high_q80": 208300.742199997,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28795,
+          "high_count": 5756,
+          "low_count": 5760,
+          "avg_future_ret_bps": 0.21901,
+          "high_mean_bps": 0.75778,
+          "low_mean_bps": 0.28029,
+          "high_minus_low_bps": 0.47749,
+          "linear_r": -0.006913,
+          "daily_lift_days": 5,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": 0.84275
+        },
+        "validation": {
+          "eligible_labels": 4315,
+          "high_count": 10,
+          "low_count": 0,
+          "avg_future_ret_bps": 0.79623,
+          "high_mean_bps": 4.08873,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": 0.007918,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        },
+        "late_holdout": {
+          "eligible_labels": 10073,
+          "high_count": 3218,
+          "low_count": 0,
+          "avg_future_ret_bps": -0.02102,
+          "high_mean_bps": 0.34168,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": -0.003205,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8633,
+        "high_count": 3194,
+        "low_count": 0,
+        "avg_future_ret_bps": 0.62929,
+        "high_mean_bps": -2.37708,
+        "low_mean_bps": null,
+        "high_minus_low_bps": null,
+        "linear_r": -0.047075,
+        "daily_lift_days": 0,
+        "daily_lift_positive_days": 0,
+        "day_median_high_minus_low_bps": null
+      }
+    },
+    {
+      "indicator_id": 6,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": -1449977.917899998,
+      "train_threshold_high_q80": 208300.742199997,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28785,
+          "high_count": 5746,
+          "low_count": 5760,
+          "avg_future_ret_bps": 0.66631,
+          "high_mean_bps": 1.15561,
+          "low_mean_bps": 0.93427,
+          "high_minus_low_bps": 0.22135,
+          "linear_r": -0.012673,
+          "daily_lift_days": 5,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": -4.97556
+        },
+        "validation": {
+          "eligible_labels": 4305,
+          "high_count": 10,
+          "low_count": 0,
+          "avg_future_ret_bps": 2.46776,
+          "high_mean_bps": 31.39691,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": 0.020762,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        },
+        "late_holdout": {
+          "eligible_labels": 10063,
+          "high_count": 3218,
+          "low_count": 0,
+          "avg_future_ret_bps": -0.01891,
+          "high_mean_bps": 1.59738,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": -0.005126,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8623,
+        "high_count": 3184,
+        "low_count": 0,
+        "avg_future_ret_bps": 1.8921,
+        "high_mean_bps": -6.73123,
+        "low_mean_bps": null,
+        "high_minus_low_bps": null,
+        "linear_r": -0.081849,
+        "daily_lift_days": 0,
+        "daily_lift_positive_days": 0,
+        "day_median_high_minus_low_bps": null
+      }
+    },
+    {
+      "indicator_id": 6,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": -1449977.917899998,
+      "train_threshold_high_q80": 208300.742199997,
+      "train_nonempty_feature_minutes": 28800,
+      "fold": {
+        "train": {
+          "eligible_labels": 28740,
+          "high_count": 5701,
+          "low_count": 5760,
+          "avg_future_ret_bps": 2.39227,
+          "high_mean_bps": -1.20645,
+          "low_mean_bps": -4.876,
+          "high_minus_low_bps": 3.66955,
+          "linear_r": -0.025347,
+          "daily_lift_days": 5,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": -36.18137
+        },
+        "validation": {
+          "eligible_labels": 4260,
+          "high_count": 10,
+          "low_count": 0,
+          "avg_future_ret_bps": 10.1433,
+          "high_mean_bps": -137.07412,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": -0.009305,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        },
+        "late_holdout": {
+          "eligible_labels": 10018,
+          "high_count": 3218,
+          "low_count": 0,
+          "avg_future_ret_bps": 0.78823,
+          "high_mean_bps": 3.04956,
+          "low_mean_bps": null,
+          "high_minus_low_bps": null,
+          "linear_r": -0.01532,
+          "daily_lift_days": 0,
+          "daily_lift_positive_days": 0,
+          "day_median_high_minus_low_bps": null
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8578,
+        "high_count": 3140,
+        "low_count": 0,
+        "avg_future_ret_bps": 7.64479,
+        "high_mean_bps": -27.95836,
+        "low_mean_bps": null,
+        "high_minus_low_bps": null,
+        "linear_r": -0.170656,
+        "daily_lift_days": 0,
+        "daily_lift_positive_days": 0,
+        "day_median_high_minus_low_bps": null
+      }
+    },
+    {
+      "indicator_id": 7,
+      "horizon_minutes": 5,
+      "train_threshold_low_q20": -12054.9077,
+      "train_threshold_high_q80": 11848.7671,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28775,
+          "high_count": 5757,
+          "low_count": 5755,
+          "avg_future_ret_bps": 0.21812,
+          "high_mean_bps": 0.33567,
+          "low_mean_bps": 0.71442,
+          "high_minus_low_bps": -0.37876,
+          "linear_r": 0.002015,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 9,
+          "day_median_high_minus_low_bps": -0.73831
+        },
+        "validation": {
+          "eligible_labels": 4312,
+          "high_count": 446,
+          "low_count": 429,
+          "avg_future_ret_bps": 0.8346,
+          "high_mean_bps": -3.5876,
+          "low_mean_bps": -3.02671,
+          "high_minus_low_bps": -0.56088,
+          "linear_r": -0.002338,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 1,
+          "day_median_high_minus_low_bps": -0.49993
+        },
+        "late_holdout": {
+          "eligible_labels": 10066,
+          "high_count": 1136,
+          "low_count": 1092,
+          "avg_future_ret_bps": -0.02833,
+          "high_mean_bps": -0.369,
+          "low_mean_bps": 3.3017,
+          "high_minus_low_bps": -3.6707,
+          "linear_r": -0.002275,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 1,
+          "day_median_high_minus_low_bps": -3.48421
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8627,
+        "high_count": 884,
+        "low_count": 847,
+        "avg_future_ret_bps": 0.62725,
+        "high_mean_bps": -0.95476,
+        "low_mean_bps": 0.14079,
+        "high_minus_low_bps": -1.09555,
+        "linear_r": 0.000304,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": 0.15874
+      }
+    },
+    {
+      "indicator_id": 7,
+      "horizon_minutes": 15,
+      "train_threshold_low_q20": -12054.9077,
+      "train_threshold_high_q80": 11848.7671,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28765,
+          "high_count": 5757,
+          "low_count": 5755,
+          "avg_future_ret_bps": 0.65692,
+          "high_mean_bps": 0.57241,
+          "low_mean_bps": 1.48464,
+          "high_minus_low_bps": -0.91224,
+          "linear_r": 0.002455,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 7,
+          "day_median_high_minus_low_bps": -0.79978
+        },
+        "validation": {
+          "eligible_labels": 4302,
+          "high_count": 446,
+          "low_count": 429,
+          "avg_future_ret_bps": 2.50078,
+          "high_mean_bps": -6.46151,
+          "low_mean_bps": -4.10095,
+          "high_minus_low_bps": -2.36056,
+          "linear_r": 0.005037,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 1,
+          "day_median_high_minus_low_bps": -3.58574
+        },
+        "late_holdout": {
+          "eligible_labels": 10056,
+          "high_count": 1134,
+          "low_count": 1090,
+          "avg_future_ret_bps": -0.02247,
+          "high_mean_bps": 2.83696,
+          "low_mean_bps": 4.02585,
+          "high_minus_low_bps": -1.18889,
+          "linear_r": -0.001548,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": -1.78925
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8617,
+        "high_count": 884,
+        "low_count": 846,
+        "avg_future_ret_bps": 1.88171,
+        "high_mean_bps": -1.24918,
+        "low_mean_bps": -1.66195,
+        "high_minus_low_bps": 0.41276,
+        "linear_r": -0.003109,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 3,
+        "day_median_high_minus_low_bps": 0.34034
+      }
+    },
+    {
+      "indicator_id": 7,
+      "horizon_minutes": 60,
+      "train_threshold_low_q20": -12054.9077,
+      "train_threshold_high_q80": 11848.7671,
+      "train_nonempty_feature_minutes": 28780,
+      "fold": {
+        "train": {
+          "eligible_labels": 28720,
+          "high_count": 5755,
+          "low_count": 5753,
+          "avg_future_ret_bps": 2.39024,
+          "high_mean_bps": 0.29425,
+          "low_mean_bps": 2.36261,
+          "high_minus_low_bps": -2.06836,
+          "linear_r": 0.001026,
+          "daily_lift_days": 20,
+          "daily_lift_positive_days": 7,
+          "day_median_high_minus_low_bps": -1.99408
+        },
+        "validation": {
+          "eligible_labels": 4257,
+          "high_count": 441,
+          "low_count": 424,
+          "avg_future_ret_bps": 10.20752,
+          "high_mean_bps": -6.04817,
+          "low_mean_bps": -8.1822,
+          "high_minus_low_bps": 2.13403,
+          "linear_r": -0.001781,
+          "daily_lift_days": 3,
+          "daily_lift_positive_days": 2,
+          "day_median_high_minus_low_bps": 0.34491
+        },
+        "late_holdout": {
+          "eligible_labels": 10011,
+          "high_count": 1133,
+          "low_count": 1088,
+          "avg_future_ret_bps": 0.80098,
+          "high_mean_bps": 5.84139,
+          "low_mean_bps": 4.10692,
+          "high_minus_low_bps": 1.73447,
+          "linear_r": -0.002628,
+          "daily_lift_days": 7,
+          "daily_lift_positive_days": 3,
+          "day_median_high_minus_low_bps": -0.6369
+        }
+      },
+      "late_holdout_prior_day_feature_placebo": {
+        "eligible_labels": 8572,
+        "high_count": 881,
+        "low_count": 844,
+        "avg_future_ret_bps": 7.64851,
+        "high_mean_bps": -9.04586,
+        "low_mean_bps": -8.54985,
+        "high_minus_low_bps": -0.496,
+        "linear_r": -0.000596,
+        "daily_lift_days": 6,
+        "daily_lift_positive_days": 2,
+        "day_median_high_minus_low_bps": -1.47115
+      }
+    }
+  ],
+  "compute_seconds": 67.02,
+  "caveats": [
+    "Overlapping labels and serial dependence; minute counts are not independent observations",
+    "No receiver observed_at or source publication clock: no causal decision-time certification",
+    "This is exploratory, not a preregistered signal, trading backtest or net after-commission PnL",
+    "Single 30-day historical period cannot establish transferable predictive edge",
+    "No across-coin pooled effect or policy threshold selection"
+  ],
+  "host_job_id": "job_6b45c330c516",
+  "host_job_exit_code": 0,
+  "git_protocol": "research/microstructure/FORWARD_LABEL_30DAY_EXPLORATORY_PROTOCOL_2026-10-21.md",
+  "exact_script_path": "research/microstructure/experiments/trade_minute_forward_label_30day_screen_v1.py",
+  "exact_script_blob": "8c784408705775fdb76d648098d9e9be9df092c8",
+  "actual_unix_actor": "cripta",
+  "server_side_mutations": "NONE",
+  "qc_categorization": "EXPOST_LABEL_SCREEN_NOT_TRADABLE_NOT_RESEARCH_READY"
+}
