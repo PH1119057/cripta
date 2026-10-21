@@ -4536,3 +4536,13 @@ evidence and a separate explicit owner REAL arm remain REQUIRED.
 ## 2026-10-21 InstrumentResearchLedger Git JSON — OWNER STORAGE DECISION / PENDING RELEASE
 
 Owner explicitly approved one Git-versioned JSON owner: `operations/dashboard/instrument_research_catalog.json` in GitHub `PH1119057/cripta:main` (ARCH §51, INDEX §48, RESEARCH_COMPUTE §23). PR #145 is **DRAFT / REVIEW IMPLEMENTATION** with 30 historical five-coin/six-scenario research candidate records, prototype read-only Dashboard card/API and tests; branch candidate is **NOT CANONICAL REGISTERED** until merge of exact reviewed release. Publication needs exact record QC/identity/provenance and audited append/corrections, independent durable backup/export/restore, and full dashboard release checks. **STORAGE DECISION=OWNER APPROVED; CODE IMPLEMENTED IN PR=YES; MERGED/DEPLOYED/RUNTIME VERIFIED=NOT CHECKED HERE / NOT CLAIMED**. No PostgreSQL migration, trading policy, LIVE arm or Exchange mutation is implied.
+
+## 2026-10-21 Coin research history merge checkpoint — SOURCE VERIFIED / RUNTIME NOT VERIFIED
+
+CANON owner decision: ARCH §51, RESEARCH_COMPUTE §23, INDEX §48, sole durable compact store: operations/dashboard/instrument_research_catalog.json at GitHub PH1119057/cripta:main.
+PR #147 MERGED (squash commit e0058ef8bb758c531ad2afa929c4fc665dbde1ea), all seven PR CI workflows passed. 30 records (5 instruments × 6 medianband Entry/Exit scenarios), exact canonical Bybit LINEAR InstrumentIdentity, individual after-fee TP/protection/hard-stop counts, net USDT, trace hashes, OOS NOT VERIFIED and historical lookahead. Authenticated read-only Dashboard API/card source is in main; Draft PR #145 CLOSED without merge.
+
+SOURCE REGISTERED=YES; TESTED=CI PASS; INSTALLED/LOADED/DASHBOARD API/UI/RESTORE VERIFIED=NO / NOT CHECKED HERE; no real-money equivalence. During post-merge server-service preflight, OpenAI upstream tool-security blocked a SentinelX request (BLOCKED_UPSTREAM_OPENAI) before deployment; no bypass or repeated rejected command. No installer job, deploy, restart or Exchange mutation was executed by this task. Runtime identity requires fresh permitted read-only evidence.
+
+Archive purge remains prohibited until independent compact-catalog backup/export+restore and hash QC PASS; checkout sync alone is not backup. A future full authenticated Dashboard API release requires exact Git SHA, approved actor/path and sandbox preflight, rollback, full release gate, runtime/UI behavior evidence and no LIVE rearm. No trading policy changed.
+

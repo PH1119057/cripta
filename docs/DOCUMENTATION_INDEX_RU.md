@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.37
+**Версия:** 3.38
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1384,3 +1384,8 @@ No change to Source count, mandatory pre-read, routing or README/AGENTS.
 Following INDEX §46 and review PR #145, owner explicitly approved **Git-versioned JSON** as the one durable source of compact per-coin research records. Exact canonical store: `operations/dashboard/instrument_research_catalog.json` committed to GitHub `PH1119057/cripta:main`. Dashboard API/UI consumes its installed release snapshot read-only; no PostgreSQL mirror/second writer. Branch-only candidate records are not registered. Per-record exact MarketSource/InstrumentIdentity, separate scenarios/periods, gross+net after fees, hard-stops, OOS/leakage flag, provenance, hashes, identity and correction history must be preserved. Replace prior ARCH §51 undecided-storage wording with this OWNER DECISION; detailed record and registration gate are RESEARCH_COMPUTE §23. This does not turn historic research into Strategy/LIVE policy.
 
 A normal source commit/branch CI is not deploy. Each implementation requires Git review/CI, exact commit release, backup/rollback and read-only runtime test. Compact JSON must have independent verified backup/restore before heavy archive purge; otherwise IRREPLACEABLE_DATA retention gate remains open. State of physical system/API and deployment is tracked in MAP. No current-doc file-set, path for mandatory pre-read, Source count, README/AGENTS/Instruction routing changed.
+
+# 49. Git coin research catalogue source checkpoint — 2026-10-21
+
+Per owner storage decision INDEX §48, source PR #147 merged the sole Git JSON research store and read-only Dashboard API/card into GitHub main, exact merge commit e0058ef8bb758c531ad2afa929c4fc665dbde1ea. Seven PR CI workflows PASS and 30 per-coin results recorded. MAP provides exact source/status and limitations. Git source registered; Dashboard runtime NOT DEPLOYED / NOT VERIFIED HERE. OpenAI upstream security blocked server preflight; no bypass, installer or runtime restart. Independent backup/restore and full authenticated release verification remain required before purge or operational-completion claim. Source set, mandatory pre-read, routing, README/AGENTS/Instructions and trading LIVE settings unchanged.
+
