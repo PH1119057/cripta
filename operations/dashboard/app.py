@@ -35,6 +35,10 @@ from bybit_workbench.live_arm_readiness import (
     strategy_symbol_scope_key,
 )
 from bybit_workbench.r1_unified_prearm import unified_r1_prearm_state
+from bybit_workbench.r1_unified_arm_control import (
+    arm_unified_r1,
+    disarm_unified_r1,
+)
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
@@ -3559,12 +3563,14 @@ U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"
 R1_MICRO_LIVE_PATH = "/api/r1/micro-live"
 R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
 R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"
+R1_UNIFIED_MICRO_LIVE_PATH = "/api/r1/unified/micro-live"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
     U6_STRATEGY_VERSION_PATH,
     U6_STRATEGY_ACTIVATION_PATH,
     U6_STRATEGY_EXECUTION_PERMISSION_PATH,
     R1_MICRO_LIVE_PATH,
+    R1_UNIFIED_MICRO_LIVE_PATH,
 }
 
 
@@ -4308,6 +4314,64 @@ def _u6_r1_micro_live(handler: object, request: dict[str, object]) -> None:
     _u6_json(handler, 200, result)
 
 
+def _u6_unified_r1_observer_ready() -> bool:
+    """Fresh exact release read-model, one Strategy and ten lanes."""
+    try:
+        state = json.loads(UNIVERSAL_ENTRY_OBSERVER_STATE.read_text(
+            encoding="utf-8"
+        ))
+        when = datetime.fromisoformat(str(state["updated_at"]))
+        if when.tzinfo is None:
+            return False
+        age = (datetime.now(UTC) - when.astimezone(UTC)).total_seconds()
+        return (
+            state.get("state") == "RUNNING"
+            and state.get("observer_ready") is True
+            and state.get("source_commit") == LOADED_RELEASE_COMMIT
+            and state.get("active_strategies") == 1
+            and len(state.get("active_entry_plans") or []) == 1
+            and len(state.get("strategy_monitors") or []) == 10
+            and 0 <= age <= 15
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+
+
+def _u6_r1_unified_micro_live(
+    handler: object, request: dict[str, object]
+) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("unified R1 enabled must be boolean")
+    operator = handler.session_user() or "UNKNOWN"
+    request_id = str(request.get("request_id") or secrets.token_hex(12))
+    now = datetime.now(UTC)
+    if enabled and request.get("confirmed") is not True:
+        raise ValueError("unified R1 OWNER ARM requires explicit confirmation")
+
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        if enabled:
+            readiness = live_rearm_readiness(connection)
+            result = arm_unified_r1(
+                connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=now,
+                operator=operator,
+                request_id=request_id,
+                confirmed=request.get("confirmed") is True,
+                observer_ready=_u6_unified_r1_observer_ready(),
+                baseline_ready=bool(readiness.get("rearm_ready")),
+                baseline_reasons=tuple(str(x) for x in readiness.get("reasons", [])),
+            )
+        else:
+            result = disarm_unified_r1(
+                connection, now=now, operator=operator, request_id=request_id
+            )
+    _u6_json(handler, 200, result)
+
+
 def _u6_handle_post(handler: object, path: str) -> None:
     try:
         request = _u6_request_json(handler)
@@ -4321,6 +4385,8 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_set_execution_permission(handler, request)
         elif path == R1_MICRO_LIVE_PATH:
             _u6_r1_micro_live(handler, request)
+        elif path == R1_UNIFIED_MICRO_LIVE_PATH:
+            _u6_r1_unified_micro_live(handler, request)
         else:
             _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
     except StaleActivationState:
@@ -4852,6 +4918,16 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         )
                         if enabled and request.get("confirmed") is not True:
                             raise ValueError("включение новых входов не подтверждено")
+                        if enabled:
+                            unified = connection.execute(
+                                """SELECT 1 FROM strategy_entry.strategy_activations
+                                   WHERE enabled=true AND strategy_id=%s""",
+                                ("r1_five_symbols",),
+                            ).fetchone()
+                            if unified is not None:
+                                raise ValueError(
+                                    "UNIFIED_R1_MUST_USE_DEDICATED_OWNER_ARM_ENDPOINT"
+                                )
                         live_context: LiveArmContext | None = None
                         if enabled:
                             live_context = _live_arm_context_from_request(request)
