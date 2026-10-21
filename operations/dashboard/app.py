@@ -59,6 +59,12 @@ try:
 except ImportError:  # package import used by tests
     from operations.dashboard.archive_v2 import read_job as read_archive_job
     from operations.dashboard.archive_v2 import start_job as start_archive_job
+try:
+    from coin_research_catalog import read_catalog as read_coin_research_catalog
+except ImportError:  # package import used by tests
+    from operations.dashboard.coin_research_catalog import (
+        read_catalog as read_coin_research_catalog,
+    )
 from datetime import UTC, datetime, timedelta
 from html import escape
 from http.cookies import SimpleCookie
@@ -4431,6 +4437,22 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
         elif path == "/api/status":
             body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")
+        elif path == "/api/research/coin-history":
+            # Authenticated, read-only projection of Git-versioned PROPOSAL data.
+            # No PostgreSQL/strategy/exchange mutation, and no implicit readiness.
+            try:
+                catalog = read_coin_research_catalog()
+                self.send_body(
+                    200,
+                    json.dumps(catalog, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                )
+            except (ValueError, OSError):
+                self.send_body(
+                    503,
+                    b'{"error":"RESEARCH_CATALOG_NOT_VERIFIED"}',
+                    "application/json; charset=utf-8",
+                )
         elif path == U6_STRATEGY_GET_PATH:
             _u6_send_catalog(self)
         elif path == R1_MICRO_LIVE_STATUS_PATH:
