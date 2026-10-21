@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.32
+**Версия:** 3.33
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1314,3 +1314,24 @@ OBS §4 preserves operator-owned explicit resolution; do not auto-clear
 five remaining historical Observer faults merely because the new observer
 runs. No current Project Source count, canonical routing or bootstrap
 topology change was introduced by this checkpoint.
+
+
+# 44. Explicit historical Observer fault resolution — 2026-10-21
+
+CURRENT_PROJECT_MAP 12.28 contains the exact date, five fault IDs, original
+historic OI/publicTrade missing-data evidence, guarded actor/DB transaction,
+operator-approved audit fields, and post-commit QC. Five stale
+`UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` incidents are resolved by an
+explicit owner-scoped operation, **not** by automatic success refresh.
+Original slot OI and DOTUSDT 3 publicTrade execIds remain NOT_RECOVERED;
+historical epochs remain NOT_COMPARABLE and cannot be silently backfilled.
+Post-state: observer fault OPEN=0, lifecycle fault OPEN=0, release-arm
+incident OPEN=0, observer RUNNING on loaded `aef533b...` with R1 one
+EntryPlan/ten lanes. Mainnet=0; no execution permissions or owner arm.
+
+Canonical owner: OBS §4 for explicit operator resolution and durable audit;
+Dashboard `resolve_observer_runtime_fault()` is the reused implementation;
+DEVELOPMENT_RELEASE §§5.1, 13, 19.5–19.6 for actor, DB privileges and
+upstream tool-security classifications. This is a dated operational checkpoint,
+not an architecture/trading-policy change. No changes to current Source count,
+paths, mandatory pre-read, routing or README/AGENTS bootstrap topology.
