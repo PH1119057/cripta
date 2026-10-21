@@ -186,8 +186,36 @@ def compute(sym):
   explanation="conditional outcome frequencies and intrahorizon print excursions; NOT executable trades, fees or PnL",
   limitations=["Train 20d / validation 3d / late holdout 7d, same source history","No observed_at/available_after proof","Returns overlap; no independence/statistical multiple testing correction","Intrahorizon print extrema not order fill simulation","Directional rules chosen only on train by relative >=20bps event uplift; not Strategy","No policy defaults or cross-coin pooling"])
 
+def compact(d):
+ def brief(m):
+  if m["n"]==0:return dict(n=0,days=0)
+  return dict(n=m["n"],days=m["distinct_days"],up=m["up_pct"],down=m["down_pct"],
+    up20=m["endpoint_move_up_ge20_pct"],down20=m["endpoint_move_down_ge20_pct"],
+    up50=m["endpoint_move_up_ge50_pct"],down50=m["endpoint_move_down_ge50_pct"],
+    up100=m["endpoint_move_up_ge100_pct"],down100=m["endpoint_move_down_ge100_pct"],
+    abs50=m["median_abs_endpoint_bps"],abs90=m["p90_abs_endpoint_bps"],
+    max_up50=m["median_max_upside_bps"],max_up90=m["p90_max_upside_bps"],
+    max_down50=m["median_max_downside_bps"],max_down90=m["p90_max_downside_bps"])
+ base={}
+ rows=[]
+ for r in d["direction_rules"]:
+  h=str(r["horizon_minutes"])
+  if h not in base:
+   base[h]={f:brief(r["fold"][f]["baseline"]) for f in FOLDS}
+  rows.append(dict(id=r["indicator_id"],h=r["horizon_minutes"],bucket=r["bucket"],
+    threshold_low=r["train_threshold_low_q20"],threshold_high=r["train_threshold_high_q80"],
+    threshold_status=r["threshold_status"],dir=r["direction_from_train_plusminus20_bps"],
+    uplifts=r["direction_fold_uplift"],filter=r["exploratory_consistency_filter_pass"],
+    fold={f:brief(r["fold"][f][r["bucket"]]) for f in FOLDS}))
+ return dict(status=d["status"],symbol=d["symbol"],source_rows=d["source_rows"],
+  cube_rows=d["cube_rows"],source_sha_checked=d["source_sha_checked"],
+  rules=len(rows),quality=d["source_clock"],base=base,results=rows,
+  elapsed_seconds=d["elapsed_seconds"],disclaimer="EXPOST_ONLY_NOT_TRADABLE_NO_RECEIPT_CLOCK")
+
 if __name__=="__main__":
  ap=argparse.ArgumentParser()
  ap.add_argument("--symbol",required=True,choices=SYMS)
+ ap.add_argument("--compact",action="store_true")
  args=ap.parse_args()
- print(json.dumps(compute(args.symbol),ensure_ascii=False,separators=(",",":")))
+ result=compute(args.symbol)
+ print(json.dumps(compact(result) if args.compact else result,ensure_ascii=False,separators=(",",":")))
