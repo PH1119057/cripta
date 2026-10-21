@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.30
+**Версия:** 3.31
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1273,3 +1273,25 @@ activation migration, LIVE readiness, new Entry authorization or deploy.
 CURRENT_PROJECT_MAP records the source/test/production boundary. Active docs,
 mandatory pre-read, routing, Project Source file count, and README/AGENTS
 bootstrap entrypoints are unchanged.
+
+
+# 42. R1 single Strategy / five-symbol production migration — runtime checkpoint 2026-10-21
+
+CURRENT_PROJECT_MAP 12.26 records the dated operator-approved and verified
+production change: old five per-symbol R1 activations retired for **new Entry**,
+new immutable R1 StrategyCard/StrategyActivation, whole-plan EntryPlan/ExitPlan
+for five instruments and two directions, ten EntryPlan monitoring rows, and
+one ACTIVE dedicated TradingAccount StrategyExecutionBinding. The historical
+28 PAPER positions and 48 PAPER orders retained their original exact lineage
+hashes; all REAL permissions and mainnet gate stayed OFF, no OWNER ARM.
+
+GitHub PR #132 (EntryPlan monitor), #133 (unified R1 source and guarded
+transition), #135 (physical claim/command schema fix) and #136 (smallint
+mainnet gate binding SQL fix) are the related implementation evidence.
+MAP owns exact deployment job IDs, commit identities, DB verification,
+source/loaded distinction, failures and recovery QC. TRADING_CONTOUR §7.5
+remains the canonical R1 owner/model specification, not this index.
+The new document section does not change source-file cardinality,
+mandatory pre-read, routing, README/AGENTS/bootstrap or UI capacity.
+Application real trading/Exit takeover and unrelated Observer continuity
+issues are NOT declared verified by a flat-account DB migration.
