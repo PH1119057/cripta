@@ -32,7 +32,11 @@
     "control_30day_physical_factor_cube_pairs": 30,
     "control_30day_physical_factor_cube_rows": 1296000,
     "control_30day_physical_factor_cube_source_hashes": 150,
-    "control_30day_physical_factor_cube_independent_output_qc_mismatch_count": 0
+    "control_30day_physical_factor_cube_independent_output_qc_mismatch_count": 0,
+    "completed_expost_forward_label_screen_coin_indicator_pairs": 30,
+    "completed_expost_forward_label_horizon_cells": 90,
+    "forward_label_undefined_threefold_cells": 9,
+    "forward_label_threefold_same_sign_non_cvd_descriptive": 12
   },
   "cells": [
     {
@@ -100,6 +104,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -158,6 +176,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -216,6 +248,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -274,6 +320,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -332,6 +392,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -399,6 +473,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -457,6 +545,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -515,6 +617,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -573,6 +689,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -631,6 +761,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -698,6 +842,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -756,6 +914,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -814,6 +986,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -872,6 +1058,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -930,6 +1130,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1231,6 +1445,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1289,6 +1517,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1347,6 +1589,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1405,6 +1661,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1463,6 +1733,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1530,6 +1814,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1588,6 +1886,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1646,6 +1958,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1704,6 +2030,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1762,6 +2102,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1829,6 +2183,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1887,6 +2255,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -1945,6 +2327,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -2003,6 +2399,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -2061,6 +2471,20 @@
         "verified_available_after": false,
         "research_ready": false,
         "report": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json"
+      },
+      "forward_return_30day_exploratory": {
+        "label_horizons_minutes": [
+          5,
+          15,
+          60
+        ],
+        "train": "2026-05-18..2026-06-06",
+        "validation": "2026-06-07..2026-06-09",
+        "late_holdout": "2026-06-10..2026-06-16",
+        "method": "ex-post last-trade-minute log return versus physical factor train-q20/q80, not decision-time signal",
+        "source": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+        "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_ONLY_NOT_TRADING_EDGE_NO_ASOF_CLOCK",
+        "readiness": "NOT_RESEARCH_READY"
       }
     },
     {
@@ -4524,7 +4948,8 @@
     "NO_FUTURE_LABEL_OOS_OR_FEE_ADJUSTED_TRADE_RESULT",
     "CROSS_VENUE_26_OWNER_DEFERRED_LAST",
     "2026-10-21 new 2-day independent fullrow minute QC for six trade-minute indicator IDs across five symbols; source/trade heuristics for remaining four; §21.6 actual source reception/period gates remain open",
-    "Control-month 30d six-factor physical measure cube now materialized and independently output-QCed for six factor IDs × five exact symbols; causal observed/available_after and full study period gates remain OPEN."
+    "Control-month 30d six-factor physical measure cube now materialized and independently output-QCed for six factor IDs × five exact symbols; causal observed/available_after and full study period gates remain OPEN.",
+    "Forward-price pilot May18–June16 completed 90 ex-post coin-factor-horizon associations; CVD sparse subsets and missing receiver as-of clock prevent inference of causal trade readiness; outputs do NOT alter RESEARCH_READY 0/150"
   ],
   "sources": [
     "research/microstructure/PASS1_TRADE_TAPE_CHECKPOINT_2026-10-20.md",
