@@ -1,0 +1,109 @@
+{
+  "title": "CRIPTA Bybit pilot 30d cohort: independent 8-field minute QC across 5 symbols",
+  "date_checked": "2026-10-21",
+  "baseline_github_main_head": "97fb9c4b0b2617cddf0d2b09a1cd0faf7526c796",
+  "scope": {
+    "start": "2026-05-18",
+    "end_inclusive": "2026-06-16",
+    "venue": "Bybit",
+    "symbols": [
+      "APTUSDT",
+      "INJUSDT",
+      "DOTUSDT",
+      "LTCUSDT",
+      "ARBUSDT"
+    ],
+    "selected_as": "30-day verified archival pilot, NOT owner-approved full study period"
+  },
+  "totals": {
+    "instruments": 5,
+    "utc_days": 30,
+    "coin_days": 150,
+    "compressed_archive_sha_matches": 150,
+    "source_fills": 37162098,
+    "minute_rows": 216000,
+    "field_comparisons": 1728000,
+    "field_mismatches": 0
+  },
+  "by_symbol": [
+    {
+      "instrument_id": "APTUSDT",
+      "source_rows": 6258912,
+      "utc_days": 30,
+      "minute_rows": 43200,
+      "numeric_field_comparisons": 345600,
+      "field_mismatches": 0,
+      "source_hashes_matched": 30,
+      "host_job_id": "job_adcb6105508b",
+      "program_blob": "fb9828b4a1baf08701ce5a7d795d6f57d94b8214",
+      "report": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json"
+    },
+    {
+      "instrument_id": "INJUSDT",
+      "source_rows": 12196213,
+      "utc_days": 30,
+      "minute_rows": 43200,
+      "numeric_field_comparisons": 345600,
+      "field_mismatches": 0,
+      "source_hashes_matched": 30,
+      "host_job_id": "job_3441133caa9b",
+      "program_blob": "ec414f391cec5fcaa41fc3023271d2f722d82084",
+      "report": "research/microstructure/INJ_30DAY_FULLROW_QC_RESULT_2026-10-21.json"
+    },
+    {
+      "instrument_id": "DOTUSDT",
+      "source_rows": 8123293,
+      "utc_days": 30,
+      "minute_rows": 43200,
+      "numeric_field_comparisons": 345600,
+      "field_mismatches": 0,
+      "source_hashes_matched": 30,
+      "host_job_id": "job_6cd8c6cfa10f",
+      "program_blob": "ec414f391cec5fcaa41fc3023271d2f722d82084",
+      "report": "research/microstructure/DOT_30DAY_FULLROW_QC_RESULT_2026-10-21.json"
+    },
+    {
+      "instrument_id": "LTCUSDT",
+      "source_rows": 2880949,
+      "utc_days": 30,
+      "minute_rows": 43200,
+      "numeric_field_comparisons": 345600,
+      "field_mismatches": 0,
+      "source_hashes_matched": 30,
+      "host_job_id": "job_17863d345920",
+      "program_blob": "ec414f391cec5fcaa41fc3023271d2f722d82084",
+      "report": "research/microstructure/LTC_30DAY_FULLROW_QC_RESULT_2026-10-21.json"
+    },
+    {
+      "instrument_id": "ARBUSDT",
+      "source_rows": 7702731,
+      "utc_days": 30,
+      "minute_rows": 43200,
+      "numeric_field_comparisons": 345600,
+      "field_mismatches": 0,
+      "source_hashes_matched": 30,
+      "host_job_id": "job_22ea9b178a13",
+      "program_blob": "ec414f391cec5fcaa41fc3023271d2f722d82084",
+      "report": "research/microstructure/ARB_30DAY_FULLROW_QC_RESULT_2026-10-21.json"
+    }
+  ],
+  "source_manifest": "research/microstructure/TRADE_TAPE_RAW_30DAY_150_SOURCE_MANIFEST_2026-10-21.json",
+  "source_programs": [
+    "research/microstructure/experiments/trade_tape_30day_independent_fullrow_audit_v1.py",
+    "research/microstructure/experiments/trade_tape_30day_fast_8field_qc_v1.py"
+  ],
+  "primary_program_blob": "71e4851faebd388fd2a6db3d93dca2ca2cb28c07",
+  "fullrow_eight_numeric_keys": [
+    "fill_count",
+    "buy_notional_usd",
+    "sell_notional_usd",
+    "delta_usd",
+    "cvd_from_day_start_usd",
+    "trade_rate_accel_per_min",
+    "delta_accel_usd",
+    "rvol_60m"
+  ],
+  "independent_qc_semantics": "Decimal raw event timestamp floor and quote notional; primary minute factor float calculation; numerical comparison tolerance relative 1e-10 and absolute 1e-6; APT includes full descriptive #4/#8/#27/#28 independent aggregation; others only 8-field comparable physical source minute metrics",
+  "quality_note": "No event receiver observed_at/source publication, actual full exchange capture completeness, independent source-of-origin hash, full approved research period, feature cube, OOS or fee-adjusted trade metrics. All READY remain false.",
+  "daily_source_inventory_count": 150
+}
