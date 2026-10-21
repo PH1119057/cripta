@@ -10,6 +10,13 @@ from typing import Protocol
 
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 
+# TC §7.5.1: release-side fail-closed envelope for one unified R1 Strategy.
+# The immutable StrategyCard and its version must not be rewritten in-place.
+_R1_UNIFIED_STRATEGY_ID = "r1_five_symbols"
+_R1_UNIFIED_VERSION = "1.0-five-symbols-20261021"
+_R1_PER_POSITION_USDT = Decimal("10")
+_R1_AGGREGATE_USDT = Decimal("50")
+
 
 class CapitalReservationState(StrEnum):
     RESERVED = "RESERVED"
@@ -185,6 +192,8 @@ class PostgresCapitalReservationPort:
                 self._validate_existing(existing, request)
                 return self._reservation_from_row(existing)
 
+            self._guard_unified_r1_envelope(request)
+
             row = self._connection.execute(
                 """SELECT coalesce(sum(requested_amount),0)
                      FROM runtime.capital_reservations
@@ -260,6 +269,49 @@ class PostgresCapitalReservationPort:
                 pre_dispatch_expires_at=request.pre_dispatch_expires_at.astimezone(UTC),
                 state_reason="RESERVATION_CREATED",
             )
+
+    def _guard_unified_r1_envelope(
+        self, request: CapitalReservationRequest
+    ) -> None:
+        """TC §7.5.1: account-locked 10/50 USDT hard ceiling for unified R1.
+
+        Executed after idempotency lookup under the transaction's
+        account advisory lock. All non-RELEASED reservation states count,
+        including CONSUMED (open position), reconciliation and pending
+        Exchange reflection. Old versions of this Strategy still count.
+        Unknown account/currency/identity is a hard stop, not free capacity.
+        """
+        if request.strategy_id != _R1_UNIFIED_STRATEGY_ID:
+            return
+        if (
+            request.strategy_version != _R1_UNIFIED_VERSION
+            or request.amount_currency.upper() != "USDT"
+            or request.requested_amount != _R1_PER_POSITION_USDT
+            or request.execution_leg != "PRIMARY"
+        ):
+            raise ValueError("R1_UNIFIED_CAPITAL_POLICY_MISMATCH")
+
+        row = self._connection.execute(
+            """SELECT coalesce(sum(requested_amount),0),
+                      count(*) FILTER (
+                          WHERE identity_status IS DISTINCT FROM 'PROVEN'
+                             OR trading_account_id IS DISTINCT FROM %s
+                             OR amount_currency IS DISTINCT FROM 'USDT'
+                      )
+                 FROM runtime.capital_reservations
+                WHERE strategy_id=%s AND state<>'RELEASED'""",
+            (request.trading_account_id, request.strategy_id),
+        ).fetchone()
+        if row is None or len(row) != 2:
+            raise ValueError("R1_UNIFIED_CAPITAL_LEDGER_UNAVAILABLE")
+        if int(row[1]) != 0:
+            raise ValueError("R1_UNIFIED_CAPITAL_LEDGER_IDENTITY_UNPROVEN")
+        committed = Decimal(str(row[0]))
+        if not committed.is_finite() or committed < 0:
+            raise ValueError("R1_UNIFIED_CAPITAL_LEDGER_INVALID")
+        available = max(Decimal("0"), _R1_AGGREGATE_USDT - committed)
+        if request.requested_amount > available:
+            raise InsufficientCapital(request.requested_amount, available)
 
     def transition(
         self,
