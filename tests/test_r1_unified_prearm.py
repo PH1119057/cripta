@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from bybit_workbench import r1_unified_prearm as prearm
+import bybit_workbench.r1_unified_prearm as prearm
 from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
 
 
