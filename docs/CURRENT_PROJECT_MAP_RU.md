@@ -4184,12 +4184,22 @@ and read-only production snapshot:
   Strategy/Activation/EntryPlan/ExitPlan IDs; no historical rewrite is allowed;
 - global mainnet new Entry gate remained OFF at last checked snapshot.
 
+SOURCE-PREPARED: an explicitly gated one-time transactional monitoring cutover
+`operations/implementation/transition_r1_five_symbols.py` is in source, with
+`--apply` required, stopped-Observer proof, mainnet OFF, exact five legacy
+fingerprints, fresh authenticated flat account, no unsettled PAPER/REAL
+resources or pre-existing account binding. Its same transaction retires old
+activations and five enabled legacy ExecutionPermissions and materializes
+one new unified StrategyCard/EntryPlan/ExitPlan; it leaves new execution OFF.
+Separate negative-path source tests cover its hard stops. No production
+execution of this tool is implied.
+
 SOURCE-PREPARED: new inert `build_r1_unified_card()` preserves all R1
 result-affecting policy blocks while selecting all five symbols under one new
 Strategy identity. Added immutable policy parity and ten-lane materialization
 tests. Historic `build_r1_cards()` and original per-symbol records are retained.
 
-NOT IMPLEMENTED / NOT DEPLOYED: transactional production transition of five
+NOT APPLIED / NOT DEPLOYED: transactional production transition of five
 active activations to the one unified activation, exact account binding, R1
 legacy owner-arm route replacement, application release and runtime continuity.
 Do not claim one active production Strategy from this source-only step.
