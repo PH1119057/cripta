@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.33
+**Версия:** 3.34
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1335,3 +1335,24 @@ DEVELOPMENT_RELEASE §§5.1, 13, 19.5–19.6 for actor, DB privileges and
 upstream tool-security classifications. This is a dated operational checkpoint,
 not an architecture/trading-policy change. No changes to current Source count,
 paths, mandatory pre-read, routing or README/AGENTS bootstrap topology.
+
+
+# 45. Owner-approved R1 unified MICRO_LIVE envelope — 2026-10-21
+
+The owner approved the financial envelope for **one** `r1_five_symbols`
+Strategy on five coins in ONE_WAY mode: 10 USDT per open position,
+1x leverage, total concurrent committed Strategy exposure/reservations
+at most 50 USDT, and an Exchange-confirmed -10% catastrophic SL.
+TC §7.5.1 is the current canonical policy; the five historically
+independent R1 Strategy authorizations and earlier scope-limited
+critical-delivery waiver do not carry over. This decision does not
+authorize mainnet opening or a new LIVE-arm.
+
+MAP 12.29 captures independent read-only technical findings, exact
+source/installed identity and outstanding pre-arm implementation gaps.
+Required order: canonical decision -> implementation/immutable version
+as required -> tests/shadow/equivalence -> technical pre-arm
+-> separate explicit owner LIVE-arm. Current historical source/branch
+CI must not be reported as a deployed real execution path.
+The document topology, mandatory pre-read, routing, Source count and
+README/AGENTS/bootstrap paths are unchanged.

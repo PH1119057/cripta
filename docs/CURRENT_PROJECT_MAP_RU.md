@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.28
+**Версия:** 12.29
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4406,3 +4406,43 @@ changed by incident closure. Current private-WS reconnection readiness,
 real-order admission and open-position Exit takeover are independently
 **NOT VERIFIED HERE**. Historical gaps remain excluded from claims of
 proven continuous historical observation.
+
+
+## 2026-10-21 R1 unified MICRO_LIVE financial envelope — OWNER DECISION / NOT ARMED
+
+The owner explicitly confirmed 10 USDT per position for each of the five
+configured APT/ARB/DOT/INJ/LTC coins, 1x leverage, an aggregate simultaneous
+R1 position/reservation/pending-entry envelope of at most 50 USDT on the
+one dedicated TradingAccount, and exchange-confirmed -10% catastrophic SL.
+This is TC §7.5.1 financial-policy approval, **not** authorization to arm LIVE.
+
+CHECKED HERE (read-only 2026-10-21 after owner decision):
+`REMOTE_HEAD/SOURCE_HEAD=0a9523e411e756e862904a8d60a59e810a60f2b7`;
+`INSTALLED_COMMIT/LOADED_COMMIT=aef533b154945e0b2871571796a75848c3f77ebd`.
+Private WS `connected`, trade WS `authenticated-locked`, identity READY.
+Current latest COMPLETE AccountStateGeneration is PROVEN, positions=0,
+orders=0, all five mode refs ONE_WAY/positionIdx=0/fresh at sampled time.
+One active `r1_five_symbols` StrategyActivation and one ACTIVE dedicated
+PRIMARY StrategyExecutionBinding; `control.live_arm_sessions ACTIVE=0`,
+new unified Strategy LIVE-arm evidence rows=0, `mainnet=0`.
+
+FINDING: historical `operations/connectivity/private_runtime.py`
+`restore_r1_gate_after_verified_reconnect()`, Dashboard
+`_u6_prepare_r1_prearm_evidence()` and
+`src/bybit_workbench/r1_micro_live_control.py` still identify the old
+five separate immutable R1 Strategy cohort, each with independent 10 USDT
+capital and LIVE-arm authorization. They are NOT a valid owner-arm rail
+or a proof of aggregate 50 USDT protection for the newly unified Strategy.
+The earlier scoped five-Strategy webhook waiver does not transfer.
+A separate exact one-Strategy owner-arm / bounded aggregated-capital contract,
+full technical evidence and explicit owner arm remain required.
+
+GitHub draft PR #141 prepared a read-only preliminary readiness display.
+A subsequent attempt to correct its five separate `strategies` rows
+to the one-Strategy/five-instrument structure was blocked by the OpenAI
+upstream tool-security gate; it was NOT bypassed. PR #141 remains DRAFT,
+NOT MERGED, NOT DEPLOYED; passing CI on its earlier commit does not waive
+the semantic incorrectness. The canonical financial parameters are
+approved, but `R1_UNIFIED_REAL_ENTRY_READY=NO`; no mainnet gate,
+execution permissions, LIVE-arm session or Exchange mutation was changed
+as part of this decision.

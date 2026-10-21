@@ -1321,3 +1321,47 @@ The source-only unified R1 constructor changes neither DB activations,
 TradingAccount bindings nor mainnet gate, and does not perform OWNER ARM.
 Implementation, tests, verified deploy and runtime behavior have separate
 statuses in CURRENT_PROJECT_MAP.
+
+### 7.5.1 One-Strategy R1 MICRO_LIVE loss/capital limit — OWNER DECISION 2026-10-21
+
+The owner explicitly confirms the financial envelope for the **one**
+`r1_five_symbols` Strategy / one dedicated MAINNET TradingAccount:
+- exact permitted symbols: APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT;
+  directions LONG/SHORT for monitoring and signals, ONE_WAY position mode,
+  positionIdx=0; one physical open position slot per coin at a time;
+- requested amount **10 USDT per position** per coin, leverage **1x**;
+- total concurrent Strategy requested exposure/capital (open positions,
+  reservations, pending Entry commitments as applicable) **at most 50 USDT**.
+  The limit is across this one Strategy's five coin slots, NOT five separate
+  StrategyActivations or five independent account authorizations;
+- exchange-resident catastrophic initial SL **-10%** per executed
+  position, submitted and exchange-confirmed under the existing R1
+  initial-protection/lifecycle contract. This is not an ordinary Exit
+  target and does not replace dynamic ExitPlan ownership.
+
+Real Entry admission must enforce both each 10 USDT request and the
+account/Strategy aggregate 50 USDT ceiling transactionally; simultaneous
+pending/reserved and open capital cannot silently exceed the envelope.
+This decision does not authorize an additional position in an already
+occupied one-way physical slot, a second TradingAccount, higher leverage,
+an altered Entry/Exit algorithm or a new default from historical research.
+
+The historical five-Strategy R1 MICRO_LIVE cohort and its exceptional
+`CRITICAL_FAULT_DELIVERY` waiver in §4.7 do **not** authorize the new
+unified Strategy. Its pre-arm evidence must use one exact
+StrategyCard/StrategyActivation/EntryPlan/ExitPlan, one exact PRIMARY
+StrategyExecutionBinding, five instrument-scoped mode/slot proofs,
+one independent aggregate capital constraint and exact release identity.
+The ordinary non-waived critical delivery requirement remains in force
+until a separate explicit owner decision. New Strategy policy fields
+affecting results require immutable versioning and explicit activation
+transition; no historical R1 rows are retroactively edited.
+
+This is an **OWNER DECISION approving risk parameters only**. It is NOT
+`MAINNET_GATE_EXPLICIT_OWNER_APPROVAL`, an OWNER ARM, a deploy instruction,
+or permission to send an Exchange order. Canonical order remains:
+CANON UPDATE -> IMPLEMENTATION -> TEST/SHADOW -> LIVE EQUIVALENCE ->
+explicit owner-authorized MICRO_LIVE admission. Until all exact new-Strategy
+gates are proved, `mainnet=0`, execution permissions OFF, no new ACTIVE
+LIVE-arm session, and existing Exit/reconciliation continue independently.
+
