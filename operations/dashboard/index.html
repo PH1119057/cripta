@@ -167,6 +167,13 @@
     <article class="card full"><h2>Exchange truth · долговечный аудит</h2><table><thead><tr><th>Состояние</th><th>Возраст потока</th><th>Сдвиг часов</th><th>REST latency</th><th>Equity</th><th>Позиции</th><th>Открытые заявки</th><th>Последняя проверка</th></tr></thead><tbody id="safety"></tbody></table><div class="muted" style="margin-top:10px">Снимки сохраняются каждые 30 секунд в PostgreSQL вместе с startup/shutdown и ошибками обновления. Контур использует только GET-запросы Bybit.</div></article>
     <article class="card full"><h2>Резервное копирование</h2><table><thead><tr><th>Состояние</th><th>Последний снимок UTC</th><th>Состав</th><th>Тяжёлые datasets</th><th>Следующий запуск</th></tr></thead><tbody id="backup"></tbody></table></article>
     <article class="card full"><h2>Операционный список монет</h2><div id="selectionRules" class="muted" style="margin-bottom:12px"></div><table><thead><tr><th>Сегодня</th><th>Монета</th><th>Роль</th><th>Оборот 24ч</th><th>Спред</th><th>Open interest</th><th>Funding</th><th>Trades</th><th>Orderbook</th><th>Данные</th></tr></thead><tbody id="symbols"></tbody></table></article>
+    <article class="card full" id="coinResearchHistorySection">
+      <h2>Карточка монеты · история исследований</h2>
+      <p class="muted">Сводка и хронология отдельных исследовательских сценариев. Только чтение; не live-торговля. Предварительный набор: внутренняя identity и окончательное хранилище ожидают отдельного согласования.</p>
+      <label>Монета <select id="coinHistorySymbol" aria-label="Монета для исследований"><option value="">Загрузка…</option></select></label>
+      <div id="coinHistorySummary" style="margin:12px 0" class="muted">Загрузка исследований…</div>
+      <div id="coinHistoryTimeline"></div>
+    </article>
     <article class="card"><h2>Службы</h2><div id="services"></div><h2 style="margin-top:20px">Технологии</h2><div id="tech" class="muted"></div></article>
     <article class="card full" id="infraSoundSettings"><h2>Звуковые уведомления</h2>
       <div class="trade-audio-row">
@@ -1136,6 +1143,79 @@ async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});c
   jobRows.innerHTML=d.jobs.items.length?d.jobs.items.map(x=>`<tr><td><b>${x.job_id}</b></td><td><span class="pill">${x.state}</span></td><td>${x.title}</td><td>${x.line}</td><td>${x.symbols.join(', ')}</td><td>${x.duration_seconds==null?'—':x.duration_seconds+' с'}</td><td>${x.error||(x.report_path?`<a href="/reports/${x.report_path}/">Открыть отчёт</a>`:'—')}</td></tr>`).join(''):'<tr><td colspan="7" class="muted">Заданий пока нет</td></tr>';
   legacyRows.innerHTML=d.legacy.length?d.legacy.map(x=>`<tr><td><b>${x.name}</b></td><td>${size(x.bytes)}</td><td>${x.files}</td><td>${x.report_roots}</td><td>${x.research_modules}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">История ещё не перенесена</td></tr>';
   legacyCatalog.innerHTML=d.legacy.map(x=>`<details><summary>Показать содержимое ${x.name}</summary><h3>Наборы отчётов (${x.reports.length})</h3><div class="catalog">${x.reports.map(n=>`<span class="item">${n}</span>`).join('')}</div><h3>Исследовательские модули (${x.modules.length})</h3><div class="catalog">${x.modules.map(n=>`<span class="item">${n}</span>`).join('')}</div></details>`).join('');
+
+/* Coin-card research history: presentation only, no trading or editing. */
+const coinHistorySymbol=document.getElementById('coinHistorySymbol');
+const coinHistorySummary=document.getElementById('coinHistorySummary');
+const coinHistoryTimeline=document.getElementById('coinHistoryTimeline');
+let coinHistoryData=null;
+const coinHistoryEscape=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const coinHistoryMoney=x=>{
+  const n=Number(x);
+  return Number.isFinite(n)?(n>0?'+':'')+n.toFixed(4)+' USDT':'NO DATA';
+};
+function coinHistoryRender(){
+  if(!coinHistoryData)return;
+  const sym=coinHistorySymbol.value;
+  const recs=(coinHistoryData.records||[]).filter(r=>r.instrument.symbol===sym)
+    .sort((a,b)=>b.historical_date.localeCompare(a.historical_date)||a.record_id.localeCompare(b.record_id));
+  if(!recs.length){
+    coinHistorySummary.textContent='Исследования для выбранного инструмента ещё не зарегистрированы';
+    coinHistoryTimeline.textContent='';
+    return;
+  }
+  const last=recs[0],m=last.economics;
+  coinHistorySummary.innerHTML='<b>'+coinHistoryEscape(sym)+'</b> · исследований: '+recs.length
+    +' · дата '+coinHistoryEscape(last.historical_date)
+    +' · предварительная загрузка: exact InstrumentIdentity NOT VERIFIED'
+    +'<br>Последний выбранный сценарий: '+coinHistoryEscape(last.scenario_id)
+    +' · плюс закрытий '+coinHistoryMoney(m.gross_positive_after_fees_usdt)
+    +' · потери '+coinHistoryMoney(m.total_negative_after_fees_usdt)
+    +' · <b>чистый итог '+coinHistoryMoney(m.realized_net_usdt)+'</b>'
+    +' · 10 USDT на позицию';
+  coinHistoryTimeline.innerHTML=recs.map(r=>{
+    const c=r.counts,p=r.parameters,e=r.economics,q=r.quality;
+    return '<details style="margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px">'
+      +'<summary><b>'+coinHistoryEscape(r.historical_date)+' · '+coinHistoryEscape(r.scenario_id)
+      +'</b> · итог <b>'+coinHistoryMoney(e.realized_net_usdt)+'</b> · hard stop '+c.hard_stop
+      +' · '+coinHistoryEscape(q.publication_qc)+'</summary>'
+      +'<p class="muted">История: '+coinHistoryEscape(r.period.start_utc)+' — '+coinHistoryEscape(r.period.end_exclusive_utc)
+      +' · ID '+coinHistoryEscape(r.record_id)+' · '+coinHistoryEscape(r.completed_at_quality)+'</p>'
+      +'<table><thead><tr><th>TP+</th><th>Защита+</th><th>Защита−</th><th>Hard −10%</th><th>Открыто / закрыто / на конце</th></tr></thead><tbody><tr>'
+      +'<td>'+c.tp_plus+' / '+coinHistoryMoney(e.profit_tp_usdt)+'</td>'
+      +'<td>'+c.protected_stop_plus+' / '+coinHistoryMoney(e.profit_protected_usdt)+'</td>'
+      +'<td>'+c.protected_stop_minus+' / '+coinHistoryMoney(e.loss_protected_usdt)+'</td>'
+      +'<td>'+c.hard_stop+' / '+coinHistoryMoney(e.loss_hard_usdt)+'</td>'
+      +'<td>'+c.opened+' / '+c.closed+' / '+c.open_censored+'</td>'
+      +'</tr></tbody></table>'
+      +'<p class="muted">Entry: '+coinHistoryEscape(p.entry)+'<br>Медиана L5-3: '+Number(p.working_width_median_pct).toFixed(3)
+      +'% ±0,5 п. п. · Exit: '+coinHistoryEscape(p.exit)+' / TP floor +'+coinHistoryEscape(p.tp_floor_gross_pct)
+      +'% · защита '+coinHistoryEscape(p.protection)+' · hard '+coinHistoryEscape(p.hard_stop_gross_pct)+'%</p>'
+      +'<p class="muted">Комиссии: taker вход '+e.fee_entry_taker_pct
+      +'%, maker TP '+e.fee_exit_resting_tp_maker_pct+'%, taker стоп '+e.fee_exit_market_or_stop_taker_pct
+      +'% · OOS '+coinHistoryEscape(q.oos)+' · lookahead '+coinHistoryEscape(q.lookahead)
+      +' · exact ID '+coinHistoryEscape(r.instrument.identity_status)
+      +' · '+coinHistoryEscape(q.source_result_sha256)+'</p>'
+      +'</details>';
+  }).join('');
+}
+async function coinHistoryLoad(){
+  const response=await fetch('/api/research/coin-history',{cache:'no-store'});
+  if(!response.ok)throw Error('API '+response.status);
+  const body=await response.json();
+  if(body.schema!=='CRIPTA_COIN_RESEARCH_PROPOSAL_V1'||!Array.isArray(body.records))throw Error('schema mismatch');
+  coinHistoryData=body;
+  const syms=[...new Set(body.records.map(r=>r.instrument.symbol))].sort();
+  coinHistorySymbol.innerHTML=syms.map(sym=>'<option value="'+coinHistoryEscape(sym)+'">'+coinHistoryEscape(sym)+'</option>').join('');
+  if(syms.length)coinHistorySymbol.value=syms.includes('APTUSDT')?'APTUSDT':syms[0];
+  coinHistoryRender();
+}
+coinHistorySymbol.addEventListener('change',coinHistoryRender);
+coinHistoryLoad().catch(e=>{
+  coinHistorySummary.textContent='История исследований недоступна: '+String(e.message);
+  coinHistoryTimeline.textContent='';
+});
+
 } loadStrategies().catch(()=>{});refresh().catch(e=>stamp.textContent='ошибка: '+e);scheduleLivePoll(0);document.addEventListener('visibilitychange',()=>scheduleLivePoll(document.hidden?livePollDelay():0));setInterval(()=>refresh().catch(()=>{}),60000);
 
 /* Right rail is a presentation-only view of already evidenced Bybit closures. */
