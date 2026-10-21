@@ -1155,8 +1155,11 @@ def test_strategy_ui_has_independent_monitor_and_execution_controls() -> None:
         "document.getElementById('strategyNewEditor')",
         "Открытые псевдосделки",
         "Завершённые псевдосделки",
-        "Монитор Strategy · монеты и точки входа",
+        "Монитор EntryPlan · монеты и направления",
         "Список монет задаётся только StrategyCard",
+        "EntryPlan / Strategy",
+        "activePlanCount=new Set(allItems.map(x=>x.entry_plan_fingerprint)",
+        "направленных строк",
     ):
         assert token in html
 
