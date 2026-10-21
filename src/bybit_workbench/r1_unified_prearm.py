@@ -112,11 +112,7 @@ def unified_r1_contexts(
 def unified_r1_prearm_state(
     connection: Any, *, release_commit: str, now: datetime
 ) -> dict[str, object]:
-    """Read-only diagnostic. Never creates evidence, permission, arm or gate.
-
-    This module deliberately does NOT implement an actionable owner-arm route.
-    Generic and legacy five-Strategy routes cannot inherit its readiness.
-    """
+    """Read-only exact-released R1 readiness; never mutates arm/gate state."""
     current = now.astimezone(UTC)
     gate = connection.execute(
         "SELECT enabled,reason FROM control.execution_gates WHERE mode='mainnet'"
@@ -129,7 +125,7 @@ def unified_r1_prearm_state(
         "gate_enabled": gate_enabled,
         "gate_reason": gate_reason,
         "ready_to_arm": False,
-        "arm_route_enabled": False,
+        "arm_route_enabled": True,
         "owner_approval_required": True,
         "strategies": [],
         "instrument_scopes": [],
@@ -158,19 +154,45 @@ def unified_r1_prearm_state(
         ),
     ).fetchone()
     all_permissions = connection.execute(
-        "SELECT strategy_id,strategy_version FROM strategy_entry.execution_permissions"
-        " WHERE enabled=true"
+        """SELECT strategy_id,strategy_version,strategy_config_fingerprint
+             FROM strategy_entry.execution_permissions WHERE enabled=true"""
     ).fetchall()
     arms = connection.execute(
-        "SELECT strategy_id,strategy_version,symbol FROM control.live_arm_sessions"
-        " WHERE state='ACTIVE'"
+        """SELECT strategy_id,strategy_version,strategy_config_fingerprint,
+                  strategy_activation_id,symbol,release_commit
+             FROM control.live_arm_sessions WHERE state='ACTIVE'"""
     ).fetchall()
+    expected = {
+        (
+            ctx.strategy_id, ctx.strategy_version,
+            ctx.strategy_config_fingerprint, ctx.strategy_activation_id,
+            ctx.symbol, ctx.release_commit,
+        )
+        for ctx in contexts
+    }
+    observed = {tuple(str(v) for v in arm) for arm in arms}
+    exact_permission = (
+        len(all_permissions) == 1
+        and tuple(str(v) for v in all_permissions[0])
+        == (
+            contexts[0].strategy_id,
+            contexts[0].strategy_version,
+            contexts[0].strategy_config_fingerprint,
+        )
+    )
+    armed = (
+        gate_enabled
+        and bool(permission and permission[0])
+        and exact_permission
+        and len(arms) == 5
+        and observed == expected
+    )
     reasons: list[str] = []
-    if gate_enabled:
+    if gate_enabled and not armed:
         reasons.append("MAINNET_GATE_NOT_CLOSED")
-    if all_permissions:
+    if all_permissions and not armed:
         reasons.append("EXECUTION_PERMISSION_ALREADY_ENABLED")
-    if arms:
+    if arms and not armed:
         reasons.append("ACTIVE_OR_LEGACY_ARM_SESSION_REQUIRES_REVIEW")
 
     scopes: list[dict[str, object]] = []
@@ -196,10 +218,12 @@ def unified_r1_prearm_state(
         "binding_verified": True,
         "trading_account_id": account,
         "technical_pre_owner_ready": technical_ready,
+        "ready_to_arm": technical_ready and not armed,
+        "owner_approval_required": not armed,
+        "armed": armed,
         "reasons": [
             *reasons,
-            "UNIFIED_OWNER_ARM_ROUTE_NOT_IMPLEMENTED",
-            "EXPLICIT_OWNER_ARM_NOT_GRANTED",
+            *(["EXPLICIT_OWNER_ARM_NOT_GRANTED"] if not armed else []),
         ],
         "strategies": [{
             "strategy_id": contexts[0].strategy_id,
