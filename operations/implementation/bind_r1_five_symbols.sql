@@ -69,7 +69,7 @@ BEGIN
        OR EXISTS (SELECT 1 FROM runtime.hot_orders)
        OR EXISTS (
            SELECT 1 FROM runtime.exchange_position_slot_claims
-           WHERE state<>'RELEASED'
+           WHERE claim_state<>'RELEASED'
        )
        OR EXISTS (
            SELECT 1 FROM runtime.capital_reservations
