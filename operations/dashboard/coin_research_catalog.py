@@ -63,7 +63,7 @@ def read_catalog(path: Path | None = None) -> dict[str, Any]:
             != bybit_instrument_id("linear", identity["symbol"])
             or identity.get("identity_status")
             != "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1"
-            or quality.get("publication_qc") != "MODEL_QC_PASS_CANDIDATE_RECORD"
+            or quality.get("publication_qc") != "MODEL_QC_PASS_GIT_REGISTERED"
         ):
             raise ValueError("RESEARCH_CATALOG_IDENTITY_MISMATCH")
         counts = record.get("counts")
