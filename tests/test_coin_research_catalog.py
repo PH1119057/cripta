@@ -25,7 +25,9 @@ def test_catalog_has_30_independently_balanced_records() -> None:
         r["quality"]["publication_qc"] == "PROPOSAL_ONLY"
         and r["quality"]["lookahead"] == "YES"
         and r["quality"]["oos"] == "NOT_VERIFIED"
-        and r["instrument"]["instrument_id"] == "inst-bybit-linear-" + r["instrument"]["symbol"].lower()
+        and r["instrument"]["instrument_id"] == (
+            "inst-bybit-linear-" + r["instrument"]["symbol"].lower()
+        )
         for r in raw["records"]
     )
     for sym in ("LTCUSDT", "APTUSDT", "DOTUSDT", "ARBUSDT", "INJUSDT"):
