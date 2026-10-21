@@ -4532,3 +4532,7 @@ read-only `strategies` projection; the attempt to repair that PR was
 blocked upstream by OpenAI and was NOT bypassed, merged or deployed.
 A correct one-Strategy owner-arm implementation, critical fault delivery
 evidence and a separate explicit owner REAL arm remain REQUIRED.
+
+## 2026-10-21 InstrumentResearchLedger Git JSON — OWNER STORAGE DECISION / PENDING RELEASE
+
+Owner explicitly approved one Git-versioned JSON owner: `operations/dashboard/instrument_research_catalog.json` in GitHub `PH1119057/cripta:main` (ARCH §51, INDEX §48, RESEARCH_COMPUTE §23). PR #145 is **DRAFT / REVIEW IMPLEMENTATION** with 30 historical five-coin/six-scenario research candidate records, prototype read-only Dashboard card/API and tests; branch candidate is **NOT CANONICAL REGISTERED** until merge of exact reviewed release. Publication needs exact record QC/identity/provenance and audited append/corrections, independent durable backup/export/restore, and full dashboard release checks. **STORAGE DECISION=OWNER APPROVED; CODE IMPLEMENTED IN PR=YES; MERGED/DEPLOYED/RUNTIME VERIFIED=NOT CHECKED HERE / NOT CLAIMED**. No PostgreSQL migration, trading policy, LIVE arm or Exchange mutation is implied.

@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.36
+**Версия:** 3.37
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1378,3 +1378,9 @@ permissions OFF, no OWNER ARM or Exchange order. MAP distinguishes
 CI-proven 50-USDT concurrency from NOT CHECKED HERE real-order execution
 and preserves exact rollback path, loaded/source identity and role isolation.
 No change to Source count, mandatory pre-read, routing or README/AGENTS.
+
+# 48. Single Git-versioned JSON owner of coin research history — OWNER DECISION 2026-10-21
+
+Following INDEX §46 and review PR #145, owner explicitly approved **Git-versioned JSON** as the one durable source of compact per-coin research records. Exact canonical store: `operations/dashboard/instrument_research_catalog.json` committed to GitHub `PH1119057/cripta:main`. Dashboard API/UI consumes its installed release snapshot read-only; no PostgreSQL mirror/second writer. Branch-only candidate records are not registered. Per-record exact MarketSource/InstrumentIdentity, separate scenarios/periods, gross+net after fees, hard-stops, OOS/leakage flag, provenance, hashes, identity and correction history must be preserved. Replace prior ARCH §51 undecided-storage wording with this OWNER DECISION; detailed record and registration gate are RESEARCH_COMPUTE §23. This does not turn historic research into Strategy/LIVE policy.
+
+A normal source commit/branch CI is not deploy. Each implementation requires Git review/CI, exact commit release, backup/rollback and read-only runtime test. Compact JSON must have independent verified backup/restore before heavy archive purge; otherwise IRREPLACEABLE_DATA retention gate remains open. State of physical system/API and deployment is tracked in MAP. No current-doc file-set, path for mandatory pre-read, Source count, README/AGENTS/Instruction routing changed.

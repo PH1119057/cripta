@@ -1,6 +1,6 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.7
+**Версия:** 3.8
 **Дата:** 2026-10-21
 **Статус:** обязательный канонический терминологический контракт
 
@@ -904,3 +904,5 @@ explicit and rechecks freshness at action time.
 **REPRODUCIBILITY_LIMITED** — запись сохраняет проверенные конкретные цифры и методику, но независимое переисполнение невозможно/непроверено из-за отсутствующих исходных данных либо исходного кода. Не означает QC PASS на новом периоде.
 
 Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/projection boundaries: ARCH §48, §51.
+
+**Git-versioned InstrumentResearchLedger primary store** — единственный долговечный исходный JSON в текущем GitHub main, точный путь `operations/dashboard/instrument_research_catalog.json`; Dashboard snapshot является только read-only consumer. Решение — ARCH §51 / INDEX §48, published registration — RESEARCH_COMPUTE §23. Наличие файла в ветке или runtime не означает регистрацию без публикации в main.

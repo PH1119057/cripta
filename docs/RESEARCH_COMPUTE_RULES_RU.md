@@ -1,6 +1,6 @@
 # CRIPTA — research / compute / data rules
 
-**Версия:** 2.4 · 2026-10-21
+**Версия:** 2.5 · 2026-10-21
 **Статус:** routed canonical process contract
 
 Читать перед research, replay, OOS/holdout, большими dataset jobs,
@@ -686,4 +686,4 @@ Research-specific owner intention is not a silent update of any separate existin
 
 ### 23.4 Реализация и границы решения
 
-ARCH §51 определяет данные/потребителей и необходимость долговечного retention; GLOSSARY §35 — термины; этот §23 — единственный владелец минимального содержания записей и процесса их фиксации. DOCUMENTATION_INDEX §46 регистрирует OWNER DECISION. Конкретные физические таблицы/files, DB migration, read API, backfill старых runs, права записи и размещение вкладок Dashboard требуют отдельного exact implementation contract, permission preflight, migration/release и runtime QC. Не создавать вторую независимую базу research truth, не записывать результаты исследований в immutable StrategyCard, не менять торговые контуры или LIVE в рамках этой документационной правки.
+ARCH §51 определяет данные/потребителей и необходимость долговечного retention; GLOSSARY §35 — термины; этот §23 — единственный владелец минимального содержания записей и процесса их фиксации. DOCUMENTATION_INDEX §46 регистрирует OWNER DECISION. **Физическое хранилище УТВЕРЖДЕНО владельцем**: единственный versioned compact-result JSON — `operations/dashboard/instrument_research_catalog.json` в GitHub `PH1119057/cripta:main` (ARCH §51, INDEX §48). Research/Analyst подготавливает validated per-instrument record, публикует через reviewed Git change c проверкой counts, fee/P&L reconciliation, источника и exact InstrumentIdentity. Успех записи = merged Git commit на main и проверенная возможность чтения, а не branch/local-file creation. Исправления — новые records с ссылками supersedes/corrects, не тихая мутация прошлых чисел; сценарии разных периодов не смешиваются. Снимок читает Dashboard только в рамках installed exact release; системная БД не является вторым writer. До удаления невосполнимых источников отдельно обязателен независимый проверенный backup/export compact JSON и hashes. read API, historical backfill, writer credentials, tested backup/restore, Dashboard UI и release/deploy требуют implementation/preflight/runtime QC: **не считать это реализованным только потому, что выбран Git JSON**. Не создавать вторую независимую базу research truth, не записывать результаты исследований в immutable StrategyCard, не менять торговые контуры или LIVE в рамках этой документационной правки.
