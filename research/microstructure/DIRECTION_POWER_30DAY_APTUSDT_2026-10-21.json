@@ -1,0 +1,3288 @@
+{
+  "checked_date": "2026-10-21",
+  "classification": "RESEARCH_RESULT_NOT_RESEARCH_READY_NO_TRADING_PNL",
+  "job_id": "job_533fcdf25f1f",
+  "job_exit_code": 0,
+  "job_host": "host_b7fb1dededf247f6",
+  "actual_actor": "cripta",
+  "script": "research/microstructure/experiments/trade_tape_direction_power_30day_v1.py",
+  "script_blob": "331ec8de0de9ad7215d8707c12b0b8d6d21b7f01",
+  "protocol": "research/microstructure/DIRECTION_AND_AMPLITUDE_30DAY_PROTOCOL_2026-10-21.md",
+  "status": "EX_POST_DIRECTIONAL_POTENTIAL_ONLY_NOT_CAUSAL_OR_TRADEABLE",
+  "symbol": "APTUSDT",
+  "source_rows": 6258912,
+  "cube_rows": 259200,
+  "source_sha_checked": 30,
+  "rules": 36,
+  "quality": "NO_RECEIVER_TIMESTAMP",
+  "base": {
+    "5": {
+      "train": {
+        "n": 27520,
+        "days": 20,
+        "up": 48.67,
+        "down": 49.302,
+        "up20": 18.354,
+        "down20": 19.502,
+        "up50": 3.935,
+        "down50": 4.549,
+        "up100": 0.64,
+        "down100": 0.621,
+        "abs50": 14.7695,
+        "abs90": 46.4734,
+        "max_up50": 12.7905,
+        "max_up90": 43.6837,
+        "max_down50": 13.2728,
+        "max_down90": 48.2652
+      },
+      "validation": {
+        "n": 4135,
+        "days": 3,
+        "up": 49.359,
+        "down": 48.343,
+        "up20": 22.515,
+        "down20": 21.33,
+        "up50": 4.111,
+        "down50": 4.401,
+        "up100": 0.435,
+        "down100": 0.58,
+        "abs50": 17.7515,
+        "abs90": 46.6813,
+        "max_up50": 16.6176,
+        "max_up90": 45.8343,
+        "max_down50": 15.3633,
+        "max_down90": 47.5625
+      },
+      "late_holdout": {
+        "n": 9624,
+        "days": 7,
+        "up": 47.485,
+        "down": 49.813,
+        "up20": 19.919,
+        "down20": 20.397,
+        "up50": 3.813,
+        "down50": 3.367,
+        "up100": 0.571,
+        "down100": 0.374,
+        "abs50": 15.7899,
+        "abs90": 43.2936,
+        "max_up50": 13.9632,
+        "max_up90": 42.8205,
+        "max_down50": 14.7275,
+        "max_down90": 43.7893
+      }
+    },
+    "15": {
+      "train": {
+        "n": 27390,
+        "days": 20,
+        "up": 48.81,
+        "down": 49.989,
+        "up20": 29.449,
+        "down20": 30.467,
+        "up50": 11.559,
+        "down50": 13.238,
+        "up100": 2.888,
+        "down100": 4.049,
+        "abs50": 26.2295,
+        "abs90": 83.5477,
+        "max_up50": 24.3373,
+        "max_up90": 77.3615,
+        "max_down50": 25.7125,
+        "max_down90": 88.3616
+      },
+      "validation": {
+        "n": 4125,
+        "days": 3,
+        "up": 49.503,
+        "down": 48.655,
+        "up20": 32.509,
+        "down20": 31.103,
+        "up50": 14.739,
+        "down50": 12.412,
+        "up100": 2.909,
+        "down100": 3.297,
+        "abs50": 28.5908,
+        "abs90": 82.6325,
+        "max_up50": 29.9671,
+        "max_up90": 83.3277,
+        "max_down50": 29.8107,
+        "max_down90": 81.6454
+      },
+      "late_holdout": {
+        "n": 9564,
+        "days": 7,
+        "up": 47.271,
+        "down": 51.129,
+        "up20": 29.235,
+        "down20": 31.859,
+        "up50": 11.397,
+        "down50": 11.909,
+        "up100": 3.022,
+        "down100": 2.143,
+        "abs50": 26.6865,
+        "abs90": 76.9053,
+        "max_up50": 25.4358,
+        "max_up90": 76.2279,
+        "max_down50": 27.6371,
+        "max_down90": 79.0893
+      }
+    },
+    "60": {
+      "train": {
+        "n": 26805,
+        "days": 20,
+        "up": 48.345,
+        "down": 51.095,
+        "up20": 38.243,
+        "down20": 41.104,
+        "up50": 25.544,
+        "down50": 27.596,
+        "up100": 11.774,
+        "down100": 14.344,
+        "abs50": 54.5368,
+        "abs90": 172.6202,
+        "max_up50": 49.5255,
+        "max_up90": 155.7539,
+        "max_down50": 58.754,
+        "max_down90": 197.1936
+      },
+      "validation": {
+        "n": 4080,
+        "days": 3,
+        "up": 50.27,
+        "down": 49.24,
+        "up20": 41.225,
+        "down20": 39.951,
+        "up50": 28.725,
+        "down50": 26.618,
+        "up100": 14.608,
+        "down100": 12.77,
+        "abs50": 57.2549,
+        "abs90": 166.7088,
+        "max_up50": 60.281,
+        "max_up90": 165.6878,
+        "max_down50": 61.4649,
+        "max_down90": 162.2876
+      },
+      "late_holdout": {
+        "n": 9311,
+        "days": 7,
+        "up": 47.503,
+        "down": 51.745,
+        "up20": 37.687,
+        "down20": 42.144,
+        "up50": 25.336,
+        "down50": 29.256,
+        "up100": 12.512,
+        "down100": 13.017,
+        "abs50": 55.6434,
+        "abs90": 151.1288,
+        "max_up50": 51.4821,
+        "max_up90": 167.0933,
+        "max_down50": 58.6082,
+        "max_down90": 162.6972
+      }
+    }
+  },
+  "results": [
+    {
+      "id": 1,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.009,
+          "n": 5510,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": -0.074,
+          "n": 811,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.744,
+          "n": 2008,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5510,
+          "days": 20,
+          "up": 48.947,
+          "down": 49.22,
+          "up20": 20.363,
+          "down20": 21.488,
+          "up50": 4.592,
+          "down50": 5.626,
+          "up100": 0.926,
+          "down100": 1.125,
+          "abs50": 16.403,
+          "abs90": 50.6391,
+          "max_up50": 14.3149,
+          "max_up90": 48.2637,
+          "max_down50": 14.7633,
+          "max_down90": 53.2653
+        },
+        "validation": {
+          "n": 811,
+          "days": 3,
+          "up": 48.459,
+          "down": 49.322,
+          "up20": 22.441,
+          "down20": 23.674,
+          "up50": 5.179,
+          "down50": 5.919,
+          "up100": 0.986,
+          "down100": 1.11,
+          "abs50": 18.0723,
+          "abs90": 51.2934,
+          "max_up50": 17.0741,
+          "max_up90": 48.8347,
+          "max_down50": 16.9924,
+          "max_down90": 50.2514
+        },
+        "late_holdout": {
+          "n": 2008,
+          "days": 7,
+          "up": 48.855,
+          "down": 48.705,
+          "up20": 21.663,
+          "down20": 20.369,
+          "up50": 5.627,
+          "down50": 4.084,
+          "up100": 0.847,
+          "down100": 0.398,
+          "abs50": 16.4265,
+          "abs90": 49.1557,
+          "max_up50": 15.3516,
+          "max_up90": 48.5124,
+          "max_down50": 14.8346,
+          "max_down90": 45.9419
+        }
+      }
+    },
+    {
+      "id": 1,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5490,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 790,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 1841,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5490,
+          "days": 20,
+          "up": 48.78,
+          "down": 48.944,
+          "up20": 15.847,
+          "down20": 15.829,
+          "up50": 2.277,
+          "down50": 2.823,
+          "up100": 0.31,
+          "down100": 0.291,
+          "abs50": 12.7186,
+          "abs90": 38.0906,
+          "max_up50": 10.6929,
+          "max_up90": 35.5072,
+          "max_down50": 10.6349,
+          "max_down90": 38.4848
+        },
+        "validation": {
+          "n": 790,
+          "days": 3,
+          "up": 51.266,
+          "down": 46.203,
+          "up20": 22.025,
+          "down20": 20.633,
+          "up50": 3.797,
+          "down50": 3.418,
+          "up100": 0.38,
+          "down100": 0.506,
+          "abs50": 16.6226,
+          "abs90": 45.1196,
+          "max_up50": 16.1753,
+          "max_up90": 41.8411,
+          "max_down50": 14.7907,
+          "max_down90": 46.3899
+        },
+        "late_holdout": {
+          "n": 1841,
+          "days": 7,
+          "up": 46.334,
+          "down": 50.788,
+          "up20": 16.893,
+          "down20": 18.523,
+          "up50": 2.336,
+          "down50": 2.444,
+          "up100": 0.326,
+          "down100": 0.326,
+          "abs50": 14.453,
+          "abs90": 39.6156,
+          "max_up50": 12.0773,
+          "max_up90": 37.837,
+          "max_down50": 13.4318,
+          "max_down90": 41.4447
+        }
+      }
+    },
+    {
+      "id": 1,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.272,
+          "n": 5479,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 3.218,
+          "n": 810,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": -0.897,
+          "n": 1996,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5479,
+          "days": 20,
+          "up": 48.275,
+          "down": 50.447,
+          "up20": 30.042,
+          "down20": 31.739,
+          "up50": 12.867,
+          "down50": 14.4,
+          "up100": 3.45,
+          "down100": 5.348,
+          "abs50": 27.8522,
+          "abs90": 92.9257,
+          "max_up50": 25.855,
+          "max_up90": 82.3853,
+          "max_down50": 28.3212,
+          "max_down90": 99.3128
+        },
+        "validation": {
+          "n": 810,
+          "days": 3,
+          "up": 46.543,
+          "down": 51.975,
+          "up20": 30.741,
+          "down20": 34.321,
+          "up50": 15.679,
+          "down50": 15.556,
+          "up100": 3.333,
+          "down100": 5.185,
+          "abs50": 31.095,
+          "abs90": 93.4933,
+          "max_up50": 28.7204,
+          "max_up90": 87.31,
+          "max_down50": 32.7381,
+          "max_down90": 89.1447
+        },
+        "late_holdout": {
+          "n": 1996,
+          "days": 7,
+          "up": 49.198,
+          "down": 49.349,
+          "up20": 31.914,
+          "down20": 30.962,
+          "up50": 12.625,
+          "down50": 11.673,
+          "up100": 3.758,
+          "down100": 1.804,
+          "abs50": 28.5669,
+          "abs90": 79.1108,
+          "max_up50": 27.5061,
+          "max_up90": 85.6061,
+          "max_down50": 27.3141,
+          "max_down90": 78.0238
+        }
+      }
+    },
+    {
+      "id": 1,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5458,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 788,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 1826,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5458,
+          "days": 20,
+          "up": 49.395,
+          "down": 49.267,
+          "up20": 27.666,
+          "down20": 27.483,
+          "up50": 8.904,
+          "down50": 10.26,
+          "up100": 1.85,
+          "down100": 2.217,
+          "abs50": 22.5649,
+          "abs90": 69.2634,
+          "max_up50": 21.4078,
+          "max_up90": 65.9212,
+          "max_down50": 21.2879,
+          "max_down90": 73.3664
+        },
+        "validation": {
+          "n": 788,
+          "days": 3,
+          "up": 51.142,
+          "down": 46.32,
+          "up20": 32.234,
+          "down20": 29.695,
+          "up50": 15.736,
+          "down50": 12.31,
+          "up100": 3.299,
+          "down100": 2.919,
+          "abs50": 26.9582,
+          "abs90": 85.257,
+          "max_up50": 29.5727,
+          "max_up90": 87.2448,
+          "max_down50": 27.6328,
+          "max_down90": 79.8498
+        },
+        "late_holdout": {
+          "n": 1826,
+          "days": 7,
+          "up": 46.221,
+          "down": 52.026,
+          "up20": 26.287,
+          "down20": 31.38,
+          "up50": 9.036,
+          "down50": 11.227,
+          "up100": 1.807,
+          "down100": 1.752,
+          "abs50": 23.902,
+          "abs90": 71.1184,
+          "max_up50": 23.3679,
+          "max_up90": 65.5057,
+          "max_down50": 25.7322,
+          "max_down90": 74.6049
+        }
+      }
+    },
+    {
+      "id": 1,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 0.687,
+          "n": 5360,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.647,
+          "n": 803,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": -0.937,
+          "n": 1956,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5360,
+          "days": 20,
+          "up": 48.022,
+          "down": 51.567,
+          "up20": 38.265,
+          "down20": 41.791,
+          "up50": 25.28,
+          "down50": 28.955,
+          "up100": 11.679,
+          "down100": 16.045,
+          "abs50": 56.1858,
+          "abs90": 186.2195,
+          "max_up50": 52.7866,
+          "max_up90": 156.0719,
+          "max_down50": 61.3905,
+          "max_down90": 221.7157
+        },
+        "validation": {
+          "n": 803,
+          "days": 3,
+          "up": 49.191,
+          "down": 50.56,
+          "up20": 39.103,
+          "down20": 40.598,
+          "up50": 27.397,
+          "down50": 24.907,
+          "up100": 15.193,
+          "down100": 13.45,
+          "abs50": 52.7388,
+          "abs90": 163.8138,
+          "max_up50": 58.3266,
+          "max_up90": 171.1224,
+          "max_down50": 65.4742,
+          "max_down90": 182.7073
+        },
+        "late_holdout": {
+          "n": 1956,
+          "days": 7,
+          "up": 47.955,
+          "down": 51.176,
+          "up20": 38.139,
+          "down20": 41.207,
+          "up50": 26.38,
+          "down50": 29.09,
+          "up100": 13.599,
+          "down100": 12.474,
+          "abs50": 56.8098,
+          "abs90": 152.156,
+          "max_up50": 52.7242,
+          "max_up90": 177.4974,
+          "max_down50": 59.5662,
+          "max_down90": 158.9172
+        }
+      }
+    },
+    {
+      "id": 1,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": 0.193216,
+      "threshold_high": 1.312312927,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 0.132,
+          "n": 5329,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 2.605,
+          "n": 778,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 0.889,
+          "n": 1742,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5329,
+          "days": 20,
+          "up": 50.948,
+          "down": 48.452,
+          "up20": 38.375,
+          "down20": 37.718,
+          "up50": 25.033,
+          "down50": 22.481,
+          "up100": 9.589,
+          "down100": 9.439,
+          "abs50": 47.1208,
+          "abs90": 141.6514,
+          "max_up50": 44.5955,
+          "max_up90": 134.963,
+          "max_down50": 50.072,
+          "max_down90": 154.0495
+        },
+        "validation": {
+          "n": 778,
+          "days": 3,
+          "up": 52.314,
+          "down": 47.429,
+          "up20": 43.83,
+          "down20": 39.589,
+          "up50": 30.848,
+          "down50": 28.663,
+          "up100": 13.625,
+          "down100": 14.01,
+          "abs50": 61.428,
+          "abs90": 181.376,
+          "max_up50": 64.4149,
+          "max_up90": 163.0471,
+          "max_down50": 58.5396,
+          "max_down90": 157.5068
+        },
+        "late_holdout": {
+          "n": 1742,
+          "days": 7,
+          "up": 49.369,
+          "down": 49.828,
+          "up20": 38.576,
+          "down20": 40.126,
+          "up50": 25.258,
+          "down50": 26.693,
+          "up100": 10.62,
+          "down100": 10.677,
+          "abs50": 52.1727,
+          "abs90": 141.6498,
+          "max_up50": 50.5277,
+          "max_up90": 153.7564,
+          "max_down50": 51.3612,
+          "max_down90": 157.1461
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 10.283,
+          "n": 5771,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 6.606,
+          "n": 685,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 6.422,
+          "n": 1218,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5771,
+          "days": 20,
+          "up": 49.264,
+          "down": 49.368,
+          "up20": 28.401,
+          "down20": 29.614,
+          "up50": 10.327,
+          "down50": 11.003,
+          "up100": 2.218,
+          "down100": 2.079,
+          "abs50": 24.8216,
+          "abs90": 72.4349,
+          "max_up50": 22.3964,
+          "max_up90": 69.6514,
+          "max_down50": 23.8721,
+          "max_down90": 73.9559
+        },
+        "validation": {
+          "n": 685,
+          "days": 3,
+          "up": 52.117,
+          "down": 46.423,
+          "up20": 28.905,
+          "down20": 28.321,
+          "up50": 9.197,
+          "down50": 10.949,
+          "up100": 1.168,
+          "down100": 2.336,
+          "abs50": 24.8756,
+          "abs90": 67.258,
+          "max_up50": 23.1607,
+          "max_up90": 63.0238,
+          "max_down50": 21.1864,
+          "max_down90": 71.3292
+        },
+        "late_holdout": {
+          "n": 1218,
+          "days": 7,
+          "up": 51.724,
+          "down": 46.88,
+          "up20": 29.146,
+          "down20": 26.683,
+          "up50": 9.195,
+          "down50": 8.867,
+          "up100": 1.314,
+          "down100": 0.657,
+          "abs50": 23.005,
+          "abs90": 63.9455,
+          "max_up50": 22.0669,
+          "max_up90": 63.898,
+          "max_down50": 21.3272,
+          "max_down90": 64.6639
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5796,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 400,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 1677,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5796,
+          "days": 20,
+          "up": 49.379,
+          "down": 47.619,
+          "up20": 10.783,
+          "down20": 10.645,
+          "up50": 0.5,
+          "down50": 1.087,
+          "up100": 0.035,
+          "down100": 0.086,
+          "abs50": 10.3638,
+          "abs90": 28.147,
+          "max_up50": 9.2001,
+          "max_up90": 27.4958,
+          "max_down50": 8.48,
+          "max_down90": 27.8016
+        },
+        "validation": {
+          "n": 400,
+          "days": 3,
+          "up": 49,
+          "down": 48.75,
+          "up20": 18.25,
+          "down20": 19.5,
+          "up50": 2.25,
+          "down50": 2.75,
+          "up100": 0.25,
+          "down100": 0.25,
+          "abs50": 15.0739,
+          "abs90": 37.7615,
+          "max_up50": 13.2441,
+          "max_up90": 36.0631,
+          "max_down50": 12.0428,
+          "max_down90": 38.806
+        },
+        "late_holdout": {
+          "n": 1677,
+          "days": 7,
+          "up": 44.365,
+          "down": 52.713,
+          "up20": 12.761,
+          "down20": 14.132,
+          "up50": 1.55,
+          "down50": 1.014,
+          "up100": 0.179,
+          "down100": 0.298,
+          "abs50": 12.2681,
+          "abs90": 32.37,
+          "max_up50": 9.3985,
+          "max_up90": 31.3036,
+          "max_down50": 10.9315,
+          "max_down90": 32.1815
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 7.574,
+          "n": 5767,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 5.565,
+          "n": 685,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 5.523,
+          "n": 1215,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5767,
+          "days": 20,
+          "up": 50.286,
+          "down": 48.847,
+          "up20": 36.986,
+          "down20": 37.246,
+          "up50": 21.016,
+          "down50": 22.733,
+          "up100": 7.526,
+          "down100": 10.005,
+          "abs50": 42.5199,
+          "abs90": 132.6903,
+          "max_up50": 38.7202,
+          "max_up90": 117.1615,
+          "max_down50": 43.3498,
+          "max_down90": 139.2744
+        },
+        "validation": {
+          "n": 685,
+          "days": 3,
+          "up": 54.161,
+          "down": 44.38,
+          "up20": 38.248,
+          "down20": 32.263,
+          "up50": 20.292,
+          "down50": 18.54,
+          "up100": 4.672,
+          "down100": 8.759,
+          "abs50": 38.3583,
+          "abs90": 114.0162,
+          "max_up50": 38.8591,
+          "max_up90": 99.9624,
+          "max_down50": 36.8947,
+          "max_down90": 129.4757
+        },
+        "late_holdout": {
+          "n": 1215,
+          "days": 7,
+          "up": 49.053,
+          "down": 49.794,
+          "up20": 34.65,
+          "down20": 33.827,
+          "up50": 17.942,
+          "down50": 15.638,
+          "up100": 5.432,
+          "down100": 4.033,
+          "abs50": 35.7622,
+          "abs90": 99.1374,
+          "max_up50": 38.047,
+          "max_up90": 107.1986,
+          "max_down50": 38.3632,
+          "max_down90": 102.8095
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5736,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 400,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 1650,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5736,
+          "days": 20,
+          "up": 48.727,
+          "down": 49.704,
+          "up20": 23.64,
+          "down20": 23.187,
+          "up50": 4.812,
+          "down50": 5.771,
+          "up100": 0.418,
+          "down100": 0.924,
+          "abs50": 18.2296,
+          "abs90": 50.9988,
+          "max_up50": 17.6431,
+          "max_up90": 50.7484,
+          "max_down50": 17.552,
+          "max_down90": 52.8994
+        },
+        "validation": {
+          "n": 400,
+          "days": 3,
+          "up": 49.25,
+          "down": 48.75,
+          "up20": 31.25,
+          "down20": 29.25,
+          "up50": 12,
+          "down50": 11,
+          "up100": 2.75,
+          "down100": 1.75,
+          "abs50": 25.2657,
+          "abs90": 70.6821,
+          "max_up50": 25.2769,
+          "max_up90": 75.0867,
+          "max_down50": 25.7167,
+          "max_down90": 65.4742
+        },
+        "late_holdout": {
+          "n": 1650,
+          "days": 7,
+          "up": 45.212,
+          "down": 52.667,
+          "up20": 22.909,
+          "down20": 29.333,
+          "up50": 7.152,
+          "down50": 6.364,
+          "up100": 1.091,
+          "down100": 0.606,
+          "abs50": 21.0653,
+          "abs90": 57.2358,
+          "max_up50": 19.5093,
+          "max_up90": 56.1384,
+          "max_down50": 22.531,
+          "max_down90": 58.2222
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 4.794,
+          "n": 5758,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.774,
+          "n": 682,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.993,
+          "n": 1212,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5758,
+          "days": 20,
+          "up": 49.045,
+          "down": 50.66,
+          "up20": 42.602,
+          "down20": 43.904,
+          "up50": 33.466,
+          "down50": 35.464,
+          "up100": 20.754,
+          "down100": 23.897,
+          "abs50": 87.2018,
+          "abs90": 258.3752,
+          "max_up50": 73.6458,
+          "max_up90": 231.2242,
+          "max_down50": 91.8734,
+          "max_down90": 295.1406
+        },
+        "validation": {
+          "n": 682,
+          "days": 3,
+          "up": 50.44,
+          "down": 48.827,
+          "up20": 42.229,
+          "down20": 40.762,
+          "up50": 32.111,
+          "down50": 29.472,
+          "up100": 18.622,
+          "down100": 16.862,
+          "abs50": 68.4526,
+          "abs90": 181.6151,
+          "max_up50": 76.7094,
+          "max_up90": 192.51,
+          "max_down50": 73.0597,
+          "max_down90": 228.6252
+        },
+        "late_holdout": {
+          "n": 1212,
+          "days": 7,
+          "up": 46.617,
+          "down": 52.723,
+          "up20": 39.769,
+          "down20": 46.122,
+          "up50": 29.868,
+          "down50": 34.736,
+          "up100": 16.914,
+          "down100": 18.564,
+          "abs50": 72.8516,
+          "abs90": 175.0346,
+          "max_up50": 66.6126,
+          "max_up90": 196.6464,
+          "max_down50": 78.397,
+          "max_down90": 200.7977
+        }
+      }
+    },
+    {
+      "id": 2,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": 43,
+      "threshold_high": 206,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5476,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 391,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 1534,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5476,
+          "days": 20,
+          "up": 48.448,
+          "down": 50.712,
+          "up20": 34.806,
+          "down20": 37.728,
+          "up50": 19.923,
+          "down50": 19.759,
+          "up100": 5.935,
+          "down100": 6.063,
+          "abs50": 38.9824,
+          "abs90": 109.079,
+          "max_up50": 36.3753,
+          "max_up90": 105.7546,
+          "max_down50": 42.5352,
+          "max_down90": 121.2781
+        },
+        "validation": {
+          "n": 391,
+          "days": 3,
+          "up": 49.616,
+          "down": 49.872,
+          "up20": 42.711,
+          "down20": 42.967,
+          "up50": 27.621,
+          "down50": 33.76,
+          "up100": 14.066,
+          "down100": 18.67,
+          "abs50": 64.6301,
+          "abs90": 247.8535,
+          "max_up50": 60.1777,
+          "max_up90": 186.6192,
+          "max_down50": 58.0243,
+          "max_down90": 154.5853
+        },
+        "late_holdout": {
+          "n": 1534,
+          "days": 7,
+          "up": 48.435,
+          "down": 50.913,
+          "up20": 35.072,
+          "down20": 38.592,
+          "up50": 20.86,
+          "down50": 24.707,
+          "up100": 8.409,
+          "down100": 7.366,
+          "abs50": 44.7635,
+          "abs90": 115.5014,
+          "max_up50": 42.9217,
+          "max_up90": 127.7308,
+          "max_down50": 44.9439,
+          "max_down90": 114.2154
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 4.069,
+          "n": 5824,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 2.11,
+          "n": 912,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.73,
+          "n": 1849,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5824,
+          "days": 20,
+          "up": 48.661,
+          "down": 49.657,
+          "up20": 22.047,
+          "down20": 23.403,
+          "up50": 5.855,
+          "down50": 6.817,
+          "up100": 1.099,
+          "down100": 1.03,
+          "abs50": 17.6339,
+          "abs90": 55.7105,
+          "max_up50": 15.6006,
+          "max_up90": 52.3342,
+          "max_down50": 16.5244,
+          "max_down90": 57.8355
+        },
+        "validation": {
+          "n": 912,
+          "days": 3,
+          "up": 51.316,
+          "down": 46.711,
+          "up20": 25.768,
+          "down20": 23.794,
+          "up50": 5.154,
+          "down50": 6.579,
+          "up100": 0.768,
+          "down100": 1.316,
+          "abs50": 19.7463,
+          "abs90": 51.9867,
+          "max_up50": 19.3553,
+          "max_up90": 49.3752,
+          "max_down50": 16.595,
+          "max_down90": 53.0827
+        },
+        "late_holdout": {
+          "n": 1849,
+          "days": 7,
+          "up": 47.701,
+          "down": 50.081,
+          "up20": 21.417,
+          "down20": 22.985,
+          "up50": 4.922,
+          "down50": 5.192,
+          "up100": 0.757,
+          "down100": 0.487,
+          "abs50": 17.5618,
+          "abs90": 50.401,
+          "max_up50": 15.8831,
+          "max_up90": 47.3898,
+          "max_down50": 16.9166,
+          "max_down90": 50.5352
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 4.229,
+          "n": 5776,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.791,
+          "n": 869,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.074,
+          "n": 1769,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5776,
+          "days": 20,
+          "up": 49.256,
+          "down": 48.944,
+          "up20": 22.022,
+          "down20": 23.563,
+          "up50": 5.557,
+          "down50": 6.337,
+          "up100": 1.021,
+          "down100": 1.177,
+          "abs50": 18.1092,
+          "abs90": 54.266,
+          "max_up50": 15.4599,
+          "max_up90": 52.4228,
+          "max_down50": 16.4754,
+          "max_down90": 56.923
+        },
+        "validation": {
+          "n": 869,
+          "days": 3,
+          "up": 49.137,
+          "down": 48.331,
+          "up20": 23.59,
+          "down20": 23.475,
+          "up50": 4.718,
+          "down50": 6.329,
+          "up100": 0.46,
+          "down100": 1.151,
+          "abs50": 19.0602,
+          "abs90": 52.3105,
+          "max_up50": 19.0295,
+          "max_up90": 49.8901,
+          "max_down50": 16.3825,
+          "max_down90": 53.1334
+        },
+        "late_holdout": {
+          "n": 1769,
+          "days": 7,
+          "up": 49.35,
+          "down": 48.163,
+          "up20": 22.951,
+          "down20": 22.329,
+          "up50": 6.162,
+          "down50": 5.144,
+          "up100": 0.848,
+          "down100": 0.509,
+          "abs50": 17.9506,
+          "abs90": 52.6863,
+          "max_up50": 16.3605,
+          "max_up90": 50.3779,
+          "max_down50": 16.2326,
+          "max_down90": 49.2025
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.943,
+          "n": 5802,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.799,
+          "n": 910,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.77,
+          "n": 1844,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5802,
+          "days": 20,
+          "up": 49.638,
+          "down": 49.19,
+          "up20": 32.351,
+          "down20": 33.092,
+          "up50": 14.547,
+          "down50": 16.598,
+          "up100": 4.309,
+          "down100": 5.67,
+          "abs50": 31.0302,
+          "abs90": 99.6818,
+          "max_up50": 28.668,
+          "max_up90": 91.043,
+          "max_down50": 30.2288,
+          "max_down90": 105.6646
+        },
+        "validation": {
+          "n": 910,
+          "days": 3,
+          "up": 50.989,
+          "down": 47.473,
+          "up20": 34.505,
+          "down20": 30,
+          "up50": 17.253,
+          "down50": 14.725,
+          "up100": 3.846,
+          "down100": 5.275,
+          "abs50": 31.341,
+          "abs90": 96.2269,
+          "max_up50": 33.4424,
+          "max_up90": 88.0675,
+          "max_down50": 31.0511,
+          "max_down90": 92.5592
+        },
+        "late_holdout": {
+          "n": 1844,
+          "days": 7,
+          "up": 48.21,
+          "down": 50.38,
+          "up20": 31.887,
+          "down20": 32.375,
+          "up50": 12.907,
+          "down50": 13.069,
+          "up100": 3.525,
+          "down100": 2.115,
+          "abs50": 29.3959,
+          "abs90": 81.314,
+          "max_up50": 28.565,
+          "max_up90": 83.0661,
+          "max_down50": 31.3873,
+          "max_down90": 84.1176
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.906,
+          "n": 5756,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 3.239,
+          "n": 868,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.626,
+          "n": 1763,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5756,
+          "days": 20,
+          "up": 49.322,
+          "down": 49.826,
+          "up20": 32.314,
+          "down20": 32.523,
+          "up50": 15.028,
+          "down50": 16.279,
+          "up100": 4.587,
+          "down100": 5.837,
+          "abs50": 30.7472,
+          "abs90": 101.8419,
+          "max_up50": 28.9778,
+          "max_up90": 92.1439,
+          "max_down50": 30.9449,
+          "max_down90": 105.6692
+        },
+        "validation": {
+          "n": 868,
+          "days": 3,
+          "up": 50.23,
+          "down": 47.696,
+          "up20": 35.945,
+          "down20": 33.295,
+          "up50": 16.935,
+          "down50": 14.401,
+          "up100": 2.88,
+          "down100": 5.3,
+          "abs50": 31.4631,
+          "abs90": 91.7031,
+          "max_up50": 34.1881,
+          "max_up90": 88.6007,
+          "max_down50": 31.3644,
+          "max_down90": 92.0844
+        },
+        "late_holdout": {
+          "n": 1763,
+          "days": 7,
+          "up": 47.93,
+          "down": 50.255,
+          "up20": 30.743,
+          "down20": 32.275,
+          "up50": 13.5,
+          "down50": 13.046,
+          "up100": 3.971,
+          "down100": 2.496,
+          "abs50": 28.86,
+          "abs90": 83.0263,
+          "max_up50": 28.715,
+          "max_up90": 87.7886,
+          "max_down50": 30.1789,
+          "max_down90": 86.7123
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.766,
+          "n": 5747,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.51,
+          "n": 903,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.008,
+          "n": 1820,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5747,
+          "days": 20,
+          "up": 48.669,
+          "down": 50.948,
+          "up20": 39.568,
+          "down20": 41.796,
+          "up50": 28.102,
+          "down50": 30.085,
+          "up100": 14.425,
+          "down100": 17.244,
+          "abs50": 63.1732,
+          "abs90": 200.4377,
+          "max_up50": 56.3959,
+          "max_up90": 175.3576,
+          "max_down50": 66.3499,
+          "max_down90": 224.4992
+        },
+        "validation": {
+          "n": 903,
+          "days": 3,
+          "up": 52.381,
+          "down": 47.176,
+          "up20": 41.971,
+          "down20": 38.649,
+          "up50": 31.008,
+          "down50": 26.689,
+          "up100": 16.722,
+          "down100": 14.507,
+          "abs50": 62.3055,
+          "abs90": 173.8406,
+          "max_up50": 63.83,
+          "max_up90": 174.493,
+          "max_down50": 61.9197,
+          "max_down90": 188.5283
+        },
+        "late_holdout": {
+          "n": 1820,
+          "days": 7,
+          "up": 47.253,
+          "down": 52.253,
+          "up20": 38.791,
+          "down20": 42.747,
+          "up50": 27.527,
+          "down50": 31.319,
+          "up100": 13.407,
+          "down100": 14.341,
+          "abs50": 61.8923,
+          "abs90": 159.0491,
+          "max_up50": 55.4599,
+          "max_up90": 177.8874,
+          "max_down50": 61.9492,
+          "max_down90": 172.4315
+        }
+      }
+    },
+    {
+      "id": 3,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": -56,
+      "threshold_high": 51,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.458,
+          "n": 5703,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 2.058,
+          "n": 864,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.071,
+          "n": 1745,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5703,
+          "days": 20,
+          "up": 48.799,
+          "down": 50.64,
+          "up20": 40.26,
+          "down20": 41.995,
+          "up50": 28.862,
+          "down50": 30.388,
+          "up100": 15.203,
+          "down100": 17.675,
+          "abs50": 64.8318,
+          "abs90": 206.0159,
+          "max_up50": 58.4455,
+          "max_up90": 183.7804,
+          "max_down50": 67.5531,
+          "max_down90": 227.1391
+        },
+        "validation": {
+          "n": 864,
+          "days": 3,
+          "up": 51.736,
+          "down": 47.917,
+          "up20": 43.519,
+          "down20": 38.773,
+          "up50": 31.597,
+          "down50": 27.662,
+          "up100": 17.245,
+          "down100": 12.616,
+          "abs50": 61.9745,
+          "abs90": 172.0183,
+          "max_up50": 67.421,
+          "max_up90": 170.6603,
+          "max_down50": 61.5294,
+          "max_down90": 184.3302
+        },
+        "late_holdout": {
+          "n": 1745,
+          "days": 7,
+          "up": 47.736,
+          "down": 51.691,
+          "up20": 38.854,
+          "down20": 43.553,
+          "up50": 27.163,
+          "down50": 31.289,
+          "up100": 13.983,
+          "down100": 14.499,
+          "abs50": 61.6923,
+          "abs90": 156.9656,
+          "max_up50": 57.4587,
+          "max_up90": 176.8393,
+          "max_down50": 66.0271,
+          "max_down90": 173.9696
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 4.027,
+          "n": 5754,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.956,
+          "n": 1035,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 3.094,
+          "n": 2021,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5754,
+          "days": 20,
+          "up": 47.967,
+          "down": 50.348,
+          "up20": 21.672,
+          "down20": 23.358,
+          "up50": 6.152,
+          "down50": 6.083,
+          "up100": 1.286,
+          "down100": 0.956,
+          "abs50": 17.3231,
+          "abs90": 54.6303,
+          "max_up50": 15.3516,
+          "max_up90": 53.8836,
+          "max_down50": 15.837,
+          "max_down90": 55.7191
+        },
+        "validation": {
+          "n": 1035,
+          "days": 3,
+          "up": 47.536,
+          "down": 50.048,
+          "up20": 22.899,
+          "down20": 23.671,
+          "up50": 4.444,
+          "down50": 5.604,
+          "up100": 0.676,
+          "down100": 0.58,
+          "abs50": 18.4729,
+          "abs90": 49.9611,
+          "max_up50": 17.5106,
+          "max_up90": 48.8926,
+          "max_down50": 17.6913,
+          "max_down90": 52.4706
+        },
+        "late_holdout": {
+          "n": 2021,
+          "days": 7,
+          "up": 46.759,
+          "down": 50.52,
+          "up20": 21.128,
+          "down20": 23.355,
+          "up50": 5.443,
+          "down50": 4.75,
+          "up100": 0.99,
+          "down100": 0.544,
+          "abs50": 17.2712,
+          "abs90": 50.7995,
+          "max_up50": 14.6929,
+          "max_up90": 47.7548,
+          "max_down50": 16.4782,
+          "max_down90": 47.9847
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 3.855,
+          "n": 5752,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 2.308,
+          "n": 916,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 4.02,
+          "n": 2104,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5752,
+          "days": 20,
+          "up": 49.548,
+          "down": 48.505,
+          "up20": 22.149,
+          "down20": 23.035,
+          "up50": 5.615,
+          "down50": 7.093,
+          "up100": 1.061,
+          "down100": 1.217,
+          "abs50": 17.6102,
+          "abs90": 56.0165,
+          "max_up50": 15.9363,
+          "max_up90": 51.1711,
+          "max_down50": 16.5627,
+          "max_down90": 58.6832
+        },
+        "validation": {
+          "n": 916,
+          "days": 3,
+          "up": 52.293,
+          "down": 45.852,
+          "up20": 24.672,
+          "down20": 22.489,
+          "up50": 5.349,
+          "down50": 5.786,
+          "up100": 0.328,
+          "down100": 1.201,
+          "abs50": 19.2607,
+          "abs90": 51.7111,
+          "max_up50": 19.4509,
+          "max_up90": 49.2649,
+          "max_down50": 16.4363,
+          "max_down90": 52.0718
+        },
+        "late_holdout": {
+          "n": 2104,
+          "days": 7,
+          "up": 49.857,
+          "down": 47.719,
+          "up20": 24.002,
+          "down20": 21.53,
+          "up50": 5.371,
+          "down50": 4.563,
+          "up100": 0.618,
+          "down100": 0.428,
+          "abs50": 18.0424,
+          "abs90": 49.5989,
+          "max_up50": 16.8234,
+          "max_up90": 48.9506,
+          "max_down50": 15.7332,
+          "max_down90": 49.2869
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.412,
+          "n": 5741,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.253,
+          "n": 1032,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.662,
+          "n": 2013,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5741,
+          "days": 20,
+          "up": 49.051,
+          "down": 49.887,
+          "up20": 31.11,
+          "down20": 32.66,
+          "up50": 14.736,
+          "down50": 16.269,
+          "up100": 4.511,
+          "down100": 5.731,
+          "abs50": 30.3195,
+          "abs90": 101.3463,
+          "max_up50": 28.1935,
+          "max_up90": 91.4108,
+          "max_down50": 30.3031,
+          "max_down90": 104.5199
+        },
+        "validation": {
+          "n": 1032,
+          "days": 3,
+          "up": 50.291,
+          "down": 47.771,
+          "up20": 34.302,
+          "down20": 31.589,
+          "up50": 14.341,
+          "down50": 14.729,
+          "up100": 2.81,
+          "down100": 4.845,
+          "abs50": 31.5245,
+          "abs90": 89.8585,
+          "max_up50": 31.8641,
+          "max_up90": 86.0617,
+          "max_down50": 31.1319,
+          "max_down90": 91.1202
+        },
+        "late_holdout": {
+          "n": 2013,
+          "days": 7,
+          "up": 47.988,
+          "down": 51.118,
+          "up20": 30.849,
+          "down20": 33.333,
+          "up50": 13.313,
+          "down50": 14.257,
+          "up100": 4.322,
+          "down100": 2.633,
+          "abs50": 29.2569,
+          "abs90": 86.7035,
+          "max_up50": 28.1294,
+          "max_up90": 87.434,
+          "max_down50": 31.1818,
+          "max_down90": 86.7749
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 3.265,
+          "n": 5735,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": -0.15,
+          "n": 916,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.995,
+          "n": 2095,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5735,
+          "days": 20,
+          "up": 49.433,
+          "down": 49.433,
+          "up20": 32.677,
+          "down20": 33.043,
+          "up50": 14.961,
+          "down50": 16.739,
+          "up100": 4.08,
+          "down100": 6.399,
+          "abs50": 31.5924,
+          "abs90": 102.3172,
+          "max_up50": 29.5559,
+          "max_up90": 88.9713,
+          "max_down50": 30.8833,
+          "max_down90": 111.604
+        },
+        "validation": {
+          "n": 916,
+          "days": 3,
+          "up": 49.345,
+          "down": 49.127,
+          "up20": 32.533,
+          "down20": 32.751,
+          "up50": 16.266,
+          "down50": 14.52,
+          "up100": 2.838,
+          "down100": 5.24,
+          "abs50": 30.8076,
+          "abs90": 87.9356,
+          "max_up50": 31.7005,
+          "max_up90": 85.3664,
+          "max_down50": 31.3644,
+          "max_down90": 91.1883
+        },
+        "late_holdout": {
+          "n": 2095,
+          "days": 7,
+          "up": 47.303,
+          "down": 51.074,
+          "up20": 31.122,
+          "down20": 32.84,
+          "up50": 11.933,
+          "down50": 12.745,
+          "up100": 3.771,
+          "down100": 2.53,
+          "abs50": 29.2196,
+          "abs90": 81.3521,
+          "max_up50": 29.0182,
+          "max_up90": 81.4324,
+          "max_down50": 30.0709,
+          "max_down90": 85.5797
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.79,
+          "n": 5672,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.901,
+          "n": 1027,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.558,
+          "n": 1983,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5672,
+          "days": 20,
+          "up": 47.867,
+          "down": 51.71,
+          "up20": 39.598,
+          "down20": 42.578,
+          "up50": 27.927,
+          "down50": 30.748,
+          "up100": 13.999,
+          "down100": 17.613,
+          "abs50": 63.5916,
+          "abs90": 201.9779,
+          "max_up50": 57.1733,
+          "max_up90": 175.6058,
+          "max_down50": 66.7276,
+          "max_down90": 227.4408
+        },
+        "validation": {
+          "n": 1027,
+          "days": 3,
+          "up": 50.536,
+          "down": 48.978,
+          "up20": 42.356,
+          "down20": 39.241,
+          "up50": 29.893,
+          "down50": 27.069,
+          "up100": 18.598,
+          "down100": 14.314,
+          "abs50": 61.323,
+          "abs90": 189.8839,
+          "max_up50": 63.86,
+          "max_up90": 182.6672,
+          "max_down50": 64.0477,
+          "max_down90": 189.2897
+        },
+        "late_holdout": {
+          "n": 1983,
+          "days": 7,
+          "up": 47.655,
+          "down": 51.689,
+          "up20": 39.334,
+          "down20": 42.511,
+          "up50": 28.089,
+          "down50": 30.459,
+          "up100": 13.868,
+          "down100": 15.129,
+          "abs50": 60.3464,
+          "abs90": 159.3535,
+          "max_up50": 55.305,
+          "max_up90": 179.8132,
+          "max_down50": 64.8751,
+          "max_down90": 175.6632
+        }
+      }
+    },
+    {
+      "id": 5,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": -2303.524155,
+      "threshold_high": 2461.307046,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.22,
+          "n": 5681,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.182,
+          "n": 910,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 0.148,
+          "n": 2062,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5681,
+          "days": 20,
+          "up": 48.953,
+          "down": 50.554,
+          "up20": 40.028,
+          "down20": 41.56,
+          "up50": 27.9,
+          "down50": 29.995,
+          "up100": 14.593,
+          "down100": 17.462,
+          "abs50": 62.1873,
+          "abs90": 201.8752,
+          "max_up50": 57.4344,
+          "max_up90": 175.3592,
+          "max_down50": 67.7006,
+          "max_down90": 230.7372
+        },
+        "validation": {
+          "n": 910,
+          "days": 3,
+          "up": 52.308,
+          "down": 47.253,
+          "up20": 42.637,
+          "down20": 37.582,
+          "up50": 31.538,
+          "down50": 24.505,
+          "up100": 15.275,
+          "down100": 13.846,
+          "abs50": 58.76,
+          "abs90": 168.2732,
+          "max_up50": 63.0362,
+          "max_up90": 166.3734,
+          "max_down50": 60.1158,
+          "max_down90": 210.9147
+        },
+        "late_holdout": {
+          "n": 2062,
+          "days": 7,
+          "up": 47.236,
+          "down": 51.988,
+          "up20": 37.924,
+          "down20": 43.404,
+          "up50": 26.382,
+          "down50": 30.019,
+          "up100": 13.919,
+          "down100": 13.725,
+          "abs50": 58.8324,
+          "abs90": 155.1793,
+          "max_up50": 55.6208,
+          "max_up90": 176.6966,
+          "max_down50": 62.3832,
+          "max_down90": 172.4437
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "NONE",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": null,
+          "n": 5747,
+          "days": 14
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": null,
+          "n": 2513,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": null,
+          "n": 3364,
+          "days": 6
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5747,
+          "days": 14,
+          "up": 47.938,
+          "down": 49.817,
+          "up20": 15.017,
+          "down20": 17.331,
+          "up50": 2.888,
+          "down50": 2.854,
+          "up100": 0.226,
+          "down100": 0.261,
+          "abs50": 12.8753,
+          "abs90": 40.0802,
+          "max_up50": 10.6678,
+          "max_up90": 38.241,
+          "max_down50": 11.5722,
+          "max_down90": 41.1415
+        },
+        "validation": {
+          "n": 2513,
+          "days": 3,
+          "up": 47.831,
+          "down": 49.622,
+          "up20": 21.289,
+          "down20": 20.891,
+          "up50": 3.78,
+          "down50": 4.218,
+          "up100": 0.398,
+          "down100": 0.597,
+          "abs50": 16.4634,
+          "abs90": 45.8479,
+          "max_up50": 15.2091,
+          "max_up90": 44.3919,
+          "max_down50": 14.9768,
+          "max_down90": 46.1895
+        },
+        "late_holdout": {
+          "n": 3364,
+          "days": 6,
+          "up": 47.354,
+          "down": 50.446,
+          "up20": 22.533,
+          "down20": 23.722,
+          "up50": 5.41,
+          "down50": 4.548,
+          "up100": 0.922,
+          "down100": 0.476,
+          "abs50": 17.7883,
+          "abs90": 49.8097,
+          "max_up50": 16.0878,
+          "max_up90": 49.9638,
+          "max_down50": 16.9166,
+          "max_down90": 48.6028
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 5.354,
+          "n": 5734,
+          "days": 12
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 5.347,
+          "n": 498,
+          "days": 1
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 80.018,
+          "n": 3,
+          "days": 1
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5734,
+          "days": 12,
+          "up": 49.791,
+          "down": 48.343,
+          "up20": 23.648,
+          "down20": 22.55,
+          "up50": 6.191,
+          "down50": 5.755,
+          "up100": 1.081,
+          "down100": 0.994,
+          "abs50": 18.2042,
+          "abs90": 54.025,
+          "max_up50": 15.5501,
+          "max_up90": 52.8307,
+          "max_down50": 16.0197,
+          "max_down90": 54.1949
+        },
+        "validation": {
+          "n": 498,
+          "days": 1,
+          "up": 54.418,
+          "down": 43.574,
+          "up20": 27.711,
+          "down20": 19.277,
+          "up50": 7.028,
+          "down50": 3.414,
+          "up100": 0.602,
+          "down100": 1.004,
+          "abs50": 18.6625,
+          "abs90": 51.0895,
+          "max_up50": 19.6449,
+          "max_up90": 58.5608,
+          "max_down50": 15.0421,
+          "max_down90": 49.4668
+        },
+        "late_holdout": {
+          "n": 3,
+          "days": 1,
+          "up": 100,
+          "down": 0,
+          "up20": 100,
+          "down20": 0,
+          "up50": 66.667,
+          "down50": 0,
+          "up100": 0,
+          "down100": 0,
+          "abs50": 59.4091,
+          "abs90": 59.4091,
+          "max_up50": 75.6849,
+          "max_up90": 75.6849,
+          "max_down50": 2.966,
+          "max_down90": 2.966
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 0.065,
+          "n": 5727,
+          "days": 14
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.255,
+          "n": 2513,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.128,
+          "n": 3364,
+          "days": 6
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5727,
+          "days": 14,
+          "up": 47.058,
+          "down": 51.475,
+          "up20": 25.738,
+          "down20": 30.313,
+          "up50": 9.01,
+          "down50": 11.14,
+          "up100": 1.502,
+          "down100": 2.602,
+          "abs50": 23.3918,
+          "abs90": 71.2761,
+          "max_up50": 20.4019,
+          "max_up90": 69.8657,
+          "max_down50": 23.3794,
+          "max_down90": 76.3205
+        },
+        "validation": {
+          "n": 2513,
+          "days": 3,
+          "up": 47.115,
+          "down": 50.895,
+          "up20": 30.76,
+          "down20": 32.591,
+          "up50": 14.485,
+          "down50": 12.415,
+          "up100": 2.587,
+          "down100": 3.064,
+          "abs50": 28.335,
+          "abs90": 80.3337,
+          "max_up50": 28.0712,
+          "max_up90": 81.2035,
+          "max_down50": 29.8107,
+          "max_down90": 76.8325
+        },
+        "late_holdout": {
+          "n": 3364,
+          "days": 6,
+          "up": 47.295,
+          "down": 51.367,
+          "up20": 31.034,
+          "down20": 33.799,
+          "up50": 14.09,
+          "down50": 14.893,
+          "up100": 4.548,
+          "down100": 2.973,
+          "abs50": 30.142,
+          "abs90": 88.2099,
+          "max_up50": 28.481,
+          "max_up90": 89.7413,
+          "max_down50": 31.3873,
+          "max_down90": 88.7186
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 5.744,
+          "n": 5689,
+          "days": 12
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 8.482,
+          "n": 498,
+          "days": 1
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 4.206,
+          "n": 3,
+          "days": 1
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5689,
+          "days": 12,
+          "up": 51.204,
+          "down": 47.794,
+          "up20": 35.156,
+          "down20": 31.693,
+          "up50": 17.244,
+          "down50": 15.89,
+          "up100": 5.133,
+          "down100": 5.273,
+          "abs50": 32.5033,
+          "abs90": 101.4769,
+          "max_up50": 30.7676,
+          "max_up90": 92.9565,
+          "max_down50": 29.8508,
+          "max_down90": 99.8549
+        },
+        "validation": {
+          "n": 498,
+          "days": 1,
+          "up": 58.434,
+          "down": 40.161,
+          "up20": 41.165,
+          "down20": 22.49,
+          "up50": 19.478,
+          "down50": 8.233,
+          "up100": 5.622,
+          "down100": 1.205,
+          "abs50": 28.608,
+          "abs90": 86.487,
+          "max_up50": 36.2922,
+          "max_up90": 104.923,
+          "max_down50": 25.0117,
+          "max_down90": 77.5679
+        },
+        "late_holdout": {
+          "n": 3,
+          "days": 1,
+          "up": 66.667,
+          "down": 33.333,
+          "up20": 33.333,
+          "down20": 33.333,
+          "up50": 0,
+          "down50": 0,
+          "up100": 0,
+          "down100": 0,
+          "abs50": 22.3198,
+          "abs90": 22.3198,
+          "max_up50": 87.5052,
+          "max_up90": 87.5052,
+          "max_down50": 11.9243,
+          "max_down90": 11.9243
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.766,
+          "n": 5681,
+          "days": 14
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 2.075,
+          "n": 2513,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": -0.498,
+          "n": 3364,
+          "days": 6
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5681,
+          "days": 14,
+          "up": 43.073,
+          "down": 56.187,
+          "up20": 30.224,
+          "down20": 43.109,
+          "up50": 18.888,
+          "down50": 27.214,
+          "up100": 7.551,
+          "down100": 12.92,
+          "abs50": 45.1283,
+          "abs90": 147.3379,
+          "max_up50": 39.9734,
+          "max_up90": 123.1615,
+          "max_down50": 55.5157,
+          "max_down90": 171.8238
+        },
+        "validation": {
+          "n": 2513,
+          "days": 3,
+          "up": 47.712,
+          "down": 51.811,
+          "up20": 39.554,
+          "down20": 42.38,
+          "up50": 29.725,
+          "down50": 27.258,
+          "up100": 14.485,
+          "down100": 12.933,
+          "abs50": 59.1455,
+          "abs90": 182.3026,
+          "max_up50": 57.7334,
+          "max_up90": 160.4312,
+          "max_down50": 62.5188,
+          "max_down90": 153.4406
+        },
+        "late_holdout": {
+          "n": 3364,
+          "days": 6,
+          "up": 49.554,
+          "down": 49.614,
+          "up20": 40.042,
+          "down20": 41.409,
+          "up50": 26.932,
+          "down50": 30.143,
+          "up100": 14.625,
+          "down100": 15.279,
+          "abs50": 59.462,
+          "abs90": 159.6319,
+          "max_up50": 61.3678,
+          "max_up90": 190.2723,
+          "max_down50": 64.9402,
+          "max_down90": 174.7576
+        }
+      }
+    },
+    {
+      "id": 6,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": -697626.303547999,
+      "threshold_high": 54488.237354,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 5.333,
+          "n": 5482,
+          "days": 12
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 25.987,
+          "n": 473,
+          "days": 1
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 28.891,
+          "n": 3,
+          "days": 1
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5482,
+          "days": 12,
+          "up": 51.24,
+          "down": 48.139,
+          "up20": 43.141,
+          "down20": 39.858,
+          "up50": 32.616,
+          "down50": 30.062,
+          "up100": 17.64,
+          "down100": 16.344,
+          "abs50": 70.3276,
+          "abs90": 210.8496,
+          "max_up50": 66.2891,
+          "max_up90": 189.6404,
+          "max_down50": 67.6047,
+          "max_down90": 223.9855
+        },
+        "validation": {
+          "n": 473,
+          "days": 1,
+          "up": 76.533,
+          "down": 22.833,
+          "up20": 67.442,
+          "down20": 12.051,
+          "up50": 46.089,
+          "down50": 6.131,
+          "up100": 27.907,
+          "down100": 0.211,
+          "abs50": 52.7388,
+          "abs90": 196.5967,
+          "max_up50": 84.8104,
+          "max_up90": 249.6875,
+          "max_down50": 43.8166,
+          "max_down90": 99.4134
+        },
+        "late_holdout": {
+          "n": 3,
+          "days": 1,
+          "up": 100,
+          "down": 0,
+          "up20": 66.667,
+          "down20": 0,
+          "up50": 0,
+          "down50": 0,
+          "up100": 0,
+          "down100": 0,
+          "abs50": 41.6234,
+          "abs90": 41.6234,
+          "max_up50": 87.5052,
+          "max_up90": 87.5052,
+          "max_down50": 11.9243,
+          "max_down90": 11.9243
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 5,
+      "bucket": "high",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 4.027,
+          "n": 5749,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.581,
+          "n": 980,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.432,
+          "n": 2032,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5749,
+          "days": 20,
+          "up": 49.226,
+          "down": 49.365,
+          "up20": 21.969,
+          "down20": 23.361,
+          "up50": 6.262,
+          "down50": 6.227,
+          "up100": 1.322,
+          "down100": 0.991,
+          "abs50": 17.7778,
+          "abs90": 55.1219,
+          "max_up50": 15.444,
+          "max_up90": 53.4149,
+          "max_down50": 15.9906,
+          "max_down90": 54.8999
+        },
+        "validation": {
+          "n": 980,
+          "days": 3,
+          "up": 47.347,
+          "down": 50.816,
+          "up20": 22.959,
+          "down20": 23.265,
+          "up50": 4.388,
+          "down50": 5.51,
+          "up100": 0.612,
+          "down100": 0.714,
+          "abs50": 18.0723,
+          "abs90": 49.817,
+          "max_up50": 18.0696,
+          "max_up90": 48.6475,
+          "max_down50": 17.6315,
+          "max_down90": 50.6179
+        },
+        "late_holdout": {
+          "n": 2032,
+          "days": 7,
+          "up": 48.13,
+          "down": 49.016,
+          "up20": 21.949,
+          "down20": 22.687,
+          "up50": 5.217,
+          "down50": 4.577,
+          "up100": 0.837,
+          "down100": 0.443,
+          "abs50": 17.4368,
+          "abs90": 48.5291,
+          "max_up50": 15.54,
+          "max_up90": 47.5484,
+          "max_down50": 16.2518,
+          "max_down90": 48.2775
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 5,
+      "bucket": "low",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "SHORT",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 3.792,
+          "n": 5751,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 0.86,
+          "n": 967,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 0.896,
+          "n": 2137,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5751,
+          "days": 20,
+          "up": 48.739,
+          "down": 49.365,
+          "up20": 21.422,
+          "down20": 23.126,
+          "up50": 5.303,
+          "down50": 6.434,
+          "up100": 0.956,
+          "down100": 1.148,
+          "abs50": 17.4673,
+          "abs90": 54.7098,
+          "max_up50": 15.3351,
+          "max_up90": 50.9514,
+          "max_down50": 16.3566,
+          "max_down90": 57.3905
+        },
+        "validation": {
+          "n": 967,
+          "days": 3,
+          "up": 49.638,
+          "down": 48.811,
+          "up20": 22.441,
+          "down20": 22.544,
+          "up50": 4.757,
+          "down50": 5.895,
+          "up100": 0.31,
+          "down100": 1.138,
+          "abs50": 17.956,
+          "abs90": 50.9593,
+          "max_up50": 17.6549,
+          "max_up90": 48.6906,
+          "max_down50": 16.5526,
+          "max_down90": 51.979
+        },
+        "late_holdout": {
+          "n": 2137,
+          "days": 7,
+          "up": 49.789,
+          "down": 48.479,
+          "up20": 24.052,
+          "down20": 21.151,
+          "up50": 5.288,
+          "down50": 4.726,
+          "up100": 0.889,
+          "down100": 0.374,
+          "abs50": 17.828,
+          "abs90": 49.8681,
+          "max_up50": 16.5526,
+          "max_up90": 48.2292,
+          "max_down50": 15.4083,
+          "max_down90": 48.6028
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 15,
+      "bucket": "high",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 3.379,
+          "n": 5737,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.41,
+          "n": 979,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.58,
+          "n": 2023,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5737,
+          "days": 20,
+          "up": 49.66,
+          "down": 49.277,
+          "up20": 32.787,
+          "down20": 32.857,
+          "up50": 15.287,
+          "down50": 15.339,
+          "up100": 4.863,
+          "down100": 5.404,
+          "abs50": 31.1343,
+          "abs90": 101.3463,
+          "max_up50": 28.9157,
+          "max_up90": 92.4702,
+          "max_down50": 30.6655,
+          "max_down90": 103.5474
+        },
+        "validation": {
+          "n": 979,
+          "days": 3,
+          "up": 49.54,
+          "down": 49.234,
+          "up20": 34.116,
+          "down20": 32.891,
+          "up50": 15.935,
+          "down50": 14.3,
+          "up100": 2.349,
+          "down100": 4.699,
+          "abs50": 32.6216,
+          "abs90": 87.9771,
+          "max_up50": 32.7918,
+          "max_up90": 85.3072,
+          "max_down50": 32.2309,
+          "max_down90": 90.6867
+        },
+        "late_holdout": {
+          "n": 2023,
+          "days": 7,
+          "up": 48.146,
+          "down": 50.717,
+          "up20": 30.697,
+          "down20": 33.465,
+          "up50": 12.654,
+          "down50": 13.544,
+          "up100": 4.103,
+          "down100": 2.966,
+          "abs50": 29.3083,
+          "abs90": 84.3499,
+          "max_up50": 28.8075,
+          "max_up90": 85.6848,
+          "max_down50": 30.727,
+          "max_down90": 85.477
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 15,
+      "bucket": "low",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 2.746,
+          "n": 5738,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": -0.615,
+          "n": 966,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 2.588,
+          "n": 2129,
+          "days": 7
+        }
+      ],
+      "filter": false,
+      "fold": {
+        "train": {
+          "n": 5738,
+          "days": 20,
+          "up": 49.93,
+          "down": 49.007,
+          "up20": 32.154,
+          "down20": 32.503,
+          "up50": 14.43,
+          "down50": 16.26,
+          "up100": 4.13,
+          "down100": 5.925,
+          "abs50": 30.8167,
+          "abs90": 100.3106,
+          "max_up50": 28.6518,
+          "max_up90": 89.5416,
+          "max_down50": 30.6883,
+          "max_down90": 107.1477
+        },
+        "validation": {
+          "n": 966,
+          "days": 3,
+          "up": 48.344,
+          "down": 49.586,
+          "up20": 32.091,
+          "down20": 33.54,
+          "up50": 15.424,
+          "down50": 14.907,
+          "up100": 2.795,
+          "down100": 5.487,
+          "abs50": 30.5064,
+          "abs90": 89.9287,
+          "max_up50": 31.3316,
+          "max_up90": 86.4902,
+          "max_down50": 31.7053,
+          "max_down90": 93.515
+        },
+        "late_holdout": {
+          "n": 2129,
+          "days": 7,
+          "up": 48.849,
+          "down": 49.836,
+          "up20": 31.705,
+          "down20": 32.363,
+          "up50": 13.058,
+          "down50": 13.527,
+          "up100": 4.086,
+          "down100": 2.349,
+          "abs50": 29.6343,
+          "abs90": 83.4009,
+          "max_up50": 29.1836,
+          "max_up90": 87.5052,
+          "max_down50": 29.7556,
+          "max_down90": 86.3403
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 60,
+      "bucket": "high",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.969,
+          "n": 5680,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.44,
+          "n": 972,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 0.786,
+          "n": 1999,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5680,
+          "days": 20,
+          "up": 48.363,
+          "down": 51.039,
+          "up20": 39.771,
+          "down20": 41.655,
+          "up50": 27.887,
+          "down50": 29.718,
+          "up100": 14.384,
+          "down100": 17.06,
+          "abs50": 61.9913,
+          "abs90": 203.1584,
+          "max_up50": 57.3067,
+          "max_up90": 176.66,
+          "max_down50": 66.2816,
+          "max_down90": 223.4935
+        },
+        "validation": {
+          "n": 972,
+          "days": 3,
+          "up": 51.955,
+          "down": 47.531,
+          "up20": 42.901,
+          "down20": 37.86,
+          "up50": 29.115,
+          "down50": 25.206,
+          "up100": 16.77,
+          "down100": 13.374,
+          "abs50": 57.9453,
+          "abs90": 174.5353,
+          "max_up50": 63.7428,
+          "max_up90": 172.8727,
+          "max_down50": 62.4904,
+          "max_down90": 182.9508
+        },
+        "late_holdout": {
+          "n": 1999,
+          "days": 7,
+          "up": 46.573,
+          "down": 52.926,
+          "up20": 38.569,
+          "down20": 43.322,
+          "up50": 28.264,
+          "down50": 30.615,
+          "up100": 14.457,
+          "down100": 14.307,
+          "abs50": 60.5695,
+          "abs90": 155.5805,
+          "max_up50": 55.227,
+          "max_up90": 182.4328,
+          "max_down50": 64.6639,
+          "max_down90": 176.7592
+        }
+      }
+    },
+    {
+      "id": 7,
+      "h": 60,
+      "bucket": "low",
+      "threshold_low": -4435.905767,
+      "threshold_high": 4409.364271,
+      "threshold_status": "NO_THRESHOLD_COLLISION",
+      "dir": "LONG",
+      "uplifts": [
+        {
+          "fold": "train",
+          "uplift_pp": 1.902,
+          "n": 5677,
+          "days": 20
+        },
+        {
+          "fold": "validation",
+          "uplift_pp": 1.083,
+          "n": 959,
+          "days": 3
+        },
+        {
+          "fold": "late_holdout",
+          "uplift_pp": 1.808,
+          "n": 2104,
+          "days": 7
+        }
+      ],
+      "filter": true,
+      "fold": {
+        "train": {
+          "n": 5677,
+          "days": 20,
+          "up": 49.322,
+          "down": 50.291,
+          "up20": 39.704,
+          "down20": 41.624,
+          "up50": 28.466,
+          "down50": 29.822,
+          "up100": 14.427,
+          "down100": 17.492,
+          "abs50": 62.2086,
+          "abs90": 198.5012,
+          "max_up50": 57.5756,
+          "max_up90": 176.3714,
+          "max_down50": 66.9601,
+          "max_down90": 225.4099
+        },
+        "validation": {
+          "n": 959,
+          "days": 3,
+          "up": 52.346,
+          "down": 47.237,
+          "up20": 42.544,
+          "down20": 38.686,
+          "up50": 32.221,
+          "down50": 26.486,
+          "up100": 17.414,
+          "down100": 13.243,
+          "abs50": 62.4723,
+          "abs90": 170.792,
+          "max_up50": 63.0238,
+          "max_up90": 176.0531,
+          "max_down50": 61.8917,
+          "max_down90": 195.996
+        },
+        "late_holdout": {
+          "n": 2104,
+          "days": 7,
+          "up": 48.384,
+          "down": 50.76,
+          "up20": 39.591,
+          "down20": 42.11,
+          "up50": 27.567,
+          "down50": 29.42,
+          "up100": 14.306,
+          "down100": 14.306,
+          "abs50": 60.0602,
+          "abs90": 156.9705,
+          "max_up50": 57.0329,
+          "max_up90": 179.1656,
+          "max_down50": 62.2757,
+          "max_down90": 173.9696
+        }
+      }
+    }
+  ],
+  "elapsed_seconds": 37.21,
+  "disclaimer": "EXPOST_ONLY_NOT_TRADABLE_NO_RECEIPT_CLOCK"
+}
