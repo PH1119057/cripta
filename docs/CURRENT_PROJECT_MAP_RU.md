@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.25
+**Версия:** 12.26
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4208,3 +4208,72 @@ mutations, historical PAPERS/REAL rewrite or change to existing ExitPlan.
 Pending PAPER and REAL Exit continuity is a mandatory gate before the eventual
 production transition. Independent Observer continuity faults remain open and
 are not auto-resolved by this configuration change.
+
+
+## 2026-10-21 R1 one-Strategy/five-instrument production transition — RUNTIME VERIFIED
+
+OWNER DECISION and applied result: one independent R1 Strategy over APTUSDT,
+ARBUSDT, DOTUSDT, INJUSDT and LTCUSDT, both LONG/SHORT, one whole-plan
+EntryPlan/ExitPlan and one dedicated ACTIVE TradingAccount binding. This section
+supersedes the SOURCE-ONLY / NOT APPLIED status in the earlier dated checkpoint;
+the historical individual Strategy/EntryPlan/ExitPlan lineage is unchanged.
+
+CHECKED HERE 2026-10-21 approx 10:53–10:57 UTC on server robot:
+- Verified installer job `job_b98d01e75f28` (release 10a61fb874adc032c2c4a371dd36bd54abee21fc)
+  and follow-up installer job `job_f6e7e72d7fec` (release
+  `cc52f0c2faa6fa342e6f40c64896971da63329d4`) both returned exit_code=0.
+  The latter had exact-commit, runtime-schema, trading-control invariance, and
+  Exchange-to-DB reconciliation PASS, with rollback backup checkpoint retained.
+- Independent, quiesced-Observer, actor-scoped DB transaction applied from the
+  verified cc52 runtime by actual DB role cripta:
+  `activation-be482d99252b4055b020a84fef8e2054`, Strategy
+  `r1_five_symbols`, version `1.0-five-symbols-20261021`.
+  It disabled exactly five historical R1 activations and five legacy REAL
+  ExecutionPermissions, then created one StrategyCard, one EntryPlan and one
+  ExitPlan. Mainnet was OFF; no REAL execution or new OWNER ARM was triggered.
+- The initial separate binding SQL invocation encountered an actual PostgreSQL
+  schema-type mismatch (`control.execution_gates.enabled` is smallint,
+  not boolean), rolled back its own transaction and left the successful
+  Strategy cutover intact. GitHub PR #136 corrected the SQL to `enabled=0`,
+  passed CI, and merged. The postgres-actor migration was run only after
+  exact GitHub/main/source SQL blob agreement was proven
+  (`d8b2bb308ec6884c669d2412c471ecda86aca189`); `BEGIN; DO; COMMIT`
+  returned success.
+- Production read-only PostgreSQL verification: ONE enabled StrategyActivation
+  (`r1_five_symbols`), ONE `ACTIVE` StrategyExecutionBinding with
+  execution_leg/role `PRIMARY` to the ONE ACTIVE MAINNET TradingAccount,
+  five exact configured symbols, zero enabled ExecutionPermissions
+  (10 historical permission records all OFF), global mainnet=0
+  (reason `private WS reconnect: verification pending`).
+- Universal Entry Observer fresh status:
+  `RUNNING`, `observer_ready=true`, `active_strategies=1`,
+  `active_entry_plans=1`, `strategy_monitors=10`,
+  symbols APTUSDT/ARBUSDT/DOTUSDT/INJUSDT/LTCUSDT, loaded
+  `cc52f0c2faa6fa342e6f40c64896971da63329d4`; observed_at
+  2026-10-21T10:56:53.816516Z.
+  Universal Exit, Lifecycle Supervisor and Private Runtime were `active`
+  with `NRestarts=0` at checked service snapshot.
+- Historical PAPER lineage parity before and after cutover:
+  28 positions exact-ID/Strategy/activation/EntryPlan/ExitPlan MD5
+  `10dc31b5b91ebcc6fa64a8f8cb41e00f`;
+  48 orders same lineage MD5 `cb715d9c28a2bc77bf41b27be6b05cfb`.
+  No legacy PAPER row was reparented; these are lineage checksum witnesses,
+  not a full immutable financial-data checksum.
+- No hot REAL positions/orders, pending PAPER orders/positions, unreleased
+  capital reservations or slot claims at pre-cutover checked snapshot.
+  Existing-position live Exit takeover is NOT VERIFIED by this flat-account
+  cutover, and no Exchange order was issued.
+
+Status distinction:
+`R1_STRATEGY_MODEL_IMPLEMENTED=YES`;
+`R1_MONITOR_RUNTIME_BEHAVIOR_VERIFIED=YES` (one whole-plan, ten causal lanes);
+`R1_ACCOUNT_BINDING_DB_VERIFIED=YES`;
+`R1_REAL_ARM_READY=NOT VERIFIED`;
+`MAINNET_GATE=OFF`;
+`OWNER_ARM=NOT PERFORMED`.
+The later GitHub/source HEAD may include documentation/research and the binding
+SQL-only commit, which differs from the application LOADED_COMMIT above.
+Source synchronization is not application deployment; real-arm exact release
+composition remains separately gated. This checkpoint does not close existing
+independent OI30S/trade-continuity observer faults or solve all account-scoped
+Entry/Exit architecture gaps.
