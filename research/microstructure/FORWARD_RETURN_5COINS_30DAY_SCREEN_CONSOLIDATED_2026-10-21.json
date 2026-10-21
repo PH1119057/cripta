@@ -1,0 +1,262 @@
+{
+  "title": "CRIPTA five-coin six-physical-factor × 5/15/60m ex-post future-label association screen",
+  "checked_date": "2026-10-21",
+  "authority": "PH1119057/cripta:main",
+  "status": "RESEARCH_RESULT_EXPOST_ASSOCIATION_NOT_CAUSAL_SIGNAL_NOT_TRADABLE_NOT_RESEARCH_READY",
+  "protocol": "research/microstructure/FORWARD_LABEL_30DAY_EXPLORATORY_PROTOCOL_2026-10-21.md",
+  "source_script": "research/microstructure/experiments/trade_minute_forward_label_30day_screen_v1.py",
+  "source_git_blob": "8c784408705775fdb76d648098d9e9be9df092c8",
+  "source_cube": "research/microstructure/TRADE_MINUTE_5COINS_30DAY_6FACTOR_CUBE_QC_2026-10-21.json",
+  "splits": {
+    "train": "2026-05-18..2026-06-06",
+    "validation": "2026-06-07..2026-06-09",
+    "late_holdout": "2026-06-10..2026-06-16",
+    "all_h_future_price_targets_inside_same_fold": true
+  },
+  "label": "10000*log(minute_last_trade_price[t+h]/minute_last_trade_price[t]), anchored only on real observed trades in each of both minutes, ex post without receiver clock",
+  "horizons_minutes": [
+    5,
+    15,
+    60
+  ],
+  "totals": {
+    "symbols": 5,
+    "source_files_sha_verified": 150,
+    "source_fills": 37162098,
+    "indicator_horizon_cells": 90,
+    "all_three_folds_defined": 81,
+    "undefined_group_cells": 9,
+    "three_fold_same_sign": 18,
+    "three_fold_same_sign_non_cvd": 12,
+    "non_cvd_same_sign_abs_better_than_previous_day_placebo": 10
+  },
+  "by_symbol": [
+    {
+      "symbol": "APTUSDT",
+      "source_rows": 6258912,
+      "source_files_sha_verified": 30,
+      "grid": 18,
+      "three_fold_defined": 18,
+      "undefined_group": 0,
+      "sign_consistent": 3,
+      "non_cvd_sign_consistent": 0,
+      "non_cvd_sign_consistent_beats_placebo": 0,
+      "interesting_descriptive_cells": [],
+      "file": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_APTUSDT_2026-10-21.json",
+      "git_blob": "7d2fbfeb8ae8c1bfb6c92ebb82d723f5c3f25a90"
+    },
+    {
+      "symbol": "INJUSDT",
+      "source_rows": 12196213,
+      "source_files_sha_verified": 30,
+      "grid": 18,
+      "three_fold_defined": 15,
+      "undefined_group": 3,
+      "sign_consistent": 4,
+      "non_cvd_sign_consistent": 4,
+      "non_cvd_sign_consistent_beats_placebo": 3,
+      "interesting_descriptive_cells": [
+        {
+          "indicator_id": 3,
+          "horizon_minutes": 5,
+          "train_bps": -0.03006,
+          "validation_bps": -0.61388,
+          "late_holdout_bps": -1.57136,
+          "placebo_bps": -0.46664,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1136,
+          "late_holdout_low_count": 1137
+        },
+        {
+          "indicator_id": 5,
+          "horizon_minutes": 60,
+          "train_bps": 0.27137,
+          "validation_bps": 18.432,
+          "late_holdout_bps": 8.99804,
+          "placebo_bps": -10.41324,
+          "better_than_placebo_amplitude": false,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1076,
+          "late_holdout_low_count": 1152
+        },
+        {
+          "indicator_id": 7,
+          "horizon_minutes": 5,
+          "train_bps": -0.37876,
+          "validation_bps": -0.56088,
+          "late_holdout_bps": -3.6707,
+          "placebo_bps": -1.09555,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1136,
+          "late_holdout_low_count": 1092
+        },
+        {
+          "indicator_id": 7,
+          "horizon_minutes": 15,
+          "train_bps": -0.91224,
+          "validation_bps": -2.36056,
+          "late_holdout_bps": -1.18889,
+          "placebo_bps": 0.41276,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1134,
+          "late_holdout_low_count": 1090
+        }
+      ],
+      "file": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_INJUSDT_2026-10-21.json",
+      "git_blob": "f2446b2d2f5d5dc936a96feab224d504e4047cfc"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "source_rows": 8123293,
+      "source_files_sha_verified": 30,
+      "grid": 18,
+      "three_fold_defined": 15,
+      "undefined_group": 3,
+      "sign_consistent": 1,
+      "non_cvd_sign_consistent": 1,
+      "non_cvd_sign_consistent_beats_placebo": 1,
+      "interesting_descriptive_cells": [
+        {
+          "indicator_id": 5,
+          "horizon_minutes": 60,
+          "train_bps": -1.04417,
+          "validation_bps": -12.1719,
+          "late_holdout_bps": -2.74314,
+          "placebo_bps": -0.52925,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1294,
+          "late_holdout_low_count": 1080
+        }
+      ],
+      "file": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_DOTUSDT_2026-10-21.json",
+      "git_blob": "9087f19ee1b9544f1163a7d43095a4a1c9a6835a"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "source_rows": 2880949,
+      "source_files_sha_verified": 30,
+      "grid": 18,
+      "three_fold_defined": 15,
+      "undefined_group": 3,
+      "sign_consistent": 2,
+      "non_cvd_sign_consistent": 2,
+      "non_cvd_sign_consistent_beats_placebo": 1,
+      "interesting_descriptive_cells": [
+        {
+          "indicator_id": 2,
+          "horizon_minutes": 15,
+          "train_bps": 0.24323,
+          "validation_bps": 5.10485,
+          "late_holdout_bps": 0.91116,
+          "placebo_bps": -3.66866,
+          "better_than_placebo_amplitude": false,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1291,
+          "late_holdout_low_count": 1916
+        },
+        {
+          "indicator_id": 3,
+          "horizon_minutes": 60,
+          "train_bps": -1.05977,
+          "validation_bps": -0.70325,
+          "late_holdout_bps": -0.31684,
+          "placebo_bps": -0.17618,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1875,
+          "late_holdout_low_count": 1878
+        }
+      ],
+      "file": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_LTCUSDT_2026-10-21.json",
+      "git_blob": "1de8823592203862bb2c8b5efa1383b0fdcd5f82"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "source_rows": 7702731,
+      "source_files_sha_verified": 30,
+      "grid": 18,
+      "three_fold_defined": 18,
+      "undefined_group": 0,
+      "sign_consistent": 8,
+      "non_cvd_sign_consistent": 5,
+      "non_cvd_sign_consistent_beats_placebo": 5,
+      "interesting_descriptive_cells": [
+        {
+          "indicator_id": 1,
+          "horizon_minutes": 5,
+          "train_bps": 0.20659,
+          "validation_bps": 0.40539,
+          "late_holdout_bps": 1.0003,
+          "placebo_bps": -0.79234,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1910,
+          "late_holdout_low_count": 2327
+        },
+        {
+          "indicator_id": 2,
+          "horizon_minutes": 5,
+          "train_bps": 1.03039,
+          "validation_bps": 1.82159,
+          "late_holdout_bps": 1.0399,
+          "placebo_bps": -0.27835,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 923,
+          "late_holdout_low_count": 3209
+        },
+        {
+          "indicator_id": 2,
+          "horizon_minutes": 15,
+          "train_bps": 2.71614,
+          "validation_bps": 2.40201,
+          "late_holdout_bps": 4.91645,
+          "placebo_bps": -3.72857,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 923,
+          "late_holdout_low_count": 3201
+        },
+        {
+          "indicator_id": 3,
+          "horizon_minutes": 15,
+          "train_bps": 0.17815,
+          "validation_bps": 0.67416,
+          "late_holdout_bps": 0.68299,
+          "placebo_bps": -0.26429,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1359,
+          "late_holdout_low_count": 1321
+        },
+        {
+          "indicator_id": 5,
+          "horizon_minutes": 5,
+          "train_bps": -0.16868,
+          "validation_bps": -1.52818,
+          "late_holdout_bps": -1.03632,
+          "placebo_bps": -0.31294,
+          "better_than_placebo_amplitude": true,
+          "late_holdout_days_with_both_buckets": 7,
+          "late_holdout_high_count": 1240,
+          "late_holdout_low_count": 1429
+        }
+      ],
+      "file": "research/microstructure/FORWARD_RETURN_30DAY_SCREEN_ARBUSDT_2026-10-21.json",
+      "git_blob": "939746c29300fbde504877a68a3001e7abcb4651"
+    }
+  ],
+  "limits": [
+    "The physical cube and historical source have no verified observed_at/source publication or decision-time available_after; no strict causal feature eligibility",
+    "Time series return windows overlap; eligible anchors do not represent independent samples",
+    "Multiple comparisons: 90 combinations evaluated; same sign across folds is only descriptive",
+    "CVD #6 UTC midnight reset and thin/highly unbalanced group support make apparent effects unreliable; some have only one holdout day with both groups",
+    "One internally held out week cannot replace truly independent future-period/source OOS",
+    "No order execution, transaction costs or after-fee PnL. No pre-registered trading decision, no Strategy modification",
+    "No results pooled across exact instrument identities"
+  ]
+}
