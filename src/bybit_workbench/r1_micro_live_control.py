@@ -11,7 +11,14 @@ from .live_arm_readiness import (
     strategy_symbol_scope_key,
 )
 from .universal_entry.dashboard_control import StrategyDashboardStore
-from .universal_entry.r1_strategy import R1_STRATEGY_IDS, R1_VERSION, build_r1_cards
+from .universal_entry.r1_strategy import (
+    R1_STRATEGY_IDS,
+    R1_UNIFIED_STRATEGY_ID,
+    R1_UNIFIED_VERSION,
+    R1_VERSION,
+    build_r1_cards,
+    build_r1_unified_card,
+)
 
 
 def expected_contexts(
@@ -60,6 +67,117 @@ def expected_contexts(
     return tuple(contexts)
 
 
+
+def unified_r1_micro_live_state(
+    connection: Any,
+    *,
+    release_commit: str,
+    now: datetime,
+    gate_enabled: bool,
+    gate_reason: str | None,
+) -> dict[str, object]:
+    """Read-only truth for the new five-symbol R1. Never an OWNER ARM rail.
+
+    The historical 5-Strategy MICRO_LIVE authorization and webhook waiver
+    cannot be transferred to this new Strategy/version. Missing technical
+    evidence, account-binding ambiguity and financial authorization remain
+    explicit blockers; this function never writes trading state.
+    """
+    card = build_r1_unified_card()
+    if len(release_commit) != 40:
+        raise ValueError("loaded release commit invalid")
+    activations = connection.execute(
+        """SELECT activation_id,strategy_config_fingerprint
+             FROM strategy_entry.strategy_activations
+            WHERE enabled=true AND strategy_id=%s AND strategy_version=%s""",
+        (R1_UNIFIED_STRATEGY_ID, R1_UNIFIED_VERSION),
+    ).fetchall()
+    if len(activations) != 1:
+        raise ValueError("unified R1 exact activation not unique")
+    activation_id, fingerprint = (str(v) for v in activations[0])
+    if fingerprint != card.strategy_config_fingerprint:
+        raise ValueError("unified R1 immutable card fingerprint mismatch")
+    active_total = connection.execute(
+        "SELECT count(*) FROM strategy_entry.strategy_activations WHERE enabled=true"
+    ).fetchone()
+    if active_total is None or int(active_total[0]) != 1:
+        raise ValueError("additional active StrategyActivation exists")
+    bindings = connection.execute(
+        """SELECT trading_account_id,execution_leg,execution_role,allocation_mode
+             FROM strategy_entry.strategy_execution_bindings
+            WHERE strategy_activation_id=%s AND binding_state='ACTIVE'
+              AND effective_from<=%s
+              AND (effective_to IS NULL OR effective_to>%s)""",
+        (activation_id, now.astimezone(UTC), now.astimezone(UTC)),
+    ).fetchall()
+    binding_ok = (
+        len(bindings) == 1
+        and str(bindings[0][0]).strip() != ""
+        and tuple(str(x) for x in bindings[0][1:]) ==
+            ("PRIMARY", "PRIMARY", "DEDICATED_STRATEGY")
+    )
+    permission = connection.execute(
+        """SELECT enabled FROM strategy_entry.execution_permissions
+            WHERE strategy_id=%s AND strategy_version=%s
+              AND strategy_config_fingerprint=%s""",
+        (card.strategy_id, card.strategy_version, fingerprint),
+    ).fetchone()
+    active_sessions = connection.execute(
+        """SELECT count(*) FROM control.live_arm_sessions
+            WHERE state='ACTIVE'"""
+    ).fetchone()
+    reasons = [
+        "R1_UNIFIED_OWNER_ARM_RAIL_NOT_IMPLEMENTED",
+        "R1_UNIFIED_MICRO_LIVE_FINANCIAL_LIMIT_OWNER_DECISION_REQUIRED",
+    ]
+    if not binding_ok:
+        reasons.append("STRATEGY_ACCOUNT_EXACT_PRIMARY_BINDING_NOT_PROVEN")
+    if active_sessions is None or int(active_sessions[0]) != 0:
+        reasons.append("ACTIVE_LEGACY_OR_UNKNOWN_OWNER_ARM_REQUIRES_REVIEW")
+    if gate_enabled:
+        reasons.append("MAINNET_GATE_ALREADY_OPEN_WITHOUT_UNIFIED_ARM_PROOF")
+    rows = []
+    for symbol in card.symbols:
+        context = LiveArmContext(
+            strategy_id=card.strategy_id,
+            strategy_version=card.strategy_version,
+            strategy_config_fingerprint=fingerprint,
+            strategy_activation_id=activation_id,
+            symbol=symbol,
+            release_commit=release_commit,
+        )
+        decision = evaluate_live_arm(
+            connection,
+            context=context,
+            now=now,
+            require_owner_approval=False,
+        )
+        rows.append({
+            "strategy_id": card.strategy_id,
+            "strategy_version": card.strategy_version,
+            "symbol": symbol,
+            "execution_permission": bool(permission and permission[0]),
+            "active_session": None,
+            "pre_owner_ready": decision.ready,
+            "failed_checks": list(decision.failed_codes),
+        })
+    return {
+        "installed": True,
+        "cohort": "R1_UNIFIED_FIVE_SYMBOLS",
+        "armed": False,
+        "gate_enabled": gate_enabled,
+        "gate_reason": gate_reason,
+        "ready_to_arm": False,
+        "arm_supported": False,
+        "reason": "; ".join(reasons),
+        "reasons": reasons,
+        "release_commit": release_commit,
+        "strategy_activation_id": activation_id,
+        "trading_account_id": str(bindings[0][0]) if binding_ok else None,
+        "binding_verified": binding_ok,
+        "strategies": rows,
+    }
+
 def micro_live_state(
     connection: Any,
     *,
@@ -75,6 +193,16 @@ def micro_live_state(
     try:
         contexts = expected_contexts(connection, release_commit=release_commit)
     except ValueError as exc:
+        try:
+            return unified_r1_micro_live_state(
+                connection,
+                release_commit=release_commit,
+                now=current,
+                gate_enabled=gate_enabled,
+                gate_reason=gate_reason,
+            )
+        except ValueError:
+            pass
         return {
             "installed": False,
             "armed": False,
