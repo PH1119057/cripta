@@ -1,7 +1,7 @@
 {
   "schema": "CRIPTA_COIN_RESEARCH_LEDGER_V1",
   "storage_approval": "OWNER_APPROVED_GITHUB_MAIN_20261021",
-  "source_status": "MODEL_QC_VERIFIED_IN_RESEARCH_NO_OOS;REQUIRES_GITHUB_MAIN_COMMIT_TO_REGISTER",
+  "source_status": "REGISTERED_IN_GITHUB_MAIN;HISTORICAL_MODEL_QC_PASS;OOS_NOT_VERIFIED;DASHBOARD_RUNTIME_NOT_VERIFIED",
   "history_scope": "2026-09-21..2026-10-19 UTC 29 complete days, only L5-3/H9 medianband candidate",
   "record_count": 30,
   "records": [
@@ -75,7 +75,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -156,7 +156,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -237,7 +237,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -318,7 +318,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -399,7 +399,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -480,7 +480,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -561,7 +561,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -642,7 +642,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -723,7 +723,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -804,7 +804,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -885,7 +885,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -966,7 +966,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1047,7 +1047,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1128,7 +1128,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1209,7 +1209,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1290,7 +1290,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1371,7 +1371,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1452,7 +1452,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1533,7 +1533,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1614,7 +1614,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1695,7 +1695,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1776,7 +1776,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1857,7 +1857,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -1938,7 +1938,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2019,7 +2019,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2100,7 +2100,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2181,7 +2181,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2262,7 +2262,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2343,7 +2343,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2424,7 +2424,7 @@
       "quality": {
         "source_research_qc": "MODEL_QC_PASS_PREVIOUS_RUN",
         "exact_identity_qc": "CANONICAL_SOURCE_DETERMINISTIC_ID;DB_ROW_NOT_CHECKED_HERE",
-        "publication_qc": "MODEL_QC_PASS_CANDIDATE_RECORD",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
