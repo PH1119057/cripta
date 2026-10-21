@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import json
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
