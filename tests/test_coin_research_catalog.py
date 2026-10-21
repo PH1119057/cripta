@@ -25,7 +25,7 @@ def test_catalog_has_30_independently_balanced_records() -> None:
         r["quality"]["publication_qc"] == "PROPOSAL_ONLY"
         and r["quality"]["lookahead"] == "YES"
         and r["quality"]["oos"] == "NOT_VERIFIED"
-        and r["instrument"]["instrument_id"] is None
+        and r["instrument"]["instrument_id"] == "inst-bybit-linear-" + r["instrument"]["symbol"].lower()
         for r in raw["records"]
     )
     for sym in ("LTCUSDT", "APTUSDT", "DOTUSDT", "ARBUSDT", "INJUSDT"):
@@ -62,9 +62,9 @@ def test_no_synthetic_instrument_identity_or_file_fallback(tmp_path: Path) -> No
     dest = tmp_path / "bad.json"
     record = source["records"][0]
     bad = copy.deepcopy(source)
-    bad["records"][0]["instrument"]["identity_status"] = "VERIFIED"
+    bad["records"][0]["instrument"]["instrument_id"] = "WRONG"
     dest.write_text(json.dumps(bad))
-    with pytest.raises(ValueError, match="UNRESOLVED_IDENTITY"):
+    with pytest.raises(ValueError, match="IDENTITY_MISMATCH"):
         read_catalog(dest)
     with pytest.raises(ValueError, match="ABSENT_OR_TOO_LARGE"):
         read_catalog(tmp_path / "missing.json")
