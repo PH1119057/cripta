@@ -8,7 +8,6 @@ import pytest
 
 from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE = "a" * 40
 NOW = datetime(2026, 10, 21, 17, 0, tzinfo=UTC)
@@ -180,16 +179,3 @@ def test_dashboard_exposes_authenticated_read_only_prearm_route():
     )[1].split("}", 1)[0]
 
 
-def test_ruff_import_layout_diagnostic_for_ci_only():
-    import subprocess
-    import sys
-
-    executable = "ruff.exe" if sys.platform == "win32" else "ruff"
-    ruff = Path(sys.executable).with_name(executable)
-    output = subprocess.run(
-        [str(ruff), "check", "--select", "I", "--diff", str(Path(__file__))],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert output.returncode == 0, output.stdout + output.stderr
