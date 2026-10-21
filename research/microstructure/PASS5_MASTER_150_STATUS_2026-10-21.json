@@ -22,7 +22,13 @@
     "pilot_two_day_fullrow_field_comparisons": 115200,
     "pilot_two_day_mismatches": 0,
     "apt_30day_source_files_qced": 30,
-    "apt_30day_fills_qced": 6258912
+    "apt_30day_fills_qced": 6258912,
+    "control_30day_coin_days": 150,
+    "control_30day_source_fills": 37162098,
+    "control_30day_numeric_pairs": 30,
+    "control_30day_instrument_indicator_source_only_other_pairs": 20,
+    "control_30day_minute_field_compared": 1728000,
+    "control_30day_mismatch_count": 0
   },
   "cells": [
     {
@@ -31,8 +37,8 @@
       "indicator_name": "RVOL",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -65,6 +71,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -73,8 +91,8 @@
       "indicator_name": "RVOL",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -98,7 +116,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -106,8 +136,8 @@
       "indicator_name": "RVOL",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -131,7 +161,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -139,8 +181,8 @@
       "indicator_name": "RVOL",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -164,7 +206,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -172,8 +226,8 @@
       "indicator_name": "RVOL",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -197,7 +251,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -205,8 +271,8 @@
       "indicator_name": "Trade Rate",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -239,6 +305,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -247,8 +325,8 @@
       "indicator_name": "Trade Rate",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -272,7 +350,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -280,8 +370,8 @@
       "indicator_name": "Trade Rate",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -305,7 +395,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -313,8 +415,8 @@
       "indicator_name": "Trade Rate",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -338,7 +440,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -346,8 +460,8 @@
       "indicator_name": "Trade Rate",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -371,7 +485,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -379,8 +505,8 @@
       "indicator_name": "Trade Rate Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -413,6 +539,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -421,8 +559,8 @@
       "indicator_name": "Trade Rate Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -446,7 +584,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -454,8 +604,8 @@
       "indicator_name": "Trade Rate Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -479,7 +629,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -487,8 +649,8 @@
       "indicator_name": "Trade Rate Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -512,7 +674,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -520,8 +694,8 @@
       "indicator_name": "Trade Rate Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -545,7 +719,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -554,7 +740,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -587,6 +773,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -596,7 +794,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -620,7 +818,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -629,7 +839,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -653,7 +863,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -662,7 +884,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -686,7 +908,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -695,7 +929,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -719,7 +953,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -727,8 +973,8 @@
       "indicator_name": "Buy/Sell Delta",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -761,6 +1007,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -769,8 +1027,8 @@
       "indicator_name": "Buy/Sell Delta",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -794,7 +1052,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -802,8 +1072,8 @@
       "indicator_name": "Buy/Sell Delta",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -827,7 +1097,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -835,8 +1117,8 @@
       "indicator_name": "Buy/Sell Delta",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -860,7 +1142,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -868,8 +1162,8 @@
       "indicator_name": "Buy/Sell Delta",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -893,7 +1187,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -901,8 +1207,8 @@
       "indicator_name": "CVD",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -935,6 +1241,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -943,8 +1261,8 @@
       "indicator_name": "CVD",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -968,7 +1286,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -976,8 +1306,8 @@
       "indicator_name": "CVD",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1001,7 +1331,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -1009,8 +1351,8 @@
       "indicator_name": "CVD",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1034,7 +1376,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -1042,8 +1396,8 @@
       "indicator_name": "CVD",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1067,7 +1421,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -1075,8 +1441,8 @@
       "indicator_name": "Delta Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1109,6 +1475,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -1117,8 +1495,8 @@
       "indicator_name": "Delta Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1142,7 +1520,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -1150,8 +1540,8 @@
       "indicator_name": "Delta Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1175,7 +1565,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -1183,8 +1585,8 @@
       "indicator_name": "Delta Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1208,7 +1610,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -1216,8 +1630,8 @@
       "indicator_name": "Delta Acceleration",
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
-      "calculation_status": "TWO_CONTROL_DAYS_FULL_1440_ROW_8FIELD_INDEPENDENT_DECIMAL_QC_PASS",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "calculation_status": "30D_FULL_1440_ROW_DAILY_INDEPENDENT_NUMERIC_QC_PASS",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "CANDIDATE_V2_FULL_1440_ROW_NUMERIC_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1241,7 +1655,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": true
+      "control_two_day_numeric_qc_pass": true,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": 345600,
+        "comparison_mismatches": 0,
+        "status": "30D_DECIMAL_8FIELD_MINUTE_QC_PASS",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -1250,7 +1676,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1283,6 +1709,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -1292,7 +1730,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1316,7 +1754,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -1325,7 +1775,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1349,7 +1799,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -1358,7 +1820,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1382,7 +1844,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -1391,7 +1865,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -1415,7 +1889,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -3004,7 +3490,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3037,6 +3523,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -3046,7 +3544,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3070,7 +3568,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -3079,7 +3589,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3103,7 +3613,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -3112,7 +3634,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3136,7 +3658,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -3145,7 +3679,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3169,7 +3703,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
@@ -3178,7 +3724,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3211,6 +3757,18 @@
         "independent_8field_1440minute_qc": "PASS_345600_NUMERIC_COMPARISONS_0_MISMATCH",
         "evidence_path": "research/microstructure/APT_30DAY_FULLROW_QC_RESULT_2026-10-21.json",
         "scope_note": "Pilot physical QC, no verified receipt/observed time, not full owner-selected research period"
+      },
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 6258912,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
       }
     },
     {
@@ -3220,7 +3778,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3244,7 +3802,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 12196213,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "DOTUSDT",
@@ -3253,7 +3823,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3277,7 +3847,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 8123293,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "LTCUSDT",
@@ -3286,7 +3868,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3310,7 +3892,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 2880949,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "ARBUSDT",
@@ -3319,7 +3913,7 @@
       "pass_group": 1,
       "source_status": "BYBIT_PUBLIC_TRADES_MAY19_AND_MAY20_SHA256_BASIC_INTEGRITY_VERIFIED",
       "calculation_status": "TWO_CONTROL_DAYS_DECIMAL_DESCRIPTIVE_VALUES_COMPUTED; PRIMARY_VS_INDEPENDENT_PER_EVENT_QC_OPEN",
-      "historical_scope": "2026-05-19 and 2026-05-20 UTC, independently separate source/QC days",
+      "historical_scope": "2026-05-18..2026-06-16 30d control; prior two-day QC preserved",
       "evidence_summary": "DAY20_INDEPENDENT_DECIMAL_SUMMARY_5_OF_5",
       "upstream_route_blocked": false,
       "research_ready": false,
@@ -3343,7 +3937,19 @@
         }
       ],
       "control_two_day_qc_artifact": "research/microstructure/TRADE_TAPE_5COINS_2DAYS_FULLROW_QC_2026-10-21.json",
-      "control_two_day_numeric_qc_pass": false
+      "control_two_day_numeric_qc_pass": false,
+      "control_30day_cohort_evidence": {
+        "period_utc": "2026-05-18..2026-06-16 inclusive",
+        "exact_coin_source_fills": 7702731,
+        "coin_days": 30,
+        "compressed_sha_matched": 30,
+        "minute_rows": 43200,
+        "independent_numeric_comparisons": null,
+        "comparison_mismatches": null,
+        "status": "RAW_PROVENANCE_30D_PASS_NO_FULL_FACTOR_ROW_PARITY_FOR_THIS_INDICATOR",
+        "source": "research/microstructure/TRADE_TAPE_5COINS_30DAY_QC_CONSOLIDATED_2026-10-21.json",
+        "source_timing_note": "actual receiver observed_at and full source publication time unknown; no RESEARCH_READY"
+      }
     },
     {
       "instrument_id": "APTUSDT",
