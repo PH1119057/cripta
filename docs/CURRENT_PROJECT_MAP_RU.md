@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.26
+**Версия:** 12.27
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4277,3 +4277,64 @@ Source synchronization is not application deployment; real-arm exact release
 composition remains separately gated. This checkpoint does not close existing
 independent OI30S/trade-continuity observer faults or solve all account-scoped
 Entry/Exit architecture gaps.
+
+
+## 2026-10-21 Observer publicTrade HTTP truncation recovery — DEPLOYED / SCOPED RUNTIME VERIFIED
+
+CHECKED HERE, host `robot`, during the 2026-10-21 UTC release sequence.
+A persistent fault record on 2026-10-21T10:19:48Z proved that an otherwise
+bounded `/v5/market/recent-trade` audit encountered an `http.client.IncompleteRead`
+for APTUSDT and failed immediately without using its existing second attempt.
+Owner-requested repair preserved the 4-second per-symbol total budget and
+two attempts, adding bounded retry for response-body `IncompleteRead`,
+`RemoteDisconnected`, and `ConnectionResetError`. Persistent failures
+still raise `ContinuityNotProvable`; no OHLC/volume/trade/OI data is imputed.
+
+Implementation: GitHub PR #138 with dedicated read()-raised truncation,
+persistent truncation and disconnected transport regression tests.
+CI: quality Linux full, Windows 3.12, Windows 3.13 and Unix archive,
+plus observer lifecycle race, inbox PostgreSQL and R1 parity checks PASS.
+The initial deployment request for commit
+`820df9f8571312fc2695c1ecd81c53694d6b7d90` returned
+`NOT STARTED` with installer error `remote main differs from requested
+release commit` after an unrelated research-only GitHub main update.
+No runtime switch or migration occurred from this aborted request.
+After source-sync and exact main/tree verification, successful standard
+installer job `job_0a149834e6e2` loaded application release
+`aef533b154945e0b2871571796a75848c3f77ebd` on top of
+`cc52f0c2faa6fa342e6f40c64896971da63329d4`.
+Confirmed from job output:
+`exit_code=0`, `DEPLOY_EXACT_VERIFIED_COMMIT=PASS`,
+`RUNTIME_SCHEMA_MIGRATION=PASS`, `RUNTIME_SCHEMA_CONTRACT=PASS`,
+`TRADING_CONTROL_UNCHANGED=PASS`,
+`POST_DEPLOY_EXCHANGE_TO_DB_RECONCILIATION=PASS`,
+`GATE=0`. Rollback checkpoint retained at
+`/data/cripta/script_archive/release_backups/20261021_130448_cc52f0c2faa6fa342e6f40c64896971da63329d4_to_aef533b154945e0b2871571796a75848c3f77ebd`.
+
+RUNTIME LIVENESS VERIFIED: observer, Exit consumer, Lifecycle Supervisor,
+private runtime all active with NRestarts=0 at checked snapshot;
+`/proc/3810186/cwd`, `/proc/3810194/cwd` and `/proc/3810140/cwd`
+all resolved to the exact new installed release.
+RUNTIME BEHAVIOR VERIFIED (limited): fresh observer status
+`RUNNING`, `observer_ready=true`, 1 active R1 Strategy
+(`r1_five_symbols`), 1 EntryPlan, 10 symbol×direction monitor lanes,
+`facts_received=1239`, loaded source commit `aef533b...`
+at 2026-10-21T13:08:43Z.
+Post-deploy DB: one PRIMARY ACTIVE StrategyExecutionBinding to the
+single MAINNET TradingAccount, zero hot real positions/orders,
+`mainnet=0`, and NO fault logged with source release `aef533b...`
+at sampled read.
+
+Historical durable Observer faults remain OPEN=5 (RESOLVED=74):
+2 transient REST timeouts (old release), 1 REST IncompleteRead
+(old release), 1 OI30S MISSED historical slot and 1 DOTUSDT mirror
+recovery missing three exact execIds. These facts are NOT erased or
+automatically resolved: OBS §4 requires exact operator/owner resolution
+with reason/time/audit, and historic missing OI/trades cannot be
+declared reconstructed without verified complete original source.
+A healthy new epoch does not prove replay or repair the old gap.
+Future retry performance and real open-position Exit takeover
+are NOT CHECKED HERE, nor does the successful deploy authorize REAL Entry.
+No new execution permission or OWNER ARM occurred. GitHub/source HEAD
+may advance via other commits after this LOADED_COMMIT; such metadata
+changes do not constitute installed trading runtime update.
