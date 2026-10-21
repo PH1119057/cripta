@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.29
+**Версия:** 3.30
 **Дата:** 2026-10-21
 **Статус:** канонический индекс документации
 
@@ -1255,3 +1255,21 @@ file count/path, mandatory pre-read, routing or Project Instructions content
 changed; eleven Project Source documents remain. Root README/AGENTS/bootstrap
 requires no topology update. No canonical new-entry authorization, Exchange
 mutation or production deployment is performed by this documentation update.
+
+
+# 41. R1 Strategy identity and EntryPlan monitoring correction — OWNER DECISION 2026-10-21
+
+R1 is one StrategyCard/StrategyActivation serving five configured coins and
+both directions, with one authorized TradingAccount. The Materializer persists
+one whole-Strategy EntryPlan, whose five instrument × two direction monitoring
+lanes are displayed by the Dashboard with the underlying EntryPlan fingerprint.
+Previously stored per-symbol R1 Strategies remain historical exact-lineage
+records and must not be silently reparented. See TRADING_CONTOUR §7.5 for
+specific R1 ownership and transition; ARCH §49.3/§49.6 and
+TRADING_CONTOUR §7.3.1 for generalized account/Strategy bindings.
+
+Source construction and read-only monitor correction do not constitute
+activation migration, LIVE readiness, new Entry authorization or deploy.
+CURRENT_PROJECT_MAP records the source/test/production boundary. Active docs,
+mandatory pre-read, routing, Project Source file count, and README/AGENTS
+bootstrap entrypoints are unchanged.
