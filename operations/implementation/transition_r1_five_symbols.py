@@ -77,7 +77,10 @@ def preflight(connection: psycopg.Connection, now: datetime) -> list[tuple[str, 
         if (str(row[2]), str(row[3])) != (R1_VERSION, old.strategy_config_fingerprint):
             raise RuntimeError("R1_MIGRATION_BLOCKED: legacy Strategy fingerprint differs")
 
-    # runtime.trade_commands uses exact lower-case states: queued/running\n    # are unsettled, while completed/failed are terminal. Do not widen this\n    # to case-folded or undocumented historical values.\n    checks = {
+    # runtime.trade_commands uses exact lower-case states: queued/running
+    # are unsettled, while completed/failed are terminal. Do not widen this
+    # to case-folded or undocumented historical values.
+    checks = {
         "PENDING_PAPER_ORDER": ("strategy_entry.paper_orders", "state='PENDING'"),
         "OPEN_PAPER_POSITION": ("strategy_entry.paper_positions", "state='OPEN'"),
         "HOT_REAL_POSITION": ("runtime.hot_positions", "TRUE"),
