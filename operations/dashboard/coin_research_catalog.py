@@ -11,6 +11,12 @@ import math
 from pathlib import Path
 from typing import Any
 
+from bybit_workbench.market_identity import (
+    BYBIT_PUBLIC_MARKET_SOURCE_ID,
+    BYBIT_VENUE_ID,
+    bybit_instrument_id,
+)
+
 CATALOG_PATH = Path(__file__).with_name("instrument_research_catalog.json")
 SCHEMA = "CRIPTA_COIN_RESEARCH_PROPOSAL_V1"
 
@@ -18,8 +24,8 @@ SCHEMA = "CRIPTA_COIN_RESEARCH_PROPOSAL_V1"
 def read_catalog(path: Path | None = None) -> dict[str, Any]:
     """Fail closed on absent, non-versioned or inconsistent evidence.
 
-    Missing exact instrument_id is allowed only as explicit PROPOSAL status,
-    not as REGISTERED research evidence.
+    Require the exact canonical market/source/instrument identity, even while
+    physical-store selection and publication stay PROPOSAL only.
     """
     source = CATALOG_PATH if path is None else path
     if not source.is_file() or source.stat().st_size > 500_000:
@@ -49,11 +55,17 @@ def read_catalog(path: Path | None = None) -> dict[str, Any]:
             raise ValueError("RESEARCH_CATALOG_PROVENANCE")
         if not identity.get("symbol") or not identity.get("venue_id"):
             raise ValueError("RESEARCH_CATALOG_INSTRUMENT")
-        if identity.get("instrument_id") is None and (
-            identity.get("identity_status") != "PENDING_EXACT_INSTRUMENT_ID_RESOLUTION"
+        if (
+            identity.get("venue_id") != BYBIT_VENUE_ID
+            or identity.get("market_source_id") != BYBIT_PUBLIC_MARKET_SOURCE_ID
+            or identity.get("product") != "LINEAR"
+            or identity.get("instrument_id")
+            != bybit_instrument_id("linear", identity["symbol"])
+            or identity.get("identity_status")
+            != "DERIVED_FROM_CANONICAL_MARKET_IDENTITY_V1"
             or quality.get("publication_qc") != "PROPOSAL_ONLY"
         ):
-            raise ValueError("RESEARCH_CATALOG_UNRESOLVED_IDENTITY")
+            raise ValueError("RESEARCH_CATALOG_IDENTITY_MISMATCH")
         counts = record.get("counts")
         money = record.get("economics")
         if not isinstance(counts, dict) or not isinstance(money, dict):
