@@ -166,7 +166,7 @@ def test_dashboard_exposes_authenticated_read_only_prearm_route():
         encoding="utf-8"
     )
     assert 'R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"' in source
-    assert "state = prearm.unified_r1_prearm_state(" in source
+    assert "state = unified_r1_prearm_state(" in source
     handler = source.split("    def do_GET(self)", 1)[1].split(
         "    def do_POST(self)", 1
     )[0]
@@ -178,3 +178,18 @@ def test_dashboard_exposes_authenticated_read_only_prearm_route():
     assert "R1_UNIFIED_PREARM_STATUS_PATH," not in source.split(
         "U6_STRATEGY_POST_PATHS =", 1
     )[1].split("}", 1)[0]
+
+
+def test_ruff_import_layout_diagnostic_for_ci_only():
+    import subprocess
+    import sys
+
+    executable = "ruff.exe" if sys.platform == "win32" else "ruff"
+    ruff = Path(sys.executable).with_name(executable)
+    output = subprocess.run(
+        [str(ruff), "check", "--select", "I", "--diff", str(Path(__file__))],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert output.returncode == 0, output.stdout + output.stderr
