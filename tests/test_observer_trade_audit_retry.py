@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import http.client
 import json
 import socket
 import types
@@ -26,6 +27,9 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
         pass
 
     class Response:
+        def __init__(self, *, incomplete: bool = False) -> None:
+            self.incomplete = incomplete
+
         def __enter__(self) -> Response:
             return self
 
@@ -33,6 +37,8 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
             pass
 
         def read(self) -> bytes:
+            if self.incomplete:
+                raise http.client.IncompleteRead(b"truncated", 99)
             body = {"retCode": 0, "time": 1791840000000, "result": {"list": []}}
             return json.dumps(body).encode()
 
@@ -43,7 +49,7 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
         next_response = response_plan.pop(0)
         if isinstance(next_response, BaseException):
             raise next_response
-        return Response()
+        return Response(incomplete=next_response == "incomplete_body")
 
     namespace: dict[str, object] = {
         "urllib": types.SimpleNamespace(
@@ -59,6 +65,7 @@ def _audit_function(response_plan: list[object]) -> tuple[Any, list[float]]:
         "_HTTPS_CONTEXT": object(),
         "ContinuityNotProvable": NotProvable,
         "socket": socket,
+        "http": types.SimpleNamespace(client=http.client),
         "json": json,
         "datetime": datetime,
         "UTC": UTC,
@@ -90,3 +97,28 @@ def test_non_network_error_does_not_retry() -> None:
     with pytest.raises(Exception, match="invalid public data"):
         fetch("APTUSDT")
     assert timeouts == [2.0]
+
+
+def test_partial_http_response_body_retries_and_proves_exact_rest_snapshot() -> None:
+    fetch, timeouts = _audit_function(["incomplete_body", "ok"])
+    rows, response_time = fetch("APTUSDT")
+    assert rows == []
+    assert response_time.tzinfo is not None
+    assert timeouts == [2.0, 2.0]
+
+
+def test_repeat_partial_response_body_fails_closed_after_two_attempts() -> None:
+    fetch, timeouts = _audit_function(["incomplete_body", "incomplete_body"])
+    with pytest.raises(Exception, match="PUBLIC_TRADE silence audit unavailable for DOTUSDT"):
+        fetch("DOTUSDT")
+    assert timeouts == [2.0, 2.0]
+
+
+def test_remote_disconnected_retries_without_silent_continuity_assumption() -> None:
+    fetch, timeouts = _audit_function([
+        http.client.RemoteDisconnected("close before reply"),
+        "ok",
+    ])
+    rows, _ = fetch("LTCUSDT")
+    assert rows == []
+    assert timeouts == [2.0, 2.0]

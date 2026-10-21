@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import http.client
 import hashlib
 import json
 import os
@@ -501,7 +502,11 @@ def _fetch_recent_trade_snapshot(
             ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             break
-        except (TimeoutError, socket.timeout, urllib.error.URLError) as exc:
+        except (
+            TimeoutError, socket.timeout, urllib.error.URLError,
+            http.client.IncompleteRead, http.client.RemoteDisconnected,
+            ConnectionResetError,
+        ) as exc:
             if attempt == 0:
                 continue
             raise ContinuityNotProvable(
