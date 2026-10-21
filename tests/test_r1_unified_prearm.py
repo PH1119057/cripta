@@ -92,9 +92,10 @@ def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
     assert {scope["symbol"] for scope in result["instrument_scopes"]} == set(
         CARD.symbols
     )
-    assert result["ready_to_arm"] is False
-    assert result["arm_route_enabled"] is False
-    assert "UNIFIED_OWNER_ARM_ROUTE_NOT_IMPLEMENTED" in result["reasons"]
+    assert result["ready_to_arm"] is True
+    assert result["arm_route_enabled"] is True
+    assert result["armed"] is False
+    assert "EXPLICIT_OWNER_ARM_NOT_GRANTED" in result["reasons"]
     assert all(
         command.lstrip().upper().startswith("SELECT")
         for command in db.query_log
