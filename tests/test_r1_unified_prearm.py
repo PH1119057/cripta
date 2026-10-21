@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from bybit_workbench.r1_unified_prearm import unified_r1_prearm_state
 from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
 
 
@@ -69,6 +68,8 @@ class ReadOnlyDB:
 
 
 def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
+    import bybit_workbench.r1_unified_prearm as prearm
+
     db = ReadOnlyDB()
     monkeypatch.setattr(
         "bybit_workbench.r1_unified_prearm.evaluate_live_arm",
@@ -76,7 +77,7 @@ def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
             ready=True, failed_codes=()
         ),
     )
-    result = unified_r1_prearm_state(
+    result = prearm.unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert result["installed"] is True
@@ -112,9 +113,11 @@ def test_one_strategy_one_account_five_symbol_prearm_scopes(monkeypatch):
     ],
 )
 def test_prearm_refuses_ambiguous_identity(attribute, value, reason):
+    import bybit_workbench.r1_unified_prearm as prearm
+
     db = ReadOnlyDB()
     setattr(db, attribute, value)
-    result = unified_r1_prearm_state(
+    result = prearm.unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert result["installed"] is False
@@ -123,6 +126,8 @@ def test_prearm_refuses_ambiguous_identity(attribute, value, reason):
 
 
 def test_unified_readiness_refuses_preexisting_gate_permission_and_arms(monkeypatch):
+    import bybit_workbench.r1_unified_prearm as prearm
+
     db = ReadOnlyDB()
     db.gate_enabled = 1
     db.active_permissions = True
@@ -133,7 +138,7 @@ def test_unified_readiness_refuses_preexisting_gate_permission_and_arms(monkeypa
             ready=False, failed_codes=("CRITICAL_FAULT_DELIVERY",)
         ),
     )
-    result = unified_r1_prearm_state(
+    result = prearm.unified_r1_prearm_state(
         db, release_commit=RELEASE, now=NOW
     )
     assert len(result["strategies"]) == 1
@@ -161,7 +166,7 @@ def test_dashboard_exposes_authenticated_read_only_prearm_route():
         encoding="utf-8"
     )
     assert 'R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"' in source
-    assert "state = unified_r1_prearm_state(" in source
+    assert "state = prearm.unified_r1_prearm_state(" in source
     handler = source.split("    def do_GET(self)", 1)[1].split(
         "    def do_POST(self)", 1
     )[0]
