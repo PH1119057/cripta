@@ -7,6 +7,11 @@ from .contracts import StrategyCard
 from .dashboard_control import card_from_editable
 
 R1_VERSION: Final = "1.1-micro-live"
+
+# New independent Strategy identity for the owner-approved five-symbol R1.
+# Historical per-symbol R1_VERSION / R1_STRATEGY_IDS are immutable for Exit/audit.
+R1_UNIFIED_STRATEGY_ID: Final = "r1_five_symbols"
+R1_UNIFIED_VERSION: Final = "1.0-five-symbols-20261021"
 R1_SYMBOLS: Final = (
     "APTUSDT",
     "INJUSDT",
@@ -239,4 +244,39 @@ def build_r1_cards(
             approved_source=approved_source,
         )
         for symbol in R1_SYMBOLS
+    )
+
+
+def r1_unified_strategy_payload() -> dict[str, object]:
+    """Build one R1 Strategy definition for five coins, preserving old R1 cards.
+
+    This is inert Strategy authoring only: no activation, binding, execution
+    permission or owner arm occurs when it is built.
+    """
+    payload = r1_strategy_payload(R1_SYMBOLS[0])
+    payload["strategy_id"] = R1_UNIFIED_STRATEGY_ID
+    payload["strategy_version"] = R1_UNIFIED_VERSION
+    payload["name"] = "R1 · APT/ARB/DOT/INJ/LTC · LONG+SHORT"
+    payload["description"] = (
+        "Owner-approved R1 one Strategy/five symbols 2026-10-21; "
+        "identical Entry/Exit/protection policies to R1 1.1 per-symbol "
+        "cards. A single StrategyActivation may monitor five coins and "
+        "both directions; REAL admission is separately authorized."
+    )
+    payload["symbols"] = list(R1_SYMBOLS)
+    payload["scope"] = {"kind": "symbols", "symbols": list(R1_SYMBOLS)}
+    return payload
+
+
+def build_r1_unified_card(
+    *,
+    approved_at: datetime | None = None,
+    approved_source: str = "owner-r1-one-strategy-five-symbols-2026-10-21",
+) -> StrategyCard:
+    """Create the proposed immutable unified StrategyCard without DB writes."""
+    when = (approved_at or datetime.now(UTC)).astimezone(UTC)
+    return card_from_editable(
+        r1_unified_strategy_payload(),
+        approved_at=when,
+        approved_source=approved_source,
     )
