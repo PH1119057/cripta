@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 
+from bybit_workbench import r1_unified_arm_control as rail
 from bybit_workbench.live_arm_readiness import LiveArmContext
 from bybit_workbench.universal_entry.r1_strategy import build_r1_unified_card
-
-import bybit_workbench.r1_unified_arm_control as rail
-
 
 NOW = datetime(2026, 10, 21, 17, 30, tzinfo=UTC)
 RELEASE = "a" * 40
@@ -190,7 +189,7 @@ def test_unified_arm_is_one_owner_action_one_permission_five_scopes(monkeypatch)
     request_ids = set()
     for sql, args in db.writes:
         if "live_arm_evidence" in sql:
-            witness = __import__("json").loads(args[-1])
+            witness = json.loads(args[-1])
             request_ids.add(witness["owner_action_request_id"])
             assert witness["aggregate_committed_usdt_max"] == "50"
     assert request_ids == {"owner-request-unique-123"}
