@@ -5,7 +5,6 @@ from typing import Any
 
 from .live_arm_readiness import (
     LiveArmContext,
-    active_live_arm_session,
     evaluate_live_arm,
 )
 from .universal_entry.r1_strategy import (
