@@ -34,6 +34,7 @@ from bybit_workbench.live_arm_readiness import (
     scope_for_check,
     strategy_symbol_scope_key,
 )
+from bybit_workbench.r1_unified_prearm import unified_r1_prearm_state
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
@@ -3551,6 +3552,7 @@ U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
 U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"
 R1_MICRO_LIVE_PATH = "/api/r1/micro-live"
 R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
+R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
     U6_STRATEGY_VERSION_PATH,
@@ -4439,6 +4441,19 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                     "dbname=cripta user=cripta host=/var/run/postgresql"
                 ) as connection:
                     state = r1_micro_live_state(
+                        connection,
+                        release_commit=LOADED_RELEASE_COMMIT,
+                        now=datetime.now(UTC),
+                    )
+                _u6_json(self, 200, state)
+            except (ValueError, RuntimeError, psycopg.Error) as exc:
+                _u6_json(self, 409, {"error": str(exc)})
+        elif path == R1_UNIFIED_PREARM_STATUS_PATH:
+            try:
+                with psycopg.connect(
+                    "dbname=cripta user=cripta host=/var/run/postgresql"
+                ) as connection:
+                    state = unified_r1_prearm_state(
                         connection,
                         release_commit=LOADED_RELEASE_COMMIT,
                         now=datetime.now(UTC),
