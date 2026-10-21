@@ -32,7 +32,7 @@ def require_quiesced_observer() -> None:
         ["systemctl", "is-active", OBSERVER_UNIT],
         check=False, capture_output=True, text=True,
     )
-    if result.stdout.strip() == "active":
+    if result.stdout.strip() != "inactive":
         raise RuntimeError("R1_MIGRATION_BLOCKED: observer must be stopped")
 
 
