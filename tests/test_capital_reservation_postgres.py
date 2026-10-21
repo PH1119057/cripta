@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from threading import Barrier
@@ -24,11 +25,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _seed_attempts(prefix: str, *, count: int = 3) -> dict[str, str]:
+def _seed_attempts(
+    prefix: str, *, count: int = 3, unified_r1: bool = False
+) -> dict[str, str]:
     assert DSN is not None
     now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
-    strategy_id = f"{prefix}-strategy"
-    strategy_version = "1"
+    strategy_id = "r1_five_symbols" if unified_r1 else f"{prefix}-strategy"
+    strategy_version = "1.0-five-symbols-20261021" if unified_r1 else "1"
     strategy_fp = f"{prefix}-strategy-fp"
     activation_id = f"{prefix}-activation"
     entry_fp = f"{prefix}-entry-fp"
