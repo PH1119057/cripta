@@ -1144,6 +1144,7 @@ async function refresh(){const r=await fetch('/api/status',{cache:'no-store'});c
   legacyRows.innerHTML=d.legacy.length?d.legacy.map(x=>`<tr><td><b>${x.name}</b></td><td>${size(x.bytes)}</td><td>${x.files}</td><td>${x.report_roots}</td><td>${x.research_modules}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">История ещё не перенесена</td></tr>';
   legacyCatalog.innerHTML=d.legacy.map(x=>`<details><summary>Показать содержимое ${x.name}</summary><h3>Наборы отчётов (${x.reports.length})</h3><div class="catalog">${x.reports.map(n=>`<span class="item">${n}</span>`).join('')}</div><h3>Исследовательские модули (${x.modules.length})</h3><div class="catalog">${x.modules.map(n=>`<span class="item">${n}</span>`).join('')}</div></details>`).join('');
 
+}
 /* Coin-card research history: presentation only, no trading or editing. */
 const coinHistorySymbol=document.getElementById('coinHistorySymbol');
 const coinHistorySummary=document.getElementById('coinHistorySummary');
@@ -1215,8 +1216,7 @@ coinHistoryLoad().catch(e=>{
   coinHistorySummary.textContent='История исследований недоступна: '+String(e.message);
   coinHistoryTimeline.textContent='';
 });
-
-} loadStrategies().catch(()=>{});refresh().catch(e=>stamp.textContent='ошибка: '+e);scheduleLivePoll(0);document.addEventListener('visibilitychange',()=>scheduleLivePoll(document.hidden?livePollDelay():0));setInterval(()=>refresh().catch(()=>{}),60000);
+loadStrategies().catch(()=>{});refresh().catch(e=>stamp.textContent='ошибка: '+e);scheduleLivePoll(0);document.addEventListener('visibilitychange',()=>scheduleLivePoll(document.hidden?livePollDelay():0));setInterval(()=>refresh().catch(()=>{}),60000);
 
 /* Right rail is a presentation-only view of already evidenced Bybit closures. */
 const railPeriodKey='cripta-workspace-closed-period-v1';
