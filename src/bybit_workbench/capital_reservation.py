@@ -176,6 +176,13 @@ class PostgresCapitalReservationPort:
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
                 (lock_identity,),
             )
+            # The portfolio ceiling is Strategy-wide even across release
+            # generations. Serialize all unified R1 commitments too.
+            if request.strategy_id == _R1_UNIFIED_STRATEGY_ID:
+                self._connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                    ("r1-aggregate-cap:" + request.strategy_id,),
+                )
             existing = self._connection.execute(
                 """SELECT reservation_id,account_ref,strategy_attempt_id,requested_amount,
                           amount_currency,capacity_snapshot_id,state,created_at,updated_at,
