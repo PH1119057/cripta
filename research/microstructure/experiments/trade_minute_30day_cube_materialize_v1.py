@@ -16,7 +16,7 @@ PREFLIGHT: exact owner/group/mode/ACL and actual-actor traversal/create/rename
   independently verified on 2026-10-21; script rechecks actual actor and targets.
 No Strategy/Entry/Exit/Execution changes, no OOS, no implied receipt/observed timing.
 """
-import argparse,csv,datetime as dt,gzip,hashlib,importlib.util,io,json,os,pwd,stat
+import argparse,csv,datetime as dt,gzip,hashlib,importlib.util,io,json,os,pwd,stat,sys,time
 from pathlib import Path
 
 BASE=Path("/srv/cripta/source_checkout/research/microstructure")
@@ -88,7 +88,7 @@ def run(sym):
     man_path=OUT/(sym+"_MANIFEST.json")
     if part.exists() or man_part.exists():raise FileExistsError("PARTIAL_OUTPUT_PRESENT_STOP")
     fd=os.open(part,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o660)
-    total=0;nulls={str(i):0 for i,_,_,_ in FEATURES};raw_counts=[]
+    total=0;nulls={str(i):0 for i,_,_,_ in FEATURES};raw_counts=[];started=time.monotonic()
     with os.fdopen(fd,"wb") as raw:
         with gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:
             with io.TextIOWrapper(gz,encoding="utf-8",newline="") as txt:
@@ -125,6 +125,13 @@ def run(sym):
                                 "UNKNOWN_NO_RECEIPT_PUBLICATION_CLOCK",agg,sha,
                                 row["fill_count"]))
                             total+=1
+                    elapsed=time.monotonic()-started
+                    done=day_idx+1
+                    progress=dict(stage="PHYSICAL_CUBE_6FACTOR",symbol=sym,
+                        processed_days=done,total_days=30,percent=round(done*100/30,2),
+                        elapsed_seconds=round(elapsed,2),eta_seconds=round(elapsed*(30-done)/done,2),
+                        cache="MISS_STREAMING_SOURCE",heartbeat=True)
+                    print(json.dumps(progress,separators=(",",":")),file=sys.stderr,flush=True)
     if total!=30*1440*len(FEATURES):raise ValueError("OUTPUT_ROW_COUNT_MISMATCH")
     os.rename(part,result_path)
     sha=source_hash(result_path)
