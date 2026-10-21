@@ -247,3 +247,86 @@ def test_released_reservation_no_longer_blocks_capacity() -> None:
         assert released.state is CapitalReservationState.RELEASED
         second = port.reserve(_request(prefix, 1, identity))
         assert second.state is CapitalReservationState.RESERVED
+
+
+def test_unified_r1_parallel_cap_consumed_and_confirmed_release() -> None:
+    """Five requests fit 50 USDT; the sixth races but must fail."""
+    assert DSN is not None
+    prefix = "r1-cap-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=7, unified_r1=True)
+    barrier = Barrier(6)
+
+    def attempt(index: int) -> tuple[int, str]:
+        request = replace(
+            _request(prefix, index, identity),
+            capacity_available=Decimal("100"),
+        )
+        with psycopg.connect(DSN) as connection:
+            port = PostgresCapitalReservationPort(connection)
+            barrier.wait(timeout=15)
+            try:
+                row = port.reserve(request)
+            except InsufficientCapital:
+                return index, "BLOCKED"
+            return index, row.state.value
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(attempt, range(6)))
+    accepted = [i for i, state in results if state == "RESERVED"]
+    blocked = [i for i, state in results if state == "BLOCKED"]
+    assert len(accepted) == 5
+    assert len(blocked) == 1
+
+    with psycopg.connect(DSN) as connection:
+        current = connection.execute(
+            """SELECT coalesce(sum(requested_amount),0), count(*)
+                 FROM runtime.capital_reservations
+                WHERE strategy_id=%s AND state<>'RELEASED'""",
+            (identity["strategy_id"],),
+        ).fetchone()
+        assert current == (Decimal("50"), 5)
+        port = PostgresCapitalReservationPort(connection)
+        first = replace(
+            _request(prefix, accepted[0], identity),
+            capacity_available=Decimal("100"),
+        )
+        assert port.reserve(first).state is CapitalReservationState.RESERVED
+
+        port.transition(
+            first.reservation_id,
+            state=CapitalReservationState.DISPATCHED,
+        )
+        port.transition(
+            first.reservation_id,
+            state=CapitalReservationState.PENDING_EXCHANGE_REFLECTION,
+            exchange_commitment_at=first.requested_at,
+        )
+        port.transition(
+            first.reservation_id,
+            state=CapitalReservationState.CONSUMED,
+            exchange_commitment_at=first.requested_at,
+        )
+        seventh = replace(
+            _request(prefix, 6, identity),
+            capacity_available=Decimal("100"),
+        )
+        with pytest.raises(InsufficientCapital):
+            port.reserve(seventh)
+
+        second = replace(
+            _request(prefix, accepted[1], identity),
+            capacity_available=Decimal("100"),
+        )
+        port.transition(
+            second.reservation_id,
+            state=CapitalReservationState.RELEASED,
+        )
+        assert port.reserve(seventh).state is CapitalReservationState.RESERVED
+
+        rejected = replace(
+            _request(prefix, blocked[0], identity),
+            requested_amount=Decimal("11"),
+            capacity_available=Decimal("100"),
+        )
+        with pytest.raises(ValueError, match="R1_UNIFIED_CAPITAL_POLICY_MISMATCH"):
+            port.reserve(rejected)
