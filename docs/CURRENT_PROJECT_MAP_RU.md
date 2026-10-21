@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.27
+**Версия:** 12.28
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4338,3 +4338,71 @@ are NOT CHECKED HERE, nor does the successful deploy authorize REAL Entry.
 No new execution permission or OWNER ARM occurred. GitHub/source HEAD
 may advance via other commits after this LOADED_COMMIT; such metadata
 changes do not constitute installed trading runtime update.
+
+
+## 2026-10-21 historical Observer fault resolution — APPLIED / RUNTIME CHECKED HERE
+
+CHECKED HERE at 2026-10-21T14:12:14.632601Z on host `robot`,
+before this documentation-only publication:
+`REMOTE_HEAD=fe16d61717ecd3463291305d85d090e38b3bdc52`;
+`SOURCE_HEAD=fe16d61717ecd3463291305d85d090e38b3bdc52`;
+`INSTALLED_COMMIT=LOADED_COMMIT=aef533b154945e0b2871571796a75848c3f77ebd`;
+`OPERATIONAL_DELTA_COMMIT(S)=NONE VERIFIED HERE` is **not asserted**,
+because independent full-path live operational-delta scan was not performed.
+Later GitHub/source documentary or research commits are not deployment.
+
+Explicit owner continuation after a specific five-fault closure question
+authorized historical resolution, not data reconstruction or any trading
+authorization. One guarded transaction ran canonical
+`resolve_observer_runtime_fault()` under actual Unix/DB actor `cripta`
+through the approved SentinelX rail. It proved exact five OPEN IDs,
+no new faults from loaded release, fresh `RUNNING` observer readiness,
+one active Strategy / EntryPlan / ten directional lanes, mainnet=0,
+and used `FOR UPDATE` plus all-or-nothing post-update assertions.
+No filesystem mutation, root-run trading workflow or unauthorized
+privilege change occurred.
+
+Exact five resolved historical fault IDs:
+- `observer-fault-2eaa63d221ec1109ef83b3a98bf74b3d`:
+  OI30S slot `oi-slot-30s-59750730` MISSED, **NOT_RECOVERED**.
+- `observer-fault-517218b0c40aadac71766cbd80fe159e`:
+  LTCUSDT publicTrade REST timeout, historical epoch NOT_COMPARABLE.
+- `observer-fault-f791a975814bfd3682d77022fe69a875`:
+  DOTUSDT publicTrade REST timeout, historical epoch NOT_COMPARABLE.
+- `observer-fault-4c5b1c619daa1e56bcd5819a8ee4bef7`:
+  DOTUSDT missing exactly 3 REST-proven publicTrade execIds,
+  **NOT_RECOVERED**, historical epoch NOT_COMPARABLE.
+- `observer-fault-59e719946075f54a59045c2267664a57`:
+  APTUSDT HTTP IncompleteRead, historical body NOT_RECOVERED;
+  bounded retry fixed in deployed PR #138.
+
+Original `detected_at`, `error_message`, `exact_ids`, source release and
+historical detail were retained. Each row now has `state=RESOLVED`,
+common `resolved_at=2026-10-21T14:12:14.632601Z`,
+`last_resolved_by=owner-approved-chat-2026-10-21`, and a separate
+`last_resolution_reason` explicitly preserving NOT_RECOVERED / old
+NOT_COMPARABLE data. This is operator incident closure, NOT retroactive
+continuity parity, replay or missing historical data backfill.
+
+Independent SELECT after commit:
+`runtime.lifecycle_faults` for the Observer fault code:
+`OPEN=0; RESOLVED=79` (previously OPEN=5 / RESOLVED=74);
+**zero OPEN all lifecycle fault codes**, **zero OPEN release-arm incidents**.
+`r1_five_symbols` remained the sole active StrategyActivation with one
+ACTIVE PRIMARY TradingAccount binding and zero enabled REAL permissions.
+`control.execution_gates.mainnet=0`, reason
+`private WS reconnect: verification pending`.
+Observer readback at 2026-10-21T14:12:47.723019Z:
+`RUNNING`, ready=true, one EntryPlan, ten monitoring rows,
+`facts_received=88776`, exact loaded release `aef533b...`.
+An additional `systemctl show` request was blocked by the **OpenAI
+upstream tool-security gate**, so no additional service-liveness assertion
+is made from that call; prior service liveness and current fresh Observer
+behavior remain separately evidenced.
+
+No execution permission, LIVE-arm, mainnet gate, Exchange order,
+Strategy policy, historical PAPER trade row or account binding was
+changed by incident closure. Current private-WS reconnection readiness,
+real-order admission and open-position Exit takeover are independently
+**NOT VERIFIED HERE**. Historical gaps remain excluded from claims of
+proven continuous historical observation.
