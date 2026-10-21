@@ -45,3 +45,11 @@
 - `SOURCE_FILE_SHA256=NOT_CHECKED_HERE`; raw row schema and true source capture/receipt clock = `NOT_CHECKED_HERE`. No pass is promoted. Existing GitHub source-reader audit remains valid, but source provenance gate remains OPEN.
 - Next action requires non-mutating effective actor/path/ACL preflight under approved research rail and a server source access contract compliant with §19.5–19.6. Do not use root as stand-in for intended research actor, do not widen permissions. If exact source visibility cannot be established under approved tool/actor gate, classify `BLOCKED`, keep 50/50 pairs `NO_READY` and continue only independent GitHub-side tasks.
 - **Pass 1 still OPEN; 0/50 RESEARCH-READY**. No server filesystem writes, no jobs launched/stopped, no DB/Strategy/LIVE changes. This operation's only write is this GitHub research checkpoint.
+
+
+## 2026-10-21 — identity preflight continuation, upstream gate
+
+- Exact read-only `sentinel_exec(command="whoami")` returned `ok=true`, `returncode=0`, `output="sentinelx"`. Therefore the previous unqualified `stat` was executed on the management `sentinelx` route, not proven as `cripta`. The `stat` permission denial may reflect management actor traversal; **it cannot be attributed to research actor `cripta`**.
+- The *next* independent diagnostic tool invocation in a staged sequence (`id` command) was **BLOCKED_UPSTREAM_OPENAI** before a host result. The batch aborted; `namei` and the planned allowlisted `sudo -u cripta python3 -c` file-read smoke were **NOT EXECUTED / NOT CHECKED HERE**. No guesses about the exact OpenAI block rule. No retry, alternate formatting, actor substitution, privilege/permission change, or tool-policy mutation.
+- Current actor conclusion: `MANAGEMENT_ACTOR=sentinelx CHECKED HERE`; `RESEARCH_ACTOR_SOURCE_READ=UNKNOWN`; source SHA256/receipt clock/full-period checks stay OPEN, 0/50 READY.
+- Route remains **BLOCKED_UPSTREAM_OPENAI** for further host actor/path QC until an independently approved policy route exists. GitHub code review is unaffected. The blocker is not a failure of `cripta`'s proven Unix rights; no server work launched.
