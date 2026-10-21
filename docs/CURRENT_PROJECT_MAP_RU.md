@@ -1,6 +1,6 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.24
+**Версия:** 12.25
 **Дата:** 2026-10-21
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
@@ -4162,3 +4162,39 @@ reconciliation remains independently required; OWNER ARM remains manual.
 No production SQL, deploy, LIVE or Exchange mutation was performed in this
 source-repair preparation. Release/runtime behavior after deployment remains
 NOT VERIFIED until a later explicit checkpoint.
+
+
+## 2026-10-21 R1 one-Strategy/five-instrument alignment — SOURCE ONLY
+
+OWNER DECISION: R1 represents ONE Strategy for APTUSDT, ARBUSDT, DOTUSDT,
+INJUSDT and LTCUSDT (LONG and SHORT), with ONE StrategyActivation and ONE
+dedicated TradingAccount. The whole-plan EntryPlan yields ten causal
+`EntryPlan × symbol × direction` monitoring lanes, not ten independent
+Strategies or ten persisted EntryPlans.
+
+CHECKED HERE at GitHub `6ae7a6982e78232aa433dfb3aaeefd60a1abdf3a`
+and read-only production snapshot:
+- installed application runtime remained `6d931baf1a8eeb323704df36cb765f0c67d477f9`;
+- five enabled, separately named legacy R1 StrategyCards have exact
+  single-symbol scope, identical result-affecting policy blocks and distinct
+  per-symbol immutable identities;
+- one ACTIVE TradingAccount and one account connector; no
+  `strategy_execution_bindings` rows as inspected before this change;
+- existing `paper_positions` and `paper_orders` records carry historical
+  Strategy/Activation/EntryPlan/ExitPlan IDs; no historical rewrite is allowed;
+- global mainnet new Entry gate remained OFF at last checked snapshot.
+
+SOURCE-PREPARED: new inert `build_r1_unified_card()` preserves all R1
+result-affecting policy blocks while selecting all five symbols under one new
+Strategy identity. Added immutable policy parity and ten-lane materialization
+tests. Historic `build_r1_cards()` and original per-symbol records are retained.
+
+NOT IMPLEMENTED / NOT DEPLOYED: transactional production transition of five
+active activations to the one unified activation, exact account binding, R1
+legacy owner-arm route replacement, application release and runtime continuity.
+Do not claim one active production Strategy from this source-only step.
+No automatic ExecutionPermission ON, mainnet opening, new LIVE-arm, Exchange
+mutations, historical PAPERS/REAL rewrite or change to existing ExitPlan.
+Pending PAPER and REAL Exit continuity is a mandatory gate before the eventual
+production transition. Independent Observer continuity faults remain open and
+are not auto-resolved by this configuration change.
