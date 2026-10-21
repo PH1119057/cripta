@@ -60,7 +60,6 @@ def test_duplicate_and_censored_trade_broken_rejected(tmp_path: Path) -> None:
 def test_no_synthetic_instrument_identity_or_file_fallback(tmp_path: Path) -> None:
     source = read_catalog()
     dest = tmp_path / "bad.json"
-    record = source["records"][0]
     bad = copy.deepcopy(source)
     bad["records"][0]["instrument"]["instrument_id"] = "WRONG"
     dest.write_text(json.dumps(bad))
