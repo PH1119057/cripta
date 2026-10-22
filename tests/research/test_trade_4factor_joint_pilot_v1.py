@@ -5,9 +5,9 @@ import gzip
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = ROOT / "research/microstructure/experiments/trade_4factor_joint_pilot_v1.py"
@@ -27,12 +27,14 @@ class PilotContractTest(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.raw = self.root / self.symbol / "public_trades" / f"{self.symbol}{self.day}.csv.gz"
         self.raw.parent.mkdir(parents=True)
-        self.start = dt.datetime(2026, 5, 19, tzinfo=dt.timezone.utc).timestamp()
+        self.start = dt.datetime(2026, 5, 19, tzinfo=dt.UTC).timestamp()
         self.manifest = self.root / "source_manifest.json"
 
     def make_data(self, bad_side=False, reversed_ts=False):
         with gzip.open(self.raw, "wt", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=("timestamp", "symbol", "side", "price", "foreignNotional"))
+            writer = csv.DictWriter(
+                f, fieldnames=("timestamp", "symbol", "side", "price", "foreignNotional")
+            )
             writer.writeheader()
             for minute in range(self.minutes):
                 t = self.start + 60 * minute
@@ -47,7 +49,10 @@ class PilotContractTest(unittest.TestCase):
                     rows[1] = (t - 1, "Buy", "40")
                 for j, (ts, side, amount) in enumerate(rows):
                     writer.writerow({"timestamp": f"{ts:.4f}", "symbol": self.symbol,
-                                     "side": "Garbage" if bad_side and minute == 0 and j == 0 else side,
+                                     "side": (
+                                         "Garbage" if bad_side and minute == 0 and j == 0
+                                         else side
+                                     ),
                                      "price": price, "foreignNotional": amount})
         digest = hashlib.sha256(self.raw.read_bytes()).hexdigest()
         self.manifest.write_text(json.dumps({"source_files": [
@@ -57,7 +62,9 @@ class PilotContractTest(unittest.TestCase):
 
     def test_physical_factors_and_unseen_price_labels(self):
         self.make_data()
-        rows, labels, processed = SUT.compute(self.symbol, self.day, self.minutes, SUT.Decimal(int(self.start)), self.raw)
+        rows, labels, processed = SUT.compute(
+            self.symbol, self.day, self.minutes, SUT.Decimal(int(self.start)), self.raw
+        )
         self.assertEqual(processed, 480)
         self.assertEqual(len(rows), 120)
         self.assertTrue(all(r["factor_4_large_trade_share"] is None for r in rows[:60]))
