@@ -154,3 +154,7 @@ GitHub branch, registered server worktree и его dirty/untracked state,
 running jobs, effective writer и previous checkpoint. Exact safe match ->
 resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 для mutation и owner decision. Полный контракт: DEVELOPMENT_RELEASE §50.4.
+## Git housekeeping checkpoint — 2026-10-22
+
+Старые worktrees сохранены как исторические; их физическая уборка **не блокирует** новые scoped задачи. Но DEVELOPMENT_RELEASE §50.4 task discovery и проверка WIP/actor/job остаются обязательными. Датированный checkpoint: CURRENT_PROJECT_MAP §38, DOCUMENTATION_INDEX §52, supporting Issue #153. Исторический код/Strategy rules не переносить в `main` молча.
+
