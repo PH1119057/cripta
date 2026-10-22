@@ -1,5 +1,9 @@
 name: Issue 153 - retire verified merged legacy branches
 on:
+  pull_request:
+    paths:
+      - '.github/scripts/retire-issue-153*'
+      - '.github/workflows/retire-issue-153.yml'
   workflow_dispatch:
     inputs:
       mode:
@@ -14,25 +18,37 @@ on:
         type: string
         default: ""
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 concurrency:
   group: issue-153-branch-retirement
   cancel-in-progress: false
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout for no-secret tests
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test retirement manifest policy
+        run: node --test .github/scripts/retire-issue-153.test.js
   retire:
-    if: github.repository == 'PH1119057/cripta' && github.actor == 'PH1119057' && github.ref == 'refs/heads/main'
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'PH1119057/cripta' && github.actor == 'PH1119057' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout trusted main
+      - name: Trusted main checkout
         uses: actions/checkout@v4
         with:
           ref: main
           persist-credentials: false
-      - name: Test retirement manifest policy
-        run: node --test .github/scripts/retire-issue-153.test.js
-      - name: Preview or owner-authorized delete with exact SHA verification
+      - name: Exact 91 SHA preflight and optional delete
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RETIRE_MODE: ${{ inputs.mode }}
