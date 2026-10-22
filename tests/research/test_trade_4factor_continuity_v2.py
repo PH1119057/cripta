@@ -86,5 +86,5 @@ def test_p90_order_statistic_and_empty_gap():
     row = primary.factors_for_minute(state, deque([[9.0] * 10] * 60, maxlen=60))
     assert row["factor_28_minute_fill_notional_p90_usdt"] == 15.0
     assert row["factor_27_median_positive_gap_ms"] is None
-    assert row["factor_4_large_trade_share"] == 1.0
+    assert row["factor_4_large_trade_share"] == 65 / 70
     assert statistics.median([100, 300]) == 200
