@@ -3,7 +3,9 @@
 
 Consumes independently QC'd first-month historical *event-time* 4-factor cubes.
 NO second-month raw files, trading runtime, database, or Exchange I/O.
-Primary anchor i%15==0: completed factor minute i, proxy price at i+1\nminute close, then 15-minute return to minute i+16 close. No overlapping\n15-minute return intervals. Conservative one-complete-minute waiting period. Offset
+Primary anchor i%15==0: completed factor minute i, proxy price at i+1
+minute close, then 15-minute return to minute i+16 close. No overlapping
+15-minute return intervals. Conservative one-complete-minute waiting period. Offset
 sensitivity is excluded from confirmatory tests and can be computed separately.
 Nested contrast: pair-true observations versus parent-true AND pair-false,
 within each UTC day. Parent is selected using TRAIN20 only, not the late folds.
@@ -116,11 +118,21 @@ def extract_nonoverlap(rows, fold):
     for i in range(lo, hi - HORIZON, HORIZON):
         if i % HORIZON != PRIMARY_OFFSET:
             raise ValueError("INVALID_PRIMARY_ANCHOR")
-        # Feature at minute i becomes complete only at end(i); never\n        # use its own minute-close price as a prospective starting price.\n        # Delay one full minute to minute i+1 close; end at i+16 close.\n        block = rows[i + 1:i + HORIZON + 2]\n        if len(block) != HORIZON + 1:\n            raise ValueError("TRUNCATED_LAGGED_PRICE_WINDOW")
+        # Feature at minute i becomes complete only at end(i); never
+        # use its own minute-close price as a prospective starting price.
+        # Delay one full minute to minute i+1 close; end at i+16 close.
+        block = rows[i + 1:i + HORIZON + 2]
+        if len(block) != HORIZON + 1:
+            raise ValueError("TRUNCATED_LAGGED_PRICE_WINDOW")
         prices = [r["price_close"] for r in block]
         if any(x is None or not math.isfinite(x) or x <= 0 for x in prices):
             continue
-        if (\n            rows[i]["minute_index"] != i\n            or rows[i + 1]["minute_index"] != i + 1\n            or rows[i + HORIZON + 1]["minute_index"] != i + HORIZON + 1\n        ):\n            raise ValueError("NONCONTIGUOUS_LAGGED_MINUTES")
+        if (
+            rows[i]["minute_index"] != i
+            or rows[i + 1]["minute_index"] != i + 1
+            or rows[i + HORIZON + 1]["minute_index"] != i + HORIZON + 1
+        ):
+            raise ValueError("NONCONTIGUOUS_LAGGED_MINUTES")
         ret = 10000 * math.log(prices[-1] / prices[0])
         events.append((i // 1440, rows[i], ret))
     return events
@@ -327,7 +339,8 @@ def run(symbol):
     for fold, events in folds.items():
         def selected(row):
             return condition(row, "high_rate", threshold, disabled)
-        def complement(row):\n            return row["factor_2_trade_rate"] is not None and not selected(row)
+        def complement(row):
+            return row["factor_2_trade_rate"] is not None and not selected(row)
         baseline[fold] = summarize(daily_contrast(events, selected, complement))
     later = baseline["VALID3"]["daily"] + baseline["LATE7"]["daily"]
     singleton_p = signflip_p([
@@ -337,7 +350,10 @@ def run(symbol):
         "status": "NONOVERLAP_NESTED_EXPLORATORY_NOT_INDEPENDENT_OOS",
         "symbol": symbol,
         "period_utc": "2026-05-18..2026-06-16",
-        "minute_horizon": 15, "primary_anchor_minute_mod_15": 0,\n        "feature_minute_to_proxy_start_lag_minutes": 1,\n        "price_proxy_start": "last_public_trade_price_in_minute_i_plus_1",\n        "price_proxy_end": "last_public_trade_price_in_minute_i_plus_16",
+        "minute_horizon": 15, "primary_anchor_minute_mod_15": 0,
+        "feature_minute_to_proxy_start_lag_minutes": 1,
+        "price_proxy_start": "last_public_trade_price_in_minute_i_plus_1",
+        "price_proxy_end": "last_public_trade_price_in_minute_i_plus_16",
         "split_day_ranges": SPLITS,
         "min_daily_test_and_control": MIN_DAILY_ARM,
         "num_primary_eligible_events_by_fold": {
@@ -356,7 +372,8 @@ def run(symbol):
             "Receiver availability after public-trade event-time is UNKNOWN",
             "Pair vs parent-only means compare nested non-overlapping groups",
             "UTC-day blocks may be serially dependent; small late-day sample",
-            "Other anchor offsets were not pooled or cherry-picked",\n            "Price starts after one-minute delay; no same-minute close leakage",
+            "Other anchor offsets were not pooled or cherry-picked",
+            "Price starts after one-minute delay; no same-minute close leakage",
             "Multiple-test correction is exploratory and assigned at cohort consolidation",
             "No execution, fees/slippage, MFE/MAE or Strategy/live policy",
         ],
@@ -458,7 +475,8 @@ def consolidate():
     output = {
         "status": "COHORT_NONOVERLAP_NESTED_SCREEN_COMPLETE_NOT_RESEARCH_READY",
         "period_utc": "2026-05-18..2026-06-16",
-        "horizon_minutes": 15, "only_anchor_offset": 0,\n        "feature_minute_to_proxy_start_lag_minutes": 1,
+        "horizon_minutes": 15, "only_anchor_offset": 0,
+        "feature_minute_to_proxy_start_lag_minutes": 1,
         "hypothesis_family_size": TOTAL_HYPOTHESES,
         "instrument_lineage": entries, "tests": top,
         "limitations": [
@@ -466,7 +484,8 @@ def consolidate():
             "Day-level signflip is preliminary, not robust serial-dependence correction",
             "BH applies only to this prespecified 45-condition 15m amplitude family",
             "Non-overlapping 15-minute horizons reduce but do not eliminate day dependence",
-            "Receiver-time feature availability unknown; no fillable quote or LIVE implication",\n            "Price response starts one full minute after feature minute: proxy only",
+            "Receiver-time feature availability unknown; no fillable quote or LIVE implication",
+            "Price response starts one full minute after feature minute: proxy only",
             "No after-fee PnL; second-month holdout not read",
         ],
     }
