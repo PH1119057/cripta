@@ -129,10 +129,9 @@ def factors_for_minute(state, previous):
     amounts = state["amounts"]
     n = state["fill_count"]
     large = None
-    lookback_n = 0
+    lookback_n = sum(len(bucket) for bucket in previous) if len(previous) == 60 else 0
     if len(previous) == 60 and amounts:
         historical = sorted(v for bucket in previous for v in bucket)
-        lookback_n = len(historical)
         if lookback_n >= 100 and sum(amounts) > 0:
             cutoff = percentile(historical, 0.99)
             large = sum(v for v in amounts if v >= cutoff) / sum(amounts)
@@ -206,7 +205,7 @@ def run(symbol, days):
         "actor_uid": os.geteuid(),
         "symbol": symbol,
         "days": days,
-        "source_commit": "SOURCE_CHECKOUT_HEAD_VERIFIED_EXTERNALLY",
+        "source_commit": (REPO / ".git/refs/heads/main").read_text().strip(),
         "code_sha256": sha256_file(code),
         "source_snapshot_sha256": sha256_file(snapshot),
         "source_manifest_sha256": sha256_file(SOURCE_MANIFEST),
