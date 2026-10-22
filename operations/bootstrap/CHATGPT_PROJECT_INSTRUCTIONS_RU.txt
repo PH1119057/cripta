@@ -185,3 +185,4 @@ English — для точных identifiers/API/DB tokens.
 Новый чат до создания ветки: проверить незавершённые Issue/PR,
 ветки и worktrees задачи; продолжать только после проверки job/actor/
 dirty state, при неоднозначности HARD_STOP. См. DEV §50.4.
+Cleanup snapshot: MAP §38, INDEX §52; DEV §50.4 обязателен.
