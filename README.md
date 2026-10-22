@@ -119,3 +119,12 @@ HARD_STOP=YES. Exact contract: META §15, WORK §4.3, ARCH §13.
 ## Routine restart recovery
 
 The canonical recovery requirements are defined in ARCH, TRADING_CONTOUR, GLOSSARY, DEVELOPMENT_RELEASE and DOCUMENTATION_INDEX. Exchange snapshots are authoritative for current positions, while durable local history must be preserved. A canonical decision is not deployed implementation.
+## Разделение параллельной разработки
+
+Один GitHub authority `PH1119057/cripta:main`; независимые scoped workstreams:
+`research/*` (эксперименты), `docs/*` (канон и документация),
+`core/*` (код/тесты/CI). `cross/*` допускается только с явным owner approval.
+GitHub PR scope checker проверяет изменённые пути, а защита `main` должна
+делать его required check. Полный контракт — `DEVELOPMENT_RELEASE §50`,
+для исследований дополнительно `RESEARCH_COMPUTE §24`. Изолированная
+ветка не равна publication, deployment или торговому LIVE.
