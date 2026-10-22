@@ -14,7 +14,6 @@ import hashlib
 import json
 import math
 import os
-import pwd
 import statistics
 import sys
 import time
@@ -128,6 +127,8 @@ def assert_same(expected, actual, label, rownum):
 
 
 def check(symbol, days):
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise PermissionError("ACTOR_NOT_CRIPTA")
     root = BASE / ("continuous_" + str(days) + "d_v2")
