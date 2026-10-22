@@ -24,7 +24,7 @@ def test_nonoverlap_15_minute_windows_and_split_boundaries():
         assert len(events) == n_expected
         inds = [day * 1440 for day, _, _ in events]
         assert inds[0] % 15 == 0
-        assert all(0 < ret for _, _, ret in events)
+        assert all(ret > 0 for _, _, ret in events)
         assert events[0][0] == SUT.SPLITS[fold][0]
         last_day = SUT.SPLITS[fold][1] - 1
         assert events[-1][0] == last_day
