@@ -17,6 +17,7 @@ import hashlib
 import io
 import json
 import os
+import platform
 import shutil
 import statistics
 import sys
@@ -166,6 +167,12 @@ def write_json(path, value):
     tmp.replace(path)
 
 
+def _peak_rss_kib():
+    import resource
+
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
 def run(symbol, days):
     import pwd
 
@@ -197,16 +204,44 @@ def run(symbol, days):
     code = Path(__file__).resolve()
     snapshot = target / "source_snapshot.py"
     shutil.copyfile(code, snapshot)
+    snapshot_root = target / "source_snapshot"
+    snapshot_root.mkdir(mode=0o2770, exist_ok=False)
+    shutil.copyfile(code, snapshot_root / "materializer.py")
+    logdir = target / "logs"
+    logdir.mkdir(mode=0o2770, exist_ok=False)
+    resultdir = target / "results"
+    resultdir.mkdir(mode=0o2770, exist_ok=False)
     command = [
         "sudo", "-u", "cripta", "python3", "-B", str(code),
         "--symbol", symbol, "--days", str(days),
     ]
+    source_commit = (REPO / ".git/refs/heads/main").read_text().strip()
+    (target / "source_commit.txt").write_text(source_commit + "\n")
+    (target / "command.txt").write_text(" ".join(command) + "\n")
+    (target / "source_sha256.txt").write_text(sha256_file(snapshot) + "\n")
+    (target / "environment.txt").write_text(
+        "actor_uid=" + str(os.geteuid()) + "\n"
+        "python_executable=" + sys.executable + "\n"
+        "python_version=" + sys.version.split()[0] + "\n"
+        "host_system=" + platform.system() + "\n"
+    )
+    write_json(target / "input_provenance.json", {
+        "scope": [START.isoformat(), selected[-1][0].isoformat()],
+        "source_root": str(RAW),
+        "files": [
+            {
+                "day": day.isoformat(), "path": str(path),
+                "expected_sha256": sources[(symbol, day.isoformat())]["compressed_sha256"],
+            }
+            for day, path in selected
+        ],
+    })
     write_json(target / "run_manifest.json", {
         "status": "RUNNING",
         "actor_uid": os.geteuid(),
         "symbol": symbol,
         "days": days,
-        "source_commit": (REPO / ".git/refs/heads/main").read_text().strip(),
+        "source_commit": source_commit,
         "code_sha256": sha256_file(code),
         "source_snapshot_sha256": sha256_file(snapshot),
         "source_manifest_sha256": sha256_file(SOURCE_MANIFEST),
@@ -224,6 +259,7 @@ def run(symbol, days):
     total_fills = 0
     nulls = {k: 0 for k in KEYS}
     start_time = time.monotonic()
+    progress_log = logdir / "progress.jsonl"
     with partial.open("xb") as raw_out:
         with gzip.GzipFile(fileobj=raw_out, mode="wb", mtime=0) as gz:
             with io.TextIOWrapper(gz, encoding="utf-8", newline="") as stream:
@@ -266,14 +302,17 @@ def run(symbol, days):
                         total_rows += 1
                     elapsed = time.monotonic() - start_time
                     done = offset + 1
-                    print(json.dumps({
+                    progress = json.dumps({
                         "stage": "MONTH30_PHYSICAL_4FACTOR",
                         "symbol": symbol, "processed_days": done, "total_days": days,
                         "percent": round(100 * done / days, 2),
                         "elapsed_seconds": round(elapsed, 2),
                         "eta_seconds": round(elapsed * (days - done) / done, 2),
                         "heartbeat": True, "cache": "MISS_RAW_ARCHIVE",
-                    }), file=sys.stderr, flush=True)
+                    })
+                    with progress_log.open("a", encoding="utf-8") as log:
+                        log.write(progress + "\n")
+                    print(progress, file=sys.stderr, flush=True)
     if total_rows != 1440 * days:
         raise ValueError("OUTPUT_MINUTE_CARDINALITY")
     partial.replace(outfile)
@@ -295,6 +334,12 @@ def run(symbol, days):
         ],
     }
     write_json(target / "result.json", result)
+    write_json(resultdir / "index.json", {
+        "result_path": str(target / "result.json"),
+        "physical_file": str(outfile),
+        "physical_sha256": result["features_sha256"],
+        "rows": total_rows,
+    })
     state = json.loads((target / "run_manifest.json").read_text())
     write_json(target / "run_final.json", {
         **state, "status": "PHYSICAL_COMPLETE",
@@ -307,6 +352,7 @@ def run(symbol, days):
         "raw_fill_count": total_fills, "output_sha256": result["features_sha256"],
         "run_dir": str(target),
         "elapsed_seconds": round(time.monotonic() - start_time, 2),
+        "peak_rss_kib": _peak_rss_kib(),
     }))
 
 
