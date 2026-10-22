@@ -135,3 +135,14 @@ Exact ChatGPT UI Project Instructions template:
 ## Recovery implementation route
 
 Recovery/reconnect tasks require ARCH + TRADING_CONTOUR + GLOSSARY + DEVELOPMENT_RELEASE pre-read. Must verify idempotent Exchange-to-DB state projection, paginated snapshots, exact historical execution IDs, 60-position restart/recovery tests and no replay of uncertain Exchange mutations. Do not confuse canonical approval with deployed implementation.
+## Parallel Git workstream guard
+
+Каждая задача — отдельный актуальный-base worktree и scoped branch:
+`research/*` для `research/**` / `tests/research/**` /
+`scripts/research/**`; `docs/*` только для canonical docs и bootstrap;
+`core/*` для executable code / tests / CI. Cross-contour `cross/*`
+требует явного OWNER DECISION и review marker. Никогда не добавлять
+посторонние files, не обходить gate сменой branch name; не выполнять
+source-sync или deploy из isolated research worktree. Owner правил:
+`docs/DEVELOPMENT_RELEASE_RULES_RU.md §50`; research publication:
+`docs/RESEARCH_COMPUTE_RULES_RU.md §24`.
