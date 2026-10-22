@@ -1,0 +1,337 @@
+{
+  "schema": 2,
+  "issue": 153,
+  "issueComment": 6344778195,
+  "repo": "PH1119057/cripta",
+  "approvedBaseline": "6025a28a368f950ef5c42e4f1a550cb6fc1c355f",
+  "archive": {
+    "location": "/data/cripta/github_cleanup_archive/20261022",
+    "githubHeadsSnapshotSha256": "c335b942e1d4c9a559ca991f3d5084a3c3b7da52ea53f333dbe569dcf5dbc8b0",
+    "wipArchiveSha256": "fc0182f5041859643cf03a48b51b8c8a78a8bd740da253a1850ea4d434f34a7f"
+  },
+  "deleteCount": 56,
+  "deleteRefs": [
+    {
+      "name": "c1-legacy-reports-migration-20260930",
+      "sha": "224b4b778fea02dd3c4cd683d3ae064d4163d068"
+    },
+    {
+      "name": "chatgpt/command-alert-visibility-20261005",
+      "sha": "3ff52558d926cc24992d5ca0f788ad1f5a81d89b"
+    },
+    {
+      "name": "chatgpt/dashboard-app-path-fix-20261005",
+      "sha": "6fddabef87bd2233abb0d135bdfd7aad69dda0aa"
+    },
+    {
+      "name": "chatgpt/dashboard-verifier-fix-20261005",
+      "sha": "732e29cce65ef22b9c97e1669e900f8bc0896d7a"
+    },
+    {
+      "name": "chatgpt/initial-protection-idempotency-20261005",
+      "sha": "92c2b301c33d7393d9dba8671569b52a29cd8f11"
+    },
+    {
+      "name": "chatgpt/net-pnl-dashboard-20261005",
+      "sha": "1938e07bf9f3ac126dd002a97b8b61c6c5ffdb0e"
+    },
+    {
+      "name": "chatgpt/net-pnl-dashboard-v2-20261005",
+      "sha": "47579d7c0aae0e25f28c3f70d242a37cfa250e1b"
+    },
+    {
+      "name": "chatgpt/owner-controlled-live-test-20261006",
+      "sha": "f782556e65e5e40a5f3f6345c3ef8534c6878552"
+    },
+    {
+      "name": "chatgpt/r1-reconciliation-reliability-20261005",
+      "sha": "a3e7f9726ae516db245d142c48c105a664d2e891"
+    },
+    {
+      "name": "cleanup/legacy-workstation-tests-20261018",
+      "sha": "267d54fb1f5c3fc629e83246b954e39a2a876615"
+    },
+    {
+      "name": "docs-final-filesystem-state-20260930",
+      "sha": "ba4e43b530f2dd2024931e57647e28687f128d08"
+    },
+    {
+      "name": "docs-final-sync-20261007",
+      "sha": "bfa81fc31c3753a34a2747eb6c25cc3cf15a8278"
+    },
+    {
+      "name": "docs-research-cleanup-final-20261001",
+      "sha": "6ec096f8e3d6b62112e4779fec37201d98b5426b"
+    },
+    {
+      "name": "docs/access-actor-runbook-20261015",
+      "sha": "2eac20ac50b65c07113533ddf162b9cdaf90833c"
+    },
+    {
+      "name": "docs/coin-research-ledger-postmerge-checkpoint-20261021",
+      "sha": "2a2d8bc50549045642f53f52fd00a79c6d85ab20"
+    },
+    {
+      "name": "docs/research-data-contour-20260921",
+      "sha": "104b1d45f2e34fa401adf72cad4865cdb02856ad"
+    },
+    {
+      "name": "feat/tp-diagnostic-contract-20261014",
+      "sha": "7ddf23c8ada5b374c477ded007b183f505e81ddd"
+    },
+    {
+      "name": "feature/coin-research-ledger-approved-20261021",
+      "sha": "a2ce8c206a52f65dd178f67ffe29f5f41d3ceb01"
+    },
+    {
+      "name": "feature/coin-research-ledger-preview-20261021",
+      "sha": "3c6553b20569048858e62a9ee3a4cffec49574cd"
+    },
+    {
+      "name": "feature/per-symbol-coin-market-context-20261015",
+      "sha": "cd1427ed1877e9bf014f3f0d35bf48f5659a2b31"
+    },
+    {
+      "name": "final-contour-cleanup-20260930",
+      "sha": "e3361250ccd300503227947c5f3de8ec9771beaf"
+    },
+    {
+      "name": "fix/bybit-position-live-metrics-20261009",
+      "sha": "7cf79dd8932e86b061de99255eb216aca2475b3f"
+    },
+    {
+      "name": "fix/dashboard-open-strategy-monitor-20261019",
+      "sha": "b8cf82681d4d6b025814a4c656033389378d5ea7"
+    },
+    {
+      "name": "fix/dispatcher-correlator-cte-alias-20261018",
+      "sha": "c9f880adf611978f46434f1ec016903efa094b8f"
+    },
+    {
+      "name": "fix/install-reconciliation-smallint-20261008",
+      "sha": "08c5cc48ebc7d8e07ebf3abb4ab4cdb2620b53d5"
+    },
+    {
+      "name": "fix/opportunity-tracker-tx-boundary-20260902",
+      "sha": "31a4f0677d0de928389b911a2802955b83baff64"
+    },
+    {
+      "name": "fix/opportunity-tracker-tx-minimal-20260902",
+      "sha": "0e5f0fda583c7161d49476dc2b916f878d79b6e5"
+    },
+    {
+      "name": "fix/r1-exit-safety-20261020",
+      "sha": "939e6091e80183f14a63afbd05a51d47d40effc4"
+    },
+    {
+      "name": "fix/r1-exit-stale-decision-guard-20261019",
+      "sha": "80b5b3e786b5b3c4d7fe6bc4bbb7d3a16e5e6e7d"
+    },
+    {
+      "name": "fix/r1-parity-attestation-candidate-20261018",
+      "sha": "398be7841f824ad858c0628715c75ef7b8ae6ab7"
+    },
+    {
+      "name": "fix/r1-transition-terminal-command-state-case-20261021",
+      "sha": "b34b4fa9a87f4c83cdd556c4ee0cb3c9bb694167"
+    },
+    {
+      "name": "fix/r1-unified-prearm-readmodel-20261021",
+      "sha": "bb7fa94bcf58e20356c418fe2191d1e47f75c278"
+    },
+    {
+      "name": "fix/r10-binding-lock-safeguard-20261018",
+      "sha": "f23ca2e4bb2d11a18b1d02accc4134c837d848de"
+    },
+    {
+      "name": "health-backup-map-20260930",
+      "sha": "e716d27405e82a87f1f6fce44c690349e1a41998"
+    },
+    {
+      "name": "health-backup-repair-20260930",
+      "sha": "9d32270cd490b599ef1408a14a462fe5d7012c47"
+    },
+    {
+      "name": "manage-download-expansion-20261001",
+      "sha": "299427c905770b75742bb3232afa4a8ae7c04cba"
+    },
+    {
+      "name": "r1-causal-cancel-audit-20261007",
+      "sha": "731fb2587fd2a5cbcbc1828f5bfa316a88cb7e41"
+    },
+    {
+      "name": "r1-initial-tp-repair-20261007",
+      "sha": "a5d026dc44701f9108c46ef3c8159e86219fdf02"
+    },
+    {
+      "name": "r1-paper-bundle-fix-20261007",
+      "sha": "25e905656f5cce771fa75d771d781a3ec1af2b58"
+    },
+    {
+      "name": "r4-bridge-cleanup-20260930",
+      "sha": "91fda73112b9e01b68cce599cbe129a16993fdc4"
+    },
+    {
+      "name": "r4-map-sync-20260930",
+      "sha": "3f75ac1c7a54222ededa16780f9a99ea28cee2ea"
+    },
+    {
+      "name": "release-backup-retention-20261001",
+      "sha": "3bb5242045c0cf7c61ca9a94d9e2c52f245dd01a"
+    },
+    {
+      "name": "repair-c1-dashboard-index-20260930",
+      "sha": "42ed05a845bca8c1d2ba32d79405d767cc407e4c"
+    },
+    {
+      "name": "repair-dashboard-transport-20260930",
+      "sha": "552c30acf01e08ad9fe5b076225053b11fd74be2"
+    },
+    {
+      "name": "repair-quarantine4-publication-20261001",
+      "sha": "d9b53d1e1644123423689a56cf6a6cf37ef7d57e"
+    },
+    {
+      "name": "research/ci-scope-smoke-20261022",
+      "sha": "77967c7fb3961116bb2187fac7116aa6c8b2ce07"
+    },
+    {
+      "name": "retire-entry-shadow-scanner-20261001",
+      "sha": "ddc77a51a901c39f3a9bf6d01a5c7e7b77f52862"
+    },
+    {
+      "name": "stage-r1-opposite-tp-20261007",
+      "sha": "b8281119c616c74f35adc4c24d8b5117b24a7ddd"
+    },
+    {
+      "name": "stage3-r1-restart-equivalence-20261006",
+      "sha": "563d3b881cdc7c337d33329add5a84c038babcfb"
+    },
+    {
+      "name": "stage4a-paper-real-canon-20261006",
+      "sha": "67ae7f475251d11c5ad34cf46b74add016a42626"
+    },
+    {
+      "name": "system-backup-glob-fix-20261001",
+      "sha": "38a7a20fc42cd27281dbc48cc607c464baed1b81"
+    },
+    {
+      "name": "system-backup-retention-20261001",
+      "sha": "4853ef158690bd6875ab78a8b1402e042cb19bef"
+    },
+    {
+      "name": "t3-map-sync-20260930",
+      "sha": "f0c293f44d3c7ffd188a7367debb573f41ec4da4"
+    },
+    {
+      "name": "t3-runtime-cutover-fix-20260930",
+      "sha": "a0d0f962bbf212ad9dc1d1aada9838178e9e21dd"
+    },
+    {
+      "name": "t4-map-sync-20260930",
+      "sha": "bb248f0716b00198c8284ff4e81964f2808b0af6"
+    },
+    {
+      "name": "work/supervisor-exchange-protection-20261012",
+      "sha": "3018a48af0aeba751b30ca40dc4162d0685a5b95"
+    }
+  ],
+  "retainUniqueHistoryRefs": [
+    {
+      "name": "docs/stage7c-parity-status-20261007",
+      "sha": "e2f1c9c5cb9692234b670473af8c4bb10293c471"
+    },
+    {
+      "name": "feature/data-continuity-integration-v1-20261005",
+      "sha": "ccfa5fb0209c0a8459d9cf42c2dce6e9791dc754"
+    },
+    {
+      "name": "feature/data-continuity-rebase-71cec-20261005",
+      "sha": "0de20d946d8c8b825cafde165c5fd3fab1c812f2"
+    },
+    {
+      "name": "feature/exit-dynamic-l53",
+      "sha": "17451ef549220c3bd432ddeca40bfa247f74a5cc"
+    },
+    {
+      "name": "feature/per-symbol-coin-market-context-integration-20261016",
+      "sha": "73ce94fbc4b7263718e4fd3a7f098d797f9aa093"
+    },
+    {
+      "name": "fix/observer-durable-fault-stage6a-20261006",
+      "sha": "ed530ba0398a695a3f44ae0b3e54d093c4515caf"
+    },
+    {
+      "name": "fix/observer-fault-dashboard-stage6b-20261006",
+      "sha": "4b77d1dcaffb552fd4aa7040d0e4a4f69f03382e"
+    },
+    {
+      "name": "fix/r1-entry-atr-cancel-20261008",
+      "sha": "bddf645c7aadc8f51b5851c74f3bebc1856e3d6a"
+    },
+    {
+      "name": "fix/r1-observer-capture-structural-entry-20261008",
+      "sha": "918c097cb7dfab1fc9873d2dfadc37469ad92733"
+    },
+    {
+      "name": "fix/r1-paper-history-bootstrap-20261006",
+      "sha": "ff892ab14eeb745e9f6c56dfa0acb573b60ada30"
+    },
+    {
+      "name": "fix/r1-paper-real-entry-parity-20261006",
+      "sha": "78d202a48bcfacbb7ac9df1edf57b003cd9c0d38"
+    },
+    {
+      "name": "fix/r1-paper-real-exit-parity-20261006",
+      "sha": "94d49f7010510a1d30946b4153c2ed479fd1d49e"
+    },
+    {
+      "name": "fix/r1-paper-real-reverse-parity-20261006",
+      "sha": "b4a5373722d4c70bd31fded897d2ffd42e728543"
+    },
+    {
+      "name": "fix/r1-parity-tests-20261018",
+      "sha": "13538a389b11e607d51af553c0591a09988caa7c"
+    },
+    {
+      "name": "fix/r1-reverse-observer-hotfix-20261006",
+      "sha": "48ef49f547516fb9b2ffe22e37f5ad09d15b133d"
+    },
+    {
+      "name": "fix/stage6b1-migration-idempotency-20261006",
+      "sha": "caee47030ef0af728e691fb3f40a8756ac1f3404"
+    },
+    {
+      "name": "fix/stage6b2-dashboard-deploy-verifier-20261006",
+      "sha": "f04b6034085df8859f0af3054532669441882c8a"
+    },
+    {
+      "name": "fix/stage6b3-resolve-sql-20261006",
+      "sha": "451b39368950631d5f39fcd12e9ce64f94727772"
+    },
+    {
+      "name": "fix/stage7c1-live-parity-gate-20261007",
+      "sha": "3cb212a54421c77119d5d961d925b9a74874aab5"
+    },
+    {
+      "name": "fix/stage7c2-lifecycle-terminal-blocked-20261007",
+      "sha": "0544cd4e2f1698e683f78777c1a901431420219a"
+    },
+    {
+      "name": "fix/stage7c3-live-arm-sql-vocab-20261007",
+      "sha": "b7241f01b8a46fc474b9804f76aa788521998257"
+    },
+    {
+      "name": "owner/operator-break-even-20261011",
+      "sha": "b73651b7e0e8c00629a1ab07552dcf2e7127afa5"
+    },
+    {
+      "name": "quarantine4-data-retire-20261001",
+      "sha": "ca962c395a7a20b1834d7a0e418b9fc014ae27d8"
+    }
+  ],
+  "exclusions": [
+    "main",
+    "impl/trade-lifecycle-20260918"
+  ]
+}
