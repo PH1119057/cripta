@@ -1,0 +1,40 @@
+name: Issue 153 - retire verified merged legacy branches
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview before deletion; delete requires owner confirmation"
+        required: true
+        type: choice
+        options: [preview, delete]
+        default: preview
+      confirm:
+        description: "Delete only: type DELETE-91-ISSUE-153-20261022"
+        required: false
+        type: string
+        default: ""
+permissions:
+  contents: write
+  pull-requests: read
+concurrency:
+  group: issue-153-branch-retirement
+  cancel-in-progress: false
+jobs:
+  retire:
+    if: github.repository == 'PH1119057/cripta' && github.actor == 'PH1119057' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Test retirement manifest policy
+        run: node --test .github/scripts/retire-issue-153.test.js
+      - name: Preview or owner-authorized delete with exact SHA verification
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RETIRE_MODE: ${{ inputs.mode }}
+          RETIRE_CONFIRM: ${{ inputs.confirm }}
+        run: node .github/scripts/retire-issue-153.js
