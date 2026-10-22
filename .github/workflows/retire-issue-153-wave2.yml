@@ -1,0 +1,56 @@
+name: Issue 153 - archive 56 unique-history branches (wave 2)
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/retire-issue-153-wave2*'
+      - '.github/workflows/retire-issue-153-wave2.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview first; delete requires an explicit owner confirmation"
+        required: true
+        type: choice
+        options: [preview, delete]
+        default: preview
+      confirm:
+        description: "For delete only, type DELETE-56-ISSUE-153-WAVE2-20261022"
+        required: false
+        type: string
+        default: ""
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: issue-153-wave2-retirement
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only test checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate immutable wave2 manifest contract
+        run: node --test .github/scripts/retire-issue-153-wave2.test.js
+  retire:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'PH1119057/cripta' && github.actor == 'PH1119057' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Preview or SHA-verified owner deletion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WAVE2_MODE: ${{ inputs.mode }}
+          WAVE2_CONFIRM: ${{ inputs.confirm }}
+        run: node .github/scripts/retire-issue-153-wave2.js
