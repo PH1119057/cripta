@@ -14,7 +14,6 @@ import hashlib
 import json
 import math
 import os
-import pwd
 import shutil
 import statistics
 from pathlib import Path
@@ -110,6 +109,8 @@ def measure(returns):
 
 
 def run(symbol):
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise PermissionError("ACTOR_NOT_CRIPTA")
     inp = SRC / "continuous_30d_v2" / (symbol + "_30d_v2")
