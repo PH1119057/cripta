@@ -118,7 +118,8 @@ def compute(symbol,day,minutes,start,raw):
   gap=statistics.median(m["gaps_ms"]) if m["gaps_ms"] else None
   out.append(dict(minute_index=i,symbol=symbol,date_utc=day,
      event_minute_utc=(dt.datetime.fromtimestamp(float(start),tz=dt.timezone.utc)+dt.timedelta(minutes=i)).isoformat(),
-     exchange_event_window_end_only=True,observed_at_utc=None,available_after_utc=None,
+     event_window_end_exclusive_utc=(dt.datetime.fromtimestamp(float(start),tz=dt.timezone.utc)+dt.timedelta(minutes=i+1)).isoformat(),
+     observed_at_utc=None,available_after_utc=None,
      quality="OBSERVED_EXCHANGE_TAPE" if a else "NO_DATA",
      factor_4_large_trade_share=ratio,prior60_n=hist_n,prior60_p99=hist_p99,
      factor_8_max_timestamp_side_group_streak=m["max_group_streak"] if a else None,
@@ -188,7 +189,9 @@ def main():
   limitations=["Pilot only; no independent four-factor full-row QC","historical exchange event-time not receiver as-of",
   "large fill 99th percentile uses previous complete 60 minutes, sample >=100",
   "timestamp-side grouping does not identify parent orders","minute p90 is known at complete bar, not during that minute",
-  "future label inside partial/day boundary only","not OOS, no fee/PnL or Strategy implication"])
+  "future label inside partial/day boundary only",
+  "previous-60-minute threshold resets at UTC day start: first 60 minutes deliberately NO_DATA, not full-month continuity",
+  "not OOS, no fee/PnL or Strategy implication"])
  write_atomic(run/"result.json",result)
  write_atomic(run/"run_manifest.json",{**json.loads((run/"run_manifest.json").read_text()),"status":"PILOT_COMPLETE","outputs_sha256":outputs,"result_sha256":sha256(run/"result.json")})
  print(json.dumps(dict(run_dir=str(run),**result),ensure_ascii=False,separators=(",",":")))
