@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "issue": 153,
+  "repo": "PH1119057/cripta",
+  "approvedBaseline": "573b50735eede7e52a0dd6319076d4a992f44d14",
+  "retain": [
+    "main",
+    "impl/trade-lifecycle-20260918"
+  ],
+  "archive": {
+    "path": "/data/cripta/github_cleanup_archive/20261022",
+    "refsManifestSha256": "c335b942e1d4c9a559ca991f3d5084a3c3b7da52ea53f333dbe569dcf5dbc8b0",
+    "wipTarSha256": "fc0182f5041859643cf03a48b51b8c8a78a8bd740da253a1850ea4d434f34a7f"
+  },
+  "count": 91,
+  "refs": [
+    {
+      "name": "canon/r1-unified-five-symbol-micro-live-risk-20261021",
+      "sha": "5084b8c8609f8b1793a1e6e3e2dfd2b04d7dfeb1"
+    },
+    {
+      "name": "chatgpt/fix-auto-entry-wallet-freshness-20261006",
+      "sha": "e1569fe5f946904ab334630c3d36d28ec75b3214"
+    },
+    {
+      "name": "chatgpt/fix-entry-reconciliation-race-20261005",
+      "sha": "49a86e5996452ee79d17569ee24749f0eba9a8be"
+    },
+    {
+      "name": "chatgpt/strategy-monitor-traffic-20261005",
+      "sha": "4b10f3fd30ed97b6940239a869022a55b3a0a3df"
+    },
+    {
+      "name": "chatgpt/ui-release-independence-20261005",
+      "sha": "45e38252c786c093ebcb41ccce4091018ff20bb0"
+    },
+    {
+      "name": "cross/workstream-isolation-20261022",
+      "sha": "6128cc0b49e5398b5e27b970bcc1206a5ac0c4f2"
+    },
+    {
+      "name": "docs/automation-checkpoint-evidence-20261020",
+      "sha": "fd72f4126b581e63d54c49d8281b534c9b1c4f4a"
+    },
+    {
+      "name": "docs/cross-chat-task-continuity-20261022",
+      "sha": "92752964d704801806f487a207b2990bb7f57a7d"
+    },
+    {
+      "name": "docs/observer-five-faults-audited-resolution-20261021",
+      "sha": "8d4e199098e768100b81d59dbd4b245799d89f49"
+    },
+    {
+      "name": "docs/observer-http-audit-runtime-checkpoint-20261021",
+      "sha": "7e566b81be3b9213cf0284376bb69ee62191ca1a"
+    },
+    {
+      "name": "docs/r1-five-symbol-runtime-verified-20261021",
+      "sha": "c70e9fc24c074299ce7cd17783f183d0ec4ceeaf"
+    },
+    {
+      "name": "docs/r1-unified-50usdt-runtime-verified-20261021",
+      "sha": "28ea2b4d113adc012f5f0cb5cb35c2ff65b7120a"
+    },
+    {
+      "name": "docs/strategy-settings-canon-20260919",
+      "sha": "6b8c9ec2fa6e4adcafcf60e84fe6e442fd6e634d"
+    },
+    {
+      "name": "feat/closed-trade-ledger-attribution-20261008",
+      "sha": "d58977bd9c78cf56bdead747cf4ea4d7601f761b"
+    },
+    {
+      "name": "feat/entry-protection-fault-audit-20261014",
+      "sha": "25bf3b6230b86c85986bf08ef5a958d1a3f9dddc"
+    },
+    {
+      "name": "feat/exchange-authoritative-restart-recovery-20261008",
+      "sha": "5da72057a3f6a6b16ae1c4147ecd39426e99abb7"
+    },
+    {
+      "name": "feat/r1-unified-card-five-symbols-20261021",
+      "sha": "acd8dd68509a3b92b7681e5bc41154f4908105c4"
+    },
+    {
+      "name": "feat/r1-unified-owner-arm-preflight-20261021",
+      "sha": "014baf0c9dd8dc16f69ef96a9ab6e7cefc5e41df"
+    },
+    {
+      "name": "feat/r1-unified-owner-arm-transaction-20261021",
+      "sha": "29ac296ad8e3a117ddadf607fb6ca3b491cf5fc8"
+    },
+    {
+      "name": "feature/account-binding-db-snapshot-20261020",
+      "sha": "a4ee3c29f3472b27cd598be902b27872d0cee1c8"
+    },
+    {
+      "name": "feature/account-binding-readiness-r1-20261020",
+      "sha": "9023be231a16b7f49786713370a7846408ce0275"
+    },
+    {
+      "name": "feature/account-connector-db-snapshot-20261020",
+      "sha": "a845ffd62f1543902dc21eae52273d7282a1dccb"
+    },
+    {
+      "name": "feature/account-connector-proof-20261020",
+      "sha": "b353006e1eb7005171c8e7bcd2f119c063a060b0"
+    },
+    {
+      "name": "feature/consumer-connector-gate-20261020",
+      "sha": "14c56c1732064ff5de5b09b46908c7ea3451bebb"
+    },
+    {
+      "name": "feature/dashboard-binding-readiness-20261020",
+      "sha": "f4a977fe7b357a0ba5f3a41ff84f91a6f66ca01c"
+    },
+    {
+      "name": "feature/dashboard-connector-readiness-20261020",
+      "sha": "0082978aacc29fe76019e2f308ee9bdf7080e662"
+    },
+    {
+      "name": "feature/entry-account-admission-scope-20261020",
+      "sha": "74bd18901df0da0a2c7d3ecda94496e1a4461fa7"
+    },
+    {
+      "name": "feature/entry-account-fanout-plan-20261020",
+      "sha": "54e766d2be72d226c3c33bbab90f0cb40952fa50"
+    },
+    {
+      "name": "feature/entry-admission-account-lineage-20261020",
+      "sha": "2ca1e2d309ff931402d55747f001956b178062ed"
+    },
+    {
+      "name": "feature/entry-fanout-db-read-20261020",
+      "sha": "660c51e7eec15d1daea1da754902193d895ad1a0"
+    },
+    {
+      "name": "feature/r5-active-private-status-scope-20261016",
+      "sha": "9927881213d4a547de89378147a95446e5548f54"
+    },
+    {
+      "name": "fix/consumer-connector-venue-contract-20261020",
+      "sha": "ad4febe2c40c3c7778fc2344dbff0d91f020d63c"
+    },
+    {
+      "name": "fix/consumer-explicit-connector-startup-20261020",
+      "sha": "60e3ae1632ee2c1ea2b6b8ec60daa553a4370c36"
+    },
+    {
+      "name": "fix/control-cohort-release-rearm-20261008",
+      "sha": "8e2af451b230e49942cfd2581f41832b9365bb17"
+    },
+    {
+      "name": "fix/dashboard-connection-indicator-20261009",
+      "sha": "42da863943f31f8cd189e5e1b6c0e248e4546839"
+    },
+    {
+      "name": "fix/dashboard-control-release-verifier-20261009",
+      "sha": "fdac6155f15741adf7b5cfd1713121825c8e5434"
+    },
+    {
+      "name": "fix/dashboard-current-release-incidents-20261012",
+      "sha": "6376f9a6adcf2eb20212d625909fe69c3a45d55e"
+    },
+    {
+      "name": "fix/dashboard-sound-latency-20261009",
+      "sha": "880ca6e42cc75d029633dd1687316a2156dae49f"
+    },
+    {
+      "name": "fix/dashboard-taker-close-20261009",
+      "sha": "9c265d05002969b2ddab281e251ab1398ed3c607"
+    },
+    {
+      "name": "fix/entry-real-account-generation-key-20261020",
+      "sha": "0e76a002e64b410261e9d417bbec2f583431bedd"
+    },
+    {
+      "name": "fix/entryplan-monitor-readmodel-20261021",
+      "sha": "0387e7081d31e999259f94566bb984c9d7660c81"
+    },
+    {
+      "name": "fix/exit-stale-transaction-timeout-20261009",
+      "sha": "c10224da26d639540c1052b640d21e487a94e896"
+    },
+    {
+      "name": "fix/exit-structural-tp-tick-20261009",
+      "sha": "5ddbd81290a6d1a4aa05c5570076698a1073a89f"
+    },
+    {
+      "name": "fix/fanout-snapshot-exhaustiveness-20261020",
+      "sha": "1224b7d806390b61d039a3331bda2134aa3cad0a"
+    },
+    {
+      "name": "fix/force-fresh-protection-audit-new-position-20261015",
+      "sha": "576737f2490d7ffb617c9bb9abe8996f69d7bb33"
+    },
+    {
+      "name": "fix/legacy-arm-account-scope-both-sides-20261020",
+      "sha": "567cb5c03da5a48b69afbe6cab86fcca09583577"
+    },
+    {
+      "name": "fix/legacy-owner-arm-account-boundary-20261020",
+      "sha": "d535bd891cfe9aa97aa7aed162c0dbf6bdb22450"
+    },
+    {
+      "name": "fix/live-release-operator-alert-20261009",
+      "sha": "333ecadeec2a975ba48222673e42c0d1b1e89aa8"
+    },
+    {
+      "name": "fix/manual-smoke-position-response-20261008",
+      "sha": "21029e2152502eb8de56d2dc4aa02110fb7e048b"
+    },
+    {
+      "name": "fix/monitor-open-view-render-20261015",
+      "sha": "c2f20bd560bd18419f9b6802b5a2049072d13e04"
+    },
+    {
+      "name": "fix/multiaccount-live-arm-scope-20261020",
+      "sha": "03a6e8a150df38f7471f0c094443d525cad46eb3"
+    },
+    {
+      "name": "fix/observer-faults-in-events-panel-20261013",
+      "sha": "4e6dadf50dc3bfd322818d22cc2733075c704183"
+    },
+    {
+      "name": "fix/observer-thread-lifecycle-20261010",
+      "sha": "0984e384d29f467ed3cfec989acd95353bd60d72"
+    },
+    {
+      "name": "fix/observer-trade-audit-incomplete-read-20261021",
+      "sha": "20363f68e251057f3f94a78a0b7bbe5328009f3e"
+    },
+    {
+      "name": "fix/observer-trade-audit-timeout-20261013",
+      "sha": "c06d95a0833cee4ccfb0f68cd503ad95a9c57e48"
+    },
+    {
+      "name": "fix/observer-ws-reconnect-20261013",
+      "sha": "0bc266513f26d060189bd196a9b72f66d69cafed"
+    },
+    {
+      "name": "fix/p1-exit-shadow-transaction-20261009",
+      "sha": "6cbf00edb5a8a0e04db80eb00c10661fda6ed0e7"
+    },
+    {
+      "name": "fix/postgres-integration-r10-fixtures-20261018",
+      "sha": "5cfc9c799d0907f67d9e4e832cf4d72964a14128"
+    },
+    {
+      "name": "fix/public-trade-exact-recovery-20261015",
+      "sha": "9a2c4d020ec7d3ef0eba8b166ac8ef61cc199346"
+    },
+    {
+      "name": "fix/r1-account-binding-mainnet-smallint-20261021",
+      "sha": "a7c5f1193960b7c286efa63ec8090dac2db268be"
+    },
+    {
+      "name": "fix/r1-independent-paper-real-parity-20261019",
+      "sha": "99e6a0808d89c406f70103999b59a0f10ed7ce4f"
+    },
+    {
+      "name": "fix/r1-prearm-parity-attestation-20261010",
+      "sha": "c1b4b013c58959debc6324c37c1f0a5b1ff47012"
+    },
+    {
+      "name": "fix/r1-rearm-nonflat-entry-admission-20261009",
+      "sha": "a1254ed497bc92ca194b7de31187e192ae608cef"
+    },
+    {
+      "name": "fix/r1-rearm-stale-session-20261008",
+      "sha": "c17cd11e644dddf32617c7d4efd3a27fe6810b8f"
+    },
+    {
+      "name": "fix/r1-source-live-trading-scope-20261019",
+      "sha": "2bf2e6a4be20b2741a9fed96b99b197d7a15f082"
+    },
+    {
+      "name": "fix/r1-unified-aggregate-capital-admission-20261021",
+      "sha": "9569eff5194db9e7d175cab35369599ddc684e16"
+    },
+    {
+      "name": "fix/r1-unified-migrator-db-schema-20261021",
+      "sha": "9a3e7f71bc62772c7b59867188672a34ccb5f359"
+    },
+    {
+      "name": "fix/recovery-position-rows-20261008",
+      "sha": "87d13384ed4b38e146d4a870a089ec38467bbf0c"
+    },
+    {
+      "name": "fix/release-arm-dict-row-20261009",
+      "sha": "6eb4d87285a2ae24e84c7408fd990c43607867f7"
+    },
+    {
+      "name": "fix/release-arm-retirement-clock-diagnostics-20261015",
+      "sha": "13c16aed26d7947329cbcc86bab68cc60dd375c0"
+    },
+    {
+      "name": "fix/release-arm-smallint-gate-20261009",
+      "sha": "735d7f069ca1d9a77a6c4d667d8fd1fade4692a8"
+    },
+    {
+      "name": "fix/release-arm-supersession-20261021",
+      "sha": "557809a1af63788f19c2fb5a294809f43e764354"
+    },
+    {
+      "name": "fix/release-banner-historical-denial-20261015",
+      "sha": "815eb55fad8e3e49494a0c06e3cb9196ec21ce3e"
+    },
+    {
+      "name": "fix/release-managed-exit-consumer-20261009",
+      "sha": "5d1ce63c8cc171ff85462f5ec7efffd919b990eb"
+    },
+    {
+      "name": "fix/runtime-contour-package-20260929",
+      "sha": "d4800b4ab132e37f896c71801621d245f6af12c5"
+    },
+    {
+      "name": "fix/shared-production-deploy-lock-20261021",
+      "sha": "d8a876039696ffff450b64e00f028c33c2730f14"
+    },
+    {
+      "name": "fix/startup-schema-live-intent-20261008",
+      "sha": "a85a5c19bf479eb2a0bbe5c794136510020faa18"
+    },
+    {
+      "name": "fix/supervisor-fresh-evidence-clock-20261013",
+      "sha": "93888cb959436ab4546b1e74e42b6ced01e84bf8"
+    },
+    {
+      "name": "maintenance/quality-baseline-20261012",
+      "sha": "55eb5d5e6ca59d92e89c2a8f27b08301ca657f72"
+    },
+    {
+      "name": "owner/strategy-multi-account-model-20261020",
+      "sha": "b57701e50a669f782ceaeac10d2c166be505d8e1"
+    },
+    {
+      "name": "research-full20-replay-20260922",
+      "sha": "30e2a2c563ec52a437a8d09ceccff02fd7c3ff32"
+    },
+    {
+      "name": "research/r1-h9-return020-20261020",
+      "sha": "de3ead0f87ded4492cdb74f830e56ff4d7030f85"
+    },
+    {
+      "name": "signal-analysis-export-v1",
+      "sha": "1a8c55d72da592c58e76ad9abb0f1cda11678528"
+    },
+    {
+      "name": "strategy-settings-20260919",
+      "sha": "dd55abda01fe9f97a54b06fe2a9331f0b53ee591"
+    },
+    {
+      "name": "test/independent-account-exit-postgres-20261020",
+      "sha": "29be8d1792ad5476ef54e4a7941a1feaff48f10c"
+    },
+    {
+      "name": "ui/be-conservative-after-fees-pullback-buffer-20261015",
+      "sha": "ca71bb63176c4693b30022d42ee7ca95ecac3ee2"
+    },
+    {
+      "name": "ui/break-even-fee-aware-indicator-20261015",
+      "sha": "351c7acd6c7fc6315bfcdc63326d32fb2b0d2ae9"
+    },
+    {
+      "name": "ui/compact-trading-health-rails-20261010",
+      "sha": "caf4181f33a71c4f167dc4e4cd1aab74335c9536"
+    },
+    {
+      "name": "ui/move-owner-test-to-bybit-log-20261009",
+      "sha": "95fe12bdaeba3bd9f9e3836a140a6d7925c2072a"
+    },
+    {
+      "name": "ui/open-positions-left-market-center-20261015",
+      "sha": "326b1e7df431083a792aac6e4f8a0d16dae37c68"
+    },
+    {
+      "name": "ui/symmetric-trading-workspace-20261010",
+      "sha": "6a33edda6260e4a8af9a94c1054f0f4e1f367d66"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+"use strict";
+const test=require("node:test");
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const path=require("node:path");
+const {validateManifest,parseIssueTable,sameRefs,CONFIRM}=require("./retire-issue-153.js");
+const m=JSON.parse(fs.readFileSync(path.join(__dirname,"retire-issue-153-manifest.json"),"utf8"));
+test("approved 91 refs",()=>assert.deepEqual(validateManifest(m),{ok:true,errors:[]}));
+test("excluded retained refs",()=>assert(!m.refs.some(v=>m.retain.includes(v.name))));
+test("unique refs",()=>assert.equal(new Set(m.refs.map(x=>x.name)).size,91));
+test("exact phrase",()=>assert.equal(CONFIRM,"DELETE-91-ISSUE-153-20261022"));
+test("reject missing one",()=>assert.equal(validateManifest({...m,refs:m.refs.slice(1)}).ok,false));
+test("reject SHA drift",()=>assert.equal(validateManifest({...m,refs:m.refs.map((x,i)=>i?x:{...x,sha:"bad"})}).ok,false));
+test("reject main",()=>assert.equal(validateManifest({...m,refs:m.refs.map((x,i)=>i?x:{...x,name:"main"})}).ok,false));
+test("reject duplicate",()=>assert.equal(validateManifest({...m,refs:m.refs.map((x,i)=>i!==1?x:{...x,name:m.refs[0].name})}).ok,false));
+test("reject traversal",()=>assert.equal(validateManifest({...m,refs:m.refs.map((x,i)=>i?x:{...x,name:"core/../main"})}).ok,false));
+test("issue extraction exact",()=>{
+ const q=String.fromCharCode(96),v=m.refs[0];
+ const body="pre\n## 2026-10-22 exact first-wave reference manifest\n\n| "+q+v.name+q+" | "+q+v.sha+q+" | REVIEW ONLY |\n\n## Next\n";
+ assert.deepEqual(parseIssueTable(body),[v]);
+});
+test("reject issue SHA mismatch",()=>assert.equal(sameRefs(m.refs,m.refs.map((x,i)=>i?x:{...x,sha:"0".repeat(40)})),false));
