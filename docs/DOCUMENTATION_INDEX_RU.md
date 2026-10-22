@@ -518,6 +518,10 @@ META/INDEX.
 подтвердил вставку exact template, состояние UI copy = `NOT CHECKED HERE`.
 
 
+
+### 17.10.1 Project Instructions: long-job delivery and cross-chat continuity — 2026-10-22
+Owner-provided UI instruction text is synchronized into the version-controlled bootstrap without adding an independent authority. Sections 13–14 refer to existing canonical contracts: DEVELOPMENT_RELEASE §19 / §50.4, RESEARCH_COMPUTE long-compute/checkpoint rules, CHATGPT_INTERACTION_RULES §11.1, CURRENT_PROJECT_MAP §38 and INDEX §52. A long-running job is not complete merely because a chat reply failed or was delivered; require actual job result and QC and separately verify notification delivery. Server completion push requires configured integration; one-shot ChatGPT follow-up can be used only when actually created. The verified template is the sole exact text for manual ChatGPT UI synchronization; GitHub tests cannot claim the UI copy is already updated. No trading, architecture, actor permission, runtime or Project Source change.
+
 ## 17.11 Filesystem contour separation
 
 OWNER DECISION 2026-09-29:
