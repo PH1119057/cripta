@@ -111,7 +111,7 @@ Dashboard read-only UI/read-model меняется отдельно от trading
 
 ## 7. Отказы доступа и server-side scripts
 
-При любом отказе: `DEVELOPMENT_RELEASE §19.5–19.6`, `CURRENT_PROJECT_MAP §1.4`; для research — `RESEARCH_COMPUTE`, для сообщения владельцу — `CHATGPT_INTERACTION_RULES §11.1`. Различать: OpenAI tool-security block (upstream), SentinelX `command_not_allowed` (allowlist), Unix `EACCES` (actor/path), job timeout (исход неизвестен), GitHub error. Не называть всё «нет доступа», не выдумывать конкретное правило OpenAI. Не повторять заблокированный вызов циклом, не обходить защиту кодированием/сменой actor, не просить рестарт агента без evidence. `cripta` — обычный read/research actor, `sentinelx` — rail управления. Сначала короткий разрешённый smoke, затем bounded run; после успеха сразу записывать source/result/QC в GitHub.
+Отказы: DEVELOPMENT_RELEASE §19.5–19.6, MAP §1.4, RESEARCH_COMPUTE, META §11.1. Различать OpenAI upstream block, SentinelX `command_not_allowed`, Unix `EACCES` (actor/path), job timeout (исход неизвестен), GitHub error. Не выдумывать OpenAI policy, не повторять заблокированные вызовы и не обходить сменой actor; не просить restart без evidence. `cripta` — read/research, `sentinelx` — management; сначала разрешённый smoke, затем bounded run и source/result/QC в GitHub.
 
 ### 7.1 Server-side scripts
 
@@ -181,3 +181,7 @@ Runtime отдельно:
 Общение с владельцем — преимущественно на русском.
 English — для точных identifiers/API/DB tokens.
 Не повторять закрытые вопросы; отвечать прямо. Торговые результаты — «после комиссий».
+
+Новый чат до создания ветки: проверить незавершённые Issue/PR,
+ветки и worktrees задачи; продолжать только после проверки job/actor/
+dirty state, при неоднозначности HARD_STOP. См. DEV §50.4.

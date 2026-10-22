@@ -427,3 +427,7 @@ UNDERSTAND THE ENVIRONMENT ONCE
 
 Long chains of repair/build versions indicate a process defect and require
 forensic/class-wide correction, not more blind iterations.
+
+## 14. Continuity across ChatGPT chats — OWNER DECISION 2026-10-22
+
+Before starting a supposedly new Git branch/worktree or rerunning a job on a previously discussed task, apply `DEVELOPMENT_RELEASE §50.4`: discover matching GitHub Issue/PR/branch, registered server worktree (including dirty/untracked bytes), active writer and actual job state; reuse the one exact verified unfinished task. Never infer that GitHub contains local uncommitted changes. Ambiguous or inaccessible pending work is a mutation HARD STOP, not permission to start over. Persist task ID/HEAD/worktree/job/evidence/next-step checkpoint for future chats; keep the one GitHub main authority unchanged.
