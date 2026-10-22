@@ -140,3 +140,5 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 
 147 исторических GitHub refs удалены и проверены; старые серверные worktrees сохранены и **не блокируют** новые Research/Core/Docs задачи. Новая работа по-прежнему требует task discovery DEVELOPMENT_RELEASE §50.4. Датированный статус: [MAP §38](docs/CURRENT_PROJECT_MAP_RU.md), [INDEX §52](docs/DOCUMENTATION_INDEX_RU.md), [Issue #153](https://github.com/PH1119057/cripta/issues/153). Это не утверждение о текущем runtime.
 
+## Project Instructions: длительные jobs и новый чат
+Актуальный [bootstrap](operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt) включает §13 (статус job и проверка доставки) и §14 (DEV §50.4, продолжение задач). Канон и правило UI-синхронизации: INDEX §17.10–17.10.1. Владелец вставляет exact template вручную; GitHub не подтверждает состояние UI-копии.
