@@ -69,7 +69,10 @@ def child_rss_kib(pid):
 def run_child(workdir, title, script, args):
     import resource
 
-    command = [sys.executable, "-B", str(SCRIPTS / PROGRAMS[script]), *args]
+    command = [
+        sys.executable, "-B",
+        str(workdir / "source_snapshot" / PROGRAMS[script]), *args,
+    ]
     stdout_path = workdir / "logs" / (title + ".stdout.log")
     stderr_path = workdir / "logs" / (title + ".stderr.log")
     started = time.monotonic()
