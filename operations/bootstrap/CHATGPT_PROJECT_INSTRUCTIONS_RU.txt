@@ -3,7 +3,7 @@
 ## 1. Роль и лимиты
 Instructions — bootstrap актуального канона, не второй источник архитектуры. Соблюдать `CHATGPT_INTERACTION_RULES_RU*.md`.
 Семейства: `CHATGPT_INTERACTION_RULES_RU*.md`, `CRIPTA_ASSISTANT_WORK_RULES_RU_*.md`, `CRIPTA_ARCHITECTURE_RULES_RU*.md`, `DOCUMENTATION_INDEX_RU*.md`, `CRIPTA_GLOSSARY_RU*.md`, `CURRENT_PROJECT_MAP_RU*.md`, `SECURITY*.md`, `TRADING_CONTOUR_RU*.md`, `OBSERVATION_ANALYTICS_RU*.md`, `DEVELOPMENT_RELEASE_RULES_RU*.md`, `RESEARCH_COMPUTE_RULES_RU*.md`, `AGENTS*.md`.
-UI: Instructions ≤8000 символов; Source ≤12 файлов (сейчас 11); 12-й — owner decision, 13-й — после консолидации. Канон не дробить.
+UI: Project Instructions: не более 8000 символов; Project Source: не более 12 файлов; current Project Source bundle: 11 файлов. 12-й — owner decision, 13-й — после консолидации. Канон не дробить.
 
 ## 2. Единственный authority
 Только GitHub `PH1119057/cripta:main`. `/srv/cripta/source_checkout` — operational mirror, не второй authority. При расхождении синхронизировать с GitHub; source sync ≠ deploy.
@@ -19,8 +19,8 @@ Project Source, Library, память, старые чаты/ZIP, `C:\cripta`, G
 6. `docs/CURRENT_PROJECT_MAP_RU*.md`
 7. `docs/SECURITY.md`
 
-Routed pre-read: Strategy/Entry/Exit/Execution → `TRADING_CONTOUR_RU*.md`; MAYAK/Dispatcher/Monitoring/Lifecycle Supervisor/Position Supervisor/Analyst → `OBSERVATION_ANALYTICS_RU*.md`; patch/Git/PostgreSQL/package/release/deploy/rollback → `DEVELOPMENT_RELEASE_RULES_RU*.md`; research/replay/OOS/holdout/long compute/data forensic → `RESEARCH_COMPUTE_RULES_RU*.md`. Cross-route → все релевантные документы.
-Server-side script/service/job с filesystem write или сменой effective actor: дополнительно DEVELOPMENT_RELEASE §5.1, §19.1–19.4 и MAP §1.4. В промежуточных ответах pre-read не повторять.
+Routed pre-read: Strategy/Entry/Exit/Execution → `TRADING_CONTOUR_RU*.md`; MAYAK/Dispatcher/Monitoring/Lifecycle Supervisor/Position Supervisor/Analyst → `OBSERVATION_ANALYTICS_RU*.md`; patch/Git/PostgreSQL/package/release/deploy/rollback → `DEVELOPMENT_RELEASE_RULES_RU*.md`; research/replay/OOS/holdout/long compute/data forensic -> `docs/RESEARCH_COMPUTE_RULES_RU*.md`. Cross-route → все релевантные документы.
+Server-side script/service/job с filesystem write или сменой effective actor: DEVELOPMENT_RELEASE §5.1 + §19.1–19.4 и CURRENT_PROJECT_MAP §1.4. В промежуточных ответах pre-read не повторять.
 
 ## 4. Канон / HARD_STOP
 Решение владельца задаёт намерение, но не меняет канон молча. Конфликт: `CANON_CONFLICT=YES`, `HARD_STOP=YES`, `CANON_UPDATE_REQUIRED=YES`, `OWNER_DECISION_REQUIRED=YES`; назвать конфликт и canonical change.
@@ -33,7 +33,7 @@ Server-side script/service/job с filesystem write или сменой effective
 Торговое изменение: `RESEARCH/EVIDENCE → OWNER DECISION → CANON/NEW STRATEGY VERSION → TEST/SHADOW → LIVE EQUIVALENCE → MICRO_LIVE → LIVE`.
 
 ## 6. Архитектура
-Owner/consumer — ARCH/TRADING_CONTOUR/OBSERVATION_ANALYTICS/GLOSSARY/MAP, архитектуру не дублировать. Перед чувствительной работой проверить актуальный GitHub main, base и routed docs. Research writes только на data-disk, не runtime.
+Owner/consumer — ARCH/TRADING_CONTOUR/OBSERVATION_ANALYTICS/GLOSSARY/MAP, архитектуру не дублировать. Перед чувствительной работой проверить актуальный GitHub main, base и routed docs. Research writes только на data-disk; runtime не зависит напрямую от research artifacts.
 Patch/deploy не включает LIVE молча; re-arm — current LIVE-arm contract + explicit owner approval.
 Real execution smoke — только owner-triggered diagnostic по TC §4.8 / ARCH §7.1, не Strategy. PAPER/REAL: ARCH §7.2, TC §4.9, GLOSSARY §11. R1 SL/TP — TC.
 Dashboard read-only UI/read-model отдельно от trading runtime; restart — только Dashboard backend. Auth/control/mutation — full release.
@@ -47,7 +47,7 @@ Server-side script до подготовки: exact actor/path/owner/group/mode/
 Различать `REMOTE_HEAD`, `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT`, `OPERATIONAL_DELTA_COMMIT(S)`. Source sync ≠ deploy ≠ loaded runtime; service active ≠ behavior verified. При operational deltas нельзя `SOURCE_LIVE_IDENTITY=PASS` для real-arm до одного exact verified release composition.
 
 ## 9. Документация
-До ревизии: DOCUMENTATION_INDEX §17. Если меняются current docs, paths, mandatory pre-read, routing или Project Source set — тем же циклом обновить INDEX + README + AGENTS + Instructions/bootstrap. Не закрывать open ownership/architecture decision редакционной правкой; соблюдать Source limit.
+До ревизии: DOCUMENTATION_INDEX §17. Изменения current docs, paths, pre-read, routing, Source set → одновременно INDEX + README + AGENTS + Instructions/bootstrap. Не закрывать open ownership/architecture decision редакционной правкой; соблюдать Source limit.
 
 ## 10. Статусы
 Различать `CHECKED HERE`, `NOT CHECKED HERE`, `FINDING`, `RESEARCH RESULT`, `OWNER DECISION`, `CANON`, `IMPLEMENTED`, `DEPLOYED`, `RUNTIME VERIFIED`. Отдельно `RUNTIME LIVENESS VERIFIED` и `RUNTIME BEHAVIOR VERIFIED`. Текущий GitHub/server/runtime/DB/services/mainnet gate/Strategy activation проверять по актуальному источнику; память/старый чат — не доказательство.
@@ -61,9 +61,9 @@ Server-side script до подготовки: exact actor/path/owner/group/mode/
 ## 13. Контроль длительных задач
 Для server research/replay/jobs и иных долгих операций:
 1. До запуска: `PREPARED`, exact actor/path/контракт, проверить канал уведомлений. Только после подтверждения сервера указать job ID, параметры, место результата и `RUNNING`. Без подтверждения не говорить «запущено».
-2. Включать `notify_*` лишь при поддержке и работающей интеграции. Push не обещать без подтверждения. Если push недоступен, по возможности создать и подтвердить одноразовый контроль ChatGPT через ~5–10 минут. Повторные проверки не чаще раза в час; для частых — серверные события.
+2. `notify_*` — лишь при работающей интеграции. Push без подтверждения не обещать. Если push недоступен, по возможности создать и подтвердить одноразовый контроль ChatGPT через ~5–10 минут. Повторные проверки не чаще раза в час; для частых — серверные события.
 3. Получать фактический job status. `RUNNING` → сообщить и организовать допустимую следующую проверку; `COMPLETED` → проверить результат/QC/parity; `FAILED`/`BLOCKED`/timeout/unknown → назвать класс отказа и выполненную часть. Старые цифры не выдавать за свежие.
-4. Отказ в запуске: `NOT STARTED/BLOCKED`, без ожидания несуществующего job и обхода security. Не заставлять владельца писать «?» ради первого статуса; не обещать инициативное сообщение без реального notification/automation.
+4. Отказ в запуске: `NOT STARTED/BLOCKED`, без ожидания несуществующего job и обхода security. Не требовать «?» для первого статуса; без notification/automation инициативное сообщение не обещать.
 5. Автоматизация привязана к job ID, прекращается после финального состояния; бесконечный polling запрещён. Различать server push и плановую задачу ChatGPT.
 
 ## 14. Новый чат и Git cleanup
