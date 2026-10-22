@@ -8,7 +8,6 @@ and exact child dirs delegated to published materializer/analyzer. No delete.
 No root or broader grants; no output overwrites. Source snapshot pinned per run.
 """
 import argparse
-import datetime as dt
 import hashlib
 import json
 import os
@@ -68,6 +67,8 @@ def child_rss_kib(pid):
 
 
 def run_child(workdir, title, script, args):
+    import resource
+
     command = [sys.executable, "-B", str(SCRIPTS / PROGRAMS[script]), *args]
     stdout_path = workdir / "logs" / (title + ".stdout.log")
     stderr_path = workdir / "logs" / (title + ".stderr.log")
@@ -98,6 +99,7 @@ def run_child(workdir, title, script, args):
                     "heartbeat": True,
                 }), flush=True)
         duration = round(time.monotonic() - started, 2)
+    peak_rss = max(peak_rss, resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)
     status = {
         "stage": title,
         "exit_code": exit_code,
@@ -235,11 +237,12 @@ def workflow(mode):
         "research_ready": False,
         "live_trading_permission": False,
     }
+    dump_new(work / "result.json", result)
     dump_new(work / "results" / "index.json", {
-        "status": result["status"], "result_sha256": None,
+        "status": result["status"],
+        "result_sha256": sha256(work / "result.json"),
         "source_commit": main_sha,
     })
-    dump_new(work / "result.json", result)
     print(json.dumps({
         "status": result["status"], "mode": mode, "symbols": symbol_set,
         "days": days, "complete_stage_count": len(steps),
