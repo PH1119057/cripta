@@ -17,7 +17,6 @@ import hashlib
 import io
 import json
 import os
-import pwd
 import shutil
 import statistics
 import sys
@@ -168,6 +167,8 @@ def write_json(path, value):
 
 
 def run(symbol, days):
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise PermissionError("ACTOR_NOT_CRIPTA")
     if symbol not in SYMS or days not in (2, 30):
