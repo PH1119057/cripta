@@ -312,3 +312,7 @@ CANON UPDATE
 -> DEPLOY [если нужен]
 -> RUNTIME EVIDENCE
 ~~~
+
+# 16. Передача незавершённой задачи между чатами — OWNER DECISION 2026-10-22
+
+Новый чат при продолжении разработки, research или документации после mandatory/routed pre-read обязан **сначала найти предыдущее незавершённое задание**, а не автоматически создавать другую ветку. Exact task/Issue/PR, GitHub branches и server worktrees/dirty state/job проверяются по `DEVELOPMENT_RELEASE §50.4`. GitHub branch без локальных байтов не является полным WIP snapshot; память/старые чаты не подтверждают current статус. При неоднозначности — HARD_STOP для mutation и owner decision. Тот же worktree продолжать только после actor/writer/job verification. Не смешивать task continuity с принятием исторических файлов за current canon.

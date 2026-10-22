@@ -146,3 +146,11 @@ Recovery/reconnect tasks require ARCH + TRADING_CONTOUR + GLOSSARY + DEVELOPMENT
 source-sync или deploy из isolated research worktree. Owner правил:
 `docs/DEVELOPMENT_RELEASE_RULES_RU.md §50`; research publication:
 `docs/RESEARCH_COMPUTE_RULES_RU.md §24`.
+
+## Continuity: новый чат
+
+НЕ создавать новую ветку по ранее начатой задаче без discovery: Issue/PR,
+GitHub branch, registered server worktree и его dirty/untracked state,
+running jobs, effective writer и previous checkpoint. Exact safe match ->
+resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
+для mutation и owner decision. Полный контракт: DEVELOPMENT_RELEASE §50.4.
