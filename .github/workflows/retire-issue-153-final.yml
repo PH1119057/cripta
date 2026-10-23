@@ -1,0 +1,58 @@
+name: Issue 153 - retire 38 archived historical refs (final)
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/retire-issue-153-final*'
+      - '.github/workflows/retire-issue-153-final.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview first; delete requires owner exact confirmation"
+        required: true
+        type: choice
+        options: [preview, delete]
+        default: preview
+      confirm:
+        description: "For delete only, type DELETE-38-ISSUE-153-20261024"
+        required: false
+        type: string
+        default: ""
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+concurrency:
+  group: issue-153-final-historical-retirement
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test exact manifest and exclusion invariants
+        run: node --test .github/scripts/retire-issue-153-final.test.js
+  retire:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'PH1119057/cripta' && github.actor == 'PH1119057' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: read
+      issues: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted main without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Preview or owner-triggered exact 38 ref retirement
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINAL_MODE: ${{ inputs.mode }}
+          FINAL_CONFIRM: ${{ inputs.confirm }}
+        run: node .github/scripts/retire-issue-153-final.js
