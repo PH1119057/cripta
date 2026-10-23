@@ -4,7 +4,8 @@
 Published research-only script; actor cripta; no database, trading, Exchange,
 service or source checkout mutation. Reads 30 UTC daily compressed Bybit ob200
 files from /data/cripta/datasets/raw/20260518_20260816. Writes ONLY new
-paths under /data/cripta/research/runs/microstructure_firstmonth_book9_11_29_utcclip_20261023.
+paths under
+/data/cripta/research/runs/microstructure_firstmonth_book9_11_29_utcclip_20261023.
 Source complete availability/receipt is UNKNOWN; no zero-imputation.
 """
 import argparse
@@ -334,10 +335,17 @@ def run(symbol, days):
                     for index, (date, path) in enumerate(sources, 1):
                         source_hash = sha(path)
                         rows, meta = day_rows(symbol, date, path)
-                        if day_evidence and day_evidence[-1]["out_of_day_suffix_messages"]:
+                        if (
+                            day_evidence
+                            and day_evidence[-1]["out_of_day_suffix_messages"]
+                        ):
                             if not verified_boundary(day_evidence[-1], meta):
-                                raise ValueError("ADJACENT_UTC_ARCHIVE_BOUNDARY_SNAPSHOT_MISMATCH")
-                            day_evidence[-1]["out_of_day_suffix_boundary_verified_with_next"] = True
+                                raise ValueError(
+                                    "ADJACENT_UTC_ARCHIVE_BOUNDARY_SNAPSHOT_MISMATCH"
+                                )
+                            day_evidence[-1][
+                                "out_of_day_suffix_boundary_verified_with_next"
+                            ] = True
                         for row in rows:
                             row["source_archive_sha256"] = source_hash
                             stream.write(json.dumps(row, sort_keys=True) + "\n")
@@ -373,13 +381,17 @@ def run(symbol, days):
                 "Last observed snapshot per minute, not intraminute average",
                 "Missing book event minute is null rather than presumed unchanged/zero",
                 "Unverified sequence gaps and receipt timing; not RESEARCH-READY",
-                "Out-of-day ZIP suffix cut by published ts; internal overlap snapshot checked",
-                "Final run day outside-month boundary left UNVERIFIED, no next-period read",
+                "Out-of-day ZIP suffix cut by published ts; "
+                "internal overlap snapshot checked",
+                "Final run day outside-month boundary left UNVERIFIED, "
+                "no next-period read",
                 "Top 5bp quote depth is snapshot stock, not cancellations or trades",
             ],
         }
         new_json(target / "result.json", result)
-        finalize_run_manifest(target / "run_manifest.json", result["status"], result=result)
+        finalize_run_manifest(
+            target / "run_manifest.json", result["status"], result=result
+        )
         print(json.dumps({
             "status": result["status"], "symbol": symbol, "days": days,
             "rows": total_rows, "messages": result["source_message_count"],
@@ -397,7 +409,9 @@ def run(symbol, days):
             )
         else:
             try:
-                finalize_run_manifest(target / "run_manifest.json", "FAILED", error=error)
+                finalize_run_manifest(
+                    target / "run_manifest.json", "FAILED", error=error
+                )
             except Exception as terminal_error:
                 print(
                     "RUN_MANIFEST_TERMINAL_WRITE_FAILED "
