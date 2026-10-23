@@ -2873,11 +2873,39 @@ def command_worker_loop(key: str, secret: str) -> None:
             )
             if profit_already_protected or Decimal(str(raw.get("trailingStop") or 0)) > 0:
                 continue
-            protection_key=f"{entry_id}:{position_row[1]}:{position_row[2]}"
+            # Recovery is a child of the proven Entry command, not a new
+            # legacy/unattributed command. Preserve its account/binding identity
+            # so that only the exact private connector can consume it.
+            protection_key=f"{TRADING_ACCOUNT_ID}:{entry_id}:{position_row[1]}:{position_row[2]}"
             init_id="auto-init-"+hashlib.sha256(protection_key.encode()).hexdigest()[:23]
-            connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
-                (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1],"initial_protection":initial_protection}),int(time.time()*1000)))
+            connection.execute(
+                """INSERT INTO runtime.trade_commands(
+                     command_id,command_type,symbol,payload_json,state,
+                     requested_at_epoch_ms,strategy_execution_binding_id,
+                     execution_leg,trading_account_id,identity_status)
+                   SELECT %s,'initial_protection',%s,%s,'queued',%s,
+                          c.strategy_execution_binding_id,c.execution_leg,
+                          c.trading_account_id,c.identity_status
+                     FROM runtime.trade_commands c
+                    WHERE c.command_id=%s AND c.command_type='entry'
+                      AND c.state='completed'
+                      AND c.trading_account_id=%s
+                      AND c.identity_status='PROVEN'
+                   ON CONFLICT(command_id) DO NOTHING""",
+                (
+                    init_id,
+                    symbol,
+                    json.dumps({
+                        "entry_command_id": entry_id,
+                        "actual_entry": position_row[2],
+                        "actual_size": position_row[1],
+                        "initial_protection": initial_protection,
+                    }),
+                    int(time.time() * 1000),
+                    entry_id,
+                    TRADING_ACCOUNT_ID,
+                ),
+            )
         connection.commit()
         # V36: BE/trailing/close decisions belong to Exit. This worker only executes commands.
         row=connection.execute(
