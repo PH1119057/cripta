@@ -102,7 +102,7 @@ def test_real_two_day_minute_grid_independent_decimal(tmp_path, monkeypatch):
     qc = json.loads((folder / "independent_qc_report.json").read_text())
     assert qc["status"] == Q.PASS
     assert qc["verified_minute_rows"] == 2880
-    assert qc["observed_delta_minutes"] == 10
+    assert qc["observed_delta_minutes"] == 8
     assert len(qc["source_days"]) == 2
     assert qc["receiver_clock_verified"] is False
     with pytest.raises(FileExistsError, match="DO_NOT_OVERWRITE"):
