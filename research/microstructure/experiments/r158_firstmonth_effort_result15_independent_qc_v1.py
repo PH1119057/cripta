@@ -72,9 +72,9 @@ def calculate_independent(source, day):
         volume = sum((q for _, q in prints), Decimal(0))
         first = prints[0][0]
         last = prints[-1][0]
-        movement = abs(last - first) * Decimal(10000) / first
+        movement = abs(last / first - 1) * Decimal(10000)
         computed = (
-            movement * Decimal(1000000) / volume if volume else None
+            movement / (volume / Decimal(1000000)) if volume else None
         )
         yield {
             "fill_count": len(prints),
