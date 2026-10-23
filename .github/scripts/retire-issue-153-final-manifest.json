@@ -1,0 +1,212 @@
+{
+  "schema": 3,
+  "repo": "PH1119057/cripta",
+  "issue": 153,
+  "ledgerCommentId": 6372760593,
+  "frozenMain": "90e934446d2e2f252655414634136526da024445",
+  "archive": {
+    "location": "/data/cripta/github_cleanup_archive/20261022",
+    "historicHeadsSha256": "c335b942e1d4c9a559ca991f3d5084a3c3b7da52ea53f333dbe569dcf5dbc8b0",
+    "wipSha256": "fc0182f5041859643cf03a48b51b8c8a78a8bd740da253a1850ea4d434f34a7f",
+    "verifiedCommitObjects": 38,
+    "offsite": false
+  },
+  "deleteRefs": [
+    {
+      "name": "docs/stage7c-parity-status-20261007",
+      "sha": "e2f1c9c5cb9692234b670473af8c4bb10293c471",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "feature/data-continuity-integration-v1-20261005",
+      "sha": "ccfa5fb0209c0a8459d9cf42c2dce6e9791dc754",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "feature/data-continuity-rebase-71cec-20261005",
+      "sha": "0de20d946d8c8b825cafde165c5fd3fab1c812f2",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "feature/exit-dynamic-l53",
+      "sha": "17451ef549220c3bd432ddeca40bfa247f74a5cc",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "feature/per-symbol-coin-market-context-integration-20261016",
+      "sha": "73ce94fbc4b7263718e4fd3a7f098d797f9aa093",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "feature/r10a-legacy-retirement-20261017",
+      "sha": "f65ca9b6ecaccc50e1a7b05808cc4cb90b5f6878",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r5-account-key-preparation-20261016",
+      "sha": "bee199d7c3c38cdc9bbe0b9fccea7cdd5382cf74",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r5-report-provenance-20261016",
+      "sha": "9e867593626841379c0e8c09718f6d7ba693489d",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r5-report-provenance-checkpoint-20261016",
+      "sha": "8088cb016bf7db2d371518dd3acfe8904c63b33f",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r5-residual-private-readers-20261016",
+      "sha": "cb1423df2009ca33dade3e82ca4358bf505dee5c",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r7a-market-instrument-identity-20261017",
+      "sha": "4ae7e138ade90247c2fb1d8e8d25a9aaf10c0f3e",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r7b-reader-cutover-20261017",
+      "sha": "ae54cfecb2f3fb345ed08880ffdddb07504e720f",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r8a-compact-analytics-20261017",
+      "sha": "8b7c6b934b38eb424b37f15489b8ae208df81f4f",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r8b-compact-equivalence-20261017",
+      "sha": "aab41e267fcfab9925768ad11994176a60335914",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r8c-compact-primitives-20261017",
+      "sha": "3a0a93b4c61728186f40f73d4ec77cc616b61148",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r9a-verifier-20261017",
+      "sha": "f76743bfcaaff4518f64dd8080a82b2a016ae823",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "feature/r9b-report-recovery-20261017",
+      "sha": "c705ae435fd777e8836161e8fe8dd1a84f4d64a5",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "fix/observer-durable-fault-stage6a-20261006",
+      "sha": "ed530ba0398a695a3f44ae0b3e54d093c4515caf",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/observer-fault-dashboard-stage6b-20261006",
+      "sha": "4b77d1dcaffb552fd4aa7040d0e4a4f69f03382e",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-entry-atr-cancel-20261008",
+      "sha": "bddf645c7aadc8f51b5851c74f3bebc1856e3d6a",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-observer-capture-structural-entry-20261008",
+      "sha": "918c097cb7dfab1fc9873d2dfadc37469ad92733",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-paper-history-bootstrap-20261006",
+      "sha": "ff892ab14eeb745e9f6c56dfa0acb573b60ada30",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-paper-real-entry-parity-20261006",
+      "sha": "78d202a48bcfacbb7ac9df1edf57b003cd9c0d38",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-paper-real-exit-parity-20261006",
+      "sha": "94d49f7010510a1d30946b4153c2ed479fd1d49e",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-paper-real-reverse-parity-20261006",
+      "sha": "b4a5373722d4c70bd31fded897d2ffd42e728543",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-parity-tests-20261018",
+      "sha": "13538a389b11e607d51af553c0591a09988caa7c",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r1-reverse-observer-hotfix-20261006",
+      "sha": "48ef49f547516fb9b2ffe22e37f5ad09d15b133d",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/r9b-runtime-recovery-20261017",
+      "sha": "768620d6d84b6cdac1d4b86f1e7b974af9942c69",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "fix/stage6b1-migration-idempotency-20261006",
+      "sha": "caee47030ef0af728e691fb3f40a8756ac1f3404",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/stage6b2-dashboard-deploy-verifier-20261006",
+      "sha": "f04b6034085df8859f0af3054532669441882c8a",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/stage6b3-resolve-sql-20261006",
+      "sha": "451b39368950631d5f39fcd12e9ce64f94727772",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/stage7a-installer-failure-atomicity-20261007",
+      "sha": "d6769ea574385dd4c1c7cbdd9e813b2509a2f44f",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "fix/stage7c1-live-parity-gate-20261007",
+      "sha": "3cb212a54421c77119d5d961d925b9a74874aab5",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/stage7c2-lifecycle-terminal-blocked-20261007",
+      "sha": "0544cd4e2f1698e683f78777c1a901431420219a",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "fix/stage7c3-live-arm-sql-vocab-20261007",
+      "sha": "b7241f01b8a46fc474b9804f76aa788521998257",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "impl/trade-lifecycle-20260918",
+      "sha": "3b8899851c65feee0ce72c2d3dd1b8df292a84e2",
+      "class": "MERGED_ANCESTOR"
+    },
+    {
+      "name": "owner/operator-break-even-20261011",
+      "sha": "b73651b7e0e8c00629a1ab07552dcf2e7127afa5",
+      "class": "ARCHIVED_UNIQUE"
+    },
+    {
+      "name": "quarantine4-data-retire-20261001",
+      "sha": "ca962c395a7a20b1834d7a0e418b9fc014ae27d8",
+      "class": "ARCHIVED_UNIQUE"
+    }
+  ],
+  "preservePatterns": [
+    "refs/heads/main",
+    "refs/heads/research/*",
+    "refs/heads/docs/*20261023*"
+  ],
+  "confirm": "DELETE-38-ISSUE-153-20261024"
+}
