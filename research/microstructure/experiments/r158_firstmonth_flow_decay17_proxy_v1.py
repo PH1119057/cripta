@@ -16,7 +16,6 @@ import io
 import json
 import os
 import pathlib
-import pwd
 import shutil
 import sys
 import time
@@ -137,6 +136,7 @@ def as_of_feature(pp, pr, cur):
 
 
 def run(symbol, days):
+    import pwd
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise PermissionError("RESEARCH_ACTOR_NOT_CRIPTA")
     if symbol not in SYMS or days not in (2, 30):
