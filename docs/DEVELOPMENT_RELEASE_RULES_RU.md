@@ -714,7 +714,7 @@ SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
 | `command_not_allowed` | SentinelX command allowlist / parser | Проверить capabilities/§19.5 и точную форму уже разрешённой команды; не расширять policy самостоятельно |
 | `Permission denied` / `EACCES` из реального host stdout/stderr | Unix filesystem gate для конкретного effective actor/path | Read-only actor/path preflight; до mutation §5.1, §19.1–19.4 |
 | `agent did not respond` / timeout / job_id | Неопределённый транспорт/исполнение; не доказан ни отказ Unix, ни падение host | Проверить job notifications, host/PID/result manifest; не дублировать тяжёлый job |
-| HTTP `429` / `500` / `502` / `503` / `504`, network reset, временная ошибка соединения GitHub/API при установленном transport failure | Потенциально временный отказ; не доказано, что запрос не был выполнен | Сначала проверить фактический результат и допустимость повтора; затем bounded retry ниже, если операция безопасна к повтору |
+| HTTP `429` (подтверждённый rate limit, не quota/billing exhaustion), `500` / `502` / `503` / `504`, network reset, временная ошибка соединения GitHub/OpenAI API/другого API | Потенциально временный отказ; неизвестно, исполнен ли запрос | Сначала проверить фактический результат и `error.code`/`Retry-After`, затем bounded retry ниже, только если безопасно |
 | `returncode=0` с корректным output | Конкретная команда завершилась | Не распространять этот PASS на другие paths/actors/mutations |
 
 ### 19.6.1 Ограниченные повторы временных отказов — OWNER DECISION 2026-10-23
@@ -726,7 +726,7 @@ SYSTEMD_SANDBOX, DB_ROLE, EXPECTED_OWNER/GROUP/MODE/ACL, PREFLIGHT_COMMAND`;
 нужны точные tool/actor/path, код отказа и сведения о достижении host.
 
 Если отказ классифицирован как **временный transport/API/service failure**
-(например HTTP `429`/`5xx`, network reset, временное отсутствие ответа),
+(например подтверждённый временный rate limit `429`, HTTP `5xx`, network reset, временное отсутствие ответа),
 для безопасно повторяемой операции сделать **до пяти повторных попыток
 после исходной**, с возрастающими интервалами **10, 30, 60, 120 и 300 секунд**.
 После каждой попытки проверить полученный ответ, а при неопределённом исходе
@@ -777,6 +777,68 @@ artifacts, lock/job или завершённом результате.
 доказательства именно agent failure.
 
 Проверенная схема read-only: `sentinel_capabilities` → одна allowlisted `sudo -u cripta python3 -c '...'` команда → точный результат. Пример smoke: `sudo -u cripta python3 -c 'import os; print(os.geteuid())'`; ожидаемый uid проверять фактически, не считать постоянным. Длинные исследования — через утверждённый job/compute contract, короткий smoke и версионированный source; без нового обходного transport. Если OpenAI повторно блокирует разрешённую работу, сохранять обезличенные evidence для owner/support escalation; внутреннее правило блокировки неизвестно.
+
+### 19.6.2 ChatGPT, OpenAI API и клиентская сеть — OWNER DECISION 2026-10-23
+
+**Разделять четыре независимые границы доставки и исполнения:**
+
+1. **Браузер владельца ↔ сервис ChatGPT/OpenAI.** Wi-Fi, провайдер,
+   VPN, расширения и WebSocket могут нарушить отправку сообщения,
+   отображение ответа и уведомления. Потеря клиентского соединения
+   не доказывает сбой уже принятой серверной tool operation или
+   исследовательского job; его исход устанавливается по result/job evidence,
+   а не по состоянию UI.
+2. **ChatGPT/OpenAI orchestration ↔ вызов инструмента.** Аргументы
+   GitHub/SentinelX-инструмента формируются серверной средой ChatGPT,
+   а не отправляются непосредственно из браузера владельца. Ошибка
+   проверки tool arguments/schema, ошибка доставки tool result и
+   OpenAI tool-security block — разные события. Внутренний точный
+   маршрут OpenAI без trace считать NOT CHECKED HERE.
+3. **OpenAI API, если он действительно вызывается в данном workflow.**
+   Ошибка API/SDK/HTTP не тождественна сбою браузера ChatGPT или
+   отказу стороннего инструмента. OpenAPI — название спецификации
+   описания интерфейсов, не синоним OpenAI API. Нельзя приписывать
+   каждому вызову ChatGPT или GitHub прямое обращение к OpenAI API.
+4. **Tool connector ↔ GitHub / SentinelX / host.** Указывать exact
+   connector, tool, actor, request/job ID, ответ и доказательство достижения
+   target. Отказ SentinelX command_not_allowed не означает сбой GitHub;
+   плохой Wi-Fi клиента не является доказанной причиной upstream tool block.
+
+Для сообщения «неправильный запрос» / «ошибка OpenAI» зафиксировать
+timestamp, участок, имя tool/endpoint (без секретов), исходное сообщение,
+HTTP status, error.type/error.code, request ID, Retry-After (если доступны),
+и достиг ли вызов target. Отсутствующие поля = NOT CHECKED HERE; не
+приписывать ошибке HTTP-код только по формулировке UI.
+Для клиентской сети использовать безопасную диагностику браузера и
+официальную status-страницу OpenAI, но не выдавать догадку за evidence.
+
+| Наблюдаемая ошибка | Классификация и действие |
+|---|---|
+| ChatGPT UI network error, WebSocket disconnect, пропажа ответа | Проверить связь и состояние чата/инструмента; до повторной mutation проверить результат на target |
+| Tool schema/argument validation, HTTP 400 BadRequestError | Проверить имя инструмента, поля, типы, схему, размер запроса и допустимые параметры; неизменённый ошибочный вызов по таймеру не повторять |
+| OpenAI API 429 c rate_limit_error / slow_down | Использовать Retry-After, снизить частоту; только для безопасных повторов применять §19.6.1 с учётом внутренних повторов SDK |
+| 429 с credit_balance_exhausted, organization_spend_limit_exceeded, project_spend_limit_exceeded, organization_usage_limit_exceeded или иным quota/billing limit | Не transient: повтор без исправления лимита не поможет; самостоятельно менять credentials, project или billing запрещено |
+| OpenAI API transport exception/timeout, HTTP 500/503 или иной подтверждённый transient 5xx | Проверить, не исполнен ли запрос; затем §19.6.1 и Retry-After, не дублируя job или mutation с неизвестным исходом |
+| HTTP 401/403, явный security denial либо BLOCKED_UPSTREAM_OPENAI | Записать точный уровень отказа и остановить отклонённую операцию; без смены actor, ключа, transport или маскировки payload ради обхода |
+
+Пять попыток из §19.6.1 — верхняя граница при доказанной временной ошибке,
+а не требование повторять любой OpenAI-отказ. При Retry-After длиннее
+базового интервала использовать не меньшую задержку; не умножать
+повторы SDK и внешнего orchestration бесконтрольно. Если удерживать
+backoff нельзя, сохранить checkpoint и использовать разрешённую
+отложенную проверку. При результате SUCCESS продолжать с последнего
+подтверждённого шага, а не перезапускать весь workflow.
+
+Для публичной документации и Issue сохранять лишь безопасные
+обезличенные evidence: время, доступный error code, request ID при
+необходимости. Не публиковать API keys, cookies, auth headers, secrets,
+полные приватные HAR/logs или токены.
+
+Официальная техническая справка (не отдельный канон):
+[ChatGPT errors](https://help.openai.com/en/articles/7996703-troubleshooting-chatgpt-error-messages),
+[ChatGPT network](https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps),
+[OpenAI API errors](https://developers.openai.com/api/docs/guides/error-codes).
+
 
 ## 20. Git sync — только exact changeset
 
