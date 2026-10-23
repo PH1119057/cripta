@@ -41,8 +41,8 @@ def source_fixture(tmp, monkeypatch, no_snapshot=False):
         source.parent.mkdir(parents=True, exist_ok=True)
         beginning = int(dt.datetime.combine(day, dt.time(), dt.UTC).timestamp()) * 1000
 
-        def e(ms, kind, b=(), a=()):
-            return {"ts": beginning + ms, "type": kind,
+        def e(ms, kind, b=(), a=(), start_ms=beginning):
+            return {"ts": start_ms + ms, "type": kind,
                     "data": {"b": list(b), "a": list(a)}}
 
         events = [
