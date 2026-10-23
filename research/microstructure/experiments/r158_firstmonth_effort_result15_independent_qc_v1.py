@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import pathlib
-import pwd
 import shutil
 from decimal import Decimal
 
@@ -129,6 +128,8 @@ def compare_row(row, expected, symbol, day, minute, source_hash):
 
 
 def check(symbol, days):
+    import pwd
+
     if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
         raise PermissionError("QC_ACTOR_NOT_CRIPTA")
     if symbol not in SYMS or days not in (2, 30):
