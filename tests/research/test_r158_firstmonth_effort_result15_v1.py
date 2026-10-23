@@ -5,7 +5,6 @@ import importlib.util
 import json
 import os
 import pathlib
-import pwd
 import types
 from decimal import Decimal
 
@@ -37,6 +36,8 @@ def archive(path, records):
 
 
 def create_fixture(tmp_path, monkeypatch, *, error_day=None):
+    import pwd
+
     root = tmp_path / "raw"
     output_root = tmp_path / "research"
     output_root.mkdir()
