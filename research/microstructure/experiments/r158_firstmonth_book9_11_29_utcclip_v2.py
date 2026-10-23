@@ -24,7 +24,7 @@ from decimal import Decimal
 COINS = ("APTUSDT", "INJUSDT", "DOTUSDT", "LTCUSDT", "ARBUSDT")
 ROOT = pathlib.Path("/data/cripta/datasets/raw/20260518_20260816")
 OUTPUT = pathlib.Path(
-    "/data/cripta/research/runs/microstructure_firstmonth_book9_11_29_20261023"
+    "/data/cripta/research/runs/microstructure_firstmonth_book9_11_29_utcclip_20261023"
 )
 REPO = pathlib.Path("/srv/cripta/source_checkout")
 FIRST = dt.date(2026, 5, 18)

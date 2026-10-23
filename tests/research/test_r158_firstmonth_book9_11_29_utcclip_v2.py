@@ -15,6 +15,28 @@ SUT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SUT)
 
 
+def test_utcclip_uses_distinct_isolated_output_root():
+    checker_path = (
+        Path(__file__).resolve().parents[2]
+        / "research/microstructure/experiments/"
+        "r158_firstmonth_book9_11_29_utcclip_independent_qc_v2.py"
+    )
+    qc_spec = importlib.util.spec_from_file_location("r158_utcclip_qc_root", checker_path)
+    checker = importlib.util.module_from_spec(qc_spec)
+    qc_spec.loader.exec_module(checker)
+    expected = Path(
+        "/data/cripta/research/runs/"
+        "microstructure_firstmonth_book9_11_29_utcclip_20261023"
+    )
+    failed_v1 = Path(
+        "/data/cripta/research/runs/"
+        "microstructure_firstmonth_book9_11_29_20261023"
+    )
+    assert expected == SUT.OUTPUT
+    assert expected == checker.OUT
+    assert failed_v1 != SUT.OUTPUT
+
+
 def fixture(tmp_path, date, messages):
     symbol = "APTUSDT"
     path = tmp_path / (date.isoformat() + "_" + symbol + "_ob200.data.zip")
