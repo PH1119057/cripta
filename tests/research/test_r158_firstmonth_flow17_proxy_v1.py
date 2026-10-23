@@ -100,7 +100,8 @@ def test_real_2day_shape_missing_and_independent_qc(tmp_path, monkeypatch):
     assert rows[70]["quality"] == "MISSING_OBSERVED_5M_BLOCK"
     assert rows[287]["quality"] == "MISSING_OBSERVED_5M_BLOCK"
     assert rows[288]["quality"] == "MISSING_OBSERVED_5M_BLOCK"
-    assert rows[290]["quality"] == "MISSING_OBSERVED_5M_BLOCK"
+    assert rows[289]["quality"] == "MISSING_OBSERVED_5M_BLOCK"
+    assert rows[290]["quality"].startswith("ELIGIBLE_")
     assert rows[291]["quality"].startswith("ELIGIBLE_")
     assert rows[288]["window_start_utc"] == "2026-05-19T00:00:00+00:00"
     assert rows[291]["observed_at_utc"] is None
