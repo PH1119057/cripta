@@ -82,3 +82,33 @@ def test_replacement_snapshot_reinitializes_book(tmp_path):
     assert rows[1]["factor_11_bid_depth_usdt_near5bp"] == "495"
     assert rows[1]["best_bid_quote"] == "99"
     assert rows[1]["best_ask_quote"] == "99.01"
+
+
+def test_secondary_full_minute_replay_is_independent_and_not_per_event(tmp_path):
+    checker_path = (
+        Path(__file__).resolve().parents[2]
+        / "research/microstructure/experiments/"
+        "r158_firstmonth_book9_11_29_independent_qc_v1.py"
+    )
+    cs = importlib.util.spec_from_file_location("r158_book_qc", checker_path)
+    independent = importlib.util.module_from_spec(cs)
+    cs.loader.exec_module(independent)
+    day = dt.date(2026, 5, 18)
+    file = fixture(tmp_path, day, [
+        (1000, "snapshot", [["100", "2"]], [["100.01", "3"]]),
+        (2000, "delta", [], [["100.01", "4"]]),
+        (125000, "delta", [["100", "3"]], []),
+    ])
+    states, messages, snapshots = independent.source_minute_states(
+        "APTUSDT", day, file
+    )
+    assert messages == 3 and snapshots == 1
+    assert sum(x is not None for x in states) == 2
+    assert states[0][2] == int(dt.datetime.combine(
+        day, dt.time(), dt.UTC
+    ).timestamp() * 1000) + 2000
+    assert independent.expected_from_state(
+        states[0],
+        int(dt.datetime.combine(day, dt.time(), dt.UTC).timestamp() * 1000),
+        0,
+    )["factor_11_ask_depth_usdt_near5bp"] == Decimal("400.04")
