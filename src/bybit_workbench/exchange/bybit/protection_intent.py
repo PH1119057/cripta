@@ -15,6 +15,37 @@ class ProtectionIntentUnavailable(ValueError):
     pass
 
 
+def initial_protection_surfaces_observed(
+    *,
+    initial_protection: Mapping[str, object] | None,
+    position: Mapping[str, object],
+) -> bool:
+    """Conservative entry-time WS evidence marker, NOT approval verification.
+
+    A position must expose every exchange-native initial protection surface
+    required by the exact Entry payload. Final VERIFIED status still requires
+    the separate authenticated account/approved-intent comparator.
+    """
+    if not isinstance(initial_protection, Mapping):
+        return False
+    if initial_protection.get("stop_loss_enabled") is not True:
+        return False
+    tp_required = initial_protection.get("take_profit_enabled")
+    if not isinstance(tp_required, bool):
+        return False
+
+    def present(value: object) -> bool:
+        try:
+            amount = Decimal(str(value))
+            return amount.is_finite() and amount > 0
+        except (ValueError, TypeError):
+            return False
+
+    return present(position.get("stopLoss")) and (
+        not tp_required or present(position.get("takeProfit"))
+    )
+
+
 def _amount(value: object) -> Decimal:
     try:
         amount = Decimal(str(value))
