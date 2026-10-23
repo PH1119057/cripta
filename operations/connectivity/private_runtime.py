@@ -42,6 +42,9 @@ from bybit_workbench.account_state_generation import (
 )
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.exchange.bybit.effective_protection import effective_protection_from_account
+from bybit_workbench.exchange.bybit.protection_intent import (
+    initial_protection_surfaces_observed,
+)
 from bybit_workbench.exchange.bybit.time_calibration import (
     BybitTimeCalibration,
     build_bybit_time_calibration,
@@ -3039,8 +3042,36 @@ def reconcile_position_ownership(
             and str(current.get("side") or "") == side
         )
         if current_matches:
-            current_stop = Decimal(str(current.get("stopLoss") or 0))
-            protection_confirmed = current_stop > 0
+            # A filled StrategyPosition is not initial-protection-confirmed
+            # from a stopLoss field alone. Respect the immutable Entry-time
+            # policy: require the TP surface only when that Strategy enabled it.
+            # This snapshot marker is not the independent VERIFIED verdict;
+            # Lifecycle Supervisor compares exact approved intent with a fresh
+            # authenticated Exchange account GET separately.
+            entry_command = connection.execute(
+                """SELECT payload_json FROM runtime.trade_commands
+                    WHERE command_id=%s AND command_type='entry'
+                      AND state='completed' AND trading_account_id=%s
+                      AND identity_status='PROVEN'""",
+                (row[8], TRADING_ACCOUNT_ID),
+            ).fetchone()
+            initial_policy = None
+            if entry_command is not None:
+                try:
+                    original = entry_command[0]
+                    entry_payload = (
+                        original if isinstance(original, dict)
+                        else json.loads(str(original))
+                    )
+                    if isinstance(entry_payload, dict):
+                        initial_policy = entry_payload.get("initial_protection")
+                except (ValueError, TypeError):
+                    # Missing/unparseable intent is NOT positive evidence.
+                    pass
+            protection_confirmed = initial_protection_surfaces_observed(
+                initial_protection=initial_policy,
+                position=current,
+            )
             connection.execute(
                 """UPDATE runtime.position_ownership
                    SET state='OPEN',
