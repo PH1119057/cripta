@@ -9,9 +9,8 @@ import ast
 import sqlite3
 from pathlib import Path
 
-SOURCE = (Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py").read_text(
-    encoding="utf-8"
-)
+SOURCE_PATH = Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py"
+SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
 
 
 def _recovery_insert_sql() -> str:
