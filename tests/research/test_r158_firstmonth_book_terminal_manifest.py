@@ -147,3 +147,21 @@ def test_failed_two_day_run_marks_failed_without_overwrite(tmp_path, monkeypatch
     with pytest.raises(FileExistsError, match="DO_NOT_OVERWRITE"):
         SUT.run("APTUSDT", 2)
     assert (target / "run_manifest.json").read_bytes() == before
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="requires Unix actor check")
+def test_manifest_io_failure_does_not_relabel_committed_result(tmp_path, monkeypatch):
+    target = setup_isolated_two_day_run(tmp_path, monkeypatch)
+
+    def broken_finalize(*_args, **_kwargs):
+        raise OSError("SIMULATED_FINALIZATION_ERROR")
+
+    monkeypatch.setattr(SUT, "finalize_run_manifest", broken_finalize)
+    with pytest.raises(OSError, match="SIMULATED_FINALIZATION_ERROR"):
+        SUT.run("APTUSDT", 2)
+    # Output is committed, but manifest update was not; do not claim FAILED.
+    assert (target / "result.json").is_file()
+    assert (target / "features.jsonl.gz").is_file()
+    manifest = json.loads((target / "run_manifest.json").read_text())
+    assert manifest["status"] == "RUNNING"
+    assert not (target / "independent_qc_report.json").exists()
