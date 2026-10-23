@@ -4,7 +4,8 @@
 Published research-only script; actor cripta; no database, trading, Exchange,
 service or source checkout mutation. Reads 30 UTC daily compressed Bybit ob200
 files from /data/cripta/datasets/raw/20260518_20260816. Writes ONLY new
-paths under /data/cripta/research/runs/microstructure_firstmonth_book9_11_29_utcclip_20261023.
+paths under
+/data/cripta/research/runs/microstructure_firstmonth_book9_11_29_utcclip_20261023.
 Source complete availability/receipt is UNKNOWN; no zero-imputation.
 """
 import argparse
@@ -49,6 +50,40 @@ def new_json(path, value):
         out.flush()
         os.fsync(out.fileno())
     partial.rename(path)
+
+
+def finalize_run_manifest(path, status, *, result=None, error=None):
+    """Atomically record a terminal state for this newly created run only."""
+    completed = "PHYSICAL_BOOK_MONTH_COMPLETE_PENDING_INDEPENDENT_QC"
+    if status not in (completed, "FAILED"):
+        raise ValueError("UNDECLARED_TERMINAL_STATUS")
+    if (status == completed) != (result is not None):
+        raise ValueError("TERMINAL_RESULT_REQUIRED_OR_UNEXPECTED")
+    if (status == "FAILED") != (error is not None):
+        raise ValueError("TERMINAL_ERROR_REQUIRED_OR_UNEXPECTED")
+    initial = json.loads(path.read_text(encoding="utf-8"))
+    if initial.get("status") != "RUNNING":
+        raise ValueError("RUN_MANIFEST_NOT_RUNNING_DO_NOT_OVERWRITE")
+    final = dict(initial)
+    final["status"] = status
+    if result is not None:
+        if result["status"] != completed:
+            raise ValueError("RESULT_STATUS_MISMATCH")
+        final["result_file"] = "result.json"
+        final["output_sha256"] = result["output_sha256"]
+        final["rows"] = result["rows"]
+        final["independent_qc"] = "PENDING"
+    else:
+        final["error_type"] = type(error).__name__
+        final["error_message"] = str(error)[:500]
+        final["independent_qc"] = "NOT_RUN"
+    partial = path.with_name(path.name + ".terminal.part")
+    with partial.open("x", encoding="utf-8") as out:
+        json.dump(final, out, indent=2, sort_keys=True, ensure_ascii=False)
+        out.write("\n")
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(partial, path)
 
 
 def update_book(bids, asks, event, saw_snapshot):
@@ -288,68 +323,102 @@ def run(symbol, days):
         "code_sha256": code_sha, "actor": "cripta",
         "receiver_clock": "UNKNOWN",
     })
-    out = target / "features.jsonl.gz"
-    tmp = target / "features.jsonl.gz.part"
-    day_evidence = []
-    started = time.monotonic()
-    total_rows = 0
-    with tmp.open("xb") as output:
-        with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as gz:
-            with io.TextIOWrapper(gz, encoding="utf-8", newline="") as stream:
-                for index, (date, path) in enumerate(sources, 1):
-                    source_hash = sha(path)
-                    rows, meta = day_rows(symbol, date, path)
-                    if day_evidence and day_evidence[-1]["out_of_day_suffix_messages"]:
-                        if not verified_boundary(day_evidence[-1], meta):
-                            raise ValueError("ADJACENT_UTC_ARCHIVE_BOUNDARY_SNAPSHOT_MISMATCH")
-                        day_evidence[-1]["out_of_day_suffix_boundary_verified_with_next"] = True
-                    for row in rows:
-                        row["source_archive_sha256"] = source_hash
-                        stream.write(json.dumps(row, sort_keys=True) + "\n")
-                        total_rows += 1
-                    day_evidence.append({
-                        "day": date.isoformat(), "path": str(path),
-                        "zip_sha256": source_hash, **meta,
-                    })
-                    elapsed = time.monotonic() - started
-                    print(json.dumps({
-                        "stage": "OB200_PHYSICAL_9_11_29",
-                        "symbol": symbol, "days_done": index,
-                        "days_total": days, "percent": round(100 * index / days, 2),
-                        "elapsed_s": round(elapsed, 1), "heartbeat": True,
-                    }), flush=True)
-    if total_rows != days * 1440:
-        raise ValueError("MINUTE_COUNT")
-    tmp.rename(out)
-    new_json(target / "input_provenance.json", {
-        "days": day_evidence,
-        "source_gap_visibility": "UNVERIFIED_NO_RECEIVER_LOG",
-    })
-    result = {
-        "status": "PHYSICAL_BOOK_MONTH_COMPLETE_PENDING_INDEPENDENT_QC",
-        "symbol": symbol, "days": days, "rows": total_rows,
-        "source_message_count": sum(x["messages"] for x in day_evidence),
-        "observed_minute_count": sum(x["minute_observed"] for x in day_evidence),
-        "zip_input_sha256": [x["zip_sha256"] for x in day_evidence],
-        "output_sha256": sha(out), "program_sha256": code_sha,
-        "has_verified_source_continuity": False,
-        "has_receiver_clock": False,
-        "limitations": [
-            "Last observed snapshot per minute, not intraminute average",
-            "Missing book event minute is null rather than presumed unchanged/zero",
-            "Unverified sequence gaps and receipt timing; not RESEARCH-READY",
-            "Out-of-day ZIP suffix cut by published ts; internal overlap snapshot checked",
-            "Final run day outside-month boundary left UNVERIFIED, no next-period read",
-            "Top 5bp quote depth is snapshot stock, not cancellations or trades",
-        ],
-    }
-    new_json(target / "result.json", result)
-    print(json.dumps({
-        "status": result["status"], "symbol": symbol, "days": days,
-        "rows": total_rows, "messages": result["source_message_count"],
-        "output_sha256": result["output_sha256"],
-        "output_dir": str(target),
-    }))
+    try:
+        out = target / "features.jsonl.gz"
+        tmp = target / "features.jsonl.gz.part"
+        day_evidence = []
+        started = time.monotonic()
+        total_rows = 0
+        with tmp.open("xb") as output:
+            with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as gz:
+                with io.TextIOWrapper(gz, encoding="utf-8", newline="") as stream:
+                    for index, (date, path) in enumerate(sources, 1):
+                        source_hash = sha(path)
+                        rows, meta = day_rows(symbol, date, path)
+                        if (
+                            day_evidence
+                            and day_evidence[-1]["out_of_day_suffix_messages"]
+                        ):
+                            if not verified_boundary(day_evidence[-1], meta):
+                                raise ValueError(
+                                    "ADJACENT_UTC_ARCHIVE_BOUNDARY_SNAPSHOT_MISMATCH"
+                                )
+                            day_evidence[-1][
+                                "out_of_day_suffix_boundary_verified_with_next"
+                            ] = True
+                        for row in rows:
+                            row["source_archive_sha256"] = source_hash
+                            stream.write(json.dumps(row, sort_keys=True) + "\n")
+                            total_rows += 1
+                        day_evidence.append({
+                            "day": date.isoformat(), "path": str(path),
+                            "zip_sha256": source_hash, **meta,
+                        })
+                        elapsed = time.monotonic() - started
+                        print(json.dumps({
+                            "stage": "OB200_PHYSICAL_9_11_29",
+                            "symbol": symbol, "days_done": index,
+                            "days_total": days, "percent": round(100 * index / days, 2),
+                            "elapsed_s": round(elapsed, 1), "heartbeat": True,
+                        }), flush=True)
+        if total_rows != days * 1440:
+            raise ValueError("MINUTE_COUNT")
+        tmp.rename(out)
+        new_json(target / "input_provenance.json", {
+            "days": day_evidence,
+            "source_gap_visibility": "UNVERIFIED_NO_RECEIVER_LOG",
+        })
+        result = {
+            "status": "PHYSICAL_BOOK_MONTH_COMPLETE_PENDING_INDEPENDENT_QC",
+            "symbol": symbol, "days": days, "rows": total_rows,
+            "source_message_count": sum(x["messages"] for x in day_evidence),
+            "observed_minute_count": sum(x["minute_observed"] for x in day_evidence),
+            "zip_input_sha256": [x["zip_sha256"] for x in day_evidence],
+            "output_sha256": sha(out), "program_sha256": code_sha,
+            "has_verified_source_continuity": False,
+            "has_receiver_clock": False,
+            "limitations": [
+                "Last observed snapshot per minute, not intraminute average",
+                "Missing book event minute is null rather than presumed unchanged/zero",
+                "Unverified sequence gaps and receipt timing; not RESEARCH-READY",
+                "Out-of-day ZIP suffix cut by published ts; "
+                "internal overlap snapshot checked",
+                "Final run day outside-month boundary left UNVERIFIED, "
+                "no next-period read",
+                "Top 5bp quote depth is snapshot stock, not cancellations or trades",
+            ],
+        }
+        new_json(target / "result.json", result)
+        finalize_run_manifest(
+            target / "run_manifest.json", result["status"], result=result
+        )
+        print(json.dumps({
+            "status": result["status"], "symbol": symbol, "days": days,
+            "rows": total_rows, "messages": result["source_message_count"],
+            "output_sha256": result["output_sha256"],
+            "output_dir": str(target),
+        }))
+    except Exception as error:
+        # Only this invocation's freshly created target can reach this handler.
+        # A committed result must never be relabelled FAILED if only the
+        # terminal manifest write or stdout reporting failed.
+        if (target / "result.json").exists():
+            print(
+                "RESULT_COMMITTED_MANIFEST_FINALIZATION_NOT_PROVEN",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                finalize_run_manifest(
+                    target / "run_manifest.json", "FAILED", error=error
+                )
+            except Exception as terminal_error:
+                print(
+                    "RUN_MANIFEST_TERMINAL_WRITE_FAILED "
+                    + type(terminal_error).__name__ + ": " + str(terminal_error),
+                    file=sys.stderr,
+                )
+        raise
 
 
 if __name__ == "__main__":
