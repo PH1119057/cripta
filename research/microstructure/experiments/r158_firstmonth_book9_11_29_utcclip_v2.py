@@ -51,7 +51,6 @@ def new_json(path, value):
     partial.rename(path)
 
 
-
 def finalize_run_manifest(path, status, *, result=None, error=None):
     """Atomically record a terminal state for this newly created run only."""
     completed = "PHYSICAL_BOOK_MONTH_COMPLETE_PENDING_INDEPENDENT_QC"
@@ -84,7 +83,6 @@ def finalize_run_manifest(path, status, *, result=None, error=None):
         out.flush()
         os.fsync(out.fileno())
     os.replace(partial, path)
-
 
 
 def update_book(bids, asks, event, saw_snapshot):
@@ -390,15 +388,22 @@ def run(symbol, days):
         }))
     except Exception as error:
         # Only this invocation's freshly created target can reach this handler.
-        # Never reconcile or overwrite older runs with stale RUNNING manifests.
-        try:
-            finalize_run_manifest(target / "run_manifest.json", "FAILED", error=error)
-        except Exception as terminal_error:
+        # A committed result must never be relabelled FAILED if only the
+        # terminal manifest write or stdout reporting failed.
+        if (target / "result.json").exists():
             print(
-                "RUN_MANIFEST_TERMINAL_WRITE_FAILED "
-                + type(terminal_error).__name__ + ": " + str(terminal_error),
+                "RESULT_COMMITTED_MANIFEST_FINALIZATION_NOT_PROVEN",
                 file=sys.stderr,
             )
+        else:
+            try:
+                finalize_run_manifest(target / "run_manifest.json", "FAILED", error=error)
+            except Exception as terminal_error:
+                print(
+                    "RUN_MANIFEST_TERMINAL_WRITE_FAILED "
+                    + type(terminal_error).__name__ + ": " + str(terminal_error),
+                    file=sys.stderr,
+                )
         raise
 
 
