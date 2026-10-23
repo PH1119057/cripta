@@ -39,6 +39,7 @@ def source_minute_states(symbol, date, zip_path):
     buy, sell = {}, {}
     ready = False
     previous_ms = None
+    previous_minute = None
     messages = snapshots = 0
     with zipfile.ZipFile(zip_path) as archive:
         expected = date.isoformat() + "_" + symbol + "_ob200.data"
@@ -52,7 +53,9 @@ def source_minute_states(symbol, date, zip_path):
                     raise ValueError("QC_SOURCE_OUT_OF_UTC_DAY")
                 if previous_ms is not None and ms < previous_ms:
                     raise ValueError("QC_TIMESTAMP_REVERSED")
-                previous_ms = ms
+                minute = (ms - start) // 60000
+                if previous_minute is not None and minute != previous_minute:
+                    last[previous_minute] = (buy.copy(), sell.copy(), previous_ms)
                 kind = obj["type"]
                 if kind == "snapshot":
                     buy.clear()
@@ -71,10 +74,10 @@ def source_minute_states(symbol, date, zip_path):
                             book[price] = size
                         else:
                             book.pop(price, None)
-                minute = (ms - start) // 60000
-                # Save at the last event in each minute; no carry across empty minute.
-                last[minute] = (buy.copy(), sell.copy(), ms)
+                previous_ms, previous_minute = ms, minute
                 messages += 1
+    if previous_minute is not None:
+        last[previous_minute] = (buy.copy(), sell.copy(), previous_ms)
     if not messages or not snapshots:
         raise ValueError("QC_EMPTY_SOURCE")
     return last, messages, snapshots
