@@ -328,10 +328,10 @@ class UniversalEntryEngine:
                                 item.binding.trading_account_id,
                             ),
                         ):
-                            effective_readiness = account_scope.technical_readiness
+                            account_readiness = account_scope.technical_readiness
                             effective_port = account_scope.entry_admission_port
                             if not real_ready:
-                                effective_readiness = TechnicalReadiness(
+                                account_readiness = TechnicalReadiness(
                                     False,
                                     admission_time or fact_for_predicate.observed_at,
                                     "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
@@ -343,7 +343,7 @@ class UniversalEntryEngine:
                                 attempt,
                                 admission_time or fact_for_predicate.observed_at,
                                 capacity=account_scope.capacity,
-                                technical_readiness=effective_readiness,
+                                technical_readiness=account_readiness,
                                 account_ref=account_scope.account_ref,
                                 entry_admission_port=effective_port,
                                 exchange_position_key=account_scope.exchange_position_key,
