@@ -15,6 +15,10 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_safety import (
+    account_entry_safety_ready,
+    latch_account_entry_safety,
+)
 from bybit_workbench.account_live_arm import account_live_arm_ready
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -184,3 +188,59 @@ def test_r04_migration_runtime_actor_has_read_only_arm_registry(
     ).fetchone()
     assert read is not None and read["allowed"] is True
     assert write is not None and write["allowed"] is False
+
+
+def test_account_entry_safety_latch_is_durable_isolation_not_live_permission(
+    disposable_db: psycopg.Connection,
+) -> None:
+    ids = _seed(disposable_db)
+    one = {
+        "trading_account_id": ids["account-1"],
+        "account_connector_id": ids["connector-1"],
+    }
+    two = {
+        "trading_account_id": ids["account-2"],
+        "account_connector_id": ids["connector-2"],
+    }
+    assert account_entry_safety_ready(disposable_db, **one) == (True, ())
+    assert account_entry_safety_ready(disposable_db, **two) == (True, ())
+    latch_account_entry_safety(disposable_db, **two, reason="SUB_WS_RECONNECT_UNPROVEN")
+    latch_account_entry_safety(disposable_db, **two, reason="RETRY_MUST_NOT_OVERWRITE_FIRST")
+    assert account_entry_safety_ready(disposable_db, **one) == (True, ())
+    assert account_entry_safety_ready(disposable_db, **two) == (
+        False, ("ACCOUNT_ENTRY_SAFETY_BLOCKED",),
+    )
+    reason_row = disposable_db.execute(
+        """SELECT reason FROM runtime.account_entry_safety_blocks
+           WHERE trading_account_id=%s AND account_connector_id=%s""",
+        (ids["account-2"], ids["connector-2"]),
+    ).fetchone()
+    assert reason_row is not None
+    assert reason_row["reason"] == "SUB_WS_RECONNECT_UNPROVEN"
+    # A separately authorized owner-control actor may remove a block after
+    # a complete authenticated recovery; runtime 'cripta' cannot do so.
+    disposable_db.execute(
+        """DELETE FROM runtime.account_entry_safety_blocks
+           WHERE trading_account_id=%s AND account_connector_id=%s""",
+        (ids["account-2"], ids["connector-2"]),
+    )
+    assert account_entry_safety_ready(disposable_db, **two) == (True, ())
+    assert account_entry_safety_ready(disposable_db, **one) == (True, ())
+
+
+def test_entry_safety_runtime_actor_may_latch_but_not_clear(
+    disposable_db: psycopg.Connection,
+) -> None:
+    table = "runtime.account_entry_safety_blocks"
+    for permission, expected in (
+        ("SELECT", True),
+        ("INSERT", True),
+        ("UPDATE", False),
+        ("DELETE", False),
+        ("TRUNCATE", False),
+    ):
+        row = disposable_db.execute(
+            "SELECT has_table_privilege(%s,%s,%s) AS allowed",
+            ("cripta", table, permission),
+        ).fetchone()
+        assert row is not None and row["allowed"] is expected
