@@ -204,6 +204,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                     pos = held[key]
                     closed_this_record = False
                     if pos is not None:
+                        active_before = pos
                         state = states.get(bucket)
                         tp = None if state is None else (state[1] if pos.side == "LONG" else state[0])
                         pos, out = on_trade(pos, px, seq, bucket, tp, kind)
