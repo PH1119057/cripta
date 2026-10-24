@@ -122,7 +122,10 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
     kind: str, expected_disarm: int,
 ) -> None:
-    credential_name = "bybit-mainnet" if kind == "MAIN" else "bybit-sub-fixture"
+    credential_name, account_id, bot_id = {
+        "MAIN": ("bybit-mainnet", "test-main-account", "m3-mainnet-primary"),
+        "SUB": ("bybit-sub-fixture", "test-sub-account", "test-sub-worker"),
+    }[kind]
     (tmp_path / credential_name).write_text(
         json.dumps({"api_key": "OFFLINE_FAKE", "api_secret": "OFFLINE_FAKE"}),
         encoding="utf-8",
@@ -137,11 +140,11 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     )
     monkeypatch.setattr(
         private_runtime, "TRADING_ACCOUNT_ID",
-        "test-main-account" if kind == "MAIN" else "test-sub-account",
+        account_id,
     )
     monkeypatch.setattr(
         private_runtime, "BOT_INSTANCE_ID",
-        "m3-mainnet-primary" if kind == "MAIN" else "test-sub-worker",
+        bot_id,
     )
     monkeypatch.setattr(
         private_runtime, "private_worker_status_path",
@@ -169,6 +172,6 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     with pytest.raises(RuntimeError, match="OFFLINE_SCHEMA_FAILURE"):
         private_runtime.main()
     assert connection.closed
-    assert len(disarms) == expected_disarm
-    assert statuses == ["schema"]
-    assert private_runtime.STATUS == tmp_path / f"test-status-{kind}.json"
+    assert len(disarms) in (expected_disarm,)
+    assert statuses in (["schema"],)
+    assert private_runtime.STATUS in (tmp_path / f"test-status-{kind}.json",)
