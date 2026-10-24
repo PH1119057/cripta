@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,9 @@ from bybit_workbench.private_worker_status import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "operations/connectivity"))
+
+import private_runtime  # noqa: E402
 
 
 def test_existing_main_status_identity_and_dashboard_reader_are_preserved() -> None:
@@ -102,3 +107,63 @@ def test_sub_worker_scope_is_explicit_before_private_credential_or_database_read
         'disarm_new_entries('
     )
     assert "bootstrap.close()" in section
+
+
+class _Bootstrap:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize(("kind", "expected_disarm"), [("MAIN", 1), ("SUB", 0)])
+def test_schema_startup_failure_only_disarms_existing_main_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    kind: str, expected_disarm: int,
+) -> None:
+    credential_name = "bybit-mainnet" if kind == "MAIN" else "bybit-sub-fixture"
+    (tmp_path / credential_name).write_text(
+        json.dumps({"api_key": "OFFLINE_FAKE", "api_secret": "OFFLINE_FAKE"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
+    monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", credential_name)
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", kind)
+    monkeypatch.setattr(
+        private_runtime, "TRADING_ACCOUNT_ID",
+        "test-main-account" if kind == "MAIN" else "test-sub-account",
+    )
+    monkeypatch.setattr(
+        private_runtime, "BOT_INSTANCE_ID",
+        "m3-mainnet-primary" if kind == "MAIN" else "test-sub-worker",
+    )
+    monkeypatch.setattr(
+        private_runtime, "private_worker_status_path",
+        lambda **_kwargs: tmp_path / f"test-status-{kind}.json",
+    )
+    connection = _Bootstrap()
+    disarms: list[str] = []
+    statuses: list[str] = []
+    monkeypatch.setattr(private_runtime, "db", lambda _name: connection)
+    monkeypatch.setattr(
+        private_runtime,
+        "validate_runtime_schema_contract",
+        lambda _connection: (_ for _ in ()).throw(RuntimeError("OFFLINE_SCHEMA_FAILURE")),
+    )
+    monkeypatch.setattr(
+        private_runtime,
+        "disarm_new_entries",
+        lambda _connection, reason: disarms.append(reason),
+    )
+    monkeypatch.setattr(
+        private_runtime,
+        "atomic_status",
+        lambda channel, _value: statuses.append(channel),
+    )
+    with pytest.raises(RuntimeError, match="OFFLINE_SCHEMA_FAILURE"):
+        private_runtime.main()
+    assert connection.closed
+    assert len(disarms) == expected_disarm
+    assert statuses == ["schema"]
+    assert private_runtime.STATUS == tmp_path / f"test-status-{kind}.json"
