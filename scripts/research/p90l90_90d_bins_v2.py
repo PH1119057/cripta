@@ -102,6 +102,7 @@ def compute(entry_root: Path, exit_root: Path) -> dict:
     daily = {scenario: [D(0) for _ in range(N_DAYS)] for scenario in SCENARIOS}
     daily_closed = {scenario: [0 for _ in range(N_DAYS)] for scenario in SCENARIOS}
     provenance = {}
+    expected = {scenario: {"accepted": 0, "closed": 0, "qualified": 0, "censored": 0, "net": D(0)} for scenario in SCENARIOS}
     for symbol in SYMBOLS:
         alias = symbol.removesuffix("USDT")
         ep = entry_root / f"entry_{alias}_FULL90"
@@ -170,12 +171,15 @@ def compute(entry_root: Path, exit_root: Path) -> dict:
             total_closed = closed[scenario]
             if observed < accepted[scenario]:
                 raise ValueError("unbalanced accepted versus candidate archive")
-            if accepted[scenario] != r["counts"]["accepted"] + 0:
-                # bins are global over coins; compare below in the final aggregate
-                pass
+            if accepted[scenario] != r["counts"]["accepted"]:
+                raise ValueError("per-symbol accepted admission mismatch")
             if total_closed != r["counts"]["closed"]:
-                # Likewise the global accumulator includes preceding symbols
-                pass
+                raise ValueError("per-symbol closed ledger mismatch")
+            expected[scenario]["accepted"] += accepted[scenario]
+            expected[scenario]["closed"] += total_closed
+            expected[scenario]["qualified"] += r["counts"]["qualified_candidate"]
+            expected[scenario]["censored"] += r["counts"].get("censored_open", 0)
+            expected[scenario]["net"] += D(r["money"]["net_usdt"])
         provenance[symbol] = {
             "entry_sha256": em["events_sha256"],
             "result_sha256": sha256(report_path),
@@ -201,6 +205,14 @@ def compute(entry_root: Path, exit_root: Path) -> dict:
             "accepted": sum(b["accepted_by_entry"] for b in arr),
             "busy": sum(b["busy"] for b in arr),
         }
+        check = expected[scenario]
+        if any(totals[scenario][name] != check[name] for name in
+               ("qualified", "accepted", "closed", "censored")):
+            raise ValueError("v2 10d bins do not reconcile original six scenario counts")
+        if totals[scenario]["net_usdt"] != check["net"]:
+            raise ValueError("v2 10d realized net does not equal five ledgers")
+        if totals[scenario]["busy"] != totals[scenario]["qualified"] - totals[scenario]["accepted"]:
+            raise ValueError("v2 occupied candidate accounting mismatch")
         rolling[scenario] = [
             {
                 "end_day_utc": datetime.fromtimestamp(START_TS + (d + 1) * ONE_DAY - 1,
