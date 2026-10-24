@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""P90L90 full 90-day independent six-scenario research Exit replay v2.
+
+Consumes a frozen candidate archive emitted by p90l90_entry_v1, NEVER live orders.
+No funding, spread, latency or modeled slippage; no exchange fill claim.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import gzip
+import json
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from decimal import Decimal as D, ROUND_HALF_EVEN, getcontext
+from pathlib import Path
+from statistics import median
+
+from scripts.research.p90l90_entry_90d_v2 import (
+    START_TS,
+    END_TS,
+    FROZEN_DEFAULT,
+    OUTPUT_ROOT,
+    RAW_DEFAULT,
+    SYMBOLS,
+    load_frozen,
+    sha256,
+)
+
+getcontext().prec = 50
+NOMINAL = D("10")
+TAKER = D("0.00055")
+MAKER = D("0.0002")
+MONEY_QUANTUM = D("0.000000000001")  # 12 decimal places in modeled USDT
+EXITS = ("LOCK050", "BE013", "TRAIL035")
+COHORTS = ("FIXED90", "PREV7D")
+SCENARIOS = tuple((a, b) for a in COHORTS for b in EXITS)
+
+
+def favorable(side: str, entry: D, current: D) -> D:
+    return (current / entry - 1) * D(100) if side == "LONG" else (1 - current / entry) * D(100)
+
+
+def threshold_price(side: str, entry: D, favorable_pct: D) -> D:
+    return entry * (1 + favorable_pct / D(100)) if side == "LONG" else entry * (1 - favorable_pct / D(100))
+
+
+def take_profit_eligible(side: str, entry: D, level: D) -> bool:
+    return favorable(side, entry, level) >= D("0.5")
+
+
+def hits_stop(side: str, px: D, level: D) -> bool:
+    return px <= level if side == "LONG" else px >= level
+
+
+def hits_tp(side: str, px: D, level: D) -> bool:
+    return px >= level if side == "LONG" else px <= level
+
+
+@dataclass
+class Position:
+    side: str
+    entry: D
+    entry_seq: int
+    entry_ts: float
+    state_bucket: int
+    stop: D
+    best_favorable: D = D(0)
+    protected: bool = False
+    protection_seq: int = -1
+    tp: D | None = None
+    tp_live_after_seq: int = -1
+    entry_event_id: str = ""
+    entry_trade_id: str = ""
+
+
+def initial_position(event: dict, seq: int, bucket: int, cohort: str, exit_kind: str):
+    del cohort, exit_kind  # scenario identity lives in outer ledger
+    side = event["side"]
+    entry = D(event["price"])
+    stop = threshold_price(side, entry, D("-10"))
+    pos = Position(side=side, entry=entry, entry_seq=seq,
+                   entry_ts=float(event["ts"]), state_bucket=bucket, stop=stop,
+                   entry_event_id=event.get("event_id", ""),
+                   entry_trade_id=event.get("trade_id", ""))
+    return pos
+
+
+def gross_and_net(pos: Position, exit_px: D, maker_exit: bool):
+    """10 USDT entry notional; exit fee scales with exit notional."""
+    exit_nominal = NOMINAL * exit_px / pos.entry
+    gross = NOMINAL * (exit_px / pos.entry - 1)
+    if pos.side == "SHORT":
+        gross = -gross
+    # Round each financial component once per closed trade, then sum fixed-point values.
+    # This prevents Decimal context-rounding drift across independently accumulated books.
+    gross = gross.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_EVEN)
+    entry_fee = (NOMINAL * TAKER).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_EVEN)
+    exit_fee = (exit_nominal * (MAKER if maker_exit else TAKER)).quantize(
+        MONEY_QUANTUM, rounding=ROUND_HALF_EVEN
+    )
+    return gross, entry_fee, exit_fee, gross - entry_fee - exit_fee
+
+
+def trade_record(symbol: str, cohort: str, kind: str, pos: Position,
+                 exit_seq: int, exit_ts: float, exit_px: D,
+                 reason: str, maker_exit: bool, gross: D, entry_fee: D,
+                 exit_fee: D, net: D) -> dict:
+    """Exact immutable modeled execution row; no claim of exchange fills."""
+    holding_seconds = D(str(exit_ts)) - D(str(pos.entry_ts))
+    if holding_seconds < 0:
+        raise ValueError("negative modeled holding duration")
+    if net != gross - entry_fee - exit_fee:
+        raise ValueError("per-trade monetary reconciliation mismatch")
+    if maker_exit != (reason == "RESTING_TP"):
+        raise ValueError("maker eligibility / exit reason mismatch")
+    return {
+        "symbol": symbol,
+        "scenario": f"{cohort}_{kind}",
+        "side": pos.side,
+        "candidate_event_id": pos.entry_event_id,
+        "entry_trade_id": pos.entry_trade_id,
+        "entry_source_order": pos.entry_seq,
+        "exit_source_order": exit_seq,
+        "entry_ts": repr(pos.entry_ts),
+        "exit_ts": repr(exit_ts),
+        "holding_seconds": str(holding_seconds),
+        "entry_price": str(pos.entry),
+        "exit_price": str(exit_px),
+        "exit_reason": reason,
+        "maker_exit": maker_exit,
+        "modeled_exchange_fill": False,
+        "gross_usdt": str(gross),
+        "entry_fee_usdt": str(entry_fee),
+        "exit_fee_usdt": str(exit_fee),
+        "net_usdt": str(net),
+    }
+
+
+def on_trade(pos: Position, px: D, seq: int, bucket: int, candidate_tp: D | None,
+             kind: str):
+    """Return (possibly new position, exit), strictly event-order causal.
+
+    Pre-existing stop and resting TP are tested *before* replacing a target.
+    Protection activated by this record can fill only on a later record.
+    """
+    if seq <= pos.entry_seq:
+        return pos, None
+    if hits_stop(pos.side, px, pos.stop):
+        return None, ("PROTECTED_STOP" if pos.protected else "HARD_STOP", px, False)
+    if pos.tp is not None and seq > pos.tp_live_after_seq and hits_tp(pos.side, px, pos.tp):
+        return None, ("RESTING_TP", pos.tp, True)
+
+    if bucket != pos.state_bucket:
+        pos.state_bucket = bucket
+        if candidate_tp is not None and take_profit_eligible(pos.side, pos.entry, candidate_tp):
+            if hits_tp(pos.side, px, candidate_tp):
+                return None, ("MARKETABLE_TP", px, False)
+            pos.tp = candidate_tp
+            pos.tp_live_after_seq = seq
+
+    f = favorable(pos.side, pos.entry, px)
+    if f > pos.best_favorable:
+        pos.best_favorable = f
+    if pos.best_favorable >= D("0.5"):
+        if kind == "LOCK050":
+            proposed = threshold_price(pos.side, pos.entry, D("0.5"))
+        elif kind == "BE013":
+            proposed = threshold_price(pos.side, pos.entry, D("0.13"))
+        elif kind == "TRAIL035":
+            proposed = threshold_price(pos.side, pos.entry, pos.best_favorable - D("0.35"))
+        else:
+            raise ValueError(kind)
+        # Stops tighten only; they never retreat.
+        tightens = proposed > pos.stop if pos.side == "LONG" else proposed < pos.stop
+        if tightens:
+            pos.stop = proposed
+            pos.protected = True
+            pos.protection_seq = seq
+    return pos, None
+
+
+def read_events(path: Path, symbol: str):
+    by_seq = defaultdict(list)
+    count = Counter()
+    prev = 0
+    with path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            e = json.loads(line)
+            seq = int(e["source_order"])
+            if seq < prev or e["symbol"] != symbol or not e["candidate_only"]:
+                raise ValueError("candidate archive order/provenance mismatch")
+            prev = seq
+            by_seq[seq].append(e)
+            count["raw_candidates"] += 1
+            for cohort in COHORTS:
+                count[cohort + "_candidates"] += bool(e[cohort])
+    return by_seq, count
+
+
+def scenario_keys(window: str):
+    """Both width cohorts require one identical complete 90-day evaluation."""
+    if window != "full90":
+        raise ValueError("P90L90 V2 only permits full90")
+    return SCENARIOS
+
+
+def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path,
+           output: Path, window: str = "full90"):
+    if symbol not in SYMBOLS or window != "full90":
+        raise ValueError("invalid research scope")
+    if output.exists():
+        raise FileExistsError("immutable output exists")
+    if not output.is_absolute() or OUTPUT_ROOT not in output.resolve().parents:
+        raise ValueError("only versioned absolute data-disk research output")
+    with (candidates_root / "manifest.json").open("r", encoding="utf-8") as stream:
+        entry = json.load(stream)
+    if entry["symbol"] != symbol or entry["research"] != "P90L90_ENTRY_90D_V2" or not entry["complete_90d_input"]:
+        raise ValueError("invalid full90 Entry identity or coverage")
+    if entry["frozen_l53"]["states"] != 90 * 288:
+        raise ValueError("wrong Entry archive")
+    events_path = candidates_root / f"candidates_{symbol}.jsonl"
+    if entry["events_sha256"] != sha256(events_path):
+        raise ValueError("Entry archive fingerprint mismatch")
+    states_path = frozen_root / f"states_{symbol}.csv.gz"
+    if entry["frozen_l53_sha256"] != sha256(states_path):
+        raise ValueError("frozen state changed since Entry")
+    states, _, _, _ = load_frozen(states_path)
+    events, counts = read_events(events_path, symbol)
+    active_scenarios = scenario_keys(window)
+    held = {key: None for key in active_scenarios}
+    metrics = {key: Counter() for key in active_scenarios}
+    money = {key: defaultdict(lambda: D(0)) for key in active_scenarios}
+    trade_rows = {key: [] for key in active_scenarios}
+    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in active_scenarios}
+    dir_money = {
+        key: {side: defaultdict(lambda: D(0)) for side in ("LONG", "SHORT")}
+        for key in active_scenarios
+    }
+    seq = 0
+    last_price = None
+    last_timestamp = None
+    start_at = START_TS
+    for item in entry["inputs"]:
+        path = raw_root / symbol / "public_trades" / item["file"]
+        if sha256(path) != item["sha256"]:
+            raise ValueError("raw source changed since Entry: " + path.name)
+        with gzip.open(path, "rt", newline="") as stream:
+            for row in csv.DictReader(stream):
+                seq += 1
+                t = float(row["timestamp"])
+                px = D(row["price"])
+                if last_timestamp is not None and t < last_timestamp:
+                    raise ValueError("raw order moved")
+                last_timestamp, last_price = t, px
+                bucket = int(t // 300) * 300
+                if not start_at <= t < END_TS:
+                    continue
+                candidates = events.get(seq, [])
+                if candidates:
+                    for e in candidates:
+                        if float(e["ts"]) != t or D(e["price"]) != px or e["trade_id"] != row["trdMatchID"]:
+                            raise ValueError("candidate source_row mismatch")
+                for key in active_scenarios:
+                    cohort, kind = key
+                    pos = held[key]
+                    closed_this_record = False
+                    if pos is not None:
+                        active_before = pos
+                        state = states.get(bucket)
+                        tp = None if state is None else (state[1] if pos.side == "LONG" else state[0])
+                        pos, out = on_trade(pos, px, seq, bucket, tp, kind)
+                        held[key] = pos
+                        if out is not None:
+                            reason, exit_px, maker_exit = out
+                            gross, entry_fee, exit_fee, net = gross_and_net(
+                                active_before, exit_px, maker_exit
+                            )
+                            trade_rows[key].append(trade_record(
+                                symbol, cohort, kind, active_before, seq, t,
+                                exit_px, reason, maker_exit, gross, entry_fee,
+                                exit_fee, net,
+                            ))
+                            m = metrics[key]
+                            dm = dir_metrics[key][active_before.side]
+                            dm["closed"] += 1
+                            dm["close_" + reason] += 1
+                            dm["win"] += net > 0
+                            dm["loss"] += net < 0
+                            for label, value in (
+                                ("gross_usdt", gross), ("entry_fees_usdt", entry_fee),
+                                ("exit_fees_usdt", exit_fee), ("net_usdt", net),
+                                ("positive_net_usdt", max(net, D(0))),
+                                ("negative_net_usdt", min(net, D(0))),
+                            ):
+                                dir_money[key][active_before.side][label] += value
+                            m["closed"] += 1
+                            m["close_" + reason] += 1
+                            m["win"] += net > 0
+                            m["loss"] += net < 0
+                            money[key]["gross_usdt"] += gross
+                            money[key]["entry_fees_usdt"] += entry_fee
+                            money[key]["exit_fees_usdt"] += exit_fee
+                            money[key]["net_usdt"] += net
+                            money[key]["positive_net_usdt"] += max(net, D(0))
+                            money[key]["negative_net_usdt"] += min(net, D(0))
+                            closed_this_record = True
+                    for event in candidates:
+                        if not event[cohort]:
+                            continue
+                        metrics[key]["qualified_candidate"] += 1
+                        dir_metrics[key][event["side"]]["qualified_candidate"] += 1
+                        if held[key] is not None or closed_this_record:
+                            metrics[key]["busy_or_same_tick"] += 1
+                            dir_metrics[key][event["side"]]["busy_or_same_tick"] += 1
+                            continue
+                        held[key] = initial_position(event, seq, bucket, cohort, kind)
+                        state = states.get(bucket)
+                        if state is None:
+                            raise ValueError("missing frozen state for accepted Entry")
+                        tp = state[1] if event["side"] == "LONG" else state[0]
+                        if take_profit_eligible(event["side"], px, tp):
+                            held[key].tp = tp
+                            held[key].tp_live_after_seq = seq
+                        metrics[key]["accepted"] += 1
+                        dir_metrics[key][event["side"]]["accepted"] += 1
+    if seq != sum(int(z["rows"]) for z in entry["inputs"]):
+        raise ValueError("source file row count mismatch")
+    if any(x > seq for x in events):
+        raise ValueError("unprocessed candidate source rows")
+    report = {
+        "research": "P90L90_EXIT_90D_V2", "symbol": symbol,
+        "status": (
+            "HISTORICAL_TICK_PROXY_NO_EXCHANGE_FILL"
+            if entry["complete_90d_input"] else "PARTIAL_DIAGNOSTIC_NOT_FINANCIAL_EVIDENCE"
+        ),
+        "entry_events_sha256": entry["events_sha256"],
+        "frozen_l53_sha256": entry["frozen_l53_sha256"],
+        "period": "FULL_90D_BOTH_COHORTS",
+        "FULL_90D_UTC_COVERAGE": True,
+        "nominal_usdt": "10", "taker_fee": str(TAKER), "maker_resting_tp_fee": str(MAKER),
+        "money_rounding_usdt": str(MONEY_QUANTUM),
+        "money_rounding_mode": "ROUND_HALF_EVEN_PER_TRADE_PER_GROSS_AND_FEE_COMPONENT",
+        "unmodeled": ["funding", "slippage", "latency", "bid_ask_spread"],
+        "entry_candidate_counts": dict(counts),
+        "scenarios": {},
+    }
+    for key in active_scenarios:
+        cohort, kind = key
+        m = metrics[key]
+        cur = held[key]
+        m["censored_open"] = 1 if cur else 0
+        if cur:
+            dir_metrics[key][cur.side]["censored_open"] += 1
+        if m["qualified_candidate"] != m["accepted"] + m["busy_or_same_tick"]:
+            raise ValueError("candidate accounting mismatch")
+        if m["accepted"] != m["closed"] + m["censored_open"]:
+            raise ValueError("trade accounting mismatch")
+        if len(trade_rows[key]) != m["closed"]:
+            raise ValueError("trade ledger row count mismatch")
+        for book in (money[key], *dir_money[key].values()):
+            if book["gross_usdt"] - book["entry_fees_usdt"] - book["exit_fees_usdt"] != book["net_usdt"]:
+                raise ValueError("fee / net reconciliation mismatch")
+            if book["positive_net_usdt"] + book["negative_net_usdt"] != book["net_usdt"]:
+                raise ValueError("signed net reconciliation mismatch")
+        if sum((D(row["net_usdt"]) for row in trade_rows[key]), D(0)) != money[key]["net_usdt"]:
+            raise ValueError("trade ledger net sum mismatch")
+        if any(row["scenario"] != f"{cohort}_{kind}" for row in trade_rows[key]):
+            raise ValueError("trade ledger scenario identity mismatch")
+        holds = [D(row["holding_seconds"]) for row in trade_rows[key]]
+        mtm_gross = None if cur is None else gross_and_net(cur, last_price, False)[0]
+        report["scenarios"][f"{cohort}_{kind}"] = {
+            "counts": dict(m),
+            "holding_seconds_mean": (str(sum(holds, D(0)) / len(holds)) if holds else None),
+            "holding_seconds_median": (str(median(holds)) if holds else None),
+            "holding_seconds_max": (str(max(holds)) if holds else None),
+            "money": {k: str(v) for k, v in money[key].items()},
+            "by_direction": {
+                side: {
+                    "counts": dict(dir_metrics[key][side]),
+                    "money": {k: str(v) for k, v in dir_money[key][side].items()},
+                }
+                for side in ("LONG", "SHORT")
+            },
+            "censored_mtm_gross_usdt_excluded": None if mtm_gross is None else str(mtm_gross),
+            "censored_position": None if cur is None else {
+                "side": cur.side, "candidate_event_id": cur.entry_event_id,
+                "entry_ts": repr(cur.entry_ts), "entry_price": str(cur.entry),
+                "entry_source_order": cur.entry_seq,
+            },
+        }
+    output.mkdir(parents=False, exist_ok=False)
+    ledger_path = output / f"trade_ledger_{symbol}.jsonl"
+    with ledger_path.open("w", encoding="utf-8") as fd:
+        for key in active_scenarios:
+            for row in trade_rows[key]:
+                fd.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+    report["trade_ledger_sha256"] = sha256(ledger_path)
+    report["trade_ledger_rows"] = sum(len(trade_rows[key]) for key in active_scenarios)
+    p = output / "result.json"
+    p.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    return report
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--symbol", choices=SYMBOLS, required=True)
+    p.add_argument("--raw-root", type=Path, default=RAW_DEFAULT)
+    p.add_argument("--frozen-root", type=Path, default=FROZEN_DEFAULT)
+    p.add_argument("--entry-output", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--window", choices=["full90"], default="full90")
+    args = p.parse_args()
+    report = replay(args.symbol, args.raw_root, args.frozen_root,
+                    args.entry_output, args.output, args.window)
+    print(json.dumps({"status": report["status"], "symbol": args.symbol,
+                      "scenarios": report["scenarios"]}))
+
+
+if __name__ == "__main__":
+    main()
