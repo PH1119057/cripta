@@ -18,7 +18,7 @@ Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
 EnvironmentFile=/etc/cripta/release.env
 EnvironmentFile=/etc/cripta/private-runtime-%i.env
-ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_entry_consumer.py
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_entry_consumer.py --sub-account=%i
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
