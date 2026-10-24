@@ -82,10 +82,14 @@ def test_main_worker_remains_compatible_and_exit_is_not_gated_by_new_entry_proof
         credential_name="bybit-mainnet",
     )
     source = (ROOT / "operations/connectivity/private_runtime.py").read_text()
-    assert 'if kind == "entry":\n        authenticated_entry_connector_gate(' in source
-    assert 'if kind == "entry":\n        authenticated_entry_connector_gate(' in source[
+    entry_path = source[
         source.index("def execute_command("):source.index("def command_worker_loop(")
     ]
+    assert 'if kind == "entry":' in entry_path
+    assert entry_path.index("account_entry_safety_ready(") < entry_path.index(
+        "authenticated_entry_connector_gate("
+    )
+    assert "authenticated_entry_connector_gate(" in entry_path
     assert "assert_sub_worker_isolation(" in source
     assert "STATUS = private_worker_status_path(" in source
 
