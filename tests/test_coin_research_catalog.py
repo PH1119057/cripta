@@ -14,24 +14,36 @@ from operations.dashboard.coin_research_catalog import (
 )
 
 
-def test_catalog_has_30_independently_balanced_records() -> None:
+def test_catalog_has_historical_30_and_p90l90_45_balanced_records() -> None:
     raw = read_catalog()
-    assert raw["record_count"] == 30
+    assert raw["record_count"] == 75
     assert raw["storage_approval"] == "OWNER_APPROVED_GITHUB_MAIN_20261021"
     assert {
         r["instrument"]["symbol"] for r in raw["records"]
     } == {"LTCUSDT", "APTUSDT", "DOTUSDT", "ARBUSDT", "INJUSDT"}
     assert all(
         r["quality"]["publication_qc"] == "MODEL_QC_PASS_GIT_REGISTERED"
-        and r["quality"]["lookahead"] == "YES"
         and r["quality"]["oos"] == "NOT_VERIFIED"
         and r["instrument"]["instrument_id"] == (
             "inst-bybit-linear-" + r["instrument"]["symbol"].lower()
         )
         for r in raw["records"]
     )
+    old = [r for r in raw["records"] if r["record_id"].startswith("l53-h9-medband-")]
+    new = [r for r in raw["records"] if r["record_id"].startswith("p90l90-v12-")]
+    assert len(old) == 30
+    assert len(new) == 45
+    assert all(r["quality"]["lookahead"] == "YES" for r in old)
+    assert sum(r["scenario_id"].startswith("COMMON82_") for r in new) == 30
+    assert sum(r["scenario_id"].startswith("EXTENDED_FIXED90_") for r in new) == 15
+    assert all(
+        (r["quality"]["lookahead"] == "YES")
+        if "_FIXED90_" in r["scenario_id"]
+        else r["quality"]["lookahead"].startswith("NO_FOR_WIDTH_FILTER_ONLY")
+        for r in new
+    )
     for sym in ("LTCUSDT", "APTUSDT", "DOTUSDT", "ARBUSDT", "INJUSDT"):
-        assert read_symbol_records(sym)["record_count"] == 6
+        assert read_symbol_records(sym)["record_count"] == 15
 
 
 def test_zero_result_must_not_be_guessed_from_invalid_data(tmp_path: Path) -> None:
