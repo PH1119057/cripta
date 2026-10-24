@@ -178,7 +178,10 @@ def strategy_card() -> StrategyCard:
     )
 
 
-def build_evaluation(*, real: bool = False, fanout: bool = False, partial: bool = False):
+def build_evaluation(
+    *, real: bool = False, fanout: bool = False,
+    partial: bool = False, all_unarmed: bool = False,
+):
     card = strategy_card()
     activation = StrategyActivation(
         activation_id="act-storage",
@@ -256,10 +259,15 @@ def build_evaluation(*, real: bool = False, fanout: bool = False, partial: bool 
                         "snapshot-one", NOW, Decimal("100"), DataQuality.HIGH,
                         "runtime.account_state_generations:g-one",
                     ),
-                    technical_readiness=TechnicalReadiness(True, NOW),
+                    technical_readiness=TechnicalReadiness(
+                        not all_unarmed, NOW,
+                        "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN" if all_unarmed else "",
+                    ),
                     account_ref="BYBIT:UNIFIED",
                     exchange_position_key="ta-one:LINEAR:XRPUSDT:0",
-                    entry_admission_port=AcceptingAdmissionPort(),
+                    entry_admission_port=(
+                        None if all_unarmed else AcceptingAdmissionPort()
+                    ),
                 ),
                 AccountAdmissionContext(
                     binding=StrategyExecutionBindingRef(
@@ -270,12 +278,19 @@ def build_evaluation(*, real: bool = False, fanout: bool = False, partial: bool 
                         "runtime.account_state_generations:g-two",
                     ),
                     technical_readiness=TechnicalReadiness(
-                        not partial, NOW,
-                        "" if not partial else "SECOND_ACCOUNT_NOT_ARM_READY",
+                        not partial and not all_unarmed,
+                        NOW,
+                        (
+                            "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+                            if all_unarmed
+                            else ("SECOND_ACCOUNT_NOT_ARM_READY" if partial else "")
+                        ),
                     ),
                     account_ref="BYBIT:UNIFIED",
                     exchange_position_key="ta-two:LINEAR:XRPUSDT:0",
-                    entry_admission_port=AcceptingAdmissionPort(),
+                    entry_admission_port=(
+                        None if all_unarmed else AcceptingAdmissionPort()
+                    ),
                 ),
             )
         }
@@ -666,3 +681,30 @@ def test_fanout_rejects_duplicate_account_before_any_storage_write() -> None:
         )
     assert not connection.statements
 
+
+
+def test_unarmed_real_fanout_records_two_denials_and_never_creates_requests() -> None:
+    _card, _activation, _entry_plan, evaluation = build_evaluation(
+        real=True, fanout=True, all_unarmed=True
+    )
+    assert evaluation.decision is None
+    assert evaluation.execution_request is None
+    assert len(evaluation.account_outcomes) == 2
+    first, second = evaluation.account_outcomes
+    assert first.decision.entry_decision_id != second.decision.entry_decision_id
+    assert all(
+        outcome.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+        and outcome.decision.reason == "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+        and outcome.execution_request is None
+        and len(outcome.notifications) == 1
+        for outcome in evaluation.account_outcomes
+    )
+    assert first.notifications[0].notification_id != second.notifications[0].notification_id
+    connection = FakeConnection()
+    StrategyEntryStore(connection).record_evaluation(evaluation)
+    sql = [statement for statement, _ in connection.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in stmt for stmt in sql) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in stmt for stmt in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in stmt for stmt in sql) == 2
+    assert sum("INSERT INTO strategy_entry.notifications" in stmt for stmt in sql) == 2
+    assert not any("INSERT INTO strategy_entry.execution_requests" in stmt for stmt in sql)
