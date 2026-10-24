@@ -15,6 +15,7 @@ Group=cripta
 WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB
+Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i
 Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
 Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-sub-%i
 Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i
