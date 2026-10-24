@@ -1,19 +1,25 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_entry import (
     ActivePlanRegistry,
+    DataQuality,
     MarketFactEnvelope,
     StrategyExecutionBindingRef,
+    TechnicalReadiness,
+    TradingCapacitySnapshot,
     UniversalEntryEngine,
 )
 from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from operations.monitoring.universal_entry_shadow import (
     _blocked_multi_account_admissions,
+    _multi_account_admissions,
     _unarmed_multi_account_candidate_bindings,
 )
 
@@ -153,3 +159,178 @@ def test_unarmed_candidate_requires_aware_snapshot() -> None:
             CandidateDB([]), (Bundle("act-one"),),
             observed_at=datetime(2026, 10, 24),
         )
+
+
+class _ScopedCard:
+    def __init__(self) -> None:
+        self.strategy_id = "strategy-1"
+        self.strategy_version = "1"
+        self.strategy_config_fingerprint = "strategy-fp"
+        self.symbols = ("BTCUSDT",)
+
+
+class _ScopedBundle(Bundle):
+    def __init__(self) -> None:
+        super().__init__("act-one")
+        self.card = _ScopedCard()
+
+
+class _ScopedRows:
+    def __init__(self, items: list[tuple[object, ...]]) -> None:
+        self.items = items
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.items[0] if self.items else None
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.items
+
+
+class _ScopedDB:
+    def __init__(self, *, gate: bool = True, missing_second: bool = False) -> None:
+        self.gate = gate
+        self.missing_second = missing_second
+        self.queries: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, sql: str, params: tuple[object, ...] = ()) -> _ScopedRows:
+        self.queries.append((sql, params))
+        if "control.execution_gates" in sql:
+            return _ScopedRows([(self.gate,)])
+        if "FROM identity.account_connectors c" in sql:
+            if self.missing_second and params[0] == "trading-account-2":
+                return _ScopedRows([])
+            return _ScopedRows([(f"connector-{params[0]}",)])
+        raise AssertionError(f"unexpected query in isolated admission test: {sql[:80]}")
+
+
+def _known_capacity(account_id: str) -> TradingCapacitySnapshot:
+    return TradingCapacitySnapshot(
+        f"generation-{account_id}", NOW, Decimal("100"), DataQuality.HIGH,
+        f"runtime.account_state_generations:generation-{account_id}",
+    )
+
+
+def test_producer_resolves_two_independent_armed_account_admissions() -> None:
+    one, two = binding(1), binding(2)
+    db = _ScopedDB()
+    seen_accounts: list[str] = []
+
+    def generation(_connection: object, *, symbol: str, observed_at: datetime,
+                   trading_account_id: str) -> tuple[TechnicalReadiness, TradingCapacitySnapshot]:
+        assert symbol == "BTCUSDT" and observed_at == NOW
+        seen_accounts.append(trading_account_id)
+        return TechnicalReadiness(True, NOW), _known_capacity(trading_account_id)
+
+    with (
+        patch(
+            "operations.monitoring.universal_entry_shadow.LOADED_COMMIT",
+            "a" * 40,
+        ),
+        patch(
+            "operations.monitoring.universal_entry_shadow.account_live_arm_ready",
+            return_value=(True, ()),
+        ) as owner_arm,
+        patch(
+            "operations.monitoring.universal_entry_shadow._real_entry_account_state",
+            side_effect=generation,
+        ),
+    ):
+        resolved, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset({"act-one"}),
+        )
+    assert ready == frozenset({"act-one"})
+    assert seen_accounts == ["trading-account-1", "trading-account-2"]
+    assert len(owner_arm.call_args_list) == 2
+    scopes = resolved["act-one"]
+    assert len(scopes) == 2
+    assert all(item.technical_readiness.ready for item in scopes)
+    assert all(item.capacity is not None for item in scopes)
+    assert all(item.entry_admission_port is not None for item in scopes)
+    assert scopes[0].exchange_position_key != scopes[1].exchange_position_key
+    assert owner_arm.call_args_list[0].kwargs["trading_account_id"] == one.trading_account_id
+    assert owner_arm.call_args_list[1].kwargs["trading_account_id"] == two.trading_account_id
+
+
+def test_one_unarmed_account_does_not_block_authorized_other_account() -> None:
+    one, two = binding(1), binding(2)
+    db = _ScopedDB()
+    def arm(_connection: object, **fields: object) -> tuple[bool, tuple[str, ...]]:
+        return ((True, ()) if fields["trading_account_id"] == one.trading_account_id
+                else (False, ("EXACT_ACCOUNT_RELEASE_OWNER_ARM_NOT_ACTIVE",)))
+    with (
+        patch("operations.monitoring.universal_entry_shadow.LOADED_COMMIT", "a" * 40),
+        patch("operations.monitoring.universal_entry_shadow.account_live_arm_ready",
+              side_effect=arm),
+        patch(
+            "operations.monitoring.universal_entry_shadow._real_entry_account_state",
+            return_value=(TechnicalReadiness(True, NOW), _known_capacity("one")),
+        ),
+    ):
+        resolved, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset({"act-one"}),
+        )
+    assert ready == frozenset({"act-one"})
+    assert resolved["act-one"][0].entry_admission_port is not None
+    assert resolved["act-one"][1].entry_admission_port is None
+    assert not resolved["act-one"][1].technical_readiness.ready
+    assert (
+        resolved["act-one"][1].technical_readiness.reason
+        == "EXACT_ACCOUNT_RELEASE_OWNER_ARM_NOT_ACTIVE"
+    )
+
+
+def test_missing_connector_never_borrows_other_account_authorization() -> None:
+    one, two = binding(1), binding(2)
+    db = _ScopedDB(missing_second=True)
+    with (
+        patch("operations.monitoring.universal_entry_shadow.LOADED_COMMIT", "a" * 40),
+        patch(
+            "operations.monitoring.universal_entry_shadow.account_live_arm_ready",
+            return_value=(True, ()),
+        ) as arm,
+        patch(
+            "operations.monitoring.universal_entry_shadow._real_entry_account_state",
+            return_value=(TechnicalReadiness(True, NOW), _known_capacity("one")),
+        ),
+    ):
+        resolved, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset({"act-one"}),
+        )
+    assert ready == frozenset({"act-one"})
+    assert len(arm.call_args_list) == 1
+    assert resolved["act-one"][1].technical_readiness.reason == "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+    assert resolved["act-one"][1].entry_admission_port is None
+
+
+def test_disarmed_mainnet_and_shadow_mode_never_authorize_private_admission() -> None:
+    one, two = binding(1), binding(2)
+    db = _ScopedDB(gate=False)
+    with (
+        patch("operations.monitoring.universal_entry_shadow.LOADED_COMMIT", "a" * 40),
+        patch(
+            "operations.monitoring.universal_entry_shadow.account_live_arm_ready"
+        ) as arm,
+    ):
+        result, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset({"act-one"}),
+        )
+        assert ready == frozenset()
+        assert all(x.entry_admission_port is None for x in result["act-one"])
+        arm.assert_not_called()
+        queries_before = len(db.queries)
+        shadow, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset(),
+        )
+        assert ready == frozenset()
+        assert len(db.queries) == queries_before
+        assert all(x.entry_admission_port is None for x in shadow["act-one"])
