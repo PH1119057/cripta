@@ -38,7 +38,7 @@ def test_non_overlapping_bin_boundaries() -> None:
     b = [new_bin(i) for i in range(9)]
     assert b[0]["from_utc"] == "2026-05-18T00:00:00+00:00"
     assert b[-1]["to_utc_exclusive"] == "2026-08-16T00:00:00+00:00"
-    assert all(x["to_utc_exclusive"] == y["from_utc"] for x, y in zip(b, b[1:]))
+    assert all(x["to_utc_exclusive"] == y["from_utc"] for x, y in zip(b[:-1], b[1:], strict=True))
 
 
 def test_both_width_cohorts_only_on_full90() -> None:
