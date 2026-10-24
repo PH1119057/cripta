@@ -280,6 +280,9 @@ class PostgresCapitalReservationPort:
                 updated_at=now,
                 pre_dispatch_expires_at=request.pre_dispatch_expires_at.astimezone(UTC),
                 state_reason="RESERVATION_CREATED",
+                strategy_execution_binding_id=request.strategy_execution_binding_id,
+                execution_leg=request.execution_leg,
+                trading_account_id=request.trading_account_id,
             )
 
     def _guard_unified_r1_envelope(
