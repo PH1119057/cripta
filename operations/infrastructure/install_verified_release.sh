@@ -203,6 +203,9 @@ unit_specs=(
   "research/server/monitoring/cripta-opportunity-tracker.service|cripta-opportunity-tracker.service|runtime"
   "operations/monitoring/cripta-position-supervisor.service|cripta-position-supervisor.service|runtime"
   "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
+  # Source-only templates are installed but never enabled or added to managed_services.
+  "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
+  "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
   "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
@@ -416,6 +419,9 @@ migration_files=(
   operations/sql/20261016_exit_account_lineage_r6c.sql
   operations/sql/20261016_trade_command_account_identity_r6d.sql
   operations/sql/20261016_report_replay_provenance_r5.sql
+  # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
+  operations/sql/20261024_account_scoped_live_arm.sql
+  operations/sql/20261025_account_entry_safety_blocks.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
