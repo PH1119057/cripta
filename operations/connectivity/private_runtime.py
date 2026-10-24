@@ -4344,12 +4344,27 @@ def trade_loop(key: str, secret: str) -> None:
 
 def main() -> None:
     global running, MOUNTED_CREDENTIAL_REF, STATUS
-    STATUS.parent.mkdir(parents=True, exist_ok=True)
+    # The worker role is explicit, not inferred from a different process's
+    # MAIN connector. A SUB failure cannot write MAIN status or revoke
+    # unrelated account permissions.
+    configured_kind = os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN")
+    configured_kind = configured_kind.strip().upper()
+    if configured_kind not in {"MAIN", "SUB"}:
+        raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
+    STATUS = private_worker_status_path(
+        trading_account_id=TRADING_ACCOUNT_ID, account_kind=configured_kind
+    )
     credential_name = os.environ.get("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-mainnet")
     if not credential_name or not all(
         char.isascii() and (char.isalnum() or char in "-_") for char in credential_name
     ):
         raise RuntimeError("BYBIT_CREDENTIAL_MOUNT_NAME_INVALID")
+    assert_sub_worker_isolation(
+        account_kind=configured_kind,
+        bot_instance_id=BOT_INSTANCE_ID,
+        credential_name=credential_name,
+    )
+    STATUS.parent.mkdir(parents=True, exist_ok=True)
     credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
     credentials = json.loads(credential_path.read_text(encoding="utf-8"))
     MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
@@ -4357,11 +4372,16 @@ def main() -> None:
     try:
         validate_runtime_schema_contract(bootstrap)
         account_kind = validate_runtime_identity_contract(bootstrap)
+        if account_kind != configured_kind:
+            raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_REGISTRY_MISMATCH")
     except Exception as exc:
-        disarm_new_entries(
-            bootstrap,
-            "restart: schema validation failed; owner re-arm required",
-        )
+        # Preserve the MAIN legacy startup protection while preventing a SUB
+        # worker's local bad configuration from disarming every account.
+        if configured_kind == "MAIN":
+            disarm_new_entries(
+                bootstrap,
+                "restart: schema validation failed; owner re-arm required",
+            )
         atomic_status(
             "schema",
             {
@@ -4370,21 +4390,6 @@ def main() -> None:
                 "error": f"{type(exc).__name__}: {exc}",
             },
         )
-        bootstrap.close()
-        raise
-    # A newly provisioned SUB worker with an incomplete local configuration
-    # must NOT disarm every other TradingAccount via the global mainnet gate.
-    # This is a local worker startup failure, not a loss of existing Exit.
-    try:
-        assert_sub_worker_isolation(
-            account_kind=account_kind,
-            bot_instance_id=BOT_INSTANCE_ID,
-            credential_name=credential_name,
-        )
-        STATUS = private_worker_status_path(
-            trading_account_id=TRADING_ACCOUNT_ID, account_kind=account_kind
-        )
-    except ValueError:
         bootstrap.close()
         raise
     atomic_status(
