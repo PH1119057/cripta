@@ -344,11 +344,19 @@ def _is_sub_private_worker() -> bool:
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
     """Fail closed on Entry only; a SUB may not disarm unrelated accounts."""
     if _is_sub_private_worker():
+        # An exception message may contain signed transport diagnostics.
+        # Persist only an internal stable category, never raw credentials,
+        # response bodies, signed URLs or their fragments.
+        safety_reason = (
+            "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
+            if reason == PRIVATE_RECONNECT_GATE_REASON
+            else "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
+        )
         latch_account_entry_safety(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
             account_connector_id=ACCOUNT_CONNECTOR_ID,
-            reason=reason[:300],
+            reason=safety_reason,
         )
         connection.commit()
         return
