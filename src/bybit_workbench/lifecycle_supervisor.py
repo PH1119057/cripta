@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
 from bybit_workbench.lifecycle_exposure_bridge import unbound_strategy_claims
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
@@ -1483,13 +1483,13 @@ class LifecycleSupervisor:
                             "symbol": item["symbol"],
                             "position_idx": item["position_idx"],
                             "exchange_position_slot_claim_ids": list(
-                                item["exchange_position_slot_claim_ids"]
+                                cast(tuple[str, ...], item["exchange_position_slot_claim_ids"])
                             ),
                         },
                         {
                             "reason": "physical slot has conflicting or unbound durable ownership",
                             "matching_open_owner_ids": list(
-                                item["matching_open_owner_ids"]
+                                cast(tuple[str, ...], item["matching_open_owner_ids"])
                             ),
                         },
                     )
