@@ -355,6 +355,9 @@ def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
             if reason == PRIVATE_RECONNECT_GATE_REASON
             else "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
         )
+        # Reconciliation may have left an aborted/uncommitted PostgreSQL
+        # transaction. The safety latch must not inherit that transaction.
+        connection.rollback()
         latch_account_entry_safety(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
