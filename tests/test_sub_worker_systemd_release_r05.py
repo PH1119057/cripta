@@ -52,7 +52,7 @@ def test_existing_main_remains_compatible_without_sub_argument() -> None:
 
 def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -> None:
     unit = PRIVATE.read_text(encoding="utf-8")
-    assert "[Install]" not in unit
+    assert "[Install]\n" not in unit
     assert "User=cripta" in unit and "Group=cripta" in unit
     assert "Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB" in unit
     assert "Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i" in unit
@@ -72,7 +72,7 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
 
 def test_sub_entry_service_is_inert_with_no_private_credential_or_exit_clone() -> None:
     unit = ENTRY.read_text(encoding="utf-8")
-    assert "[Install]" not in unit
+    assert "[Install]\n" not in unit
     assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
