@@ -4418,6 +4418,11 @@ def main() -> None:
         bot_instance_id=BOT_INSTANCE_ID,
         credential_name=credential_name,
     )
+    if (
+        configured_kind == "SUB"
+        and credential_name != f"bybit-sub-{TRADING_ACCOUNT_ID}"
+    ):
+        raise RuntimeError("SUB_PRIVATE_WORKER_CREDENTIAL_ACCOUNT_MISMATCH")
     if configured_kind == "MAIN":
         STATUS.parent.mkdir(parents=True, exist_ok=True)
     # SUB status directory must be explicitly provisioned by the control actor,
