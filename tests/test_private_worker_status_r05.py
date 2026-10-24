@@ -188,3 +188,67 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     assert len(disarms) in (expected_disarm,)
     assert statuses in (["schema"],)
     assert private_runtime.STATUS in (tmp_path / f"test-status-{kind}.json",)
+
+
+def test_sub_signed_account_failure_blocks_before_any_exchange_recovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    account_id = "ta-fixture"
+    status_directory = tmp_path / f"sub-{account_id}"
+    status_directory.mkdir(mode=0o750)
+    credential_name = f"bybit-sub-{account_id}"
+    (tmp_path / credential_name).write_text(
+        json.dumps({
+            "api_key": "OFFLINE_FAKE", "api_secret": "OFFLINE_FAKE",
+            "credential_ref": "OFFLINE_PROVENANCE_REFERENCE",
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
+    monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", credential_name)
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    monkeypatch.setenv("CRIPTA_PRIVATE_STATUS_DIR", str(status_directory))
+    monkeypatch.setattr(private_runtime.sys, "argv", [
+        "private_runtime.py", f"--sub-account={account_id}",
+    ])
+    monkeypatch.setattr(private_runtime, "TRADING_ACCOUNT_ID", account_id)
+    monkeypatch.setattr(private_runtime, "BOT_INSTANCE_ID", f"private-sub-{account_id}")
+    monkeypatch.setattr(private_runtime, "DEFAULT_STATUS_DIR", tmp_path)
+    monkeypatch.setattr(private_runtime, "STATUS", private_runtime.STATUS)
+    monkeypatch.setattr(
+        private_runtime, "MOUNTED_CREDENTIAL_REF", private_runtime.MOUNTED_CREDENTIAL_REF
+    )
+    bootstrap = _Bootstrap()
+    observed: list[str] = []
+    monkeypatch.setattr(private_runtime, "db", lambda _app: bootstrap)
+    monkeypatch.setattr(
+        private_runtime, "validate_runtime_schema_contract",
+        lambda _connection: None,
+    )
+    monkeypatch.setattr(
+        private_runtime, "validate_runtime_identity_contract",
+        lambda _connection: "SUB",
+    )
+    monkeypatch.setattr(
+        private_runtime, "authenticated_entry_connector_gate",
+        lambda _connection, _key, _secret: (
+            observed.append("signed_uid_denied"),
+            (_ for _ in ()).throw(RuntimeError("ENTRY_ACCOUNT_IDENTITY_NOT_ATTESTED")),
+        ),
+    )
+    monkeypatch.setattr(
+        private_runtime, "startup_live_safety",
+        lambda *_args: observed.append("UNSAFE_RECONCILIATION"),
+    )
+    monkeypatch.setattr(
+        private_runtime, "disarm_new_entries",
+        lambda *_args: observed.append("UNSAFE_GLOBAL_DISARM"),
+    )
+    monkeypatch.setattr(
+        private_runtime, "atomic_status",
+        lambda *_args: None,
+    )
+    with pytest.raises(RuntimeError, match="ENTRY_ACCOUNT_IDENTITY_NOT_ATTESTED"):
+        private_runtime.main()
+    assert bootstrap.closed
+    assert observed == ["signed_uid_denied"]
