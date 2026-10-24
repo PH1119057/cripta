@@ -7,6 +7,7 @@ TradingAccount/Connector/ExecutionLeg are hard denials.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,9 +42,14 @@ def account_live_arm_ready(
         return False, ("ACCOUNT_LIVE_ARM_SCOPE_INVALID",)
     # A missing migration is a block, never a downgrade to legacy authority.
     exists = connection.execute(
-        "SELECT to_regclass('control.account_live_arm_sessions')"
+        "SELECT to_regclass('control.account_live_arm_sessions') AS relation_oid"
     ).fetchone()
-    if not exists or exists[0] is None:
+    schema_ref = (
+        None if exists is None
+        else exists.get("relation_oid") if isinstance(exists, Mapping)
+        else exists[0]
+    )
+    if schema_ref is None:
         return False, ("ACCOUNT_LIVE_ARM_SCHEMA_NOT_INSTALLED",)
     rows = connection.execute(
         """SELECT s.account_live_arm_session_id
