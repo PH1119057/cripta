@@ -1409,6 +1409,7 @@ Owner approved a mandatory new-chat continuity gate: before creating a new branc
 
 **Работа Research/Core/Docs разблокирована:** начинать новую scoped задачу от актуального защищённого `main`, но всегда выполнять DEVELOPMENT_RELEASE §50.4 discovery для совпадающей незавершённой задачи; старые Research/Entry/Exit данные не становятся Strategy policy. `REMOTE_HEAD` в MAP §38 — датированный снимок до публикации, а не SHA будущего документационного commit. Никаких server worktree removals, deploy, PostgreSQL, Exchange и LIVE действий эта редакция не выполняет. Состав 11 current docs, root entrypoints, pre-read, routing, filesystem roots и UI Project Source count не меняются.
 
+
 # 53. P90L90 isolated historical research contract — OWNER DECISION 2026-10-24
 
 Owner confirmed `VARIANT_A`: independent Bybit P90L90 `[2026-05-18T00Z, 2026-08-16T00Z)` for LTC/DOT/ARB/APT/INJ, equality of the relevant RAW side of 9-hour 5m/15m geometries, depth 0..15% normalized by **RAW H9 Union Span**, separate `FIXED90` full-window hindsight vs `PREV7D` causal previous-seven-complete-UTC-days L5-3 working-width filters (±0.5 percentage points), and independent `LOCK050`, `BE013`, `TRAIL035` Exit variants. Entry events are ordered public-trade crossing candidates, not actual fills. All financial comparisons require realized P&L net of stated fees and the common 82 full days alongside any separately reported extended FIXED90 sample.
