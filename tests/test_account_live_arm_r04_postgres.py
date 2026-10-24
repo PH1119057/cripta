@@ -234,7 +234,7 @@ def test_entry_safety_runtime_actor_may_latch_but_not_clear(
     table = "runtime.account_entry_safety_blocks"
     for permission, expected in (
         ("SELECT", True),
-        ("INSERT", True),
+        ("INSERT", False),  # Not table-wide: INSERT is column-restricted.
         ("UPDATE", False),
         ("DELETE", False),
         ("TRUNCATE", False),
@@ -244,3 +244,14 @@ def test_entry_safety_runtime_actor_may_latch_but_not_clear(
             ("cripta", table, permission),
         ).fetchone()
         assert row is not None and row["allowed"] is expected
+    for column, permitted in (
+        ("trading_account_id", True),
+        ("account_connector_id", True),
+        ("reason", True),
+        ("blocked_at", False),
+    ):
+        row = disposable_db.execute(
+            "SELECT has_column_privilege(%s,%s,%s,%s) AS allowed",
+            ("cripta", table, column, "INSERT"),
+        ).fetchone()
+        assert row is not None and row["allowed"] is permitted
