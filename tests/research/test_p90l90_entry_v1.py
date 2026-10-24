@@ -126,7 +126,8 @@ def test_frozen_state_gap_is_qc_failure(tmp_path: Path):
         w = csv.DictWriter(fd, fieldnames=fields)
         w.writeheader()
         for ts in (1779062400, 1779063000):
-            w.writerow(dict(zip(fields, [ts, ts, "100", "110", "5", "100", "105", "LTCUSDT"], strict=True)))
+            values = [ts, ts, "100", "110", "5", "100", "105", "LTCUSDT"]
+            w.writerow(dict(zip(fields, values, strict=True)))
     with pytest.raises(ValueError, match="timeline gap"):
         load_frozen(p)
 
