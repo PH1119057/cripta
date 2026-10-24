@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import sys
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
+from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
@@ -1170,6 +1172,12 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
 
 
 def main() -> int:
+    account_kind = os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper()
+    require_exact_sub_instance(
+        account_kind=account_kind,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        argv=sys.argv[1:],
+    )
     if ENTRY_COMMAND_SOURCE != "UNIVERSAL_ENTRY" or CONSUMER_ARM != "ENABLED":
         print(
             json.dumps(
