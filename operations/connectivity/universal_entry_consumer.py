@@ -13,7 +13,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
-from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
@@ -23,6 +22,7 @@ from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.strategy_position_binding import exchange_position_key
+from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
     BridgePolicyBundle,
