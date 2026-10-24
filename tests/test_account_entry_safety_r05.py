@@ -131,6 +131,7 @@ def test_sub_private_ws_reconnect_latches_own_account_without_global_disarm(
         patch.object(private_runtime, "TRADING_ACCOUNT_ID", "ta-sub"),
         patch.object(private_runtime, "ACCOUNT_CONNECTOR_ID", "connector-sub"),
         patch.object(private_runtime, "db", return_value=db),
+        patch.object(private_runtime, "authenticated_entry_connector_gate") as signed,
         patch.object(private_runtime, "reconcile", return_value=(0, 0)),
         patch.object(
             private_runtime.websocket, "create_connection",
@@ -148,6 +149,7 @@ def test_sub_private_ws_reconnect_latches_own_account_without_global_disarm(
     assert any("INSERT INTO runtime.account_entry_safety_blocks" in q for q, _ in db.queries)
     assert not any("UPDATE control.execution_gates" in q for q, _ in db.queries)
     restore.assert_not_called()
+    signed.assert_called_once_with(db, "offline", "offline")
     assert db.queries[0][1][2] == "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
 
 
