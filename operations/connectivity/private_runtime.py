@@ -350,6 +350,7 @@ def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
             account_connector_id=ACCOUNT_CONNECTOR_ID,
             reason=reason[:300],
         )
+        connection.commit()
         return
     now_ms = int(time.time() * 1000)
     connection.execute(
