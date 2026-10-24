@@ -35,6 +35,9 @@ from runtime_schema import (
 )
 from safety_observer import api_get as safety_api_get
 
+from bybit_workbench.exchange.bybit.account_connector_attestation import (
+    attest_bybit_account_connector,
+)
 from bybit_workbench.market_identity import bybit_instrument_id
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
@@ -93,6 +96,9 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
+# From the same protected systemd credential bundle as API key and secret.
+# It MUST be supplied independently of identity.account_connectors DB rows.
+MOUNTED_CREDENTIAL_REF = ""
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -125,13 +131,41 @@ def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
     if (
         venue_id != "venue-bybit"
         or venue_kind != "CEX"
-        or account_kind != "MAIN"
+        or account_kind not in {"MAIN", "SUB"}
         or account_type != "UNIFIED"
         or environment != "MAINNET"
         or account_status != "ACTIVE"
         or connector_status != "ACTIVE"
     ):
         raise RuntimeError("TRADING_ACCOUNT_IDENTITY_MISMATCH")
+
+
+def authenticated_entry_connector_gate(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+) -> None:
+    """New Entry only: prove this mounted key's actual Bybit UID and parent.
+
+    Never block existing Exit/protection/reconciliation on a missing new-Entry
+    attestation. The generic per-command failure path releases pre-ACK Entry
+    resources without disabling other TradingAccounts.
+    """
+    result = attest_bybit_account_connector(
+        connection,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        verified_credential_ref=MOUNTED_CREDENTIAL_REF,
+        signed_account_get=lambda: api_get(
+            "/v5/user/query-api", {}, key, secret
+        )[0],
+        now=datetime.now(UTC),
+    )
+    if not result.ready:
+        # Only stable reason tokens, never UID, signed response or credentials.
+        raise RuntimeError(
+            "ENTRY_ACCOUNT_IDENTITY_NOT_ATTESTED:" + ",".join(result.reasons)
+        )
 
 
 class PreMutationSafetyBlock(RuntimeError):
@@ -2138,6 +2172,8 @@ def record_effective_protection_after_command(
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
+    if kind == "entry":
+        authenticated_entry_connector_gate(connection, key, secret)
     assert_legacy_automated_exit_ownership(
         connection,
         command_id=command_id,
@@ -4300,9 +4336,16 @@ def trade_loop(key: str, secret: str) -> None:
 
 
 def main() -> None:
-    global running
+    global running, MOUNTED_CREDENTIAL_REF
     STATUS.parent.mkdir(parents=True, exist_ok=True)
-    credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
+    credential_name = os.environ.get("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-mainnet")
+    if not credential_name or not all(
+        char.isascii() and (char.isalnum() or char in "-_") for char in credential_name
+    ):
+        raise RuntimeError("BYBIT_CREDENTIAL_MOUNT_NAME_INVALID")
+    credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
+    credentials = json.loads(credential_path.read_text(encoding="utf-8"))
+    MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
