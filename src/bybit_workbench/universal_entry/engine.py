@@ -113,9 +113,12 @@ class UniversalEntryEngine:
     ) -> tuple[EntryEvaluation, ...]:
         # Distinct activations may use fan-out and the compatible legacy path
         # concurrently. An activation must NEVER use both admission inputs.
-        if account_admissions is not None and execution_bindings is not None:
-            if set(account_admissions).intersection(execution_bindings):
-                raise ValueError("REAL_FANOUT_AND_LEGACY_BINDING_ACTIVATION_OVERLAP")
+        if (
+            account_admissions is not None
+            and execution_bindings is not None
+            and set(account_admissions).intersection(execution_bindings)
+        ):
+            raise ValueError("REAL_FANOUT_AND_LEGACY_BINDING_ACTIVATION_OVERLAP")
         if account_admissions is not None and execution_bindings is None and (
             entry_admission_port is not None or exchange_position_keys is not None
         ):
