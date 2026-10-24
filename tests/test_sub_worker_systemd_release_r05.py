@@ -191,6 +191,10 @@ def test_release_installs_sub_templates_and_account_schema_without_auto_start() 
     second = "operations/sql/20261025_account_entry_safety_blocks.sql"
     assert first in migrations and second in migrations
     assert migrations.index(first) < migrations.index(second)
+    # A previously running SUB participates in the same release identity
+    # cutover; an absent SUB is never auto-started by a new release.
+    assert "systemctl list-units --all --type=service" in installer
+    assert 'managed_services+=("$unit")' in installer
     # The two templates have no [Install] section and no running instance
     # is introduced by the installer or by this offline test.
     assert "[Install]\n" not in PRIVATE.read_text(encoding="utf-8")
