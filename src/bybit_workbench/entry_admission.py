@@ -397,8 +397,12 @@ class PostgresEntryAdmissionPort:
                           trading_account_id
                      FROM runtime.exchange_position_slot_claims
                     WHERE strategy_attempt_id=%s
+                      AND (strategy_execution_binding_id=%s
+                           OR strategy_execution_binding_id IS NULL)
+                    ORDER BY strategy_execution_binding_id NULLS FIRST
+                    LIMIT 1
                     FOR UPDATE""",
-                (request.strategy_attempt_id,),
+                (request.strategy_attempt_id, request.strategy_execution_binding_id),
             ).fetchone()
             if existing is not None:
                 if (
