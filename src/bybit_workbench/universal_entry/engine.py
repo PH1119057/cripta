@@ -337,15 +337,15 @@ class UniversalEntryEngine:
                         ):
                             account_readiness = account_scope.technical_readiness
                             effective_port = account_scope.entry_admission_port
+                            if not real_ready and account_readiness.ready:
+                                # Preserve a specific independently proven
+                                # block reason; do not mask it as generic arm.
+                                account_readiness = TechnicalReadiness(
+                                    False,
+                                    admission_time or fact_for_predicate.observed_at,
+                                    "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                                )
                             if not real_ready:
-                                # Retain a precise independently proven block
-                                # reason rather than masking it as generic arm.
-                                if account_readiness.ready:
-                                    account_readiness = TechnicalReadiness(
-                                        False,
-                                        admission_time or fact_for_predicate.observed_at,
-                                        "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
-                                    )
                                 effective_port = None
                             account_decision = self._decision(
                                 plan,
