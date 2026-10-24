@@ -175,6 +175,11 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
     held = {key: None for key in SCENARIOS}
     metrics = {key: Counter() for key in SCENARIOS}
     money = {key: defaultdict(lambda: D(0)) for key in SCENARIOS}
+    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in SCENARIOS}
+    dir_money = {
+        key: {side: defaultdict(lambda: D(0)) for side in ("LONG", "SHORT")}
+        for key in SCENARIOS
+    }
     seq = 0
     last_price = None
     last_timestamp = None
@@ -215,6 +220,18 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                                 active_before, exit_px, maker_exit
                             )
                             m = metrics[key]
+                            dm = dir_metrics[key][active_before.side]
+                            dm["closed"] += 1
+                            dm["close_" + reason] += 1
+                            dm["win"] += net > 0
+                            dm["loss"] += net < 0
+                            for label, value in (
+                                ("gross_usdt", gross), ("entry_fees_usdt", entry_fee),
+                                ("exit_fees_usdt", exit_fee), ("net_usdt", net),
+                                ("positive_net_usdt", max(net, D(0))),
+                                ("negative_net_usdt", min(net, D(0))),
+                            ):
+                                dir_money[key][active_before.side][label] += value
                             m["closed"] += 1
                             m["close_" + reason] += 1
                             m["win"] += net > 0
@@ -230,8 +247,10 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                         if not event[cohort] or (cohort == "PREV7D" and bucket < COMMON_TS):
                             continue
                         metrics[key]["qualified_candidate"] += 1
+                        dir_metrics[key][event["side"]]["qualified_candidate"] += 1
                         if held[key] is not None or closed_this_record:
                             metrics[key]["busy_or_same_tick"] += 1
+                            dir_metrics[key][event["side"]]["busy_or_same_tick"] += 1
                             continue
                         held[key] = initial_position(event, seq, bucket, cohort, kind)
                         state = states.get(bucket)
@@ -242,6 +261,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                             held[key].tp = tp
                             held[key].tp_live_after_seq = seq
                         metrics[key]["accepted"] += 1
+                        dir_metrics[key][event["side"]]["accepted"] += 1
     if seq != sum(int(z["rows"]) for z in entry["inputs"]):
         raise ValueError("source file row count mismatch")
     if any(x > seq for x in events):
@@ -265,12 +285,28 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         m = metrics[key]
         cur = held[key]
         m["censored_open"] = 1 if cur else 0
+        if cur:
+            dir_metrics[key][cur.side]["censored_open"] += 1
         if m["qualified_candidate"] != m["accepted"] + m["busy_or_same_tick"]:
             raise ValueError("candidate accounting mismatch")
+        if m["accepted"] != m["closed"] + m["censored_open"]:
+            raise ValueError("trade accounting mismatch")
+        for book in (money[key], *dir_money[key].values()):
+            if book["gross_usdt"] - book["entry_fees_usdt"] - book["exit_fees_usdt"] != book["net_usdt"]:
+                raise ValueError("fee / net reconciliation mismatch")
+            if book["positive_net_usdt"] + book["negative_net_usdt"] != book["net_usdt"]:
+                raise ValueError("signed net reconciliation mismatch")
         mtm_gross = None if cur is None else gross_and_net(cur, last_price, False)[0]
         report["scenarios"][f"{cohort}_{kind}"] = {
             "counts": dict(m),
             "money": {k: str(v) for k, v in money[key].items()},
+            "by_direction": {
+                side: {
+                    "counts": dict(dir_metrics[key][side]),
+                    "money": {k: str(v) for k, v in dir_money[key][side].items()},
+                }
+                for side in ("LONG", "SHORT")
+            },
             "censored_mtm_gross_usdt_excluded": None if mtm_gross is None else str(mtm_gross),
         }
     output.mkdir(parents=False, exist_ok=False)
