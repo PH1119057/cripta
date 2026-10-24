@@ -333,9 +333,17 @@ def db(application_name: str) -> psycopg.Connection:
     )
 
 
+def _is_sub_private_worker() -> bool:
+    """Configured worker role; not inferred from another account's state."""
+    return (
+        os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper()
+        == "SUB"
+    )
+
+
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
     """Fail closed on Entry only; a SUB may not disarm unrelated accounts."""
-    if os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "SUB":
+    if _is_sub_private_worker():
         latch_account_entry_safety(
             connection,
             trading_account_id=TRADING_ACCOUNT_ID,
@@ -2192,7 +2200,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
     if kind == "entry":
-        if os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "SUB":
+        if _is_sub_private_worker():
             ready, reasons = account_entry_safety_ready(
                 connection,
                 trading_account_id=TRADING_ACCOUNT_ID,
@@ -4250,7 +4258,7 @@ def private_loop(key: str, secret: str) -> None:
                 restored = False
                 if (
                     restore_gate_after_reconnect
-                    and os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "MAIN"
+                    and not _is_sub_private_worker()
                 ):
                     restored = restore_r1_gate_after_verified_reconnect(
                         connection,
@@ -4326,8 +4334,7 @@ def private_loop(key: str, secret: str) -> None:
             if not recovering:
                 try:
                     restore_gate_after_reconnect = (
-                        os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "MAIN"
-                        and mainnet_gate_enabled(connection)
+                        not _is_sub_private_worker() and mainnet_gate_enabled(connection)
                     )
                 except Exception:
                     restore_gate_after_reconnect = False
