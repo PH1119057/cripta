@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
@@ -909,6 +910,13 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     route_check = check_consumer_worker_route(connection, route=route)
     if not route_check.ready:
         return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
+    safety_ready, safety_reasons = account_entry_safety_ready(
+        connection,
+        trading_account_id=route.trading_account_id,
+        account_connector_id=route.account_connector_id,
+    )
+    if not safety_ready:
+        return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
     row = _next_request(connection, route=route)
     if row is None:
         return "NO_REQUEST"
