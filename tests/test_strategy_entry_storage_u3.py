@@ -9,6 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from bybit_workbench.account_live_arm import account_live_arm_ready
+from bybit_workbench.exchange.bybit.account_connector_attestation import (
+    attest_bybit_account_connector,
+)
 from bybit_workbench.capital_reservation import CapitalReservation, CapitalReservationState
 from bybit_workbench.entry_admission import EntryAdmissionReceipt, EntryAdmissionRequest
 from bybit_workbench.universal_entry import (
@@ -708,3 +712,108 @@ def test_unarmed_real_fanout_records_two_denials_and_never_creates_requests() ->
     assert sum("INSERT INTO strategy_entry.entry_decisions" in stmt for stmt in sql) == 2
     assert sum("INSERT INTO strategy_entry.notifications" in stmt for stmt in sql) == 2
     assert not any("INSERT INTO strategy_entry.execution_requests" in stmt for stmt in sql)
+
+
+class _R06Rows:
+    def __init__(self, rows: list[tuple[object, ...]]) -> None:
+        self.rows = rows
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.rows[0] if self.rows else None
+
+
+class _R06IdentityDB:
+    def __init__(self, *, connector_id: str, credential_ref: str) -> None:
+        self.connector_id = connector_id
+        self.credential_ref = credential_ref
+
+    def execute(self, query: str, params: tuple[object, ...] = ()) -> _R06Rows:
+        if "FROM identity.trading_accounts" in query:
+            return _R06Rows([
+                ("ta-one", "venue-bybit", "100", None, "MAIN", "UNIFIED",
+                 "MAINNET", "ACTIVE"),
+                ("ta-two", "venue-bybit", "200", "ta-one", "SUB", "UNIFIED",
+                 "MAINNET", "ACTIVE"),
+            ])
+        if "FROM identity.account_connectors" in query:
+            return _R06Rows([
+                (self.connector_id, "ta-one" if self.connector_id == "conn-one"
+                 else "ta-two", "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE",
+                 self.credential_ref, "ACTIVE", None),
+            ])
+        raise AssertionError("unexpected R06 offline identity query")
+
+
+class _R06ArmDB:
+    def __init__(self, *, expected_account: str, expected_binding: str) -> None:
+        self.expected_account = expected_account
+        self.expected_binding = expected_binding
+
+    def execute(self, query: str, params: tuple[object, ...] = ()) -> _R06Rows:
+        if "to_regclass" in query:
+            return _R06Rows([("control.account_live_arm_sessions",)])
+        if "FROM control.account_live_arm_sessions s" in query:
+            if params[1] == self.expected_binding and params[2] == self.expected_account:
+                return _R06Rows([(f"owner-arm-{self.expected_account}",)])
+            return _R06Rows([])
+        raise AssertionError("unexpected R06 offline arm query")
+
+
+def test_r06_offline_two_account_identity_arm_and_shared_signal_lineage() -> None:
+    """Contract-level dry run; NOT Bybit credentials, OWNER ARM or MICRO_LIVE evidence."""
+    card, _activation, _entry_plan, evaluation = build_evaluation(
+        real=True, fanout=True
+    )
+    assert len(evaluation.account_outcomes) == 2
+    for outcome, uid, parent, is_master, connector, secret_ref in (
+        (evaluation.account_outcomes[0], 100, "0", True, "conn-one", "cred-one"),
+        (evaluation.account_outcomes[1], 200, "100", False, "conn-two", "cred-two"),
+    ):
+        ta = outcome.binding.trading_account_id
+        account = attest_bybit_account_connector(
+            _R06IdentityDB(connector_id=connector, credential_ref=secret_ref),
+            trading_account_id=ta,
+            account_connector_id=connector,
+            verified_credential_ref=secret_ref,
+            signed_account_get=lambda uid=uid, parent=parent, is_master=is_master: {
+                "retCode": 0,
+                "result": {
+                    "userID": uid,
+                    "parentUid": parent,
+                    "isMaster": is_master,
+                    "uta": 1,
+                },
+            },
+            now=NOW,
+        )
+        assert account.ready, account.reasons
+        arm, reasons = account_live_arm_ready(
+            _R06ArmDB(
+                expected_account=ta,
+                expected_binding=outcome.binding.strategy_execution_binding_id,
+            ),
+            strategy_activation_id="act-storage",
+            strategy_execution_binding_id=outcome.binding.strategy_execution_binding_id,
+            trading_account_id=ta,
+            account_connector_id=connector,
+            strategy_id=card.strategy_id,
+            strategy_version=card.strategy_version,
+            strategy_config_fingerprint=card.strategy_config_fingerprint,
+            symbol="XRPUSDT",
+            release_commit="a" * 40,
+            now=NOW,
+        )
+        assert arm, reasons
+        assert outcome.execution_request is not None
+        assert outcome.execution_request.trading_account_id == ta
+        assert outcome.execution_request.execution_leg == outcome.binding.execution_leg
+    store_db = FakeConnection()
+    StrategyEntryStore(store_db).record_evaluation(evaluation)
+    sql = [statement for statement, _ in store_db.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in q for q in sql) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in q for q in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in q for q in sql) == 2
+    assert sum("INSERT INTO strategy_entry.execution_requests" in q for q in sql) == 2
