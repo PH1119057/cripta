@@ -8,6 +8,7 @@ operation following complete authenticated recovery may delete a latch.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -19,9 +20,12 @@ def account_entry_safety_ready(
     exists = connection.execute(
         "SELECT to_regclass('runtime.account_entry_safety_blocks')"
     ).fetchone()
-    if not exists or next(iter(exists.values())) is None if isinstance(exists, dict) else (
-        not exists or exists[0] is None
-    ):
+    schema_ref = (
+        None if exists is None
+        else exists.get("to_regclass") if isinstance(exists, Mapping)
+        else exists[0]
+    )
+    if schema_ref is None:
         return False, ("ACCOUNT_ENTRY_SAFETY_SCHEMA_MISSING",)
     matches = connection.execute(
         """SELECT 1
