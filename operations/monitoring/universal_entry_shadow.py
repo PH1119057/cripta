@@ -1270,10 +1270,20 @@ def _unarmed_multi_account_candidate_bindings(
         )
         if binding.strategy_activation_id in known:
             by_activation.setdefault(binding.strategy_activation_id, []).append(binding)
+    # A single dedicated SUB (or non-PRIMARY execution leg) must also use
+    # the explicit account-scoped arm. Only the exact legacy MAIN PRIMARY
+    # singleton may retain the compatible legacy admission route.
     return {
         activation: tuple(legs)
         for activation, legs in by_activation.items()
         if len(legs) > 1
+        or (
+            len(legs) == 1
+            and (
+                legs[0].trading_account_id != TRADING_ACCOUNT_ID
+                or legs[0].execution_leg != "PRIMARY"
+            )
+        )
     }
 
 
