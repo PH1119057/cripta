@@ -192,8 +192,13 @@ class PostgresCapitalReservationPort:
                           entry_plan_fingerprint,signal_id,
                           strategy_execution_binding_id,execution_leg,trading_account_id
                      FROM runtime.capital_reservations
-                    WHERE strategy_attempt_id=%s""",
-                (request.strategy_attempt_id,),
+                    WHERE strategy_attempt_id=%s
+                      AND (strategy_execution_binding_id=%s
+                           OR strategy_execution_binding_id IS NULL)
+                    ORDER BY strategy_execution_binding_id NULLS FIRST
+                    LIMIT 1
+                    FOR UPDATE""",
+                (request.strategy_attempt_id, request.strategy_execution_binding_id),
             ).fetchone()
             if existing is not None:
                 self._validate_existing(existing, request)
