@@ -10,6 +10,7 @@ import pytest
 from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "research/server/connectivity"))
 sys.path.insert(0, str(ROOT / "operations/connectivity"))
 
 import private_runtime  # noqa: E402
@@ -125,7 +126,9 @@ def test_sub_startup_rejects_cross_account_credential_before_read(
         private_runtime.main()
 
 
-def test_entry_consumer_checks_cli_scope_even_while_disabled() -> None:
+def test_entry_consumer_checks_cli_scope_even_while_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import operations.connectivity.universal_entry_consumer as consumer
 
     source = (ROOT / "operations/connectivity/universal_entry_consumer.py").read_text()
@@ -133,4 +136,10 @@ def test_entry_consumer_checks_cli_scope_even_while_disabled() -> None:
     assert main.index("require_exact_sub_instance(") < main.index(
         'CONSUMER_ARM != "ENABLED"'
     )
-    assert consumer.CONSUMER_ARM != "ENABLED" or isinstance(consumer.CONSUMER_ARM, str)
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    monkeypatch.setattr(consumer, "TRADING_ACCOUNT_ID", "ta-two")
+    monkeypatch.setattr(consumer.sys, "argv", [
+        "universal_entry_consumer.py", "--sub-account=ta-one",
+    ])
+    with pytest.raises(RuntimeError, match="PRIVATE_SUB_INSTANCE_IDENTITY_MISMATCH"):
+        consumer.main()
