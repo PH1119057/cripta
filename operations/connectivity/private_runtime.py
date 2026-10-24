@@ -4427,6 +4427,11 @@ def main() -> None:
     )
     if (
         configured_kind == "SUB"
+        and BOT_INSTANCE_ID != f"private-sub-{TRADING_ACCOUNT_ID}"
+    ):
+        raise RuntimeError("SUB_PRIVATE_WORKER_BOT_INSTANCE_ACCOUNT_MISMATCH")
+    if (
+        configured_kind == "SUB"
         and credential_name != f"bybit-sub-{TRADING_ACCOUNT_ID}"
     ):
         raise RuntimeError("SUB_PRIVATE_WORKER_CREDENTIAL_ACCOUNT_MISMATCH")
