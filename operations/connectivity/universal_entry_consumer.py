@@ -11,6 +11,10 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.entry_consumer_route import (
+    ConsumerWorkerRoute,
+    check_consumer_worker_route,
+)
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
@@ -102,7 +106,17 @@ def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
     )
 
 
-def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] | None:
+def _next_request(
+    connection: psycopg.Connection[Any], *, route: ConsumerWorkerRoute | None = None
+) -> Mapping[str, object] | None:
+    # Exactly one private connector / TradingAccount is owned by this worker.
+    # A route parameter cannot authorize a process to use different credentials.
+    scoped = route or ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
+    if (
+        scoped.trading_account_id != TRADING_ACCOUNT_ID
+        or scoped.account_connector_id != ACCOUNT_CONNECTOR_ID
+    ):
+        raise ValueError("CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH")
     return connection.execute(
         """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
                   a.strategy_id AS activation_strategy_id,
@@ -148,7 +162,7 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
             )
             ORDER BY r.requested_at,r.execution_request_id
             LIMIT 1""",
-        (TRADING_ACCOUNT_ID,),
+        (scoped.trading_account_id,),
     ).fetchone()
 
 
@@ -864,7 +878,17 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     _release_expired_reserved_requests(connection, now=current)
     if not _execution_gate_enabled(connection):
         return "EXECUTION_GATE_DISARMED"
-    row = _next_request(connection)
+    # Registry routing is only a prerequisite. Per-request binding/connector,
+    # independently authenticated private credentials and LIVE arm remain
+    # separately required; no cross-account worker fallback.
+    try:
+        route = ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
+    except ValueError:
+        return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+    route_check = check_consumer_worker_route(connection, route=route)
+    if not route_check.ready:
+        return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
+    row = _next_request(connection, route=route)
     if row is None:
         return "NO_REQUEST"
     request = _request_from_row(row)
