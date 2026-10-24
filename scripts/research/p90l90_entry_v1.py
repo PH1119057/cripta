@@ -15,10 +15,11 @@ import json
 import math
 from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from pathlib import Path
 from statistics import median
 
+getcontext().prec = 50  # Preserve CLEAN v1 40-digit decimal source identities.
 D = Decimal
 SYMBOLS = ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
 START = datetime(2026, 5, 18, tzinfo=timezone.utc)
