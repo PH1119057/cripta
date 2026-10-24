@@ -8,9 +8,9 @@ from typing import Protocol
 from .contracts import (
     ContextLink,
     ContextMode,
-    EntryEvaluation,
     EntryDecision,
     EntryDecisionCode,
+    EntryEvaluation,
     EntryPlan,
     ExitPlan,
     FrozenPolicy,
@@ -314,7 +314,9 @@ class StrategyEntryStore:
                             request.trading_account_id,
                         ),
                     )
-                    state_event_id = "reqstate-" + request.execution_request_id.removeprefix("request-")
+                    state_event_id = (
+                        "reqstate-" + request.execution_request_id.removeprefix("request-")
+                    )
                     self._connection.execute(
                         """INSERT INTO strategy_entry.execution_request_state_events(
                                request_state_event_id,execution_request_id,state,occurred_at,
