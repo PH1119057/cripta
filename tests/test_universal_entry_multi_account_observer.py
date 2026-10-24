@@ -207,7 +207,8 @@ class _ScopedDB:
         if "to_regclass" in sql:
             return _ScopedRows([("runtime.account_entry_safety_blocks",)])
         if "FROM runtime.account_entry_safety_blocks" in sql:
-            return _ScopedRows([(1,)] if self.blocked_second and params[0] == "trading-account-2" else [])
+            blocked = self.blocked_second and params[0] == "trading-account-2"
+            return _ScopedRows([(1,)] if blocked else [])
         raise AssertionError(f"unexpected query in isolated admission test: {sql[:80]}")
 
 
