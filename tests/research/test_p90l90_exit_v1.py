@@ -12,7 +12,8 @@ from scripts.research.p90l90_exit_v1 import (
 
 
 def pos(side="LONG", price="100", seq=2, bucket=300):
-    return initial_position({"side": side, "price": price, "ts": "300.001"}, seq, bucket, "FIXED90", "LOCK050")
+    event = {"side": side, "price": price, "ts": "300.001"}
+    return initial_position(event, seq, bucket, "FIXED90", "LOCK050")
 
 
 def test_return_signs_long_short_and_tp_threshold():
