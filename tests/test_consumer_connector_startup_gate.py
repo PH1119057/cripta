@@ -9,6 +9,7 @@ def test_armed_consumer_requires_explicit_connector_before_database_connection()
     with (
         patch.object(consumer, "ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"),
         patch.object(consumer, "CONSUMER_ARM", "ENABLED"),
+        patch.object(consumer.sys, "argv", ["universal_entry_consumer.py"]),
         patch.object(consumer, "TRADING_ACCOUNT_ID", "ta-1"),
         patch.object(consumer, "ACCOUNT_CONNECTOR_ID", ""),
         patch.object(consumer.psycopg, "connect") as connect,
@@ -21,6 +22,7 @@ def test_armed_consumer_requires_explicit_connector_before_database_connection()
 def test_disabled_consumer_does_not_require_connector_or_database():
     with (
         patch.object(consumer, "CONSUMER_ARM", "DISABLED"),
+        patch.object(consumer.sys, "argv", ["universal_entry_consumer.py"]),
         patch.object(consumer, "ACCOUNT_CONNECTOR_ID", ""),
         patch.object(consumer.psycopg, "connect") as connect,
     ):
