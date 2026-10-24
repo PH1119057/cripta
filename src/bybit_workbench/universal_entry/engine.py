@@ -119,8 +119,8 @@ class UniversalEntryEngine:
             raise ValueError("REAL_FANOUT_AND_LEGACY_ACCOUNT_STATE_MUTUALLY_EXCLUSIVE")
         # Validate the complete candidate set before the first account can reserve.
         if account_admissions is not None:
-            for activation_id, contexts in account_admissions.items():
-                self._validate_account_admissions(activation_id, contexts)
+            for activation_id, admission_scopes in account_admissions.items():
+                self._validate_account_admissions(activation_id, admission_scopes)
         available_sensors = dict(sensors or {})
         available_contexts = dict(contexts or {})
         output: list[EntryEvaluation] = []
