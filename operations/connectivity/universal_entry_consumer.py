@@ -11,6 +11,7 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
     check_consumer_worker_route,
@@ -863,7 +864,26 @@ def _live_arm_ready(
         now=now,
     )
     if not scope_ready:
-        return False, scope_reasons
+        if scope_reasons != ("MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",):
+            return False, scope_reasons
+        binding_id = str(row.get("strategy_execution_binding_id") or "")
+        if not binding_id or not ACCOUNT_CONNECTOR_ID:
+            return False, scope_reasons
+        # A Strategy/symbol arm NEVER authorizes a second account. Multi-account
+        # permission can come only from an exact owner-issued account session.
+        return account_live_arm_ready(
+            connection,
+            strategy_activation_id=context.strategy_activation_id,
+            strategy_execution_binding_id=binding_id,
+            trading_account_id=str(row.get("trading_account_id") or ""),
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            strategy_id=context.strategy_id,
+            strategy_version=context.strategy_version,
+            strategy_config_fingerprint=context.strategy_config_fingerprint,
+            symbol=context.symbol,
+            release_commit=context.release_commit,
+            now=now,
+        )
     # Durable LIVE-arm evidence is the pre-arm authorization contract. Once
     # an exact release-bound arm session exists, per-request safety is enforced
     # by _admission_pre_dispatch_status() and the request's admission lineage.
