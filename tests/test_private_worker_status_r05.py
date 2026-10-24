@@ -130,6 +130,11 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
     monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", credential_name)
     monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", kind)
+    # main() rebinds process globals; restore them when the test finishes.
+    monkeypatch.setattr(private_runtime, "STATUS", private_runtime.STATUS)
+    monkeypatch.setattr(
+        private_runtime, "MOUNTED_CREDENTIAL_REF", private_runtime.MOUNTED_CREDENTIAL_REF
+    )
     monkeypatch.setattr(
         private_runtime, "TRADING_ACCOUNT_ID",
         "test-main-account" if kind == "MAIN" else "test-sub-account",
