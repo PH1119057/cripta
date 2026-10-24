@@ -38,6 +38,10 @@ from safety_observer import api_get as safety_api_get
 from bybit_workbench.exchange.bybit.account_connector_attestation import (
     attest_bybit_account_connector,
 )
+from bybit_workbench.private_worker_status import (
+    assert_sub_worker_isolation,
+    private_worker_status_path,
+)
 from bybit_workbench.market_identity import bybit_instrument_id
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
@@ -111,7 +115,7 @@ PRIVATE_RECONNECT_RECOVERED_REASON = (
 )
 
 
-def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
+def validate_runtime_identity_contract(connection: psycopg.Connection) -> str:
     if not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID:
         raise RuntimeError("TRADING_ACCOUNT_IDENTITY_CONFIG_MISSING")
     row = connection.execute(
@@ -138,6 +142,7 @@ def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
         or connector_status != "ACTIVE"
     ):
         raise RuntimeError("TRADING_ACCOUNT_IDENTITY_MISMATCH")
+    return account_kind
 
 
 def authenticated_entry_connector_gate(
@@ -4336,7 +4341,7 @@ def trade_loop(key: str, secret: str) -> None:
 
 
 def main() -> None:
-    global running, MOUNTED_CREDENTIAL_REF
+    global running, MOUNTED_CREDENTIAL_REF, STATUS
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     credential_name = os.environ.get("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-mainnet")
     if not credential_name or not all(
@@ -4349,7 +4354,15 @@ def main() -> None:
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
-        validate_runtime_identity_contract(bootstrap)
+        account_kind = validate_runtime_identity_contract(bootstrap)
+        assert_sub_worker_isolation(
+            account_kind=account_kind,
+            bot_instance_id=BOT_INSTANCE_ID,
+            credential_name=credential_name,
+        )
+        STATUS = private_worker_status_path(
+            trading_account_id=TRADING_ACCOUNT_ID, account_kind=account_kind
+        )
     except Exception as exc:
         disarm_new_entries(
             bootstrap,
