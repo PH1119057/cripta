@@ -11,9 +11,11 @@ from .contracts import (
     EntryDecision,
     EntryDecisionCode,
     EntryEvaluation,
+    ExecutionRequest,
     EntryPlan,
     ExitPlan,
     FrozenPolicy,
+    NotificationEvent,
     ObjectiveContext,
     SensorLink,
     StrategyActivation,
@@ -225,7 +227,9 @@ class StrategyEntryStore:
             seen_bindings: set[str] = set()
             seen_accounts: set[str] = set()
             seen_legs: set[str] = set()
-            outcomes = []
+            outcomes: list[
+                tuple[EntryDecision | None, ExecutionRequest | None, tuple[NotificationEvent, ...]]
+            ] = []
             for item in evaluation.account_outcomes:
                 binding = item.binding
                 decision = item.decision
