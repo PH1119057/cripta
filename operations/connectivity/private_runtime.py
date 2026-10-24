@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import signal
+import sys
 import threading
 import time
 import urllib.error
@@ -42,6 +43,7 @@ from bybit_workbench.account_entry_safety import (
     account_entry_safety_ready,
     latch_account_entry_safety,
 )
+from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.private_worker_status import (
     DEFAULT_STATUS_DIR,
     assert_sub_worker_isolation,
@@ -4394,6 +4396,11 @@ def main() -> None:
     configured_kind = configured_kind.strip().upper()
     if configured_kind not in {"MAIN", "SUB"}:
         raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
+    require_exact_sub_instance(
+        account_kind=configured_kind,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        argv=sys.argv[1:],
+    )
     status_directory = DEFAULT_STATUS_DIR
     if configured_kind == "SUB":
         expected_directory = DEFAULT_STATUS_DIR / f"sub-{TRADING_ACCOUNT_ID}"
