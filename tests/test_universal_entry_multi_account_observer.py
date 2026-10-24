@@ -187,9 +187,13 @@ class _ScopedRows:
 
 
 class _ScopedDB:
-    def __init__(self, *, gate: bool = True, missing_second: bool = False) -> None:
+    def __init__(
+        self, *, gate: bool = True, missing_second: bool = False,
+        blocked_second: bool = False,
+    ) -> None:
         self.gate = gate
         self.missing_second = missing_second
+        self.blocked_second = blocked_second
         self.queries: list[tuple[str, tuple[object, ...]]] = []
 
     def execute(self, sql: str, params: tuple[object, ...] = ()) -> _ScopedRows:
@@ -200,6 +204,10 @@ class _ScopedDB:
             if self.missing_second and params[0] == "trading-account-2":
                 return _ScopedRows([])
             return _ScopedRows([(f"connector-{params[0]}",)])
+        if "to_regclass" in sql:
+            return _ScopedRows([("runtime.account_entry_safety_blocks",)])
+        if "FROM runtime.account_entry_safety_blocks" in sql:
+            return _ScopedRows([(1,)] if self.blocked_second and params[0] == "trading-account-2" else [])
         raise AssertionError(f"unexpected query in isolated admission test: {sql[:80]}")
 
 
@@ -334,3 +342,29 @@ def test_disarmed_mainnet_and_shadow_mode_never_authorize_private_admission() ->
         assert ready == frozenset()
         assert len(db.queries) == queries_before
         assert all(x.entry_admission_port is None for x in shadow["act-one"])
+
+
+def test_one_private_account_safety_latch_blocks_only_its_own_entry() -> None:
+    one, two = binding(1), binding(2)
+    db = _ScopedDB(blocked_second=True)
+    with (
+        patch("operations.monitoring.universal_entry_shadow.LOADED_COMMIT", "a" * 40),
+        patch(
+            "operations.monitoring.universal_entry_shadow.account_live_arm_ready",
+            return_value=(True, ()),
+        ),
+        patch(
+            "operations.monitoring.universal_entry_shadow._real_entry_account_state",
+            return_value=(TechnicalReadiness(True, NOW), _known_capacity("one")),
+        ) as generation,
+    ):
+        scopes, ready = _multi_account_admissions(
+            db, (_ScopedBundle(),), {"act-one": (one, two)},
+            symbol="BTCUSDT", observed_at=NOW,
+            real_selected_for=frozenset({"act-one"}),
+        )
+    assert ready == frozenset({"act-one"})
+    assert generation.call_count == 1
+    assert scopes["act-one"][0].entry_admission_port is not None
+    assert scopes["act-one"][1].entry_admission_port is None
+    assert scopes["act-one"][1].technical_readiness.reason == "ACCOUNT_ENTRY_SAFETY_BLOCKED"
