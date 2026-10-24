@@ -4254,6 +4254,10 @@ def private_loop(key: str, secret: str) -> None:
     reconnect_started_ms = 0
     while running:
         try:
+            # A SUB must prove its mounted signed credential identifies this
+            # exact registered account before reading/restoring Exchange state.
+            if _is_sub_private_worker():
+                authenticated_entry_connector_gate(connection, key, secret)
             hot_positions, hot_orders = reconcile(
                 connection,
                 key,
@@ -4448,6 +4452,10 @@ def main() -> None:
         account_kind = validate_runtime_identity_contract(bootstrap)
         if account_kind != configured_kind:
             raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_REGISTRY_MISMATCH")
+        if configured_kind == "SUB":
+            authenticated_entry_connector_gate(
+                bootstrap, credentials["api_key"], credentials["api_secret"]
+            )
     except Exception as exc:
         # Preserve the MAIN legacy startup protection while preventing a SUB
         # worker's local bad configuration from disarming every account.
