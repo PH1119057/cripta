@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.38
-**Дата:** 2026-10-21
+**Версия:** 3.39
+**Дата:** 2026-10-24
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -330,6 +330,8 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 ## 17.1.1 Canonical tool-failure routing (2026-10-18)
 
 Owner for refusal classification, correct actor/tool path and retry policy: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`. Research execution/checkpoint discipline: `docs/RESEARCH_COMPUTE_RULES_RU.md`. Owner-facing communication: `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`. Current dated server actor snapshot: `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. This documentation cycle adds no files to the 11-member Project Source set and changes no role, allowlist, permissions, LIVE or architecture ownership.
+
+**Уточнение OWNER DECISION 2026-10-24:** `DEVELOPMENT_RELEASE §19.5–19.6.1` владеет точной проверкой SentinelX command-prefix allowlist и отдельной однократной попыткой после явного распоряжения владельца при сохранении platform/tool gates. Датированное evidence агента — `CURRENT_PROJECT_MAP §1.4`; owner-facing формулировки — `CHATGPT_INTERACTION_RULES §11.1`. `git` и `sudo -u cripta git` — разные разрешения; success GitHub connector не устраняет локальный Git actor gate. Правка в действующем `docs/owner-directed-tool-retry-20261024` / PR #186 не изменяет source paths, active Source set, mandatory pre-read или trade/runtime/LIVE. README, AGENTS и derived Project Instructions синхронизируются в том же documentation changeset; фактическая ChatGPT UI-копия должна быть отдельно обновлена владельцем.
 
 ## 17.2 Нумерация и ссылки
 
