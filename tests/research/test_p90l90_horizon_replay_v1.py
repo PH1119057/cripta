@@ -1,10 +1,10 @@
-"""Offline chronology checks; full server run must additionally prove exact uncapped ledger parity."""
+"""Offline causal horizon checks; server smoke must also verify baseline parity."""
 import importlib.util
 import sys
 import types
 import unittest
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 for module in ('scripts', 'scripts.research'):
     sys.modules[module] = types.ModuleType(module)
@@ -13,9 +13,9 @@ sys.modules[base.__name__] = base
 entry = types.ModuleType('scripts.research.p90l90_entry_90d_v2')
 entry.START_TS = 1779062400
 entry.END_TS = 1786838400
-entry.RAW_DEFAULT = Path('/data/cripta/research/runs/p90l90_90d_warmup_v2_20261024/inputs')
-entry.FROZEN_DEFAULT = Path('/data/cripta/research/runs/p90l90_90d_warmup_v2_20261024/results/l53_clean_v2/parts')
-entry.OUTPUT_ROOT = Path('/data/cripta/research/runs/p90l90_90d_warmup_v2_20261024/results')
+entry.RAW_DEFAULT = Path('/not_used_by_offline_test')
+entry.FROZEN_DEFAULT = Path('/not_used_by_offline_test')
+entry.OUTPUT_ROOT = Path('/not_used_by_offline_test')
 entry.SYMBOLS = ('LTCUSDT', 'DOTUSDT', 'ARBUSDT', 'APTUSDT', 'INJUSDT')
 entry.load_frozen = lambda _: None
 entry.sha256 = lambda _: 'mock'
