@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import replace
-
-import pytest
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 from bybit_workbench.capital_reservation import CapitalReservation, CapitalReservationState
 from bybit_workbench.entry_admission import EntryAdmissionReceipt, EntryAdmissionRequest
@@ -31,9 +31,9 @@ from bybit_workbench.universal_entry import (
     UniversalEntryEngine,
     StrategyExecutionBindingRef,
 )
-from bybit_workbench.universal_entry.storage import StrategyEntryStore
-from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from bybit_workbench.universal_entry.contracts import EntryDecisionCode
+from bybit_workbench.universal_entry.engine import AccountAdmissionContext
+from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.dashboard import archive_v2
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -586,8 +586,14 @@ def test_fanout_one_market_signal_two_account_admissions_persist_once() -> None:
     assert one.execution_request.execution_request_id != two.execution_request.execution_request_id
     assert one.execution_request.strategy_attempt_id == two.execution_request.strategy_attempt_id
     assert one.execution_request.signal_id == two.execution_request.signal_id
-    assert one.execution_request.capital_reservation_id != two.execution_request.capital_reservation_id
-    assert one.execution_request.exchange_position_slot_claim_id != two.execution_request.exchange_position_slot_claim_id
+    assert (
+        one.execution_request.capital_reservation_id
+        != two.execution_request.capital_reservation_id
+    )
+    assert (
+        one.execution_request.exchange_position_slot_claim_id
+        != two.execution_request.exchange_position_slot_claim_id
+    )
     connection = FakeConnection()
     store = StrategyEntryStore(connection)
     store.insert_strategy_card(card)
@@ -600,7 +606,9 @@ def test_fanout_one_market_signal_two_account_admissions_persist_once() -> None:
     assert sum("INSERT INTO strategy_entry.strategy_attempts" in item for item in sql) == 1
     assert sum("INSERT INTO strategy_entry.entry_decisions" in item for item in sql) == 2
     assert sum("INSERT INTO strategy_entry.execution_requests" in item for item in sql) == 2
-    assert sum("INSERT INTO strategy_entry.execution_request_state_events" in item for item in sql) == 2
+    assert sum(
+        "INSERT INTO strategy_entry.execution_request_state_events" in item for item in sql
+    ) == 2
     assert sum("INSERT INTO strategy_entry.notifications" in item for item in sql) == 0
     assert connection.transactions == 1
 
