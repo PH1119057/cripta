@@ -40,7 +40,7 @@ Dashboard read-only UI/read-model отдельно от trading runtime; restart
 
 ## 7. Отказы, actor и права
 Отказы: DEVELOPMENT_RELEASE §19.5–19.6, MAP §1.4; research — RESEARCH_COMPUTE, коммуникация — CHATGPT_INTERACTION_RULES §11.1. Различать OpenAI upstream tool-security block, SentinelX `command_not_allowed`, Unix `EACCES` (actor/path), job timeout (исход неизвестен), GitHub error.
-Не выдумывать OpenAI policy, не повторять blocked call, не обходить кодированием/сменой actor, не просить restart агента без evidence. `cripta` — read/research actor, `sentinelx` — rail управления; сначала разрешённый smoke, затем bounded run и source/result/QC в GitHub.
+Не выдумывать OpenAI policy. Проверять точный SentinelX allowlist-префикс (`git` ≠ `sudo -u cripta git`); UI full access ≠ unrestricted exec. Owner «повтори» — одна попытка только если tool допускает; не обходить через actor/tool/transport, не просить restart без evidence. `cripta` — read/research actor, `sentinelx` — rail управления; сначала разрешённый smoke, затем bounded run и source/result/QC в GitHub.
 Server-side script до подготовки: exact actor/path/owner/group/mode/ACL/systemd sandbox, операции READ/WRITE/CREATE/RENAME/DELETE и parent permissions; проверять от actual writer. Без контракта `PREPARED=NO`. `ReadWritePaths=` ≠ Unix write. Root/SentinelX ≠ writer. Запрещены `chmod 777`, uncontrolled recursive chown/chmod, запуск всего workflow от root и лишние privileges. Server/DB: actor, tool и owner approval — отдельные gates.
 
 ## 8. Git / runtime
