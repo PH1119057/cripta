@@ -275,9 +275,9 @@ class StrategyEntryStore:
         with self._connection.transaction():
             self._insert_signal(evaluation)
             self._insert_attempt(evaluation)
-            for decision, _request, _notices in outcomes:
-                if decision is not None:
-                    self._insert_decision(evaluation, decision=decision)
+            for stored_decision, _request, _notices in outcomes:
+                if stored_decision is not None:
+                    self._insert_decision(evaluation, decision=stored_decision)
             for context_link in evaluation.context_links:
                 self._insert_context_evidence(evaluation, context_link, evidence)
             for sensor_link in evaluation.sensor_links:
