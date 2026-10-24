@@ -602,7 +602,7 @@ def test_fanout_one_market_signal_two_account_admissions_persist_once() -> None:
     assert sum("INSERT INTO strategy_entry.execution_requests" in item for item in sql) == 2
     assert sum("INSERT INTO strategy_entry.execution_request_state_events" in item for item in sql) == 2
     assert sum("INSERT INTO strategy_entry.notifications" in item for item in sql) == 0
-    assert connection.transactions == 4
+    assert connection.transactions == 1
 
 
 def test_fanout_one_account_not_ready_does_not_erase_other_account() -> None:
