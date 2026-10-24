@@ -137,6 +137,10 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
     monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", credential_name)
     monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", kind)
+    argv = ["private_runtime.py"]
+    if kind == "SUB":
+        argv.append(f"--sub-account={account_id}")
+    monkeypatch.setattr(private_runtime.sys, "argv", argv)
     monkeypatch.setattr(private_runtime, "DEFAULT_STATUS_DIR", tmp_path)
     if kind == "SUB":
         sub_directory = tmp_path / f"sub-{account_id}"
