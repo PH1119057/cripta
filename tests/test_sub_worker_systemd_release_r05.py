@@ -127,6 +127,28 @@ def test_sub_startup_rejects_cross_account_credential_before_read(
         private_runtime.main()
 
 
+def test_sub_startup_rejects_main_or_wrong_bot_identity_before_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    (tmp_path / "sub-ta-one").mkdir(mode=0o750)
+    monkeypatch.setattr(private_runtime, "DEFAULT_STATUS_DIR", tmp_path)
+    monkeypatch.setattr(private_runtime, "TRADING_ACCOUNT_ID", "ta-one")
+    monkeypatch.setattr(private_runtime, "BOT_INSTANCE_ID", "m3-mainnet-primary")
+    monkeypatch.setattr(
+        private_runtime.sys,
+        "argv",
+        ["private_runtime.py", "--sub-account=ta-one"],
+    )
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    monkeypatch.setenv("CRIPTA_PRIVATE_STATUS_DIR", str(tmp_path / "sub-ta-one"))
+    monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-sub-ta-one")
+    with pytest.raises(ValueError, match="SUB_PRIVATE_WORKER_ISOLATION_NOT_CONFIGURED"):
+        private_runtime.main()
+    monkeypatch.setattr(private_runtime, "BOT_INSTANCE_ID", "private-sub-ta-two")
+    with pytest.raises(RuntimeError, match="SUB_PRIVATE_WORKER_BOT_INSTANCE_ACCOUNT_MISMATCH"):
+        private_runtime.main()
+
+
 def test_entry_consumer_checks_cli_scope_even_while_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
