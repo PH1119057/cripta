@@ -79,7 +79,10 @@ def test_sub_entry_service_is_inert_with_no_private_credential_or_exit_clone() -
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
     assert "BindsTo=cripta-private-runtime@%i.service" in unit
-    assert "After=network-online.target postgresql.service cripta-private-runtime@%i.service" in unit
+    assert (
+        "After=network-online.target postgresql.service cripta-private-runtime@%i.service"
+        in unit
+    )
     assert "LoadCredential" not in unit
     assert "ReadWritePaths=" not in unit
     assert "NoNewPrivileges=true" in unit
