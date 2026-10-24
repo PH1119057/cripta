@@ -180,7 +180,7 @@ def main():
     if (a.first_date,a.last_date)!=("2026-05-08","2026-08-15") or sorted(a.symbols)!=sorted(DEFAULT_SYMBOLS):
         raise ValueError("P90L90 v2 requires all five symbols and May08..Aug15 exact input")
     for sym in a.symbols:
-        p=Path(a.raw_root).parent/f"manifest_{sym}.json"
+        p=Path(a.raw_root)/f"manifest_{sym}.json"
         v=json.loads(p.read_text())
         if v["status"]!="INPUT_QC_PASS_NOT_YET_GEOMETRY_READY" or len(v["files"])!=100:
             raise ValueError("v2 prewarm input manifest not validated")
