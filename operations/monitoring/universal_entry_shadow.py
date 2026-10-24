@@ -25,6 +25,7 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from bybit_workbench.account_entry_safety import account_entry_safety_ready
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
@@ -1387,16 +1388,24 @@ def _multi_account_admissions(
                 if not arm_ready:
                     reason = ",".join(arm_reasons)
                 else:
-                    readiness, capacity = _real_entry_account_state(
+                    safety_ready, safety_reasons = account_entry_safety_ready(
                         connection,
-                        symbol=symbol,
-                        observed_at=observed_at,
                         trading_account_id=binding.trading_account_id,
+                        account_connector_id=str(connector_rows[0][0]),
                     )
-                    reason = readiness.reason
-                    if readiness.ready and capacity is not None:
-                        admission_port = PostgresEntryAdmissionPort(connection)
-                        ready_activations.add(activation_id)
+                    if not safety_ready:
+                        reason = ",".join(safety_reasons)
+                    else:
+                        readiness, capacity = _real_entry_account_state(
+                            connection,
+                            symbol=symbol,
+                            observed_at=observed_at,
+                            trading_account_id=binding.trading_account_id,
+                        )
+                        reason = readiness.reason
+                        if readiness.ready and capacity is not None:
+                            admission_port = PostgresEntryAdmissionPort(connection)
+                            ready_activations.add(activation_id)
             result.append(
                 AccountAdmissionContext(
                     binding=binding,
