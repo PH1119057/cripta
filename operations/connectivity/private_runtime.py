@@ -344,6 +344,13 @@ def _is_sub_private_worker() -> bool:
     )
 
 
+def _private_worker_safe_error(exc: Exception) -> str:
+    """SUB diagnostics must never persist signed URLs or provider responses."""
+    if _is_sub_private_worker():
+        return type(exc).__name__
+    return f"{type(exc).__name__}: {exc}"
+
+
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
     """Fail closed on Entry only; a SUB may not disarm unrelated accounts."""
     if _is_sub_private_worker():
@@ -4362,8 +4369,15 @@ def private_loop(key: str, secret: str) -> None:
                 recovering = True
             disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)
             reconnects += 1
-            connection_event(connection, "private", "reconnecting", error=f"{type(exc).__name__}: {exc}", reconnects=reconnects)
-            atomic_status("private", {"state": "reconnecting", "reconnects": reconnects, "error": f"{type(exc).__name__}: {exc}"})
+            safe_error = _private_worker_safe_error(exc)
+            connection_event(
+                connection, "private", "reconnecting",
+                error=safe_error, reconnects=reconnects,
+            )
+            atomic_status(
+                "private",
+                {"state": "reconnecting", "reconnects": reconnects, "error": safe_error},
+            )
             time.sleep(min(30, reconnects))
 
 
@@ -4389,8 +4403,18 @@ def trade_loop(key: str, secret: str) -> None:
                     next_ping = time.monotonic() + 20
         except Exception as exc:
             reconnects += 1
-            connection_event(connection, "trade", "reconnecting", error=f"{type(exc).__name__}: {exc}", reconnects=reconnects)
-            atomic_status("trade", {"state": "reconnecting", "reconnects": reconnects, "commands_sent": 0, "error": f"{type(exc).__name__}: {exc}"})
+            safe_error = _private_worker_safe_error(exc)
+            connection_event(
+                connection, "trade", "reconnecting",
+                error=safe_error, reconnects=reconnects,
+            )
+            atomic_status(
+                "trade",
+                {
+                    "state": "reconnecting", "reconnects": reconnects,
+                    "commands_sent": 0, "error": safe_error,
+                },
+            )
             time.sleep(min(30, reconnects))
 
 
@@ -4472,7 +4496,7 @@ def main() -> None:
             {
                 "state": "BLOCKED",
                 "expected_version": EXPECTED_RUNTIME_SCHEMA_VERSION,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": _private_worker_safe_error(exc),
             },
         )
         bootstrap.close()
