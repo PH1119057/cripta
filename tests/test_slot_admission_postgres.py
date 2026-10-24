@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
@@ -536,3 +537,76 @@ def test_runtime_role_has_minimal_new_schema_privileges() -> None:
                        )"""
         ).fetchone()
     assert function_rights == (True, False)
+
+def test_one_attempt_fans_out_to_two_proven_accounts_with_independent_ledger() -> None:
+    """One StrategySignal/attempt, two physical slots and two capital reservations."""
+    assert DSN is not None
+    prefix = "slot-same-attempt-" + uuid4().hex
+    sub_prefix = prefix + "-sub"
+    identity = _seed_attempts(prefix, count=1)
+    _seed_mode(prefix, identity)
+
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            """INSERT INTO identity.trading_accounts(
+                   trading_account_id,venue_id,account_kind,environment,status
+               ) VALUES(%s,'venue-bybit','SUB','MAINNET','ACTIVE')""",
+            (f"{sub_prefix}-ta",),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_execution_bindings(
+                   strategy_execution_binding_id,strategy_activation_id,
+                   execution_leg,execution_role,trading_account_id,
+                   allocation_mode,binding_state,effective_from,
+                   operator,source,reason)
+               VALUES(%s,%s,'SUB','PRIMARY',%s,
+                      'DEDICATED_STRATEGY','ACTIVE',%s,
+                      'test','test','same-attempt fanout')""",
+            (f"{sub_prefix}-binding", f"{prefix}-activation",
+             f"{sub_prefix}-ta", NOW),
+        )
+
+    _seed_mode(sub_prefix, {"account_ref": f"{sub_prefix}-account"})
+    first_request = _request(prefix, 0, identity)
+    second_request = replace(
+        first_request,
+        account_ref=f"{sub_prefix}-account",
+        exchange_position_key=exchange_position_key(f"{sub_prefix}-ta", SYMBOL, 0),
+        capacity_snapshot_id=f"{sub_prefix}-generation",
+        account_state_generation_id=f"{sub_prefix}-generation",
+        strategy_execution_binding_id=f"{sub_prefix}-binding",
+        execution_leg="SUB",
+        trading_account_id=f"{sub_prefix}-ta",
+    )
+
+    with psycopg.connect(DSN) as connection:
+        port = PostgresEntryAdmissionPort(connection)
+        main_receipt = port.admit(first_request)
+        sub_receipt = port.admit(second_request)
+        assert main_receipt.exchange_position_slot_claim_id != (
+            sub_receipt.exchange_position_slot_claim_id
+        )
+        assert main_receipt.capital_reservation.reservation_id != (
+            sub_receipt.capital_reservation.reservation_id
+        )
+        assert port.admit(first_request) == main_receipt
+        assert port.admit(second_request) == sub_receipt
+
+        attempts = connection.execute(
+            """SELECT strategy_execution_binding_id, trading_account_id
+                 FROM runtime.exchange_position_slot_claims
+                WHERE strategy_attempt_id=%s""",
+            (first_request.strategy_attempt_id,),
+        ).fetchall()
+        reservations = connection.execute(
+            """SELECT strategy_execution_binding_id, trading_account_id
+                 FROM runtime.capital_reservations
+                WHERE strategy_attempt_id=%s""",
+            (first_request.strategy_attempt_id,),
+        ).fetchall()
+        expected = {
+            (f"{prefix}-binding", f"{prefix}-ta"),
+            (f"{sub_prefix}-binding", f"{sub_prefix}-ta"),
+        }
+        assert set(attempts) == expected
+        assert set(reservations) == expected
