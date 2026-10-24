@@ -36,7 +36,9 @@ class DB:
         return Cursor([("owner-armed-session",)] if self.active else [])
 
 
-def check(db: DB, *, connector: str = "conn-a", binding: str = "binding-a") -> tuple[bool, tuple[str, ...]]:
+def check(
+    db: DB, *, connector: str = "conn-a", binding: str = "binding-a"
+) -> tuple[bool, tuple[str, ...]]:
     return account_live_arm_ready(
         db,
         strategy_activation_id="act-a",
