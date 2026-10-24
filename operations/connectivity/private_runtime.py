@@ -156,6 +156,8 @@ def authenticated_entry_connector_gate(
     attestation. The generic per-command failure path releases pre-ACK Entry
     resources without disabling other TradingAccounts.
     """
+    if not key or not secret:
+        raise RuntimeError("ENTRY_MOUNTED_API_CREDENTIAL_MISSING")
     result = attest_bybit_account_connector(
         connection,
         trading_account_id=TRADING_ACCOUNT_ID,
