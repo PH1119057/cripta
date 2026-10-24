@@ -173,3 +173,25 @@ def test_entry_consumer_checks_cli_scope_even_while_disabled(
     ])
     with pytest.raises(RuntimeError, match="PRIVATE_SUB_INSTANCE_IDENTITY_MISMATCH"):
         consumer.main()
+
+
+def test_release_installs_sub_templates_and_account_schema_without_auto_start() -> None:
+    installer = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
+    units = installer.split("unit_specs=(", 1)[1].split("\n)", 1)[0]
+    managed = installer.split("managed_services=(", 1)[1].split("\n)", 1)[0]
+    migrations = installer.split("migration_files=(", 1)[1].split("\n)", 1)[0]
+
+    for template in (
+        "cripta-private-runtime@.service",
+        "cripta-universal-entry-consumer@.service",
+    ):
+        assert f"|{template}|runtime" in units
+        assert template not in managed
+    first = "operations/sql/20261024_account_scoped_live_arm.sql"
+    second = "operations/sql/20261025_account_entry_safety_blocks.sql"
+    assert first in migrations and second in migrations
+    assert migrations.index(first) < migrations.index(second)
+    # The two templates have no [Install] section and no running instance
+    # is introduced by the installer or by this offline test.
+    assert "[Install]\n" not in PRIVATE.read_text(encoding="utf-8")
+    assert "[Install]\n" not in ENTRY.read_text(encoding="utf-8")
