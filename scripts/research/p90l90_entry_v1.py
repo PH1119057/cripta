@@ -302,9 +302,14 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
         counters["raw_rows"] += day_rows
     if h5.gaps or h15.gaps or counters["h9_not_ready_common"]:
         raise ValueError(f"missing H9 bars: 5m={h5.gaps},15m={h15.gaps},common={counters['h9_not_ready_common']}")
+    complete = (warmup_first == "2026-05-17" and through == "2026-08-15")
     manifest = {
         "research": "P90L90_ENTRY_V1", "canon": "RESEARCH_COMPUTE §22.1",
-        "symbol": symbol, "status": "ENTRY_CANDIDATE_ONLY_NO_FILL_NO_EXIT",
+        "symbol": symbol,
+        "status": "ENTRY_CANDIDATE_ONLY_NO_FILL_NO_EXIT" if complete else "PARTIAL_ENTRY_DIAGNOSTIC",
+        "complete_90d_input": complete,
+        "source_first_day": warmup_first,
+        "source_last_day": through,
         "window": ["2026-05-18T00:00Z", "2026-08-16T00:00Z"],
         "common_window": ["2026-05-26T00:00Z", "2026-08-16T00:00Z"],
         "frozen_l53_sha256": sha256(states_path), "frozen_l53": state_meta,
