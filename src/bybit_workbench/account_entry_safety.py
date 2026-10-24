@@ -52,4 +52,4 @@ def latch_account_entry_safety(
            ON CONFLICT(trading_account_id,account_connector_id) DO NOTHING""",
         (trading_account_id, account_connector_id, reason[:300]),
     )
-    connection.commit()
+    # Commit belongs to the caller, so a disposable transaction can roll back.
