@@ -198,6 +198,15 @@ def read_events(path: Path, symbol: str):
     return by_seq, count
 
 
+def scenario_keys(window: str):
+    """Keep retrospective extended FIXED90 distinct from common 82-day comparison."""
+    if window == "common":
+        return SCENARIOS
+    if window == "extended":
+        return tuple(key for key in SCENARIOS if key[0] == "FIXED90")
+    raise ValueError("invalid window")
+
+
 def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path,
            output: Path, window: str = "common"):
     if symbol not in SYMBOLS or window not in ("common", "extended"):
@@ -218,14 +227,15 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         raise ValueError("frozen state changed since Entry")
     states, _, _, _ = load_frozen(states_path)
     events, counts = read_events(events_path, symbol)
-    held = {key: None for key in SCENARIOS}
-    metrics = {key: Counter() for key in SCENARIOS}
-    money = {key: defaultdict(lambda: D(0)) for key in SCENARIOS}
-    trade_rows = {key: [] for key in SCENARIOS}
-    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in SCENARIOS}
+    active_scenarios = scenario_keys(window)
+    held = {key: None for key in active_scenarios}
+    metrics = {key: Counter() for key in active_scenarios}
+    money = {key: defaultdict(lambda: D(0)) for key in active_scenarios}
+    trade_rows = {key: [] for key in active_scenarios}
+    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in active_scenarios}
     dir_money = {
         key: {side: defaultdict(lambda: D(0)) for side in ("LONG", "SHORT")}
-        for key in SCENARIOS
+        for key in active_scenarios
     }
     seq = 0
     last_price = None
@@ -251,7 +261,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                     for e in candidates:
                         if float(e["ts"]) != t or D(e["price"]) != px or e["trade_id"] != row["trdMatchID"]:
                             raise ValueError("candidate source_row mismatch")
-                for key in SCENARIOS:
+                for key in active_scenarios:
                     cohort, kind = key
                     pos = held[key]
                     closed_this_record = False
@@ -334,7 +344,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         "entry_candidate_counts": dict(counts),
         "scenarios": {},
     }
-    for key in SCENARIOS:
+    for key in active_scenarios:
         cohort, kind = key
         m = metrics[key]
         cur = held[key]
@@ -381,11 +391,11 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
     output.mkdir(parents=False, exist_ok=False)
     ledger_path = output / f"trade_ledger_{symbol}.jsonl"
     with ledger_path.open("w", encoding="utf-8") as fd:
-        for key in SCENARIOS:
+        for key in active_scenarios:
             for row in trade_rows[key]:
                 fd.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
     report["trade_ledger_sha256"] = sha256(ledger_path)
-    report["trade_ledger_rows"] = sum(len(trade_rows[key]) for key in SCENARIOS)
+    report["trade_ledger_rows"] = sum(len(trade_rows[key]) for key in active_scenarios)
     p = output / "result.json"
     p.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     return report
