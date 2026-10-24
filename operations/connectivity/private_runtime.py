@@ -4357,14 +4357,6 @@ def main() -> None:
     try:
         validate_runtime_schema_contract(bootstrap)
         account_kind = validate_runtime_identity_contract(bootstrap)
-        assert_sub_worker_isolation(
-            account_kind=account_kind,
-            bot_instance_id=BOT_INSTANCE_ID,
-            credential_name=credential_name,
-        )
-        STATUS = private_worker_status_path(
-            trading_account_id=TRADING_ACCOUNT_ID, account_kind=account_kind
-        )
     except Exception as exc:
         disarm_new_entries(
             bootstrap,
@@ -4378,6 +4370,21 @@ def main() -> None:
                 "error": f"{type(exc).__name__}: {exc}",
             },
         )
+        bootstrap.close()
+        raise
+    # A newly provisioned SUB worker with an incomplete local configuration
+    # must NOT disarm every other TradingAccount via the global mainnet gate.
+    # This is a local worker startup failure, not a loss of existing Exit.
+    try:
+        assert_sub_worker_isolation(
+            account_kind=account_kind,
+            bot_instance_id=BOT_INSTANCE_ID,
+            credential_name=credential_name,
+        )
+        STATUS = private_worker_status_path(
+            trading_account_id=TRADING_ACCOUNT_ID, account_kind=account_kind
+        )
+    except ValueError:
         bootstrap.close()
         raise
     atomic_status(
