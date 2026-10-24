@@ -1884,11 +1884,12 @@ def _run_observer_epoch(
     multi_account_candidates = _unarmed_multi_account_candidate_bindings(
         connection, bundles, observed_at=epoch_started
     )
+    execution_bindings = _real_execution_bindings(
+        connection, bundles, observed_at=epoch_started
+    )
     execution_bindings = {
         activation: binding
-        for activation, binding in _real_execution_bindings(
-            connection, bundles, observed_at=epoch_started
-        ).items()
+        for activation, binding in execution_bindings.items()
         if activation not in multi_account_candidates
     }
     binding_ready_for = frozenset(execution_bindings)
@@ -2337,9 +2338,7 @@ def _run_observer_epoch(
                             entry_plan=bundle.entry_plan,
                             exit_plan=bundle.exit_plan,
                             # Persistence time may not precede EntryDecision.
-                            captured_at=max(
-                                datetime.now(UTC), evaluation.decision.decided_at
-                            ),
+                            captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
                         )
                         if candidate is not None:
                             counterfactual_store.record_candidate(candidate)
