@@ -14,7 +14,6 @@ import gzip
 import hashlib
 import json
 import os
-import shutil
 import tempfile
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
@@ -103,8 +102,9 @@ def download_one(symbol: str, day: date, output: Path) -> dict:
                 os.fsync(dst.fileno())
         if n <= 0 or (content_length and n != int(content_length)):
             raise ValueError("incomplete remote transfer")
-        if Path(tmp).open("rb").read(2) != bytes.fromhex("1f8b"):
-            raise ValueError("gzip header mismatch")
+        with Path(tmp).open("rb") as source:
+            if source.read(2) != bytes.fromhex("1f8b"):
+                raise ValueError("gzip header mismatch")
         qc = validate_day(Path(tmp), symbol, day)
         os.replace(tmp, output)
         tmp = None
