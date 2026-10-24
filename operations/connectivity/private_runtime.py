@@ -38,6 +38,10 @@ from safety_observer import api_get as safety_api_get
 from bybit_workbench.exchange.bybit.account_connector_attestation import (
     attest_bybit_account_connector,
 )
+from bybit_workbench.account_entry_safety import (
+    account_entry_safety_ready,
+    latch_account_entry_safety,
+)
 from bybit_workbench.private_worker_status import (
     assert_sub_worker_isolation,
     private_worker_status_path,
@@ -330,7 +334,15 @@ def db(application_name: str) -> psycopg.Connection:
 
 
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
-    """Close only the new-entry gate; ownership/protection commands remain available."""
+    """Fail closed on Entry only; a SUB may not disarm unrelated accounts."""
+    if os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "SUB":
+        latch_account_entry_safety(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            reason=reason[:300],
+        )
+        return
     now_ms = int(time.time() * 1000)
     connection.execute(
         """UPDATE control.execution_gates
@@ -2180,6 +2192,14 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
     if kind == "entry":
+        if os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "SUB":
+            ready, reasons = account_entry_safety_ready(
+                connection,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+            )
+            if not ready:
+                raise PreMutationSafetyBlock(",".join(reasons))
         authenticated_entry_connector_gate(connection, key, secret)
     assert_legacy_automated_exit_ownership(
         connection,
@@ -4228,7 +4248,10 @@ def private_loop(key: str, secret: str) -> None:
             atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
             if recovering:
                 restored = False
-                if restore_gate_after_reconnect:
+                if (
+                    restore_gate_after_reconnect
+                    and os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "MAIN"
+                ):
                     restored = restore_r1_gate_after_verified_reconnect(
                         connection,
                         reconnect_started_ms=reconnect_started_ms,
@@ -4302,7 +4325,10 @@ def private_loop(key: str, secret: str) -> None:
         except Exception as exc:
             if not recovering:
                 try:
-                    restore_gate_after_reconnect = mainnet_gate_enabled(connection)
+                    restore_gate_after_reconnect = (
+                        os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper() == "MAIN"
+                        and mainnet_gate_enabled(connection)
+                    )
                 except Exception:
                     restore_gate_after_reconnect = False
                     connection.rollback()
