@@ -14,6 +14,7 @@ from bybit_workbench.account_entry_safety import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "research/server/connectivity"))
 sys.path.insert(0, str(ROOT / "operations/connectivity"))
 
 import private_runtime  # noqa: E402
