@@ -1227,7 +1227,11 @@ class UniversalEntryEngine:
             + fingerprint(
                 {
                     "attempt": attempt.strategy_attempt_id,
-                    **({"execution_binding_id": decision_namespace} if decision_namespace is not None else {}),
+                    **(
+                        {"execution_binding_id": decision_namespace}
+                        if decision_namespace is not None
+                        else {}
+                    ),
                     "code": code,
                     "reason": reason,
                     "capital_reservation_id": reservation_id,
