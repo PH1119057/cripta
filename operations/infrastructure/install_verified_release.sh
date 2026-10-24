@@ -437,6 +437,7 @@ migration_files=(
   # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
   operations/sql/20261024_account_scoped_live_arm.sql
   operations/sql/20261025_account_entry_safety_blocks.sql
+  operations/sql/20261025_account_attempt_fanout.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
