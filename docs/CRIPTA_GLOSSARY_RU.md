@@ -909,14 +909,14 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 
 ## 36. P90L90 independent RAW H9 research terminology — OWNER DECISION 2026-10-24
 
-**P90L90** — исследовательский 90-дневный контур для пяти exact Bybit instruments за \`[2026-05-18T00:00:00Z, 2026-08-16T00:00:00Z)\`; не StrategyCard, не LIVE-arm и не версия прежнего 29-дневного research.
+**P90L90** — исследовательский 90-дневный контур для пяти exact Bybit instruments за `[2026-05-18T00:00:00Z, 2026-08-16T00:00:00Z)`; не StrategyCard, не LIVE-arm и не версия прежнего 29-дневного research.
 
-**RAW H9 Union Span** — знаменатель нормализованной глубины L5-3, охватывающий объединённые RAW high/low экстремумы двух независимо завершённых компонент H9-5m/H9-15m. Формула и условия применимости принадлежат исключительно \`RESEARCH_COMPUTE §22.1\`; это НЕ прежний H9 working-range denominator из §22.
+**RAW H9 Union Span** — знаменатель нормализованной глубины L5-3, охватывающий объединённые RAW high/low экстремумы двух независимо завершённых компонент H9-5m/H9-15m. Формула и условия применимости принадлежат исключительно `RESEARCH_COMPUTE §22.1`; это НЕ прежний H9 working-range denominator из §22.
 
-**FIXED90** — hindsight/in-sample фильтр по фиксированной медиане ширины L5-3 за весь объявленный P90L90 window, \`LOOKAHEAD=YES\`.
+**FIXED90** — hindsight/in-sample фильтр по фиксированной медиане ширины L5-3 за весь объявленный P90L90 window, `LOOKAHEAD=YES`.
 
 **PREV7D** — причинный фильтр ширины L5-3 по медиане семи полностью завершённых предыдущих UTC calendar days.
 
 **RAW Boundary Crossing Candidate** — исследовательское событие первого пересечения RAW-границы L5-3 соседними записями public trades; само по себе не доказывает ни отправку ордера, ни подтверждённое исполнение.
 
-Детальная методика, TP/SL/Exit, комиссии, QC и разделение старой/новой research версии: \`RESEARCH_COMPUTE §22/§22.1\`. Глоссарий не является вторым владельцем их параметров.
+Детальная методика, TP/SL/Exit, комиссии, QC и разделение старой/новой research версии: `RESEARCH_COMPUTE §22/§22.1`. Глоссарий не является вторым владельцем их параметров.
