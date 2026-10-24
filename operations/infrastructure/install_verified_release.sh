@@ -316,6 +316,21 @@ managed_services=(
   cripta-universal-exit-consumer.service
 )
 
+# The templates above are inert for an unprovisioned SUB. If an instance was
+# already loaded for a previously approved account, it MUST join the same
+# release stop/start and exact-loaded-commit lifecycle as MAIN and Exit.
+# Never leave an active SUB process running old code after source cutover.
+mapfile -t discovered_sub_units < <(
+  systemctl list-units --all --type=service --plain --no-legend \
+    'cripta-private-runtime@*.service' \
+    'cripta-universal-entry-consumer@*.service' | awk '{print $1}' | sort -u
+)
+for unit in "${discovered_sub_units[@]}"; do
+  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer)@[A-Za-z0-9_.-]+\.service$ ]] ||
+    die "unexpected SUB unit identity while preparing release: $unit"
+  managed_services+=("$unit")
+done
+
 declare -A was_active=()
 services_stopped=0
 db_mutation_steps=0
