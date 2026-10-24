@@ -1070,7 +1070,7 @@ def observe_m3_entry_context(
     else:
         assessment_id, mayak_id, observed_at, version, status, quality, payload, market_context_id = row
         age_seconds = (signal_at - observed_at).total_seconds()
-        freshness = "FRESH" if 0 <= age_seconds <= 90 else "STALE"
+        freshness = "FRESH" if age_seconds >= 0 and age_seconds <= 90 else "STALE"
         reason = "Причинная оценка Диспетчера сохранена только как контекст"
     document = {
         "signal_id": signal_id,
