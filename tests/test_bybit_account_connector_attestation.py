@@ -32,7 +32,12 @@ class Database:
 
     def execute(self, statement: str, params: tuple[object, ...] = ()) -> Rows:
         self.queries.append((statement, params))
-        return Rows(self.accounts if "FROM identity.trading_accounts" in statement else self.connectors)
+        values = (
+            self.accounts
+            if "FROM identity.trading_accounts" in statement
+            else self.connectors
+        )
+        return Rows(values)
 
 
 def main_account() -> tuple[object, ...]:
