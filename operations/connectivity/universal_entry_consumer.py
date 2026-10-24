@@ -163,7 +163,7 @@ def _next_request(
             ORDER BY r.requested_at,r.execution_request_id
             LIMIT 1
             FOR UPDATE OF r SKIP LOCKED""",
-        (scoped.trading_account_id,),
+        (TRADING_ACCOUNT_ID,),
     ).fetchone()
 
 
