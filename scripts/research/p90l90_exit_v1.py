@@ -248,7 +248,10 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         raise ValueError("unprocessed candidate source rows")
     report = {
         "research": "P90L90_EXIT_V1", "symbol": symbol,
-        "status": "HISTORICAL_TICK_PROXY_NO_EXCHANGE_FILL",
+        "status": (
+            "HISTORICAL_TICK_PROXY_NO_EXCHANGE_FILL"
+            if entry["complete_90d_input"] else "PARTIAL_DIAGNOSTIC_NOT_FINANCIAL_EVIDENCE"
+        ),
         "entry_events_sha256": entry["events_sha256"],
         "frozen_l53_sha256": entry["frozen_l53_sha256"],
         "period": "COMMON_82D" if window == "common" else "FIXED90_EXTENDED",
