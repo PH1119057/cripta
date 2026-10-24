@@ -161,7 +161,8 @@ def _next_request(
                    WHERE d.execution_request_id=r.execution_request_id
             )
             ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1""",
+            LIMIT 1
+            FOR UPDATE OF r SKIP LOCKED""",
         (scoped.trading_account_id,),
     ).fetchone()
 
