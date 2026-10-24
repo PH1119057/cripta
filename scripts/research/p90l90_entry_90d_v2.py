@@ -24,10 +24,9 @@ D = Decimal
 SYMBOLS = ("LTCUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT", "INJUSDT")
 START = datetime(2026, 5, 18, tzinfo=timezone.utc)
 END = datetime(2026, 8, 16, tzinfo=timezone.utc)
-COMMON = datetime(2026, 5, 26, tzinfo=timezone.utc)
 MAY11 = datetime(2026, 5, 11, tzinfo=timezone.utc)
-START_TS, END_TS, MAY11_TS, COMMON_TS = (
-    int(x.timestamp()) for x in (START, END, MAY11, COMMON)
+START_TS, END_TS, MAY11_TS = (
+    int(x.timestamp()) for x in (START, END, MAY11)
 )
 RAW_DEFAULT = Path("/data/cripta/research/runs/p90l90_90d_warmup_v2_20261024/inputs")
 FROZEN_DEFAULT = Path("/data/cripta/research/runs/p90l90_90d_warmup_v2_20261024/results/l53_clean_v2/parts")
@@ -272,8 +271,8 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
                         h5ext, h15ext = h5.extrema(), h15.extrema()
                         if h5ext and h15ext:
                             eligible = geometry_candidates(l5, h5ext, h15ext)
-                        elif bucket >= COMMON_TS:
-                            counters["h9_not_ready_common"] += 1
+                        elif bucket >= START_TS:
+                            counters["h9_not_ready_full90"] += 1
                 if START_TS <= t < END_TS and prev_px is not None and eligible:
                     for side, g in eligible.items():
                         if side in seen or not crossing(side, prev_px, px, g["edge"]):
@@ -316,8 +315,8 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
                 prev_px, prev_t = px, t
         dataset_files.append({"file": path.name, "rows": day_rows, "sha256": input_hash})
         counters["raw_rows"] += day_rows
-    if h5.gaps or h15.gaps or counters["h9_not_ready_common"]:
-        raise ValueError(f"missing H9 bars: 5m={h5.gaps},15m={h15.gaps},common={counters['h9_not_ready_common']}")
+    if h5.gaps or h15.gaps or counters["h9_not_ready_full90"]:
+        raise ValueError(f"missing H9 bars: 5m={h5.gaps},15m={h15.gaps},common={counters['h9_not_ready_full90']}")
     complete = (warmup_first == "2026-05-08" and through == "2026-08-15")
     if not complete:
         raise ValueError("P90L90 V2 forbids partial 90-day input")
@@ -325,7 +324,7 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
     if not source_manifest.exists() or len(json.loads(source_manifest.read_text())["files"]) != 100:
         raise ValueError("incomplete native Bybit 100-day source provenance")
     manifest = {
-        "research": "P90L90_ENTRY_90D_V2", "canon": "RESEARCH_COMPUTE §22.1",
+        "research": "P90L90_ENTRY_90D_V2", "canon": "RESEARCH_COMPUTE §22.2",
         "symbol": symbol,
         "status": "FULL_90D_ENTRY_CANDIDATE_ONLY_NO_FILL_NO_EXIT",
         "complete_90d_input": complete,
