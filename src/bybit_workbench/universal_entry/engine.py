@@ -295,8 +295,8 @@ class UniversalEntryEngine:
                 notifications: tuple[NotificationEvent, ...]
                 account_outcomes: tuple[AccountEntryOutcome, ...] = ()
                 if real_admission and account_admissions is not None:
-                    contexts = account_admissions.get(plan.strategy_activation_id, ())
-                    if not contexts:
+                    per_account_scopes = account_admissions.get(plan.strategy_activation_id, ())
+                    if not per_account_scopes:
                         # Missing account scope cannot fall back to a default.
                         decision = self._decision(
                             plan,
@@ -321,15 +321,15 @@ class UniversalEntryEngine:
                         )
                     else:
                         per_account: list[AccountEntryOutcome] = []
-                        for context in sorted(
-                            contexts,
+                        for account_scope in sorted(
+                            per_account_scopes,
                             key=lambda item: (
                                 item.binding.execution_leg,
                                 item.binding.trading_account_id,
                             ),
                         ):
-                            effective_readiness = context.technical_readiness
-                            effective_port = context.entry_admission_port
+                            effective_readiness = account_scope.technical_readiness
+                            effective_port = account_scope.entry_admission_port
                             if not real_ready:
                                 effective_readiness = TechnicalReadiness(
                                     False,
@@ -342,21 +342,21 @@ class UniversalEntryEngine:
                                 signal,
                                 attempt,
                                 admission_time or fact_for_predicate.observed_at,
-                                capacity=context.capacity,
+                                capacity=account_scope.capacity,
                                 technical_readiness=effective_readiness,
-                                account_ref=context.account_ref,
+                                account_ref=account_scope.account_ref,
                                 entry_admission_port=effective_port,
-                                exchange_position_key=context.exchange_position_key,
-                                execution_binding=context.binding,
+                                exchange_position_key=account_scope.exchange_position_key,
+                                execution_binding=account_scope.binding,
                                 policy_attempt_block=policy_attempt_block,
-                                decision_namespace=context.binding.strategy_execution_binding_id,
+                                decision_namespace=account_scope.binding.strategy_execution_binding_id,
                             )
                             account_request = self._execution_request(
                                 execution_intent, account_decision
                             )
                             per_account.append(
                                 AccountEntryOutcome(
-                                    context.binding,
+                                    account_scope.binding,
                                     account_decision,
                                     account_request,
                                     self._notifications(
@@ -364,7 +364,7 @@ class UniversalEntryEngine:
                                         attempt,
                                         account_decision,
                                         plan,
-                                        capacity=context.capacity,
+                                        capacity=account_scope.capacity,
                                     ),
                                 )
                             )
