@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from decimal import Decimal as D, ROUND_HALF_EVEN, getcontext
 from pathlib import Path
+from statistics import median
 
 from scripts.research.p90l90_entry_v1 import (
     COMMON_TS,
@@ -69,6 +70,8 @@ class Position:
     protection_seq: int = -1
     tp: D | None = None
     tp_live_after_seq: int = -1
+    entry_event_id: str = ""
+    entry_trade_id: str = ""
 
 
 def initial_position(event: dict, seq: int, bucket: int, cohort: str, exit_kind: str):
@@ -77,7 +80,9 @@ def initial_position(event: dict, seq: int, bucket: int, cohort: str, exit_kind:
     entry = D(event["price"])
     stop = threshold_price(side, entry, D("-10"))
     pos = Position(side=side, entry=entry, entry_seq=seq,
-                   entry_ts=float(event["ts"]), state_bucket=bucket, stop=stop)
+                   entry_ts=float(event["ts"]), state_bucket=bucket, stop=stop,
+                   entry_event_id=event.get("event_id", ""),
+                   entry_trade_id=event.get("trade_id", ""))
     return pos
 
 
@@ -95,6 +100,41 @@ def gross_and_net(pos: Position, exit_px: D, maker_exit: bool):
         MONEY_QUANTUM, rounding=ROUND_HALF_EVEN
     )
     return gross, entry_fee, exit_fee, gross - entry_fee - exit_fee
+
+
+def trade_record(symbol: str, cohort: str, kind: str, pos: Position,
+                 exit_seq: int, exit_ts: float, exit_px: D,
+                 reason: str, maker_exit: bool, gross: D, entry_fee: D,
+                 exit_fee: D, net: D) -> dict:
+    """Exact immutable modeled execution row; no claim of exchange fills."""
+    holding_seconds = D(str(exit_ts)) - D(str(pos.entry_ts))
+    if holding_seconds < 0:
+        raise ValueError("negative modeled holding duration")
+    if net != gross - entry_fee - exit_fee:
+        raise ValueError("per-trade monetary reconciliation mismatch")
+    if maker_exit != (reason == "RESTING_TP"):
+        raise ValueError("maker eligibility / exit reason mismatch")
+    return {
+        "symbol": symbol,
+        "scenario": f"{cohort}_{kind}",
+        "side": pos.side,
+        "candidate_event_id": pos.entry_event_id,
+        "entry_trade_id": pos.entry_trade_id,
+        "entry_source_order": pos.entry_seq,
+        "exit_source_order": exit_seq,
+        "entry_ts": repr(pos.entry_ts),
+        "exit_ts": repr(exit_ts),
+        "holding_seconds": str(holding_seconds),
+        "entry_price": str(pos.entry),
+        "exit_price": str(exit_px),
+        "exit_reason": reason,
+        "maker_exit": maker_exit,
+        "modeled_exchange_fill": False,
+        "gross_usdt": str(gross),
+        "entry_fee_usdt": str(entry_fee),
+        "exit_fee_usdt": str(exit_fee),
+        "net_usdt": str(net),
+    }
 
 
 def on_trade(pos: Position, px: D, seq: int, bucket: int, candidate_tp: D | None,
@@ -158,6 +198,15 @@ def read_events(path: Path, symbol: str):
     return by_seq, count
 
 
+def scenario_keys(window: str):
+    """Keep retrospective extended FIXED90 distinct from common 82-day comparison."""
+    if window == "common":
+        return SCENARIOS
+    if window == "extended":
+        return tuple(key for key in SCENARIOS if key[0] == "FIXED90")
+    raise ValueError("invalid window")
+
+
 def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path,
            output: Path, window: str = "common"):
     if symbol not in SYMBOLS or window not in ("common", "extended"):
@@ -178,13 +227,15 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         raise ValueError("frozen state changed since Entry")
     states, _, _, _ = load_frozen(states_path)
     events, counts = read_events(events_path, symbol)
-    held = {key: None for key in SCENARIOS}
-    metrics = {key: Counter() for key in SCENARIOS}
-    money = {key: defaultdict(lambda: D(0)) for key in SCENARIOS}
-    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in SCENARIOS}
+    active_scenarios = scenario_keys(window)
+    held = {key: None for key in active_scenarios}
+    metrics = {key: Counter() for key in active_scenarios}
+    money = {key: defaultdict(lambda: D(0)) for key in active_scenarios}
+    trade_rows = {key: [] for key in active_scenarios}
+    dir_metrics = {key: {side: Counter() for side in ("LONG", "SHORT")} for key in active_scenarios}
     dir_money = {
         key: {side: defaultdict(lambda: D(0)) for side in ("LONG", "SHORT")}
-        for key in SCENARIOS
+        for key in active_scenarios
     }
     seq = 0
     last_price = None
@@ -210,7 +261,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                     for e in candidates:
                         if float(e["ts"]) != t or D(e["price"]) != px or e["trade_id"] != row["trdMatchID"]:
                             raise ValueError("candidate source_row mismatch")
-                for key in SCENARIOS:
+                for key in active_scenarios:
                     cohort, kind = key
                     pos = held[key]
                     closed_this_record = False
@@ -225,6 +276,11 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                             gross, entry_fee, exit_fee, net = gross_and_net(
                                 active_before, exit_px, maker_exit
                             )
+                            trade_rows[key].append(trade_record(
+                                symbol, cohort, kind, active_before, seq, t,
+                                exit_px, reason, maker_exit, gross, entry_fee,
+                                exit_fee, net,
+                            ))
                             m = metrics[key]
                             dm = dir_metrics[key][active_before.side]
                             dm["closed"] += 1
@@ -273,7 +329,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
     if any(x > seq for x in events):
         raise ValueError("unprocessed candidate source rows")
     report = {
-        "research": "P90L90_EXIT_V1_1", "symbol": symbol,
+        "research": "P90L90_EXIT_V1_2", "symbol": symbol,
         "status": (
             "HISTORICAL_TICK_PROXY_NO_EXCHANGE_FILL"
             if entry["complete_90d_input"] else "PARTIAL_DIAGNOSTIC_NOT_FINANCIAL_EVIDENCE"
@@ -288,7 +344,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         "entry_candidate_counts": dict(counts),
         "scenarios": {},
     }
-    for key in SCENARIOS:
+    for key in active_scenarios:
         cohort, kind = key
         m = metrics[key]
         cur = held[key]
@@ -299,14 +355,24 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
             raise ValueError("candidate accounting mismatch")
         if m["accepted"] != m["closed"] + m["censored_open"]:
             raise ValueError("trade accounting mismatch")
+        if len(trade_rows[key]) != m["closed"]:
+            raise ValueError("trade ledger row count mismatch")
         for book in (money[key], *dir_money[key].values()):
             if book["gross_usdt"] - book["entry_fees_usdt"] - book["exit_fees_usdt"] != book["net_usdt"]:
                 raise ValueError("fee / net reconciliation mismatch")
             if book["positive_net_usdt"] + book["negative_net_usdt"] != book["net_usdt"]:
                 raise ValueError("signed net reconciliation mismatch")
+        if sum((D(row["net_usdt"]) for row in trade_rows[key]), D(0)) != money[key]["net_usdt"]:
+            raise ValueError("trade ledger net sum mismatch")
+        if any(row["scenario"] != f"{cohort}_{kind}" for row in trade_rows[key]):
+            raise ValueError("trade ledger scenario identity mismatch")
+        holds = [D(row["holding_seconds"]) for row in trade_rows[key]]
         mtm_gross = None if cur is None else gross_and_net(cur, last_price, False)[0]
         report["scenarios"][f"{cohort}_{kind}"] = {
             "counts": dict(m),
+            "holding_seconds_mean": (str(sum(holds, D(0)) / len(holds)) if holds else None),
+            "holding_seconds_median": (str(median(holds)) if holds else None),
+            "holding_seconds_max": (str(max(holds)) if holds else None),
             "money": {k: str(v) for k, v in money[key].items()},
             "by_direction": {
                 side: {
@@ -316,8 +382,20 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
                 for side in ("LONG", "SHORT")
             },
             "censored_mtm_gross_usdt_excluded": None if mtm_gross is None else str(mtm_gross),
+            "censored_position": None if cur is None else {
+                "side": cur.side, "candidate_event_id": cur.entry_event_id,
+                "entry_ts": repr(cur.entry_ts), "entry_price": str(cur.entry),
+                "entry_source_order": cur.entry_seq,
+            },
         }
     output.mkdir(parents=False, exist_ok=False)
+    ledger_path = output / f"trade_ledger_{symbol}.jsonl"
+    with ledger_path.open("w", encoding="utf-8") as fd:
+        for key in active_scenarios:
+            for row in trade_rows[key]:
+                fd.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+    report["trade_ledger_sha256"] = sha256(ledger_path)
+    report["trade_ledger_rows"] = sum(len(trade_rows[key]) for key in active_scenarios)
     p = output / "result.json"
     p.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     return report

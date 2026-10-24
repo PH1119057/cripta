@@ -1,13 +1,17 @@
 """P90L90 independent Exit arithmetic and event-order tests."""
 from decimal import Decimal as D
 
+import pytest
+
 from scripts.research.p90l90_exit_v1 import (
     favorable,
     gross_and_net,
     initial_position,
     on_trade,
+    scenario_keys,
     take_profit_eligible,
     threshold_price,
+    trade_record,
 )
 
 
@@ -104,3 +108,53 @@ def test_model_money_reconciliation_at_declared_quantum():
         exit_fee_total += exit_fee
         net_total += net
     assert gross_total - entry_fee_total - exit_fee_total == net_total
+
+def test_trade_record_holding_and_fee_identity():
+    p = pos()
+    p.entry_event_id = "LTCUSDT:300:LONG"
+    p.entry_trade_id = "source-id-1"
+    gross, entry_fee, exit_fee, net = gross_and_net(p, D("101"), True)
+    row = trade_record(
+        "LTCUSDT", "FIXED90", "LOCK050", p,
+        100, 321.001, D("101"), "RESTING_TP", True,
+        gross, entry_fee, exit_fee, net,
+    )
+    assert row["candidate_event_id"] == "LTCUSDT:300:LONG"
+    assert row["entry_trade_id"] == "source-id-1"
+    assert row["holding_seconds"] == "21.000"
+    assert row["exit_source_order"] == 100
+    assert row["maker_exit"] is True
+    assert row["modeled_exchange_fill"] is False
+    assert D(row["net_usdt"]) == (
+        D(row["gross_usdt"]) - D(row["entry_fee_usdt"]) - D(row["exit_fee_usdt"])
+    )
+
+
+def test_trade_record_fails_bad_chronology_and_maker_category():
+    p = pos()
+    money = gross_and_net(p, D("101"), True)
+    with pytest.raises(ValueError, match="negative modeled holding duration"):
+        trade_record(
+            "LTCUSDT", "FIXED90", "LOCK050", p, 50, 299.0,
+            D("101"), "RESTING_TP", True, *money,
+        )
+    with pytest.raises(ValueError, match="maker eligibility"):
+        trade_record(
+            "LTCUSDT", "FIXED90", "LOCK050", p, 50, 320.0,
+            D("101"), "HARD_STOP", True, *money,
+        )
+    with pytest.raises(ValueError, match="monetary reconciliation"):
+        trade_record(
+            "LTCUSDT", "FIXED90", "LOCK050", p, 50, 320.0,
+            D("101"), "RESTING_TP", True, money[0], money[1], money[2],
+            money[3] + D("0.01"),
+        )
+
+def test_extended_window_research_scope():
+    common = scenario_keys("common")
+    extended = scenario_keys("extended")
+    assert len(common) == 6
+    assert len(extended) == 3
+    assert all(cohort == "FIXED90" for cohort, _ in extended)
+    with pytest.raises(ValueError, match="invalid window"):
+        scenario_keys("other")
