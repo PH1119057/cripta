@@ -6,6 +6,7 @@ Description=Cripta Universal Entry SUB consumer (%i, initially disabled)
 After=network-online.target postgresql.service cripta-private-runtime@%i.service
 Wants=network-online.target
 Requires=postgresql.service
+BindsTo=cripta-private-runtime@%i.service
 
 [Service]
 Type=simple
