@@ -349,7 +349,9 @@ class UniversalEntryEngine:
                                 exchange_position_key=account_scope.exchange_position_key,
                                 execution_binding=account_scope.binding,
                                 policy_attempt_block=policy_attempt_block,
-                                decision_namespace=account_scope.binding.strategy_execution_binding_id,
+                                decision_namespace=(
+                                    account_scope.binding.strategy_execution_binding_id
+                                ),
                             )
                             account_request = self._execution_request(
                                 execution_intent, account_decision
