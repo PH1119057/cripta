@@ -4,11 +4,11 @@ from unittest.mock import patch
 
 import pytest
 
+import operations.connectivity.universal_entry_consumer as consumer
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
     check_consumer_worker_route,
 )
-import operations.connectivity.universal_entry_consumer as consumer
 
 
 class Rows:
@@ -136,11 +136,9 @@ def test_consumer_cannot_impersonate_second_worker_through_route_argument() -> N
     with (
         patch.object(consumer, "TRADING_ACCOUNT_ID", "ta-one"),
         patch.object(consumer, "ACCOUNT_CONNECTOR_ID", "connector-one"),
+        pytest.raises(ValueError, match="CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH"),
     ):
-        with pytest.raises(ValueError, match="CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH"):
-            consumer._next_request(
-                db, route=ConsumerWorkerRoute("ta-two", "connector-two")
-            )
+        consumer._next_request(db, route=ConsumerWorkerRoute("ta-two", "connector-two"))
     assert not db.queries
 
 
