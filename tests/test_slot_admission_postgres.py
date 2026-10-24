@@ -582,6 +582,15 @@ def test_one_attempt_fans_out_to_two_proven_accounts_with_independent_ledger() -
     with psycopg.connect(DSN) as connection:
         port = PostgresEntryAdmissionPort(connection)
         main_receipt = port.admit(first_request)
+        # Failure of one per-account leg must not roll back the other account
+        # or strand the rejected account's slot/capital in the admission ledger.
+        with pytest.raises(InsufficientCapital):
+            port.admit(replace(second_request, requested_amount=Decimal("1000")))
+        assert connection.execute(
+            """SELECT 1 FROM runtime.exchange_position_slot_claims
+                WHERE strategy_attempt_id=%s AND trading_account_id=%s""",
+            (first_request.strategy_attempt_id, second_request.trading_account_id),
+        ).fetchone() is None
         sub_receipt = port.admit(second_request)
         assert main_receipt.exchange_position_slot_claim_id != (
             sub_receipt.exchange_position_slot_claim_id
