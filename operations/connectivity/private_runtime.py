@@ -43,6 +43,7 @@ from bybit_workbench.account_entry_safety import (
     latch_account_entry_safety,
 )
 from bybit_workbench.private_worker_status import (
+    DEFAULT_STATUS_DIR,
     assert_sub_worker_isolation,
     private_worker_status_path,
 )
@@ -4393,8 +4394,19 @@ def main() -> None:
     configured_kind = configured_kind.strip().upper()
     if configured_kind not in {"MAIN", "SUB"}:
         raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
+    status_directory = DEFAULT_STATUS_DIR
+    if configured_kind == "SUB":
+        expected_directory = DEFAULT_STATUS_DIR / f"sub-{TRADING_ACCOUNT_ID}"
+        configured_directory = os.environ.get("CRIPTA_PRIVATE_STATUS_DIR", "")
+        if not TRADING_ACCOUNT_ID or Path(configured_directory) != expected_directory:
+            raise RuntimeError("SUB_PRIVATE_WORKER_STATUS_DIRECTORY_SCOPE_MISMATCH")
+        if not expected_directory.is_dir() or not os.access(expected_directory, os.W_OK):
+            raise RuntimeError("SUB_PRIVATE_WORKER_STATUS_DIRECTORY_NOT_PREPARED")
+        status_directory = expected_directory
     STATUS = private_worker_status_path(
-        trading_account_id=TRADING_ACCOUNT_ID, account_kind=configured_kind
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_kind=configured_kind,
+        directory=status_directory,
     )
     credential_name = os.environ.get("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-mainnet")
     if not credential_name or not all(
@@ -4406,7 +4418,10 @@ def main() -> None:
         bot_instance_id=BOT_INSTANCE_ID,
         credential_name=credential_name,
     )
-    STATUS.parent.mkdir(parents=True, exist_ok=True)
+    if configured_kind == "MAIN":
+        STATUS.parent.mkdir(parents=True, exist_ok=True)
+    # SUB status directory must be explicitly provisioned by the control actor,
+    # never silently created under the shared MAIN status directory.
     credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
     credentials = json.loads(credential_path.read_text(encoding="utf-8"))
     MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
