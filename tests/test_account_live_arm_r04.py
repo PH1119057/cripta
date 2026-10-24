@@ -156,3 +156,17 @@ def test_multi_account_denied_when_account_session_missing() -> None:
         assert consumer._live_arm_ready(DB(), row, now=NOW) == (
             False, ("EXACT_ACCOUNT_RELEASE_OWNER_ARM_NOT_ACTIVE",),
         )
+
+
+def test_psycopg_dict_row_schema_probe_is_supported() -> None:
+    class MappingCursor:
+        def fetchone(self) -> dict[str, object]:
+            return {"relation_oid": "control.account_live_arm_sessions"}
+
+    class MappingDB(DB):
+        def execute(self, sql: str, params: tuple[object, ...] = ()) -> Cursor | MappingCursor:
+            if "to_regclass" in sql:
+                return MappingCursor()
+            return super().execute(sql, params)
+
+    assert check(MappingDB()) == (True, ())
