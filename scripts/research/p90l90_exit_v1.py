@@ -12,7 +12,7 @@ import gzip
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from decimal import Decimal as D, getcontext
+from decimal import Decimal as D, ROUND_HALF_EVEN, getcontext
 from pathlib import Path
 
 from scripts.research.p90l90_entry_v1 import (
@@ -30,6 +30,7 @@ getcontext().prec = 50
 NOMINAL = D("10")
 TAKER = D("0.00055")
 MAKER = D("0.0002")
+MONEY_QUANTUM = D("0.000000000001")  # 12 decimal places in modeled USDT
 EXITS = ("LOCK050", "BE013", "TRAIL035")
 COHORTS = ("FIXED90", "PREV7D")
 SCENARIOS = tuple((a, b) for a in COHORTS for b in EXITS)
@@ -86,8 +87,13 @@ def gross_and_net(pos: Position, exit_px: D, maker_exit: bool):
     gross = NOMINAL * (exit_px / pos.entry - 1)
     if pos.side == "SHORT":
         gross = -gross
-    entry_fee = NOMINAL * TAKER
-    exit_fee = exit_nominal * (MAKER if maker_exit else TAKER)
+    # Round each financial component once per closed trade, then sum fixed-point values.
+    # This prevents Decimal context-rounding drift across independently accumulated books.
+    gross = gross.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_EVEN)
+    entry_fee = (NOMINAL * TAKER).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_EVEN)
+    exit_fee = (exit_nominal * (MAKER if maker_exit else TAKER)).quantize(
+        MONEY_QUANTUM, rounding=ROUND_HALF_EVEN
+    )
     return gross, entry_fee, exit_fee, gross - entry_fee - exit_fee
 
 
@@ -267,7 +273,7 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
     if any(x > seq for x in events):
         raise ValueError("unprocessed candidate source rows")
     report = {
-        "research": "P90L90_EXIT_V1", "symbol": symbol,
+        "research": "P90L90_EXIT_V1_1", "symbol": symbol,
         "status": (
             "HISTORICAL_TICK_PROXY_NO_EXCHANGE_FILL"
             if entry["complete_90d_input"] else "PARTIAL_DIAGNOSTIC_NOT_FINANCIAL_EVIDENCE"
@@ -276,6 +282,8 @@ def replay(symbol: str, raw_root: Path, frozen_root: Path, candidates_root: Path
         "frozen_l53_sha256": entry["frozen_l53_sha256"],
         "period": "COMMON_82D" if window == "common" else "FIXED90_EXTENDED",
         "nominal_usdt": "10", "taker_fee": str(TAKER), "maker_resting_tp_fee": str(MAKER),
+        "money_rounding_usdt": str(MONEY_QUANTUM),
+        "money_rounding_mode": "ROUND_HALF_EVEN_PER_TRADE_PER_GROSS_AND_FEE_COMPONENT",
         "unmodeled": ["funding", "slippage", "latency", "bid_ask_spread"],
         "entry_candidate_counts": dict(counts),
         "scenarios": {},
