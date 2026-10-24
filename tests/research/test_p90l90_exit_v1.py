@@ -9,9 +9,9 @@ from scripts.research.p90l90_exit_v1 import (
     initial_position,
     on_trade,
     take_profit_eligible,
+    scenario_keys,
     threshold_price,
     trade_record,
-    scenario_keys,
 )
 
 
