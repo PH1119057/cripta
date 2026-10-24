@@ -2325,23 +2325,21 @@ def _run_observer_epoch(
                     evaluation,
                     bundle,
                 )
+                # The existing counterfactual schema has legacy
+                # single-account lineage. Do not collapse per-account
+                # outcomes into an unattributed counterfactual row.
                 if (
-                    evaluation.signal.strategy_activation_id
-                    in real_execution_selected_for
+                    evaluation.signal.strategy_activation_id in real_execution_selected_for
+                    and evaluation.decision is not None
                 ):
-                    # The existing counterfactual schema has legacy
-                    # single-account lineage. Do not collapse per-account
-                    # outcomes into an unattributed counterfactual row.
-                    if evaluation.decision is not None:
-                        candidate = build_insufficient_funds_candidate(
-                            evaluation,
-                            entry_plan=bundle.entry_plan,
-                            exit_plan=bundle.exit_plan,
-                            # Persistence time may not precede EntryDecision.
-                            captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
-                        )
-                        if candidate is not None:
-                            counterfactual_store.record_candidate(candidate)
+                    candidate = build_insufficient_funds_candidate(
+                        evaluation,
+                        entry_plan=bundle.entry_plan,
+                        exit_plan=bundle.exit_plan,
+                        captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
+                    )
+                    if candidate is not None:
+                        counterfactual_store.record_candidate(candidate)
                 if (
                     evaluation.signal.strategy_activation_id
                     not in real_execution_selected_for
