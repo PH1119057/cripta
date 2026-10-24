@@ -64,6 +64,8 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
         in unit
     )
     assert "private_runtime.py --sub-account=%i" in unit
+    assert "StartLimitBurst=3" in unit
+    assert "StartLimitIntervalSec=300" in unit
     assert "ProtectSystem=strict" in unit and "NoNewPrivileges=true" in unit
     assert "ReadWritePaths=/var/lib/cripta/private_runtime/sub-%i" in unit
     assert "ReadWritePaths=/var/lib/cripta/private_runtime\n" not in unit
@@ -76,6 +78,8 @@ def test_sub_entry_service_is_inert_with_no_private_credential_or_exit_clone() -
     assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
+    assert "BindsTo=cripta-private-runtime@%i.service" in unit
+    assert "After=network-online.target postgresql.service cripta-private-runtime@%i.service" in unit
     assert "LoadCredential" not in unit
     assert "ReadWritePaths=" not in unit
     assert "NoNewPrivileges=true" in unit
