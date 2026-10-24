@@ -37,6 +37,7 @@ class DB:
         self.schema = schema
         self.queries: list[tuple[str, tuple[object, ...]]] = []
         self.commits = 0
+        self.rollbacks = 0
 
     def execute(self, sql: str, params: tuple[object, ...] = ()) -> Rows:
         self.queries.append((sql, params))
@@ -48,6 +49,9 @@ class DB:
 
     def commit(self) -> None:
         self.commits += 1
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
 
 
 def test_account_latch_checks_schema_and_only_exact_account_connector() -> None:
@@ -77,6 +81,7 @@ def test_sub_safety_failure_latches_exact_account_without_global_disarm(
     ):
         private_runtime.disarm_new_entries(db, "SUB_EXCHANGE_RECOVERY_UNPROVEN")
     assert db.commits == 1
+    assert db.rollbacks == 1
     assert len(db.queries) == 1
     sql, params = db.queries[0]
     assert "INSERT INTO runtime.account_entry_safety_blocks" in sql
