@@ -128,7 +128,7 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
 ) -> None:
     credential_name, account_id, bot_id = {
         "MAIN": ("bybit-mainnet", "test-main-account", "m3-mainnet-primary"),
-        "SUB": ("bybit-sub-test-sub-account", "test-sub-account", "test-sub-worker"),
+        "SUB": ("bybit-sub-test-sub-account", "test-sub-account", "private-sub-test-sub-account"),
     }[kind]
     (tmp_path / credential_name).write_text(
         json.dumps({"api_key": "OFFLINE_FAKE", "api_secret": "OFFLINE_FAKE"}),
