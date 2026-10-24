@@ -80,7 +80,7 @@ def test_sub_safety_failure_latches_exact_account_without_global_disarm(
     sql, params = db.queries[0]
     assert "INSERT INTO runtime.account_entry_safety_blocks" in sql
     assert "ON CONFLICT" in sql
-    assert params == ("ta-sub", "connector-sub", "SUB_EXCHANGE_RECOVERY_UNPROVEN")
+    assert params == ("ta-sub", "connector-sub", "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED")
     assert not any("UPDATE control.execution_gates" in q for q, _ in db.queries)
 
 
@@ -147,6 +147,25 @@ def test_sub_private_ws_reconnect_latches_own_account_without_global_disarm(
     assert any("INSERT INTO runtime.account_entry_safety_blocks" in q for q, _ in db.queries)
     assert not any("UPDATE control.execution_gates" in q for q, _ in db.queries)
     restore.assert_not_called()
+    assert db.queries[0][1][2] == "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
+
+
+def test_sub_error_text_never_persisted_in_denial_latch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    db = DB()
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", "ta-sub"),
+        patch.object(private_runtime, "ACCOUNT_CONNECTOR_ID", "connector-sub"),
+    ):
+        private_runtime.disarm_new_entries(
+            db, "signed_url=https://bad.example/?api_secret=SENSITIVE_FAKE"
+        )
+    assert len(db.queries) == 1
+    sql, params = db.queries[0]
+    assert "SENSITIVE_FAKE" not in sql and "SENSITIVE_FAKE" not in repr(params)
+    assert params[2] == "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
 
 
 def test_invalid_latch_scope_is_rejected_before_sql() -> None:
