@@ -55,6 +55,7 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
     assert "[Install]" not in unit
     assert "User=cripta" in unit and "Group=cripta" in unit
     assert "Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB" in unit
+    assert "Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i" in unit
     assert "Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-sub-%i" in unit
     assert "Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
@@ -115,7 +116,7 @@ def test_sub_startup_rejects_cross_account_credential_before_read(
     sub_directory.mkdir(mode=0o750)
     monkeypatch.setattr(private_runtime, "DEFAULT_STATUS_DIR", tmp_path)
     monkeypatch.setattr(private_runtime, "TRADING_ACCOUNT_ID", account)
-    monkeypatch.setattr(private_runtime, "BOT_INSTANCE_ID", "sub-worker-one")
+    monkeypatch.setattr(private_runtime, "BOT_INSTANCE_ID", "private-sub-ta-one")
     monkeypatch.setattr(private_runtime.sys, "argv", [
         "private_runtime.py", "--sub-account=ta-one",
     ])
