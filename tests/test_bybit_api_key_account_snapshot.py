@@ -45,9 +45,12 @@ CONNECTOR = {
 }
 
 
-def parse(payload=None, *, proved=True, now=NOW):
+_UNSET = object()
+
+
+def parse(payload=_UNSET, *, proved=True, now=NOW):
     return normalize_authenticated_api_key_info(
-        MAIN_API if payload is None else payload,
+        MAIN_API if payload is _UNSET else payload,
         observed_at=now,
         signed_get_proven=proved,
     )
