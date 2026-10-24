@@ -25,6 +25,7 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -1304,6 +1305,2356 @@ def _blocked_multi_account_admissions(
         )
         for activation_id, legs in candidates.items()
     }
+
+
+def _multi_account_admissions(
+    connection: Any,
+    bundles: tuple[object, ...],
+    candidates: Mapping[str, tuple[StrategyExecutionBindingRef, ...]],
+    *,
+    symbol: str,
+    observed_at: datetime,
+    real_selected_for: frozenset[str],
+) -> tuple[dict[str, tuple[AccountAdmissionContext, ...]], frozenset[str]]:
+    """Resolve exact per-account REAL permissions without borrowing legacy arm.
+
+    A registered UID is a routing prerequisite, not signed Bybit proof.
+    Private runtime must independently attest the mounted key's provider UID
+    immediately before each exchange Entry mutation (R03). This function
+    never reads credentials and never grants OWNER ARM.
+    """
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    gate_ready = bool(gate and gate[0]) and bool(LOADED_COMMIT)
+    known = {
+        cast(Any, bundle).activation.activation_id: cast(Any, bundle)
+        for bundle in bundles
+    }
+    output: dict[str, tuple[AccountAdmissionContext, ...]] = {}
+    ready_activations: set[str] = set()
+    for activation_id, bindings in candidates.items():
+        result: list[AccountAdmissionContext] = []
+        bundle = known.get(activation_id)
+        for binding in bindings:
+            reason = "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+            capacity: TradingCapacitySnapshot | None = None
+            admission_port: PostgresEntryAdmissionPort | None = None
+            connector_rows = connection.execute(
+                """SELECT c.account_connector_id
+                     FROM identity.account_connectors c
+                     JOIN identity.trading_accounts a
+                       ON a.trading_account_id=c.trading_account_id
+                    WHERE c.trading_account_id=%s
+                      AND c.status='ACTIVE'
+                      AND c.retired_at IS NULL
+                      AND c.adapter_id='BYBIT_V5_PRIVATE'
+                      AND c.connector_kind='CEX_PRIVATE_RUNTIME'
+                      AND nullif(btrim(c.credential_ref),'') IS NOT NULL
+                      AND a.status='ACTIVE' AND a.environment='MAINNET'
+                      AND a.venue_id='venue-bybit' AND a.account_type='UNIFIED'
+                      AND a.account_kind IN ('MAIN','SUB')
+                      AND a.external_account_ref ~ '^[0-9]+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime | None = None,
+) -> dict[str, StrategyExecutionBindingRef]:
+    if not TRADING_ACCOUNT_ID:
+        return {}
+    at = (observed_at or datetime.now(UTC)).astimezone(UTC)
+    rows = connection.execute(
+        """SELECT b.strategy_execution_binding_id,b.strategy_activation_id,
+                  b.execution_leg,b.trading_account_id
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN strategy_entry.strategy_activations a
+               ON a.activation_id=b.strategy_activation_id
+             JOIN identity.trading_accounts ta
+               ON ta.trading_account_id=b.trading_account_id
+            WHERE b.binding_state='ACTIVE'
+              AND b.execution_leg='PRIMARY'
+              AND b.execution_role='PRIMARY'
+              AND b.allocation_mode='DEDICATED_STRATEGY'
+              AND b.trading_account_id=%s
+              AND b.effective_from<=%s
+              AND (b.effective_to IS NULL OR b.effective_to>%s)
+              AND a.enabled=true
+              AND ta.status='ACTIVE'
+              AND ta.environment='MAINNET'""",
+        (TRADING_ACCOUNT_ID, at, at),
+    ).fetchall()
+    known = {cast(Any, raw_bundle).activation.activation_id for raw_bundle in bundles}
+    result: dict[str, StrategyExecutionBindingRef] = {}
+    for row in rows:
+        ref = StrategyExecutionBindingRef(
+            strategy_execution_binding_id=str(row[0]),
+            strategy_activation_id=str(row[1]),
+            execution_leg=str(row[2]),
+            trading_account_id=str(row[3]),
+        )
+        if ref.strategy_activation_id in known:
+            result[ref.strategy_activation_id] = ref
+    return result
+
+
+def _real_execution_binding_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime | None = None,
+) -> frozenset[str]:
+    return frozenset(_real_execution_bindings(connection,bundles,observed_at=observed_at))
+
+def _real_execution_activation_ids(
+    connection: Any,
+    bundles: tuple[object, ...],
+) -> frozenset[str]:
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    if not gate or not bool(gate[0]) or not LOADED_COMMIT:
+        return frozenset()
+    rows = connection.execute(
+        """SELECT strategy_id,strategy_version,strategy_config_fingerprint
+             FROM strategy_entry.execution_permissions
+            WHERE enabled=true AND enabled_at IS NOT NULL"""
+    ).fetchall()
+    allowed = {tuple(str(value) for value in row) for row in rows}
+    ready: set[str] = set()
+    for raw_bundle in bundles:
+        bundle = cast(Any, raw_bundle)
+        identity = (
+            bundle.card.strategy_id,
+            bundle.card.strategy_version,
+            bundle.card.strategy_config_fingerprint,
+        )
+        if identity not in allowed:
+            continue
+        scope_ready, _scope_reasons = check_legacy_live_arm_account_scope(
+            connection,
+            strategy_activation_id=bundle.activation.activation_id,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            now=datetime.now(UTC),
+        )
+        if not scope_ready:
+            continue
+        symbols = tuple(str(symbol) for symbol in bundle.card.symbols)
+        if not symbols:
+            continue
+        activation_ready = True
+        for symbol in symbols:
+            try:
+                context = LiveArmContext(
+                    strategy_id=bundle.card.strategy_id,
+                    strategy_version=bundle.card.strategy_version,
+                    strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                    strategy_activation_id=bundle.activation.activation_id,
+                    symbol=symbol,
+                    release_commit=LOADED_COMMIT,
+                )
+            except ValueError:
+                activation_ready = False
+                break
+            # LIVE-arm evidence is a pre-arm contract. After a successful
+            # owner-approved arm, ongoing real admission is guarded by the
+            # exact release-bound active arm session plus per-entry technical
+            # readiness and atomic Entry admission below.
+            if active_live_arm_session(connection, context=context) is None:
+                activation_ready = False
+                break
+        if activation_ready:
+            ready.add(bundle.activation.activation_id)
+    return frozenset(ready)
+
+
+def _real_entry_account_state(
+    connection: Any,
+    *,
+    symbol: str,
+    observed_at: datetime,
+    trading_account_id: str | None = None,
+) -> tuple[TechnicalReadiness, TradingCapacitySnapshot | None]:
+    try:
+        generation = current_complete_account_state_generation(
+            connection,
+            account_ref="BYBIT:UNIFIED",
+            trading_account_id=(
+                TRADING_ACCOUNT_ID if trading_account_id is None else trading_account_id
+            ),
+            acquire_account_lock=True,
+        )
+    except AccountStateGenerationUnavailable as exc:
+        return TechnicalReadiness(False, observed_at, str(exc)), None
+
+    state_ref = generation.position_mode_refs.get(symbol)
+    if not state_ref:
+        return (
+            TechnicalReadiness(
+                False,
+                observed_at,
+                f"current account state generation has no position-mode proof for {symbol}",
+            ),
+            None,
+        )
+
+    critical_fault = connection.execute(
+        """SELECT fault_code
+             FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+            ORDER BY detected_at LIMIT 1"""
+    ).fetchone()
+    if critical_fault is not None:
+        return (
+            TechnicalReadiness(
+                False,
+                observed_at,
+                f"open critical lifecycle fault: {critical_fault[0]}",
+            ),
+            None,
+        )
+
+    capacity = TradingCapacitySnapshot(
+        capacity_snapshot_id=generation.generation_id,
+        observed_at=generation.completed_at,
+        available_for_new_trading=generation.available_balance,
+        quality=DataQuality.HIGH,
+        source_ref=f"runtime.account_state_generations:{generation.generation_id}",
+    )
+    return (
+        TechnicalReadiness(
+            True,
+            observed_at,
+            f"complete account state generation {generation.generation_id}",
+        ),
+        capacity,
+    )
+
+
+def _observer_objective_inputs(
+    connection: Any,
+    symbols: tuple[str, ...],
+    observed_at: datetime,
+) -> tuple[ObjectiveContext | None, dict[str, ObjectiveContext], TradingCapacitySnapshot | None]:
+    global_row = connection.execute(
+        """SELECT global_context_id,observed_at,data_quality,payload,source_market_context_id,
+                  market_source_id
+             FROM dispatcher_v2.global_market_contexts
+            WHERE market_source_id=%s
+              AND observed_at <= %s
+            ORDER BY observed_at DESC LIMIT 1""",
+        (BYBIT_PUBLIC_MARKET_SOURCE_ID, observed_at),
+    ).fetchone()
+    global_context: ObjectiveContext | None = None
+    if global_row is not None:
+        global_context = ObjectiveContext(
+            context_id=str(global_row[0]),
+            context_type="DISPATCHER_GLOBAL",
+            observed_at=cast(datetime, global_row[1]).astimezone(UTC),
+            quality=DataQuality(str(global_row[2])),
+            completeness="COMPLETE",
+            payload=FrozenPolicy.from_mapping(cast(Mapping[str, object], global_row[3])),
+            source_refs=(
+                f"market-source:{global_row[5]}",
+                f"dispatcher-global:{global_row[0]}",
+                f"mayak:{global_row[4]}",
+            ),
+        )
+    coins: dict[str, ObjectiveContext] = {}
+    if symbols:
+        expected_linear_ids = [
+            bybit_instrument_id("linear", symbol)
+            for symbol in symbols
+        ]
+        coin_rows = connection.execute(
+            """SELECT DISTINCT ON (linear_instrument_id)
+                      symbol,coin_context_id,observed_at,data_quality,payload,
+                      source_coin_context_id,market_source_id,spot_instrument_id,
+                      linear_instrument_id
+                 FROM dispatcher_v2.coin_market_contexts
+                WHERE market_source_id=%s
+                  AND linear_instrument_id = ANY(%s)
+                  AND observed_at <= %s
+                ORDER BY linear_instrument_id,observed_at DESC""",
+            (BYBIT_PUBLIC_MARKET_SOURCE_ID, expected_linear_ids, observed_at),
+        ).fetchall()
+        for row in coin_rows:
+            symbol = str(row[0])
+            expected_spot_id = bybit_instrument_id("spot", symbol)
+            expected_linear_id = bybit_instrument_id("linear", symbol)
+            if (
+                str(row[6]) != BYBIT_PUBLIC_MARKET_SOURCE_ID
+                or str(row[7]) != expected_spot_id
+                or str(row[8]) != expected_linear_id
+            ):
+                raise RuntimeError(
+                    "DISPATCHER_COIN_MARKET_IDENTITY_MISMATCH "
+                    f"symbol={symbol} source={row[6]} spot={row[7]} linear={row[8]}"
+                )
+            coins[symbol] = ObjectiveContext(
+                context_id=str(row[1]),
+                context_type="DISPATCHER_COIN",
+                observed_at=cast(datetime, row[2]).astimezone(UTC),
+                quality=DataQuality(str(row[3])),
+                completeness="COMPLETE",
+                payload=FrozenPolicy.from_mapping(cast(Mapping[str, object], row[4])),
+                source_refs=(
+                    f"market-source:{row[6]}",
+                    f"instrument:{row[7]}",
+                    f"instrument:{row[8]}",
+                    f"dispatcher-coin:{row[1]}",
+                    f"mayak-coin:{row[5]}",
+                ),
+            )
+    capacity_row = connection.execute(
+        """SELECT capacity_snapshot_id,observed_at,available_for_new_trading,
+                  data_quality,source_account_ref
+             FROM dispatcher_v2.trading_capacity_snapshots
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'
+              AND observed_at <= %s
+            ORDER BY observed_at DESC LIMIT 1""",
+        (TRADING_ACCOUNT_ID, observed_at),
+    ).fetchone()
+    capacity: TradingCapacitySnapshot | None = None
+    if capacity_row is not None:
+        capacity = TradingCapacitySnapshot(
+            capacity_snapshot_id=str(capacity_row[0]),
+            observed_at=cast(datetime, capacity_row[1]).astimezone(UTC),
+            available_for_new_trading=(
+                None if capacity_row[2] is None else Decimal(str(capacity_row[2]))
+            ),
+            quality=DataQuality(str(capacity_row[3])),
+            source_ref=str(capacity_row[4]),
+        )
+    return global_context, coins, capacity
+
+
+def _maybe_record_reverse_transition(
+    connection: psycopg.Connection[Any],
+    evaluation: object,
+    bundle: object,
+) -> str | None:
+    decision = getattr(evaluation, "decision", None)
+    if (
+        decision is None
+        or decision.code
+        is not EntryDecisionCode.EXCHANGE_POSITION_OWNERSHIP_CONFLICT
+    ):
+        return None
+    lifecycle = bundle.card.lifecycle_policy.to_dict()
+    signal = evaluation.signal
+    target = signal.direction.value
+    expected_side = "Sell" if target == "LONG" else "Buy"
+    row = connection.execute(
+        """SELECT position_id,side,exit_plan_fingerprint
+             FROM runtime.position_ownership
+            WHERE state='OPEN'
+              AND strategy_id=%s AND strategy_version=%s
+              AND strategy_config_fingerprint=%s
+              AND symbol=%s
+              AND trading_account_id=%s
+              AND identity_status='PROVEN'
+            ORDER BY fill_at DESC
+            LIMIT 1
+            FOR SHARE""",
+        (
+            signal.strategy_id,
+            signal.strategy_version,
+            signal.strategy_config_fingerprint,
+            signal.symbol,
+            TRADING_ACCOUNT_ID,
+        ),
+    ).fetchone()
+    if row is None or str(row[1]) != expected_side:
+        return None
+    from_direction = (
+        TradeDirection.LONG if str(row[1]) == "Buy" else TradeDirection.SHORT
+    )
+    reverse_intent = build_reverse_transition_intent(
+        evaluation.execution_intent,
+        strategy_activation_id=signal.strategy_activation_id,
+        from_direction=from_direction,
+        lifecycle_policy=lifecycle,
+        capital_policy=bundle.card.capital_policy.to_dict(),
+    )
+    if reverse_intent is None:
+        return None
+    transition_id = "reverse-" + fingerprint(
+        {
+            "strategy_position_id": str(row[0]),
+            "reverse_intent_id": reverse_intent.reverse_intent_id,
+        }
+    )[:32]
+    transition_payload = reverse_intent.transition_payload().to_dict()
+    connection.execute(
+        """INSERT INTO strategy_entry.reverse_transitions(
+               reverse_transition_id,strategy_position_id,
+               strategy_id,strategy_version,strategy_config_fingerprint,
+               entry_plan_fingerprint,exit_plan_fingerprint,
+               strategy_activation_id,signal_id,source_strategy_attempt_id,
+               symbol,from_direction,to_direction,state,requested_at,payload
+           ) VALUES(
+               %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'REQUESTED',%s,%s::jsonb
+           )
+           ON CONFLICT(source_strategy_attempt_id) DO NOTHING""",
+        (
+            transition_id,
+            str(row[0]),
+            signal.strategy_id,
+            signal.strategy_version,
+            signal.strategy_config_fingerprint,
+            signal.entry_plan_fingerprint,
+            str(row[2]),
+            signal.strategy_activation_id,
+            signal.signal_id,
+            evaluation.attempt.strategy_attempt_id,
+            signal.symbol,
+            reverse_intent.from_direction.value,
+            reverse_intent.to_direction.value,
+            signal.detected_at,
+            json.dumps(transition_payload, ensure_ascii=False, default=str),
+        ),
+    )
+    return transition_id
+
+
+OBSERVER_RUNTIME_FAULT_CODE = "UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR"
+
+
+def _record_observer_runtime_fault(
+    connection: Any,
+    exc: BaseException,
+    *,
+    observed_at: datetime,
+    observer_epoch_id: str | None,
+) -> str:
+    current = observed_at.astimezone(UTC)
+    error_type = type(exc).__name__
+    error_message = (str(exc) or error_type)[:1000]
+    signature = fingerprint(
+        {
+            "service": "cripta-universal-entry-observer.service",
+            "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+            "source_commit": LOADED_COMMIT,
+            "error_type": error_type,
+            "error_message": error_message,
+        }
+    )[:32]
+    fault_id = "observer-fault-" + signature
+    exact_ids = {
+        "service": "cripta-universal-entry-observer.service",
+        "source_commit": LOADED_COMMIT,
+        "fault_signature": signature,
+    }
+    payload = {
+        "service": "cripta-universal-entry-observer.service",
+        "runtime_mode": "MULTI_STRATEGY_OBSERVER",
+        "source_commit": LOADED_COMMIT,
+        "error_type": error_type,
+        "error_message": error_message,
+        "last_observer_epoch_id": observer_epoch_id,
+        "first_seen_at": current.isoformat(),
+        "last_seen_at": current.isoformat(),
+        "occurrence_count": 1,
+        "auto_resolve": False,
+        "owner_resolution_required": True,
+        "traceback": traceback.format_exc(limit=8)[-6000:],
+    }
+    connection.execute(
+        """INSERT INTO runtime.lifecycle_faults(
+               fault_id,fault_code,severity,state,strategy_position_id,
+               detected_at,resolved_at,exact_ids,payload
+           ) VALUES(%s,%s,'ERROR','OPEN',NULL,%s,NULL,%s::jsonb,%s::jsonb)
+           ON CONFLICT(fault_id) DO UPDATE
+           SET state='OPEN',
+               resolved_at=NULL,
+               payload=(
+                   runtime.lifecycle_faults.payload
+                   || EXCLUDED.payload
+                   || jsonb_build_object(
+                       'first_seen_at',
+                       coalesce(
+                           runtime.lifecycle_faults.payload->>'first_seen_at',
+                           EXCLUDED.payload->>'first_seen_at'
+                       ),
+                       'occurrence_count',
+                       coalesce(
+                           (runtime.lifecycle_faults.payload->>'occurrence_count')::bigint,
+                           0
+                       ) + 1
+                   )
+               )""",
+        (
+            fault_id,
+            OBSERVER_RUNTIME_FAULT_CODE,
+            current,
+            json.dumps(exact_ids, ensure_ascii=False, sort_keys=True),
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        ),
+    )
+    # Enqueue one durable console notification per exact fault identity.
+    # The authenticated browser confirms presentation separately; this
+    # enqueue must never be interpreted as notification delivery.
+    connection.execute(
+        """INSERT INTO runtime.lifecycle_fault_deliveries(
+               delivery_id,fault_id,channel,state,attempts,next_attempt_at,payload
+           ) VALUES(%s,%s,'DASHBOARD_INBOX','PENDING',0,%s,%s::jsonb)
+           ON CONFLICT(fault_id) DO UPDATE
+           SET state='PENDING',
+               attempts=0,
+               next_attempt_at=EXCLUDED.next_attempt_at,
+               last_attempt_at=NULL,
+               delivered_at=NULL,
+               acknowledged_at=NULL,
+               escalation_at=NULL,
+               last_error=NULL,
+               updated_at=clock_timestamp()
+           WHERE runtime.lifecycle_fault_deliveries.channel='DASHBOARD_INBOX'
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at IS NOT NULL
+             AND runtime.lifecycle_fault_deliveries.acknowledged_at <
+                 (SELECT (payload->>'last_resolved_at')::timestamptz
+                    FROM runtime.lifecycle_faults
+                   WHERE fault_id=EXCLUDED.fault_id)""",
+        (
+            "observer-inbox-" + fault_id,
+            fault_id,
+            current,
+            json.dumps(
+                {
+                    "fault_id": fault_id,
+                    "fault_code": OBSERVER_RUNTIME_FAULT_CODE,
+                    "channel": "DASHBOARD_INBOX",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        ),
+    )
+    return fault_id
+
+
+def _observer_status(
+    *,
+    state: str,
+    epoch_id: str | None,
+    active_bundles: tuple[object, ...],
+    symbols: tuple[str, ...],
+    facts_received: int = 0,
+    evaluations: int = 0,
+    signals: int = 0,
+    warmup_until: datetime | None = None,
+    reason: str = "",
+    sensor_status: Mapping[str, object] | None = None,
+    strategy_monitors: tuple[Mapping[str, object], ...] = (),
+) -> None:
+    _atomic_json(
+        OBSERVER_STATUS_PATH,
+        {
+            "updated_at": datetime.now(UTC).isoformat(),
+            "service": "cripta-universal-entry-observer.service",
+            "runtime_mode": "MULTI_STRATEGY_OBSERVER",
+            "state": state,
+            "reason": reason,
+            "observer_ready": state in {"IDLE", "WARMUP", "RUNNING", "RELOADING"},
+            "trading_effect": "NONE",
+            "source_commit": LOADED_COMMIT,
+            "fact_source_id": FACT_SOURCE_ID,
+            "observer_epoch_id": epoch_id,
+            "active_strategies": len(active_bundles),
+            "active_entry_plans": [
+                cast(Any, item).entry_plan.entry_plan_fingerprint for item in active_bundles
+            ],
+            "active_exit_plans": [
+                cast(Any, item).exit_plan.exit_plan_fingerprint for item in active_bundles
+            ],
+            "symbols": list(symbols),
+            "facts_received": facts_received,
+            "evaluations": evaluations,
+            "signals": signals,
+            "warmup_until": None if warmup_until is None else warmup_until.isoformat(),
+            "sensor_status": dict(sensor_status or {}),
+            "strategy_monitors": [dict(item) for item in strategy_monitors],
+        },
+    )
+
+
+def _observer_unknown_prestart_warmup_seconds(
+    bundles: tuple[object, ...], service_started_at: datetime
+) -> int:
+    horizons = [
+        derive_unknown_prestart_horizon_seconds(cast(Any, bundle).entry_plan)
+        if cast(Any, bundle).activation.enabled_at < service_started_at
+        else 0
+        for bundle in bundles
+    ]
+    return max(horizons, default=0)
+
+
+def _run_observer_epoch(
+    connection: Any,
+    bundles: tuple[object, ...],
+    stopping: Callable[[], bool],
+    service_started_at: datetime,
+) -> str:
+    epoch_started = datetime.now(UTC)
+    signature = _observer_light_signature(connection)
+    if not signature:
+        return "RELOAD"
+    registry = ActivePlanRegistry()
+    consumer_instance_id = (
+        f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
+        f"{service_started_at.isoformat()}"
+    )
+    for raw_bundle in bundles:
+        bundle = cast(Any, raw_bundle)
+        registry.register_card(bundle.card)
+        materialized = registry.activate(bundle.activation)
+        if materialized.entry_plan_fingerprint != bundle.entry_plan.entry_plan_fingerprint:
+            raise RuntimeError("observer materialized EntryPlan fingerprint mismatch")
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "universal_entry_multi_strategy_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
+    engine = UniversalEntryEngine(registry)
+    store = StrategyEntryStore(connection)
+    counterfactual_store = AnalystCounterfactualStore(connection)
+    paper = PaperTradeRuntime(connection, bundles=tuple(cast(Any, bundles)))
+    real_execution_selected_for = _real_execution_selected_activation_ids(
+        connection, bundles
+    )
+    release_ready_for = _real_execution_activation_ids(connection, bundles)
+    multi_account_candidates = _unarmed_multi_account_candidate_bindings(
+        connection, bundles, observed_at=epoch_started
+    )
+    execution_bindings = _real_execution_bindings(
+        connection, bundles, observed_at=epoch_started
+    )
+    execution_bindings = {
+        activation: binding
+        for activation, binding in execution_bindings.items()
+        if activation not in multi_account_candidates
+    }
+    binding_ready_for = frozenset(execution_bindings)
+    real_admission_ready_for = release_ready_for.intersection(binding_ready_for)
+    entry_admission_port = (
+        PostgresEntryAdmissionPort(connection)
+        if real_execution_selected_for
+        else None
+    )
+    bundle_by_entry_plan = {
+        cast(Any, item).entry_plan.entry_plan_fingerprint: cast(Any, item) for item in bundles
+    }
+    symbols = tuple(
+        sorted({symbol for bundle in cast(Any, bundles) for symbol in bundle.card.symbols})
+    )
+    intervals = _observer_intervals(bundles)
+    if "5" not in intervals:
+        raise RuntimeError("production observer requires 5m candidate transport")
+    epoch_id = (
+        "ueo-"
+        + fingerprint(
+            {
+                "started_at": epoch_started,
+                "plans": [
+                    cast(Any, bundle).entry_plan.entry_plan_fingerprint for bundle in bundles
+                ],
+                "source_commit": LOADED_COMMIT,
+            }
+        )[:32]
+    )
+    warmup_seconds = _observer_unknown_prestart_warmup_seconds(bundles, service_started_at)
+    warmup_until = epoch_started + timedelta(seconds=warmup_seconds)
+    required_flow_symbols = {
+        symbol
+        for bundle in cast(Any, bundles)
+        if bool(bundle.entry_plan.watch_policy.to_dict().get("flow", {}).get("enabled", False))
+        for symbol in bundle.entry_plan.symbols
+    }
+    required_oi_symbols = {
+        symbol
+        for bundle in cast(Any, bundles)
+        if bool(bundle.entry_plan.watch_policy.to_dict().get("oi", {}).get("enabled", False))
+        for symbol in bundle.entry_plan.symbols
+    }
+
+    closed_boundaries: dict[tuple[str, str], datetime] = {}
+    for symbol in symbols:
+        observed = datetime.now(UTC)
+        history = _fetch_history(symbol, observed, intervals)
+        oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
+        for timeframe in intervals:
+            rows = history.get(timeframe, ())
+            if not rows:
+                raise RuntimeError(f"observer causal history seed missing {symbol}:{timeframe}")
+            closed_boundaries[(symbol, timeframe)] = max(item.closed_at for item in rows)
+        engine.load_watch_history(
+            symbol,
+            {key: tuple(value) for key, value in history.items()},
+            tuple(oi_history),
+            observed_at=observed,
+        )
+        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        time.sleep(0.05)
+
+    flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
+    last_trade_prices: dict[str, Decimal] = {}
+    oi_seen: set[str] = set()
+    trade_cursors: dict[str, TradeCursor] = {}
+    trade_current_seq_exec_ids: dict[str, set[str]] = {}
+    trade_proof_monotonic: dict[str, float] = {}
+    deduper = ExactFactDeduper()
+    oi_config = Oi30sConfig(
+        fact_source_id=FACT_SOURCE_ID,
+        required_symbols=symbols,
+        slot_seconds=30,
+        request_timeout_seconds=5.0,
+        retry_interval_seconds=0.25,
+    )
+    oi_health = Oi30sHealthTracker(oi_config)
+    oi_results: queue.Queue[OiSlotResult] = queue.Queue()
+    oi_stop = threading.Event()
+    trade_mirror = PublicTradeMirrorBuffer(
+        tuple(symbols),
+        retention_seconds=MIRROR_RETENTION_SECONDS,
+    )
+    trade_mirror_stop = threading.Event()
+    trade_mirror_ready = threading.Event()
+    trade_mirror_thread = threading.Thread(
+        target=_run_public_trade_mirror,
+        args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+        name="universal-entry-observer-public-trade-mirror",
+        daemon=True,
+    )
+    oi_thread = threading.Thread(
+        target=_run_rest_oi30s_worker,
+        args=(oi_config, oi_results, oi_stop),
+        name="universal-entry-observer-oi30s",
+        daemon=True,
+    )
+    sock: Any | None = None
+    facts_received = 0
+    evaluations_count = 0
+    signals_count = 0
+    last_inputs_refresh = 0.0
+    global_context: ObjectiveContext | None = None
+    coin_contexts: dict[str, ObjectiveContext] = {}
+    capacity: TradingCapacitySnapshot | None = None
+    current_signature = signature
+    provenance = FrozenPolicy.from_mapping(
+        {
+            "source": "universal_entry_multi_strategy_observer",
+            "observer_epoch_id": epoch_id,
+            "source_commit": LOADED_COMMIT,
+            "fact_source_id": FACT_SOURCE_ID,
+        }
+    )
+
+    def sensor_status(now: datetime) -> dict[str, object]:
+        flow_counts = {
+            symbol: len(flow_minutes[symbol]) for symbol in sorted(required_flow_symbols)
+        }
+        missing_flow = [symbol for symbol, count in flow_counts.items() if count < 5]
+        missing_oi = sorted(required_oi_symbols.difference(oi_seen))
+        return {
+            "time_ready": now >= warmup_until,
+            "flow_required_symbols": sorted(required_flow_symbols),
+            "flow_minute_counts": flow_counts,
+            "flow_missing_symbols": missing_flow,
+            "oi_required_symbols": sorted(required_oi_symbols),
+            "oi_seen_symbols": sorted(oi_seen),
+            "oi_missing_symbols": missing_oi,
+        }
+
+    def sensor_ready(now: datetime) -> bool:
+        status = sensor_status(now)
+        return bool(
+            status["time_ready"]
+            and not status["flow_missing_symbols"]
+            and not status["oi_missing_symbols"]
+        )
+
+    def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
+        rows: list[Mapping[str, object]] = []
+        for raw_bundle in bundles:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                watch = engine.watch_snapshot(plan.entry_plan_fingerprint, symbol)
+                lifecycle = engine.lifecycle_snapshot(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                cooldown_until = engine.candidate_cooldown_until(
+                    plan.entry_plan_fingerprint, symbol, account_ref="BYBIT:UNIFIED"
+                )
+                current_price = last_trade_prices.get(symbol)
+                geometry = {
+                    timeframe: {
+                        "range_high": str(zone.range_high),
+                        "range_low": str(zone.range_low),
+                        "atr": str(zone.atr),
+                        "resistance_top": str(zone.resistance_top),
+                        "resistance_bottom": str(zone.resistance_bottom),
+                        "support_top": str(zone.support_top),
+                        "support_bottom": str(zone.support_bottom),
+                        "effective_lookback": zone.effective_lookback,
+                        "regime_reset_at": (
+                            None
+                            if zone.regime_reset_at is None
+                            else zone.regime_reset_at.isoformat()
+                        ),
+                    }
+                    for timeframe, zone in watch.geometry.items()
+                }
+                for direction in plan.directions:
+                    entry_price = (
+                        watch.long_entry if direction.value == "LONG" else watch.short_entry
+                    )
+                    distance_pct: Decimal | None = None
+                    if current_price is not None and entry_price is not None and entry_price > 0:
+                        if direction.value == "LONG":
+                            distance_pct = (
+                                (current_price - entry_price) / entry_price * Decimal("100")
+                            )
+                        else:
+                            distance_pct = (
+                                (entry_price - current_price) / entry_price * Decimal("100")
+                            )
+                    embargo_active = (
+                        lifecycle.entry_embargo_until is not None
+                        and now < lifecycle.entry_embargo_until
+                    )
+                    cooldown_active = cooldown_until is not None and now < cooldown_until
+                    if embargo_active:
+                        state = "EMBARGO"
+                    elif cooldown_active:
+                        state = "COOLDOWN"
+                    elif watch.hourly_swing_blocked:
+                        state = "SWING_BLOCK"
+                    elif entry_price is None:
+                        state = "WAITING"
+                    elif distance_pct is not None and distance_pct <= 0:
+                        state = "AT_OR_BEYOND_ENTRY"
+                    elif distance_pct is not None and distance_pct <= Decimal("1"):
+                        state = "APPROACH"
+                    else:
+                        state = "WATCH"
+                    rows.append(
+                        {
+                            "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                            "strategy_id": plan.strategy_id,
+                            "strategy_version": plan.strategy_version,
+                            "strategy_name": bundle.card.name,
+                            "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                            "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                            "activation_id": plan.strategy_activation_id,
+                            "symbol": symbol,
+                            "direction": direction.value,
+                            "state": state,
+                            "current_price": None if current_price is None else str(current_price),
+                            "entry_price": None if entry_price is None else str(entry_price),
+                            "distance_pct": None if distance_pct is None else str(distance_pct),
+                            "r1_stability": (
+                                None
+                                if watch.r1_stability is None
+                                else {
+                                    "required_states": watch.r1_stability.required_states,
+                                    "available_states": watch.r1_stability.available_states,
+                                    "strict_stable_states": watch.r1_stability.strict_stable_states,
+                                    "low_stable_states": watch.r1_stability.low_stable_states,
+                                    "high_stable_states": watch.r1_stability.high_stable_states,
+                                    "working_width_pct": (
+                                        None
+                                        if watch.r1_stability.working_width_pct is None
+                                        else str(watch.r1_stability.working_width_pct)
+                                    ),
+                                    "working_width_min_pct": str(
+                                        watch.r1_stability.working_width_min_pct
+                                    ),
+                                    "width_ready": watch.r1_stability.width_ready,
+                                    "history_ready": watch.r1_stability.history_ready,
+                                    "reset_reason": watch.r1_stability.reset_reason,
+                                    "observed_at": (
+                                        None
+                                        if watch.r1_stability.observed_at is None
+                                        else watch.r1_stability.observed_at.isoformat()
+                                    ),
+                                }
+                            ),
+                            "candidate_id": watch.candidate_id,
+                            "candidate_bar_at": (
+                                None
+                                if watch.candidate_bar_at is None
+                                else watch.candidate_bar_at.isoformat()
+                            ),
+                            "geometry": geometry,
+                            "hourly_swing_blocked": watch.hourly_swing_blocked,
+                            "hourly_swing_percent": (
+                                None
+                                if watch.hourly_swing_percent is None
+                                else str(watch.hourly_swing_percent)
+                            ),
+                            "flow_condition_met": watch.last_flow_condition_met,
+                            "oi_condition_met": watch.last_oi_condition_met,
+                            "last_touch_at": (
+                                None
+                                if watch.last_touch_at is None
+                                else watch.last_touch_at.isoformat()
+                            ),
+                            "candidate_cooldown_until": (
+                                None if cooldown_until is None else cooldown_until.isoformat()
+                            ),
+                            "tracked_outcomes": lifecycle.tracked_outcomes,
+                            "last_resolution": lifecycle.last_resolution,
+                            "last_resolution_at": (
+                                None
+                                if lifecycle.last_resolution_at is None
+                                else lifecycle.last_resolution_at.isoformat()
+                            ),
+                            "entry_embargo_until": (
+                                None
+                                if lifecycle.entry_embargo_until is None
+                                else lifecycle.entry_embargo_until.isoformat()
+                            ),
+                            "updated_at": now.isoformat(),
+                        }
+                    )
+        return tuple(rows)
+
+    def refresh_inputs(fact_at: datetime) -> None:
+        nonlocal last_inputs_refresh, global_context, coin_contexts, capacity
+        now_mono = time.monotonic()
+        if now_mono - last_inputs_refresh < 1.0:
+            return
+        global_context, coin_contexts, capacity = _observer_objective_inputs(
+            connection, symbols, fact_at
+        )
+        last_inputs_refresh = now_mono
+
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        nonlocal facts_received, evaluations_count, signals_count
+        if not deduper.accept(fact.fact_id):
+            return
+        if fact.event_kind == "PUBLIC_TRADE":
+            if cursor is None:
+                raise ContinuityNotProvable("observer PUBLIC_TRADE lacks exact cursor")
+            previous = trade_cursors.get(fact.symbol)
+            if previous is not None and cursor.seq < previous.seq:
+                raise ContinuityNotProvable(
+                    f"observer PUBLIC_TRADE sequence regressed for {fact.symbol}"
+                )
+            if previous is None or cursor.seq > previous.seq:
+                trade_current_seq_exec_ids[fact.symbol] = {cursor.exec_id}
+            else:
+                trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(cursor.exec_id)
+            trade_cursors[fact.symbol] = cursor
+            trade_proof_monotonic[fact.symbol] = time.monotonic()
+            trade_attrs = fact.attributes.to_dict()
+            last_trade_prices[fact.symbol] = Decimal(str(trade_attrs["price"]))
+            flow_minutes[fact.symbol].add(
+                fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+            )
+            cutoff = fact.observed_at - timedelta(minutes=10)
+            flow_minutes[fact.symbol] = {
+                minute for minute in flow_minutes[fact.symbol] if minute >= cutoff
+            }
+        elif fact.event_kind == "OPEN_INTEREST":
+            oi_seen.add(fact.symbol)
+        elif fact.event_kind == "CANDLE_CLOSED":
+            attrs = fact.attributes.to_dict()
+            timeframe = str(attrs.get("timeframe") or "")
+            boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            prior = closed_boundaries.get((fact.symbol, timeframe))
+            if prior is not None and boundary < prior:
+                raise ContinuityNotProvable(
+                    f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
+                )
+            closed_boundaries[(fact.symbol, timeframe)] = boundary
+            if timeframe == "5":
+                paper.on_candle_closed(
+                    Candle(
+                        symbol=fact.symbol,
+                        timeframe="5",
+                        opened_at=datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC),
+                        closed_at=boundary,
+                        open=Decimal(str(attrs["open"])),
+                        high=Decimal(str(attrs["high"])),
+                        low=Decimal(str(attrs["low"])),
+                        close=Decimal(str(attrs["close"])),
+                        volume=Decimal(str(attrs["volume"])),
+                        is_closed=True,
+                    )
+                )
+        refresh_inputs(fact.observed_at)
+        contexts: dict[str, ObjectiveContext] = {}
+        if global_context is not None and global_context.observed_at <= fact.observed_at:
+            contexts["dispatcher.global"] = global_context
+        coin = coin_contexts.get(fact.symbol)
+        if coin is not None and coin.observed_at <= fact.observed_at:
+            contexts["dispatcher.coin"] = coin
+        if fact.event_kind == "PUBLIC_TRADE":
+            attrs = fact.attributes.to_dict()
+            paper.on_public_trade(
+                symbol=fact.symbol,
+                price=Decimal(str(attrs["price"])),
+                observed_at=fact.observed_at,
+                contexts=contexts,
+            )
+        admission_time = (
+            datetime.now(UTC) if real_execution_selected_for else fact.observed_at
+        )
+        evaluation_transaction = (
+            connection.transaction() if real_execution_selected_for else nullcontext()
+        )
+        with evaluation_transaction:
+            if real_admission_ready_for:
+                readiness, admission_capacity = _real_entry_account_state(
+                    connection,
+                    symbol=fact.symbol,
+                    observed_at=admission_time,
+                )
+            elif real_execution_selected_for:
+                readiness = TechnicalReadiness(
+                    False,
+                    admission_time,
+                    "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                )
+                admission_capacity = None
+            else:
+                readiness = TechnicalReadiness(
+                    True,
+                    fact.observed_at,
+                    "SHADOW observer causal transport is continuous",
+                )
+                admission_capacity = capacity
+            scoped_admissions, scoped_ready_for = _multi_account_admissions(
+                connection,
+                bundles,
+                multi_account_candidates,
+                symbol=fact.symbol,
+                observed_at=admission_time,
+                real_selected_for=real_execution_selected_for,
+            ) if multi_account_candidates else ({}, frozenset())
+            evaluations = engine.process(
+                fact,
+                contexts=contexts,
+                capacity=admission_capacity,
+                technical_readiness=readiness,
+                account_ref="BYBIT:UNIFIED",
+                entry_admission_port=entry_admission_port,
+                real_admission_required_for=real_execution_selected_for,
+                real_admission_ready_for=real_admission_ready_for | scoped_ready_for,
+                execution_bindings=execution_bindings,
+                account_admissions=scoped_admissions if multi_account_candidates else None,
+                exchange_position_keys={
+                    symbol: exchange_position_key(TRADING_ACCOUNT_ID, symbol, 0)
+                    for symbol in symbols
+                },
+                allow_new_signals=sensor_ready(fact.observed_at),
+                admission_time=admission_time,
+            )
+            facts_received += 1
+            for evaluation in evaluations:
+                store.record_evaluation(evaluation, provenance=provenance)
+                bundle = bundle_by_entry_plan.get(
+                    evaluation.signal.entry_plan_fingerprint
+                )
+                if bundle is None:
+                    raise RuntimeError(
+                        "observer exact Strategy/EntryPlan bundle is missing"
+                    )
+                _maybe_record_reverse_transition(
+                    connection,
+                    evaluation,
+                    bundle,
+                )
+                # The existing counterfactual schema has legacy
+                # single-account lineage. Do not collapse per-account
+                # outcomes into an unattributed counterfactual row.
+                if (
+                    evaluation.signal.strategy_activation_id in real_execution_selected_for
+                    and evaluation.decision is not None
+                ):
+                    candidate = build_insufficient_funds_candidate(
+                        evaluation,
+                        entry_plan=bundle.entry_plan,
+                        exit_plan=bundle.exit_plan,
+                        captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
+                    )
+                    if candidate is not None:
+                        counterfactual_store.record_candidate(candidate)
+                if (
+                    evaluation.signal.strategy_activation_id
+                    not in real_execution_selected_for
+                ):
+                    paper.create_order(evaluation, bundle, now=fact.observed_at)
+                evaluations_count += 1
+                signals_count += 1
+
+    try:
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "observer publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
+        oi_thread.start()
+        sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
+        buffered_messages = list(buffered)
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
+        next_status = 0.0
+        next_signature = 0.0
+        _observer_status(
+            state="WARMUP" if not sensor_ready(datetime.now(UTC)) else "RUNNING",
+            epoch_id=epoch_id,
+            active_bundles=bundles,
+            symbols=symbols,
+            warmup_until=warmup_until,
+            reason="causal seed complete",
+            sensor_status=sensor_status(datetime.now(UTC)),
+            strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+        )
+        while not stopping():
+            now_mono = time.monotonic()
+            if now_mono >= next_signature:
+                latest_signature = _observer_light_signature(connection)
+                if latest_signature != current_signature:
+                    _observer_status(
+                        state="RELOADING",
+                        epoch_id=epoch_id,
+                        active_bundles=bundles,
+                        symbols=symbols,
+                        facts_received=facts_received,
+                        evaluations=evaluations_count,
+                        signals=signals_count,
+                        warmup_until=warmup_until,
+                        reason="StrategyActivation set changed",
+                        sensor_status=sensor_status(datetime.now(UTC)),
+                        strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                    )
+                    return "RELOAD"
+                next_signature = now_mono + 1.0
+            stale = tuple(
+                symbol
+                for symbol, cursor in trade_cursors.items()
+                if now_mono - trade_proof_monotonic.get(symbol, now_mono)
+                >= TRADE_SILENCE_AUDIT_SECONDS
+            )
+            if stale:
+                try:
+                    _audit_public_trade_silence(stale, trade_cursors, trade_current_seq_exec_ids)
+                except PublicTradeStreamBehind as audit_exc:
+                    # Validate all REST-proven missing execIds before replaying any
+                    # event. A nonempty mirror result is not continuity proof.
+                    recovered_by_symbol = {}
+                    for symbol, expected in audit_exc.missing_exec_ids.items():
+                        recovered = trade_mirror.recover_after(
+                            {symbol: trade_cursors[symbol]},
+                            cutoff_at=audit_exc.cutoff_by_symbol[symbol],
+                        )
+                        assert_exact_recovery_coverage(
+                            symbol=symbol,
+                            expected_exec_ids=expected,
+                            recovered=recovered,
+                        )
+                        recovered_by_symbol[symbol] = recovered
+                    # Preserve the mirror's original cross-symbol received order.
+                    # Replaying in alphabetical symbol order changes causal semantics.
+                    recovered_all = sorted(
+                        (event for events in recovered_by_symbol.values() for event in events),
+                        key=lambda event: event.ordinal,
+                    )
+                    for event in recovered_all:
+                        process_fact(
+                            _replay_trade_fact(event.as_replay_trade(), event.received_at),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                proven_at = time.monotonic()
+                for symbol in stale:
+                    trade_proof_monotonic[symbol] = proven_at
+            while True:
+                try:
+                    oi_result = oi_results.get_nowait()
+                except queue.Empty:
+                    break
+                oi_health.accept(oi_result)
+                if oi_result.state is not OiSlotState.COMPLETE:
+                    raise ContinuityNotProvable(
+                        f"observer OI30S slot {oi_result.slot_id} is {oi_result.state.value}"
+                    )
+                for fact in oi_result.facts:
+                    process_fact(fact)
+            message: dict[str, Any] | None = None
+            received_at = datetime.now(UTC)
+            if buffered_messages:
+                message = buffered_messages.pop(0)
+            else:
+                try:
+                    raw = sock.recv()
+                    received_at = datetime.now(UTC)
+                    if raw in (None, ""):
+                        raise websocket.WebSocketConnectionClosedException(
+                            "observer public WebSocket closed"
+                        )
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        message = cast(dict[str, Any], parsed)
+                except websocket.WebSocketTimeoutException:
+                    pass
+            now_mono = time.monotonic()
+            if heartbeat.deadline_exceeded(now_mono):
+                raise ContinuityNotProvable("observer application heartbeat deadline exceeded")
+            if message is not None:
+                if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                    heartbeat.note_pong(now_mono)
+                elif message.get("op") != "subscribe":
+                    heartbeat.note_market_frame(now_mono)
+                topic = str(message.get("topic") or "")
+                if topic.startswith("publicTrade."):
+                    data = message.get("data")
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, Mapping):
+                                symbol = str(item.get("s") or "").upper()
+                                if symbol in symbols:
+                                    process_fact(
+                                        _trade_fact(item, received_at),
+                                        _trade_cursor(item),
+                                    )
+                elif topic.startswith("kline."):
+                    for fact in _kline_facts(message, received_at):
+                        if fact.symbol in symbols:
+                            process_fact(fact)
+            if heartbeat.ping_due(now_mono):
+                sock.send('{"op":"ping"}')
+                heartbeat.note_ping_sent(now_mono)
+            if now_mono >= next_status:
+                running = sensor_ready(datetime.now(UTC))
+                _observer_status(
+                    state="RUNNING" if running else "WARMUP",
+                    epoch_id=epoch_id,
+                    active_bundles=bundles,
+                    symbols=symbols,
+                    facts_received=facts_received,
+                    evaluations=evaluations_count,
+                    signals=signals_count,
+                    warmup_until=warmup_until,
+                    reason=(
+                        "all active StrategyPlans consume one causal fact stream"
+                        if running
+                        else "waiting for plan-owned pre-start influence/sensor completeness"
+                    ),
+                    sensor_status=sensor_status(datetime.now(UTC)),
+                    strategy_monitors=strategy_monitor_rows(datetime.now(UTC)),
+                )
+                next_status = now_mono + 2.0
+        return "STOP"
+    finally:
+        oi_stop.set()
+        if oi_thread.ident is not None:
+            oi_thread.join(timeout=2.0)
+        trade_mirror_stop.set()
+        if trade_mirror_thread.ident is not None:
+            trade_mirror_thread.join(timeout=2.0)
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
+
+
+def _run_multi_strategy_observer() -> None:
+    if not LOADED_COMMIT:
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
+    if FACT_SOURCE_ID != REST_OI30S_SOURCE_ID or OI_SAMPLE_SECONDS != 30:
+        raise RuntimeError(
+            "multi-Strategy observer requires BYBIT_PUBLIC_REST_CURRENT_OI_30S_V1 at 30s"
+        )
+    OBSERVER_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    service_started_at = datetime.now(UTC)
+    stopping_flag = False
+    disconnect_count = 0
+    disconnect_window_started = 0.0
+
+    def stop(_signum: int, _frame: object) -> None:
+        nonlocal stopping_flag
+        stopping_flag = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    with psycopg.connect(DATABASE_DSN, autocommit=True) as connection:
+        while not stopping_flag:
+            try:
+                bundles = load_active_strategy_bundles(connection)
+                if not bundles:
+                    _observer_status(
+                        state="IDLE",
+                        epoch_id=None,
+                        active_bundles=(),
+                        symbols=(),
+                        reason="no enabled StrategyActivation",
+                    )
+                    time.sleep(1.0)
+                    continue
+                outcome = _run_observer_epoch(
+                    connection,
+                    cast(tuple[object, ...], bundles),
+                    lambda: stopping_flag,
+                    service_started_at,
+                )
+                if outcome == "STOP":
+                    break
+                disconnect_count = 0
+            except websocket.WebSocketConnectionClosedException as exc:
+                now_mono = time.monotonic()
+                if now_mono - disconnect_window_started > 60.0:
+                    disconnect_window_started = now_mono
+                    disconnect_count = 0
+                disconnect_count += 1
+                if disconnect_count >= 3:
+                    fault_id = _record_observer_runtime_fault(
+                        connection, exc, observed_at=datetime.now(UTC), observer_epoch_id=None
+                    )
+                    _observer_status(
+                        state="ERROR", epoch_id=None, active_bundles=(), symbols=(),
+                        reason=f"repeated WebSocket disconnects [fault_id={fault_id}]",
+                    )
+                    if stopping_flag:
+                        break
+                    time.sleep(2.0)
+                    continue
+                # A public socket drop starts a fresh epoch; the continuity
+                # state is never reused to admit new real entries.
+                _observer_status(
+                    state="RECONNECTING",
+                    epoch_id=None,
+                    active_bundles=(),
+                    symbols=(),
+                    reason=f"public WebSocket disconnected: {type(exc).__name__}",
+                )
+                if stopping_flag:
+                    break
+                time.sleep(2.0)
+            except Exception as exc:
+                try:
+                    fault_id = _record_observer_runtime_fault(
+                        connection,
+                        exc,
+                        observed_at=datetime.now(UTC),
+                        observer_epoch_id=None,
+                    )
+                except Exception as persist_exc:
+                    _observer_status(
+                        state="ERROR",
+                        epoch_id=None,
+                        active_bundles=(),
+                        symbols=(),
+                        reason=(
+                            f"{type(exc).__name__}: {exc}; durable fault persistence "
+                            f"failed: {type(persist_exc).__name__}: {persist_exc}"
+                        ),
+                    )
+                    raise RuntimeError(
+                        "Universal Entry observer durable fault persistence failed"
+                    ) from persist_exc
+                _observer_status(
+                    state="ERROR",
+                    epoch_id=None,
+                    active_bundles=(),
+                    symbols=(),
+                    reason=f"{type(exc).__name__}: {exc} [fault_id={fault_id}]",
+                )
+                if stopping_flag:
+                    break
+                time.sleep(2.0)
+    _observer_status(
+        state="STOPPED",
+        epoch_id=None,
+        active_bundles=(),
+        symbols=(),
+        reason="service stopped",
+    )
+
+
+def _run_parity_main() -> None:
+    if not LOADED_COMMIT:
+        raise RuntimeError("CRIPTA_RELEASE_COMMIT is required")
+    if OI_SAMPLE_SECONDS <= 0:
+        raise RuntimeError("CRIPTA_U5_OI_SAMPLE_SECONDS must be positive")
+    use_rest_oi30s = FACT_SOURCE_ID == REST_OI30S_SOURCE_ID
+    if use_rest_oi30s and OI_SAMPLE_SECONDS != 30:
+        raise RuntimeError("REST current OI source requires exact 30-second slots")
+    bundle = load_v1_compatibility_bundle(PROJECT_ROOT)
+    plan, _ = materialize_plans(bundle.card, bundle.activation)
+    calibration_path = PROJECT_ROOT / bundle.calibration_relative_path
+    calibration_size = calibration_path.stat().st_size
+    if calibration_size != 4647:
+        raise RuntimeError("frozen calibration size does not match published U4 evidence")
+    symbols = bundle.card.symbols
+    if len(symbols) != 10:
+        raise RuntimeError("U5 frozen V1 Strategy scope must contain exactly 10 symbols")
+
+    started_at = datetime.now(UTC)
+    service_instance_id = f"{socket.gethostname()}:{os.getpid()}:{started_at.isoformat()}"
+    parity_run_id = (
+        "spr-"
+        + fingerprint(
+            {
+                "strategy": bundle.card.strategy_config_fingerprint,
+                "plan": plan.entry_plan_fingerprint,
+                "service": service_instance_id,
+                "started_at": started_at,
+            }
+        )[:32]
+    )
+    identity = ShadowRunIdentity(
+        parity_run_id=parity_run_id,
+        strategy_id=bundle.card.strategy_id,
+        strategy_version=bundle.card.strategy_version,
+        strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+        entry_plan_fingerprint=plan.entry_plan_fingerprint,
+        calibration_sha256=bundle.calibration_sha256,
+        calibration_size=calibration_size,
+        baseline_source_commit=BASELINE_COMMIT,
+        universal_source_commit=LOADED_COMMIT,
+        fact_source_id=FACT_SOURCE_ID,
+        service_instance_id=service_instance_id,
+        started_at=started_at,
+    )
+    gate = ShadowComparabilityGate(
+        started_at,
+        required_warmup_seconds=derive_unknown_prestart_horizon_seconds(plan),
+    )
+    journal = DurableFactJournal(JOURNAL_PATH)
+    stopping = False
+
+    def request_stop(_signum: int, _frame: object) -> None:
+        nonlocal stopping
+        stopping = True
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
+
+    connection = psycopg.connect(DATABASE_DSN, autocommit=True)
+    store = ShadowParityStore(connection)
+    store.ensure_policy_identity(bundle.card, plan)
+    recovered_run_id = store.finalize_unfinished_run_for_restart(
+        strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+        entry_plan_fingerprint=plan.entry_plan_fingerprint,
+        fact_source_id=FACT_SOURCE_ID,
+        occurred_at=started_at,
+    )
+    initial_summary: dict[str, object] = {
+        "trading_effect": "NONE",
+        "state": "WARMUP",
+        "reason": "service startup",
+        "recovered_unfinished_run_id": recovered_run_id,
+        "symbols": list(symbols),
+        "facts_received": 0,
+        "comparable_events": 0,
+        "matched_events": 0,
+        "mismatches_by_category": {},
+        "transport_reconnects": 0,
+    }
+    store.start_run(identity, summary=initial_summary)
+
+    runners: dict[str, V1DeterministicParityRunner] = {}
+    sock: Any | None = None
+    oi_stop_event: threading.Event | None = None
+    oi_thread: threading.Thread | None = None
+    trade_mirror_stop: threading.Event | None = None
+    trade_mirror_thread: threading.Thread | None = None
+    try:
+        closed_boundaries: dict[tuple[str, str], datetime] = {}
+        for symbol in symbols:
+            if stopping:
+                break
+            observed_at = datetime.now(UTC)
+            history = _fetch_history(symbol, observed_at)
+            oi_history = _fetch_oi_history(symbol)
+            runner_history: dict[str, tuple[object, ...]] = {
+                timeframe: tuple(rows) for timeframe, rows in history.items()
+            }
+            for timeframe, rows in history.items():
+                if not rows:
+                    raise RuntimeError(f"causal history seed missing {symbol}:{timeframe}")
+                closed_boundaries[(symbol, timeframe)] = max(row.closed_at for row in rows)
+            runners[symbol] = V1DeterministicParityRunner(
+                bundle,
+                symbol=symbol,
+                candles=runner_history,
+                oi_points=tuple(oi_history),
+                observed_at=observed_at,
+            )
+        if len(runners) != len(symbols):
+            raise RuntimeError("causal history seed incomplete")
+        gate.mark_seed_complete()
+        comparator = OnlineParityComparator(identity, runners)
+        state = gate.state_at(datetime.now(UTC))
+        last_state = state
+        facts_received = 0
+        flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
+        last_oi_sample: dict[str, datetime] = {}
+        trade_cursors: dict[str, TradeCursor] = {}
+        trade_current_seq_exec_ids: dict[str, set[str]] = {}
+        trade_proof_monotonic: dict[str, float] = {}
+        oi_cursors: dict[str, OiSampleCursor] = {}
+        bar_open_boundaries: dict[str, datetime] = {}
+        deduper = ExactFactDeduper()
+        transport_reconnects = 0
+        trade_audits = 0
+        trade_audit_reconnects = 0
+        oi_config = (
+            Oi30sConfig(
+                fact_source_id=FACT_SOURCE_ID,
+                required_symbols=tuple(symbols),
+                slot_seconds=30,
+                request_timeout_seconds=5.0,
+                retry_interval_seconds=0.25,
+            )
+            if use_rest_oi30s
+            else None
+        )
+        oi_health = Oi30sHealthTracker(oi_config) if oi_config is not None else None
+        oi_results: queue.Queue[OiSlotResult] = queue.Queue()
+        oi_stop_event = threading.Event()
+        trade_mirror = PublicTradeMirrorBuffer(
+            tuple(symbols),
+            retention_seconds=MIRROR_RETENTION_SECONDS,
+        )
+        trade_mirror_stop = threading.Event()
+        trade_mirror_ready = threading.Event()
+
+        def write_status(
+            *, transport_state: str = "CONNECTED", extra: Mapping[str, object] | None = None
+        ) -> None:
+            payload = _status_payload(
+                identity=identity,
+                state=gate.state_at(datetime.now(UTC)),
+                gate=gate,
+                comparator=comparator,
+                facts_received=facts_received,
+                seeded_symbols=len(runners),
+                total_symbols=len(symbols),
+            ) | {
+                "transport_state": transport_state,
+                "transport_reconnects": transport_reconnects,
+                "service_instance_id": identity.service_instance_id,
+                "ws_ping_interval_seconds": PING_INTERVAL_SECONDS,
+                "ws_pong_timeout_seconds": PONG_TIMEOUT_SECONDS,
+                "trade_silence_audit_seconds": TRADE_SILENCE_AUDIT_SECONDS,
+                "trade_audit_request_timeout_seconds": TRADE_AUDIT_REQUEST_TIMEOUT_SECONDS,
+                "trade_audits": trade_audits,
+                "trade_audit_reconnects": trade_audit_reconnects,
+                "trade_proven_symbols": len(trade_proof_monotonic),
+            }
+            if oi_health is not None:
+                payload.update(oi_health.snapshot())
+            mirror_snapshot = trade_mirror.snapshot()
+            payload.update(
+                {
+                    "trade_mirror_state": mirror_snapshot["state"],
+                    "trade_mirror_epoch": mirror_snapshot["epoch"],
+                    "trade_mirror_events": mirror_snapshot["events"],
+                    "trade_mirror_duplicates": mirror_snapshot["duplicates"],
+                    "trade_mirror_gaps": mirror_snapshot["gaps"],
+                    "trade_mirror_last_received_at": mirror_snapshot["last_received_at"],
+                    "trade_mirror_retention_seconds": MIRROR_RETENTION_SECONDS,
+                }
+            )
+            if extra:
+                payload.update(dict(extra))
+            _atomic_json(STATUS_PATH, payload)
+
+        def process_fact(
+            fact: MarketFactEnvelope,
+            *,
+            trade_cursor: TradeCursor | None = None,
+            oi_cursor: OiSampleCursor | None = None,
+        ) -> bool:
+            nonlocal facts_received, last_state
+            if not deduper.accept(fact.fact_id):
+                return True
+            if fact.event_kind == "PUBLIC_TRADE":
+                if trade_cursor is None:
+                    raise ContinuityNotProvable(
+                        "PUBLIC_TRADE accepted without exact transport cursor"
+                    )
+                previous_trade = trade_cursors.get(fact.symbol)
+                if previous_trade is not None and trade_cursor.seq < previous_trade.seq:
+                    raise ContinuityNotProvable(
+                        f"PUBLIC_TRADE cross-sequence regressed for {fact.symbol}"
+                    )
+                if previous_trade is None or trade_cursor.seq > previous_trade.seq:
+                    trade_current_seq_exec_ids[fact.symbol] = {trade_cursor.exec_id}
+                else:
+                    trade_current_seq_exec_ids.setdefault(fact.symbol, set()).add(
+                        trade_cursor.exec_id
+                    )
+                trade_cursors[fact.symbol] = trade_cursor
+            elif fact.event_kind == "OPEN_INTEREST":
+                if use_rest_oi30s:
+                    attrs = fact.attributes.to_dict()
+                    if attrs.get("fact_source_id") != FACT_SOURCE_ID or not attrs.get("slot_id"):
+                        raise ContinuityNotProvable(
+                            "REST OPEN_INTEREST fact lacks exact source/slot identity"
+                        )
+                else:
+                    if oi_cursor is None:
+                        raise ContinuityNotProvable(
+                            "OPEN_INTEREST accepted without exact OI30S cursor"
+                        )
+                    oi_cursors[fact.symbol] = oi_cursor
+            elif fact.event_kind == "CANDLE_CLOSED":
+                attrs = fact.attributes.to_dict()
+                timeframe = str(attrs["timeframe"])
+                boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+                previous_closed = closed_boundaries.get((fact.symbol, timeframe))
+                if previous_closed is not None and boundary < previous_closed:
+                    raise ContinuityNotProvable(
+                        f"CANDLE_CLOSED boundary regressed for {fact.symbol}:{timeframe}"
+                    )
+                closed_boundaries[(fact.symbol, timeframe)] = boundary
+            elif fact.event_kind == "BAR_OPEN":
+                attrs = fact.attributes.to_dict()
+                boundary = datetime.fromisoformat(str(attrs["opened_at"])).astimezone(UTC)
+                previous_bar = bar_open_boundaries.get(fact.symbol)
+                if previous_bar is not None and boundary < previous_bar:
+                    raise ContinuityNotProvable(f"BAR_OPEN boundary regressed for {fact.symbol}")
+                bar_open_boundaries[fact.symbol] = boundary
+
+            journal.append(fact)
+            facts_received += 1
+            if fact.event_kind == "PUBLIC_TRADE":
+                flow_minutes[fact.symbol].add(
+                    fact.observed_at.astimezone(UTC).replace(second=0, microsecond=0)
+                )
+            flow_ready = all(len(minutes) >= 5 for minutes in flow_minutes.values())
+            oi_ready = True
+            if oi_health is not None:
+                oi_snapshot = oi_health.snapshot()
+                oi_ready = (
+                    int(str(oi_snapshot["complete_slots"])) > 0
+                    and oi_snapshot["oi_source_state"] == "HEALTHY"
+                )
+            if flow_ready and oi_ready:
+                gate.mark_live_sensor_complete()
+            current_state = gate.state_at(fact.observed_at)
+            if current_state is ShadowComparability.PARITY_COMPARABLE:
+                observation = comparator.process(fact)
+                store.record_observation(observation)
+                store.update_summary(
+                    identity,
+                    {
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+            else:
+                runners[fact.symbol].step(fact)
+            if current_state is not last_state:
+                store.transition_run(
+                    identity,
+                    status=current_state.value,
+                    occurred_at=fact.observed_at,
+                    summary={
+                        "trading_effect": "NONE",
+                        "state": current_state.value,
+                        "reason": gate.reason,
+                        "facts_received": facts_received,
+                        "transport_reconnects": transport_reconnects,
+                        **comparator.summary(),
+                    },
+                )
+                last_state = current_state
+            if comparator.first_mismatch is not None:
+                final_summary = {
+                    "trading_effect": "NONE",
+                    "state": "FAIL",
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **comparator.summary(),
+                }
+                store.transition_run(
+                    identity,
+                    status="FAIL",
+                    occurred_at=fact.observed_at,
+                    summary=final_summary,
+                )
+                write_status(transport_state="CONNECTED", extra={"run_status": "FAIL"})
+                return False
+            return True
+
+        def collect_oi_results() -> list[OiSlotResult]:
+            pending: list[OiSlotResult] = []
+            while True:
+                try:
+                    pending.append(oi_results.get_nowait())
+                except queue.Empty:
+                    return pending
+
+        def record_oi_slot(result: OiSlotResult) -> bool:
+            if oi_health is None:
+                raise RuntimeError("REST OI slot received without OI health tracker")
+            oi_health.accept(result)
+            occurred_at = result.response_received_at or result.slot_end_at
+            _record_transport_event(
+                connection,
+                identity,
+                category="OI30S_SLOT",
+                occurred_at=occurred_at,
+                payload={
+                    "fact_source_id": result.fact_source_id,
+                    "slot_id": result.slot_id,
+                    "nominal_slot_at": result.nominal_slot_at.isoformat(),
+                    "slot_end_at": result.slot_end_at.isoformat(),
+                    "state": result.state.value,
+                    "attempts": result.attempts,
+                    "request_started_at": (
+                        None
+                        if result.request_started_at is None
+                        else result.request_started_at.isoformat()
+                    ),
+                    "response_received_at": (
+                        None
+                        if result.response_received_at is None
+                        else result.response_received_at.isoformat()
+                    ),
+                    "exchange_server_observed_at": (
+                        None
+                        if result.exchange_server_observed_at is None
+                        else result.exchange_server_observed_at.isoformat()
+                    ),
+                    "delivery_delay_seconds": result.delivery_delay_seconds,
+                    "missing_symbols": list(result.missing_symbols),
+                    "invalid_symbols": list(result.invalid_symbols),
+                    "accepted_symbols": [fact.symbol for fact in result.facts],
+                    "fact_ids": [fact.fact_id for fact in result.facts],
+                    "source_refs": [list(fact.source_refs) for fact in result.facts],
+                    "provenance": result.provenance,
+                    "reason": result.reason,
+                    "health": oi_health.snapshot(),
+                    "trading_effect": "NONE",
+                },
+            )
+            if result.state is OiSlotState.COMPLETE:
+                return True
+            reason = f"OI30S source slot {result.slot_id} is {result.state.value}: {result.reason}"
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=occurred_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                    "facts_received": facts_received,
+                    "transport_reconnects": transport_reconnects,
+                    **oi_health.snapshot(),
+                    **comparator.summary(),
+                },
+            )
+            write_status(
+                transport_state="CONNECTED",
+                extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+            )
+            return False
+
+        def process_oi_results(results: list[OiSlotResult]) -> bool:
+            for result in results:
+                if not record_oi_slot(result):
+                    return False
+                for fact in result.facts:
+                    if not process_fact(fact):
+                        return False
+            return True
+
+        def message_items(
+            message: Mapping[str, object], received_at: datetime
+        ) -> tuple[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None], ...]:
+            topic = str(message.get("topic") or "")
+            result: list[tuple[MarketFactEnvelope, TradeCursor | None, OiSampleCursor | None]] = []
+            if topic.startswith("publicTrade."):
+                data = message.get("data")
+                if isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, Mapping):
+                            continue
+                        symbol = str(item.get("s") or "").upper()
+                        if symbol not in runners:
+                            continue
+                        trade_proof_monotonic[symbol] = time.monotonic()
+                        result.append((_trade_fact(item, received_at), _trade_cursor(item), None))
+            elif topic.startswith("kline."):
+                result.extend(
+                    (fact, None, None)
+                    for fact in _kline_facts(message, received_at)
+                    if fact.symbol in runners
+                )
+            elif not use_rest_oi30s and topic.startswith("tickers."):
+                oi_result = _ticker_oi_fact(message, received_at, last_oi_sample)
+                if oi_result is not None:
+                    fact, cursor = oi_result
+                    if fact.symbol in runners:
+                        result.append((fact, None, cursor))
+            return tuple(result)
+
+        def process_message(message: Mapping[str, object], received_at: datetime) -> bool:
+            if message.get("op") == "subscribe":
+                if message.get("success") is False or message.get("retCode") not in (None, 0):
+                    raise ConnectionError("U5 public subscription rejected")
+                return True
+            if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                return True
+            for fact, trade_cursor, oi_cursor in message_items(message, received_at):
+                if not process_fact(fact, trade_cursor=trade_cursor, oi_cursor=oi_cursor):
+                    return False
+            return True
+
+        trade_mirror_thread = threading.Thread(
+            target=_run_public_trade_mirror,
+            args=(tuple(symbols), trade_mirror, trade_mirror_stop, trade_mirror_ready),
+            name="u5-public-trade-mirror",
+            daemon=True,
+        )
+        trade_mirror_thread.start()
+        if not trade_mirror_ready.wait(MIRROR_READY_TIMEOUT_SECONDS):
+            raise ContinuityNotProvable(
+                "publicTrade mirror did not become ready before startup deadline"
+            )
+        if trade_mirror.snapshot()["state"] != "ACTIVE":
+            raise ContinuityNotProvable("publicTrade mirror startup continuity is not active")
+        write_status()
+        if oi_config is not None:
+            oi_thread = threading.Thread(
+                target=_run_rest_oi30s_worker,
+                args=(oi_config, oi_results, oi_stop_event),
+                name="u5-rest-oi30s",
+                daemon=True,
+            )
+            oi_thread.start()
+        sock, _initial_ready_local, _initial_ready_server, initial_buffer = _connect_and_subscribe(
+            symbols
+        )
+        buffered_messages: list[dict[str, Any]] = list(initial_buffer)
+        heartbeat = PublicWsHeartbeat(
+            PING_INTERVAL_SECONDS,
+            PONG_TIMEOUT_SECONDS,
+            started_monotonic=time.monotonic(),
+        )
+        next_status = time.monotonic()
+        transport_errors = (
+            websocket.WebSocketConnectionClosedException,
+            ConnectionError,
+            OSError,
+            ssl.SSLError,
+        )
+
+        while not stopping:
+            try:
+                audit_now = time.monotonic()
+                stale_trade_symbols = tuple(
+                    symbol
+                    for symbol in symbols
+                    if symbol in trade_cursors
+                    and audit_now - trade_proof_monotonic.get(symbol, audit_now)
+                    >= TRADE_SILENCE_AUDIT_SECONDS
+                )
+                if stale_trade_symbols:
+                    try:
+                        _audit_public_trade_silence(
+                            stale_trade_symbols,
+                            trade_cursors,
+                            trade_current_seq_exec_ids,
+                        )
+                    except PublicTradeStreamBehind:
+                        trade_audit_reconnects += 1
+                        raise
+                    except ContinuityNotProvable as audit_exc:
+                        reason = str(audit_exc)
+                        occurred_at = datetime.now(UTC)
+                        _record_transport_event(
+                            connection,
+                            identity,
+                            category="TRANSPORT_CONTINUITY",
+                            occurred_at=occurred_at,
+                            payload={
+                                "verdict": "NOT_PROVABLE",
+                                "source": "PUBLIC_TRADE_SILENCE_AUDIT",
+                                "reason": reason,
+                                "symbols": list(stale_trade_symbols),
+                            },
+                        )
+                        store.transition_run(
+                            identity,
+                            status="NOT_COMPARABLE",
+                            occurred_at=occurred_at,
+                            summary={
+                                "trading_effect": "NONE",
+                                "state": "NOT_COMPARABLE",
+                                "reason": reason,
+                                "facts_received": facts_received,
+                                "transport_reconnects": transport_reconnects,
+                                "trade_audits": trade_audits,
+                                **comparator.summary(),
+                            },
+                        )
+                        write_status(
+                            transport_state="NOT_PROVABLE",
+                            extra={
+                                "run_status": "NOT_COMPARABLE",
+                                "continuity_reason": reason,
+                            },
+                        )
+                        return
+                    else:
+                        trade_audits += 1
+                        audit_proven_at = time.monotonic()
+                        for symbol in stale_trade_symbols:
+                            trade_proof_monotonic[symbol] = audit_proven_at
+                if use_rest_oi30s and not process_oi_results(collect_oi_results()):
+                    return
+                message: dict[str, Any] | None = None
+                received_at = datetime.now(UTC)
+                if buffered_messages:
+                    message = buffered_messages.pop(0)
+                else:
+                    try:
+                        raw_message = sock.recv()
+                        received_at = datetime.now(UTC)
+                        if raw_message in (None, ""):
+                            raise websocket.WebSocketConnectionClosedException(
+                                "public WebSocket closed"
+                            )
+                        parsed = json.loads(raw_message)
+                        if isinstance(parsed, dict):
+                            message = cast(dict[str, Any], parsed)
+                    except websocket.WebSocketTimeoutException:
+                        pass
+                now_monotonic = time.monotonic()
+                if heartbeat.deadline_exceeded(now_monotonic):
+                    raise websocket.WebSocketConnectionClosedException(
+                        "application heartbeat deadline exceeded"
+                    )
+                if message is not None:
+                    if message.get("op") == "pong" or message.get("ret_msg") == "pong":
+                        heartbeat.note_pong(now_monotonic)
+                    elif message.get("op") != "subscribe":
+                        heartbeat.note_market_frame(now_monotonic)
+                    if not process_message(message, received_at):
+                        return
+                if heartbeat.ping_due(now_monotonic):
+                    sock.send('{"op":"ping"}')
+                    heartbeat.note_ping_sent(now_monotonic)
+                if now_monotonic >= next_status:
+                    write_status()
+                    next_status = now_monotonic + 2.0
+            except transport_errors as exc:
+                if stopping:
+                    break
+                disconnected_at = datetime.now(UTC)
+                cursor_snapshot = _transport_cursor_payload(
+                    trade_cursors=trade_cursors,
+                    oi_cursors=oi_cursors,
+                    closed_boundaries=closed_boundaries,
+                    bar_open_boundaries=bar_open_boundaries,
+                )
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_DISCONNECT",
+                    occurred_at=disconnected_at,
+                    payload={
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "state": last_state.value,
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                write_status(
+                    transport_state="PAUSED",
+                    extra={"transport_disconnect_at": disconnected_at.isoformat()},
+                )
+                with suppress(Exception):
+                    sock.close()
+
+                pending_gap_oi: list[OiSlotResult] = []
+                try:
+                    if use_rest_oi30s:
+                        reconnect_errors = transport_errors + (websocket.WebSocketTimeoutException,)
+                        while True:
+                            for oi_result in collect_oi_results():
+                                if not record_oi_slot(oi_result):
+                                    return
+                                pending_gap_oi.append(oi_result)
+                            try:
+                                new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                                    _connect_and_subscribe(symbols)
+                                )
+                                break
+                            except reconnect_errors:
+                                time.sleep(0.25)
+                    else:
+                        new_sock, ready_local_at, ready_server_at, reconnect_buffer = (
+                            _reconnect_until_oi_safe(symbols, oi_cursors)
+                        )
+                except ContinuityNotProvable as gap_exc:
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
+
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_RECONNECT",
+                    occurred_at=ready_local_at,
+                    payload={
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "gap_seconds": max(0.0, (ready_local_at - disconnected_at).total_seconds()),
+                        "cursors": cursor_snapshot,
+                    },
+                )
+                trade_recovery_source = "REST_RECENT_TRADE"
+                mirror_fallback_reason: str | None = None
+                trade_override: tuple[tuple[MarketFactEnvelope, TradeCursor], ...] | None = None
+                try:
+                    mirror_cursors, mirror_seq_ids = trade_mirror.current_cursors()
+                    if set(mirror_cursors) != set(symbols):
+                        raise ContinuityNotProvable(
+                            "publicTrade mirror lacks exact current cursors "
+                            "for all required symbols"
+                        )
+                    # A continuously ACTIVE mirror epoch is itself the exact ordered
+                    # publicTrade transport proof. Do not race it against a later REST
+                    # snapshot here; that snapshot can contain newer trades and falsely
+                    # disqualify a healthy mirror.
+                    mirror_events = trade_mirror.recover_after(
+                        trade_cursors,
+                        cutoff_at=ready_server_at,
+                    )
+                    trade_override = tuple(
+                        (
+                            _replay_trade_fact(
+                                event.as_replay_trade(),
+                                event.received_at,
+                            ),
+                            TradeCursor(
+                                event.symbol,
+                                event.exec_id,
+                                event.seq,
+                                event.traded_at,
+                            ),
+                        )
+                        for event in mirror_events
+                    )
+                    trade_recovery_source = "MIRROR_WS"
+                except (ContinuityNotProvable, PublicTradeStreamBehind) as mirror_exc:
+                    mirror_fallback_reason = f"{type(mirror_exc).__name__}: {mirror_exc}"
+
+                try:
+                    replay_items, replay_counts = _recover_public_gap(
+                        symbols=symbols,
+                        ready_local_at=ready_local_at,
+                        ready_server_at=ready_server_at,
+                        trade_cursors=trade_cursors,
+                        oi_cursors=oi_cursors,
+                        closed_boundaries=closed_boundaries,
+                        bar_open_boundaries=bar_open_boundaries,
+                        known_trade_exec_ids=trade_current_seq_exec_ids,
+                        trade_replay_override=trade_override,
+                    )
+                except ContinuityNotProvable as gap_exc:
+                    with suppress(Exception):
+                        new_sock.close()
+                    reason = str(gap_exc)
+                    _record_transport_event(
+                        connection,
+                        identity,
+                        category="TRANSPORT_CONTINUITY",
+                        occurred_at=datetime.now(UTC),
+                        payload={
+                            "verdict": "NOT_PROVABLE",
+                            "reason": reason,
+                            "disconnect_at": disconnected_at.isoformat(),
+                            "subscription_ready_server_at": ready_server_at.isoformat(),
+                            "cursors": cursor_snapshot,
+                        },
+                    )
+                    store.transition_run(
+                        identity,
+                        status="NOT_COMPARABLE",
+                        occurred_at=datetime.now(UTC),
+                        summary={
+                            "trading_effect": "NONE",
+                            "state": "NOT_COMPARABLE",
+                            "reason": reason,
+                            "facts_received": facts_received,
+                            "transport_reconnects": transport_reconnects,
+                            **comparator.summary(),
+                        },
+                    )
+                    write_status(
+                        transport_state="NOT_PROVABLE",
+                        extra={"run_status": "NOT_COMPARABLE", "continuity_reason": reason},
+                    )
+                    return
+
+                if use_rest_oi30s:
+                    for oi_result in collect_oi_results():
+                        if not record_oi_slot(oi_result):
+                            with suppress(Exception):
+                                new_sock.close()
+                            return
+                        pending_gap_oi.append(oi_result)
+                    oi_gap_facts = [fact for result in pending_gap_oi for fact in result.facts]
+                    replay_counts["OPEN_INTEREST"] = len(oi_gap_facts)
+                    combined_replay = _merge_gap_oi_without_reordering_replay(
+                        replay_items,
+                        oi_gap_facts,
+                    )
+                else:
+                    combined_replay = list(replay_items)
+                for replay_fact, replay_trade_cursor in combined_replay:
+                    if not process_fact(replay_fact, trade_cursor=replay_trade_cursor):
+                        with suppress(Exception):
+                            new_sock.close()
+                        return
+                recovery_proven_at = time.monotonic()
+                for symbol in symbols:
+                    trade_proof_monotonic[symbol] = recovery_proven_at
+                transport_reconnects += 1
+                _record_transport_event(
+                    connection,
+                    identity,
+                    category="TRANSPORT_CONTINUITY",
+                    occurred_at=datetime.now(UTC),
+                    payload={
+                        "verdict": "PROVEN_COMPLETE",
+                        "disconnect_at": disconnected_at.isoformat(),
+                        "subscription_ready_local_at": ready_local_at.isoformat(),
+                        "subscription_ready_server_at": ready_server_at.isoformat(),
+                        "same_parity_run_id": identity.parity_run_id,
+                        "same_service_instance_id": identity.service_instance_id,
+                        "same_started_at": identity.started_at.isoformat(),
+                        "replay_counts": replay_counts,
+                        "trade_recovery_source": trade_recovery_source,
+                        "mirror_fallback_reason": mirror_fallback_reason,
+                        "cursors_before": cursor_snapshot,
+                        "cursors_after": _transport_cursor_payload(
+                            trade_cursors=trade_cursors,
+                            oi_cursors=oi_cursors,
+                            closed_boundaries=closed_boundaries,
+                            bar_open_boundaries=bar_open_boundaries,
+                        ),
+                    },
+                )
+                sock = new_sock
+                buffered_messages = list(reconnect_buffer)
+                heartbeat = PublicWsHeartbeat(
+                    PING_INTERVAL_SECONDS,
+                    PONG_TIMEOUT_SECONDS,
+                    started_monotonic=time.monotonic(),
+                )
+                next_status = time.monotonic()
+                write_status(
+                    transport_state="CONNECTED",
+                    extra={
+                        "last_transport_continuity": "PROVEN_COMPLETE",
+                        "last_reconnect_at": ready_local_at.isoformat(),
+                        "last_trade_recovery_source": trade_recovery_source,
+                    },
+                )
+                continue
+
+        stopped_at = datetime.now(UTC)
+        final_state = gate.state_at(stopped_at)
+        if final_state is ShadowComparability.PARITY_COMPARABLE:
+            final_status = "PASS" if comparator.first_mismatch is None else "FAIL"
+        else:
+            final_status = "NOT_COMPARABLE"
+        store.transition_run(
+            identity,
+            status=final_status,
+            occurred_at=stopped_at,
+            summary={
+                "trading_effect": "NONE",
+                "state": final_status,
+                "facts_received": facts_received,
+                "transport_reconnects": transport_reconnects,
+                **comparator.summary(),
+            },
+        )
+    except ContinuityNotProvable as exc:
+        failed_at = datetime.now(UTC)
+        reason = f"{type(exc).__name__}: {exc}"
+        with suppress(Exception):
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=failed_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": reason,
+                },
+            )
+        with suppress(Exception):
+            _atomic_json(
+                STATUS_PATH,
+                {
+                    "updated_at": failed_at.isoformat(),
+                    "service": "cripta-universal-entry-shadow.service",
+                    "trading_effect": "NONE",
+                    "parity_run_id": identity.parity_run_id,
+                    "state": "NOT_COMPARABLE",
+                    "state_reason": reason,
+                    "source_commit": identity.universal_source_commit,
+                    "fact_source_id": identity.fact_source_id,
+                    "service_instance_id": identity.service_instance_id,
+                },
+            )
+        return
+    except Exception as exc:
+        failed_at = datetime.now(UTC)
+        with suppress(Exception):
+            store.transition_run(
+                identity,
+                status="NOT_COMPARABLE",
+                occurred_at=failed_at,
+                summary={
+                    "trading_effect": "NONE",
+                    "state": "NOT_COMPARABLE",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+            )
+        raise
+    finally:
+        if oi_stop_event is not None:
+            oi_stop_event.set()
+        if oi_thread is not None and oi_thread.ident is not None:
+            oi_thread.join(timeout=2.0)
+        if trade_mirror_stop is not None:
+            trade_mirror_stop.set()
+        if trade_mirror_thread is not None and trade_mirror_thread.ident is not None:
+            trade_mirror_thread.join(timeout=2.0)
+        if sock is not None:
+            with suppress(Exception):
+                sock.close()
+        connection.close()
+
+
+def main() -> None:
+    if RUNTIME_MODE == "MULTI_STRATEGY_OBSERVER":
+        _run_multi_strategy_observer()
+        return
+    if RUNTIME_MODE != "PARITY_V1":
+        raise RuntimeError(f"unsupported CRIPTA_U5_RUNTIME_MODE={RUNTIME_MODE}")
+    STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    _run_parity_main()
+
+
+if __name__ == "__main__":
+    main()
+
+                      AND a.external_account_ref <> '0'""",
+                (binding.trading_account_id,),
+            ).fetchall()
+            if len(connector_rows) != 1:
+                reason = "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+            elif not gate_ready or activation_id not in real_selected_for:
+                reason = "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
+            elif bundle is None or symbol not in bundle.card.symbols:
+                reason = "REAL_EXECUTION_BINDING_NOT_READY"
+            else:
+                arm_ready, arm_reasons = account_live_arm_ready(
+                    connection,
+                    strategy_activation_id=activation_id,
+                    strategy_execution_binding_id=binding.strategy_execution_binding_id,
+                    trading_account_id=binding.trading_account_id,
+                    account_connector_id=str(connector_rows[0][0]),
+                    strategy_id=bundle.card.strategy_id,
+                    strategy_version=bundle.card.strategy_version,
+                    strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                    symbol=symbol,
+                    release_commit=LOADED_COMMIT,
+                    now=observed_at,
+                )
+                if not arm_ready:
+                    reason = ",".join(arm_reasons)
+                else:
+                    readiness, capacity = _real_entry_account_state(
+                        connection,
+                        symbol=symbol,
+                        observed_at=observed_at,
+                        trading_account_id=binding.trading_account_id,
+                    )
+                    reason = readiness.reason
+                    if readiness.ready and capacity is not None:
+                        admission_port = PostgresEntryAdmissionPort(connection)
+                        ready_activations.add(activation_id)
+            result.append(
+                AccountAdmissionContext(
+                    binding=binding,
+                    capacity=capacity,
+                    technical_readiness=TechnicalReadiness(
+                        admission_port is not None, observed_at, reason
+                    ),
+                    account_ref="BYBIT:UNIFIED",
+                    exchange_position_key=exchange_position_key(
+                        binding.trading_account_id, symbol, 0
+                    ),
+                    entry_admission_port=admission_port,
+                )
+            )
+        output[activation_id] = tuple(result)
+    return output, frozenset(ready_activations)
 
 
 def _real_execution_bindings(
