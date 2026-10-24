@@ -49,7 +49,10 @@ def sub_account() -> tuple[object, ...]:
 
 
 def connector(account: str = "ta-main", credential: str = "mounted-main") -> tuple[object, ...]:
-    return ("conn-main", account, "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE", credential, "ACTIVE", None)
+    return (
+        "conn-main", account, "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE",
+        credential, "ACTIVE", None,
+    )
 
 
 def response(user_id: int = 100, parent: str = "0", master: bool = True) -> dict[str, Any]:
