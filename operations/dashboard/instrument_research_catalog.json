@@ -2565,7 +2565,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2709,7 +2709,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2855,7 +2855,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2999,7 +2999,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3143,7 +3143,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3287,7 +3287,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3434,7 +3434,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3578,7 +3578,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3725,7 +3725,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3872,7 +3872,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4017,7 +4017,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4162,7 +4162,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4307,7 +4307,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4452,7 +4452,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4597,7 +4597,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4744,7 +4744,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4889,7 +4889,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5034,7 +5034,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5178,7 +5178,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5322,7 +5322,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5466,7 +5466,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5610,7 +5610,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -5754,7 +5754,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -5898,7 +5898,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -6042,7 +6042,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6186,7 +6186,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6330,7 +6330,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6476,7 +6476,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6620,7 +6620,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6766,7 +6766,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6912,7 +6912,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -7056,7 +7056,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -7202,7 +7202,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -7348,7 +7348,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7492,7 +7492,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7638,7 +7638,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7786,7 +7786,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7931,7 +7931,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8078,7 +8078,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8222,7 +8222,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8366,7 +8366,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8510,7 +8510,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8658,7 +8658,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8803,7 +8803,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8950,7 +8950,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
+        "publication_qc": "MODEL_QC_PASS_GIT_REGISTERED",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
