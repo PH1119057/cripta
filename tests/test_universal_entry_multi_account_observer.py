@@ -108,19 +108,34 @@ def test_unarmed_multi_account_bindings_are_blocked_per_leg_no_admission_port() 
     assert len({x.exchange_position_key for x in prepared["act-one"]}) == 2
 
 
-def test_empty_or_single_binding_never_enters_multi_account_route() -> None:
-    only = binding(1)
-    db = CandidateDB([
-        (
-            only.strategy_execution_binding_id,
-            only.strategy_activation_id,
-            only.execution_leg,
-            only.trading_account_id,
-        )
-    ])
-    assert _unarmed_multi_account_candidate_bindings(
-        db, (Bundle("act-one"),), observed_at=NOW
-    ) == {}
+def test_single_main_keeps_legacy_while_single_sub_requires_account_arm() -> None:
+    main = StrategyExecutionBindingRef(
+        "binding-main", "act-one", "PRIMARY", "trading-account-main"
+    )
+    sub = binding(1)
+
+    def roster(ref: StrategyExecutionBindingRef) -> CandidateDB:
+        return CandidateDB([(
+            ref.strategy_execution_binding_id,
+            ref.strategy_activation_id,
+            ref.execution_leg,
+            ref.trading_account_id,
+        )])
+
+    with patch(
+        "operations.monitoring.universal_entry_shadow.TRADING_ACCOUNT_ID",
+        "trading-account-main",
+    ):
+        assert _unarmed_multi_account_candidate_bindings(
+            roster(main), (Bundle("act-one"),), observed_at=NOW
+        ) == {}
+        assert _unarmed_multi_account_candidate_bindings(
+            roster(sub), (Bundle("act-one"),), observed_at=NOW
+        ) == {"act-one": (sub,)}
+        # No fallback to a default or legacy arm for an unproven SUB.
+        assert _unarmed_multi_account_candidate_bindings(
+            roster(sub), (Bundle("act-other"),), observed_at=NOW
+        ) == {}
 
 
 def test_legacy_and_fanout_preflight_allow_only_disjoint_activations() -> None:
