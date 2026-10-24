@@ -183,3 +183,56 @@ def test_invalid_latch_scope_is_rejected_before_sql() -> None:
             db, trading_account_id="", account_connector_id="conn", reason="bad"
         )
     assert not db.queries
+
+
+def test_sub_untrusted_transport_error_is_not_written_to_status_or_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    db = DB()
+    leaked = "signed_url=https://example.invalid/?api_secret=OFFLINE_SENSITIVE"
+    statuses: list[str] = []
+    events: list[str] = []
+    monkeypatch.setattr(private_runtime, "running", True)
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", "ta-sub"),
+        patch.object(private_runtime, "ACCOUNT_CONNECTOR_ID", "connector-sub"),
+        patch.object(private_runtime, "db", return_value=db),
+        patch.object(
+            private_runtime, "authenticated_entry_connector_gate",
+            side_effect=RuntimeError(leaked),
+        ),
+        patch.object(private_runtime, "reconcile") as recovery,
+        patch.object(
+            private_runtime, "connection_event",
+            side_effect=lambda _c, _channel, _state, **fields:
+            events.append(str(fields.get("error", ""))),
+        ),
+        patch.object(
+            private_runtime, "atomic_status",
+            side_effect=lambda _channel, fields:
+            statuses.append(str(fields.get("error", ""))),
+        ),
+        patch.object(
+            private_runtime.time, "sleep",
+            side_effect=lambda _: setattr(private_runtime, "running", False),
+        ),
+    ):
+        private_runtime.private_loop("offline", "offline")
+    recovery.assert_not_called()
+    assert events == ["RuntimeError"]
+    assert statuses == ["RuntimeError"]
+    assert leaked not in repr(db.queries)
+    assert db.commits == 1
+    assert db.rollbacks == 1
+    assert db.queries[0][1][2] == "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
+
+
+def test_sub_error_logging_omits_signed_urls_but_main_is_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exc = RuntimeError("signed_url=https://example.invalid?api_secret=FAKE")
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    assert private_runtime._private_worker_safe_error(exc) == "RuntimeError"
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN")
+    assert "signed_url=" in private_runtime._private_worker_safe_error(exc)
