@@ -83,3 +83,22 @@ def test_main_worker_remains_compatible_and_exit_is_not_gated_by_new_entry_proof
     ]
     assert "assert_sub_worker_isolation(" in source
     assert "STATUS = private_worker_status_path(" in source
+
+
+def test_sub_worker_scope_is_explicit_before_private_credential_or_database_read() -> None:
+    source = (ROOT / "operations/connectivity/private_runtime.py").read_text()
+    section = source.split("def main() -> None:", 1)[1]
+    assert 'os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN")' in section
+    assert 'if configured_kind not in {"MAIN", "SUB"}' in section
+    assert section.index("STATUS = private_worker_status_path(") < section.index(
+        'credentials = json.loads(credential_path.read_text'
+    )
+    assert section.index("assert_sub_worker_isolation(") < section.index(
+        'credentials = json.loads(credential_path.read_text'
+    )
+    assert 'if account_kind != configured_kind:' in section
+    assert 'if configured_kind == "MAIN":' in section
+    assert section.index('if configured_kind == "MAIN":') < section.index(
+        'disarm_new_entries('
+    )
+    assert "bootstrap.close()" in section
