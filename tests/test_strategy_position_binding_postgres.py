@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -107,10 +108,13 @@ def _seed_request(
     connection.execute(
         """INSERT INTO identity.trading_accounts(
                trading_account_id,venue_id,account_kind,account_type,
-               environment,status
-           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE')
+               environment,status,external_account_ref
+           ) VALUES(%s,'venue-bybit','MAIN','UNIFIED','MAINNET','ACTIVE',%s)
            ON CONFLICT(trading_account_id) DO NOTHING""",
-        (trading_account_id,),
+        (
+            trading_account_id,
+            str(int.from_bytes(hashlib.sha256(trading_account_id.encode()).digest()[:7], "big")),
+        ),
     )
     connection.execute(
         """INSERT INTO identity.account_connectors(

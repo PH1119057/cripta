@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import sys
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -11,10 +12,17 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_safety import account_entry_safety_ready
+from bybit_workbench.account_live_arm import account_live_arm_ready
+from bybit_workbench.entry_consumer_route import (
+    ConsumerWorkerRoute,
+    check_consumer_worker_route,
+)
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
 from bybit_workbench.live_arm_readiness import LiveArmContext, active_live_arm_session
 from bybit_workbench.release_arm_safety import check_release_arm_invariant
 from bybit_workbench.strategy_position_binding import exchange_position_key
+from bybit_workbench.sub_worker_scope import require_exact_sub_instance
 from bybit_workbench.universal_entry.contracts import ExecutionRequest, FrozenPolicy, TradeDirection
 from bybit_workbench.universal_entry.execution_bridge import (
     BridgePolicyBundle,
@@ -102,7 +110,17 @@ def _request_from_row(row: Mapping[str, object]) -> ExecutionRequest:
     )
 
 
-def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] | None:
+def _next_request(
+    connection: psycopg.Connection[Any], *, route: ConsumerWorkerRoute | None = None
+) -> Mapping[str, object] | None:
+    # Exactly one private connector / TradingAccount is owned by this worker.
+    # A route parameter cannot authorize a process to use different credentials.
+    scoped = route or ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
+    if (
+        scoped.trading_account_id != TRADING_ACCOUNT_ID
+        or scoped.account_connector_id != ACCOUNT_CONNECTOR_ID
+    ):
+        raise ValueError("CONSUMER_ROUTE_PROCESS_IDENTITY_MISMATCH")
     return connection.execute(
         """SELECT r.*,a.activation_id,a.enabled AS activation_enabled,
                   a.strategy_id AS activation_strategy_id,
@@ -147,7 +165,8 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
                    WHERE d.execution_request_id=r.execution_request_id
             )
             ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1""",
+            LIMIT 1
+            FOR UPDATE OF r SKIP LOCKED""",
         (TRADING_ACCOUNT_ID,),
     ).fetchone()
 
@@ -801,6 +820,27 @@ def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
     return bool(row and row["enabled"])
 
 
+def _critical_lifecycle_fault_code(
+    connection: psycopg.Connection[Any], *, trading_account_id: str,
+) -> str | None:
+    """Fail closed on unscoped or matching-account OPEN CRITICAL faults.
+
+    An exact fault for another TradingAccount is independent; legacy/unscoped
+    faults cannot be attributed safely and remain an Entry blocker.
+    """
+    if not trading_account_id:
+        raise RuntimeError("required TradingAccount identity missing")
+    row = connection.execute(
+        """SELECT fault_code FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
+                   OR exact_ids->>'trading_account_id'=%s)
+            ORDER BY detected_at,fault_id LIMIT 1""",
+        (trading_account_id,),
+    ).fetchone()
+    return None if row is None else str(row["fault_code"])
+
+
 def _live_arm_ready(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
@@ -827,7 +867,26 @@ def _live_arm_ready(
         now=now,
     )
     if not scope_ready:
-        return False, scope_reasons
+        if scope_reasons != ("MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",):
+            return False, scope_reasons
+        binding_id = str(row.get("strategy_execution_binding_id") or "")
+        if not binding_id or not ACCOUNT_CONNECTOR_ID:
+            return False, scope_reasons
+        # A Strategy/symbol arm NEVER authorizes a second account. Multi-account
+        # permission can come only from an exact owner-issued account session.
+        return account_live_arm_ready(
+            connection,
+            strategy_activation_id=context.strategy_activation_id,
+            strategy_execution_binding_id=binding_id,
+            trading_account_id=str(row.get("trading_account_id") or ""),
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            strategy_id=context.strategy_id,
+            strategy_version=context.strategy_version,
+            strategy_config_fingerprint=context.strategy_config_fingerprint,
+            symbol=context.symbol,
+            release_commit=context.release_commit,
+            now=now,
+        )
     # Durable LIVE-arm evidence is the pre-arm authorization contract. Once
     # an exact release-bound arm session exists, per-request safety is enforced
     # by _admission_pre_dispatch_status() and the request's admission lineage.
@@ -843,7 +902,24 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
     _release_expired_reserved_requests(connection, now=current)
     if not _execution_gate_enabled(connection):
         return "EXECUTION_GATE_DISARMED"
-    row = _next_request(connection)
+    # Registry routing is only a prerequisite. Per-request binding/connector,
+    # independently authenticated private credentials and LIVE arm remain
+    # separately required; no cross-account worker fallback.
+    try:
+        route = ConsumerWorkerRoute(TRADING_ACCOUNT_ID, ACCOUNT_CONNECTOR_ID)
+    except ValueError:
+        return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+    route_check = check_consumer_worker_route(connection, route=route)
+    if not route_check.ready:
+        return "ACCOUNT_CONNECTOR_ROUTE_NOT_READY:" + ",".join(route_check.reasons)
+    safety_ready, safety_reasons = account_entry_safety_ready(
+        connection,
+        trading_account_id=route.trading_account_id,
+        account_connector_id=route.account_connector_id,
+    )
+    if not safety_ready:
+        return "ACCOUNT_ENTRY_SAFETY_NOT_READY:" + ",".join(safety_reasons)
+    row = _next_request(connection, route=route)
     if row is None:
         return "NO_REQUEST"
     request = _request_from_row(row)
@@ -984,6 +1060,28 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
             )
         return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
 
+    fault_code = _critical_lifecycle_fault_code(
+        connection, trading_account_id=request.trading_account_id or "",
+    )
+    if fault_code is not None:
+        # An existing EntryExecutionRequest is not grandfathered through a
+        # newly detected CRITICAL fault. No Exchange mutation has been sent.
+        reason = f"CRITICAL_LIFECYCLE_FAULT:{fault_code}"
+        with connection.transaction():
+            _record_blocked(
+                connection, request, reason=reason,
+                payload={"block_code": "CRITICAL_LIFECYCLE_FAULT", "fault_code": fault_code},
+            )
+            _release_pre_exchange_admission(
+                connection, request,
+                reason="PRE_EXCHANGE_BLOCK:CRITICAL_LIFECYCLE_FAULT", now=current,
+            )
+            _record_request_state(
+                connection, request, state="REQUEST_CANCELLED",
+                occurred_at=current, reason=reason,
+            )
+        return "BLOCKED:CRITICAL_LIFECYCLE_FAULT"
+
     live_ready, failed_live_checks = _live_arm_ready(connection, row, now=current)
     if not live_ready:
         reason = "LIVE_ARM_NOT_READY:" + ",".join(failed_live_checks)
@@ -1074,6 +1172,12 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
 
 
 def main() -> int:
+    account_kind = os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper()
+    require_exact_sub_instance(
+        account_kind=account_kind,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        argv=sys.argv[1:],
+    )
     if ENTRY_COMMAND_SOURCE != "UNIVERSAL_ENTRY" or CONSUMER_ARM != "ENABLED":
         print(
             json.dumps(

@@ -25,6 +25,8 @@ from typing import Any, cast
 import psycopg
 import websocket
 
+from bybit_workbench.account_entry_safety import account_entry_safety_ready
+from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -59,6 +61,7 @@ from bybit_workbench.universal_entry import (
     TradingCapacitySnapshot,
     UniversalEntryEngine,
 )
+from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
@@ -1230,6 +1233,207 @@ def _real_execution_selected_activation_ids(
     )
 
 
+def _unarmed_multi_account_candidate_bindings(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime,
+) -> dict[str, tuple[StrategyExecutionBindingRef, ...]]:
+    """Observe all real candidate legs without interpreting legacy arms as authority.
+
+    This is intentionally only a roster. Under the current Strategy/symbol
+    legacy arm, multi-account rows MUST produce blocked Entry outcomes, not
+    executable admissions. R04 must deliver separately proven account-scoped
+    owner arms before these candidates may be given admission ports.
+    """
+    if observed_at.tzinfo is None:
+        raise ValueError("account candidate snapshot requires aware timestamp")
+    at = observed_at.astimezone(UTC)
+    known = {cast(Any, bundle).activation.activation_id for bundle in bundles}
+    rows = connection.execute(
+        """SELECT strategy_execution_binding_id,strategy_activation_id,
+                  execution_leg,trading_account_id
+             FROM strategy_entry.strategy_execution_bindings
+            WHERE binding_state='ACTIVE'
+              AND effective_from<=%s
+              AND (effective_to IS NULL OR effective_to>%s)
+            ORDER BY strategy_activation_id,execution_leg,trading_account_id""",
+        (at, at),
+    ).fetchall()
+    by_activation: dict[str, list[StrategyExecutionBindingRef]] = {}
+    for row in rows:
+        binding = StrategyExecutionBindingRef(
+            strategy_execution_binding_id=str(row[0]),
+            strategy_activation_id=str(row[1]),
+            execution_leg=str(row[2]),
+            trading_account_id=str(row[3]),
+        )
+        if binding.strategy_activation_id in known:
+            by_activation.setdefault(binding.strategy_activation_id, []).append(binding)
+    # A single dedicated SUB (or non-PRIMARY execution leg) must also use
+    # the explicit account-scoped arm. Only the exact legacy MAIN PRIMARY
+    # singleton may retain the compatible legacy admission route.
+    return {
+        activation: tuple(legs)
+        for activation, legs in by_activation.items()
+        if len(legs) > 1
+        or (
+            len(legs) == 1
+            and (
+                legs[0].trading_account_id != TRADING_ACCOUNT_ID
+                or legs[0].execution_leg != "PRIMARY"
+            )
+        )
+    }
+
+
+def _blocked_multi_account_admissions(
+    candidates: Mapping[str, tuple[StrategyExecutionBindingRef, ...]],
+    *,
+    symbol: str,
+    observed_at: datetime,
+) -> dict[str, tuple[AccountAdmissionContext, ...]]:
+    """Explicit blocked results for every effective multi-account binding.
+
+    Never infer account authentication, connector readiness, owner arm or
+    capital state from the mere existence of a Strategy binding.
+    """
+    return {
+        activation_id: tuple(
+            AccountAdmissionContext(
+                binding=binding,
+                capacity=None,
+                technical_readiness=TechnicalReadiness(
+                    False, observed_at, "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+                ),
+                account_ref="BYBIT:UNIFIED",
+                exchange_position_key=exchange_position_key(
+                    binding.trading_account_id, symbol, 0
+                ),
+                entry_admission_port=None,
+            )
+            for binding in legs
+        )
+        for activation_id, legs in candidates.items()
+    }
+
+
+def _multi_account_admissions(
+    connection: Any,
+    bundles: tuple[object, ...],
+    candidates: Mapping[str, tuple[StrategyExecutionBindingRef, ...]],
+    *,
+    symbol: str,
+    observed_at: datetime,
+    real_selected_for: frozenset[str],
+) -> tuple[dict[str, tuple[AccountAdmissionContext, ...]], frozenset[str]]:
+    """Resolve independently approved account Entry without borrowing legacy arm.
+
+    The registered UID and account generation are prerequisites, NOT the signed
+    provider identity attestation. The private runtime repeats signed Bybit UID
+    authentication for this worker immediately before exchange Entry mutation.
+    """
+    if not real_selected_for:
+        return (
+            _blocked_multi_account_admissions(
+                candidates, symbol=symbol, observed_at=observed_at
+            ),
+            frozenset(),
+        )
+    gate = connection.execute(
+        "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+    ).fetchone()
+    gate_ready = bool(gate and gate[0]) and bool(LOADED_COMMIT)
+    known = {
+        cast(Any, bundle).activation.activation_id: cast(Any, bundle)
+        for bundle in bundles
+    }
+    output: dict[str, tuple[AccountAdmissionContext, ...]] = {}
+    ready_activations: set[str] = set()
+    for activation_id, bindings in candidates.items():
+        result: list[AccountAdmissionContext] = []
+        bundle = known.get(activation_id)
+        for binding in bindings:
+            reason = "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+            capacity: TradingCapacitySnapshot | None = None
+            admission_port: PostgresEntryAdmissionPort | None = None
+            connector_rows = connection.execute(
+                """SELECT c.account_connector_id
+                     FROM identity.account_connectors c
+                     JOIN identity.trading_accounts a
+                       ON a.trading_account_id=c.trading_account_id
+                    WHERE c.trading_account_id=%s
+                      AND c.status='ACTIVE'
+                      AND c.retired_at IS NULL
+                      AND c.adapter_id='BYBIT_V5_PRIVATE'
+                      AND c.connector_kind='CEX_PRIVATE_RUNTIME'
+                      AND nullif(btrim(c.credential_ref),'') IS NOT NULL
+                      AND a.status='ACTIVE' AND a.environment='MAINNET'
+                      AND a.venue_id='venue-bybit' AND a.account_type='UNIFIED'
+                      AND a.account_kind IN ('MAIN','SUB')
+                      AND a.external_account_ref ~ '^[0-9]+$'
+                      AND a.external_account_ref ~ '[1-9]'""",
+                (binding.trading_account_id,),
+            ).fetchall()
+            if len(connector_rows) != 1:
+                reason = "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+            elif not gate_ready or activation_id not in real_selected_for:
+                reason = "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
+            elif bundle is None or symbol not in bundle.card.symbols:
+                reason = "REAL_EXECUTION_BINDING_NOT_READY"
+            else:
+                arm_ready, arm_reasons = account_live_arm_ready(
+                    connection,
+                    strategy_activation_id=activation_id,
+                    strategy_execution_binding_id=binding.strategy_execution_binding_id,
+                    trading_account_id=binding.trading_account_id,
+                    account_connector_id=str(connector_rows[0][0]),
+                    strategy_id=bundle.card.strategy_id,
+                    strategy_version=bundle.card.strategy_version,
+                    strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                    symbol=symbol,
+                    release_commit=LOADED_COMMIT,
+                    now=observed_at,
+                )
+                if not arm_ready:
+                    reason = ",".join(arm_reasons)
+                else:
+                    safety_ready, safety_reasons = account_entry_safety_ready(
+                        connection,
+                        trading_account_id=binding.trading_account_id,
+                        account_connector_id=str(connector_rows[0][0]),
+                    )
+                    if not safety_ready:
+                        reason = ",".join(safety_reasons)
+                    else:
+                        readiness, capacity = _real_entry_account_state(
+                            connection,
+                            symbol=symbol,
+                            observed_at=observed_at,
+                            trading_account_id=binding.trading_account_id,
+                        )
+                        reason = readiness.reason
+                        if readiness.ready and capacity is not None:
+                            admission_port = PostgresEntryAdmissionPort(connection)
+                            ready_activations.add(activation_id)
+            result.append(
+                AccountAdmissionContext(
+                    binding=binding,
+                    capacity=capacity,
+                    technical_readiness=TechnicalReadiness(
+                        admission_port is not None, observed_at, reason
+                    ),
+                    account_ref="BYBIT:UNIFIED",
+                    exchange_position_key=exchange_position_key(
+                        binding.trading_account_id, symbol, 0
+                    ),
+                    entry_admission_port=admission_port,
+                )
+            )
+        output[activation_id] = tuple(result)
+    return output, frozenset(ready_activations)
+
+
 def _real_execution_bindings(
     connection: Any,
     bundles: tuple[object, ...],
@@ -1348,12 +1552,15 @@ def _real_entry_account_state(
     *,
     symbol: str,
     observed_at: datetime,
+    trading_account_id: str | None = None,
 ) -> tuple[TechnicalReadiness, TradingCapacitySnapshot | None]:
     try:
         generation = current_complete_account_state_generation(
             connection,
             account_ref="BYBIT:UNIFIED",
-            trading_account_id=TRADING_ACCOUNT_ID,
+            trading_account_id=(
+                TRADING_ACCOUNT_ID if trading_account_id is None else trading_account_id
+            ),
             acquire_account_lock=True,
         )
     except AccountStateGenerationUnavailable as exc:
@@ -1805,11 +2012,17 @@ def _run_observer_epoch(
         connection, bundles
     )
     release_ready_for = _real_execution_activation_ids(connection, bundles)
-    execution_bindings = _real_execution_bindings(
-        connection,
-        bundles,
-        observed_at=epoch_started,
+    multi_account_candidates = _unarmed_multi_account_candidate_bindings(
+        connection, bundles, observed_at=epoch_started
     )
+    execution_bindings = _real_execution_bindings(
+        connection, bundles, observed_at=epoch_started
+    )
+    execution_bindings = {
+        activation: binding
+        for activation, binding in execution_bindings.items()
+        if activation not in multi_account_candidates
+    }
     binding_ready_for = frozenset(execution_bindings)
     real_admission_ready_for = release_ready_for.intersection(binding_ready_for)
     entry_admission_port = (
@@ -2202,6 +2415,18 @@ def _run_observer_epoch(
                     "SHADOW observer causal transport is continuous",
                 )
                 admission_capacity = capacity
+            scoped_admissions, scoped_ready_for = (
+                _multi_account_admissions(
+                    connection,
+                    bundles,
+                    multi_account_candidates,
+                    symbol=fact.symbol,
+                    observed_at=admission_time,
+                    real_selected_for=real_execution_selected_for,
+                )
+                if multi_account_candidates
+                else ({}, frozenset())
+            )
             evaluations = engine.process(
                 fact,
                 contexts=contexts,
@@ -2210,8 +2435,9 @@ def _run_observer_epoch(
                 account_ref="BYBIT:UNIFIED",
                 entry_admission_port=entry_admission_port,
                 real_admission_required_for=real_execution_selected_for,
-                real_admission_ready_for=real_admission_ready_for,
+                real_admission_ready_for=real_admission_ready_for | scoped_ready_for,
                 execution_bindings=execution_bindings,
+                account_admissions=scoped_admissions if multi_account_candidates else None,
                 exchange_position_keys={
                     symbol: exchange_position_key(TRADING_ACCOUNT_ID, symbol, 0)
                     for symbol in symbols
@@ -2234,17 +2460,17 @@ def _run_observer_epoch(
                     evaluation,
                     bundle,
                 )
+                # The existing counterfactual schema has legacy
+                # single-account lineage. Do not collapse per-account
+                # outcomes into an unattributed counterfactual row.
                 if (
-                    evaluation.signal.strategy_activation_id
-                    in real_execution_selected_for
+                    evaluation.signal.strategy_activation_id in real_execution_selected_for
+                    and evaluation.decision is not None
                 ):
                     candidate = build_insufficient_funds_candidate(
                         evaluation,
                         entry_plan=bundle.entry_plan,
                         exit_plan=bundle.exit_plan,
-                        # Capture time is a persistence event, not the earlier
-                        # market-fact timestamp. Preserve decision lineage and
-                        # never put capture before its EntryDecision.
                         captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
                     )
                     if candidate is not None:

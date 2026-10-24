@@ -13,9 +13,12 @@ def test_authenticated_user_identity_comes_from_existing_key(monkeypatch):
             pass
 
         async def get(self, endpoint, params, *, authenticated):
-            assert endpoint == "/v5/user/query-api"
             assert authenticated
-            return {"retCode": 0, "result": {"userID": "existing-account"}}
+            if endpoint == "/v5/user/query-api":
+                return {"retCode": 0, "result": {"userID": "existing-account"}}
+            assert endpoint == "/v5/position/list"
+            assert params["settleCoin"] == "USDT"
+            return {"retCode": 0, "result": {"list": [], "nextPageCursor": ""}}
 
     monkeypatch.setattr(protection_probe, "LifecycleAccountReadTransport", FakeReader)
     monkeypatch.setattr(
@@ -29,6 +32,8 @@ def test_authenticated_user_identity_comes_from_existing_key(monkeypatch):
     ))
     assert account["account_user_id"] == "existing-account"
     assert account["complete"] is True
+    assert account["account_wide_positions"] == []
+    assert account["account_wide_pagination_complete"] is True
 
 
 def test_flat_scope_still_authenticates_account_identity(monkeypatch):
@@ -40,14 +45,22 @@ def test_flat_scope_still_authenticates_account_identity(monkeypatch):
 
         async def get(self, endpoint, params, *, authenticated):
             calls.append((endpoint, authenticated))
-            return {"retCode": 0, "result": {"userID": "existing-account"}}
+            if endpoint == "/v5/user/query-api":
+                return {"retCode": 0, "result": {"userID": "existing-account"}}
+            assert endpoint == "/v5/position/list"
+            assert params["settleCoin"] == "USDT"
+            return {"retCode": 0, "result": {"list": [], "nextPageCursor": ""}}
 
     monkeypatch.setattr(protection_probe, "LifecycleAccountReadTransport", FakeReader)
     account = asyncio.run(protection_probe.direct_account_snapshot(
         (), api_key="fixture", api_secret="fixture",
     ))
-    assert calls == [("/v5/user/query-api", True)]
+    assert calls == [
+        ("/v5/user/query-api", True),
+        ("/v5/position/list", True),
+    ]
     assert account["account_user_id"] == "existing-account"
+    assert account["account_wide_positions"] == []
     assert account["symbols"] == {}
 
 

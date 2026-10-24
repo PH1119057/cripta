@@ -659,6 +659,16 @@ class NotificationEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountEntryOutcome:
+    """One account-scoped result from a single shared StrategySignal/Attempt."""
+
+    binding: StrategyExecutionBindingRef
+    decision: EntryDecision
+    execution_request: ExecutionRequest | None
+    notifications: tuple[NotificationEvent, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class EntryEvaluation:
     signal: StrategySignal
     attempt: StrategyAttempt
@@ -668,6 +678,7 @@ class EntryEvaluation:
     sensor_links: tuple[SensorLink, ...]
     context_links: tuple[ContextLink, ...]
     notifications: tuple[NotificationEvent, ...]
+    account_outcomes: tuple[AccountEntryOutcome, ...] = ()
 
     @property
     def paper_intent(self) -> EntryExecutionIntent:

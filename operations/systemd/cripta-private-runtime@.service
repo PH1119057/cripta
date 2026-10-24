@@ -1,0 +1,39 @@
+# Core R05: template for an independently registered Bybit SUB only.
+# Provision the exact %i directory and non-secret env file under owner-approved
+# release controls BEFORE enabling this unit. Never use for existing MAIN.
+# No [Install] section: deploying a template must not enable any SUB.
+[Unit]
+Description=Cripta independent Bybit SUB private state (%i)
+After=network-online.target postgresql.service cripta-safety-observer.service
+Wants=network-online.target
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND=SUB
+Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i
+Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
+Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-sub-%i
+Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity:/srv/cripta/runtime/current/research/server/connectivity
+EnvironmentFile=/etc/cripta/private-runtime-%i.env
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/private_runtime.py --sub-account=%i
+LoadCredentialEncrypted=bybit-sub-%i:/etc/cripta/credentials/bybit-sub-%i.cred
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/cripta/private_runtime/sub-%i

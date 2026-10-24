@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from .account_position_inventory import complete_linear_positions
 from .transport import LifecycleAccountReadTransport
 
 
@@ -106,11 +107,23 @@ async def direct_account_snapshot(
     if not actual_user_id:
         raise RuntimeError("authenticated Bybit account userID unavailable")
     results = await asyncio.gather(*(_symbol_snapshot(reader, s) for s in symbols))
+    account_wide_positions = await complete_linear_positions(reader)
     return {
         "source": "BYBIT_AUTHENTICATED_ACCOUNT_GET",
         "account_ref": "BYBIT:UNIFIED",
         "account_user_id": actual_user_id,
+        # Preserve exact authenticated Bybit account-kind evidence for an
+        # independent TradingAccount registry comparison. No UID is logged.
+        "is_master": details.get("isMaster") if isinstance(details, Mapping) else None,
+        "parent_uid": (
+            str(details["parentUid"])
+            if isinstance(details, Mapping) and details.get("parentUid") is not None
+            else ""
+        ),
+        "uta": details.get("uta") if isinstance(details, Mapping) else None,
         "complete": True,
+        "account_wide_positions": account_wide_positions,
+        "account_wide_pagination_complete": True,
         # Conservative freshness: timestamp the beginning of the authenticated
         # inventory, not the end after potentially slow paginated reads.
         "observed_at": observed_at.isoformat(),

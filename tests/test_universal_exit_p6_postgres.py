@@ -10,6 +10,10 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from bybit_workbench.account_entry_safety import (
+    account_entry_safety_ready,
+    latch_account_entry_safety,
+)
 from bybit_workbench.strategy_position_binding import exchange_position_key
 from bybit_workbench.universal_exit.execution_bridge import (
     prepare_runtime_exit_command,
@@ -733,6 +737,34 @@ def test_two_accounts_complete_independent_exit_dispatch_with_entry_disarmed() -
         first = _seed(connection, prefix + "-a", symbol_override="BTCUSDT")
         second = _seed(connection, prefix + "-b", symbol_override="BTCUSDT")
         assert first["trading_account_id"] != second["trading_account_id"]
+        # One account lost private Entry readiness while BOTH accounts still
+        # have independently owned positions needing Exit protection.
+        for index, ids in enumerate((first, second), start=1):
+            ids["connector_id"] = f"{prefix}-connector-{index}"
+            connection.execute(
+                """INSERT INTO identity.account_connectors(
+                       account_connector_id,trading_account_id,
+                       connector_kind,adapter_id,credential_ref,status
+                   ) VALUES(%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                            'DISPOSABLE_EXIT_TEST_ONLY','ACTIVE')""",
+                (ids["connector_id"], ids["trading_account_id"]),
+            )
+        latch_account_entry_safety(
+            connection,
+            trading_account_id=first["trading_account_id"],
+            account_connector_id=first["connector_id"],
+            reason="PRIVATE_ENTRY_RECONCILIATION_UNPROVEN",
+        )
+        assert account_entry_safety_ready(
+            connection,
+            trading_account_id=first["trading_account_id"],
+            account_connector_id=first["connector_id"],
+        ) == (False, ("ACCOUNT_ENTRY_SAFETY_BLOCKED",))
+        assert account_entry_safety_ready(
+            connection,
+            trading_account_id=second["trading_account_id"],
+            account_connector_id=second["connector_id"],
+        ) == (True, ())
         _gate(connection, False)
         connection.commit()
 

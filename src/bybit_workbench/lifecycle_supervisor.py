@@ -5,8 +5,9 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, cast
 
+from bybit_workbench.lifecycle_exposure_bridge import unbound_strategy_claims
 from bybit_workbench.universal_entry.fingerprint import canonical_json, fingerprint
 
 
@@ -109,6 +110,8 @@ class LifecycleSupervisor:
         *,
         policy: LifecycleSupervisorPolicy | None = None,
         exchange_protection: Mapping[str, Mapping[str, object]] | None = None,
+        # None = unproven snapshot; () = proven empty inventory.
+        exchange_exposure: Sequence[Mapping[str, object]] | None = None,
         trading_account_id: str | None = None,
     ) -> None:
         self._connection = connection
@@ -118,6 +121,7 @@ class LifecycleSupervisor:
         )
         # Production passes independently read account evidence each scan.
         self._exchange_protection = exchange_protection
+        self._exchange_exposure = exchange_exposure
 
     def scan(self, *, now: datetime) -> LifecycleScanResult:
         current = now.astimezone(UTC)
@@ -1459,6 +1463,37 @@ class LifecycleSupervisor:
                 )
             )
 
+        # Only authenticated, account-bound inventory can produce ownership facts.
+        if self._exchange_exposure is not None and self._trading_account_id:
+            for item in unbound_strategy_claims(
+                self._exchange_exposure, account_id=self._trading_account_id
+            ):
+                key = (
+                    f"claim:{self._trading_account_id}:"
+                    f"{item['symbol']}:{item['position_idx']}"
+                )
+                faults.append(
+                    FaultCondition(
+                        "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN",
+                        FaultSeverity.CRITICAL,
+                        key,
+                        None,
+                        {
+                            "trading_account_id": self._trading_account_id,
+                            "symbol": item["symbol"],
+                            "position_idx": item["position_idx"],
+                            "exchange_position_slot_claim_ids": list(
+                                cast(tuple[str, ...], item["exchange_position_slot_claim_ids"])
+                            ),
+                        },
+                        {
+                            "reason": "physical slot has conflicting or unbound durable ownership",
+                            "matching_open_owner_ids": list(
+                                cast(tuple[str, ...], item["matching_open_owner_ids"])
+                            ),
+                        },
+                    )
+                )
         faults.extend(self._exchange_divergence_faults(now))
         return tuple(faults)
 
@@ -1707,6 +1742,9 @@ class LifecycleSupervisor:
                 fault_code == "EXCHANGE_STATE_DIVERGED"
                 and self._fresh_exchange_reconciliation(now) is None
             ):
+                continue
+            if fault_code == "EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN":
+                # Requires explicit verified lineage repair, not a blank snapshot.
                 continue
             fault_id = str(row["fault_id"])
             if fault_id in active_ids:

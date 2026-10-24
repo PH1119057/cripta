@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
+from bybit_workbench.account_live_arm import account_live_arm_ready
+from bybit_workbench.exchange.bybit.account_connector_attestation import (
+    attest_bybit_account_connector,
+)
 from bybit_workbench.capital_reservation import CapitalReservation, CapitalReservationState
 from bybit_workbench.entry_admission import EntryAdmissionReceipt, EntryAdmissionRequest
 from bybit_workbench.universal_entry import (
@@ -28,6 +35,8 @@ from bybit_workbench.universal_entry import (
     UniversalEntryEngine,
     StrategyExecutionBindingRef,
 )
+from bybit_workbench.universal_entry.contracts import EntryDecisionCode
+from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.dashboard import archive_v2
 
@@ -62,8 +71,9 @@ class FakeConnection:
 
 class AcceptingAdmissionPort:
     def admit(self, request: EntryAdmissionRequest) -> EntryAdmissionReceipt:
+        account = request.trading_account_id
         reservation = CapitalReservation(
-            reservation_id="cap-storage",
+            reservation_id=("cap-storage" if account == "ta-storage" else f"cap-{account}"),
             account_ref=request.account_ref,
             strategy_attempt_id=request.strategy_attempt_id,
             requested_amount=request.requested_amount,
@@ -76,9 +86,13 @@ class AcceptingAdmissionPort:
             state_reason="TEST",
         )
         return EntryAdmissionReceipt(
-            exchange_position_slot_claim_id="slot-storage",
+            exchange_position_slot_claim_id=(
+                "slot-storage" if account == "ta-storage" else f"slot-{account}"
+            ),
             exchange_position_key=request.exchange_position_key,
-            position_mode_state_ref="pmode-storage",
+            position_mode_state_ref=(
+                "pmode-storage" if account == "ta-storage" else f"pmode-{account}"
+            ),
             position_idx=0,
             capital_reservation=reservation,
         )
@@ -168,7 +182,10 @@ def strategy_card() -> StrategyCard:
     )
 
 
-def build_evaluation(*, real: bool = False):
+def build_evaluation(
+    *, real: bool = False, fanout: bool = False,
+    partial: bool = False, all_unarmed: bool = False,
+):
     card = strategy_card()
     activation = StrategyActivation(
         activation_id="act-storage",
@@ -232,6 +249,55 @@ def build_evaluation(*, real: bool = False):
                 },
             }
         )
+    if fanout:
+        kwargs.pop("execution_bindings", None)
+        kwargs.pop("exchange_position_keys", None)
+        kwargs.pop("entry_admission_port", None)
+        kwargs["account_admissions"] = {
+            "act-storage": (
+                AccountAdmissionContext(
+                    binding=StrategyExecutionBindingRef(
+                        "binding-one", "act-storage", "LEG_A", "ta-one"
+                    ),
+                    capacity=TradingCapacitySnapshot(
+                        "snapshot-one", NOW, Decimal("100"), DataQuality.HIGH,
+                        "runtime.account_state_generations:g-one",
+                    ),
+                    technical_readiness=TechnicalReadiness(
+                        not all_unarmed, NOW,
+                        "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN" if all_unarmed else "",
+                    ),
+                    account_ref="BYBIT:UNIFIED",
+                    exchange_position_key="ta-one:LINEAR:XRPUSDT:0",
+                    entry_admission_port=(
+                        None if all_unarmed else AcceptingAdmissionPort()
+                    ),
+                ),
+                AccountAdmissionContext(
+                    binding=StrategyExecutionBindingRef(
+                        "binding-two", "act-storage", "LEG_B", "ta-two"
+                    ),
+                    capacity=TradingCapacitySnapshot(
+                        "snapshot-two", NOW, Decimal("100"), DataQuality.HIGH,
+                        "runtime.account_state_generations:g-two",
+                    ),
+                    technical_readiness=TechnicalReadiness(
+                        not partial and not all_unarmed,
+                        NOW,
+                        (
+                            "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+                            if all_unarmed
+                            else ("SECOND_ACCOUNT_NOT_ARM_READY" if partial else "")
+                        ),
+                    ),
+                    account_ref="BYBIT:UNIFIED",
+                    exchange_position_key="ta-two:LINEAR:XRPUSDT:0",
+                    entry_admission_port=(
+                        None if all_unarmed else AcceptingAdmissionPort()
+                    ),
+                ),
+            )
+        }
     result = engine.process(fact, **kwargs)
     assert len(result) == 1
     return card, activation, entry_plan, result[0]
@@ -523,3 +589,231 @@ def test_storage_source_has_no_nearest_time_or_exchange_mutation() -> None:
     )
     for token in forbidden:
         assert token not in source
+
+
+def test_fanout_one_market_signal_two_account_admissions_persist_once() -> None:
+    card, activation, entry_plan, evaluation = build_evaluation(real=True, fanout=True)
+    assert evaluation.decision is None
+    assert evaluation.execution_request is None
+    assert len(evaluation.account_outcomes) == 2
+    one, two = evaluation.account_outcomes
+    assert one.decision.code is two.decision.code is EntryDecisionCode.ACCEPTED
+    assert one.binding.trading_account_id != two.binding.trading_account_id
+    assert one.decision.entry_decision_id != two.decision.entry_decision_id
+    assert one.execution_request is not None
+    assert two.execution_request is not None
+    assert one.execution_request.execution_request_id != two.execution_request.execution_request_id
+    assert one.execution_request.strategy_attempt_id == two.execution_request.strategy_attempt_id
+    assert one.execution_request.signal_id == two.execution_request.signal_id
+    assert (
+        one.execution_request.capital_reservation_id
+        != two.execution_request.capital_reservation_id
+    )
+    assert (
+        one.execution_request.exchange_position_slot_claim_id
+        != two.execution_request.exchange_position_slot_claim_id
+    )
+    connection = FakeConnection()
+    store = StrategyEntryStore(connection)
+    store.insert_strategy_card(card)
+    store.insert_activation(activation)
+    store.insert_entry_plan(entry_plan)
+    connection.statements.clear()
+    store.record_evaluation(evaluation)
+    sql = [statement for statement, _ in connection.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in item for item in sql) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in item for item in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in item for item in sql) == 2
+    assert sum("INSERT INTO strategy_entry.execution_requests" in item for item in sql) == 2
+    assert sum(
+        "INSERT INTO strategy_entry.execution_request_state_events" in item for item in sql
+    ) == 2
+    assert sum("INSERT INTO strategy_entry.notifications" in item for item in sql) == 0
+    assert connection.transactions == 1
+
+
+def test_fanout_one_account_not_ready_does_not_erase_other_account() -> None:
+    card, activation, entry_plan, evaluation = build_evaluation(
+        real=True, fanout=True, partial=True
+    )
+    one, two = evaluation.account_outcomes
+    assert one.decision.code is EntryDecisionCode.ACCEPTED
+    assert one.execution_request is not None
+    assert two.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+    assert "SECOND_ACCOUNT_NOT_ARM_READY" in two.decision.reason
+    assert two.execution_request is None
+    assert one.decision.entry_decision_id != two.decision.entry_decision_id
+    connection = FakeConnection()
+    store = StrategyEntryStore(connection)
+    store.insert_strategy_card(card)
+    store.insert_activation(activation)
+    store.insert_entry_plan(entry_plan)
+    connection.statements.clear()
+    store.record_evaluation(evaluation)
+    sql = [stmt for stmt, _params in connection.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in item for item in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in item for item in sql) == 2
+    assert sum("INSERT INTO strategy_entry.execution_requests" in item for item in sql) == 1
+
+
+def test_fanout_rejects_cross_account_request_before_any_storage_write() -> None:
+    _card, _activation, _plan, evaluation = build_evaluation(real=True, fanout=True)
+    one, two = evaluation.account_outcomes
+    assert one.execution_request is not None
+    forged = replace(
+        two,
+        execution_request=replace(
+            one.execution_request, entry_decision_id=two.decision.entry_decision_id
+        ),
+    )
+    connection = FakeConnection()
+    with pytest.raises(ValueError, match="REAL_FANOUT_REQUEST_ATTRIBUTION_MISMATCH"):
+        StrategyEntryStore(connection).record_evaluation(
+            replace(evaluation, account_outcomes=(one, forged))
+        )
+    assert connection.statements == []
+    assert connection.transactions == 0
+
+
+def test_fanout_rejects_duplicate_account_before_any_storage_write() -> None:
+    _card, _activation, _plan, evaluation = build_evaluation(real=True, fanout=True)
+    one, _two = evaluation.account_outcomes
+    connection = FakeConnection()
+    with pytest.raises(ValueError, match="REAL_FANOUT_DUPLICATED_ACCOUNT_OUTCOME"):
+        StrategyEntryStore(connection).record_evaluation(
+            replace(evaluation, account_outcomes=(one, one))
+        )
+    assert not connection.statements
+
+
+
+def test_unarmed_real_fanout_records_two_denials_and_never_creates_requests() -> None:
+    _card, _activation, _entry_plan, evaluation = build_evaluation(
+        real=True, fanout=True, all_unarmed=True
+    )
+    assert evaluation.decision is None
+    assert evaluation.execution_request is None
+    assert len(evaluation.account_outcomes) == 2
+    first, second = evaluation.account_outcomes
+    assert first.decision.entry_decision_id != second.decision.entry_decision_id
+    assert all(
+        outcome.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+        and outcome.decision.reason == "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+        and outcome.execution_request is None
+        and len(outcome.notifications) == 1
+        for outcome in evaluation.account_outcomes
+    )
+    assert first.notifications[0].notification_id != second.notifications[0].notification_id
+    connection = FakeConnection()
+    StrategyEntryStore(connection).record_evaluation(evaluation)
+    sql = [statement for statement, _ in connection.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in stmt for stmt in sql) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in stmt for stmt in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in stmt for stmt in sql) == 2
+    assert sum("INSERT INTO strategy_entry.notifications" in stmt for stmt in sql) == 2
+    assert not any("INSERT INTO strategy_entry.execution_requests" in stmt for stmt in sql)
+
+
+class _R06Rows:
+    def __init__(self, rows: list[tuple[object, ...]]) -> None:
+        self.rows = rows
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self.rows[0] if self.rows else None
+
+
+class _R06IdentityDB:
+    def __init__(self, *, connector_id: str, credential_ref: str) -> None:
+        self.connector_id = connector_id
+        self.credential_ref = credential_ref
+
+    def execute(self, query: str, params: tuple[object, ...] = ()) -> _R06Rows:
+        if "FROM identity.trading_accounts" in query:
+            return _R06Rows([
+                ("ta-one", "venue-bybit", "100", None, "MAIN", "UNIFIED",
+                 "MAINNET", "ACTIVE"),
+                ("ta-two", "venue-bybit", "200", "ta-one", "SUB", "UNIFIED",
+                 "MAINNET", "ACTIVE"),
+            ])
+        if "FROM identity.account_connectors" in query:
+            return _R06Rows([
+                (self.connector_id, "ta-one" if self.connector_id == "conn-one"
+                 else "ta-two", "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE",
+                 self.credential_ref, "ACTIVE", None),
+            ])
+        raise AssertionError("unexpected R06 offline identity query")
+
+
+class _R06ArmDB:
+    def __init__(self, *, expected_account: str, expected_binding: str) -> None:
+        self.expected_account = expected_account
+        self.expected_binding = expected_binding
+
+    def execute(self, query: str, params: tuple[object, ...] = ()) -> _R06Rows:
+        if "to_regclass" in query:
+            return _R06Rows([("control.account_live_arm_sessions",)])
+        if "FROM control.account_live_arm_sessions s" in query:
+            if params[1] == self.expected_binding and params[2] == self.expected_account:
+                return _R06Rows([(f"owner-arm-{self.expected_account}",)])
+            return _R06Rows([])
+        raise AssertionError("unexpected R06 offline arm query")
+
+
+def test_r06_offline_two_account_identity_arm_and_shared_signal_lineage() -> None:
+    """Contract-level dry run; NOT Bybit credentials, OWNER ARM or MICRO_LIVE evidence."""
+    card, _activation, _entry_plan, evaluation = build_evaluation(
+        real=True, fanout=True
+    )
+    assert len(evaluation.account_outcomes) == 2
+    for outcome, uid, parent, is_master, connector, secret_ref in (
+        (evaluation.account_outcomes[0], 100, "0", True, "conn-one", "cred-one"),
+        (evaluation.account_outcomes[1], 200, "100", False, "conn-two", "cred-two"),
+    ):
+        ta = outcome.binding.trading_account_id
+        account = attest_bybit_account_connector(
+            _R06IdentityDB(connector_id=connector, credential_ref=secret_ref),
+            trading_account_id=ta,
+            account_connector_id=connector,
+            verified_credential_ref=secret_ref,
+            signed_account_get=lambda uid=uid, parent=parent, is_master=is_master: {
+                "retCode": 0,
+                "result": {
+                    "userID": uid,
+                    "parentUid": parent,
+                    "isMaster": is_master,
+                    "uta": 1,
+                },
+            },
+            now=NOW,
+        )
+        assert account.ready, account.reasons
+        arm, reasons = account_live_arm_ready(
+            _R06ArmDB(
+                expected_account=ta,
+                expected_binding=outcome.binding.strategy_execution_binding_id,
+            ),
+            strategy_activation_id="act-storage",
+            strategy_execution_binding_id=outcome.binding.strategy_execution_binding_id,
+            trading_account_id=ta,
+            account_connector_id=connector,
+            strategy_id=card.strategy_id,
+            strategy_version=card.strategy_version,
+            strategy_config_fingerprint=card.strategy_config_fingerprint,
+            symbol="XRPUSDT",
+            release_commit="a" * 40,
+            now=NOW,
+        )
+        assert arm, reasons
+        assert outcome.execution_request is not None
+        assert outcome.execution_request.trading_account_id == ta
+        assert outcome.execution_request.execution_leg == outcome.binding.execution_leg
+    store_db = FakeConnection()
+    StrategyEntryStore(store_db).record_evaluation(evaluation)
+    sql = [statement for statement, _ in store_db.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in q for q in sql) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in q for q in sql) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in q for q in sql) == 2
+    assert sum("INSERT INTO strategy_entry.execution_requests" in q for q in sql) == 2

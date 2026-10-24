@@ -8,10 +8,14 @@ from typing import Protocol
 from .contracts import (
     ContextLink,
     ContextMode,
+    EntryDecision,
+    EntryDecisionCode,
     EntryEvaluation,
     EntryPlan,
+    ExecutionRequest,
     ExitPlan,
     FrozenPolicy,
+    NotificationEvent,
     ObjectiveContext,
     SensorLink,
     StrategyActivation,
@@ -211,89 +215,149 @@ class StrategyEntryStore:
         provenance: FrozenPolicy | None = None,
     ) -> None:
         evidence = provenance or FrozenPolicy.from_mapping({"source": "universal_entry"})
+        if evaluation.account_outcomes:
+            # One signal/attempt, many fully attributed account decisions. Never
+            # combine this path with legacy per-evaluation decision/request rows.
+            if (
+                evaluation.decision is not None
+                or evaluation.execution_request is not None
+                or evaluation.notifications
+            ):
+                raise ValueError("REAL_FANOUT_LEGACY_AND_PER_ACCOUNT_OUTCOMES_MIXED")
+            seen_bindings: set[str] = set()
+            seen_accounts: set[str] = set()
+            seen_legs: set[str] = set()
+            outcomes: list[
+                tuple[EntryDecision | None, ExecutionRequest | None, tuple[NotificationEvent, ...]]
+            ] = []
+            for item in evaluation.account_outcomes:
+                binding = item.binding
+                decision = item.decision
+                request = item.execution_request
+                if (
+                    decision.strategy_attempt_id != evaluation.attempt.strategy_attempt_id
+                    or decision.signal_id != evaluation.signal.signal_id
+                    or binding.strategy_activation_id
+                    != evaluation.attempt.strategy_activation_id
+                    or decision.strategy_execution_binding_id
+                    != binding.strategy_execution_binding_id
+                    or decision.trading_account_id != binding.trading_account_id
+                    or decision.execution_leg != binding.execution_leg
+                ):
+                    raise ValueError("REAL_FANOUT_DECISION_ATTRIBUTION_MISMATCH")
+                if (
+                    binding.strategy_execution_binding_id in seen_bindings
+                    or binding.trading_account_id in seen_accounts
+                    or binding.execution_leg in seen_legs
+                ):
+                    raise ValueError("REAL_FANOUT_DUPLICATED_ACCOUNT_OUTCOME")
+                if request is not None and (
+                    decision.code is not EntryDecisionCode.ACCEPTED
+                    or request.entry_decision_id != decision.entry_decision_id
+                    or request.strategy_attempt_id != decision.strategy_attempt_id
+                    or request.signal_id != decision.signal_id
+                    or request.strategy_execution_binding_id
+                    != binding.strategy_execution_binding_id
+                    or request.trading_account_id != binding.trading_account_id
+                    or request.execution_leg != binding.execution_leg
+                ):
+                    raise ValueError("REAL_FANOUT_REQUEST_ATTRIBUTION_MISMATCH")
+                if decision.code is EntryDecisionCode.ACCEPTED and request is None:
+                    raise ValueError("REAL_FANOUT_ACCEPTED_WITHOUT_EXECUTION_REQUEST")
+                seen_bindings.add(binding.strategy_execution_binding_id)
+                seen_accounts.add(binding.trading_account_id)
+                seen_legs.add(binding.execution_leg)
+                outcomes.append((decision, request, item.notifications))
+        else:
+            outcomes = [
+                (evaluation.decision, evaluation.execution_request, evaluation.notifications)
+            ]
         with self._connection.transaction():
             self._insert_signal(evaluation)
             self._insert_attempt(evaluation)
-            if evaluation.decision is not None:
-                self._insert_decision(evaluation)
+            for stored_decision, _request, _notices in outcomes:
+                if stored_decision is not None:
+                    self._insert_decision(evaluation, decision=stored_decision)
             for context_link in evaluation.context_links:
                 self._insert_context_evidence(evaluation, context_link, evidence)
             for sensor_link in evaluation.sensor_links:
                 self._insert_sensor_evidence(evaluation, sensor_link, evidence)
-            if evaluation.execution_request is not None:
-                request = evaluation.execution_request
-                self._connection.execute(
-                    """INSERT INTO strategy_entry.execution_requests(
-                           execution_request_id,strategy_attempt_id,entry_decision_id,
-                           signal_id,strategy_id,strategy_version,
-                           strategy_config_fingerprint,entry_plan_fingerprint,
-                           symbol,direction,requested_at,payload,
-                           exit_plan_fingerprint,capital_reservation_id,
-                           exchange_position_slot_claim_id,position_mode_state_ref,
-                           strategy_execution_binding_id,execution_leg,trading_account_id,
-                           identity_status
-                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,
-                                %s,%s,%s,'PROVEN')""",
-                    (
-                        request.execution_request_id,
-                        request.strategy_attempt_id,
-                        request.entry_decision_id,
-                        request.signal_id,
-                        request.strategy_id,
-                        request.strategy_version,
-                        request.strategy_config_fingerprint,
-                        request.entry_plan_fingerprint,
-                        request.symbol,
-                        request.direction.value,
-                        request.requested_at,
-                        request.payload.payload_json,
-                        request.exit_plan_fingerprint,
-                        request.capital_reservation_id,
-                        request.exchange_position_slot_claim_id,
-                        request.position_mode_state_ref,
-                        request.strategy_execution_binding_id,
-                        request.execution_leg,
-                        request.trading_account_id,
-                    ),
-                )
-                state_event_id = "reqstate-" + request.execution_request_id.removeprefix("request-")
-                self._connection.execute(
-                    """INSERT INTO strategy_entry.execution_request_state_events(
-                           request_state_event_id,execution_request_id,state,occurred_at,
-                           reason,payload
-                       ) VALUES(%s,%s,'REQUEST_PENDING',%s,%s,%s::jsonb)
-                       ON CONFLICT(request_state_event_id) DO NOTHING""",
-                    (
-                        state_event_id,
-                        request.execution_request_id,
-                        request.requested_at,
-                        "ACCEPTED EntryDecision created request",
-                        "{}",
-                    ),
-                )
-            for notice in evaluation.notifications:
-                self._connection.execute(
-                    """INSERT INTO strategy_entry.notifications(
-                           notification_id,strategy_attempt_id,signal_id,kind,
-                           strategy_id,strategy_version,symbol,direction,occurred_at,
-                           reason,requested_amount,available_amount,payload
-                       ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
-                    (
-                        notice.notification_id,
-                        notice.strategy_attempt_id,
-                        notice.signal_id,
-                        notice.kind.value,
-                        notice.strategy_id,
-                        notice.strategy_version,
-                        notice.symbol,
-                        notice.direction.value,
-                        notice.occurred_at,
-                        notice.reason,
-                        notice.requested_amount,
-                        notice.available_amount,
-                        _json(notice),
-                    ),
-                )
+            for _decision, request, notices in outcomes:
+                if request is not None:
+                    self._connection.execute(
+                        """INSERT INTO strategy_entry.execution_requests(
+                               execution_request_id,strategy_attempt_id,entry_decision_id,
+                               signal_id,strategy_id,strategy_version,
+                               strategy_config_fingerprint,entry_plan_fingerprint,
+                               symbol,direction,requested_at,payload,
+                               exit_plan_fingerprint,capital_reservation_id,
+                               exchange_position_slot_claim_id,position_mode_state_ref,
+                               strategy_execution_binding_id,execution_leg,trading_account_id,
+                               identity_status
+                           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,
+                                    %s,%s,%s,'PROVEN')""",
+                        (
+                            request.execution_request_id,
+                            request.strategy_attempt_id,
+                            request.entry_decision_id,
+                            request.signal_id,
+                            request.strategy_id,
+                            request.strategy_version,
+                            request.strategy_config_fingerprint,
+                            request.entry_plan_fingerprint,
+                            request.symbol,
+                            request.direction.value,
+                            request.requested_at,
+                            request.payload.payload_json,
+                            request.exit_plan_fingerprint,
+                            request.capital_reservation_id,
+                            request.exchange_position_slot_claim_id,
+                            request.position_mode_state_ref,
+                            request.strategy_execution_binding_id,
+                            request.execution_leg,
+                            request.trading_account_id,
+                        ),
+                    )
+                    state_event_id = (
+                        "reqstate-" + request.execution_request_id.removeprefix("request-")
+                    )
+                    self._connection.execute(
+                        """INSERT INTO strategy_entry.execution_request_state_events(
+                               request_state_event_id,execution_request_id,state,occurred_at,
+                               reason,payload
+                           ) VALUES(%s,%s,'REQUEST_PENDING',%s,%s,%s::jsonb)
+                           ON CONFLICT(request_state_event_id) DO NOTHING""",
+                        (
+                            state_event_id,
+                            request.execution_request_id,
+                            request.requested_at,
+                            "ACCEPTED EntryDecision created request",
+                            "{}",
+                        ),
+                    )
+                for notice in notices:
+                    self._connection.execute(
+                        """INSERT INTO strategy_entry.notifications(
+                               notification_id,strategy_attempt_id,signal_id,kind,
+                               strategy_id,strategy_version,symbol,direction,occurred_at,
+                               reason,requested_amount,available_amount,payload
+                           ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                        (
+                            notice.notification_id,
+                            notice.strategy_attempt_id,
+                            notice.signal_id,
+                            notice.kind.value,
+                            notice.strategy_id,
+                            notice.strategy_version,
+                            notice.symbol,
+                            notice.direction.value,
+                            notice.occurred_at,
+                            notice.reason,
+                            notice.requested_amount,
+                            notice.available_amount,
+                            _json(notice),
+                        ),
+                    )
 
     def record_observed_context(
         self,
@@ -384,8 +448,10 @@ class StrategyEntryStore:
             ),
         )
 
-    def _insert_decision(self, evaluation: EntryEvaluation) -> None:
-        decision = evaluation.decision
+    def _insert_decision(
+        self, evaluation: EntryEvaluation, *, decision: EntryDecision | None = None
+    ) -> None:
+        decision = evaluation.decision if decision is None else decision
         if decision is None:
             raise ValueError("_insert_decision requires EntryDecision")
         self._connection.execute(
