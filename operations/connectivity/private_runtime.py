@@ -1077,7 +1077,7 @@ def observe_m3_entry_context(
     else:
         assessment_id, mayak_id, observed_at, version, status, quality, payload, market_context_id = row
         age_seconds = (signal_at - observed_at).total_seconds()
-        freshness = "FRESH" if age_seconds >= 0 and age_seconds <= 90 else "STALE"
+        freshness = "FRESH" if 0 <= age_seconds <= 90 else "STALE"
         reason = "Причинная оценка Диспетчера сохранена только как контекст"
     document = {
         "signal_id": signal_id,
@@ -4456,10 +4456,8 @@ def main() -> None:
         bot_instance_id=BOT_INSTANCE_ID,
         credential_name=credential_name,
     )
-    if (
-        configured_kind == "SUB"
-        and BOT_INSTANCE_ID != f"private-sub-{TRADING_ACCOUNT_ID}"
-    ):
+    expected_instance_id = f"private-sub-{TRADING_ACCOUNT_ID}"
+    if configured_kind == "SUB" and expected_instance_id != BOT_INSTANCE_ID:
         raise RuntimeError("SUB_PRIVATE_WORKER_BOT_INSTANCE_ACCOUNT_MISMATCH")
     if (
         configured_kind == "SUB"
