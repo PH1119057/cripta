@@ -1,0 +1,32 @@
+# Core R02: one independently gated consumer per provisioned SUB TradingAccount.
+# The env file contains registry IDs and safe settings only, NO credentials.
+# No [Install]: deployment must never auto-enable Entry for an account.
+[Unit]
+Description=Cripta Universal Entry SUB consumer (%i, initially disabled)
+After=network-online.target postgresql.service cripta-private-runtime@%i.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
+Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages
+EnvironmentFile=/etc/cripta/release.env
+EnvironmentFile=/etc/cripta/private-runtime-%i.env
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/universal_entry_consumer.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
