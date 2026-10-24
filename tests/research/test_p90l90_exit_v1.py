@@ -8,8 +8,8 @@ from scripts.research.p90l90_exit_v1 import (
     gross_and_net,
     initial_position,
     on_trade,
-    take_profit_eligible,
     scenario_keys,
+    take_profit_eligible,
     threshold_price,
     trade_record,
 )
