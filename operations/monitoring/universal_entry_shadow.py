@@ -59,6 +59,7 @@ from bybit_workbench.universal_entry import (
     TradingCapacitySnapshot,
     UniversalEntryEngine,
 )
+from bybit_workbench.universal_entry.engine import AccountAdmissionContext
 from bybit_workbench.universal_entry.fingerprint import fingerprint
 from bybit_workbench.universal_entry.market_watch import GenericOiPoint
 from bybit_workbench.universal_entry.materializer import materialize_plans
@@ -1230,6 +1231,81 @@ def _real_execution_selected_activation_ids(
     )
 
 
+def _unarmed_multi_account_candidate_bindings(
+    connection: Any,
+    bundles: tuple[object, ...],
+    *,
+    observed_at: datetime,
+) -> dict[str, tuple[StrategyExecutionBindingRef, ...]]:
+    """Observe all real candidate legs without interpreting legacy arms as authority.
+
+    This is intentionally only a roster. Under the current Strategy/symbol
+    legacy arm, multi-account rows MUST produce blocked Entry outcomes, not
+    executable admissions. R04 must deliver separately proven account-scoped
+    owner arms before these candidates may be given admission ports.
+    """
+    if observed_at.tzinfo is None:
+        raise ValueError("account candidate snapshot requires aware timestamp")
+    at = observed_at.astimezone(UTC)
+    known = {cast(Any, bundle).activation.activation_id for bundle in bundles}
+    rows = connection.execute(
+        """SELECT strategy_execution_binding_id,strategy_activation_id,
+                  execution_leg,trading_account_id
+             FROM strategy_entry.strategy_execution_bindings
+            WHERE binding_state='ACTIVE'
+              AND effective_from<=%s
+              AND (effective_to IS NULL OR effective_to>%s)
+            ORDER BY strategy_activation_id,execution_leg,trading_account_id""",
+        (at, at),
+    ).fetchall()
+    by_activation: dict[str, list[StrategyExecutionBindingRef]] = {}
+    for row in rows:
+        binding = StrategyExecutionBindingRef(
+            strategy_execution_binding_id=str(row[0]),
+            strategy_activation_id=str(row[1]),
+            execution_leg=str(row[2]),
+            trading_account_id=str(row[3]),
+        )
+        if binding.strategy_activation_id in known:
+            by_activation.setdefault(binding.strategy_activation_id, []).append(binding)
+    return {
+        activation: tuple(legs)
+        for activation, legs in by_activation.items()
+        if len(legs) > 1
+    }
+
+
+def _blocked_multi_account_admissions(
+    candidates: Mapping[str, tuple[StrategyExecutionBindingRef, ...]],
+    *,
+    symbol: str,
+    observed_at: datetime,
+) -> dict[str, tuple[AccountAdmissionContext, ...]]:
+    """Explicit blocked results for every effective multi-account binding.
+
+    Never infer account authentication, connector readiness, owner arm or
+    capital state from the mere existence of a Strategy binding.
+    """
+    return {
+        activation_id: tuple(
+            AccountAdmissionContext(
+                binding=binding,
+                capacity=None,
+                technical_readiness=TechnicalReadiness(
+                    False, observed_at, "MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN"
+                ),
+                account_ref="BYBIT:UNIFIED",
+                exchange_position_key=exchange_position_key(
+                    binding.trading_account_id, symbol, 0
+                ),
+                entry_admission_port=None,
+            )
+            for binding in legs
+        )
+        for activation_id, legs in candidates.items()
+    }
+
+
 def _real_execution_bindings(
     connection: Any,
     bundles: tuple[object, ...],
@@ -1805,11 +1881,16 @@ def _run_observer_epoch(
         connection, bundles
     )
     release_ready_for = _real_execution_activation_ids(connection, bundles)
-    execution_bindings = _real_execution_bindings(
-        connection,
-        bundles,
-        observed_at=epoch_started,
+    multi_account_candidates = _unarmed_multi_account_candidate_bindings(
+        connection, bundles, observed_at=epoch_started
     )
+    execution_bindings = {
+        activation: binding
+        for activation, binding in _real_execution_bindings(
+            connection, bundles, observed_at=epoch_started
+        ).items()
+        if activation not in multi_account_candidates
+    }
     binding_ready_for = frozenset(execution_bindings)
     real_admission_ready_for = release_ready_for.intersection(binding_ready_for)
     entry_admission_port = (
@@ -2212,6 +2293,15 @@ def _run_observer_epoch(
                 real_admission_required_for=real_execution_selected_for,
                 real_admission_ready_for=real_admission_ready_for,
                 execution_bindings=execution_bindings,
+                account_admissions=(
+                    _blocked_multi_account_admissions(
+                        multi_account_candidates,
+                        symbol=fact.symbol,
+                        observed_at=admission_time,
+                    )
+                    if multi_account_candidates
+                    else None
+                ),
                 exchange_position_keys={
                     symbol: exchange_position_key(TRADING_ACCOUNT_ID, symbol, 0)
                     for symbol in symbols
@@ -2238,17 +2328,21 @@ def _run_observer_epoch(
                     evaluation.signal.strategy_activation_id
                     in real_execution_selected_for
                 ):
-                    candidate = build_insufficient_funds_candidate(
-                        evaluation,
-                        entry_plan=bundle.entry_plan,
-                        exit_plan=bundle.exit_plan,
-                        # Capture time is a persistence event, not the earlier
-                        # market-fact timestamp. Preserve decision lineage and
-                        # never put capture before its EntryDecision.
-                        captured_at=max(datetime.now(UTC), evaluation.decision.decided_at),
-                    )
-                    if candidate is not None:
-                        counterfactual_store.record_candidate(candidate)
+                    # The existing counterfactual schema has legacy
+                    # single-account lineage. Do not collapse per-account
+                    # outcomes into an unattributed counterfactual row.
+                    if evaluation.decision is not None:
+                        candidate = build_insufficient_funds_candidate(
+                            evaluation,
+                            entry_plan=bundle.entry_plan,
+                            exit_plan=bundle.exit_plan,
+                            # Persistence time may not precede EntryDecision.
+                            captured_at=max(
+                                datetime.now(UTC), evaluation.decision.decided_at
+                            ),
+                        )
+                        if candidate is not None:
+                            counterfactual_store.record_candidate(candidate)
                 if (
                     evaluation.signal.strategy_activation_id
                     not in real_execution_selected_for
