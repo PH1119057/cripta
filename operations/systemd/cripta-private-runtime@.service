@@ -7,6 +7,8 @@ Description=Cripta independent Bybit SUB private state (%i)
 After=network-online.target postgresql.service cripta-safety-observer.service
 Wants=network-online.target
 Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
