@@ -1165,6 +1165,13 @@ def _observer_intervals(bundles: tuple[object, ...]) -> tuple[str, ...]:
 
 
 def _observer_light_signature(connection: Any) -> tuple[tuple[str, ...], ...]:
+    if not real_selected_for:
+        return (
+            _blocked_multi_account_admissions(
+                candidates, symbol=symbol, observed_at=observed_at
+            ),
+            frozenset(),
+        )
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
     ).fetchone()
@@ -3603,7 +3610,7 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-                      AND a.external_account_ref <> '0'""",
+                      AND a.external_account_ref ~ '[1-9]'""",
                 (binding.trading_account_id,),
             ).fetchall()
             if len(connector_rows) != 1:
