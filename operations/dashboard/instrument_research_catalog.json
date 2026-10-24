@@ -2499,7 +2499,11 @@
         "total_negative_after_fees_usdt": -1.011807684843,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "9249.01445",
-        "protected_stop_net_usdt_exact": "0.014855324864"
+        "protected_stop_net_usdt_exact": "0.014855324864",
+        "profit_protected_usdt": 0.014855324864,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.011807684843"
       },
       "counts": {
         "qualified_entry_candidates": 1050,
@@ -2561,7 +2565,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2640,7 +2644,11 @@
         "total_negative_after_fees_usdt": -1.011807684843,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7350.3860",
-        "protected_stop_net_usdt_exact": "2.792456565854"
+        "protected_stop_net_usdt_exact": "2.792456565854",
+        "profit_protected_usdt": 2.792456565854,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.011807684843"
       },
       "counts": {
         "qualified_entry_candidates": 1050,
@@ -2701,7 +2709,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2781,7 +2789,11 @@
         "total_negative_after_fees_usdt": -1.011807684843,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "8212.45425",
-        "protected_stop_net_usdt_exact": "0.813408569917"
+        "protected_stop_net_usdt_exact": "0.813408569917",
+        "profit_protected_usdt": 0.813408569917,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.011807684843"
       },
       "counts": {
         "qualified_entry_candidates": 1050,
@@ -2843,7 +2855,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -2922,7 +2934,11 @@
         "total_negative_after_fees_usdt": -2.023095906249,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "9629.6639",
-        "protected_stop_net_usdt_exact": "0.011725477475"
+        "protected_stop_net_usdt_exact": "0.011725477475",
+        "profit_protected_usdt": 0.011893975852,
+        "loss_protected_usdt": -0.000168498377,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-2.022927407872"
       },
       "counts": {
         "qualified_entry_candidates": 1071,
@@ -2983,7 +2999,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3062,7 +3078,11 @@
         "total_negative_after_fees_usdt": -2.022927407872,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6900.6452",
-        "protected_stop_net_usdt_exact": "3.035883552850"
+        "protected_stop_net_usdt_exact": "3.035883552850",
+        "profit_protected_usdt": 3.03588355285,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-2.022927407872"
       },
       "counts": {
         "qualified_entry_candidates": 1071,
@@ -3123,7 +3143,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3202,7 +3222,11 @@
         "total_negative_after_fees_usdt": -2.022927407872,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "8007.9751",
-        "protected_stop_net_usdt_exact": "1.036433380677"
+        "protected_stop_net_usdt_exact": "1.036433380677",
+        "profit_protected_usdt": 1.036433380677,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-2.022927407872"
       },
       "counts": {
         "qualified_entry_candidates": 1071,
@@ -3263,7 +3287,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -3343,7 +3367,11 @@
         "total_negative_after_fees_usdt": -1.01045,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "9418.5398",
-        "protected_stop_net_usdt_exact": "0.017135099647"
+        "protected_stop_net_usdt_exact": "0.017135099647",
+        "profit_protected_usdt": 0.017135099647,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.010450000000"
       },
       "counts": {
         "qualified_entry_candidates": 1118,
@@ -3406,7 +3434,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3485,7 +3513,11 @@
         "total_negative_after_fees_usdt": -1.01045,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7350.3860",
-        "protected_stop_net_usdt_exact": "2.683741022346"
+        "protected_stop_net_usdt_exact": "2.683741022346",
+        "profit_protected_usdt": 2.683741022346,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.010450000000"
       },
       "counts": {
         "qualified_entry_candidates": 1118,
@@ -3546,7 +3578,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3626,7 +3658,11 @@
         "total_negative_after_fees_usdt": -1.01045,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "8052.11975",
-        "protected_stop_net_usdt_exact": "0.860104020609"
+        "protected_stop_net_usdt_exact": "0.860104020609",
+        "profit_protected_usdt": 0.860104020609,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-1.010450000000"
       },
       "counts": {
         "qualified_entry_candidates": 1118,
@@ -3689,7 +3725,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3769,7 +3805,11 @@
         "total_negative_after_fees_usdt": -5.057350343391,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "10190.33285",
-        "protected_stop_net_usdt_exact": "0.038969106364"
+        "protected_stop_net_usdt_exact": "0.038969106364",
+        "profit_protected_usdt": 0.039494884956,
+        "loss_protected_usdt": -0.000525778592,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 679,
@@ -3832,7 +3872,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -3911,7 +3951,11 @@
         "total_negative_after_fees_usdt": -5.056824564799,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7836.9667",
-        "protected_stop_net_usdt_exact": "2.260101706953"
+        "protected_stop_net_usdt_exact": "2.260101706953",
+        "profit_protected_usdt": 2.260101706953,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 679,
@@ -3973,7 +4017,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4052,7 +4096,11 @@
         "total_negative_after_fees_usdt": -5.056824564799,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7836.9667",
-        "protected_stop_net_usdt_exact": "1.277732312814"
+        "protected_stop_net_usdt_exact": "1.277732312814",
+        "profit_protected_usdt": 1.277732312814,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 679,
@@ -4114,7 +4162,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4193,7 +4241,11 @@
         "total_negative_after_fees_usdt": -5.056142543199,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "8478.4832",
-        "protected_stop_net_usdt_exact": "0.067649856652"
+        "protected_stop_net_usdt_exact": "0.067649856652",
+        "profit_protected_usdt": 0.067649856652,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056142543199"
       },
       "counts": {
         "qualified_entry_candidates": 733,
@@ -4255,7 +4307,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4334,7 +4386,11 @@
         "total_negative_after_fees_usdt": -5.056142543199,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "5158.2734",
-        "protected_stop_net_usdt_exact": "3.073989377239"
+        "protected_stop_net_usdt_exact": "3.073989377239",
+        "profit_protected_usdt": 3.073989377239,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056142543199"
       },
       "counts": {
         "qualified_entry_candidates": 733,
@@ -4396,7 +4452,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4475,7 +4531,11 @@
         "total_negative_after_fees_usdt": -5.056142543199,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "5858.3533",
-        "protected_stop_net_usdt_exact": "1.611830584209"
+        "protected_stop_net_usdt_exact": "1.611830584209",
+        "profit_protected_usdt": 1.611830584209,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056142543199"
       },
       "counts": {
         "qualified_entry_candidates": 733,
@@ -4537,7 +4597,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -4617,7 +4677,11 @@
         "total_negative_after_fees_usdt": -5.057350343391,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "10190.33285",
-        "protected_stop_net_usdt_exact": "0.045126094075"
+        "protected_stop_net_usdt_exact": "0.045126094075",
+        "profit_protected_usdt": 0.045651872667,
+        "loss_protected_usdt": -0.000525778592,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 755,
@@ -4680,7 +4744,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4759,7 +4823,11 @@
         "total_negative_after_fees_usdt": -5.056824564799,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7836.9667",
-        "protected_stop_net_usdt_exact": "2.452756315392"
+        "protected_stop_net_usdt_exact": "2.452756315392",
+        "profit_protected_usdt": 2.452756315392,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 755,
@@ -4821,7 +4889,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -4900,7 +4968,11 @@
         "total_negative_after_fees_usdt": -5.056824564799,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7836.9667",
-        "protected_stop_net_usdt_exact": "1.346317687763"
+        "protected_stop_net_usdt_exact": "1.346317687763",
+        "profit_protected_usdt": 1.346317687763,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-5.056824564799"
       },
       "counts": {
         "qualified_entry_candidates": 755,
@@ -4962,7 +5034,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5041,7 +5113,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6795.1273",
-        "protected_stop_net_usdt_exact": "0.106823751393"
+        "protected_stop_net_usdt_exact": "0.106823751393",
+        "profit_protected_usdt": 0.106823751393,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 509,
@@ -5102,7 +5178,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5181,7 +5257,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "3725.3170",
-        "protected_stop_net_usdt_exact": "4.687353730972"
+        "protected_stop_net_usdt_exact": "4.687353730972",
+        "profit_protected_usdt": 4.687353730972,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 509,
@@ -5242,7 +5322,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5321,7 +5401,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4880.07795",
-        "protected_stop_net_usdt_exact": "3.025980851808"
+        "protected_stop_net_usdt_exact": "3.025980851808",
+        "profit_protected_usdt": 3.025980851808,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 509,
@@ -5382,7 +5466,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -5461,7 +5545,11 @@
         "total_negative_after_fees_usdt": -4.043596951301,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6825.25615",
-        "protected_stop_net_usdt_exact": "0.112309751303"
+        "protected_stop_net_usdt_exact": "0.112309751303",
+        "profit_protected_usdt": 0.112309751303,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043596951301"
       },
       "counts": {
         "qualified_entry_candidates": 584,
@@ -5522,7 +5610,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -5601,7 +5689,11 @@
         "total_negative_after_fees_usdt": -4.043596951301,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4026.4294",
-        "protected_stop_net_usdt_exact": "4.632626659054"
+        "protected_stop_net_usdt_exact": "4.632626659054",
+        "profit_protected_usdt": 4.632626659054,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043596951301"
       },
       "counts": {
         "qualified_entry_candidates": 584,
@@ -5662,7 +5754,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -5741,7 +5833,11 @@
         "total_negative_after_fees_usdt": -4.043596951301,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "5003.4185",
-        "protected_stop_net_usdt_exact": "3.335388714082"
+        "protected_stop_net_usdt_exact": "3.335388714082",
+        "profit_protected_usdt": 3.335388714082,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043596951301"
       },
       "counts": {
         "qualified_entry_candidates": 584,
@@ -5802,7 +5898,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -5881,7 +5977,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6796.2000",
-        "protected_stop_net_usdt_exact": "0.118455473224"
+        "protected_stop_net_usdt_exact": "0.118455473224",
+        "profit_protected_usdt": 0.118455473224,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 562,
@@ -5942,7 +6042,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6021,7 +6121,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "3856.1150",
-        "protected_stop_net_usdt_exact": "5.221968861527"
+        "protected_stop_net_usdt_exact": "5.221968861527",
+        "profit_protected_usdt": 5.221968861527,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 562,
@@ -6082,7 +6186,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6161,7 +6265,11 @@
         "total_negative_after_fees_usdt": -4.043341567454,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "5129.3968",
-        "protected_stop_net_usdt_exact": "3.101372476803"
+        "protected_stop_net_usdt_exact": "3.101372476803",
+        "profit_protected_usdt": 3.101372476803,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.043341567454"
       },
       "counts": {
         "qualified_entry_candidates": 562,
@@ -6222,7 +6330,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6302,7 +6410,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6987.33735",
-        "protected_stop_net_usdt_exact": "0.066150343266"
+        "protected_stop_net_usdt_exact": "0.066150343266",
+        "profit_protected_usdt": 0.066150343266,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 624,
@@ -6364,7 +6476,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6443,7 +6555,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4109.6984",
-        "protected_stop_net_usdt_exact": "3.188613909392"
+        "protected_stop_net_usdt_exact": "3.188613909392",
+        "profit_protected_usdt": 3.188613909392,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 624,
@@ -6504,7 +6620,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6584,7 +6700,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4932.83665",
-        "protected_stop_net_usdt_exact": "2.198853406832"
+        "protected_stop_net_usdt_exact": "2.198853406832",
+        "profit_protected_usdt": 2.198853406832,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 624,
@@ -6646,7 +6766,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -6726,7 +6846,11 @@
         "total_negative_after_fees_usdt": -4.044593932204,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "7002.0569",
-        "protected_stop_net_usdt_exact": "0.073713763813"
+        "protected_stop_net_usdt_exact": "0.073713763813",
+        "profit_protected_usdt": 0.073713763813,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044593932204"
       },
       "counts": {
         "qualified_entry_candidates": 637,
@@ -6788,7 +6912,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -6867,7 +6991,11 @@
         "total_negative_after_fees_usdt": -4.044593932204,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4052.1013",
-        "protected_stop_net_usdt_exact": "3.356738428681"
+        "protected_stop_net_usdt_exact": "3.356738428681",
+        "profit_protected_usdt": 3.356738428681,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044593932204"
       },
       "counts": {
         "qualified_entry_candidates": 637,
@@ -6928,7 +7056,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -7008,7 +7136,11 @@
         "total_negative_after_fees_usdt": -4.044593932204,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4987.59015",
-        "protected_stop_net_usdt_exact": "2.523861621112"
+        "protected_stop_net_usdt_exact": "2.523861621112",
+        "profit_protected_usdt": 2.523861621112,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044593932204"
       },
       "counts": {
         "qualified_entry_candidates": 637,
@@ -7070,7 +7202,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -7150,7 +7282,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "6972.6178",
-        "protected_stop_net_usdt_exact": "0.077030416362"
+        "protected_stop_net_usdt_exact": "0.077030416362",
+        "profit_protected_usdt": 0.077030416362,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 695,
@@ -7212,7 +7348,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7291,7 +7427,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "3762.3850",
-        "protected_stop_net_usdt_exact": "3.682847125938"
+        "protected_stop_net_usdt_exact": "3.682847125938",
+        "profit_protected_usdt": 3.682847125938,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 695,
@@ -7352,7 +7492,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7432,7 +7572,11 @@
         "total_negative_after_fees_usdt": -4.044931937111,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4917.3835",
-        "protected_stop_net_usdt_exact": "2.322184663485"
+        "protected_stop_net_usdt_exact": "2.322184663485",
+        "profit_protected_usdt": 2.322184663485,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-4.044931937111"
       },
       "counts": {
         "qualified_entry_candidates": 695,
@@ -7494,7 +7638,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7574,7 +7718,11 @@
         "total_negative_after_fees_usdt": -6.070891510655,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4889.3437",
-        "protected_stop_net_usdt_exact": "0.109560847256"
+        "protected_stop_net_usdt_exact": "0.109560847256",
+        "profit_protected_usdt": 0.109875717241,
+        "loss_protected_usdt": -0.000314869985,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.070576640670"
       },
       "counts": {
         "qualified_entry_candidates": 444,
@@ -7638,7 +7786,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7717,7 +7865,11 @@
         "total_negative_after_fees_usdt": -6.07057664067,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "2085.5387",
-        "protected_stop_net_usdt_exact": "5.431448245076"
+        "protected_stop_net_usdt_exact": "5.431448245076",
+        "profit_protected_usdt": 5.431448245076,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.070576640670"
       },
       "counts": {
         "qualified_entry_candidates": 444,
@@ -7779,7 +7931,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -7859,7 +8011,11 @@
         "total_negative_after_fees_usdt": -6.07057664067,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "2556.3126",
-        "protected_stop_net_usdt_exact": "4.483483369591"
+        "protected_stop_net_usdt_exact": "4.483483369591",
+        "profit_protected_usdt": 4.483483369591,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.070576640670"
       },
       "counts": {
         "qualified_entry_candidates": 444,
@@ -7922,7 +8078,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8001,7 +8157,11 @@
         "total_negative_after_fees_usdt": -6.07167985317,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4420.5454",
-        "protected_stop_net_usdt_exact": "0.126413750129"
+        "protected_stop_net_usdt_exact": "0.126413750129",
+        "profit_protected_usdt": 0.126857108259,
+        "loss_protected_usdt": -0.00044335813,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.071236495040"
       },
       "counts": {
         "qualified_entry_candidates": 589,
@@ -8062,7 +8222,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8141,7 +8301,11 @@
         "total_negative_after_fees_usdt": -6.07123649504,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "1495.5005",
-        "protected_stop_net_usdt_exact": "6.310876167025"
+        "protected_stop_net_usdt_exact": "6.310876167025",
+        "profit_protected_usdt": 6.310876167025,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.071236495040"
       },
       "counts": {
         "qualified_entry_candidates": 589,
@@ -8202,7 +8366,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8281,7 +8445,11 @@
         "total_negative_after_fees_usdt": -6.07123649504,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "2116.24665",
-        "protected_stop_net_usdt_exact": "5.776562997610"
+        "protected_stop_net_usdt_exact": "5.776562997610",
+        "profit_protected_usdt": 5.77656299761,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-6.071236495040"
       },
       "counts": {
         "qualified_entry_candidates": 589,
@@ -8342,7 +8510,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "NO_FOR_WIDTH_FILTER_ONLY;SCENARIO_SELECTION_NOT_OOS",
@@ -8422,7 +8590,11 @@
         "total_negative_after_fees_usdt": -7.083575492521,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "4420.5454",
-        "protected_stop_net_usdt_exact": "0.119545821670"
+        "protected_stop_net_usdt_exact": "0.119545821670",
+        "profit_protected_usdt": 0.119860691655,
+        "loss_protected_usdt": -0.000314869985,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-7.083260622536"
       },
       "counts": {
         "qualified_entry_candidates": 473,
@@ -8486,7 +8658,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8565,7 +8737,11 @@
         "total_negative_after_fees_usdt": -7.083260622536,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "1933.0159",
-        "protected_stop_net_usdt_exact": "6.039663353270"
+        "protected_stop_net_usdt_exact": "6.039663353270",
+        "profit_protected_usdt": 6.03966335327,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-7.083260622536"
       },
       "counts": {
         "qualified_entry_candidates": 473,
@@ -8627,7 +8803,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
@@ -8707,7 +8883,11 @@
         "total_negative_after_fees_usdt": -7.083260622536,
         "return_denominator": "NO_VERIFIED_CAPITAL_BASE_PER_EXACT_INSTRUMENT",
         "holding_seconds_median": "2423.9851",
-        "protected_stop_net_usdt_exact": "5.149235504689"
+        "protected_stop_net_usdt_exact": "5.149235504689",
+        "profit_protected_usdt": 5.149235504689,
+        "loss_protected_usdt": 0,
+        "loss_tp_usdt": 0,
+        "hard_stop_net_usdt_exact": "-7.083260622536"
       },
       "counts": {
         "qualified_entry_candidates": 473,
@@ -8770,7 +8950,7 @@
       "quality": {
         "source_research_qc": "INDEPENDENT_ENTRY_EVENT_AND_PER_TRADE_DECIMAL_LEDGER_QC_PASS",
         "exact_identity_qc": "REUSED_GITHUB_CANONICAL_INSTRUMENT_IDENTITY;DB_NOT_CHECKED",
-        "publication_qc": "REVIEWED_GIT_PUBLICATION_CANDIDATE",
+        "publication_qc": "MODEL_QC_PASS_GIT_RECORD_REVIEW_REQUIRED_BEFORE_MAIN",
         "oos": "NOT_VERIFIED",
         "live_equivalence": "NOT_VERIFIED",
         "lookahead": "YES",
