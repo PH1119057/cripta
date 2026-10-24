@@ -801,6 +801,27 @@ def _execution_gate_enabled(connection: psycopg.Connection[Any]) -> bool:
     return bool(row and row["enabled"])
 
 
+def _critical_lifecycle_fault_code(
+    connection: psycopg.Connection[Any], *, trading_account_id: str,
+) -> str | None:
+    """Fail closed on unscoped or matching-account OPEN CRITICAL faults.
+
+    An exact fault for another TradingAccount is independent; legacy/unscoped
+    faults cannot be attributed safely and remain an Entry blocker.
+    """
+    if not trading_account_id:
+        raise RuntimeError("required TradingAccount identity missing")
+    row = connection.execute(
+        """SELECT fault_code FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
+                   OR exact_ids->>'trading_account_id'=%s)
+            ORDER BY detected_at,fault_id LIMIT 1""",
+        (trading_account_id,),
+    ).fetchone()
+    return None if row is None else str(row["fault_code"])
+
+
 def _live_arm_ready(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
@@ -983,6 +1004,28 @@ def run_once(connection: psycopg.Connection[Any], *, now: datetime | None = None
                 reason=reason,
             )
         return "BLOCKED:EXCHANGE_POSITION_OWNERSHIP_INVARIANT_BROKEN"
+
+    fault_code = _critical_lifecycle_fault_code(
+        connection, trading_account_id=request.trading_account_id or "",
+    )
+    if fault_code is not None:
+        # An existing EntryExecutionRequest is not grandfathered through a
+        # newly detected CRITICAL fault. No Exchange mutation has been sent.
+        reason = f"CRITICAL_LIFECYCLE_FAULT:{fault_code}"
+        with connection.transaction():
+            _record_blocked(
+                connection, request, reason=reason,
+                payload={"block_code": "CRITICAL_LIFECYCLE_FAULT", "fault_code": fault_code},
+            )
+            _release_pre_exchange_admission(
+                connection, request,
+                reason="PRE_EXCHANGE_BLOCK:CRITICAL_LIFECYCLE_FAULT", now=current,
+            )
+            _record_request_state(
+                connection, request, state="REQUEST_CANCELLED",
+                occurred_at=current, reason=reason,
+            )
+        return "BLOCKED:CRITICAL_LIFECYCLE_FAULT"
 
     live_ready, failed_live_checks = _live_arm_ready(connection, row, now=current)
     if not live_ready:

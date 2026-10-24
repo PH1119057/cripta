@@ -470,6 +470,21 @@ def restore_r1_gate_after_verified_reconnect(
     return True
 
 
+def _critical_lifecycle_fault_code(connection: psycopg.Connection) -> str | None:
+    """Read-only, fail-closed new Entry guard for exact TradingAccount."""
+    if not TRADING_ACCOUNT_ID:
+        raise RuntimeError("required TradingAccount identity missing")
+    row = connection.execute(
+        """SELECT fault_code FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
+                   OR exact_ids->>'trading_account_id'=%s)
+            ORDER BY detected_at,fault_id LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchone()
+    return None if row is None else str(row[0])
+
+
 def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
@@ -538,6 +553,9 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         trailing = Decimal(str(raw.get("trailingStop") or 0))
         if stop <= 0 and trailing <= 0:
             return False, f"UNPROTECTED_EXCHANGE_POSITION:{symbol}"
+    fault_code = _critical_lifecycle_fault_code(connection)
+    if fault_code is not None:
+        return False, f"CRITICAL_LIFECYCLE_FAULT:{fault_code}"
     return True, "REARM_READY"
 
 
@@ -2296,6 +2314,11 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
+        fault_code = _critical_lifecycle_fault_code(connection)
+        if fault_code is not None:
+            # First Exchange mutation for this Entry is below. Avoid claiming
+            # pre-mutation safety after any Exchange mutation was already sent.
+            raise PreMutationSafetyBlock(f"CRITICAL_LIFECYCLE_FAULT:{fault_code}")
         api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
         contract = initial_protection_contract(payload)
         stop, target = resolve_initial_protection_boundaries(

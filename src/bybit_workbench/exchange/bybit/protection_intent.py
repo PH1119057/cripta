@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 
 
 class ProtectionIntentUnavailable(ValueError):
@@ -38,7 +38,7 @@ def initial_protection_surfaces_observed(
         try:
             amount = Decimal(str(value))
             return amount.is_finite() and amount > 0
-        except (ValueError, TypeError):
+        except (InvalidOperation, ValueError, TypeError):
             return False
 
     return present(position.get("stopLoss")) and (
