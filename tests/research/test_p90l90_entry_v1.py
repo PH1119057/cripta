@@ -1,7 +1,7 @@
 """Independent deterministic P90L90 Entry-source tests, no server/data dependency."""
 import csv
 import gzip
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -89,7 +89,7 @@ def test_frozen_clean_width_and_prev7_complete_utc_days(tmp_path: Path):
         "range_high", "working_width_pct_lower", "lower_inner",
         "upper_inner", "symbol",
     ]
-    start = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    start = datetime(2026, 5, 19, tzinfo=UTC)
     with gzip.open(p, "wt", newline="") as fd:
         w = csv.DictWriter(fd, fieldnames=fields)
         w.writeheader()
@@ -126,7 +126,7 @@ def test_frozen_state_gap_is_qc_failure(tmp_path: Path):
         w = csv.DictWriter(fd, fieldnames=fields)
         w.writeheader()
         for ts in (1779062400, 1779063000):
-            w.writerow(dict(zip(fields, [ts, ts, "100", "110", "5", "100", "105", "LTCUSDT"])))
+            w.writerow(dict(zip(fields, [ts, ts, "100", "110", "5", "100", "105", "LTCUSDT"], strict=True)))
     with pytest.raises(ValueError, match="timeline gap"):
         load_frozen(p)
 
