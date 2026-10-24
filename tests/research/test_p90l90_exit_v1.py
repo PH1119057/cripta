@@ -11,6 +11,7 @@ from scripts.research.p90l90_exit_v1 import (
     take_profit_eligible,
     threshold_price,
     trade_record,
+    scenario_keys,
 )
 
 
@@ -148,3 +149,12 @@ def test_trade_record_fails_bad_chronology_and_maker_category():
             D("101"), "RESTING_TP", True, money[0], money[1], money[2],
             money[3] + D("0.01"),
         )
+
+def test_extended_window_research_scope():
+    common = scenario_keys("common")
+    extended = scenario_keys("extended")
+    assert len(common) == 6
+    assert len(extended) == 3
+    assert all(cohort == "FIXED90" for cohort, _ in extended)
+    with pytest.raises(ValueError, match="invalid window"):
+        scenario_keys("other")
