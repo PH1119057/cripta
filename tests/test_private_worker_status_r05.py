@@ -137,6 +137,11 @@ def test_schema_startup_failure_only_disarms_existing_main_worker(
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(tmp_path))
     monkeypatch.setenv("CRIPTA_BYBIT_CREDENTIAL_NAME", credential_name)
     monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", kind)
+    monkeypatch.setattr(private_runtime, "DEFAULT_STATUS_DIR", tmp_path)
+    if kind == "SUB":
+        sub_directory = tmp_path / f"sub-{account_id}"
+        sub_directory.mkdir(mode=0o750)
+        monkeypatch.setenv("CRIPTA_PRIVATE_STATUS_DIR", str(sub_directory))
     # main() rebinds process globals; restore them when the test finishes.
     monkeypatch.setattr(private_runtime, "STATUS", private_runtime.STATUS)
     monkeypatch.setattr(
