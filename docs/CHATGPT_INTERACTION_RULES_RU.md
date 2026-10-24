@@ -1,7 +1,7 @@
 # CRIPTA — правила взаимодействия ChatGPT с владельцем
 
-**Версия:** 1.9
-**Дата:** 2026-10-02
+**Версия:** 1.10
+**Дата:** 2026-10-24
 **Статус:** обязательный канонический META-контракт взаимодействия
 
 Этот документ регулирует способ совместной работы владельца проекта и ChatGPT.
@@ -183,7 +183,7 @@ mainnet gate, Strategy activation или фактических данных с�
 
 ## 11.1 Точная коммуникация об отказах доступа
 
-Сообщать владельцу точный уровень отказа: OpenAI tool-security gate, SentinelX allowlist, Unix EACCES, host/job timeout или GitHub/API error; не заменять всё словами «нет доступа». Без evidence не просить перезапуск агента и не обвинять effective actor. При инструментальной блокировке сохранять уже проверенный прогресс и не обещать последующее завершение без запланированной задачи. Обязательные operational детали — `DEVELOPMENT_RELEASE §19.5–19.6`, `RESEARCH_COMPUTE` и `CURRENT_PROJECT_MAP §1.4`.
+Сообщать владельцу точный уровень отказа: OpenAI tool-security gate, SentinelX allowlist, Unix EACCES, host/job timeout или GitHub/API error; не заменять всё словами «нет доступа». Без evidence не просить перезапуск агента и не обвинять effective actor. При инструментальной блокировке сохранять уже проверенный прогресс и не обещать последующее завершение без запланированной задачи. **Уточнять, какой именно слой отказал:** отсутствующий SentinelX allowlist-префикс (например, `sudo -u cripta git`, хотя `git` есть) — не ошибка GitHub и не запрет владельца. «Полный доступ» в интерфейсе не доказывает `exec_mode=unrestricted` для подключённого агента. Однократный ручной retry по явному распоряжению владельца рассматривается по `DEVELOPMENT_RELEASE §19.6.1` только при допускающем вызов security gate; это не разрешение изменить actor, команду или transport для обхода защиты. GitHub read/other write PASS не доказывает доступность конкретного отклонённого GitHub write, и наоборот. Обязательные operational детали — `DEVELOPMENT_RELEASE §19.5–19.6`, `RESEARCH_COMPUTE` и `CURRENT_PROJECT_MAP §1.4`.
 
 # 12. Project Instructions — тонкий bootstrap
 

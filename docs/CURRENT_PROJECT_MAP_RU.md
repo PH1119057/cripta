@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.30
-**Дата:** 2026-10-21
+**Версия:** 12.31
+**Дата:** 2026-10-24
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -318,6 +318,29 @@ cripta-source-sync.timer          enabled/active
 - source mirror не является live runtime и его обновление не является deploy;
 - tool-generated `.bak.*`, temp/overlay files не допускаются в staged
   changeset и удаляются из isolated worktree до final status/staging.
+
+### SentinelX exact command policy — CHECKED HERE 2026-10-24
+
+Это **датированный снимок ответа инструмента**, а не утверждение о вечных
+правах сервера или о режиме, выбранном в интерфейсе владельца.
+`sentinel_capabilities(detail=full)` на host `robot` сообщает:
+агент `0.11.14`, **87** разрешённых командных префиксов;
+`git` и `sudo -u cripta python3` присутствуют, но префикс
+`sudo -u cripta git` отсутствует. Режим `exec_mode=unrestricted`
+в полученном ответе **не подтверждён**.
+Две исходные read-only команды для `git worktree list --porcelain`
+и `git status --porcelain=v1` с префиксом `sudo -u cripta git`
+получили от SentinelX `command_not_allowed`, **не** Unix `EACCES`.
+Штатный `sudo -u cripta python3 -c 'import os; print(os.geteuid())'`
+вернул `107`, `exit_code=0`; это не проверка Git worktree.
+
+Для `file_ops` подтверждены, в частности, `/srv` — read-only и
+`/data/cripta/research` — read/write; прямое чтение `/data/cripta/datasets`
+через `sentinel_list` получило `path_not_allowed`. Этот отказ не
+доказывает Unix-недоступность сырых архивов для `cripta`.
+Tool policy, фактический Unix actor и разрешение владельца — отдельные gates
+по DEVELOPMENT_RELEASE §19.5–19.6. Изменений `config.yaml`, allowlist,
+прав Unix, сервиса SentinelX или торговых runtime здесь **не выполнялось**.
 
 ### Current writable roots relevant to CRIPTA jobs/reports
 
