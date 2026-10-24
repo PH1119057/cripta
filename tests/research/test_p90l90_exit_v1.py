@@ -84,3 +84,23 @@ def test_no_implicit_tp_if_target_below_half_percent():
     p = pos()
     p, result = on_trade(p, D("100.3"), 3, 600, D("100.4"), "LOCK050")
     assert result is None and p.tp is None
+
+def test_model_money_reconciliation_at_declared_quantum():
+    # Repeating Decimal divisions previously left a -1E-51 book drift.
+    from scripts.research.p90l90_exit_v1 import MONEY_QUANTUM
+
+    p = pos("LONG", "99.91")
+    gross_total = D(0)
+    entry_fee_total = D(0)
+    exit_fee_total = D(0)
+    net_total = D(0)
+    for px in ("100.12723", "99.81231", "101.10101") * 50:
+        gross, entry_fee, exit_fee, net = gross_and_net(p, D(px), True)
+        for component in (gross, entry_fee, exit_fee, net):
+            assert component == component.quantize(MONEY_QUANTUM)
+        assert gross - entry_fee - exit_fee == net
+        gross_total += gross
+        entry_fee_total += entry_fee
+        exit_fee_total += exit_fee
+        net_total += net
+    assert gross_total - entry_fee_total - exit_fee_total == net_total
