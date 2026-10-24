@@ -111,9 +111,12 @@ class UniversalEntryEngine:
         allow_new_signals: bool = True,
         admission_time: datetime | None = None,
     ) -> tuple[EntryEvaluation, ...]:
+        # Distinct activations may use fan-out and the compatible legacy path
+        # concurrently. An activation must NEVER use both admission inputs.
         if account_admissions is not None and execution_bindings is not None:
-            raise ValueError("REAL_FANOUT_AND_LEGACY_BINDINGS_MUTUALLY_EXCLUSIVE")
-        if account_admissions is not None and (
+            if set(account_admissions).intersection(execution_bindings):
+                raise ValueError("REAL_FANOUT_AND_LEGACY_BINDING_ACTIVATION_OVERLAP")
+        if account_admissions is not None and execution_bindings is None and (
             entry_admission_port is not None or exchange_position_keys is not None
         ):
             raise ValueError("REAL_FANOUT_AND_LEGACY_ACCOUNT_STATE_MUTUALLY_EXCLUSIVE")
@@ -294,7 +297,11 @@ class UniversalEntryEngine:
                 request: ExecutionRequest | None
                 notifications: tuple[NotificationEvent, ...]
                 account_outcomes: tuple[AccountEntryOutcome, ...] = ()
-                if real_admission and account_admissions is not None:
+                if (
+                    real_admission
+                    and account_admissions is not None
+                    and plan.strategy_activation_id in account_admissions
+                ):
                     per_account_scopes = account_admissions.get(plan.strategy_activation_id, ())
                     if not per_account_scopes:
                         # Missing account scope cannot fall back to a default.
@@ -331,11 +338,14 @@ class UniversalEntryEngine:
                             account_readiness = account_scope.technical_readiness
                             effective_port = account_scope.entry_admission_port
                             if not real_ready:
-                                account_readiness = TechnicalReadiness(
-                                    False,
-                                    admission_time or fact_for_predicate.observed_at,
-                                    "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
-                                )
+                                # Retain a precise independently proven block
+                                # reason rather than masking it as generic arm.
+                                if account_readiness.ready:
+                                    account_readiness = TechnicalReadiness(
+                                        False,
+                                        admission_time or fact_for_predicate.observed_at,
+                                        "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                                    )
                                 effective_port = None
                             account_decision = self._decision(
                                 plan,
