@@ -70,9 +70,15 @@ jobs:
         run: uv pip install --python .venv/bin/python "psycopg[binary]==3.2.10"
       - name: Require NEW_RUFF_DIAGNOSTICS=0 on changed Python files
         shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          # pull_request checks out the synthetic merge ref. Its first parent
+          # is the actual current main, unlike stale PR metadata.base.sha.
+          read -r -a parents <<< "$(git rev-list --parents -n 1 HEAD)"
+          if (("${#parents[@]}" != 3)); then
+            echo "Expected exactly two parents on GitHub PR merge checkout" >&2
+            exit 1
+          fi
+          BASE_SHA="${parents[1]}"
           mapfile -t files < <(git diff --name-only "$BASE_SHA" HEAD -- "*.py")
           git worktree add --detach ../base-ruff "$BASE_SHA"
           set +e
@@ -137,9 +143,13 @@ jobs:
           exit 0
       - name: Capture exact base regression
         shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          read -r -a parents <<< "$(git rev-list --parents -n 1 HEAD)"
+          if (("${#parents[@]}" != 3)); then
+            echo "Expected exactly two parents on GitHub PR merge checkout" >&2
+            exit 1
+          fi
+          BASE_SHA="${parents[1]}"
           git worktree add --detach ../base-regression "$BASE_SHA"
           set +e
           (
