@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.39
-**Дата:** 2026-10-24
+**Версия:** 3.40
+**Дата:** 2026-10-25
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1427,3 +1427,11 @@ This is **docs-only research scope**, not an implementation of research replays,
 **Один owner контракта**: `RESEARCH_COMPUTE §22.2`; терминология — `CRIPTA_GLOSSARY §37`. Основной анализ: 9 непересекающихся интервалов по 10 UTC суток, дополнительный скользящий PnL 10d; каждая закрытая позиция относится к UTC дате закрытия. PnL строго net после модельных комиссий, крупные hard stops разложены по монетам, направлениям и сценариям; все итоговые суммы проверяются по immutable per-trade ledger. Новая L5-3 CLEAN v2 хранится отдельно от v1, с явной проверкой перекрытия/разницы ATR seed. Исходный `§22.1`, GitHub research catalog records и результаты v1.2 остаются архивной историей, не переписываются и не участвуют в новой основной таблице. Новые готовые результаты регистрируются в `RESEARCH_COMPUTE §23` как новые версии, а не как исправленные старые факты.
 
 Это новая research methodology, **не** StrategyCard, trading Entry/Exit/Execution, Dashboard/DB или LIVE. Current Project Source set остаётся 11 файлов; mandatory pre-read, routed pre-read, root README/AGENTS и Project Instructions/bootstrap не меняются. До внедрения §22.2 требуется protected docs PR/CI; до объявления результатов — acquisition provenance, полный preflight actual writer, reproducible new research source, input/ATR coverage and independent QC. Source sync ≠ deploy.
+
+# 55. Внутренний пользователь CRIPTA — владелец TradingAccount, а не биржевой MAIN — OWNER DECISION 2026-10-25
+
+Владелец утвердил отдельную product identity `CRIPTAUser`, которому принадлежит множество `TradingAccount` на любых разрешённых Venues (как MAIN, так и SUB либо other execution account). Каждый TradingAccount имеет ровно одного текущего CRIPTAUser-owner. Создатель регистрации и владелец могут не совпадать. Provider `isMaster`, `parentUid`, `parent_trading_account_id` и внешний MAIN являются только provenance и **не** пользовательским ownership. Подключение SUB не требует регистрации parent MAIN в CRIPTA. Потребительский доступ, торговое размещение, приватные записи и статистика должны быть owner-scoped; future UI/Telegram self-service отдельная capability с защищённым secret enrollment, не передачей raw keys обычными сообщениями.
+
+Единственный canonical owner архитектурного решения — ARCH §49.7; GLOSSARY §33 определяет `CRIPTAUser` / `TradingAccountOwnership`, SECURITY владеет secret storage, доступами и privacy-boundary. TRADING_CONTOUR и DEV сохраняют действующие LIVE, Exchange admission, staged implementation и release gates. Current implementation finding: Bybit SUB UID checker требует зарегистрированного parent MAIN, а multi-user/tenant ownership и UI ещё не реализованы; потребуется отдельный `core/*` с DB/actor contracts, тестами, reviewed PR, deploy и runtime verification.
+
+**Status:** OWNER DECISION / TARGET CONCEPT. **IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED = NO / NOT CHECKED HERE** для multi-user и secure bot. Данное docs-only изменение не делает DB write, schema/backfill, connector provisioning, real order, service restart или LIVE re-arm. Active Project Source set остаётся 11, пути, mandatory/routed pre-read, README, AGENTS и Project Instructions/bootstrap не меняются; section numbering текущих разделов сохранён. Before canonical merge: INDEX §17.7, GitHub scope/CI/PR verification.
