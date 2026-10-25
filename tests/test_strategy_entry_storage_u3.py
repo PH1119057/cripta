@@ -37,6 +37,10 @@ from bybit_workbench.universal_entry import (
 )
 from bybit_workbench.universal_entry.contracts import EntryDecisionCode
 from bybit_workbench.universal_entry.engine import AccountAdmissionContext
+from bybit_workbench.universal_entry.execution_bridge import (
+    BridgePolicyBundle,
+    prepare_runtime_entry_command,
+)
 from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from operations.dashboard import archive_v2
 
@@ -819,3 +823,119 @@ def test_r06_offline_two_account_identity_arm_and_shared_signal_lineage() -> Non
     assert sum("INSERT INTO strategy_entry.strategy_attempts" in q for q in sql) == 1
     assert sum("INSERT INTO strategy_entry.entry_decisions" in q for q in sql) == 2
     assert sum("INSERT INTO strategy_entry.execution_requests" in q for q in sql) == 2
+
+
+def test_causal_signal_two_accounts_persist_and_compile_distinct_entry_commands() -> None:
+    """A joined offline core contract from one fact to two prepared commands.
+
+    Execution transport and Exchange fills are tested independently; this
+    test does not invent real account authorization or Bybit evidence.
+    """
+    card, activation, plan, evaluation = build_evaluation(
+        real=True,
+        fanout=True,
+        fact_attributes={"entry_price": "100"},
+    )
+    assert len(evaluation.account_outcomes) == 2
+    requests = [
+        outcome.execution_request for outcome in evaluation.account_outcomes
+    ]
+    assert all(item is not None for item in requests)
+    first = requests[0]
+    assert first is not None
+    fact_payload = first.payload.to_dict()
+    ids = {
+        "strategy_id": card.strategy_id,
+        "strategy_version": card.strategy_version,
+        "strategy_config_fingerprint": card.strategy_config_fingerprint,
+    }
+    policy_fields = (
+        "entry_reference_policy",
+        "local_entry_policy",
+        "context_feature_policy",
+        "context_ranking_policy",
+    )
+    exact_policy = {
+        field: fact_payload[field]
+        for field in policy_fields
+    }
+    emergency = {
+        "enabled": True,
+        "on_fault": "POSITION_WITHOUT_CONFIRMED_INITIAL_PROTECTION",
+        "action": "FAIL_CLOSED_ONLY",
+        "reconciliation_required": True,
+    }
+    bundle = BridgePolicyBundle(
+        strategy_card={
+            **ids,
+            "entry_policy": {
+                "execution_policy": {
+                    "order_type": "MARKET",
+                    "reference_value_path": "fact.entry_price",
+                    "max_request_age_seconds": 30,
+                },
+                **exact_policy,
+            },
+            "capital_policy": card.capital_policy.to_dict(),
+            "lifecycle_policy": {"emergency_policy": emergency},
+        },
+        entry_plan={
+            **ids,
+            "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+            **exact_policy,
+        },
+        exit_plan={
+            **ids,
+            "exit_plan_fingerprint": first.exit_plan_fingerprint,
+            "protection_policy": {
+                "initial_protection": {
+                    "stop_loss_pct": "1",
+                    "take_profit_pct": "3",
+                    "trigger_by": "LastPrice",
+                    "tpsl_mode": "Full",
+                },
+            },
+            "emergency_policy": emergency,
+        },
+        activation={
+            **ids, "activation_id": activation.activation_id, "enabled": True,
+        },
+    )
+    commands = [
+        prepare_runtime_entry_command(
+            item, bundle, now=NOW,
+        )
+        for item in requests
+        if item is not None
+    ]
+    assert len(commands) == 2
+    assert len({item.command_id for item in commands}) == 2
+    assert len({item.trading_account_id for item in commands}) == 2
+    assert len({item.execution_request_id for item in commands}) == 2
+    assert {item.strategy_attempt_id for item in commands} == {
+        evaluation.attempt.strategy_attempt_id
+    }
+    assert all(item.payload["stake_usdt"] == "10" for item in commands)
+    assert all(item.payload["price"] == "100" for item in commands)
+    assert all(item.payload["initial_protection"]["stop_loss_pct"] == "1"
+               for item in commands)
+    assert all(item.payload["initial_protection"]["take_profit_pct"] == "3"
+               for item in commands)
+
+    # One persisted causal signal+attempt, exactly two distinct decisions,
+    # requests, reservations/slot refs and executable command IDs.
+    db = FakeConnection()
+    StrategyEntryStore(db).record_evaluation(evaluation)
+    statements = [query for query, _args in db.statements]
+    assert sum("INSERT INTO strategy_entry.strategy_signals" in s
+               for s in statements) == 1
+    assert sum("INSERT INTO strategy_entry.strategy_attempts" in s
+               for s in statements) == 1
+    assert sum("INSERT INTO strategy_entry.entry_decisions" in s
+               for s in statements) == 2
+    assert sum("INSERT INTO strategy_entry.execution_requests" in s
+               for s in statements) == 2
+    assert len({item.capital_reservation_id for item in requests
+                if item is not None}) == 2
+    assert len({item.exchange_position_slot_claim_id for item in requests
+                if item is not None}) == 2
