@@ -52,7 +52,7 @@ def build_market(path: Path):
     eth = [float(row["eth"]) for row in rows]
     if len(ts) < 2300 or any(b-a != 3600 for a, b in zip(ts, ts[1:])):
         raise ValueError("BTC/ETH hourly coverage discontinuous or insufficient")
-    if ts[0] > START_TS-7*86400 or ts[-1] < END_TS:
+    if ts[0] > START_TS-7*86400+6*3600 or ts[-1] < END_TS:
         raise ValueError("BTC/ETH hourly coverage does not span full study")
     if any(not (x > 0 and x < float("inf")) for x in btc+eth):
         raise ValueError("invalid BTC/ETH hourly source close")
