@@ -632,3 +632,88 @@ def test_offline_two_account_entry_orders_carry_independent_initial_sl_tp() -> N
         assert audit.call_args.kwargs["command_id"] == command
 
     assert len(set(submitted)) == 2
+
+
+@pytest.mark.parametrize("repeated_cursor", (False, True))
+def test_entry_second_page_pending_order_prevents_new_exchange_mutation(
+    repeated_cursor: bool,
+) -> None:
+    requests: list[str] = []
+    payload = {
+        "stake_usdt": "10",
+        "leverage": 1,
+        "side": "Buy",
+        "price": "100",
+        "entry_offset_pct": "0",
+        "initial_protection": {
+            "stop_loss_pct": "1",
+            "take_profit_pct": "3",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        },
+    }
+
+    def bybit_get(path, params, *_keys):
+        if path == "/v5/position/list":
+            return {"retCode": 0, "result": {"list": []}}, {}
+        if path == "/v5/market/instruments-info":
+            return {
+                "retCode": 0,
+                "result": {"list": [{
+                    "priceFilter": {"tickSize": "0.01"},
+                    "lotSizeFilter": {"qtyStep": "0.001"},
+                }]},
+            }, {}
+        if path == "/v5/order/realtime":
+            cursor = str(params.get("cursor") or "FIRST")
+            requests.append(cursor)
+            if cursor == "FIRST":
+                return {
+                    "retCode": 0,
+                    "result": {
+                        "list": [{
+                            "symbol": "BTCUSDT",
+                            "orderStatus": "Cancelled",
+                            "reduceOnly": False,
+                        }],
+                        "nextPageCursor": "PAGE2",
+                    },
+                }, {}
+            if repeated_cursor:
+                return {
+                    "retCode": 0,
+                    "result": {"list": [], "nextPageCursor": "PAGE2"},
+                }, {}
+            return {
+                "retCode": 0,
+                "result": {
+                    "list": [{
+                        "symbol": "BTCUSDT",
+                        "orderStatus": "PartiallyFilled",
+                        "reduceOnly": "false",
+                    }],
+                    "nextPageCursor": "",
+                },
+            }, {}
+        raise AssertionError(f"Should block before wallet read: {path}")
+
+    error = (
+        private_runtime.ExchangeReadUnavailable
+        if repeated_cursor else RuntimeError
+    )
+    with (
+        patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+        patch.object(private_runtime, "authenticated_entry_connector_gate"),
+        patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+        patch.object(private_runtime, "api_get", side_effect=bybit_get),
+        patch.object(private_runtime, "api_post") as exchange_mutation,
+        pytest.raises(error),
+    ):
+        private_runtime.execute_command(
+            object(),
+            "offline-key",
+            "offline-secret",
+            ("entry-paged", "entry", "BTCUSDT", json.dumps(payload)),
+        )
+    assert requests == ["FIRST", "PAGE2"]
+    exchange_mutation.assert_not_called()
