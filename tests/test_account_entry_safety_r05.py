@@ -583,13 +583,13 @@ def test_offline_two_account_entry_orders_carry_independent_initial_sl_tp() -> N
         db = OfflineDB()
         command = f"entry-{account}"
 
-        def authenticated(_db, key, secret):
-            assert key == f"offline-key-{account}"
-            assert secret == f"offline-secret-{account}"
+        def authenticated(_db, key, secret, *, expected=account):
+            assert key == f"offline-key-{expected}"
+            assert secret == f"offline-secret-{expected}"
 
-        def observe_reconcile(_db, _key, _secret, _reason):
-            assert exchange.positions[0]["stopLoss"] == "99.00"
-            assert exchange.positions[0]["takeProfit"] == "103.00"
+        def observe_reconcile(_db, _key, _secret, _reason, *, provider=exchange):
+            assert provider.positions[0]["stopLoss"] == "99.00"
+            assert provider.positions[0]["takeProfit"] == "103.00"
             return 1, 0
 
         with (
