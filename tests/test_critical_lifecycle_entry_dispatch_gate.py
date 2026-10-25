@@ -202,9 +202,12 @@ def test_pre_first_mutation_safety_block():
     # The fault check now precedes policy/order validation AND the first POST.
     # Isolate the safety guard itself before evaluating it independently.
     target = "        contract = initial_protection_contract(payload)"
-    endpoint = text.index(target)
+    entry_start = text.index('    elif kind == "entry":\n')
+    endpoint = text.index(target, entry_start)
     start = text.rfind(
-        "        fault_code = _critical_lifecycle_fault_code(connection)\n", 0, endpoint
+        "        fault_code = _critical_lifecycle_fault_code(connection)\n",
+        entry_start,
+        endpoint,
     )
     assert start > 0
     block = textwrap.indent(textwrap.dedent(text[start:endpoint]), "    ")
