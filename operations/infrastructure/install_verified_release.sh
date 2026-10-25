@@ -444,6 +444,9 @@ migration_files=(
   operations/sql/20261024_account_scoped_live_arm.sql
   operations/sql/20261025_account_entry_safety_blocks.sql
   operations/sql/20261025_account_attempt_fanout.sql
+  # Cut over all five physical current-state keys after additive account indexes
+  # and complete writer/reader parity gates; no pre-existing rows are rewritten.
+  operations/sql/20261026_account_scoped_physical_key_cutover.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
