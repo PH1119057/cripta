@@ -142,6 +142,36 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
         ).fetchall()
         assert sorted(values) == [(accounts[0][0],"100"),(accounts[1][0],"200")]
 
+        # Two CEX accounts may reuse the same exchange orderLinkId and execId.
+        # The causal correlator must only count fills for the same proven account.
+        matched = c.execute(
+            """WITH command_scope(trading_account_id,order_link_id) AS (
+                   VALUES (%s::text,'local'),(%s::text,'local')
+               )
+               SELECT cmd.trading_account_id,count(e.exec_id)
+                 FROM command_scope cmd LEFT JOIN runtime.executions e
+                   ON e.order_link_id=cmd.order_link_id
+                  AND e.trading_account_id=cmd.trading_account_id
+                  AND e.identity_status='PROVEN'
+                GROUP BY cmd.trading_account_id ORDER BY cmd.trading_account_id""",
+            (accounts[0][0], accounts[1][0]),
+        ).fetchall()
+        assert matched == [(accounts[0][0], 1), (accounts[1][0], 1)]
+
+        # An unscoped legacy Supervisor comparison must not join MAIN's
+        # position to SUB's same symbol and position index.
+        scoped_hot = c.execute(
+            """SELECT p.trading_account_id,count(h.trading_account_id)
+                 FROM (VALUES (%s::text),(%s::text)) p(trading_account_id)
+                 LEFT JOIN runtime.hot_positions h
+                   ON h.symbol=%s AND h.position_idx=0
+                  AND h.trading_account_id IS NOT DISTINCT FROM p.trading_account_id
+                  AND h.identity_status='PROVEN'
+                GROUP BY p.trading_account_id ORDER BY p.trading_account_id""",
+            (accounts[0][0], accounts[1][0], symbol),
+        ).fetchall()
+        assert scoped_hot == [(accounts[0][0], 1), (accounts[1][0], 1)]
+
         # Explicit LEGACY_UNKNOWN remains one unassigned physical identity.
         # This does not attribute historical records to a guessed account.
         legacy_order = prefix + "-legacy"
