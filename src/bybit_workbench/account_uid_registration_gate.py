@@ -116,24 +116,28 @@ def registered_uid_match(
         ):
             reasons.add("MAIN_ACCOUNT_TYPE_MISMATCH")
     elif kind == "SUB":
+        # The provider's parentUid is mandatory evidence that this key belongs
+        # to a SUB, but the parent MAIN need not be onboarded into CRIPTA.
+        # A configured internal parent link, if present, must still match the
+        # exact registered parent and its authenticated provider provenance.
         parent_id = a.get("parent_trading_account_id")
-        parent_rows = [p for p in accounts if p.get("trading_account_id") == parent_id]
-        if (
-            is_master is not False
-            or not parent_uid.isdecimal()
-            or parent_uid == "0"
-            or len(parent_rows) != 1
-        ):
+        if is_master is not False or not parent_uid.isdecimal() or parent_uid == "0":
             reasons.add("SUB_ACCOUNT_PARENT_UNPROVEN")
-        elif (
-            _uid(parent_rows[0].get("external_account_ref")) != _uid(parent_uid)
-            or parent_rows[0].get("account_kind") != "MAIN"
-            or parent_rows[0].get("status") != "ACTIVE"
-            or parent_rows[0].get("environment") != "MAINNET"
-            or parent_rows[0].get("account_type") != "UNIFIED"
-            or parent_rows[0].get("venue_id") != a.get("venue_id")
-        ):
-            reasons.add("SUB_ACCOUNT_PARENT_MISMATCH")
+        elif parent_id is not None:
+            parent_rows = [
+                p for p in accounts if p.get("trading_account_id") == parent_id
+            ]
+            if len(parent_rows) != 1:
+                reasons.add("SUB_ACCOUNT_PARENT_UNPROVEN")
+            elif (
+                _uid(parent_rows[0].get("external_account_ref")) != _uid(parent_uid)
+                or parent_rows[0].get("account_kind") != "MAIN"
+                or parent_rows[0].get("status") != "ACTIVE"
+                or parent_rows[0].get("environment") != "MAINNET"
+                or parent_rows[0].get("account_type") != "UNIFIED"
+                or parent_rows[0].get("venue_id") != a.get("venue_id")
+            ):
+                reasons.add("SUB_ACCOUNT_PARENT_MISMATCH")
     else:
         reasons.add("REGISTERED_ACCOUNT_KIND_UNSUPPORTED")
     if a.get("account_type") != "UNIFIED":
