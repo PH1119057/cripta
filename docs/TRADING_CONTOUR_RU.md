@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.0
-**Дата:** 2026-10-21
+**Версия:** 3.1
+**Дата:** 2026-10-26
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -232,9 +232,11 @@ MARKET FACT / CONTEXT
 Materializer/readiness обязаны fail-closed, если Strategy заявляет POLICY, но
 поддержка/consumer path required context не доказаны.
 
-## 1.10 R1 — owner-approved implementation candidate
+## 1.10 R1 — historical implementation candidate (RETIRED 2026-10-26)
 
-OWNER DECISION 2026-10-04: `R1` остаётся current label исследованной L5-3 Strategy Candidate, но ниже зафиксирован exact implementation target, разрешённый для реализации и SHADOW/test validation. Это всё ещё не production Strategy ID и не разрешение MICRO_LIVE/LIVE.
+**CURRENT OWNER DECISION 2026-10-26:** R1 и конкретная `r1_five_symbols` StrategyActivation более не действуют как текущая торговая Strategy. Владелец явно снял R1 с дальнейшей проверки Universal Entry; нельзя включать или копировать её Entry/Exit policy, параметры, one-account owner-arm или старые MICRO_LIVE исключения в новую Strategy без нового исследования, отдельного решения и версионирования. Ранее опубликованные ниже R1 параметры сохраняются **исключительно как исторический контракт и evidence**, не как активные defaults или разрешение на LIVE. Производственный R1 был деактивирован штатным CAS-контролем: `enabled=false`, `disabled_at IS NOT NULL`, наблюдатель перешёл в IDLE. Дальнейшая цель — отдельно проверить MAIN/SUB на будущей явно утверждённой Strategy и universal Entry/Exit, сохранив все safety gates. 
+
+HISTORICAL OWNER DECISION 2026-10-04: `R1` была label исследованной L5-3 Strategy Candidate, но ниже зафиксирован exact implementation target, разрешённый для реализации и SHADOW/test validation. Это всё ещё не production Strategy ID и не разрешение MICRO_LIVE/LIVE.
 
 ```text
 GEOMETRY
