@@ -25,6 +25,7 @@ from scripts.research import p90l90_29d_sources_v1 as sources
 from scripts.research import p90l90_entry_sep29_v1 as entry
 from scripts.research import p90l90_exit_90d_v2 as base
 from scripts.research import p90l90_portfolio_pause_v1 as portfolio
+from scripts.research import p90l90_btceth_adverse_exit_90d_v1 as market_impl
 from scripts.research.p90l90_btceth_adverse_exit_90d_v1 import MarketExitPortfolio
 
 ROOT = sources.ROOT
@@ -83,7 +84,7 @@ def read_inputs(sym: str):
     manifest = json.loads((folder/"manifest.json").read_text())
     if (manifest["research"] != "P90L90_ENTRY_SEP29_V1"
             or manifest["symbol"] != sym
-            or not manifest["complete_90d_input"]
+            or not manifest["complete_29d_input"]
             or manifest["frozen_l53"]["states"] != DAYS*288):
         raise ValueError("incorrect immutable 29d Entry manifest")
     state_path = entry.FROZEN_DEFAULT / f"states_{sym}.csv.gz"
@@ -238,11 +239,9 @@ def run(output:Path,smoke_hours:int=0):
     snapshot=output/"source_snapshot"
     snapshot.mkdir(mode=0o2770)
     source_list=[Path(__file__),Path(entry.__file__),Path(sources.__file__),
-                 Path(base.__file__),Path(portfolio.__file__),
-                 Path(MarketExitPortfolio.__module__.replace(".","/"))]
-    # Last list entry is the stable GitHub import; copy only actual files.
+                 Path(base.__file__),Path(portfolio.__file__),Path(market_impl.__file__)]
     snapshots={}
-    for f in source_list[:-1]:
+    for f in source_list:
         to=snapshot/f.name
         shutil.copyfile(f,to)
         snapshots[f.name]=sources.hash_file(to)
