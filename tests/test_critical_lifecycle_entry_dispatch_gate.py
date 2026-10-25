@@ -199,7 +199,9 @@ def test_queued_private_entry_refuses_ready_with_critical_fault():
 
 def test_pre_first_mutation_safety_block():
     text = source("private_runtime.py")
-    target = '        api_post("/v5/position/set-leverage",'
+    # The fault check now precedes policy/order validation AND the first POST.
+    # Isolate the safety guard itself before evaluating it independently.
+    target = "        contract = initial_protection_contract(payload)"
     endpoint = text.index(target)
     start = text.rfind(
         "        fault_code = _critical_lifecycle_fault_code(connection)\n", 0, endpoint
@@ -223,9 +225,11 @@ def test_pre_first_mutation_safety_block():
 
 def test_entry_only_mutation_barrier_is_before_first_exchange_post():
     text = source("private_runtime.py")
-    sent = text.index('        api_post("/v5/position/set-leverage",')
+    sent = text.index('        api_post(\n            "/v5/position/set-leverage",')
     guard = text.rfind("        fault_code = _critical_lifecycle_fault_code(connection)", 0, sent)
-    assert 0 < sent - guard < 360
+    protection = text.index("        contract = initial_protection_contract(payload)", guard)
+    order = text.index("        order: dict[str, object] = {", protection)
+    assert 0 < guard < protection < order < sent
     assert text.count('raise PreMutationSafetyBlock(f"CRITICAL_LIFECYCLE_FAULT:{fault_code}")') == 1
     consumer = source("universal_entry_consumer.py")
     assert consumer.index('return "BLOCKED:CRITICAL_LIFECYCLE_FAULT"') < consumer.index(
