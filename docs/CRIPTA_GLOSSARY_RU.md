@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.9
-**Дата:** 2026-10-25
+**Версия:** 3.10
+**Дата:** 2026-10-26
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -471,11 +471,7 @@ physical slot claim и не имеет Exchange mutation rights.
 
 **Исследование / research** — получение доказательств. Не канон и не Strategy.
 
-**R1** — current label для owner-approved L5-3 Strategy Candidate и exact
-implementation target. R1 не является production Strategy ID и сам по себе не
-даёт MICRO_LIVE/LIVE rights. Реализация и SHADOW/test validation разрешены
-только по exact contract из `TRADING_CONTOUR §1.10`; research screening и
-execution-selection lineage фиксируются в `RESEARCH_COMPUTE §19`.
+**R1** — историческая, **RETIRED 2026-10-26**, label прежней owner-approved L5-3 Strategy Candidate и её exact historical implementation contract. R1 более не является текущим Strategy/Entry/Exit implementation target; прежняя `r1_five_symbols` StrategyActivation деактивирована. Исторический контракт сохраняется в `TRADING_CONTOUR §1.10`, evidence и research lineage — в `RESEARCH_COMPUTE §19`, но не переиспользуется как policy новой Strategy и не даёт ни MICRO_LIVE, ни LIVE rights.
 
 **Evidence / доказательный материал** — результат исследования/runtime-наблюдения.
 
