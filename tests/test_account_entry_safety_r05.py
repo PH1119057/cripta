@@ -290,3 +290,59 @@ def test_sub_trade_mutation_barrier_redacts_nested_failures(
     assert all("OFFLINE_FAKE_KEY" not in s for s in disarms)
     assert leaked not in repr(db.queries)
     assert leaked not in repr(statuses)
+
+
+def test_failed_account_generation_uses_exact_entry_admission_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import nullcontext
+
+    class FailedReconcileDB:
+        def __init__(self) -> None:
+            self.statements: list[tuple[str, tuple[object, ...]]] = []
+
+        def transaction(self):
+            return nullcontext()
+
+        def rollback(self) -> None:
+            pass
+
+        def execute(
+            self, sql: str, params: tuple[object, ...] = ()
+        ) -> object:
+            self.statements.append((sql, params))
+            return None
+
+    # Independent MAIN and SUB failure paths must use the same advisory
+    # account lock that real Entry admission acquires for that account.
+    for account in ("ta-main", "ta-sub"):
+        conn = FailedReconcileDB()
+        with (
+            patch.object(private_runtime, "TRADING_ACCOUNT_ID", account),
+            patch.object(private_runtime, "ACCOUNT_REF", "BYBIT:UNIFIED"),
+            patch.object(private_runtime, "_begin_account_state_generation"),
+            patch.object(
+                private_runtime,
+                "_complete_exchange_inventory",
+                side_effect=private_runtime.ExchangeReadUnavailable(
+                    "offline Exchange read unavailable"
+                ),
+            ),
+        ):
+            with pytest.raises(
+                private_runtime.ExchangeReadUnavailable,
+                match="offline Exchange read unavailable",
+            ):
+                private_runtime.reconcile(conn, "fake", "fake", "periodic")
+        locks = [
+            params for sql, params in conn.statements
+            if "pg_advisory_xact_lock" in sql
+        ]
+        assert locks == [(account,)]
+        assert any(
+            "SET state='FAILED'" in sql and params[1].startswith("acctgen-")
+            for sql, params in conn.statements
+        )
+        assert not any(
+            params == ("BYBIT:UNIFIED",) for _sql, params in conn.statements
+        )
