@@ -344,7 +344,7 @@ def _is_sub_private_worker() -> bool:
     )
 
 
-def _private_worker_safe_error(exc: Exception) -> str:
+def _private_worker_safe_error(exc: BaseException) -> str:
     """SUB diagnostics must never persist signed URLs or provider responses."""
     if _is_sub_private_worker():
         return type(exc).__name__
@@ -1314,7 +1314,7 @@ def handle_pre_mutation_safety_block(
 ) -> None:
     """Fail closed without claiming ambiguity when no mutation was sent."""
 
-    error = f"PRE_MUTATION_SAFETY_BLOCK:{type(exc).__name__}:{exc}"
+    error = f"PRE_MUTATION_SAFETY_BLOCK:{_private_worker_safe_error(exc)}"
     connection.rollback()
     if command_id is not None:
         finalize_failed_entry_command_reservation(
@@ -1350,7 +1350,7 @@ def handle_exchange_mutation_barrier(
     exc: BaseException,
 ) -> None:
     """Fail closed and force startup reconciliation before any later mutation."""
-    error = f"EXCHANGE_MUTATION_BARRIER:{type(exc).__name__}:{exc}"
+    error = f"EXCHANGE_MUTATION_BARRIER:{_private_worker_safe_error(exc)}"
     recovery_errors: list[str] = []
 
     try:
@@ -2843,7 +2843,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                     "command",
                     {
                         "state": "degraded_market_read",
-                        "error": str(exc),
+                        "error": _private_worker_safe_error(exc),
                         "mutation_sent": False,
                         "global_gate_changed": False,
                     },
@@ -3079,7 +3079,7 @@ def command_worker_loop(key: str, secret: str) -> None:
             reservation_state = finalize_failed_entry_command_reservation(
                 connection,
                 command_id=command_id,
-                reason=f"{type(exc).__name__}:{exc}",
+                reason=_private_worker_safe_error(exc),
                 mutation_ambiguous=False,
             )
             connection.execute(
@@ -3088,7 +3088,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                    WHERE command_id=%s""",
                 (
                     int(time.time() * 1000),
-                    f"{type(exc).__name__}: {exc}",
+                    _private_worker_safe_error(exc),
                     command_id,
                 ),
             )
@@ -3116,7 +3116,7 @@ def command_loop(key: str, secret: str) -> None:
                 "command",
                 {
                     "state": "error",
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": _private_worker_safe_error(exc),
                     "retry_in_seconds": 2,
                 },
             )
@@ -4018,7 +4018,7 @@ def reconcile(
                       SET state='FAILED',completed_at=clock_timestamp(),
                           error=%s,updated_at=clock_timestamp()
                     WHERE generation_id=%s AND state='COLLECTING'""",
-                (f"{type(exc).__name__}: {exc}", generation_id),
+                (_private_worker_safe_error(exc), generation_id),
             )
             connection.execute(
                 """INSERT INTO runtime.reconciliation_runs(
@@ -4029,7 +4029,7 @@ def reconcile(
                     started,
                     finished,
                     reason,
-                    f"{type(exc).__name__}: {exc}",
+                    _private_worker_safe_error(exc),
                     TRADING_ACCOUNT_ID,
                     ACCOUNT_CONNECTOR_ID,
                 ),
@@ -4338,7 +4338,7 @@ def private_loop(key: str, secret: str) -> None:
                             connection,
                             "private",
                             "reconciliation_degraded",
-                            error=f"{type(exc).__name__}: {exc}",
+                            error=_private_worker_safe_error(exc),
                             reconnects=reconnects,
                         )
                         atomic_status(
@@ -4350,7 +4350,7 @@ def private_loop(key: str, secret: str) -> None:
                                 "last_message_epoch": previous.get("last_message_epoch"),
                                 "hot_positions": previous.get("hot_positions", 0),
                                 "hot_orders": previous.get("hot_orders", 0),
-                                "reconciliation_error": f"{type(exc).__name__}: {exc}",
+                                "reconciliation_error": _private_worker_safe_error(exc),
                             },
                         )
                         # Keep the healthy private WS connected. Entry admission
