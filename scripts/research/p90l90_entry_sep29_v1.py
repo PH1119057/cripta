@@ -91,7 +91,7 @@ def load_frozen(path: Path):
             raise ValueError("Sep14 onward must contain all 288 causal L5 states per UTC day")
     stamps = sorted(states)
     if stamps[0] != START_TS or stamps[-1] != END_TS - 300:
-        raise ValueError("90-day boundary L5 state missing")
+        raise ValueError("29-day boundary L5 state missing")
     if any(b - a != 300 for a, b in zip(stamps, stamps[1:])):
         raise ValueError("L5-3 timeline gap")
     fixed = median(all_widths)
@@ -282,7 +282,7 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
                         day = utc_day(bucket)
                         passes_fixed = abs(width - fixed) <= D("0.5")
                         if day not in prev7:
-                            raise ValueError("PREV7D not ready in full 90-day evaluation")
+                            raise ValueError("PREV7D not ready in full 29-day evaluation")
                         passes_prev = abs(width - prev7[day]) <= D("0.5")
                         counters["raw_crossing"] += 1
                         counters[side + "_raw_crossing"] += 1
@@ -327,7 +327,7 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
         "research": "P90L90_ENTRY_SEP29_V1", "canon": "RESEARCH_COMPUTE §22.1/§22.2; OOS research-only exact 29d extension",
         "symbol": symbol,
         "status": "FULL_29D_ENTRY_CANDIDATE_ONLY_NO_FILL_NO_EXIT",
-        "complete_90d_input": complete,
+        "complete_29d_input": complete,
         "source_first_day": warmup_first,
         "source_last_day": through,
         "window": ["2026-09-21T00:00Z", "2026-10-20T00:00Z"],
@@ -338,7 +338,7 @@ def process(symbol: str, raw: Path, frozen: Path, output: Path,
         "source_row_sequence": "original gzip file order, chronological UTC days",
         "price_precision": "Decimal(source string)",
         "selection": "RAW_H9_UNION_SPAN, side RAW equality, 0..15%, first adjacent tick crossing",
-        "FIXED90_LOOKAHEAD": True, "PREV7D_WIDTH_LOOKAHEAD": False, "FULL_29D_UTC_COVERAGE": True,
+        "FIXED29_INSAMPLE_LOOKAHEAD": True, "PREV7D_WIDTH_LOOKAHEAD": False, "FULL_29D_UTC_COVERAGE": True,
     }
     if output.parent != output.parent.resolve() or output.parent != output.parent.absolute():
         raise ValueError("output must be absolute resolved")
