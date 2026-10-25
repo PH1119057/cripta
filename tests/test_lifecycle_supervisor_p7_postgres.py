@@ -418,7 +418,7 @@ def test_exchange_divergence_requires_explicit_fresh_reconciliation() -> None:
                    symbol,position_idx,side,size,entry_price,leverage,
                    exchange_updated_ms,refreshed_at_epoch_ms,payload_json
                ) VALUES(%s,0,'Buy','2','10','1',%s,%s,'{}')
-               ON CONFLICT(symbol,position_idx) DO UPDATE
+               ON CONFLICT(trading_account_id,symbol,position_idx) DO UPDATE
                  SET side=excluded.side,size=excluded.size,
                      refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
                      payload_json=excluded.payload_json""",
