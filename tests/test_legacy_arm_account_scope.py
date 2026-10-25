@@ -50,7 +50,10 @@ def check(db, account_id="account-a"):
 @pytest.mark.parametrize(
     "rows",
     [
-        [{"trading_account_id": "account-a", "account_kind": "MAIN"}, {"trading_account_id": "account-b", "account_kind": "SUB"}],
+        [
+            {"trading_account_id": "account-a", "account_kind": "MAIN"},
+            {"trading_account_id": "account-b", "account_kind": "SUB"},
+        ],
         [("account-a", "MAIN"), ("account-b", "SUB")],
     ],
 )
