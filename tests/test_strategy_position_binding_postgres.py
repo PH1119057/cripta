@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -212,6 +213,25 @@ def _seed_request(
             trading_account_id,
         ),
     )
+    # An accepted REAL request is always backed by a current terminal
+    # COMPLETE account generation, including the same exact mode ref.
+    connection.execute(
+        """INSERT INTO runtime.account_state_generations(
+               generation_id,account_ref,reason,state,started_at,completed_at,
+               account_type,total_equity,wallet_balance,available_balance,
+               positions_count,active_orders_count,position_mode_refs,
+               wallet_payload,error,trading_account_id,identity_status)
+           VALUES(%s,'BYBIT:UNIFIED','disposable-test','COMPLETE',%s,%s,
+                  'UNIFIED',100,100,10,0,0,%s::jsonb,'{}'::jsonb,
+                  '',%s,'PROVEN')""",
+        (
+            f"{prefix}-generation",
+            NOW,
+            NOW,
+            json.dumps({symbol: position_mode_state_ref}),
+            trading_account_id,
+        ),
+    )
     connection.execute(
         """INSERT INTO runtime.capital_reservations(
                reservation_id,account_ref,strategy_id,strategy_version,
@@ -233,7 +253,7 @@ def _seed_request(
             entry_fp,
             signal_id,
             attempt_id,
-            f"{prefix}-capacity",
+            f"{prefix}-generation",
             NOW,
             NOW + timedelta(seconds=30),
             reservation_state,
@@ -284,7 +304,7 @@ def _seed_request(
             attempt_id,
             signal_id,
             NOW,
-            f"{prefix}-capacity",
+            f"{prefix}-generation",
             reservation_id,
             slot_claim_id,
             position_mode_state_ref,
