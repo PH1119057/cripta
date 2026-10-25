@@ -136,7 +136,8 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
             ).fetchall()
             assert sorted(rows) == [(accounts[0][0],1),(accounts[1][0],1)], relation
         values = c.execute(
-            "SELECT trading_account_id,total_equity FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)",
+            """SELECT trading_account_id,total_equity
+                 FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)""",
             ([accounts[0][0],accounts[1][0]],),
         ).fetchall()
         assert sorted(values) == [(accounts[0][0],"100"),(accounts[1][0],"200")]
@@ -152,9 +153,8 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
                        '{}'::jsonb,'LEGACY_UNKNOWN')""",
             (legacy_order,symbol),
         )
-        with pytest.raises(UniqueViolation):
-            with c.transaction():
-                c.execute(
+        with pytest.raises(UniqueViolation), c.transaction():
+            c.execute(
                     """INSERT INTO runtime.hot_orders (
                         order_id,order_link_id,symbol,side,order_status,
                         qty,price,leaves_qty,refreshed_at_epoch_ms,
@@ -164,7 +164,8 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
                     (legacy_order,symbol),
                 )
         assert c.execute(
-            "SELECT count(*) FROM runtime.hot_orders WHERE order_id=%s AND identity_status='LEGACY_UNKNOWN'",
+            """SELECT count(*) FROM runtime.hot_orders
+                WHERE order_id=%s AND identity_status='LEGACY_UNKNOWN'""",
             (legacy_order,),
         ).fetchone()[0] == 1
         c.rollback()
