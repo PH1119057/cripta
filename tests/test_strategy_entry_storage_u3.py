@@ -185,6 +185,7 @@ def strategy_card() -> StrategyCard:
 def build_evaluation(
     *, real: bool = False, fanout: bool = False,
     partial: bool = False, all_unarmed: bool = False,
+    fact_attributes: dict[str, object] | None = None,
 ):
     card = strategy_card()
     activation = StrategyActivation(
@@ -206,6 +207,7 @@ def build_evaluation(
         event_at=NOW,
         received_at=NOW,
         source_refs=("trade:exact:1", "zone:exact:1"),
+        attributes=policy(fact_attributes),
     )
     sensor = SensorObservation(
         sensor_id="flow.delta",
