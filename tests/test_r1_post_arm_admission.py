@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from operations.connectivity import universal_entry_consumer as entry_consumer
 
@@ -122,3 +124,77 @@ def test_real_entry_consumer_accepts_exact_active_session_without_prearm_recheck
     )
     assert ready is True
     assert failed == ()
+
+
+def test_pre_dispatch_reproves_exact_latest_account_generation() -> None:
+    request = SimpleNamespace(
+        trading_account_id="account-main",
+        symbol="BTCUSDT",
+        position_mode_state_ref="mode-btc",
+    )
+    current = SimpleNamespace(
+        generation_id="generation-main",
+        position_mode_refs={"BTCUSDT": "mode-btc"},
+    )
+    row = {"capital_capacity_snapshot_id": "generation-main"}
+    with patch.object(
+        entry_consumer, "current_complete_account_state_generation",
+        return_value=current,
+    ) as load:
+        result = entry_consumer._generation_pre_dispatch_status(
+            object(), row, request,
+        )
+    assert result == ("OK", "")
+    assert load.call_args.kwargs == {
+        "account_ref": "BYBIT:UNIFIED",
+        "trading_account_id": "account-main",
+        "acquire_account_lock": True,
+    }
+
+
+def test_pre_dispatch_blocks_obsolete_or_cross_account_generation() -> None:
+    request = SimpleNamespace(
+        trading_account_id="account-sub",
+        symbol="BTCUSDT",
+        position_mode_state_ref="mode-sub",
+    )
+    current = SimpleNamespace(
+        generation_id="generation-sub",
+        position_mode_refs={"BTCUSDT": "mode-sub"},
+    )
+    with patch.object(
+        entry_consumer, "current_complete_account_state_generation",
+        return_value=current,
+    ):
+        assert entry_consumer._generation_pre_dispatch_status(
+            object(), {"capital_capacity_snapshot_id": "generation-main"},
+            request,
+        ) == ("STALE_MODE", "ADMISSION_ACCOUNT_GENERATION_CHANGED")
+        assert entry_consumer._generation_pre_dispatch_status(
+            object(), {"capital_capacity_snapshot_id": "generation-sub"},
+            SimpleNamespace(
+                trading_account_id="account-sub",
+                symbol="BTCUSDT",
+                position_mode_state_ref="mode-main",
+            ),
+        ) == ("STALE_MODE", "ADMISSION_ACCOUNT_GENERATION_CHANGED")
+
+
+def test_pre_dispatch_blocks_failed_terminal_generation() -> None:
+    from bybit_workbench.account_state_generation import (
+        AccountStateGenerationUnavailable,
+    )
+
+    request = SimpleNamespace(
+        trading_account_id="account-sub",
+        symbol="BTCUSDT",
+        position_mode_state_ref="mode-sub",
+    )
+    with patch.object(
+        entry_consumer, "current_complete_account_state_generation",
+        side_effect=AccountStateGenerationUnavailable("FAILED"),
+    ):
+        assert entry_consumer._generation_pre_dispatch_status(
+            object(), {"capital_capacity_snapshot_id": "generation-sub"},
+            request,
+        ) == ("STALE_MODE", "CURRENT_ACCOUNT_GENERATION_UNAVAILABLE")
