@@ -30,7 +30,7 @@ BEGIN
            ARRAY['trading_account_id','exec_id']::text[], ARRAY['exec_id']::text[]),
           ('runtime.exchange_order_history'::regclass, 'exchange_order_history_pkey',
            'runtime.ux_exchange_order_history_trading_account_order',
-           ARRAY['trading_account_id','order_id']::text[])
+           ARRAY['trading_account_id','order_id']::text[], ARRAY['order_id']::text[])
         ) AS t(relid,old_pk,account_index,expected_columns,old_pk_columns)
     LOOP
         account_unique := to_regclass(item.account_index);
