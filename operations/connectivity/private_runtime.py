@@ -2607,10 +2607,59 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     "idempotent": True,
                     "verifiedFromExchange": True,
                 }
+            # A successful trading-stop ACK is NOT Exchange proof. Before
+            # declaring a market Entry command completed, independently read
+            # the exact opened position and confirm the actual SL and TP.
+            # If state is pending/uncertain, keep the acknowledged order for
+            # reconciliation; NEVER retry /order/create or trading-stop here.
+            live_protection_confirmed = False
+            for probe in range(3):
+                try:
+                    proven_payload, _ = api_get(
+                        "/v5/position/list",
+                        {"category": "linear", "symbol": symbol},
+                        key,
+                        secret,
+                    )
+                    _require_entry_bybit_read_ok(
+                        proven_payload, "/v5/position/list"
+                    )
+                except ExchangeReadUnavailable as exc:
+                    raise ExchangeMutationBarrier(
+                        "market Entry protection Exchange read unavailable after mutation"
+                    ) from exc
+                matching = [
+                    item
+                    for item in proven_payload["result"]["list"]
+                    if str(item.get("symbol") or "") == symbol
+                    and str(item.get("side") or "") == side
+                    and int(item.get("positionIdx") or 0) == 0
+                    and Decimal(str(item.get("size") or 0)) > 0
+                ]
+                if len(matching) == 1:
+                    try:
+                        observed_stop = Decimal(str(matching[0].get("stopLoss") or 0))
+                        observed_tp = Decimal(str(matching[0].get("takeProfit") or 0))
+                    except (InvalidOperation, TypeError, ValueError):
+                        observed_stop = Decimal(0)
+                        observed_tp = Decimal(0)
+                    live_protection_confirmed = (
+                        observed_stop == actual_stop
+                        and (actual_target is None or observed_tp == actual_target)
+                    )
+                if live_protection_confirmed:
+                    break
+                if probe < 2:
+                    time.sleep(0.25)
+            if not live_protection_confirmed:
+                raise ExchangeMutationBarrier(
+                    "market Entry initial protection not confirmed on Exchange"
+                )
             result["actualProtection"] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": None if actual_target is None else str(actual_target),
                 "exchange": protection.get("retMsg"),
+                "verifiedFromExchange": True,
             }
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
