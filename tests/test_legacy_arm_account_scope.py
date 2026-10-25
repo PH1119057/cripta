@@ -50,8 +50,11 @@ def check(db, account_id="account-a"):
 @pytest.mark.parametrize(
     "rows",
     [
-        [{"trading_account_id": "account-a"}, {"trading_account_id": "account-b"}],
-        [("account-a",), ("account-b",)],
+        [
+            {"trading_account_id": "account-a", "account_kind": "MAIN"},
+            {"trading_account_id": "account-b", "account_kind": "SUB"},
+        ],
+        [("account-a", "MAIN"), ("account-b", "SUB")],
     ],
 )
 def test_two_accounts_never_inherit_legacy_strategy_arm(rows):
@@ -60,7 +63,7 @@ def test_two_accounts_never_inherit_legacy_strategy_arm(rows):
 
 
 def test_one_account_can_proceed_to_separate_release_session_check():
-    db = DB([("account-a",)])
+    db = DB([("account-a", "MAIN")])
     assert check(db) == (True, ())
     sql, params = db.statements[-1]
     assert "effective_from<=%s" in sql
@@ -68,12 +71,12 @@ def test_one_account_can_proceed_to_separate_release_session_check():
 
 
 def test_wrong_account_and_missing_binding_fail_closed():
-    assert check(DB([{"trading_account_id": "account-b"}]))[0] is False
+    assert check(DB([{"trading_account_id": "account-b", "account_kind": "MAIN"}]))[0] is False
     assert check(DB([])) == (False, ("OWNER_ARM_ACCOUNT_BINDING_NOT_PROVEN",))
 
 
 def test_missing_identity_or_timezone_avoids_unproven_authorization():
-    db = DB([("account-a",)])
+    db = DB([("account-a", "MAIN")])
     assert check(db, account_id="") == (False, ("OWNER_ARM_ACCOUNT_IDENTITY_MISSING",))
     assert db.statements == []
     with pytest.raises(ValueError):
@@ -84,7 +87,7 @@ def test_missing_identity_or_timezone_avoids_unproven_authorization():
 
 
 def test_observer_rejects_multiaccount_activation_before_session_lookup():
-    db = DB([("account-a",), ("account-b",)])
+    db = DB([("account-a", "MAIN"), ("account-b", "SUB")])
     bundle = SimpleNamespace(
         card=SimpleNamespace(
             strategy_id="strategy-a", strategy_version="1",
@@ -103,7 +106,7 @@ def test_observer_rejects_multiaccount_activation_before_session_lookup():
 
 
 def test_observer_retains_single_account_exact_session_requirement():
-    db = DB([("account-a",)])
+    db = DB([("account-a", "MAIN")])
     bundle = SimpleNamespace(
         card=SimpleNamespace(
             strategy_id="strategy-a", strategy_version="1",

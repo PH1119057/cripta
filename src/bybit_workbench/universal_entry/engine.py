@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -17,6 +17,7 @@ from bybit_workbench.entry_admission import (
 
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import (
+    AccountEntryOutcome,
     CandidateCooldown,
     ContextFailureAction,
     ContextLink,
@@ -66,6 +67,23 @@ _QUALITY_RANK = {
 _DECISION_MODES = {ContextMode.CONDITION, ContextMode.RANKING}
 
 
+@dataclass(frozen=True, slots=True)
+class AccountAdmissionContext:
+    """Pre-resolved, exact account-scoped evidence for one REAL execution leg.
+
+    The caller must independently prove effective bindings, AccountStateGeneration,
+    connector identity and per-account release/arm rights. This object grants none
+    of those rights and is not a substitute for the Postgres admission port.
+    """
+
+    binding: StrategyExecutionBindingRef
+    capacity: TradingCapacitySnapshot | None
+    technical_readiness: TechnicalReadiness
+    account_ref: str
+    exchange_position_key: str
+    entry_admission_port: EntryAdmissionPort | None
+
+
 class UniversalEntryEngine:
     def __init__(self, registry: ActivePlanRegistry) -> None:
         self._registry = registry
@@ -88,10 +106,27 @@ class UniversalEntryEngine:
         real_admission_required_for: frozenset[str] = frozenset(),
         real_admission_ready_for: frozenset[str] | None = None,
         execution_bindings: Mapping[str, StrategyExecutionBindingRef] | None = None,
+        account_admissions: Mapping[str, tuple[AccountAdmissionContext, ...]] | None = None,
         exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
         admission_time: datetime | None = None,
     ) -> tuple[EntryEvaluation, ...]:
+        # Distinct activations may use fan-out and the compatible legacy path
+        # concurrently. An activation must NEVER use both admission inputs.
+        if (
+            account_admissions is not None
+            and execution_bindings is not None
+            and set(account_admissions).intersection(execution_bindings)
+        ):
+            raise ValueError("REAL_FANOUT_AND_LEGACY_BINDING_ACTIVATION_OVERLAP")
+        if account_admissions is not None and execution_bindings is None and (
+            entry_admission_port is not None or exchange_position_keys is not None
+        ):
+            raise ValueError("REAL_FANOUT_AND_LEGACY_ACCOUNT_STATE_MUTUALLY_EXCLUSIVE")
+        # Validate the complete candidate set before the first account can reserve.
+        if account_admissions is not None:
+            for activation_id, admission_scopes in account_admissions.items():
+                self._validate_account_admissions(activation_id, admission_scopes)
         available_sensors = dict(sensors or {})
         available_contexts = dict(contexts or {})
         output: list[EntryEvaluation] = []
@@ -264,7 +299,95 @@ class UniversalEntryEngine:
                 decision: EntryDecision | None
                 request: ExecutionRequest | None
                 notifications: tuple[NotificationEvent, ...]
-                if real_admission:
+                account_outcomes: tuple[AccountEntryOutcome, ...] = ()
+                if (
+                    real_admission
+                    and account_admissions is not None
+                    and plan.strategy_activation_id in account_admissions
+                ):
+                    per_account_scopes = account_admissions.get(plan.strategy_activation_id, ())
+                    if not per_account_scopes:
+                        # Missing account scope cannot fall back to a default.
+                        decision = self._decision(
+                            plan,
+                            signal,
+                            attempt,
+                            admission_time or fact_for_predicate.observed_at,
+                            capacity=None,
+                            technical_readiness=TechnicalReadiness(
+                                False,
+                                admission_time or fact_for_predicate.observed_at,
+                                "REAL_EXECUTION_BINDING_NOT_READY",
+                            ),
+                            account_ref=None,
+                            entry_admission_port=None,
+                            exchange_position_key=None,
+                            execution_binding=None,
+                            policy_attempt_block=policy_attempt_block,
+                        )
+                        request = None
+                        notifications = self._notifications(
+                            signal, attempt, decision, plan, capacity=None
+                        )
+                    else:
+                        per_account: list[AccountEntryOutcome] = []
+                        for account_scope in sorted(
+                            per_account_scopes,
+                            key=lambda item: (
+                                item.binding.execution_leg,
+                                item.binding.trading_account_id,
+                            ),
+                        ):
+                            account_readiness = account_scope.technical_readiness
+                            effective_port = account_scope.entry_admission_port
+                            if not real_ready and account_readiness.ready:
+                                # Preserve a specific independently proven
+                                # block reason; do not mask it as generic arm.
+                                account_readiness = TechnicalReadiness(
+                                    False,
+                                    admission_time or fact_for_predicate.observed_at,
+                                    "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY",
+                                )
+                            if not real_ready:
+                                effective_port = None
+                            account_decision = self._decision(
+                                plan,
+                                signal,
+                                attempt,
+                                admission_time or fact_for_predicate.observed_at,
+                                capacity=account_scope.capacity,
+                                technical_readiness=account_readiness,
+                                account_ref=account_scope.account_ref,
+                                entry_admission_port=effective_port,
+                                exchange_position_key=account_scope.exchange_position_key,
+                                execution_binding=account_scope.binding,
+                                policy_attempt_block=policy_attempt_block,
+                                decision_namespace=(
+                                    account_scope.binding.strategy_execution_binding_id
+                                ),
+                            )
+                            account_request = self._execution_request(
+                                execution_intent, account_decision
+                            )
+                            per_account.append(
+                                AccountEntryOutcome(
+                                    account_scope.binding,
+                                    account_decision,
+                                    account_request,
+                                    self._notifications(
+                                        signal,
+                                        attempt,
+                                        account_decision,
+                                        plan,
+                                        capacity=account_scope.capacity,
+                                    ),
+                                )
+                            )
+                        account_outcomes = tuple(per_account)
+                        decision = None
+                        request = None
+                        notifications = ()
+                elif real_admission:
                     exchange_position_key = (
                         None
                         if exchange_position_keys is None
@@ -324,9 +447,36 @@ class UniversalEntryEngine:
                         sensor_links,
                         context_links,
                         notifications,
+                        account_outcomes,
                     )
                 )
         return tuple(output)
+
+    @staticmethod
+    def _validate_account_admissions(
+        activation_id: str,
+        contexts: tuple[AccountAdmissionContext, ...],
+    ) -> None:
+        if not activation_id.strip():
+            raise ValueError("REAL_FANOUT_ACTIVATION_MISSING")
+        binding_ids: set[str] = set()
+        trading_accounts: set[str] = set()
+        legs: set[str] = set()
+        for context in contexts:
+            ref = context.binding
+            if ref.strategy_activation_id != activation_id:
+                raise ValueError("REAL_FANOUT_CROSS_ACTIVATION_BINDING")
+            if ref.strategy_execution_binding_id in binding_ids:
+                raise ValueError("REAL_FANOUT_DUPLICATE_BINDING")
+            if ref.trading_account_id in trading_accounts:
+                raise ValueError("REAL_FANOUT_DUPLICATE_TRADING_ACCOUNT")
+            if ref.execution_leg in legs:
+                raise ValueError("REAL_FANOUT_DUPLICATE_EXECUTION_LEG")
+            if not context.account_ref or not context.exchange_position_key:
+                raise ValueError("REAL_FANOUT_ACCOUNT_STATE_SCOPE_MISSING")
+            binding_ids.add(ref.strategy_execution_binding_id)
+            trading_accounts.add(ref.trading_account_id)
+            legs.add(ref.execution_leg)
 
     @staticmethod
     def _with_feature_evidence(
@@ -945,6 +1095,7 @@ class UniversalEntryEngine:
         exchange_position_key: str | None,
         execution_binding: StrategyExecutionBindingRef | None,
         policy_attempt_block: str | None = None,
+        decision_namespace: str | None = None,
     ) -> EntryDecision:
         code = EntryDecisionCode.ACCEPTED
         reason = "strategy conditions matched"
@@ -1091,6 +1242,11 @@ class UniversalEntryEngine:
             + fingerprint(
                 {
                     "attempt": attempt.strategy_attempt_id,
+                    **(
+                        {"execution_binding_id": decision_namespace}
+                        if decision_namespace is not None
+                        else {}
+                    ),
                     "code": code,
                     "reason": reason,
                     "capital_reservation_id": reservation_id,

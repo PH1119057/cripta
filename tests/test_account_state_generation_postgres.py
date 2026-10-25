@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg.rows import dict_row
 
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
@@ -113,4 +114,36 @@ def test_latest_failed_generation_blocks_until_next_complete() -> None:
             current_complete_account_state_generation(
                 connection,
                 account_ref=account_ref,
+            )
+
+
+def test_dict_row_runtime_consumer_loads_complete_and_rejects_failed() -> None:
+    assert DSN is not None
+    token = uuid4().hex
+    account_ref = f"dict-account-{token}"
+    now = datetime(2026, 10, 6, 9, 0, tzinfo=UTC)
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        _insert_generation(
+            connection,
+            generation_id=f"dict-complete-{token}",
+            account_ref=account_ref,
+            state="COMPLETE",
+            started_at=now,
+            completed_at=now + timedelta(seconds=1),
+        )
+        generation = current_complete_account_state_generation(
+            connection, account_ref=account_ref,
+        )
+        assert generation.generation_id == f"dict-complete-{token}"
+        _insert_generation(
+            connection,
+            generation_id=f"dict-failed-{token}",
+            account_ref=account_ref,
+            state="FAILED",
+            started_at=now + timedelta(seconds=2),
+            completed_at=now + timedelta(seconds=3),
+        )
+        with pytest.raises(AccountStateGenerationUnavailable, match="FAILED"):
+            current_complete_account_state_generation(
+                connection, account_ref=account_ref,
             )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
@@ -346,9 +347,9 @@ def test_two_accounts_admit_same_symbol_with_independent_physical_slots() -> Non
         )
 
 
-def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
+def test_generation_backed_mode_ignores_separate_fresh_until_expiry() -> None:
     assert DSN is not None
-    prefix = "slot-stale-" + uuid4().hex
+    prefix = "slot-generation-mode-" + uuid4().hex
     identity = _seed_attempts(prefix, count=1)
     _seed_mode(
         prefix,
@@ -356,9 +357,32 @@ def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
         observed_at=NOW - timedelta(minutes=10),
         fresh_until=NOW - timedelta(minutes=1),
     )
+    # Current terminal COMPLETE generation is authoritative; a historical
+    # mode provenance timestamp is not a second per-Entry seconds gate.
     with psycopg.connect(DSN) as connection:
+        receipt = PostgresEntryAdmissionPort(connection).admit(
+            _request(prefix, 0, identity)
+        )
+    assert receipt.capital_reservation is not None
+    assert receipt.exchange_position_slot_claim_id
+
+
+def test_failed_latest_account_generation_blocks_all_admission() -> None:
+    assert DSN is not None
+    prefix = "slot-failed-generation-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=1)
+    _seed_mode(prefix, identity)
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            """UPDATE runtime.account_state_generations
+                  SET state='FAILED',error='OFFLINE_TEST_FAILURE'
+                WHERE generation_id=%s""",
+            (f"{prefix}-generation",),
+        )
         with pytest.raises(PositionModeStateUnavailable):
-            PostgresEntryAdmissionPort(connection).admit(_request(prefix, 0, identity))
+            PostgresEntryAdmissionPort(connection).admit(
+                _request(prefix, 0, identity)
+            )
         claim_count = connection.execute(
             "SELECT count(*) FROM runtime.exchange_position_slot_claims WHERE account_ref=%s",
             (identity["account_ref"],),
@@ -369,6 +393,66 @@ def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
         ).fetchone()[0]
     assert claim_count == 0
     assert reservation_count == 0
+
+
+def test_failed_generation_serializes_with_entry_account_lock() -> None:
+    """A terminal FAILED update wins the same account lock as admission.
+
+    On the disposable DB, while a terminal failure holds the exact account
+    lock, a concurrent Entry may neither claim a slot nor reserve capital.
+    An unrelated account retains independent admission capacity.
+    """
+    assert DSN is not None
+    prefix = "slot-generation-race-" + uuid4().hex
+    peer_prefix = "slot-generation-peer-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=1)
+    peer = _seed_attempts(peer_prefix, count=1)
+    _seed_mode(prefix, identity)
+    _seed_mode(peer_prefix, peer)
+    account_id = f"{prefix}-ta"
+    with psycopg.connect(DSN) as writer:
+        writer.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (account_id,),
+        )
+        writer.execute(
+            """UPDATE runtime.account_state_generations
+                  SET state='FAILED',error='OFFLINE_TEST_FAILURE'
+                WHERE generation_id=%s AND state='COMPLETE'""",
+            (f"{prefix}-generation",),
+        )
+        # The failing account is locked. An independent account must not
+        # be affected or serialized by the other account's generation.
+        with psycopg.connect(DSN) as peer_connection:
+            admitted = PostgresEntryAdmissionPort(peer_connection).admit(
+                _request(peer_prefix, 0, peer)
+            )
+            assert admitted.capital_reservation is not None
+
+        with psycopg.connect(DSN) as contender:
+            contender.execute("SET lock_timeout = '300ms'")
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                PostgresEntryAdmissionPort(contender).admit(
+                    _request(prefix, 0, identity)
+                )
+
+    # Once FAILED commits, the next attempt rejects for actual account
+    # state, not just because a transient advisory lock is held.
+    with psycopg.connect(DSN) as after:
+        with pytest.raises(PositionModeStateUnavailable):
+            PostgresEntryAdmissionPort(after).admit(
+                _request(prefix, 0, identity)
+            )
+        assert after.execute(
+            """SELECT count(*) FROM runtime.exchange_position_slot_claims
+               WHERE account_ref=%s""",
+            (identity["account_ref"],),
+        ).fetchone()[0] == 0
+        assert after.execute(
+            """SELECT count(*) FROM runtime.capital_reservations
+               WHERE account_ref=%s""",
+            (identity["account_ref"],),
+        ).fetchone()[0] == 0
 
 
 def test_incompatible_position_mode_creates_no_claim_or_reservation() -> None:
@@ -536,3 +620,85 @@ def test_runtime_role_has_minimal_new_schema_privileges() -> None:
                        )"""
         ).fetchone()
     assert function_rights == (True, False)
+
+def test_one_attempt_fans_out_to_two_proven_accounts_with_independent_ledger() -> None:
+    """One StrategySignal/attempt, two physical slots and two capital reservations."""
+    assert DSN is not None
+    prefix = "slot-same-attempt-" + uuid4().hex
+    sub_prefix = prefix + "-sub"
+    identity = _seed_attempts(prefix, count=1)
+    _seed_mode(prefix, identity)
+
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            """INSERT INTO identity.trading_accounts(
+                   trading_account_id,venue_id,account_kind,environment,status
+               ) VALUES(%s,'venue-bybit','SUB','MAINNET','ACTIVE')""",
+            (f"{sub_prefix}-ta",),
+        )
+        connection.execute(
+            """INSERT INTO strategy_entry.strategy_execution_bindings(
+                   strategy_execution_binding_id,strategy_activation_id,
+                   execution_leg,execution_role,trading_account_id,
+                   allocation_mode,binding_state,effective_from,
+                   operator,source,reason)
+               VALUES(%s,%s,'SUB','PRIMARY',%s,
+                      'DEDICATED_STRATEGY','ACTIVE',%s,
+                      'test','test','same-attempt fanout')""",
+            (f"{sub_prefix}-binding", f"{prefix}-activation",
+             f"{sub_prefix}-ta", NOW),
+        )
+
+    _seed_mode(sub_prefix, {"account_ref": f"{sub_prefix}-account"})
+    first_request = _request(prefix, 0, identity)
+    second_request = replace(
+        first_request,
+        account_ref=f"{sub_prefix}-account",
+        exchange_position_key=exchange_position_key(f"{sub_prefix}-ta", SYMBOL, 0),
+        capacity_snapshot_id=f"{sub_prefix}-generation",
+        account_state_generation_id=f"{sub_prefix}-generation",
+        strategy_execution_binding_id=f"{sub_prefix}-binding",
+        execution_leg="SUB",
+        trading_account_id=f"{sub_prefix}-ta",
+    )
+
+    with psycopg.connect(DSN) as connection:
+        port = PostgresEntryAdmissionPort(connection)
+        main_receipt = port.admit(first_request)
+        # Failure of one per-account leg must not roll back the other account
+        # or strand the rejected account's slot/capital in the admission ledger.
+        with pytest.raises(InsufficientCapital):
+            port.admit(replace(second_request, requested_amount=Decimal("1000")))
+        assert connection.execute(
+            """SELECT 1 FROM runtime.exchange_position_slot_claims
+                WHERE strategy_attempt_id=%s AND trading_account_id=%s""",
+            (first_request.strategy_attempt_id, second_request.trading_account_id),
+        ).fetchone() is None
+        sub_receipt = port.admit(second_request)
+        assert main_receipt.exchange_position_slot_claim_id != (
+            sub_receipt.exchange_position_slot_claim_id
+        )
+        assert main_receipt.capital_reservation.reservation_id != (
+            sub_receipt.capital_reservation.reservation_id
+        )
+        assert port.admit(first_request) == main_receipt
+        assert port.admit(second_request) == sub_receipt
+
+        attempts = connection.execute(
+            """SELECT strategy_execution_binding_id, trading_account_id
+                 FROM runtime.exchange_position_slot_claims
+                WHERE strategy_attempt_id=%s""",
+            (first_request.strategy_attempt_id,),
+        ).fetchall()
+        reservations = connection.execute(
+            """SELECT strategy_execution_binding_id, trading_account_id
+                 FROM runtime.capital_reservations
+                WHERE strategy_attempt_id=%s""",
+            (first_request.strategy_attempt_id,),
+        ).fetchall()
+        expected = {
+            (f"{prefix}-binding", f"{prefix}-ta"),
+            (f"{sub_prefix}-binding", f"{sub_prefix}-ta"),
+        }
+        assert set(attempts) == expected
+        assert set(reservations) == expected

@@ -19,6 +19,7 @@ from bybit_workbench.fault_delivery import (
     escalate_missing_dashboard_display,
     process_due_deliveries,
 )
+from bybit_workbench.lifecycle_exposure_bridge import verified_account_exposure
 from bybit_workbench.lifecycle_supervisor import (
     LifecycleScanResult,
     LifecycleSupervisor,
@@ -146,12 +147,14 @@ def scan_once(
     now: datetime,
     policy: LifecycleSupervisorPolicy,
     protection: dict[str, dict[str, object]] | None = None,
+    account_exposure: tuple[dict[str, object], ...] | None = None,
 ) -> LifecycleScanResult:
     with connection.transaction():
         return LifecycleSupervisor(
             connection,
             policy=policy,
             exchange_protection=protection,
+            exchange_exposure=account_exposure,
             trading_account_id=TRADING_ACCOUNT_ID,
         ).scan(now=now.astimezone(UTC))
 
@@ -247,8 +250,30 @@ def main() -> int:
                 account_read_complete
                 and str(account.get("account_user_id") or "").strip()
             )
+            # Credential provenance and registry lineage are independent gates.
+            credential_dir = os.environ.get("CREDENTIALS_DIRECTORY", "")
+            mounted_here = (
+                bool(credential_dir)
+                and Path(credential_dir).resolve()
+                == Path("/run/credentials/cripta-lifecycle-supervisor.service")
+            )
+            credential_ref = (
+                "systemd-credential:bybit-mainnet" if mounted_here else None
+            )
+            with connection.transaction():
+                exposure_audit = verified_account_exposure(
+                    connection,
+                    account_snapshot=account,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    account_connector_id=os.environ.get(
+                        "CRIPTA_ACCOUNT_CONNECTOR_ID", ""
+                    ).strip(),
+                    verified_credential_ref=credential_ref,
+                    now=now,
+                )
             result = scan_once(
                 connection, now=now, policy=policy, protection=protection,
+                account_exposure=exposure_audit.verified_positions,
             )
             retired_arms: tuple[str, ...] = ()
             # This code never creates new sessions, changes permissions,
@@ -309,6 +334,15 @@ def main() -> int:
                         "delivered": delivery.delivered,
                         "escalated": delivery.escalated,
                         "pending_or_unacknowledged": delivery.pending,
+                    },
+                    "exposure_audit": {
+                        "state": exposure_audit.state,
+                        "reasons": list(exposure_audit.reasons),
+                        "unknown_open_count": exposure_audit.unknown_open_count,
+                        "verified_position_count": (
+                            None if exposure_audit.verified_positions is None
+                            else len(exposure_audit.verified_positions)
+                        ),
                     },
                     "protection_audit": {
                         "account_read_error": read_error,

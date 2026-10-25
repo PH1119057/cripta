@@ -337,10 +337,12 @@ class PostgresEntryAdmissionPort:
                 if (
                     observed_at.astimezone(UTC) > now
                     or received_at.astimezone(UTC) > now
-                    or fresh_until.astimezone(UTC) < now
                 ):
+                    # Production mode authority is the exact current COMPLETE
+                    # AccountStateGeneration ref, not its independent
+                    # historical fresh_until expiry (ARCH 5.1.1 / TC 2.7).
                     raise PositionModeStateUnavailable(
-                        f"generation position mode stale/invalid: {state_ref}"
+                        f"generation position mode timestamps invalid: {state_ref}"
                     )
             else:
                 # Compatibility path for historical/shadow/integration callers.
@@ -397,8 +399,12 @@ class PostgresEntryAdmissionPort:
                           trading_account_id
                      FROM runtime.exchange_position_slot_claims
                     WHERE strategy_attempt_id=%s
+                      AND (strategy_execution_binding_id=%s
+                           OR strategy_execution_binding_id IS NULL)
+                    ORDER BY strategy_execution_binding_id NULLS FIRST
+                    LIMIT 1
                     FOR UPDATE""",
-                (request.strategy_attempt_id,),
+                (request.strategy_attempt_id, request.strategy_execution_binding_id),
             ).fetchone()
             if existing is not None:
                 if (

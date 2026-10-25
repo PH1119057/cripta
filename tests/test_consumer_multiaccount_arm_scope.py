@@ -19,7 +19,10 @@ class Rows:
         self.accounts = accounts
 
     def fetchall(self):
-        return [{"trading_account_id": account} for account in self.accounts]
+        return [
+            {"trading_account_id": account, "account_kind": "MAIN"}
+            for account in self.accounts
+        ]
 
 
 class FakeConnection:

@@ -5,13 +5,14 @@ import hmac
 import json
 import os
 import signal
+import sys
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from pathlib import Path
 
 import psycopg
@@ -35,6 +36,19 @@ from runtime_schema import (
 )
 from safety_observer import api_get as safety_api_get
 
+from bybit_workbench.exchange.bybit.account_connector_attestation import (
+    attest_bybit_account_connector,
+)
+from bybit_workbench.account_entry_safety import (
+    account_entry_safety_ready,
+    latch_account_entry_safety,
+)
+from bybit_workbench.sub_worker_scope import require_exact_sub_instance
+from bybit_workbench.private_worker_status import (
+    DEFAULT_STATUS_DIR,
+    assert_sub_worker_isolation,
+    private_worker_status_path,
+)
 from bybit_workbench.market_identity import bybit_instrument_id
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
@@ -42,6 +56,9 @@ from bybit_workbench.account_state_generation import (
 )
 from bybit_workbench.exchange.bybit.mappers import map_rest_klines
 from bybit_workbench.exchange.bybit.effective_protection import effective_protection_from_account
+from bybit_workbench.exchange.bybit.protection_intent import (
+    initial_protection_surfaces_observed,
+)
 from bybit_workbench.exchange.bybit.time_calibration import (
     BybitTimeCalibration,
     build_bybit_time_calibration,
@@ -90,6 +107,9 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
+# From the same protected systemd credential bundle as API key and secret.
+# It MUST be supplied independently of identity.account_connectors DB rows.
+MOUNTED_CREDENTIAL_REF = ""
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -102,7 +122,7 @@ PRIVATE_RECONNECT_RECOVERED_REASON = (
 )
 
 
-def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
+def validate_runtime_identity_contract(connection: psycopg.Connection) -> str:
     if not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID:
         raise RuntimeError("TRADING_ACCOUNT_IDENTITY_CONFIG_MISSING")
     row = connection.execute(
@@ -122,13 +142,44 @@ def validate_runtime_identity_contract(connection: psycopg.Connection) -> None:
     if (
         venue_id != "venue-bybit"
         or venue_kind != "CEX"
-        or account_kind != "MAIN"
+        or account_kind not in {"MAIN", "SUB"}
         or account_type != "UNIFIED"
         or environment != "MAINNET"
         or account_status != "ACTIVE"
         or connector_status != "ACTIVE"
     ):
         raise RuntimeError("TRADING_ACCOUNT_IDENTITY_MISMATCH")
+    return account_kind
+
+
+def authenticated_entry_connector_gate(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+) -> None:
+    """New Entry only: prove this mounted key's actual Bybit UID and parent.
+
+    Never block existing Exit/protection/reconciliation on a missing new-Entry
+    attestation. The generic per-command failure path releases pre-ACK Entry
+    resources without disabling other TradingAccounts.
+    """
+    if not key or not secret:
+        raise RuntimeError("ENTRY_MOUNTED_API_CREDENTIAL_MISSING")
+    result = attest_bybit_account_connector(
+        connection,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        verified_credential_ref=MOUNTED_CREDENTIAL_REF,
+        signed_account_get=lambda: api_get(
+            "/v5/user/query-api", {}, key, secret
+        )[0],
+        now=datetime.now(UTC),
+    )
+    if not result.ready:
+        # Only stable reason tokens, never UID, signed response or credentials.
+        raise RuntimeError(
+            "ENTRY_ACCOUNT_IDENTITY_NOT_ATTESTED:" + ",".join(result.reasons)
+        )
 
 
 class PreMutationSafetyBlock(RuntimeError):
@@ -285,8 +336,43 @@ def db(application_name: str) -> psycopg.Connection:
     )
 
 
+def _is_sub_private_worker() -> bool:
+    """Configured worker role; not inferred from another account's state."""
+    return (
+        os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN").strip().upper()
+        == "SUB"
+    )
+
+
+def _private_worker_safe_error(exc: BaseException) -> str:
+    """SUB diagnostics must never persist signed URLs or provider responses."""
+    if _is_sub_private_worker():
+        return type(exc).__name__
+    return f"{type(exc).__name__}: {exc}"
+
+
 def disarm_new_entries(connection: psycopg.Connection, reason: str) -> None:
-    """Close only the new-entry gate; ownership/protection commands remain available."""
+    """Fail closed on Entry only; a SUB may not disarm unrelated accounts."""
+    if _is_sub_private_worker():
+        # An exception message may contain signed transport diagnostics.
+        # Persist only an internal stable category, never raw credentials,
+        # response bodies, signed URLs or their fragments.
+        safety_reason = (
+            "PRIVATE_ACCOUNT_WS_RECOVERY_UNPROVEN"
+            if reason == PRIVATE_RECONNECT_GATE_REASON
+            else "PRIVATE_ACCOUNT_MUTATION_SAFETY_BLOCKED"
+        )
+        # Reconciliation may have left an aborted/uncommitted PostgreSQL
+        # transaction. The safety latch must not inherit that transaction.
+        connection.rollback()
+        latch_account_entry_safety(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            reason=safety_reason,
+        )
+        connection.commit()
+        return
     now_ms = int(time.time() * 1000)
     connection.execute(
         """UPDATE control.execution_gates
@@ -467,6 +553,21 @@ def restore_r1_gate_after_verified_reconnect(
     return True
 
 
+def _critical_lifecycle_fault_code(connection: psycopg.Connection) -> str | None:
+    """Read-only, fail-closed new Entry guard for exact TradingAccount."""
+    if not TRADING_ACCOUNT_ID:
+        raise RuntimeError("required TradingAccount identity missing")
+    row = connection.execute(
+        """SELECT fault_code FROM runtime.lifecycle_faults
+            WHERE state='OPEN' AND severity='CRITICAL'
+              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
+                   OR exact_ids->>'trading_account_id'=%s)
+            ORDER BY detected_at,fault_id LIMIT 1""",
+        (TRADING_ACCOUNT_ID,),
+    ).fetchone()
+    return None if row is None else str(row[0])
+
+
 def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
     gate = connection.execute(
         "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
@@ -535,6 +636,9 @@ def entry_runtime_readiness(connection: psycopg.Connection) -> tuple[bool, str]:
         trailing = Decimal(str(raw.get("trailingStop") or 0))
         if stop <= 0 and trailing <= 0:
             return False, f"UNPROTECTED_EXCHANGE_POSITION:{symbol}"
+    fault_code = _critical_lifecycle_fault_code(connection)
+    if fault_code is not None:
+        return False, f"CRITICAL_LIFECYCLE_FAULT:{fault_code}"
     return True, "REARM_READY"
 
 
@@ -1210,7 +1314,7 @@ def handle_pre_mutation_safety_block(
 ) -> None:
     """Fail closed without claiming ambiguity when no mutation was sent."""
 
-    error = f"PRE_MUTATION_SAFETY_BLOCK:{type(exc).__name__}:{exc}"
+    error = f"PRE_MUTATION_SAFETY_BLOCK:{_private_worker_safe_error(exc)}"
     connection.rollback()
     if command_id is not None:
         finalize_failed_entry_command_reservation(
@@ -1246,7 +1350,7 @@ def handle_exchange_mutation_barrier(
     exc: BaseException,
 ) -> None:
     """Fail closed and force startup reconciliation before any later mutation."""
-    error = f"EXCHANGE_MUTATION_BARRIER:{type(exc).__name__}:{exc}"
+    error = f"EXCHANGE_MUTATION_BARRIER:{_private_worker_safe_error(exc)}"
     recovery_errors: list[str] = []
 
     try:
@@ -1272,7 +1376,7 @@ def handle_exchange_mutation_barrier(
             connection.commit()
     except Exception as recovery_exc:
         recovery_errors.append(
-            f"persist={type(recovery_exc).__name__}:{recovery_exc}"
+            f"persist={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1283,7 +1387,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"disarm={type(recovery_exc).__name__}:{recovery_exc}"
+            f"disarm={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1294,7 +1398,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"executions={type(recovery_exc).__name__}:{recovery_exc}"
+            f"executions={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1305,7 +1409,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"reconcile={type(recovery_exc).__name__}:{recovery_exc}"
+            f"reconcile={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -2114,9 +2218,38 @@ def record_effective_protection_after_command(
     )
 
 
+def _require_entry_bybit_read_ok(payload: dict[str, object], path: str) -> None:
+    """Do not treat a rejected Bybit read as an empty account/order inventory."""
+    try:
+        code = int(payload.get("retCode", -1))
+    except (TypeError, ValueError) as exc:
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read has invalid retCode: {path}"
+        ) from exc
+    if code != 0:
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read rejected: path={path} retCode={code}"
+        )
+    result = payload.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("list"), list):
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read has incomplete inventory: {path}"
+        )
+
+
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
+    if kind == "entry":
+        if _is_sub_private_worker():
+            ready, reasons = account_entry_safety_ready(
+                connection,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+            )
+            if not ready:
+                raise PreMutationSafetyBlock(",".join(reasons))
+        authenticated_entry_connector_gate(connection, key, secret)
     assert_legacy_automated_exit_ownership(
         connection,
         command_id=command_id,
@@ -2125,8 +2258,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         payload=payload,
     )
     positions, _ = api_get("/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret)
+    if kind == "entry":
+        _require_entry_bybit_read_ok(positions, "/v5/position/list")
     position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
+    if kind == "entry":
+        _require_entry_bybit_read_ok(instruments, "/v5/market/instruments-info")
     instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
     tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
     if tick > 0:
@@ -2197,6 +2334,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 key,
                 secret,
             )
+            _require_entry_bybit_read_ok(verified_payload, "/v5/position/list")
             verified_position = next(
                 (
                     item
@@ -2267,7 +2405,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result = {"retCode": 0, "retMsg": "not modified", "idempotent": True}
     elif kind == "entry":
         if position: raise RuntimeError("position already exists")
-        existing_orders, _ = api_get(
+        # One page is not enough to prove absence of bot/other pending Entry.
+        # Read every cursor or fail closed before any Exchange mutation.
+        existing_orders = _complete_exchange_inventory(
             "/v5/order/realtime",
             {"category": "linear", "symbol": symbol, "openOnly": "0", "limit": "50"},
             key,
@@ -2276,9 +2416,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         active_entry = next(
             (
                 order
-                for order in ((existing_orders.get("result") or {}).get("list") or [])
+                for order in existing_orders
                 if order.get("orderStatus") in {"New", "PartiallyFilled", "Untriggered"}
-                and not bool(order.get("reduceOnly"))
+                and str(order.get("reduceOnly") or "false").lower() != "true"
             ),
             None,
         )
@@ -2289,11 +2429,21 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         price = signal_price * (Decimal("1") - offset if side == "Buy" else Decimal("1") + offset)
         price = quantize(price, tick, upward=side == "Sell")
         wallet, _ = api_get("/v5/account/wallet-balance", {"accountType":"UNIFIED"}, key, secret); account=((wallet.get("result") or {}).get("list") or [{}])[0]
+        _require_entry_bybit_read_ok(wallet, "/v5/account/wallet-balance")
+        if str(account.get("accountType") or "") != "UNIFIED":
+            raise ExchangeReadUnavailable("Entry wallet accountType is not UNIFIED")
         available=account_available_usdt(account)
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
-        api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
+        fault_code = _critical_lifecycle_fault_code(connection)
+        if fault_code is not None:
+            # First Exchange mutation for this Entry is below. Avoid claiming
+            # pre-mutation safety after any Exchange mutation was already sent.
+            raise PreMutationSafetyBlock(f"CRITICAL_LIFECYCLE_FAULT:{fault_code}")
+        # Build and validate the complete Entry order and mandatory protection
+        # before the FIRST Exchange mutation. A malformed Strategy policy
+        # must never change leverage and then be labelled "no mutation".
         contract = initial_protection_contract(payload)
         stop, target = resolve_initial_protection_boundaries(
             entry=price,
@@ -2335,6 +2485,18 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     f"unsupported entry_time_in_force {entry_time_in_force}"
                 )
             order.update({"price": str(price), "timeInForce": bybit_time_in_force})
+        api_post(
+            "/v5/position/set-leverage",
+            {
+                "category": "linear",
+                "symbol": symbol,
+                "buyLeverage": str(leverage),
+                "sellLeverage": str(leverage),
+            },
+            key,
+            secret,
+            accepted_codes=(110043,),
+        )
         result=api_post("/v5/order/create", order, key, secret)
         exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
         if not exchange_order_id:
@@ -2359,6 +2521,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 current, _ = api_get(
                     "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
                 )
+                _require_entry_bybit_read_ok(current, "/v5/position/list")
                 filled_position = next(
                     (
                         item
@@ -2444,10 +2607,59 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     "idempotent": True,
                     "verifiedFromExchange": True,
                 }
+            # A successful trading-stop ACK is NOT Exchange proof. Before
+            # declaring a market Entry command completed, independently read
+            # the exact opened position and confirm the actual SL and TP.
+            # If state is pending/uncertain, keep the acknowledged order for
+            # reconciliation; NEVER retry /order/create or trading-stop here.
+            live_protection_confirmed = False
+            for probe in range(3):
+                try:
+                    proven_payload, _ = api_get(
+                        "/v5/position/list",
+                        {"category": "linear", "symbol": symbol},
+                        key,
+                        secret,
+                    )
+                    _require_entry_bybit_read_ok(
+                        proven_payload, "/v5/position/list"
+                    )
+                except ExchangeReadUnavailable as exc:
+                    raise ExchangeMutationBarrier(
+                        "market Entry protection Exchange read unavailable after mutation"
+                    ) from exc
+                matching = [
+                    item
+                    for item in proven_payload["result"]["list"]
+                    if str(item.get("symbol") or "") == symbol
+                    and str(item.get("side") or "") == side
+                    and int(item.get("positionIdx") or 0) == 0
+                    and Decimal(str(item.get("size") or 0)) > 0
+                ]
+                if len(matching) == 1:
+                    try:
+                        observed_stop = Decimal(str(matching[0].get("stopLoss") or 0))
+                        observed_tp = Decimal(str(matching[0].get("takeProfit") or 0))
+                    except (InvalidOperation, TypeError, ValueError):
+                        observed_stop = Decimal(0)
+                        observed_tp = Decimal(0)
+                    live_protection_confirmed = (
+                        observed_stop == actual_stop
+                        and (actual_target is None or observed_tp == actual_target)
+                    )
+                if live_protection_confirmed:
+                    break
+                if probe < 2:
+                    time.sleep(0.25)
+            if not live_protection_confirmed:
+                raise ExchangeMutationBarrier(
+                    "market Entry initial protection not confirmed on Exchange"
+                )
             result["actualProtection"] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": None if actual_target is None else str(actual_target),
                 "exchange": protection.get("retMsg"),
+                "verifiedFromExchange": True,
             }
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
@@ -2724,7 +2936,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                     "command",
                     {
                         "state": "degraded_market_read",
-                        "error": str(exc),
+                        "error": _private_worker_safe_error(exc),
                         "mutation_sent": False,
                         "global_gate_changed": False,
                     },
@@ -2873,11 +3085,39 @@ def command_worker_loop(key: str, secret: str) -> None:
             )
             if profit_already_protected or Decimal(str(raw.get("trailingStop") or 0)) > 0:
                 continue
-            protection_key=f"{entry_id}:{position_row[1]}:{position_row[2]}"
+            # Recovery is a child of the proven Entry command, not a new
+            # legacy/unattributed command. Preserve its account/binding identity
+            # so that only the exact private connector can consume it.
+            protection_key=f"{TRADING_ACCOUNT_ID}:{entry_id}:{position_row[1]}:{position_row[2]}"
             init_id="auto-init-"+hashlib.sha256(protection_key.encode()).hexdigest()[:23]
-            connection.execute("""INSERT INTO runtime.trade_commands(command_id,command_type,symbol,payload_json,state,requested_at_epoch_ms)
-                VALUES(%s,'initial_protection',%s,%s,'queued',%s) ON CONFLICT(command_id) DO NOTHING""",
-                (init_id,symbol,json.dumps({"entry_command_id":entry_id,"actual_entry":position_row[2],"actual_size":position_row[1],"initial_protection":initial_protection}),int(time.time()*1000)))
+            connection.execute(
+                """INSERT INTO runtime.trade_commands(
+                     command_id,command_type,symbol,payload_json,state,
+                     requested_at_epoch_ms,strategy_execution_binding_id,
+                     execution_leg,trading_account_id,identity_status)
+                   SELECT %s,'initial_protection',%s,%s,'queued',%s,
+                          c.strategy_execution_binding_id,c.execution_leg,
+                          c.trading_account_id,c.identity_status
+                     FROM runtime.trade_commands c
+                    WHERE c.command_id=%s AND c.command_type='entry'
+                      AND c.state='completed'
+                      AND c.trading_account_id=%s
+                      AND c.identity_status='PROVEN'
+                   ON CONFLICT(command_id) DO NOTHING""",
+                (
+                    init_id,
+                    symbol,
+                    json.dumps({
+                        "entry_command_id": entry_id,
+                        "actual_entry": position_row[2],
+                        "actual_size": position_row[1],
+                        "initial_protection": initial_protection,
+                    }),
+                    int(time.time() * 1000),
+                    entry_id,
+                    TRADING_ACCOUNT_ID,
+                ),
+            )
         connection.commit()
         # V36: BE/trailing/close decisions belong to Exit. This worker only executes commands.
         row=connection.execute(
@@ -2932,7 +3172,7 @@ def command_worker_loop(key: str, secret: str) -> None:
             reservation_state = finalize_failed_entry_command_reservation(
                 connection,
                 command_id=command_id,
-                reason=f"{type(exc).__name__}:{exc}",
+                reason=_private_worker_safe_error(exc),
                 mutation_ambiguous=False,
             )
             connection.execute(
@@ -2941,7 +3181,7 @@ def command_worker_loop(key: str, secret: str) -> None:
                    WHERE command_id=%s""",
                 (
                     int(time.time() * 1000),
-                    f"{type(exc).__name__}: {exc}",
+                    _private_worker_safe_error(exc),
                     command_id,
                 ),
             )
@@ -2969,7 +3209,7 @@ def command_loop(key: str, secret: str) -> None:
                 "command",
                 {
                     "state": "error",
-                    "error": f"{type(exc).__name__}: {exc}",
+                    "error": _private_worker_safe_error(exc),
                     "retry_in_seconds": 2,
                 },
             )
@@ -3011,8 +3251,36 @@ def reconcile_position_ownership(
             and str(current.get("side") or "") == side
         )
         if current_matches:
-            current_stop = Decimal(str(current.get("stopLoss") or 0))
-            protection_confirmed = current_stop > 0
+            # A filled StrategyPosition is not initial-protection-confirmed
+            # from a stopLoss field alone. Respect the immutable Entry-time
+            # policy: require the TP surface only when that Strategy enabled it.
+            # This snapshot marker is not the independent VERIFIED verdict;
+            # Lifecycle Supervisor compares exact approved intent with a fresh
+            # authenticated Exchange account GET separately.
+            entry_command = connection.execute(
+                """SELECT payload_json FROM runtime.trade_commands
+                    WHERE command_id=%s AND command_type='entry'
+                      AND state='completed' AND trading_account_id=%s
+                      AND identity_status='PROVEN'""",
+                (row[8], TRADING_ACCOUNT_ID),
+            ).fetchone()
+            initial_policy = None
+            if entry_command is not None:
+                try:
+                    original = entry_command[0]
+                    entry_payload = (
+                        original if isinstance(original, dict)
+                        else json.loads(str(original))
+                    )
+                    if isinstance(entry_payload, dict):
+                        initial_policy = entry_payload.get("initial_protection")
+                except (ValueError, TypeError):
+                    # Missing/unparseable intent is NOT positive evidence.
+                    pass
+            protection_confirmed = initial_protection_surfaces_observed(
+                initial_protection=initial_policy,
+                position=current,
+            )
             connection.execute(
                 """UPDATE runtime.position_ownership
                    SET state='OPEN',
@@ -3463,8 +3731,15 @@ def collect_position_mode_states(
                    ON ep.strategy_id=a.strategy_id
                   AND ep.strategy_version=a.strategy_version
                   AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                  AND b.trading_account_id=%s
+                  AND b.binding_state='ACTIVE'
+                  AND b.effective_from<=clock_timestamp()
+                  AND (b.effective_to IS NULL OR b.effective_to>clock_timestamp())
                 WHERE a.enabled=true
-                ORDER BY symbol"""
+                ORDER BY symbol""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchall()
     symbols = [str(row[0]) for row in rows if str(row[0]).strip()]
     if not symbols:
@@ -3523,7 +3798,8 @@ def collect_position_mode_states(
             position_idx = None
         instrument_id = bybit_instrument_id("linear", symbol)
         state_ref = "pmode-" + hashlib.sha256(
-            f"BYBIT|BYBIT:UNIFIED|LINEAR|{instrument_id}|{mode}|{indexes}|{now_ms}".encode()
+            f"BYBIT|{TRADING_ACCOUNT_ID}|{ACCOUNT_CONNECTOR_ID}|BYBIT:UNIFIED|"
+            f"LINEAR|{instrument_id}|{mode}|{indexes}|{now_ms}".encode()
         ).hexdigest()[:32]
         result.append(
             {
@@ -3826,16 +4102,18 @@ def reconcile(
         connection.rollback()
         finished = int(time.time() * 1000)
         with connection.transaction():
+            # Serialize failed terminalization with admission and COMPLETE
+            # under the *same exact account* lock, never global account_ref.
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (ACCOUNT_REF,),
+                (TRADING_ACCOUNT_ID,),
             )
             connection.execute(
                 """UPDATE runtime.account_state_generations
                       SET state='FAILED',completed_at=clock_timestamp(),
                           error=%s,updated_at=clock_timestamp()
                     WHERE generation_id=%s AND state='COLLECTING'""",
-                (f"{type(exc).__name__}: {exc}", generation_id),
+                (_private_worker_safe_error(exc), generation_id),
             )
             connection.execute(
                 """INSERT INTO runtime.reconciliation_runs(
@@ -3846,7 +4124,7 @@ def reconcile(
                     started,
                     finished,
                     reason,
-                    f"{type(exc).__name__}: {exc}",
+                    _private_worker_safe_error(exc),
                     TRADING_ACCOUNT_ID,
                     ACCOUNT_CONNECTOR_ID,
                 ),
@@ -4089,6 +4367,10 @@ def private_loop(key: str, secret: str) -> None:
     reconnect_started_ms = 0
     while running:
         try:
+            # A SUB must prove its mounted signed credential identifies this
+            # exact registered account before reading/restoring Exchange state.
+            if _is_sub_private_worker():
+                authenticated_entry_connector_gate(connection, key, secret)
             hot_positions, hot_orders = reconcile(
                 connection,
                 key,
@@ -4103,7 +4385,10 @@ def private_loop(key: str, secret: str) -> None:
             atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
             if recovering:
                 restored = False
-                if restore_gate_after_reconnect:
+                if (
+                    restore_gate_after_reconnect
+                    and not _is_sub_private_worker()
+                ):
                     restored = restore_r1_gate_after_verified_reconnect(
                         connection,
                         reconnect_started_ms=reconnect_started_ms,
@@ -4148,7 +4433,7 @@ def private_loop(key: str, secret: str) -> None:
                             connection,
                             "private",
                             "reconciliation_degraded",
-                            error=f"{type(exc).__name__}: {exc}",
+                            error=_private_worker_safe_error(exc),
                             reconnects=reconnects,
                         )
                         atomic_status(
@@ -4160,7 +4445,7 @@ def private_loop(key: str, secret: str) -> None:
                                 "last_message_epoch": previous.get("last_message_epoch"),
                                 "hot_positions": previous.get("hot_positions", 0),
                                 "hot_orders": previous.get("hot_orders", 0),
-                                "reconciliation_error": f"{type(exc).__name__}: {exc}",
+                                "reconciliation_error": _private_worker_safe_error(exc),
                             },
                         )
                         # Keep the healthy private WS connected. Entry admission
@@ -4177,7 +4462,9 @@ def private_loop(key: str, secret: str) -> None:
         except Exception as exc:
             if not recovering:
                 try:
-                    restore_gate_after_reconnect = mainnet_gate_enabled(connection)
+                    restore_gate_after_reconnect = (
+                        not _is_sub_private_worker() and mainnet_gate_enabled(connection)
+                    )
                 except Exception:
                     restore_gate_after_reconnect = False
                     connection.rollback()
@@ -4185,8 +4472,15 @@ def private_loop(key: str, secret: str) -> None:
                 recovering = True
             disarm_new_entries(connection, PRIVATE_RECONNECT_GATE_REASON)
             reconnects += 1
-            connection_event(connection, "private", "reconnecting", error=f"{type(exc).__name__}: {exc}", reconnects=reconnects)
-            atomic_status("private", {"state": "reconnecting", "reconnects": reconnects, "error": f"{type(exc).__name__}: {exc}"})
+            safe_error = _private_worker_safe_error(exc)
+            connection_event(
+                connection, "private", "reconnecting",
+                error=safe_error, reconnects=reconnects,
+            )
+            atomic_status(
+                "private",
+                {"state": "reconnecting", "reconnects": reconnects, "error": safe_error},
+            )
             time.sleep(min(30, reconnects))
 
 
@@ -4212,30 +4506,98 @@ def trade_loop(key: str, secret: str) -> None:
                     next_ping = time.monotonic() + 20
         except Exception as exc:
             reconnects += 1
-            connection_event(connection, "trade", "reconnecting", error=f"{type(exc).__name__}: {exc}", reconnects=reconnects)
-            atomic_status("trade", {"state": "reconnecting", "reconnects": reconnects, "commands_sent": 0, "error": f"{type(exc).__name__}: {exc}"})
+            safe_error = _private_worker_safe_error(exc)
+            connection_event(
+                connection, "trade", "reconnecting",
+                error=safe_error, reconnects=reconnects,
+            )
+            atomic_status(
+                "trade",
+                {
+                    "state": "reconnecting", "reconnects": reconnects,
+                    "commands_sent": 0, "error": safe_error,
+                },
+            )
             time.sleep(min(30, reconnects))
 
 
 def main() -> None:
-    global running
-    STATUS.parent.mkdir(parents=True, exist_ok=True)
-    credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
+    global running, MOUNTED_CREDENTIAL_REF, STATUS
+    # The worker role is explicit, not inferred from a different process's
+    # MAIN connector. A SUB failure cannot write MAIN status or revoke
+    # unrelated account permissions.
+    configured_kind = os.environ.get("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN")
+    configured_kind = configured_kind.strip().upper()
+    if configured_kind not in {"MAIN", "SUB"}:
+        raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
+    require_exact_sub_instance(
+        account_kind=configured_kind,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        argv=sys.argv[1:],
+    )
+    status_directory = DEFAULT_STATUS_DIR
+    if configured_kind == "SUB":
+        expected_directory = DEFAULT_STATUS_DIR / f"sub-{TRADING_ACCOUNT_ID}"
+        configured_directory = os.environ.get("CRIPTA_PRIVATE_STATUS_DIR", "")
+        if not TRADING_ACCOUNT_ID or Path(configured_directory) != expected_directory:
+            raise RuntimeError("SUB_PRIVATE_WORKER_STATUS_DIRECTORY_SCOPE_MISMATCH")
+        if not expected_directory.is_dir() or not os.access(expected_directory, os.W_OK):
+            raise RuntimeError("SUB_PRIVATE_WORKER_STATUS_DIRECTORY_NOT_PREPARED")
+        status_directory = expected_directory
+    STATUS = private_worker_status_path(
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_kind=configured_kind,
+        directory=status_directory,
+    )
+    credential_name = os.environ.get("CRIPTA_BYBIT_CREDENTIAL_NAME", "bybit-mainnet")
+    if not credential_name or not all(
+        char.isascii() and (char.isalnum() or char in "-_") for char in credential_name
+    ):
+        raise RuntimeError("BYBIT_CREDENTIAL_MOUNT_NAME_INVALID")
+    assert_sub_worker_isolation(
+        account_kind=configured_kind,
+        bot_instance_id=BOT_INSTANCE_ID,
+        credential_name=credential_name,
+    )
+    expected_instance_id = f"private-sub-{TRADING_ACCOUNT_ID}"
+    if configured_kind == "SUB" and expected_instance_id != BOT_INSTANCE_ID:
+        raise RuntimeError("SUB_PRIVATE_WORKER_BOT_INSTANCE_ACCOUNT_MISMATCH")
+    if (
+        configured_kind == "SUB"
+        and credential_name != f"bybit-sub-{TRADING_ACCOUNT_ID}"
+    ):
+        raise RuntimeError("SUB_PRIVATE_WORKER_CREDENTIAL_ACCOUNT_MISMATCH")
+    if configured_kind == "MAIN":
+        STATUS.parent.mkdir(parents=True, exist_ok=True)
+    # SUB status directory must be explicitly provisioned by the control actor,
+    # never silently created under the shared MAIN status directory.
+    credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
+    credentials = json.loads(credential_path.read_text(encoding="utf-8"))
+    MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
-        validate_runtime_identity_contract(bootstrap)
+        account_kind = validate_runtime_identity_contract(bootstrap)
+        if account_kind != configured_kind:
+            raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_REGISTRY_MISMATCH")
+        if configured_kind == "SUB":
+            authenticated_entry_connector_gate(
+                bootstrap, credentials["api_key"], credentials["api_secret"]
+            )
     except Exception as exc:
-        disarm_new_entries(
-            bootstrap,
-            "restart: schema validation failed; owner re-arm required",
-        )
+        # Preserve the MAIN legacy startup protection while preventing a SUB
+        # worker's local bad configuration from disarming every account.
+        if configured_kind == "MAIN":
+            disarm_new_entries(
+                bootstrap,
+                "restart: schema validation failed; owner re-arm required",
+            )
         atomic_status(
             "schema",
             {
                 "state": "BLOCKED",
                 "expected_version": EXPECTED_RUNTIME_SCHEMA_VERSION,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": _private_worker_safe_error(exc),
             },
         )
         bootstrap.close()

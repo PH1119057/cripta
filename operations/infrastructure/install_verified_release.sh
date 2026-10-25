@@ -203,6 +203,9 @@ unit_specs=(
   "research/server/monitoring/cripta-opportunity-tracker.service|cripta-opportunity-tracker.service|runtime"
   "operations/monitoring/cripta-position-supervisor.service|cripta-position-supervisor.service|runtime"
   "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
+  # Source-only templates are installed but never enabled or added to managed_services.
+  "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
+  "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
   "operations/systemd/cripta-u5-oi30s-source-soak.service|cripta-u5-oi30s-source-soak.service|runtime"
@@ -313,6 +316,27 @@ managed_services=(
   cripta-universal-exit-consumer.service
 )
 
+# The templates above are inert for an unprovisioned SUB. If an instance was
+# already loaded for a previously approved account, it MUST join the same
+# release stop/start and exact-loaded-commit lifecycle as MAIN and Exit.
+# Never leave an active SUB process running old code after source cutover.
+# Capture the command status (including pipeline errors) before consuming units.
+# Process substitution hides list-units failures from mapfile under set -e.
+discovered_sub_text="$(
+  systemctl list-units --all --type=service --plain --no-legend \
+    'cripta-private-runtime@*.service' \
+    'cripta-universal-entry-consumer@*.service' | awk '{print $1}' | sort -u
+)" || die "SUB unit enumeration failed; release identity cannot be verified"
+discovered_sub_units=()
+if [[ -n "$discovered_sub_text" ]]; then
+  mapfile -t discovered_sub_units <<< "$discovered_sub_text"
+fi
+for unit in "${discovered_sub_units[@]}"; do
+  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer)@[A-Za-z0-9_.-]+\.service$ ]] ||
+    die "unexpected SUB unit identity while preparing release: $unit"
+  managed_services+=("$unit")
+done
+
 declare -A was_active=()
 services_stopped=0
 db_mutation_steps=0
@@ -416,6 +440,10 @@ migration_files=(
   operations/sql/20261016_exit_account_lineage_r6c.sql
   operations/sql/20261016_trade_command_account_identity_r6d.sql
   operations/sql/20261016_report_replay_provenance_r5.sql
+  # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
+  operations/sql/20261024_account_scoped_live_arm.sql
+  operations/sql/20261025_account_entry_safety_blocks.sql
+  operations/sql/20261025_account_attempt_fanout.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
