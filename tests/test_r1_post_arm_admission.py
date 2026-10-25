@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from operations.connectivity import universal_entry_consumer as entry_consumer
+from operations.monitoring import universal_entry_shadow as observer
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -249,3 +251,60 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
         "COMMIT", "BLOCKED:MODE", "COMMIT",
         "COMMIT", "NO_REQUEST", "COMMIT",
     ]
+
+
+def test_observer_real_entry_faults_are_scoped_per_account() -> None:
+    now = datetime(2026, 10, 25, 10, 0, tzinfo=UTC)
+    generation = SimpleNamespace(
+        generation_id="gen-sub",
+        position_mode_refs={"BTCUSDT": "mode-sub"},
+        completed_at=now,
+        available_balance=Decimal("10"),
+    )
+
+    class FaultDB:
+        def __init__(self, account: str | None) -> None:
+            self.account = account
+
+        def execute(self, sql: str, params: tuple[str, ...]):
+            assert "runtime.lifecycle_faults" in sql
+            assert "NULLIF(exact_ids->>'trading_account_id','')" in sql
+            assert params == ("ta-sub",)
+            row = (
+                ("EXACT_CRITICAL",)
+                if self.account is None or self.account == "ta-sub"
+                else None
+            )
+            return SimpleNamespace(fetchone=lambda: row)
+
+    with patch.object(
+        observer, "current_complete_account_state_generation",
+        return_value=generation,
+    ) as fetch:
+        _ready, allowed = observer._real_entry_account_state(
+            FaultDB("ta-main"),
+            symbol="BTCUSDT", observed_at=now, trading_account_id="ta-sub",
+        )
+        assert allowed is not None
+        assert allowed.capacity_snapshot_id == "gen-sub"
+        for scope in ("ta-sub", None):
+            _blocked, capacity = observer._real_entry_account_state(
+                FaultDB(scope),
+                symbol="BTCUSDT", observed_at=now, trading_account_id="ta-sub",
+            )
+            assert capacity is None
+    assert fetch.call_args.kwargs["trading_account_id"] == "ta-sub"
+
+
+def test_observer_real_entry_rejects_missing_account_without_generation() -> None:
+    with (
+        patch.object(observer, "TRADING_ACCOUNT_ID", ""),
+        patch.object(observer, "current_complete_account_state_generation") as fetch,
+    ):
+        _readiness, capacity = observer._real_entry_account_state(
+            object(),
+            symbol="BTCUSDT",
+            observed_at=datetime(2026, 10, 25, tzinfo=UTC),
+        )
+    assert capacity is None
+    fetch.assert_not_called()
