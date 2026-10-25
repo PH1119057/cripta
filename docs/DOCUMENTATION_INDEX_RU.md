@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.38
-**Дата:** 2026-10-21
+**Версия:** 3.39
+**Дата:** 2026-10-24
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -330,6 +330,8 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 ## 17.1.1 Canonical tool-failure routing (2026-10-18)
 
 Owner for refusal classification, correct actor/tool path and retry policy: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`. Research execution/checkpoint discipline: `docs/RESEARCH_COMPUTE_RULES_RU.md`. Owner-facing communication: `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`. Current dated server actor snapshot: `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. This documentation cycle adds no files to the 11-member Project Source set and changes no role, allowlist, permissions, LIVE or architecture ownership.
+
+**Уточнение OWNER DECISION 2026-10-24:** `DEVELOPMENT_RELEASE §19.5–19.6.1` владеет точной проверкой SentinelX command-prefix allowlist и отдельной однократной попыткой после явного распоряжения владельца при сохранении platform/tool gates. Датированное evidence агента — `CURRENT_PROJECT_MAP §1.4`; owner-facing формулировки — `CHATGPT_INTERACTION_RULES §11.1`. `git` и `sudo -u cripta git` — разные разрешения; success GitHub connector не устраняет локальный Git actor gate. Правка в действующем `docs/owner-directed-tool-retry-20261024` / PR #186 не изменяет source paths, active Source set, mandatory pre-read или trade/runtime/LIVE. README, AGENTS и derived Project Instructions синхронизируются в том же documentation changeset; фактическая ChatGPT UI-копия должна быть отдельно обновлена владельцем.
 
 ## 17.2 Нумерация и ссылки
 
@@ -1417,3 +1419,11 @@ Owner confirmed `VARIANT_A`: independent Bybit P90L90 `[2026-05-18T00Z, 2026-08-
 Canonical research-policy owner: `RESEARCH_COMPUTE §22.1`; terminology: `CRIPTA_GLOSSARY §36`; per-instrument versioned report/registration: `RESEARCH_COMPUTE §23`. Historical 2026-09-21..2026-10-20 methodology at `RESEARCH_COMPUTE §22`, including its **working H9** denominator and original implementation gate, is preserved without silent retrospective changes. The §23.2 example is explicitly labeled as historical. Cross-version dataset reuse does not entail strategy-policy reuse.
 
 This is **docs-only research scope**, not an implementation of research replays, not an installation or runtime verification, not production Entry/Exit/Strategy/DB/Exchange changes and not LIVE activation. The eleven existing Project Source documents, mandatory pre-read/routing, root README/AGENTS and Project Instructions/bootstrap remain unchanged. Before merged canonical publication, complete INDEX §17.7 documentation gate and protected GitHub PR/CI review; branch-only text is proposed, not `CANON`. Source/replay/QC/ledger publication use their own subsequent gates.
+
+# 54. P90L90 full 90-day warmup and ten-day analytical intervals — OWNER DECISION 2026-10-24
+
+По последующему явному решению владельца новый `P90L90_90D_WARMUP_V2` заменяет в **новой версии исследования** основную сравнительную выборку `COMMON82` и частичный первый день `EXTENDED_FIXED90`: для пяти Bybit LINEAR инструментов требуется равная проверенная полнота **90 UTC суток** `[2026-05-18T00:00:00Z,2026-08-16T00:00:00Z)`, отдельная история public trades **как минимум 8–17 мая** для Wilder ATR200 (L5-3, H9-5m, H9-15m) и семь полных предшествующих суток L5-3 width (11–17 мая) для причинной `PREV7D`. Если полнота отсутствует — `NOT_READY`, а не пересчёт 82d как 90d. `FIXED90` сохраняет `LOOKAHEAD=YES`.
+
+**Один owner контракта**: `RESEARCH_COMPUTE §22.2`; терминология — `CRIPTA_GLOSSARY §37`. Основной анализ: 9 непересекающихся интервалов по 10 UTC суток, дополнительный скользящий PnL 10d; каждая закрытая позиция относится к UTC дате закрытия. PnL строго net после модельных комиссий, крупные hard stops разложены по монетам, направлениям и сценариям; все итоговые суммы проверяются по immutable per-trade ledger. Новая L5-3 CLEAN v2 хранится отдельно от v1, с явной проверкой перекрытия/разницы ATR seed. Исходный `§22.1`, GitHub research catalog records и результаты v1.2 остаются архивной историей, не переписываются и не участвуют в новой основной таблице. Новые готовые результаты регистрируются в `RESEARCH_COMPUTE §23` как новые версии, а не как исправленные старые факты.
+
+Это новая research methodology, **не** StrategyCard, trading Entry/Exit/Execution, Dashboard/DB или LIVE. Current Project Source set остаётся 11 файлов; mandatory pre-read, routed pre-read, root README/AGENTS и Project Instructions/bootstrap не меняются. До внедрения §22.2 требуется protected docs PR/CI; до объявления результатов — acquisition provenance, полный preflight actual writer, reproducible new research source, input/ATR coverage and independent QC. Source sync ≠ deploy.
