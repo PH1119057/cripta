@@ -38,6 +38,7 @@ PRESERVATION_OR_SCHEMA_FILES = {
     "operations/sql/20261016_report_replay_provenance_r5.sql",
     "operations/sql/20261016_trade_command_account_identity_r6d.sql",
     "operations/sql/20261017_market_instrument_identity_r7a.sql",
+    "operations/sql/20261025_account_attempt_fanout.sql",
     "operations/sql/p1_exact_close_readonly_audit.sql",
     "src/bybit_workbench/strategy_position.py",
     "src/bybit_workbench/universal_entry/storage.py",
