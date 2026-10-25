@@ -1,11 +1,34 @@
 """Deterministic invariants for research-only BTC/ETH adverse Exit replay."""
 import importlib
+import sys
 from decimal import Decimal as D
+from pathlib import Path
 
 
 def model():
-    module=importlib.import_module("scripts.research.p90l90_btceth_adverse_exit_90d_v1")
-    return module.MarketExitPortfolio, module.VARIANTS
+    """Keep historical tests' scripts.research mocks out of this import."""
+    names = (
+        "scripts", "scripts.research",
+        "scripts.research.p90l90_entry_90d_v2",
+        "scripts.research.p90l90_exit_90d_v2",
+        "scripts.research.p90l90_portfolio_pause_v1",
+        "scripts.research.p90l90_btceth_adverse_exit_90d_v1",
+    )
+    saved = {name: sys.modules.get(name) for name in names}
+    root = str(Path(__file__).parents[2])
+    sys.path.insert(0, root)
+    try:
+        for name in names:
+            sys.modules.pop(name, None)
+        module = importlib.import_module(
+            "scripts.research.p90l90_btceth_adverse_exit_90d_v1")
+        return module.MarketExitPortfolio, module.VARIANTS
+    finally:
+        sys.path.remove(root)
+        for name in names:
+            sys.modules.pop(name, None)
+            if saved[name] is not None:
+                sys.modules[name] = saved[name]
 
 
 STATE=(D("80"),D("120"),D("1"))
