@@ -2412,7 +2412,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # First Exchange mutation for this Entry is below. Avoid claiming
             # pre-mutation safety after any Exchange mutation was already sent.
             raise PreMutationSafetyBlock(f"CRITICAL_LIFECYCLE_FAULT:{fault_code}")
-        api_post("/v5/position/set-leverage", {"category":"linear","symbol":symbol,"buyLeverage":str(leverage),"sellLeverage":str(leverage)}, key, secret, accepted_codes=(110043,))
+        # Build and validate the complete Entry order and mandatory protection
+        # before the FIRST Exchange mutation. A malformed Strategy policy
+        # must never change leverage and then be labelled "no mutation".
         contract = initial_protection_contract(payload)
         stop, target = resolve_initial_protection_boundaries(
             entry=price,
@@ -2454,6 +2456,18 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     f"unsupported entry_time_in_force {entry_time_in_force}"
                 )
             order.update({"price": str(price), "timeInForce": bybit_time_in_force})
+        api_post(
+            "/v5/position/set-leverage",
+            {
+                "category": "linear",
+                "symbol": symbol,
+                "buyLeverage": str(leverage),
+                "sellLeverage": str(leverage),
+            },
+            key,
+            secret,
+            accepted_codes=(110043,),
+        )
         result=api_post("/v5/order/create", order, key, secret)
         exchange_order_id = str((result.get("result") or {}).get("orderId") or "")
         if not exchange_order_id:
