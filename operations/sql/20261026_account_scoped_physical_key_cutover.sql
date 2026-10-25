@@ -40,7 +40,7 @@ BEGIN
             AND ix.indnullsnotdistinct
             AND ix.indnkeyatts=cardinality(item.expected_columns)
             AND (
-                SELECT array_agg(att.attname ORDER BY keycol.ordinality)
+                SELECT array_agg(att.attname::text ORDER BY keycol.ordinality)
                   FROM unnest(ix.indkey) WITH ORDINALITY
                        AS keycol(attnum,ordinality)
                   JOIN pg_attribute att
