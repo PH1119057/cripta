@@ -347,9 +347,9 @@ def test_two_accounts_admit_same_symbol_with_independent_physical_slots() -> Non
         )
 
 
-def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
+def test_generation_backed_mode_ignores_separate_fresh_until_expiry() -> None:
     assert DSN is not None
-    prefix = "slot-stale-" + uuid4().hex
+    prefix = "slot-generation-mode-" + uuid4().hex
     identity = _seed_attempts(prefix, count=1)
     _seed_mode(
         prefix,
@@ -357,9 +357,32 @@ def test_stale_position_mode_creates_no_claim_or_reservation() -> None:
         observed_at=NOW - timedelta(minutes=10),
         fresh_until=NOW - timedelta(minutes=1),
     )
+    # Current terminal COMPLETE generation is authoritative; a historical
+    # mode provenance timestamp is not a second per-Entry seconds gate.
     with psycopg.connect(DSN) as connection:
+        receipt = PostgresEntryAdmissionPort(connection).admit(
+            _request(prefix, 0, identity)
+        )
+    assert receipt.capital_reservation is not None
+    assert receipt.exchange_position_slot_claim_id
+
+
+def test_failed_latest_account_generation_blocks_all_admission() -> None:
+    assert DSN is not None
+    prefix = "slot-failed-generation-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=1)
+    _seed_mode(prefix, identity)
+    with psycopg.connect(DSN) as connection:
+        connection.execute(
+            """UPDATE runtime.account_state_generations
+                  SET state='FAILED',error='OFFLINE_TEST_FAILURE'
+                WHERE generation_id=%s""",
+            (f"{prefix}-generation",),
+        )
         with pytest.raises(PositionModeStateUnavailable):
-            PostgresEntryAdmissionPort(connection).admit(_request(prefix, 0, identity))
+            PostgresEntryAdmissionPort(connection).admit(
+                _request(prefix, 0, identity)
+            )
         claim_count = connection.execute(
             "SELECT count(*) FROM runtime.exchange_position_slot_claims WHERE account_ref=%s",
             (identity["account_ref"],),
