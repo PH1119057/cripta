@@ -170,3 +170,47 @@ def test_psycopg_dict_row_schema_probe_is_supported() -> None:
             return super().execute(sql, params)
 
     assert check(MappingDB()) == (True, ())
+
+
+def test_singleton_sub_cannot_borrow_legacy_arm() -> None:
+    from bybit_workbench.legacy_live_arm_account_scope import (
+        check_legacy_live_arm_account_scope,
+    )
+
+    class ScopeDB:
+        def __init__(self, rows: list[tuple[str, str]]) -> None:
+            self.rows = rows
+            self.statement = ""
+
+        def execute(self, statement: str, params: tuple[object, ...]) -> "ScopeDB":
+            self.statement = statement
+            assert params[0] == "act-a"
+            return self
+
+        def fetchall(self) -> list[tuple[str, str]]:
+            return self.rows
+
+    main = ScopeDB([("account-a", "MAIN")])
+    assert check_legacy_live_arm_account_scope(
+        main, strategy_activation_id="act-a",
+        trading_account_id="account-a", now=NOW,
+    ) == (True, ())
+    assert "JOIN identity.trading_accounts" in main.statement
+
+    sub = ScopeDB([("account-a", "SUB")])
+    assert check_legacy_live_arm_account_scope(
+        sub, strategy_activation_id="act-a",
+        trading_account_id="account-a", now=NOW,
+    ) == (False, ("MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",))
+
+    multiple = ScopeDB([("account-a", "MAIN"), ("account-b", "SUB")])
+    assert check_legacy_live_arm_account_scope(
+        multiple, strategy_activation_id="act-a",
+        trading_account_id="account-a", now=NOW,
+    ) == (False, ("MULTI_ACCOUNT_OWNER_ARM_SCOPE_UNPROVEN",))
+
+    foreign = ScopeDB([("account-b", "MAIN")])
+    assert check_legacy_live_arm_account_scope(
+        foreign, strategy_activation_id="act-a",
+        trading_account_id="account-a", now=NOW,
+    ) == (False, ("OWNER_ARM_ACCOUNT_BINDING_NOT_PROVEN",))
