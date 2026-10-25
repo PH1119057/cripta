@@ -3698,7 +3698,8 @@ def collect_position_mode_states(
             position_idx = None
         instrument_id = bybit_instrument_id("linear", symbol)
         state_ref = "pmode-" + hashlib.sha256(
-            f"BYBIT|BYBIT:UNIFIED|LINEAR|{instrument_id}|{mode}|{indexes}|{now_ms}".encode()
+            f"BYBIT|{TRADING_ACCOUNT_ID}|{ACCOUNT_CONNECTOR_ID}|BYBIT:UNIFIED|"
+            f"LINEAR|{instrument_id}|{mode}|{indexes}|{now_ms}".encode()
         ).hexdigest()[:32]
         result.append(
             {
