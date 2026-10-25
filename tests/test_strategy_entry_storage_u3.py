@@ -875,6 +875,11 @@ def test_causal_signal_two_accounts_persist_and_compile_distinct_entry_commands(
                     "max_request_age_seconds": 30,
                 },
                 **exact_policy,
+                # StrategyCard stores the feature sequence; EntryPlan/Request
+                # wrap it in {"features": ...}. Match the compiler contract.
+                "context_feature_policy": exact_policy["context_feature_policy"][
+                    "features"
+                ],
             },
             "capital_policy": card.capital_policy.to_dict(),
             "lifecycle_policy": {"emergency_policy": emergency},
