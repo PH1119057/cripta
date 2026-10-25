@@ -13,6 +13,10 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
+from bybit_workbench.account_state_generation import (
+    AccountStateGenerationUnavailable,
+    current_complete_account_state_generation,
+)
 from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
@@ -129,6 +133,7 @@ def _next_request(
                   p.execution_permission_id,p.enabled_at AS execution_enabled_at,
                   c.state AS capital_reservation_state,
                   c.account_ref AS capital_reservation_account_ref,
+                  c.capacity_snapshot_id AS capital_capacity_snapshot_id,
                   c.strategy_execution_binding_id AS capital_binding_id,
                   c.execution_leg AS capital_execution_leg,
                   c.trading_account_id AS capital_trading_account_id,
@@ -553,6 +558,25 @@ def _admission_pre_dispatch_status(
     if actual != expected:
         return "INVARIANT_BROKEN", f"SLOT_CLAIM_IDENTITY_MISMATCH:{actual!r}"
 
+    # The accepted reservation must still belong to this account's latest
+    # terminal COMPLETE generation. COLLECTING does not retire prior COMPLETE;
+    # a later FAILED or a replacement COMPLETE makes this request stale.
+    try:
+        generation = current_complete_account_state_generation(
+            connection,
+            account_ref=CURRENT_ACCOUNT_REF,
+            trading_account_id=request.trading_account_id,
+            acquire_account_lock=True,
+        )
+    except AccountStateGenerationUnavailable:
+        return "STALE_MODE", "CURRENT_ACCOUNT_GENERATION_UNAVAILABLE"
+    if (
+        str(row.get("capital_capacity_snapshot_id") or "") != generation.generation_id
+        or generation.position_mode_refs.get(request.symbol)
+        != request.position_mode_state_ref
+    ):
+        return "STALE_MODE", "ADMISSION_ACCOUNT_GENERATION_CHANGED"
+
     mode = connection.execute(
         """SELECT position_mode,position_idx,observed_at,received_at,fresh_until,
                   trading_account_id,identity_status
@@ -570,9 +594,10 @@ def _admission_pre_dispatch_status(
     if (
         observed_at.astimezone(UTC) > now
         or received_at.astimezone(UTC) > now
-        or fresh_until.astimezone(UTC) < now
     ):
-        return "STALE_MODE", "POSITION_MODE_STATE_STALE"
+        # fresh_until is provenance for recovery/activation, not an additional
+        # generation-backed per-entry expiry gate (ARCH 5.1.1 / TC 2.7).
+        return "STALE_MODE", "POSITION_MODE_STATE_INVALID_TIMESTAMPS"
     mode_position_idx = (
         -1 if mode["position_idx"] is None else int(mode["position_idx"])
     )
