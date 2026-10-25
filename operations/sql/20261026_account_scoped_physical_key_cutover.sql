@@ -18,20 +18,20 @@ BEGIN
         SELECT * FROM (VALUES
           ('runtime.wallet_latest'::regclass, 'wallet_latest_pkey',
            'runtime.ux_wallet_latest_trading_account_singleton',
-           ARRAY['trading_account_id','singleton']::text[]),
+           ARRAY['trading_account_id','singleton']::text[], ARRAY['singleton']::text[]),
           ('runtime.hot_positions'::regclass, 'hot_positions_pkey',
            'runtime.ux_hot_positions_trading_account_slot',
-           ARRAY['trading_account_id','symbol','position_idx']::text[]),
+           ARRAY['trading_account_id','symbol','position_idx']::text[], ARRAY['symbol','position_idx']::text[]),
           ('runtime.hot_orders'::regclass, 'hot_orders_pkey',
            'runtime.ux_hot_orders_trading_account_order',
-           ARRAY['trading_account_id','order_id']::text[]),
+           ARRAY['trading_account_id','order_id']::text[], ARRAY['order_id']::text[]),
           ('runtime.executions'::regclass, 'executions_pkey',
            'runtime.ux_executions_trading_account_exec',
-           ARRAY['trading_account_id','exec_id']::text[]),
+           ARRAY['trading_account_id','exec_id']::text[], ARRAY['exec_id']::text[]),
           ('runtime.exchange_order_history'::regclass, 'exchange_order_history_pkey',
            'runtime.ux_exchange_order_history_trading_account_order',
            ARRAY['trading_account_id','order_id']::text[])
-        ) AS t(relid,old_pk,account_index,expected_columns)
+        ) AS t(relid,old_pk,account_index,expected_columns,old_pk_columns)
     LOOP
         account_unique := to_regclass(item.account_index);
         SELECT COALESCE(
@@ -72,8 +72,7 @@ BEGIN
          WHERE c.conrelid=item.relid AND c.contype='p';
         IF FOUND THEN
             IF pk.conname<>item.old_pk OR
-               pk.definition= '' OR
-               pk.definition IS NULL THEN
+               pk.definition <> 'PRIMARY KEY (' || array_to_string(item.old_pk_columns, ', ') || ')' THEN
                 RAISE EXCEPTION 'UNEXPECTED_LEGACY_PRIMARY_KEY: %',item.relid;
             END IF;
             IF EXISTS (
