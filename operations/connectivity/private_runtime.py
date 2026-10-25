@@ -1376,7 +1376,7 @@ def handle_exchange_mutation_barrier(
             connection.commit()
     except Exception as recovery_exc:
         recovery_errors.append(
-            f"persist={type(recovery_exc).__name__}:{recovery_exc}"
+            f"persist={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1387,7 +1387,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"disarm={type(recovery_exc).__name__}:{recovery_exc}"
+            f"disarm={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1398,7 +1398,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"executions={type(recovery_exc).__name__}:{recovery_exc}"
+            f"executions={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
@@ -1409,7 +1409,7 @@ def handle_exchange_mutation_barrier(
         except Exception:
             pass
         recovery_errors.append(
-            f"reconcile={type(recovery_exc).__name__}:{recovery_exc}"
+            f"reconcile={_private_worker_safe_error(recovery_exc)}"
         )
 
     try:
