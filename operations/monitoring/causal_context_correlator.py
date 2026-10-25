@@ -25,15 +25,30 @@ SELECT 'TRADE_COMMAND', command_id, requested_at_epoch_ms, symbol, NULL,
        jsonb_build_object('command_type',command_type,'processing_state',state,
                           'exchange_filled',EXISTS(
                               SELECT 1 FROM runtime.executions e
-                              WHERE e.order_link_id=coalesce(
+                              WHERE trade_commands.identity_status='PROVEN'
+                                AND trade_commands.trading_account_id IS NOT NULL
+                                AND e.identity_status='PROVEN'
+                                AND e.trading_account_id=trade_commands.trading_account_id
+                                AND e.order_link_id=coalesce(
                                   trade_commands.result_json::jsonb->'result'->>'orderLinkId',
                                   trade_commands.result_json::jsonb->>'orderLinkId',
                                   trade_commands.payload_json::jsonb->>'order_link_id')))
 FROM runtime.trade_commands
 UNION ALL
-SELECT 'FILL', exec_id, COALESCE(exec_time_ms,received_at_epoch_ms), symbol, side,
-       jsonb_build_object('order_id',order_id,'order_link_id',order_link_id,
-                          'qty',exec_qty,'price',exec_price,'fee',exec_fee)
+SELECT 'FILL',
+       jsonb_build_array(
+           CASE WHEN identity_status='PROVEN' AND trading_account_id IS NOT NULL
+                THEN trading_account_id
+                ELSE 'LEGACY_UNKNOWN' END,
+           exec_id
+       )::text,
+       COALESCE(exec_time_ms,received_at_epoch_ms), symbol, side,
+       jsonb_build_object(
+           'trading_account_id',CASE WHEN identity_status='PROVEN'
+                 THEN trading_account_id ELSE NULL END,
+           'identity_status',identity_status,
+           'order_id',order_id,'order_link_id',order_link_id,
+           'qty',exec_qty,'price',exec_price,'fee',exec_fee)
 FROM runtime.executions
 UNION ALL
 SELECT 'POSITION_TRANSITION', id::text, observed_at_epoch_ms, symbol, NULL,
