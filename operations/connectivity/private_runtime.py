@@ -2230,6 +2230,11 @@ def _require_entry_bybit_read_ok(payload: dict[str, object], path: str) -> None:
         raise ExchangeReadUnavailable(
             f"Entry Exchange read rejected: path={path} retCode={code}"
         )
+    result = payload.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("list"), list):
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read has incomplete inventory: {path}"
+        )
 
 
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
