@@ -100,6 +100,47 @@ def test_sub_with_exact_parent_matches() -> None:
     ).matches
 
 
+def test_independent_sub_without_registered_parent_matches() -> None:
+    sub = {
+        **MAIN, "account_kind": "SUB", "external_account_ref": "789",
+        "parent_trading_account_id": None,
+    }
+    response = {**SNAPSHOT, "account_user_id": "789", "is_master": False, "parent_uid": "456"}
+    assert registered_uid_match(
+        snapshot=response, trading_account_id="ta-a", account_connector_id="ac-a",
+        accounts=[sub], connectors=[CONNECTOR], now=NOW,
+        verified_credential_ref="systemd-credential:bybit-mainnet",
+    ).matches
+
+
+def test_parentless_sub_ignores_unrelated_registered_main() -> None:
+    sub = {
+        **MAIN, "account_kind": "SUB", "external_account_ref": "789",
+        "parent_trading_account_id": None,
+    }
+    unrelated_main = {**MAIN, "trading_account_id": "ta-other", "external_account_ref": "999"}
+    response = {**SNAPSHOT, "account_user_id": "789", "is_master": False, "parent_uid": "456"}
+    assert registered_uid_match(
+        snapshot=response, trading_account_id="ta-a", account_connector_id="ac-a",
+        accounts=[sub, unrelated_main], connectors=[CONNECTOR], now=NOW,
+        verified_credential_ref="systemd-credential:bybit-mainnet",
+    ).matches
+
+
+def test_parentless_sub_requires_authenticated_provider_parent_uid() -> None:
+    sub = {
+        **MAIN, "account_kind": "SUB", "external_account_ref": "789",
+        "parent_trading_account_id": None,
+    }
+    response = {**SNAPSHOT, "account_user_id": "789", "is_master": False, "parent_uid": "0"}
+    result = registered_uid_match(
+        snapshot=response, trading_account_id="ta-a", account_connector_id="ac-a",
+        accounts=[sub], connectors=[CONNECTOR], now=NOW,
+        verified_credential_ref="systemd-credential:bybit-mainnet",
+    )
+    assert "SUB_ACCOUNT_PARENT_UNPROVEN" in result.reasons
+
+
 def test_sub_without_proven_parent_blocks() -> None:
     sub = {
         **MAIN,
