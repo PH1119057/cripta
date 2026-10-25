@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 
 
 class AccountStateGenerationUnavailable(RuntimeError):
@@ -85,6 +85,7 @@ def current_complete_account_state_generation(
     # The runtime Entry consumer uses psycopg dict_row while the observer
     # and admission callers can use tuples. Preserve identical validation.
     if isinstance(row, Mapping):
+        row_map = cast(Mapping[str, object], row)
         columns = (
             "generation_id", "state", "started_at", "completed_at",
             "account_ref", "account_type", "total_equity", "wallet_balance",
@@ -93,7 +94,7 @@ def current_complete_account_state_generation(
             "identity_status",
         )
         try:
-            row = tuple(row[name] for name in columns)
+            row = tuple(row_map[name] for name in columns)
         except KeyError as exc:
             raise AccountStateGenerationUnavailable(
                 "account state generation columns incomplete"
