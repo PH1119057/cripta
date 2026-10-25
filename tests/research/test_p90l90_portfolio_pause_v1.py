@@ -1,7 +1,33 @@
 """Unit chronology for P90L90 research-only five-coin Hard Stop portfolio pause."""
+import importlib
+import sys
 from decimal import Decimal as D
+from pathlib import Path
 
-from scripts.research.p90l90_portfolio_pause_v1 import Portfolio
+
+def portfolio_type():
+    """Prevent legacy tests mocking scripts.research from poisoning this import."""
+    names = (
+        "scripts", "scripts.research",
+        "scripts.research.p90l90_entry_90d_v2",
+        "scripts.research.p90l90_exit_90d_v2",
+        "scripts.research.p90l90_portfolio_pause_v1",
+    )
+    saved = {key: sys.modules.get(key) for key in names}
+    root = str(Path(__file__).parents[2])
+    sys.path.insert(0, root)
+    try:
+        for key in names:
+            sys.modules.pop(key, None)
+        return importlib.import_module(
+            "scripts.research.p90l90_portfolio_pause_v1").Portfolio
+    finally:
+        sys.path.remove(root)
+        for key in names:
+            sys.modules.pop(key, None)
+            if saved[key] is not None:
+                sys.modules[key] = saved[key]
+
 
 
 STATE = (D("80"), D("120"), D("1"))
@@ -16,7 +42,7 @@ def candidate(symbol, t, side="LONG"):
 
 
 def test_global_hard_stop_flattens_other_coin_and_blocks_entry_until_expiry():
-    book = Portfolio(6)
+    book = portfolio_type()(6)
     book.handle("APTUSDT", 100, 1, D("100"), candidate("APTUSDT", 100), STATE)
     book.handle("LTCUSDT", 100, 1, D("100"), candidate("LTCUSDT", 100), STATE)
     book.handle("APTUSDT", 101, 2, D("89"), (), STATE)
@@ -40,7 +66,7 @@ def test_global_hard_stop_flattens_other_coin_and_blocks_entry_until_expiry():
 
 
 def test_no_pause_keeps_other_coin_and_has_no_global_trigger():
-    book = Portfolio(None)
+    book = portfolio_type()(None)
     book.handle("APTUSDT", 100, 1, D("100"), candidate("APTUSDT", 100), STATE)
     book.handle("LTCUSDT", 100, 1, D("100"), candidate("LTCUSDT", 100), STATE)
     book.handle("APTUSDT", 101, 2, D("89"), (), STATE)
@@ -51,7 +77,7 @@ def test_no_pause_keeps_other_coin_and_has_no_global_trigger():
 
 
 def test_same_record_exit_prohibits_immediate_reentry():
-    book = Portfolio(12)
+    book = portfolio_type()(12)
     book.handle("APTUSDT", 100, 1, D("100"), candidate("APTUSDT", 100), STATE)
     book.handle("APTUSDT", 101, 2, D("120"), candidate("APTUSDT", 101), STATE)
     assert book.count["accepted"] == 1
@@ -61,7 +87,7 @@ def test_same_record_exit_prohibits_immediate_reentry():
 
 
 def test_pending_portfolio_flatten_blocks_entry_after_cooldown():
-    book = Portfolio(6)
+    book = portfolio_type()(6)
     book.handle("APTUSDT", 100, 1, D("100"), candidate("APTUSDT", 100), STATE)
     book.handle("LTCUSDT", 100, 1, D("100"), candidate("LTCUSDT", 100), STATE)
     book.handle("APTUSDT", 101, 2, D("89"), (), STATE)
