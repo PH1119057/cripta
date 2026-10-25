@@ -18,6 +18,7 @@ from decimal import Decimal as D
 from pathlib import Path
 from statistics import median
 
+from scripts.research import p90l90_entry_90d_v2 as entry_source
 from scripts.research import p90l90_exit_90d_v2 as base
 from scripts.research import p90l90_portfolio_pause_v1 as prior
 from scripts.research.p90l90_entry_90d_v2 import (
@@ -236,7 +237,7 @@ def process(output: Path, smoke_hours: int = 0):
     source_dir = output/"source_snapshot"
     source_dir.mkdir(mode=0o770)
     source_paths = [Path(__file__), Path(prior.__file__),
-                    Path(base.__file__)]
+                    Path(base.__file__), Path(entry_source.__file__)]
     source_hashes = {}
     for p in source_paths:
         target = source_dir/p.name
