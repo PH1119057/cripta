@@ -1249,8 +1249,11 @@ def main() -> int:
             )
             connection.commit()
             result = run_once(connection)
+            # Each request/dispatch/fail-closed outcome must become durable
+            # before polling the next Entry. A continuous signal stream
+            # must not hold slot/advisory locks or queued commands uncommitted.
+            connection.commit()
             if not result.startswith("DISPATCHED") and not result.startswith("BLOCKED"):
-                connection.commit()
                 time.sleep(POLL_SECONDS)
     return 0
 
