@@ -419,6 +419,36 @@ def _publish_command(
     )
 
 
+def _generation_pre_dispatch_status(
+    connection: psycopg.Connection[Any],
+    row: Mapping[str, object],
+    request: ExecutionRequest,
+) -> tuple[str, str]:
+    """Reprove current terminal COMPLETE and exact admitted account-mode ref.
+
+    This is separate from historical mode fresh_until and does not replace
+    Strategy-owned request expiration, incompatible-mode or fault gates.
+    """
+    if not request.trading_account_id:
+        return "STALE_MODE", "REQUEST_ACCOUNT_IDENTITY_MISSING"
+    try:
+        generation = current_complete_account_state_generation(
+            connection,
+            account_ref=CURRENT_ACCOUNT_REF,
+            trading_account_id=request.trading_account_id,
+            acquire_account_lock=True,
+        )
+    except AccountStateGenerationUnavailable:
+        return "STALE_MODE", "CURRENT_ACCOUNT_GENERATION_UNAVAILABLE"
+    if (
+        str(row.get("capital_capacity_snapshot_id") or "") != generation.generation_id
+        or generation.position_mode_refs.get(request.symbol)
+        != request.position_mode_state_ref
+    ):
+        return "STALE_MODE", "ADMISSION_ACCOUNT_GENERATION_CHANGED"
+    return "OK", ""
+
+
 def _admission_pre_dispatch_status(
     connection: psycopg.Connection[Any],
     row: Mapping[str, object],
@@ -558,24 +588,11 @@ def _admission_pre_dispatch_status(
     if actual != expected:
         return "INVARIANT_BROKEN", f"SLOT_CLAIM_IDENTITY_MISMATCH:{actual!r}"
 
-    # The accepted reservation must still belong to this account's latest
-    # terminal COMPLETE generation. COLLECTING does not retire prior COMPLETE;
-    # a later FAILED or a replacement COMPLETE makes this request stale.
-    try:
-        generation = current_complete_account_state_generation(
-            connection,
-            account_ref=CURRENT_ACCOUNT_REF,
-            trading_account_id=request.trading_account_id,
-            acquire_account_lock=True,
-        )
-    except AccountStateGenerationUnavailable:
-        return "STALE_MODE", "CURRENT_ACCOUNT_GENERATION_UNAVAILABLE"
-    if (
-        str(row.get("capital_capacity_snapshot_id") or "") != generation.generation_id
-        or generation.position_mode_refs.get(request.symbol)
-        != request.position_mode_state_ref
-    ):
-        return "STALE_MODE", "ADMISSION_ACCOUNT_GENERATION_CHANGED"
+    generation_status, generation_detail = _generation_pre_dispatch_status(
+        connection, row, request
+    )
+    if generation_status != "OK":
+        return generation_status, generation_detail
 
     mode = connection.execute(
         """SELECT position_mode,position_idx,observed_at,received_at,fresh_until,
