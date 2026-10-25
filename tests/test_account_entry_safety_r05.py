@@ -236,3 +236,57 @@ def test_sub_error_logging_omits_signed_urls_but_main_is_unchanged(
     assert private_runtime._private_worker_safe_error(exc) == "RuntimeError"
     monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "MAIN")
     assert "signed_url=" in private_runtime._private_worker_safe_error(exc)
+
+
+def test_sub_trade_mutation_barrier_redacts_nested_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Both the durable command row and the local status must not expose the
+    # signed request URL from a fake Exchange transport exception.
+    leaked = "signed_url=https://example.invalid/?api_secret=OFFLINE_FAKE_KEY"
+    monkeypatch.setenv("CRIPTA_PRIVATE_WORKER_ACCOUNT_KIND", "SUB")
+    db = DB()
+    statuses: list[dict[str, object]] = []
+    disarms: list[str] = []
+
+    with (
+        patch.object(
+            private_runtime, "finalize_failed_entry_command_reservation",
+            return_value=None,
+        ),
+        patch.object(private_runtime, "mark_ambiguous_exit_command"),
+        patch.object(
+            private_runtime, "disarm_new_entries",
+            side_effect=lambda _db, reason: disarms.append(reason),
+        ),
+        patch.object(
+            private_runtime, "atomic_status",
+            side_effect=lambda _name, fields: statuses.append(fields),
+        ),
+        patch.object(
+            private_runtime, "refresh_recent_executions",
+            side_effect=RuntimeError(leaked),
+        ),
+        patch.object(
+            private_runtime, "reconcile",
+            side_effect=RuntimeError(leaked),
+        ),
+        patch.object(private_runtime.os, "_exit", side_effect=SystemExit(75)),
+    ):
+        private_runtime.handle_pre_mutation_safety_block(
+            db, "cmd-a", RuntimeError(leaked),
+        )
+        with pytest.raises(SystemExit) as abrupt:
+            private_runtime.handle_exchange_mutation_barrier(
+                db, "fake", "fake", "cmd-b", RuntimeError(leaked),
+            )
+    assert abrupt.value.code == 75
+    assert len(statuses) == 2
+    assert statuses[0]["error"] == "PRE_MUTATION_SAFETY_BLOCK:RuntimeError"
+    assert statuses[1]["error"] == "EXCHANGE_MUTATION_BARRIER:RuntimeError"
+    assert statuses[1]["recovery_errors"] == [
+        "executions=RuntimeError", "reconcile=RuntimeError",
+    ]
+    assert all("OFFLINE_FAKE_KEY" not in s for s in disarms)
+    assert leaked not in repr(db.queries)
+    assert leaked not in repr(statuses)
