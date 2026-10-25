@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -346,3 +347,74 @@ def test_failed_account_generation_uses_exact_entry_admission_lock(
         assert not any(
             params == ("BYBIT:UNIFIED",) for _sql, params in conn.statements
         )
+
+
+@pytest.mark.parametrize(
+    "invalid_field",
+    ("initial_protection", "entry_time_in_force"),
+)
+def test_invalid_entry_protection_and_tif_never_mutate_exchange(
+    invalid_field: str,
+) -> None:
+    # Real production execute_command branch, but all provider calls are
+    # offline stand-ins. An invalid Entry policy cannot send set-leverage.
+    payload = {
+        "stake_usdt": "10",
+        "leverage": 1,
+        "side": "Buy",
+        "price": "100",
+        "entry_offset_pct": "0.2",
+        "entry_time_in_force": "POST_ONLY",
+        "initial_protection": {
+            "stop_loss_pct": "1",
+            "take_profit_pct": "3",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        },
+    }
+    if invalid_field == "initial_protection":
+        payload["initial_protection"] = {}
+    else:
+        payload["entry_time_in_force"] = "UNSUPPORTED"
+
+    def offline_get(endpoint, _params, *_args):
+        if endpoint == "/v5/position/list":
+            return {"retCode": 0, "result": {"list": []}}, {}
+        if endpoint == "/v5/market/instruments-info":
+            return {
+                "retCode": 0,
+                "result": {
+                    "list": [{
+                        "priceFilter": {"tickSize": "0.01"},
+                        "lotSizeFilter": {"qtyStep": "0.001"},
+                    }],
+                },
+            }, {}
+        if endpoint == "/v5/order/realtime":
+            return {"retCode": 0, "result": {"list": []}}, {}
+        if endpoint == "/v5/account/wallet-balance":
+            return {
+                "retCode": 0,
+                "result": {"list": [{
+                    "accountType": "UNIFIED",
+                    "totalAvailableBalance": "100",
+                }]},
+            }, {}
+        raise AssertionError(f"Unexpected offline endpoint: {endpoint}")
+
+    with (
+        patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+        patch.object(private_runtime, "authenticated_entry_connector_gate"),
+        patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+        patch.object(private_runtime, "_critical_lifecycle_fault_code", return_value=None),
+        patch.object(private_runtime, "api_get", side_effect=offline_get),
+        patch.object(private_runtime, "api_post") as exchange_mutation,
+        pytest.raises(RuntimeError),
+    ):
+        private_runtime.execute_command(
+            object(),
+            "offline-key",
+            "offline-secret",
+            ("entry-offline", "entry", "BTCUSDT", json.dumps(payload)),
+        )
+    exchange_mutation.assert_not_called()
