@@ -328,12 +328,12 @@ def test_failed_account_generation_uses_exact_entry_admission_lock(
                     "offline Exchange read unavailable"
                 ),
             ),
-        ):
-            with pytest.raises(
+            pytest.raises(
                 private_runtime.ExchangeReadUnavailable,
                 match="offline Exchange read unavailable",
-            ):
-                private_runtime.reconcile(conn, "fake", "fake", "periodic")
+            ),
+        ):
+            private_runtime.reconcile(conn, "fake", "fake", "periodic")
         locks = [
             params for sql, params in conn.statements
             if "pg_advisory_xact_lock" in sql
