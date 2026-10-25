@@ -1,6 +1,5 @@
 """Deterministic invariants for research-only BTC/ETH adverse Exit replay."""
 from decimal import Decimal as D
-
 from scripts.research.p90l90_btceth_adverse_exit_90d_v1 import (
     MarketExitPortfolio, VARIANTS,
 )
