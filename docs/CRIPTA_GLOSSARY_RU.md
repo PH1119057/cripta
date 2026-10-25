@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.8
-**Дата:** 2026-10-21
+**Версия:** 3.9
+**Дата:** 2026-10-25
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -819,6 +819,11 @@ until equivalence is proved.
 tradable/observable instrument within its Venue/product semantics. A raw symbol
 string alone is not guaranteed to be globally unique. DEX identity may require
 chain/network/protocol/pool semantics.
+
+
+**CRIPTAUser / cripta_user_id** — независимая от биржи внутренняя identity пользователя CRIPTA, определяющая границу доступа к принадлежащим ему TradingAccounts, настройкам и приватной статистике. Не равно Bybit MAIN/SUB, provider UID, AccountConnector, API key или Unix actor. Нынешнее единственное пользовательское окружение — исходный случай; multi-user capability ещё не реализована (ARCH §49.7).
+
+**TradingAccountOwnership** — авторизованная и аудируемая связь одного текущего CRIPTAUser с конкретным TradingAccount. Один CRIPTAUser может иметь множество счетов на разных Venues. Биржевой `parentUid`/MAIN и создатель записи (`created_by`) не определяют этого внутреннего владельца. Смена ownership сохраняет историческую атрибуцию. Дата-модель/хранилище ownership ещё не реализованы.
 
 **TradingAccount / trading_account_id** — stable opaque CRIPTA identity for one
 exact private execution account, CEX main/subaccount or approved on-chain wallet
