@@ -2218,6 +2218,20 @@ def record_effective_protection_after_command(
     )
 
 
+def _require_entry_bybit_read_ok(payload: dict[str, object], path: str) -> None:
+    """Do not treat a rejected Bybit read as an empty account/order inventory."""
+    try:
+        code = int(payload.get("retCode", -1))
+    except (TypeError, ValueError) as exc:
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read has invalid retCode: {path}"
+        ) from exc
+    if code != 0:
+        raise ExchangeReadUnavailable(
+            f"Entry Exchange read rejected: path={path} retCode={code}"
+        )
+
+
 def execute_command(connection: psycopg.Connection, key: str, secret: str, row: tuple[object, ...]) -> None:
     command_id, kind, symbol, raw_payload = map(str, row)
     payload = json.loads(raw_payload)
@@ -2239,8 +2253,12 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         payload=payload,
     )
     positions, _ = api_get("/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret)
+    if kind == "entry":
+        _require_entry_bybit_read_ok(positions, "/v5/position/list")
     position = next((p for p in ((positions.get("result") or {}).get("list") or []) if Decimal(str(p.get("size") or 0)) > 0), None)
     instruments, _ = api_get("/v5/market/instruments-info", {"category": "linear", "symbol": symbol})
+    if kind == "entry":
+        _require_entry_bybit_read_ok(instruments, "/v5/market/instruments-info")
     instrument = ((instruments.get("result") or {}).get("list") or [{}])[0]
     tick = Decimal(str((instrument.get("priceFilter") or {}).get("tickSize") or "0"))
     if tick > 0:
@@ -2311,6 +2329,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 key,
                 secret,
             )
+            _require_entry_bybit_read_ok(verified_payload, "/v5/position/list")
             verified_position = next(
                 (
                     item
@@ -2387,6 +2406,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             key,
             secret,
         )
+        _require_entry_bybit_read_ok(existing_orders, "/v5/order/realtime")
         active_entry = next(
             (
                 order
@@ -2403,6 +2423,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         price = signal_price * (Decimal("1") - offset if side == "Buy" else Decimal("1") + offset)
         price = quantize(price, tick, upward=side == "Sell")
         wallet, _ = api_get("/v5/account/wallet-balance", {"accountType":"UNIFIED"}, key, secret); account=((wallet.get("result") or {}).get("list") or [{}])[0]
+        _require_entry_bybit_read_ok(wallet, "/v5/account/wallet-balance")
         available=account_available_usdt(account)
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
@@ -2492,6 +2513,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 current, _ = api_get(
                     "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
                 )
+                _require_entry_bybit_read_ok(current, "/v5/position/list")
                 filled_position = next(
                     (
                         item
