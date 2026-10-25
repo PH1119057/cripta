@@ -1554,13 +1554,14 @@ def _real_entry_account_state(
     observed_at: datetime,
     trading_account_id: str | None = None,
 ) -> tuple[TechnicalReadiness, TradingCapacitySnapshot | None]:
+    exact_account = TRADING_ACCOUNT_ID if trading_account_id is None else trading_account_id
+    if not exact_account:
+        return TechnicalReadiness(False, observed_at, "TradingAccount identity missing"), None
     try:
         generation = current_complete_account_state_generation(
             connection,
             account_ref="BYBIT:UNIFIED",
-            trading_account_id=(
-                TRADING_ACCOUNT_ID if trading_account_id is None else trading_account_id
-            ),
+            trading_account_id=exact_account,
             acquire_account_lock=True,
         )
     except AccountStateGenerationUnavailable as exc:
@@ -1581,7 +1582,10 @@ def _real_entry_account_state(
         """SELECT fault_code
              FROM runtime.lifecycle_faults
             WHERE state='OPEN' AND severity='CRITICAL'
-            ORDER BY detected_at LIMIT 1"""
+              AND (NULLIF(exact_ids->>'trading_account_id','') IS NULL
+                   OR exact_ids->>'trading_account_id'=%s)
+            ORDER BY detected_at,fault_id LIMIT 1""",
+        (exact_account,),
     ).fetchone()
     if critical_fault is not None:
         return (
