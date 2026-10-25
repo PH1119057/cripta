@@ -5,7 +5,7 @@ import csv
 import gzip
 import io
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,7 +28,7 @@ def test_native_trade_day_qc(tmp_path: Path):
         writer.writeheader()
         writer.writerow({
             "timestamp": str(datetime(2026, 9, 11, 0, 0, 0,
-                                       tzinfo=timezone.utc).timestamp()),
+                                       tzinfo=UTC).timestamp()),
             "symbol": "LTCUSDT", "price": "100.5",
             "tickDirection": "PlusTick", "trdMatchID": "unique",
         })
@@ -67,7 +67,9 @@ def test_missing_hour_is_rejected():
         [str(start*1000), "1", "2", "1", "200.0", "11", "12"],
     ]}}
 
-    with patch.object(source.urllib.request, "urlopen",
-                      return_value=io.BytesIO(json.dumps(payload).encode())):
-        with pytest.raises(ValueError, match="incomplete"):
-            source.hourly_symbol("ETHUSDT")
+    with (
+        patch.object(source.urllib.request, "urlopen",
+                     return_value=io.BytesIO(json.dumps(payload).encode())),
+        pytest.raises(ValueError, match="incomplete"),
+    ):
+        source.hourly_symbol("ETHUSDT")
