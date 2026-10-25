@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.31
-**Дата:** 2026-10-24
+**Версия:** 12.32
+**Дата:** 2026-10-26
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -4580,3 +4580,16 @@ Archive purge remains prohibited until independent compact-catalog backup/export
 
 **Owner operational decision:** незавершённая физическая уборка не блокирует новые scoped Research/Core/Docs задачи. При этом обязательно DEVELOPMENT_RELEASE §50.4 task discovery: нельзя присваивать неоднозначный worktree, reset/purge или повторно запускать неизвестный job. Issue #153 остаётся `OPEN` как **неблокирующий backlog**. `SERVER_WORKTREE_DELETE=NOT STARTED`; `INSTALLED_COMMIT/LOADED_COMMIT/RUNTIME BEHAVIOR=NOT CHECKED HERE`; trading runtime/DB/LIVE действия этой уборкой не производились.
 
+## 2026-10-26 R1 retirement and MAIN/SUB onboarding — CHECKED HERE / PARTIAL BLOCKER
+
+OWNER DECISION: R1 no longer qualifies as a current Strategy or target for Universal Entry tests; trading contract history remains historical evidence (TRADING_CONTOUR §1.10, INDEX §56). Checked on production `robot`: `StrategyDashboardStore.set_activation_enabled_cas` successfully set the sole `r1_five_symbols` activation `enabled=false`, `disabled_at` populated; subsequent Universal Entry Observer status `IDLE`, `active_strategies=0`, `active_entry_plans=0`. The R1-dedicated historical binding is not silently reassigned to a new Strategy. No new Strategy or REAL arm authorized.
+
+**Source/runtime evidence before this documentation publication:** GitHub main, source checkout, runtime and research tooling loaded `978654f3e1e0a994a204dc2efd198088d7e00554` (SUB independent parent UID gate correction via PR #204, installation job `job_3397fe7c07b1` completed with exit 0, schema/reconciliation checks PASS). Mainnet=0, real execution permissions 0, active LIVE-arm sessions 0, and no live hot positions or orders. Source sync is not an additional deploy. This documentary merge will advance REMOTE_HEAD separately.
+
+**SUB registration:** authenticated Bybit signed `/v5/user/query-api` proves independent Unified SUB, private credentials stored encrypted, unique internal TradingAccount and AccountConnector entered atomically, parent internal link NULL per ARCH §49.7, individual systemd instance environment root:cripta 0640 and runtime-state directory cripta:cripta 0750 prepared. Independent signed Bybit wallet/position/order reads confirmed total and available equity `21.971906 USDT`, zero open positions and zero active orders; response lists no withdrawal/transfer permissions. Provider UID/credentials not published here. Identity/schema status initially READY.
+
+**New hard blocker (Issue #205):** the independent SUB private runtime crashes during `startup_live_safety → reconcile → upsert_wallet`, PostgreSQL `UniqueViolation wallet_latest_pkey (singleton=1)`. Runtime `wallet_latest` and hot positions/orders retain global legacy primary keys alongside account-scoped unique indexes, so account isolation is not proven for two concurrently running writers or account-scoped readers. SUB systemd unit transitioned to `failed` after 3 restarts; do not restart/retry or drop legacy PK until all affected writers/readers, migrations, legacy identities, backup/rollback and multi-account parity are repaired/reviewed. `SUB_REGISTRY=IMPLEMENTED`; `SUB_RUNTIME_LIVENESS=FAILED`; `TWO_ACCOUNT_ENTRY_BEHAVIOR=BLOCKED`.
+
+**MAIN identity:** live MAIN private WS works; original MAIN registry `external_account_ref` is NULL and Lifecycle Supervisor reports `REGISTERED_BYBIT_UID_MISSING`. Fresh signed MAIN UID confirmation/registry repair remains NOT COMPLETED. Earlier combined credential diagnostic failed OpenAI upstream security twice; no repeated blocked call or workaround authorized. MAIN/SUB are not ready for two real Entry attempts; future full readiness and owner approval are independent of this checkpoint.
+
+No Telegram/multi-user product implementation, destructive DB migration, Exchange mutation, new LIVE arm or server installation was performed in this documentation-only update.
