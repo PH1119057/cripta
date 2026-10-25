@@ -4009,9 +4009,11 @@ def reconcile(
         connection.rollback()
         finished = int(time.time() * 1000)
         with connection.transaction():
+            # Serialize failed terminalization with admission and COMPLETE
+            # under the *same exact account* lock, never global account_ref.
             connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (ACCOUNT_REF,),
+                (TRADING_ACCOUNT_ID,),
             )
             connection.execute(
                 """UPDATE runtime.account_state_generations
