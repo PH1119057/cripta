@@ -202,3 +202,48 @@ def test_release_installs_sub_templates_and_account_schema_without_auto_start() 
     # is introduced by the installer or by this offline test.
     assert "[Install]\n" not in PRIVATE.read_text(encoding="utf-8")
     assert "[Install]\n" not in ENTRY.read_text(encoding="utf-8")
+
+
+def test_position_mode_proofs_are_unique_per_trading_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Same Bybit symbol, mode, observed millisecond: proofs must not collide.
+    # The transport below is synthetic and makes no network requests.
+    from contextlib import nullcontext
+
+    class PlanCursor:
+        def fetchall(self) -> list[tuple[str]]:
+            return [("BTCUSDT",)]
+
+    class Plans:
+        def transaction(self):
+            return nullcontext()
+
+        def execute(self, _sql: str):
+            return PlanCursor()
+
+    def fake_get(_path: str, _params: dict[str, str],
+                 _key: str, _secret: str):
+        return (
+            {"retCode": 0, "result": {"list": [{"positionIdx": 0}]}},
+            0.1,
+        )
+
+    monkeypatch.setattr(private_runtime, "api_get", fake_get)
+
+    def prove(account: str) -> dict[str, object]:
+        monkeypatch.setattr(private_runtime, "TRADING_ACCOUNT_ID", account)
+        monkeypatch.setattr(
+            private_runtime, "ACCOUNT_CONNECTOR_ID", "connector-" + account,
+        )
+        states = private_runtime.collect_position_mode_states(
+            Plans(), "fake", "fake", 1792900000000, force_refresh=True,
+        )
+        assert len(states) == 1
+        assert states[0]["position_mode"] == "ONE_WAY"
+        return states[0]
+
+    main = prove("ta-main")
+    sub = prove("ta-sub")
+    assert main["position_mode_state_ref"] != sub["position_mode_state_ref"]
+    assert main["instrument"] == sub["instrument"] == "BTCUSDT"
