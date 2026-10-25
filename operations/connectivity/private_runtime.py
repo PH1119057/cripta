@@ -2430,6 +2430,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         price = quantize(price, tick, upward=side == "Sell")
         wallet, _ = api_get("/v5/account/wallet-balance", {"accountType":"UNIFIED"}, key, secret); account=((wallet.get("result") or {}).get("list") or [{}])[0]
         _require_entry_bybit_read_ok(wallet, "/v5/account/wallet-balance")
+        if str(account.get("accountType") or "") != "UNIFIED":
+            raise ExchangeReadUnavailable("Entry wallet accountType is not UNIFIED")
         available=account_available_usdt(account)
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
