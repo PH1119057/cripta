@@ -908,3 +908,128 @@ def test_partial_fill_cancel_requires_reconciliation_and_keeps_capital() -> None
             (ids["reservation_id"],),
         ).fetchone()
         assert stored == ("RECONCILIATION_REQUIRED",)
+
+
+def test_two_account_ack_partial_cancel_and_restart_preserves_independent_ledger() -> None:
+    """Joined disposable PG Entry recovery with exact per-account evidence.
+
+    Both accounts receive distinct acknowledged Entry orders on one symbol.
+    MAIN has proven zero fill; SUB has a partial fill. A DB reconnect cannot
+    release SUB capital or slot by copying MAIN's cancellation evidence.
+    """
+    assert DSN is not None
+    prefix = "two-entry-recovery-" + uuid4().hex[:10]
+    with psycopg.connect(DSN) as connection:
+        main = _seed(
+            connection, prefix + "-main",
+            symbol="LINKUSDT", reservation_state="DISPATCHED",
+            expires_at=NOW + timedelta(seconds=30),
+            dispatched=True, command=True,
+        )
+        sub = _seed(
+            connection, prefix + "-sub",
+            symbol="LINKUSDT", reservation_state="DISPATCHED",
+            expires_at=NOW + timedelta(seconds=30),
+            dispatched=True, command=True,
+        )
+        connection.execute(
+            """UPDATE identity.trading_accounts
+                  SET account_kind='SUB'
+                WHERE trading_account_id=%s""",
+            (sub["trading_account_id"],),
+        )
+        assert main["trading_account_id"] != sub["trading_account_id"]
+        assert main["command_id"] != sub["command_id"]
+        assert main["slot_claim_id"] != sub["slot_claim_id"]
+        assert main["reservation_id"] != sub["reservation_id"]
+        for ids in (main, sub):
+            state = mark_entry_order_acknowledged(
+                connection,
+                command_id=ids["command_id"],
+                exchange_order_id=f"{ids['command_id']}-exchange",
+                acknowledged_at=NOW,
+            )
+            assert state == "PENDING_EXCHANGE_REFLECTION"
+            connection.execute(
+                """INSERT INTO runtime.exchange_order_history(
+                       order_id,order_link_id,symbol,side,order_status,
+                       updated_at_epoch_ms,payload_json,refreshed_at_epoch_ms,
+                       trading_account_id,account_connector_id,identity_status
+                   ) VALUES(%s,%s,%s,'Buy','Cancelled',1,%s::jsonb,1,%s,%s,'PROVEN')""",
+                (
+                    f"{ids['command_id']}-exchange",
+                    ids["command_id"][:36],
+                    ids["symbol"],
+                    json.dumps({
+                        "cumExecQty": "0.5" if ids is sub else "0",
+                    }),
+                    ids["trading_account_id"],
+                    ids["trading_account_id"][:-3] + "-connector",
+                ),
+            )
+        connection.execute(
+            """INSERT INTO runtime.executions(
+                   exec_id,order_id,order_link_id,symbol,side,exec_qty,exec_price,
+                   exec_fee,exec_time_ms,received_at_epoch_ms,payload_json,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,%s,%s,%s,'Buy','0.5','1','0',1,1,'{}',%s,%s,'PROVEN')""",
+            (
+                f"{prefix}-sub-exec",
+                f"{sub['command_id']}-exchange",
+                sub["command_id"][:36],
+                sub["symbol"],
+                sub["trading_account_id"],
+                sub["trading_account_id"][:-3] + "-connector",
+            ),
+        )
+        assert resolve_cancelled_entry_reservation_after_reconcile(
+            connection,
+            command_id=main["command_id"],
+            exchange_order_id=f"{main['command_id']}-exchange",
+            cancel_reason="EXACT_ZERO_FILL",
+        ) == "RELEASED"
+        assert resolve_cancelled_entry_reservation_after_reconcile(
+            connection,
+            command_id=sub["command_id"],
+            exchange_order_id=f"{sub['command_id']}-exchange",
+            cancel_reason="PARTIAL_FILL",
+        ) == "RECONCILIATION_REQUIRED"
+        connection.commit()
+
+    # A restarted worker sees the same durable terminal/uncertain ledger.
+    with psycopg.connect(DSN) as restarted:
+        assert resolve_cancelled_entry_reservation_after_reconcile(
+            restarted,
+            command_id=main["command_id"],
+            exchange_order_id=f"{main['command_id']}-exchange",
+        ) == "RELEASED"
+        assert resolve_cancelled_entry_reservation_after_reconcile(
+            restarted,
+            command_id=sub["command_id"],
+            exchange_order_id=f"{sub['command_id']}-exchange",
+        ) == "RECONCILIATION_REQUIRED"
+        rows = restarted.execute(
+            """SELECT c.trading_account_id,c.state,s.claim_state
+                 FROM runtime.capital_reservations c
+                 JOIN runtime.exchange_position_slot_claims s
+                   ON s.capital_reservation_id=c.reservation_id
+                WHERE c.reservation_id IN (%s,%s)
+                ORDER BY c.trading_account_id""",
+            (main["reservation_id"], sub["reservation_id"]),
+        ).fetchall()
+        assert {row[0]: (row[1], row[2]) for row in rows} == {
+            main["trading_account_id"]: ("RELEASED", "RELEASED"),
+            sub["trading_account_id"]: (
+                "RECONCILIATION_REQUIRED", "RECONCILIATION_REQUIRED",
+            ),
+        }
+        assert restarted.execute(
+            """SELECT count(*) FROM runtime.executions
+                WHERE trading_account_id=%s AND symbol='LINKUSDT'""",
+            (main["trading_account_id"],),
+        ).fetchone()[0] == 0
+        assert restarted.execute(
+            """SELECT count(*) FROM runtime.executions
+                WHERE trading_account_id=%s AND symbol='LINKUSDT'""",
+            (sub["trading_account_id"],),
+        ).fetchone()[0] == 1
