@@ -75,7 +75,8 @@ def test_real_entry_consumer_uses_active_session_not_expiring_prearm_evidence() 
     assert run_body.index("_admission_pre_dispatch_status(") < run_body.index(
         "_live_arm_ready("
     )
-    assert "POSITION_MODE_STATE_STALE" in source
+    assert "ADMISSION_ACCOUNT_GENERATION_CHANGED" in source
+    assert "POSITION_MODE_STATE_STALE" not in source
     assert "EXCHANGE_POSITION_MODE_MISMATCH" in source
 
 
