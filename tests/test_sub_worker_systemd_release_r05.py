@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -247,3 +248,50 @@ def test_position_mode_proofs_are_unique_per_trading_account(
     sub = prove("ta-sub")
     assert main["position_mode_state_ref"] != sub["position_mode_state_ref"]
     assert main["instrument"] == sub["instrument"] == "BTCUSDT"
+
+
+def test_sub_release_discovery_failure_is_fatal() -> None:
+    # Run only the release discovery block in an isolated Bash process,
+    # with a stubbed systemctl command and no server contact.
+    src = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
+    start = src.index('discovered_sub_text="$(')
+    end = src.index('for unit in "${discovered_sub_units[@]}"', start)
+    block = src[start:end]
+    script = (
+        'die() { echo "$*" >&2; exit 1; }; '
+        'systemctl() { return 66; };\n'
+        + block
+        + '\nprintf "WRONGLY_SUCCEEDED\\n"'
+    )
+    result = subprocess.run(
+        ["bash", "-e", "-u", "-o", "pipefail", "-c", script],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "SUB unit enumeration failed" in result.stderr
+    assert "WRONGLY_SUCCEEDED" not in result.stdout
+
+
+def test_sub_release_discovery_collects_each_unique_active_instance() -> None:
+    src = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
+    start = src.index('discovered_sub_text="$(')
+    end = src.index('for unit in "${discovered_sub_units[@]}"', start)
+    block = src[start:end]
+    script = (
+        'die() { echo "$*" >&2; exit 1; }; '
+        'systemctl() { printf "%s\\n" '
+        '"cripta-private-runtime@sub1.service loaded active running" '
+        '"cripta-universal-entry-consumer@sub1.service loaded active running" '
+        '"cripta-private-runtime@sub1.service loaded active running"; };\n'
+        + block
+        + '\nprintf "%s\\n" "${discovered_sub_units[@]}"'
+    )
+    result = subprocess.run(
+        ["bash", "-e", "-u", "-o", "pipefail", "-c", script],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "cripta-private-runtime@sub1.service",
+        "cripta-universal-entry-consumer@sub1.service",
+    ]
