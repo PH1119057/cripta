@@ -253,6 +253,7 @@ def test_position_mode_proofs_are_unique_per_trading_account(
     assert main["instrument"] == sub["instrument"] == "BTCUSDT"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="GNU Bash release runs only on Linux")
 def test_sub_release_discovery_failure_is_fatal() -> None:
     # Run only the release discovery block in an isolated Bash process,
     # with a stubbed systemctl command and no server contact.
@@ -275,6 +276,7 @@ def test_sub_release_discovery_failure_is_fatal() -> None:
     assert "WRONGLY_SUCCEEDED" not in result.stdout
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="GNU Bash release runs only on Linux")
 def test_sub_release_discovery_collects_each_unique_active_instance() -> None:
     src = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text()
     start = src.index('discovered_sub_text="$(')
