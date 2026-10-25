@@ -1,10 +1,12 @@
 """Deterministic invariants for research-only BTC/ETH adverse Exit replay."""
+import importlib
 from decimal import Decimal as D
 
-from scripts.research.p90l90_btceth_adverse_exit_90d_v1 import (
-    MarketExitPortfolio,
-    VARIANTS,
-)
+
+def model():
+    module=importlib.import_module("scripts.research.p90l90_btceth_adverse_exit_90d_v1")
+    return module.MarketExitPortfolio, module.VARIANTS
+
 
 STATE=(D("80"),D("120"),D("1"))
 
@@ -16,7 +18,8 @@ def entry(symbol, t, side="LONG"):
 
 
 def test_market_exit_only_after_entry_and_when_both_risk_and_loss_gates_hold():
-    book=MarketExitPortfolio(VARIANTS["H06_X5_L2"])
+    Book, variants = model()
+    book=Book(variants["H06_X5_L2"])
     book.handle_market("APTUSDT",100,1,D("100"),entry("APTUSDT",100),STATE,(1,9))
     assert book.count["accepted"]==1
     book.handle_market("APTUSDT",101,2,D("99"),(),STATE,(1,6))
@@ -35,7 +38,8 @@ def test_market_exit_only_after_entry_and_when_both_risk_and_loss_gates_hold():
 
 
 def test_risk_exit_does_not_reenter_on_same_tick():
-    book=MarketExitPortfolio(VARIANTS["H06_X4_L1"])
+    Book, variants = model()
+    book=Book(variants["H06_X4_L1"])
     book.handle_market("LTCUSDT",100,1,D("100"),entry("LTCUSDT",100),STATE,None)
     book.handle_market("LTCUSDT",200,2,D("98"),
                        entry("LTCUSDT",200),STATE,(1,4.5))
@@ -45,7 +49,8 @@ def test_risk_exit_does_not_reenter_on_same_tick():
 
 
 def test_existing_hard_stop_not_relabelled_as_market_exit():
-    book=MarketExitPortfolio(VARIANTS["H06_X5_L2"])
+    Book, variants = model()
+    book=Book(variants["H06_X5_L2"])
     book.handle_market("INJUSDT",100,1,D("100"),entry("INJUSDT",100),STATE,None)
     book.handle_market("INJUSDT",200,2,D("89"),(),STATE,(1,99))
     assert book.count["close_HARD_STOP"]==1
@@ -54,7 +59,8 @@ def test_existing_hard_stop_not_relabelled_as_market_exit():
 
 
 def test_short_risk_direction_reverses():
-    book=MarketExitPortfolio(VARIANTS["H06_X5_L2"])
+    Book, variants = model()
+    book=Book(variants["H06_X5_L2"])
     book.handle_market("DOTUSDT",100,1,D("100"),
                        entry("DOTUSDT",100,"SHORT"),STATE,None)
     book.handle_market("DOTUSDT",150,2,D("103"),(),STATE,(1,9))
