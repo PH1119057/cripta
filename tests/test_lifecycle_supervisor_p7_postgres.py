@@ -362,6 +362,15 @@ def test_exchange_divergence_requires_explicit_fresh_reconciliation() -> None:
     ids = _identity(prefix)
     with psycopg.connect(DSN, row_factory=dict_row) as connection:
         seeded = _seed(connection, prefix)
+        connector_id = f"{prefix}-connector"
+        connection.execute(
+            """INSERT INTO identity.account_connectors(
+                   account_connector_id,trading_account_id,connector_kind,
+                   adapter_id,credential_ref,status)
+               VALUES (%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                       'DISPOSABLE_TEST_REFERENCE','ACTIVE')""",
+            (connector_id, seeded["trading_account_id"]),
+        )
         _ack_entry_plan(connection, prefix)
         claim_exit_position(
             connection,
@@ -425,7 +434,7 @@ def test_exchange_divergence_requires_explicit_fresh_reconciliation() -> None:
                      payload_json=excluded.payload_json""",
             (
                 seeded["symbol"], now_ms, now_ms,
-                seeded["trading_account_id"], seeded["connector_id"],
+                seeded["trading_account_id"], connector_id,
             ),
         )
         connection.commit()
