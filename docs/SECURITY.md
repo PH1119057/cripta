@@ -1,7 +1,7 @@
 # CRIPTA — security baseline
 
-**Версия:** 1.4
-**Дата:** 2026-10-16
+**Версия:** 1.5
+**Дата:** 2026-10-25
 **Статус:** обязательный technical security baseline
 
 Этот файл входит в base pre-read для любой содержательной работы.
@@ -84,3 +84,13 @@ by StrategyExecutionBinding and AccountStateGeneration.
 DEX private keys/signing material follow the same rule: public wallet/venue
 identity may be referenced where required, while signing secrets remain only in
 approved secret storage.
+
+## Internal CRIPTAUser isolation and future self-service enrollment — OWNER DECISION 2026-10-25
+
+ARCH §49.7 owns the product-user-to-TradingAccount ownership and privacy boundary; GLOSSARY §33 defines CRIPTAUser and TradingAccountOwnership. SECURITY owns secret handling and least-privilege authorization. Product user, CEX MAIN/SUB, credential reference, account connector and Unix service identity are separate concepts.
+
+Before any multi-user rollout, all private balances, orders, positions, fee/P&L records, strategy configuration/bindings, notifications and exports must default to owner-scoped visibility and mutation. Dashboard, API, Telegram, search and reports must never reveal another user's private account facts without a separately authorized, logged delegation/admin role. Ownership changes require authorization and durable attribution rather than historical rewrites.
+
+Self-service UI/Telegram-bot enrollment requires authenticated session ownership and a verified encrypted API Key/API Secret enrollment path to the existing approved secret store. Do not solicit plaintext API secrets through normal Telegram messages, ChatGPT chats, logs or GitHub. A bot may coordinate enrollment and display owner-scoped statistics, but does not acquire trading permission or disable LIVE gates. Credential and read/trade permission checks remain venue-specific; withdrawal/transfer privileges are not issued by default.
+
+CONCEPT ONLY: no user registry, tenancy isolation, bot, DB migration, key change, deploy or LIVE permission is claimed.
