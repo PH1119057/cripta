@@ -3638,8 +3638,15 @@ def collect_position_mode_states(
                    ON ep.strategy_id=a.strategy_id
                   AND ep.strategy_version=a.strategy_version
                   AND ep.strategy_config_fingerprint=a.strategy_config_fingerprint
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                  AND b.trading_account_id=%s
+                  AND b.binding_state='ACTIVE'
+                  AND b.effective_from<=clock_timestamp()
+                  AND (b.effective_to IS NULL OR b.effective_to>clock_timestamp())
                 WHERE a.enabled=true
-                ORDER BY symbol"""
+                ORDER BY symbol""",
+            (TRADING_ACCOUNT_ID,),
         ).fetchall()
     symbols = [str(row[0]) for row in rows if str(row[0]).strip()]
     if not symbols:
