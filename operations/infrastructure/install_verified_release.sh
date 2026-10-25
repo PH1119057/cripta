@@ -320,11 +320,17 @@ managed_services=(
 # already loaded for a previously approved account, it MUST join the same
 # release stop/start and exact-loaded-commit lifecycle as MAIN and Exit.
 # Never leave an active SUB process running old code after source cutover.
-mapfile -t discovered_sub_units < <(
+# Capture the command status (including pipeline errors) before consuming units.
+# Process substitution hides list-units failures from mapfile under set -e.
+discovered_sub_text="$(
   systemctl list-units --all --type=service --plain --no-legend \
     'cripta-private-runtime@*.service' \
     'cripta-universal-entry-consumer@*.service' | awk '{print $1}' | sort -u
-)
+)" || die "SUB unit enumeration failed; release identity cannot be verified"
+discovered_sub_units=()
+if [[ -n "$discovered_sub_text" ]]; then
+  mapfile -t discovered_sub_units <<< "$discovered_sub_text"
+fi
 for unit in "${discovered_sub_units[@]}"; do
   [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer)@[A-Za-z0-9_.-]+\.service$ ]] ||
     die "unexpected SUB unit identity while preparing release: $unit"
