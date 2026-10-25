@@ -416,13 +416,17 @@ def test_exchange_divergence_requires_explicit_fresh_reconciliation() -> None:
         connection.execute(
             """INSERT INTO runtime.hot_positions(
                    symbol,position_idx,side,size,entry_price,leverage,
-                   exchange_updated_ms,refreshed_at_epoch_ms,payload_json
-               ) VALUES(%s,0,'Buy','2','10','1',%s,%s,'{}')
+                   exchange_updated_ms,refreshed_at_epoch_ms,payload_json,
+                   trading_account_id,account_connector_id,identity_status
+               ) VALUES(%s,0,'Buy','2','10','1',%s,%s,'{}',%s,%s,'PROVEN')
                ON CONFLICT(trading_account_id,symbol,position_idx) DO UPDATE
                  SET side=excluded.side,size=excluded.size,
                      refreshed_at_epoch_ms=excluded.refreshed_at_epoch_ms,
                      payload_json=excluded.payload_json""",
-            (seeded["symbol"], now_ms, now_ms),
+            (
+                seeded["symbol"], now_ms, now_ms,
+                seeded["trading_account_id"], seeded["connector_id"],
+            ),
         )
         connection.commit()
         LifecycleSupervisor(
