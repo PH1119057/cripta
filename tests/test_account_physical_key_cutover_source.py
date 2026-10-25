@@ -6,9 +6,15 @@ CI plus separately authorized release/rollback evidence; text tests are not that
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SQL = (ROOT / "operations/sql/20261026_account_scoped_physical_key_cutover.sql").read_text(encoding="utf-8")
-PREPARATION = (ROOT / "operations/sql/20261016_account_scoped_key_preparation_r5.sql").read_text(encoding="utf-8")
-INSTALLER = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text(encoding="utf-8")
+SQL = (ROOT / "operations/sql/20261026_account_scoped_physical_key_cutover.sql").read_text(
+    encoding="utf-8"
+)
+PREPARATION = (ROOT / "operations/sql/20261016_account_scoped_key_preparation_r5.sql").read_text(
+    encoding="utf-8"
+)
+INSTALLER = (ROOT / "operations/infrastructure/install_verified_release.sh").read_text(
+    encoding="utf-8"
+)
 SCHEMA = (ROOT / "operations/connectivity/runtime_schema.py").read_text(encoding="utf-8")
 VERIFIER = (ROOT / "operations/monitoring/r9_migration_verifier.py").read_text(encoding="utf-8")
 
@@ -50,7 +56,10 @@ def test_cutover_uses_one_transaction_with_prepared_keys_and_no_data_rewrite() -
         "GLOBAL_PRIMARY_KEY_NOT_RETIRED",
     ):
         assert invariant in SQL
-    for forbidden in ("DELETE FROM", "UPDATE runtime.", "TRUNCATE", "DROP TABLE", "CASCADE", "CREATE USER"):
+    for forbidden in (
+        "DELETE FROM", "UPDATE runtime.", "TRUNCATE",
+        "DROP TABLE", "CASCADE", "CREATE USER",
+    ):
         assert forbidden not in SQL.upper()
 
 
