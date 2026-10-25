@@ -418,3 +418,69 @@ def test_invalid_entry_protection_and_tif_never_mutate_exchange(
             ("entry-offline", "entry", "BTCUSDT", json.dumps(payload)),
         )
     exchange_mutation.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    (
+        "/v5/position/list",
+        "/v5/market/instruments-info",
+        "/v5/order/realtime",
+        "/v5/account/wallet-balance",
+    ),
+)
+@pytest.mark.parametrize("incomplete", (False, True))
+def test_required_entry_exchange_read_failure_never_reaches_first_post(
+    bad_path: str, incomplete: bool,
+) -> None:
+    payload = {
+        "stake_usdt": "10",
+        "leverage": 1,
+        "side": "Buy",
+        "price": "100",
+        "entry_offset_pct": "0",
+        "initial_protection": {
+            "stop_loss_pct": "1",
+            "take_profit_pct": "3",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        },
+    }
+
+    def exchange_read(path, _params, *_args):
+        inventories = {
+            "/v5/position/list": [],
+            "/v5/market/instruments-info": [
+                {
+                    "priceFilter": {"tickSize": "0.01"},
+                    "lotSizeFilter": {"qtyStep": "0.001"},
+                }
+            ],
+            "/v5/order/realtime": [],
+            "/v5/account/wallet-balance": [
+                {"accountType": "UNIFIED", "totalAvailableBalance": "100"}
+            ],
+        }
+        assert path in inventories
+        if path == bad_path:
+            if incomplete:
+                return {"retCode": 0, "result": {}}, {}
+            return {"retCode": 10006, "retMsg": "offline rejection"}, {}
+        return {"retCode": 0, "result": {"list": inventories[path]}}, {}
+
+    with (
+        patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+        patch.object(private_runtime, "authenticated_entry_connector_gate"),
+        patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+        patch.object(private_runtime, "_critical_lifecycle_fault_code", return_value=None),
+        patch.object(private_runtime, "api_get", side_effect=exchange_read),
+        patch.object(private_runtime, "api_post") as mutation,
+        pytest.raises(private_runtime.ExchangeReadUnavailable),
+    ):
+        private_runtime.execute_command(
+            object(),
+            "offline-key",
+            "offline-secret",
+            ("entry-failure", "entry", "BTCUSDT", json.dumps(payload)),
+        )
+    mutation.assert_not_called()
