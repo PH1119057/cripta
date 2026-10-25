@@ -292,7 +292,10 @@ def validate_runtime_schema_shape(connection: psycopg.Connection) -> None:
             "invalid account key indexes: " + ", ".join(invalid_account_key_indexes)
         )
     if unretired_global_primary_keys:
-        errors.append("legacy global PRIMARY KEY still present: " + ", ".join(unretired_global_primary_keys))
+        errors.append(
+            "legacy global PRIMARY KEY still present: "
+            + ", ".join(unretired_global_primary_keys)
+        )
     if not enabled_type or str(enabled_type[0]) != "smallint":
         errors.append("control.execution_gates.enabled must be SMALLINT")
     if errors:
