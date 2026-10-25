@@ -395,6 +395,66 @@ def test_failed_latest_account_generation_blocks_all_admission() -> None:
     assert reservation_count == 0
 
 
+def test_failed_generation_serializes_with_entry_account_lock() -> None:
+    """A terminal FAILED update wins the same account lock as admission.
+
+    On the disposable DB, while a terminal failure holds the exact account
+    lock, a concurrent Entry may neither claim a slot nor reserve capital.
+    An unrelated account retains independent admission capacity.
+    """
+    assert DSN is not None
+    prefix = "slot-generation-race-" + uuid4().hex
+    peer_prefix = "slot-generation-peer-" + uuid4().hex
+    identity = _seed_attempts(prefix, count=1)
+    peer = _seed_attempts(peer_prefix, count=1)
+    _seed_mode(prefix, identity)
+    _seed_mode(peer_prefix, peer)
+    account_id = f"{prefix}-ta"
+    with psycopg.connect(DSN) as writer:
+        writer.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (account_id,),
+        )
+        writer.execute(
+            """UPDATE runtime.account_state_generations
+                  SET state='FAILED',error='OFFLINE_TEST_FAILURE'
+                WHERE generation_id=%s AND state='COMPLETE'""",
+            (f"{prefix}-generation",),
+        )
+        # The failing account is locked. An independent account must not
+        # be affected or serialized by the other account's generation.
+        with psycopg.connect(DSN) as peer_connection:
+            admitted = PostgresEntryAdmissionPort(peer_connection).admit(
+                _request(peer_prefix, 0, peer)
+            )
+            assert admitted.capital_reservation is not None
+
+        with psycopg.connect(DSN) as contender:
+            contender.execute("SET lock_timeout = '300ms'")
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                PostgresEntryAdmissionPort(contender).admit(
+                    _request(prefix, 0, identity)
+                )
+
+    # Once FAILED commits, the next attempt rejects for actual account
+    # state, not just because a transient advisory lock is held.
+    with psycopg.connect(DSN) as after:
+        with pytest.raises(PositionModeStateUnavailable):
+            PostgresEntryAdmissionPort(after).admit(
+                _request(prefix, 0, identity)
+            )
+        assert after.execute(
+            """SELECT count(*) FROM runtime.exchange_position_slot_claims
+               WHERE account_ref=%s""",
+            (identity["account_ref"],),
+        ).fetchone()[0] == 0
+        assert after.execute(
+            """SELECT count(*) FROM runtime.capital_reservations
+               WHERE account_ref=%s""",
+            (identity["account_ref"],),
+        ).fetchone()[0] == 0
+
+
 def test_incompatible_position_mode_creates_no_claim_or_reservation() -> None:
     assert DSN is not None
     prefix = "slot-mode-" + uuid4().hex
