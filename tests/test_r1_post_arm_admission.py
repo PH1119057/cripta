@@ -199,3 +199,53 @@ def test_pre_dispatch_blocks_failed_terminal_generation() -> None:
             object(), {"capital_capacity_snapshot_id": "generation-sub"},
             request,
         ) == ("STALE_MODE", "CURRENT_ACCOUNT_GENERATION_UNAVAILABLE")
+
+
+def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
+    # An unbroken stream of DISPATCHED/BLOCKED results must not retain
+    # uncommitted queued commands, capital locks, or request state.
+    events: list[str] = []
+
+    class OfflineConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def commit(self):
+            events.append("COMMIT")
+
+    fake_connection = OfflineConnection()
+    outcomes = iter(("DISPATCHED:entry-a", "BLOCKED:MODE", "NO_REQUEST"))
+
+    def fake_run_once(_connection):
+        result = next(outcomes)
+        events.append(result)
+        if result == "NO_REQUEST":
+            monkeypatch.setattr(entry_consumer, "running", False)
+        return result
+
+    with (
+        patch.object(entry_consumer, "ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"),
+        patch.object(entry_consumer, "CONSUMER_ARM", "ENABLED"),
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", "test-main"),
+        patch.object(entry_consumer, "ACCOUNT_CONNECTOR_ID", "test-connector"),
+        patch.object(entry_consumer, "POLL_SECONDS", 0.01),
+        patch.object(entry_consumer, "running", True),
+        patch.object(entry_consumer, "require_exact_sub_instance"),
+        patch.object(entry_consumer.signal, "signal"),
+        patch.object(
+            entry_consumer.psycopg, "connect", return_value=fake_connection
+        ),
+        patch.object(entry_consumer, "check_release_arm_invariant"),
+        patch.object(entry_consumer, "run_once", side_effect=fake_run_once),
+        patch.object(entry_consumer.time, "sleep"),
+    ):
+        assert entry_consumer.main() == 0
+
+    assert events == [
+        "COMMIT", "DISPATCHED:entry-a", "COMMIT",
+        "COMMIT", "BLOCKED:MODE", "COMMIT",
+        "COMMIT", "NO_REQUEST", "COMMIT",
+    ]
