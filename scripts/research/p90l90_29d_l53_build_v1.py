@@ -33,11 +33,13 @@ def process(symbol: str):
         if sources.hash_file(path) != item["sha256"]:
             raise ValueError("input SHA drift")
     parent = OUTPUT / "parts"
-    if parent.exists():
-        raise FileExistsError("immutable L5 output parts exist; do not overwrite")
     if not os.access(sources.ROOT, os.W_OK | os.X_OK):
         raise PermissionError("research output root not writable")
-    parent.mkdir(parents=True, mode=0o2770)
+    if (parent / f"states_{symbol}.csv.gz").exists() or (
+        parent / f"touches_{symbol}.csv.gz"
+    ).exists():
+        raise FileExistsError("immutable L5 symbol output collision")
+    parent.mkdir(parents=True, exist_ok=True, mode=0o2770)
     meta = clean.process_symbol(
         symbol, str(sources.ROOT / "inputs"), str(parent),
         first_date="2026-09-11", last_date="2026-10-19",
