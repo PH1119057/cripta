@@ -76,6 +76,17 @@ REQUIRED_ACCOUNT_KEY_INDEXES: tuple[
     ),
 )
 
+# R10: old provider-global PRIMARY KEY constraints must no longer reject
+# two independently authenticated accounts with the same physical provider ID.
+RETIRED_GLOBAL_PRIMARY_KEYS: tuple[tuple[str, str], ...] = (
+    ("runtime.wallet_latest", "wallet_latest_pkey"),
+    ("runtime.hot_positions", "hot_positions_pkey"),
+    ("runtime.hot_orders", "hot_orders_pkey"),
+    ("runtime.executions", "executions_pkey"),
+    ("runtime.exchange_order_history", "exchange_order_history_pkey"),
+)
+
+
 REQUIRED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("analytics", "market_minutes", "observed_minute"),
     ("analytics", "market_minutes", "market_source_id"),
@@ -247,10 +258,25 @@ def _invalid_account_key_indexes(connection: psycopg.Connection[Any]) -> list[st
     return invalid
 
 
+def _unretired_global_primary_keys(connection: psycopg.Connection[Any]) -> list[str]:
+    remaining: list[str] = []
+    for relation, obsolete_name in RETIRED_GLOBAL_PRIMARY_KEYS:
+        row = connection.execute(
+            """SELECT conname
+                 FROM pg_constraint
+                WHERE conrelid=to_regclass(%s) AND contype='p'""",
+            (relation,),
+        ).fetchone()
+        if row is not None:
+            remaining.append(f"{relation}:{row[0]}:expected_retired={obsolete_name}")
+    return remaining
+
+
 def validate_runtime_schema_shape(connection: psycopg.Connection) -> None:
     missing_relations = _missing_relations(connection)
     missing_columns = _missing_columns(connection)
     invalid_account_key_indexes = _invalid_account_key_indexes(connection)
+    unretired_global_primary_keys = _unretired_global_primary_keys(connection)
     enabled_type = connection.execute(
         """SELECT data_type FROM information_schema.columns
            WHERE table_schema='control' AND table_name='execution_gates'
@@ -265,6 +291,8 @@ def validate_runtime_schema_shape(connection: psycopg.Connection) -> None:
         errors.append(
             "invalid account key indexes: " + ", ".join(invalid_account_key_indexes)
         )
+    if unretired_global_primary_keys:
+        errors.append("legacy global PRIMARY KEY still present: " + ", ".join(unretired_global_primary_keys))
     if not enabled_type or str(enabled_type[0]) != "smallint":
         errors.append("control.execution_gates.enabled must be SMALLINT")
     if errors:
