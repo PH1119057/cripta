@@ -2405,19 +2405,20 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             result = {"retCode": 0, "retMsg": "not modified", "idempotent": True}
     elif kind == "entry":
         if position: raise RuntimeError("position already exists")
-        existing_orders, _ = api_get(
+        # One page is not enough to prove absence of bot/other pending Entry.
+        # Read every cursor or fail closed before any Exchange mutation.
+        existing_orders = _complete_exchange_inventory(
             "/v5/order/realtime",
             {"category": "linear", "symbol": symbol, "openOnly": "0", "limit": "50"},
             key,
             secret,
         )
-        _require_entry_bybit_read_ok(existing_orders, "/v5/order/realtime")
         active_entry = next(
             (
                 order
-                for order in ((existing_orders.get("result") or {}).get("list") or [])
+                for order in existing_orders
                 if order.get("orderStatus") in {"New", "PartiallyFilled", "Untriggered"}
-                and not bool(order.get("reduceOnly"))
+                and str(order.get("reduceOnly") or "false").lower() != "true"
             ),
             None,
         )
