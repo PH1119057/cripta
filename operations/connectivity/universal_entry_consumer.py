@@ -13,11 +13,11 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.account_entry_safety import account_entry_safety_ready
+from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
 )
-from bybit_workbench.account_live_arm import account_live_arm_ready
 from bybit_workbench.entry_consumer_route import (
     ConsumerWorkerRoute,
     check_consumer_worker_route,
