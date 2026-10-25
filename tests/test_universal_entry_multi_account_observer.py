@@ -75,7 +75,7 @@ def test_live_observer_sees_every_active_account_without_creating_authority() ->
         db, (Bundle("act-one"), Bundle("act-single")),
         observed_at=NOW,
     )
-    assert result == {"act-one": (one, two)}
+    assert result == {"act-one": (one, two), "act-single": (three,)}
     assert len(db.queries) == 1
     query, params = db.queries[0]
     assert "strategy_entry.strategy_execution_bindings" in query
