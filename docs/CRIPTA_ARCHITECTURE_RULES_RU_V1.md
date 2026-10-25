@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.2
-**Дата:** 2026-10-21
+**Версия:** 3.3
+**Дата:** 2026-10-25
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -1109,6 +1109,22 @@ No creation, copying, binding or release process automatically enables REAL.
 New REAL authorization is exact-release, exact-Strategy and explicit OWNER ARM.
 This section defines target semantics, not evidence that existing consumers,
 schema, adapters or dashboard implement multi-account fan-out.
+
+### 49.7 Внутренний пользователь CRIPTA и владение TradingAccount — OWNER DECISION 2026-10-25 / TARGET CONCEPT
+
+**CRIPTAUser** (`cripta_user_id`) — внутренняя устойчивая, независимая от бирж и API-ключей identity пользователя системы CRIPTA. Один пользователь может владеть множеством TradingAccounts на одной или разных Venues, включая MAIN, SUB и разрешённые on-chain accounts. Один нынешний оператор — начальный случай, не архитектурный лимит.
+
+У каждого TradingAccount должен быть ровно один текущий **внутренний владелец CRIPTAUser** (`TradingAccountOwnership`). Владелец не обязан совпадать с actor, создавшим запись: `created_by` — audit, а не автоматическое доказательство собственности или полномочий. Предоставивший API-доступ человек должен быть вправе поручить подключение; изменение внутреннего владельца — только по явному разрешённому, аудируемому маршруту с сохранением исторической атрибуции. Физические user/ownership таблицы, права и схема переназначения являются отдельной будущей реализацией, не утверждены этим концептом.
+
+Биржевые `isMaster`, `parentUid`, `parent_trading_account_id` — provider provenance, **не отношение владельца продукта CRIPTA**. Регистрация/доступность внешнего SUB не требует, чтобы родительский MAIN имел регистрацию в CRIPTA или принадлежал тому же пользователю. Provenance допускает nullable parent link и точный provider identifier без выдуманного parent TradingAccount. Для иного Venue, не имеющего MAIN/SUB, Bybit-specific parent checks не применяются.
+
+Для каждого нового TradingAccount независимо проверяются authenticated provider identity (fresh signed exchange API read), права на чтение и требуемые торговые действия, отсутствие прав на withdrawal/transfer, уникальность точного provider account mapping, баланс/available margin, позиции/ордера, position-mode/protection и связь конкретного mounted credential с конкретным TradingAccount/AccountConnector. **Нулевой баланс разрешает регистрацию**, но не означает готовность к REAL Entry. Реальные действия отдельно требуют всех существующих admission/LIVE gates.
+
+Внутренний владелец определяет boundary приватных данных и авторизации: wallet/capital, позиции/ордера/fills, Strategy configurations/bindings, net P&L и fee/funding history, уведомления, API/UI и пользовательские отчёты. По умолчанию CRIPTAUser получает доступ **только** к своим TradingAccounts и относящимся к ним операциям; cross-user admin/delegation требует отдельно определённого, авторизованного и аудируемого права. StrategyExecutionBinding должен проверять принадлежность целевого TradingAccount пользователю/допущенной роли. Общие public MarketSource observations сохраняют независимую от пользователей identity и storage grain.
+
+Self-service UI и возможный Telegram-бот в будущем могут управлять onboarding, профилем, счетами и owner-scoped статистикой. Для ввода API Key + API Secret требуется отдельный проверенный secure enrollment в approved secret store; **обычная Telegram-переписка и логи не являются хранилищем ключей**, доступ бота к данным и командам должен быть tenant-scoped, автоматический LIVE запрещён. Реализация интерфейса и credential protocol — отдельное решение.
+
+**FINDING / implementation gap:** нынешний `src/bybit_workbench/account_uid_registration_gate.py` требует зарегистрированный Bybit parent MAIN для SUB. Это не соответствует настоящему TARGET CONCEPT; поправка возможна только как отдельный `core/*` changeset с сохранением точного signed UID/credential attestation, тестами, GitHub PR, безопасным релизом и runtime evidence. Сам этот раздел **не** создаёт пользователей, не меняет PostgreSQL, не разрешает подключение/торговлю и не включает LIVE.
 
 ## 50. One-time PostgreSQL physical offload — OWNER DECISION 2026-10-18
 
