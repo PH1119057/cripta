@@ -220,7 +220,10 @@ def test_position_mode_proofs_are_unique_per_trading_account(
         def transaction(self):
             return nullcontext()
 
-        def execute(self, _sql: str):
+        def execute(self, sql: str, params: tuple[str, ...] = ()):
+            assert "JOIN strategy_entry.strategy_execution_bindings b" in sql
+            assert "b.trading_account_id=%s" in sql
+            assert params == (private_runtime.TRADING_ACCOUNT_ID,)
             return PlanCursor()
 
     def fake_get(_path: str, _params: dict[str, str],
