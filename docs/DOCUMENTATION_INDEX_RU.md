@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.40
-**Дата:** 2026-10-25
+**Версия:** 3.41
+**Дата:** 2026-10-26
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1435,3 +1435,11 @@ This is **docs-only research scope**, not an implementation of research replays,
 Единственный canonical owner архитектурного решения — ARCH §49.7; GLOSSARY §33 определяет `CRIPTAUser` / `TradingAccountOwnership`, SECURITY владеет secret storage, доступами и privacy-boundary. TRADING_CONTOUR и DEV сохраняют действующие LIVE, Exchange admission, staged implementation и release gates. Current implementation finding: Bybit SUB UID checker требует зарегистрированного parent MAIN, а multi-user/tenant ownership и UI ещё не реализованы; потребуется отдельный `core/*` с DB/actor contracts, тестами, reviewed PR, deploy и runtime verification.
 
 **Status:** OWNER DECISION / TARGET CONCEPT. **IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED = NO / NOT CHECKED HERE** для multi-user и secure bot. Данное docs-only изменение не делает DB write, schema/backfill, connector provisioning, real order, service restart или LIVE re-arm. Active Project Source set остаётся 11, пути, mandatory/routed pre-read, README, AGENTS и Project Instructions/bootstrap не меняются; section numbering текущих разделов сохранён. Before canonical merge: INDEX §17.7, GitHub scope/CI/PR verification.
+
+# 56. R1 retired; MAIN/SUB identity and Universal Entry verification — OWNER DECISION 2026-10-26
+
+Current owner supersedes historical R1 as an active implementation/test Strategy: `r1_five_symbols` is **RETIRED**, not a template for multi-account Universal Entry, and its historical Entry/Exit rules, MICRO_LIVE envelope and one-account owner-arm are not automatically inherited by future Strategies. Canonical trading meaning and historical retention: TRADING_CONTOUR §1.10; canonical terminology: GLOSSARY R1. Future MAIN/SUB Strategy/ExecutionBindings and live test require separate exact owner-approved policy, PAPER parity, fault/protection/evidence gates and explicit release-scoped owner arm. No real orders authorized here.
+
+Current operational checkpoint recorded in CURRENT_PROJECT_MAP (dated 2026-10-26): old R1 activation deactivated via standard CAS; mainnet gate 0 and no active exposure; SUB independently registered/credential/Bybit verified but its instance startup exposed legacy globally keyed wallet/hot-state DB blocker (Issue #205); MAIN exact provider UID registration still missing. ARCH §49 maintains private data scoped by TradingAccount; DEVELOPMENT_RELEASE §48 governs safe all-reader/writer index/key cutover. This documentation update is not a SUB runtime repair, migration, release or re-arm.
+
+Project Source set still 11; current doc paths, base/routed pre-read, README/AGENTS and derived Instructions/bootstrap unchanged. Canon updates confined to historical R1 status and dated MAP evidence; test/document scope per INDEX §17.7.
