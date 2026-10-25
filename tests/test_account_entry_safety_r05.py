@@ -484,3 +484,151 @@ def test_required_entry_exchange_read_failure_never_reaches_first_post(
             ("entry-failure", "entry", "BTCUSDT", json.dumps(payload)),
         )
     mutation.assert_not_called()
+
+
+def test_offline_two_account_entry_orders_carry_independent_initial_sl_tp() -> None:
+    """Two isolated provider credentials, two Entry commands, no shared order ID.
+
+    Offline Exchange simulator only. Does not assert real signed UID, production
+    permissions, actual Bybit fill or owner-arm readiness.
+    """
+
+    class OfflineDB:
+        def __init__(self) -> None:
+            self.commits = 0
+            self.queries: list[str] = []
+
+        def execute(self, sql: str, _args=()):
+            self.queries.append(sql)
+            return None
+
+        def commit(self) -> None:
+            self.commits += 1
+
+    class OfflineExchange:
+        def __init__(self, account: str) -> None:
+            self.account = account
+            self.positions: list[dict[str, object]] = []
+            self.posts: list[tuple[str, dict[str, object]]] = []
+
+        def get(self, path, params, *_keys):
+            assert params["symbol"] == "BTCUSDT" if "symbol" in params else True
+            if path == "/v5/position/list":
+                return {"retCode": 0, "result": {"list": self.positions}}, {}
+            if path == "/v5/market/instruments-info":
+                return {
+                    "retCode": 0,
+                    "result": {
+                        "list": [{
+                            "priceFilter": {"tickSize": "0.01"},
+                            "lotSizeFilter": {"qtyStep": "0.001"},
+                        }],
+                    },
+                }, {}
+            if path == "/v5/order/realtime":
+                return {"retCode": 0, "result": {"list": []}}, {}
+            if path == "/v5/account/wallet-balance":
+                return {
+                    "retCode": 0,
+                    "result": {"list": [{
+                        "accountType": "UNIFIED",
+                        "totalAvailableBalance": "100",
+                    }]},
+                }, {}
+            raise AssertionError(path)
+
+        def post(self, path, params, *_keys, **_kwargs):
+            self.posts.append((path, dict(params)))
+            if path == "/v5/position/set-leverage":
+                return {"retCode": 0}
+            if path == "/v5/order/create":
+                assert params["stopLoss"] == "99.00"
+                assert params["takeProfit"] == "103.00"
+                self.positions = [{
+                    "symbol": "BTCUSDT",
+                    "positionIdx": 0,
+                    "side": "Buy",
+                    "size": params["qty"],
+                    "avgPrice": "100",
+                    "stopLoss": params["stopLoss"],
+                    "takeProfit": params["takeProfit"],
+                }]
+                return {
+                    "retCode": 0,
+                    "result": {"orderId": f"{self.account}-exchange-order"},
+                }
+            if path == "/v5/position/trading-stop":
+                assert len(self.positions) == 1
+                self.positions[0]["stopLoss"] = params["stopLoss"]
+                self.positions[0]["takeProfit"] = params["takeProfit"]
+                return {"retCode": 0, "retMsg": "OK"}
+            raise AssertionError(path)
+
+    payload = {
+        "stake_usdt": "10",
+        "leverage": 1,
+        "side": "Buy",
+        "price": "100",
+        "entry_offset_pct": "0",
+        "initial_protection": {
+            "stop_loss_pct": "1",
+            "take_profit_pct": "3",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        },
+    }
+    submitted: list[str] = []
+    for account in ("ta-main", "ta-sub"):
+        exchange = OfflineExchange(account)
+        db = OfflineDB()
+        command = f"entry-{account}"
+
+        def authenticated(_db, key, secret):
+            assert key == f"offline-key-{account}"
+            assert secret == f"offline-secret-{account}"
+
+        def observe_reconcile(_db, _key, _secret, _reason):
+            assert exchange.positions[0]["stopLoss"] == "99.00"
+            assert exchange.positions[0]["takeProfit"] == "103.00"
+            return 1, 0
+
+        with (
+            patch.object(private_runtime, "TRADING_ACCOUNT_ID", account),
+            patch.object(private_runtime, "ACCOUNT_CONNECTOR_ID", f"connector-{account}"),
+            patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+            patch.object(
+                private_runtime, "authenticated_entry_connector_gate",
+                side_effect=authenticated,
+            ),
+            patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+            patch.object(private_runtime, "_critical_lifecycle_fault_code", return_value=None),
+            patch.object(private_runtime, "api_get", side_effect=exchange.get),
+            patch.object(private_runtime, "api_post", side_effect=exchange.post),
+            patch.object(private_runtime, "mark_entry_order_acknowledged") as ack,
+            patch.object(private_runtime, "reconcile", side_effect=observe_reconcile),
+            patch.object(private_runtime, "record_protection_or_owner_event"),
+            patch.object(private_runtime, "record_effective_protection_after_command") as audit,
+            patch.object(private_runtime.time, "sleep"),
+        ):
+            private_runtime.execute_command(
+                db,
+                f"offline-key-{account}",
+                f"offline-secret-{account}",
+                (command, "entry", "BTCUSDT", json.dumps(payload)),
+            )
+        assert [path for path, _ in exchange.posts] == [
+            "/v5/position/set-leverage",
+            "/v5/order/create",
+            "/v5/position/trading-stop",
+        ]
+        order = exchange.posts[1][1]
+        assert order["orderLinkId"] == command
+        submitted.append(str(order["orderLinkId"]))
+        assert db.commits >= 2
+        ack.assert_called_once()
+        assert ack.call_args.kwargs["command_id"] == command
+        assert ack.call_args.kwargs["exchange_order_id"] == f"{account}-exchange-order"
+        audit.assert_called_once()
+        assert audit.call_args.kwargs["command_id"] == command
+
+    assert len(set(submitted)) == 2
