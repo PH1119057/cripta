@@ -83,9 +83,37 @@ jobs:
             operations/sql/20261026_account_scoped_physical_key_cutover.sql
           )
           for migration in "${migrations[@]}"; do
+            if [[ "$migration" == "operations/sql/20261026_account_scoped_physical_key_cutover.sql" ]]; then
+              echo "DISPOSABLE_PRE_CUTOVER_BACKUP=START"
+              pg_dump -Fc -d cripta_integration -f "$RUNNER_TEMP/cripta_pre_cutover.dump"
+              pg_restore --list "$RUNNER_TEMP/cripta_pre_cutover.dump" > /dev/null
+              echo "DISPOSABLE_PRE_CUTOVER_BACKUP=PASS"
+            fi
             echo "APPLY=$migration"
             psql -X -v ON_ERROR_STOP=1 -f "$migration"
           done
+      - name: Prove disposable pre-cutover database restore
+        shell: bash
+        run: |
+          test -s "$RUNNER_TEMP/cripta_pre_cutover.dump"
+          createdb cripta_cutover_rollback_ci
+          pg_restore --exit-on-error --no-owner --no-acl \
+            -d cripta_cutover_rollback_ci "$RUNNER_TEMP/cripta_pre_cutover.dump"
+          before_pk_count="$(psql -X -v ON_ERROR_STOP=1 -d cripta_cutover_rollback_ci -Atqc             "SELECT count(*) FROM pg_constraint WHERE contype='p' AND conrelid IN (
+                'runtime.wallet_latest'::regclass,
+                'runtime.hot_positions'::regclass,
+                'runtime.hot_orders'::regclass,
+                'runtime.executions'::regclass,
+                'runtime.exchange_order_history'::regclass)")"
+          test "$before_pk_count" = 5
+          after_pk_count="$(psql -X -v ON_ERROR_STOP=1 -d cripta_integration -Atqc             "SELECT count(*) FROM pg_constraint WHERE contype='p' AND conrelid IN (
+                'runtime.wallet_latest'::regclass,
+                'runtime.hot_positions'::regclass,
+                'runtime.hot_orders'::regclass,
+                'runtime.executions'::regclass,
+                'runtime.exchange_order_history'::regclass)")"
+          test "$after_pk_count" = 0
+          echo "DISPOSABLE_CUTOVER_ROLLBACK_RESTORE=PASS"
       - name: Run 58 lifecycle PostgreSQL integration tests
         shell: bash
         run: |
