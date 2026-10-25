@@ -717,3 +717,57 @@ def test_entry_second_page_pending_order_prevents_new_exchange_mutation(
         )
     assert requests == ["FIRST", "PAGE2"]
     exchange_mutation.assert_not_called()
+
+
+def test_wrong_wallet_account_type_rejects_entry_before_mutation() -> None:
+    payload = {
+        "stake_usdt": "10",
+        "leverage": 1,
+        "side": "Buy",
+        "price": "100",
+        "entry_offset_pct": "0",
+        "initial_protection": {
+            "stop_loss_pct": "1",
+            "take_profit_pct": "3",
+            "trigger_by": "LastPrice",
+            "tpsl_mode": "Full",
+        },
+    }
+
+    def wrong_wallet(path, _params, *_key):
+        if path == "/v5/market/instruments-info":
+            return {
+                "retCode": 0,
+                "result": {"list": [{
+                    "priceFilter": {"tickSize": "0.01"},
+                    "lotSizeFilter": {"qtyStep": "0.001"},
+                }]},
+            }, {}
+        if path == "/v5/account/wallet-balance":
+            return {
+                "retCode": 0,
+                "result": {"list": [{
+                    "accountType": "CONTRACT",
+                    "totalAvailableBalance": "100",
+                }]},
+            }, {}
+        if path in {"/v5/position/list", "/v5/order/realtime"}:
+            return {"retCode": 0, "result": {"list": []}}, {}
+        raise AssertionError(path)
+
+    with (
+        patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+        patch.object(private_runtime, "authenticated_entry_connector_gate"),
+        patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+        patch.object(private_runtime, "api_get", side_effect=wrong_wallet),
+        patch.object(private_runtime, "api_post") as mutation,
+        pytest.raises(
+            private_runtime.ExchangeReadUnavailable,
+            match="accountType is not UNIFIED",
+        ),
+    ):
+        private_runtime.execute_command(
+            object(), "offline", "offline",
+            ("entry-wrong-wallet", "entry", "BTCUSDT", json.dumps(payload)),
+        )
+    mutation.assert_not_called()
