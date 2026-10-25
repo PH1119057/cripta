@@ -182,7 +182,7 @@ def test_singleton_sub_cannot_borrow_legacy_arm() -> None:
             self.rows = rows
             self.statement = ""
 
-        def execute(self, statement: str, params: tuple[object, ...]) -> "ScopeDB":
+        def execute(self, statement: str, params: tuple[object, ...]) -> ScopeDB:
             self.statement = statement
             assert params[0] == "act-a"
             return self
