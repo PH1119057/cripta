@@ -104,6 +104,27 @@ def test_sub_uid_and_master_parent_are_both_registered_and_verified() -> None:
     assert outcome.ready and outcome.reasons == ()
 
 
+def test_independent_sub_attests_without_registered_parent_main() -> None:
+    independent = ("ta-sub", "venue-bybit", "200", None, "SUB", "UNIFIED", "MAINNET", "ACTIVE")
+    db = Database([independent], [connector("ta-sub", "mounted-sub")])
+    outcome = check(
+        db, account="ta-sub", credential="mounted-sub",
+        get=lambda: response(200, "100", False),
+    )
+    assert outcome.ready and outcome.reasons == ()
+
+
+def test_explicit_internal_parent_still_requires_registered_parent() -> None:
+    db = Database([sub_account()], [connector("ta-sub", "mounted-sub")])
+    outcome = check(
+        db, account="ta-sub", credential="mounted-sub",
+        get=lambda: response(200, "100", False),
+    )
+    assert not outcome.ready
+    assert "SUB_ACCOUNT_PARENT_UNPROVEN" in outcome.reasons
+
+
+
 @pytest.mark.parametrize(
     ("get", "expected"),
     [
