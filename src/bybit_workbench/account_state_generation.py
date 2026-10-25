@@ -82,6 +82,22 @@ def current_complete_account_state_generation(
         raise AccountStateGenerationUnavailable(
             f"account state generation missing for {account_ref}"
         )
+    # The runtime Entry consumer uses psycopg dict_row while the observer
+    # and admission callers can use tuples. Preserve identical validation.
+    if isinstance(row, Mapping):
+        columns = (
+            "generation_id", "state", "started_at", "completed_at",
+            "account_ref", "account_type", "total_equity", "wallet_balance",
+            "available_balance", "positions_count", "active_orders_count",
+            "position_mode_refs", "error", "trading_account_id",
+            "identity_status",
+        )
+        try:
+            row = tuple(row[name] for name in columns)
+        except KeyError as exc:
+            raise AccountStateGenerationUnavailable(
+                "account state generation columns incomplete"
+            ) from exc
     generation_id = str(row[0])
     state = str(row[1])
     if state != "COMPLETE":
