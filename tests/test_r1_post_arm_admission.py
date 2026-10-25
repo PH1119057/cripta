@@ -96,7 +96,7 @@ class _ActiveSessionOnlyConnection:
     def execute(self, statement: str, parameters: object = ()) -> _SessionCursor:
         assert "live_arm_evidence" not in statement
         if "FROM strategy_entry.strategy_execution_bindings" in statement:
-            return _SessionCursor(None, ({"trading_account_id": "test-account"},))
+            return _SessionCursor(None, ({"trading_account_id": "test-account", "account_kind": "MAIN"},))
         if "FROM control.live_arm_sessions" in statement:
             return _SessionCursor(("arm-session",))
         raise AssertionError(f"unexpected query: {statement}")
