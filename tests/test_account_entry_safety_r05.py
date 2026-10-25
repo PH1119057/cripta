@@ -633,6 +633,58 @@ def test_offline_two_account_entry_orders_carry_independent_initial_sl_tp() -> N
 
     assert len(set(submitted)) == 2
 
+    # Exchange may acknowledge trading-stop while protection has not actually
+    # materialized. Keep the accepted Entry uncertain; never issue another
+    # /order/create and never mark the command completed.
+    failed_exchange = OfflineExchange("ta-missing-protection")
+    failed_db = OfflineDB()
+    original_post = failed_exchange.post
+
+    def acknowledged_but_unprotected(path, params, *_keys, **kwargs):
+        result = original_post(path, params, *_keys, **kwargs)
+        if path == "/v5/position/trading-stop":
+            failed_exchange.positions[0]["stopLoss"] = "0"
+        return result
+
+    with (
+        patch.object(private_runtime, "TRADING_ACCOUNT_ID", "ta-missing-protection"),
+        patch.object(
+            private_runtime, "ACCOUNT_CONNECTOR_ID",
+            "connector-ta-missing-protection",
+        ),
+        patch.object(private_runtime, "_is_sub_private_worker", return_value=False),
+        patch.object(private_runtime, "authenticated_entry_connector_gate"),
+        patch.object(private_runtime, "assert_legacy_automated_exit_ownership"),
+        patch.object(private_runtime, "_critical_lifecycle_fault_code", return_value=None),
+        patch.object(private_runtime, "api_get", side_effect=failed_exchange.get),
+        patch.object(private_runtime, "api_post", side_effect=acknowledged_but_unprotected),
+        patch.object(private_runtime, "mark_entry_order_acknowledged") as ack,
+        patch.object(private_runtime, "reconcile") as reconciler,
+        patch.object(private_runtime, "record_effective_protection_after_command") as audit,
+        patch.object(private_runtime.time, "sleep"),
+        pytest.raises(
+            private_runtime.ExchangeMutationBarrier,
+            match="initial protection not confirmed",
+        ),
+    ):
+        private_runtime.execute_command(
+            failed_db,
+            "offline-key",
+            "offline-secret",
+            ("entry-unprotected", "entry", "BTCUSDT", json.dumps(payload)),
+        )
+    assert [path for path, _ in failed_exchange.posts] == [
+        "/v5/position/set-leverage",
+        "/v5/order/create",
+        "/v5/position/trading-stop",
+    ]
+    ack.assert_called_once()
+    reconciler.assert_not_called()
+    audit.assert_not_called()
+    assert not any(
+        "SET state='completed'" in query for query in failed_db.queries
+    )
+
 
 @pytest.mark.parametrize("repeated_cursor", (False, True))
 def test_entry_second_page_pending_order_prevents_new_exchange_mutation(
