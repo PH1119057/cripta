@@ -70,6 +70,20 @@ def inspect_financial_account_choice(
             or not str(credential_ref or "").strip()
         ):
             reasons.add("FINANCIAL_ACCOUNT_PRIVATE_CONNECTOR_NOT_READY")
+    # StrategyExecutionBinding currently stores the stable TradingAccount,
+    # not a connector ID. Unless exactly one private connector is usable,
+    # choosing a connector cannot be persisted unambiguously.
+    active = connection.execute(
+        """SELECT account_connector_id FROM identity.account_connectors
+            WHERE trading_account_id=%s
+              AND connector_kind='CEX_PRIVATE_RUNTIME'
+              AND adapter_id='BYBIT_V5_PRIVATE'
+              AND status='ACTIVE' AND retired_at IS NULL
+              AND nullif(btrim(credential_ref),'') IS NOT NULL""",
+        (trading_account_id,),
+    ).fetchall()
+    if len(active) != 1 or str(active[0][0]) != account_connector_id:
+        reasons.add("FINANCIAL_ACCOUNT_CONNECTOR_AMBIGUOUS")
     return FinancialAccountChoice(
         trading_account_id, account_connector_id, not reasons, tuple(sorted(reasons))
     )
