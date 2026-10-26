@@ -12,6 +12,7 @@ BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_b
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
 CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
+STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 CONTROL_MAX_AGE_SECONDS=604800
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -57,6 +58,10 @@ flock -n 9 || die "another release installer is already running"
 [[ "$EXPECTED_BASELINE" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_EXPECTED_BASELINE_COMMIT is invalid"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
 [[ "$CONTROL_CHECKPOINT" == "0" || "$CONTROL_CHECKPOINT" == "1" ]] || die "CRIPTA_RELEASE_CONTROL_CHECKPOINT must be 0 or 1"
+[[ "$STAGED_OFFLINE" == "0" || "$STAGED_OFFLINE" == "1" ]] || die "CRIPTA_STAGED_OFFLINE_CUTOVER must be 0 or 1"
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  [[ "$CONTROL_CHECKPOINT" == "1" ]] || die "STAGED_OFFLINE_REQUIRES_CONTROL_CHECKPOINT"
+fi
 if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
   [[ -n "$CONTROL_REASON" ]] || die "CRIPTA_RELEASE_CONTROL_REASON is required for a control checkpoint"
 fi
@@ -73,6 +78,15 @@ pre_gate="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE m
 pre_permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 pre_sessions="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
 echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions"
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  # Local facts are necessary, NOT sufficient: approved preflight must also
+  # independently verify Exchange positions/orders and restore/rollback.
+  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
+  pre_hot_positions="$(sql_scalar "SELECT count(*) FROM runtime.hot_positions")"
+  pre_hot_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders")"
+  [[ "$pre_hot_positions" == "0" && "$pre_hot_orders" == "0" ]] || die "STAGED_OFFLINE_LOCAL_HOT_INVENTORY_NOT_EMPTY"
+  echo "STAGED_OFFLINE_LOCAL_PREFLIGHT=PASS EXCHANGE_EVIDENCE=EXTERNAL_REQUIRED"
+fi
 
 current_runtime="$(readlink -f "$RUNTIME_ROOT/current" 2>/dev/null || true)"
 current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current" 2>/dev/null || true)"
@@ -237,6 +251,7 @@ backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
 {
   echo "release_commit=$RELEASE_COMMIT"
+  echo "staged_offline=$STAGED_OFFLINE"
   echo "release_tree_sha=$tree"
   echo "expected_baseline_commit=$EXPECTED_BASELINE"
   echo "remote_main=$remote"
@@ -563,7 +578,13 @@ printf '%s\n' "$backup" > "$STATE_ROOT/LAST_BACKUP"
 chown root:cripta "$STATE_ROOT/LAST_BACKUP"
 chmod 0640 "$STATE_ROOT/LAST_BACKUP"
 
-prune_release_backups
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  # Protect all historic archives and release backups during breaking R10.
+  # Pruning may resume only under a separately reviewed retention decision.
+  echo "STAGED_OFFLINE_BACKUP_RETENTION=KEEP_ALL"
+else
+  prune_release_backups
+fi
 
 deploy_succeeded=1
 trap - EXIT
