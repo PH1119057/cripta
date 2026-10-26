@@ -62,6 +62,16 @@ class TradeWindow:
         while self.rows and self.rows[0][0] < cutoff:
             self.rows.popleft()
 
+    def frozen_view(self) -> TradeWindow:
+        """Capture a point-in-time row set for one consistent market snapshot.
+
+        The socket worker may append to the live window immediately afterward.
+        All metrics derived from this view share the same immutable trade rows.
+        The new window has its own lock and optional percentile cache.
+        """
+        with self.lock:
+            return TradeWindow(rows=deque(self.rows), revision=self.revision)
+
     def metrics(
         self,
         now: float,
@@ -764,6 +774,7 @@ class LiveMayakEngine:
     def snapshot(self, now: datetime) -> dict[str, Any]:
         now_ts = now.timestamp()
         coins: dict[str, Any] = {}
+        trade_views: dict[str, tuple[TradeWindow, TradeWindow]] = {}
         returns: dict[str, float] = {}
         spot_sells = future_sells = oi_up = bid_withdrawal = 0
         source_rows: list[dict[str, Any]] = []
@@ -777,10 +788,13 @@ class LiveMayakEngine:
             self.transport["linear"].get("connected_since"),
         )
         for symbol in self.symbols:
-            spot = self.trades[("spot", symbol)].metrics(now_ts, 300)
-            linear = self.trades[("linear", symbol)].metrics(now_ts, 300)
+            spot_window = self.trades[("spot", symbol)].frozen_view()
+            linear_window = self.trades[("linear", symbol)].frozen_view()
+            trade_views[symbol] = (spot_window, linear_window)
+            spot = spot_window.metrics(now_ts, 300)
+            linear = linear_window.metrics(now_ts, 300)
             returns_by_horizon = {
-                f"{minutes}m": self.trades[("linear", symbol)].metrics(
+                f"{minutes}m": linear_window.metrics(
                     now_ts, minutes * 60
                 )["return_pct"]
                 for minutes in (1, 5, 15, 30, 60)
@@ -878,6 +892,7 @@ class LiveMayakEngine:
             observed_at=now.isoformat(),
             coins=coins,
             config_fingerprint=config_fingerprint,
+            trade_views=trade_views,
         )
         snapshot = {
             "observed_at": now.isoformat(),
@@ -918,6 +933,7 @@ class LiveMayakEngine:
         observed_at: str,
         coins: dict[str, Any],
         config_fingerprint: str,
+        trade_views: dict[str, tuple[TradeWindow, TradeWindow]],
     ) -> dict[str, dict[str, Any]]:
         panel_medians: dict[str, float | None] = {}
         for horizon in ("1m", "5m", "15m", "30m", "60m"):
@@ -1022,8 +1038,9 @@ class LiveMayakEngine:
                     "reason": "EXACT_LIQUIDATION_SOURCE_NOT_AVAILABLE",
                 }
             )
-            spot_flow = self.trades[("spot", symbol)].flow_context(now_ts)
-            derivatives_flow = self.trades[("linear", symbol)].flow_context(now_ts)
+            spot_window, linear_window = trade_views[symbol]
+            spot_flow = spot_window.flow_context(now_ts)
+            derivatives_flow = linear_window.flow_context(now_ts)
             stress_inputs = build_coin_stress_inputs(
                 returns_by_horizon=returns_by_horizon,
                 liquidations=liquidation,
