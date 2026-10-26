@@ -136,7 +136,7 @@ def calculate(
             if source_name not in receipts:
                 raise ValueError("normalized row has no verified original object")
             source_day, source_hour = receipts[source_name]
-            observed = datetime.fromtimestamp(micros / 1000000, UTC)
+            observed = datetime.fromtimestamp(micros // 1000000, UTC)
             if observed.date() != source_day or observed.hour != source_hour:
                 raise ValueError("vendor receive time outside original object hour")
             if row["liquidated_position_side"] not in ("LONG", "SHORT"):
