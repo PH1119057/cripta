@@ -63,7 +63,10 @@ def test_new_best_price_union_not_rank_index():
 
 def test_200_price_visibility_unproven_is_unknown_not_zero():
     reader = m.Reader("APTUSDT")
-    reader.on_record(original_snapshot())
+    snap = original_snapshot()
+    # Keep ask above new bids; exercise visibility, not the crossed-book gate.
+    snap["data"]["a"] = [[str(1010 + k), "10"] for k in range(200)]
+    reader.on_record(snap)
     # 200 new higher bids remove the old Top5 from truncated new OB200.
     event = reader.on_record(
         delta(b=[[str(500 - k), "10"] for k in range(200)])
