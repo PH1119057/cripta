@@ -122,3 +122,25 @@ def test_invalid_trade_symbol_and_price_fail(tmp_path):
     root = stage(tmp_path, [snapshot()], [(t, SYM, "Buy", 1, "NaN", "a")])
     with pytest.raises(ValueError, match="non-finite"):
         m.calculate(SYM, DAY, root)
+
+
+def test_trade_timestamp_backwards_inside_same_minute_fails(tmp_path):
+    t = TS // 1000
+    root = stage(
+        tmp_path,
+        [snapshot()],
+        [
+            (t + 20, SYM, "Buy", 1, 3, "x"),
+            (t + 10, SYM, "Sell", 1, 2, "y"),
+        ],
+    )
+    with pytest.raises(ValueError, match="unsorted"):
+        m.calculate(SYM, DAY, root)
+
+
+def test_crossed_original_snapshot_fails(tmp_path):
+    snap = snapshot()
+    snap["data"]["a"][0] = ["299", "10"]
+    root = stage(tmp_path, [snap], [])
+    with pytest.raises(ValueError, match="crossed original snapshot"):
+        m.calculate(SYM, DAY, root)
