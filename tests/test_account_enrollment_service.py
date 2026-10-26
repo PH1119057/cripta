@@ -158,3 +158,49 @@ def test_persist_uses_exact_conditional_registry_write_without_commit() -> None:
             c, evidence=result.evidence, now=NOW + timedelta(seconds=16),
             approved_operator_ref="owner-audit",
         )
+
+
+def test_owner_asserted_backfill_gets_signed_evidence_before_verified_promotion() -> None:
+    # Provisionally stored owner UID must never be treated as signed proof.
+    owner_asserted = (
+        "ta-main", "venue-bybit", "654321", None,
+        "MAIN", "UNIFIED", "MAINNET", "ACTIVE",
+    )
+    c = Connection(accounts=[owner_asserted, SUB])
+    result, calls = check(c)
+    assert result.ready
+    assert calls == ["signed"]
+    assert result.evidence is not None
+    persist_verified_account_enrollment(
+        c, evidence=result.evidence, now=NOW, approved_operator_ref="owner-audit"
+    )
+    assert len(c.updated) == 1
+    # A successful independently signed enrollment explicitly upgrades the
+    # owner-asserted pending status; not merely leaves a numeric UID in DB.
+    source = __import__(
+        "bybit_workbench.exchange.bybit.account_enrollment_service", fromlist=["x"]
+    )
+    import inspect
+
+    sql_source = inspect.getsource(source.persist_verified_account_enrollment)
+    assert "'uid_registration_status', 'SIGNED_VERIFIED'" in sql_source
+    assert "a.external_account_ref IS NULL OR a.external_account_ref=%s" in sql_source
+    assert "uid_owner_asserted_at" not in sql_source  # Existing audit is preserved.
+
+
+def test_failed_pending_uid_signed_mismatch_never_persists() -> None:
+    owner_asserted = (
+        "ta-main", "venue-bybit", "654321", None,
+        "MAIN", "UNIFIED", "MAINNET", "ACTIVE",
+    )
+    c = Connection(accounts=[owner_asserted, SUB])
+    result, calls = check(c, response={
+        "retCode": 0,
+        "result": {
+            "userID": "987654", "parentUid": "0", "isMaster": True, "uta": 1,
+        },
+    })
+    assert calls == ["signed"]
+    assert not result.ready
+    assert result.evidence is None
+    assert c.updated == []
