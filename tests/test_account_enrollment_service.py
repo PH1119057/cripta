@@ -149,7 +149,10 @@ def test_persist_uses_exact_conditional_registry_write_without_commit() -> None:
     persist_verified_account_enrollment(
         c, evidence=result.evidence, now=NOW, approved_operator_ref="owner-audit"
     )
-    assert c.updated == [("654321", "ta-main", "654321", "ac-main", "mounted:main", "654321")]
+    assert c.updated == [(
+        "654321", "owner-audit", NOW, "ta-main",
+        "654321", "ac-main", "mounted:main", "654321",
+    )]
     with pytest.raises(RuntimeError, match="ATTESTATION_STALE"):
         persist_verified_account_enrollment(
             c, evidence=result.evidence, now=NOW + timedelta(seconds=16),
