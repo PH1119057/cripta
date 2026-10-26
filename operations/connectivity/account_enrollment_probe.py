@@ -36,6 +36,9 @@ def _read_mount(config: Mapping[str, str]) -> dict[str, str]:
     if not directory.startswith("/run/credentials/"):
         raise RuntimeError("SYSTEMD_CREDENTIAL_DIRECTORY_REQUIRED")
     root = Path(directory).resolve(strict=True)
+    allowed = Path("/run/credentials")
+    if root == allowed or not root.is_relative_to(allowed):
+        raise RuntimeError("SYSTEMD_CREDENTIAL_DIRECTORY_REQUIRED")
     # Do not accept a symlink leaving the exact credential mount.
     target = root / name
     if not target.is_file() or target.is_symlink() or target.resolve().parent != root:
