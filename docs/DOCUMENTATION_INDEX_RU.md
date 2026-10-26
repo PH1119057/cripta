@@ -1,6 +1,6 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.41
+**Версия:** 3.42
 **Дата:** 2026-10-26
 **Статус:** канонический индекс документации
 
@@ -1443,3 +1443,11 @@ Current owner supersedes historical R1 as an active implementation/test Strategy
 Current operational checkpoint recorded in CURRENT_PROJECT_MAP (dated 2026-10-26): old R1 activation deactivated via standard CAS; mainnet gate 0 and no active exposure; SUB independently registered/credential/Bybit verified but its instance startup exposed legacy globally keyed wallet/hot-state DB blocker (Issue #205); MAIN exact provider UID registration still missing. ARCH §49 maintains private data scoped by TradingAccount; DEVELOPMENT_RELEASE §48 governs safe all-reader/writer index/key cutover. This documentation update is not a SUB runtime repair, migration, release or re-arm.
 
 Project Source set still 11; current doc paths, base/routed pre-read, README/AGENTS and derived Instructions/bootstrap unchanged. Canon updates confined to historical R1 status and dated MAP evidence; test/document scope per INDEX §17.7.
+
+# 57. First-month research exact indicator decisions №10/13/16/23/24/25 — OWNER DECISION 2026-10-26
+
+**Authority:** владелец утвердил точные физические направления через анкету Issue #158 (durable record [comment 6417846185](https://github.com/PH1119057/cripta/issues/158#issuecomment-6417846185)). Единственный canonical owner — **`docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`**; единицы/causal/passport gates — §§21.3–21.7, GLOSSARY §34, Git/writer — DEVELOPMENT_RELEASE §§19,50. Не дублировать формулы в INDEX/MAP/README/AGENTS.
+
+**Scope:** APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT за 30 UTC суток с 18 мая по 16 июня 2026, один источник Bybit (+ Spot для №25), описательные research версии, №26 остаётся последним. Утверждены №10 exact-price Top5 union signed USDT; №13 все 200 уровней с отдельными Top5/6–200, H15/H60/H300 и `C` на UTC cutoff только для незавершённых; №16 отдельные наблюдаемые trade/book/price-компоненты; №23 только оригинальные изменения OI; №24 provider-published liquidation + file-hour coverage/UNKNOWN; №25 real Spot/Perp 1m executed base-volume VWAP divergence. Оригинальные данные могут быть исследованы описательно без доказанного local receiver clock, но не получают причинный READY; публичные оригиналы — только через обычный actor/path/Git security gate, платные — отдельное разрешение.
+
+**Status:** OWNER DECISION → CANON (только после публикации этого docs PR в GitHub main); IMPLEMENTED/DEPLOYED/RUNTIME VERIFIED — NO/NOT CHECKED HERE. Исторические 23/30 physical QC и 0/30 formal READY не изменены. Неподтверждённые точные timestamp ties, continuity/gap, provider origin, availability, полнота первичных OI/Spot/LIQ и independent full-period QC остаются OPEN. Existing PR #166 — отдельно исследовательский код, не владелец канона. Никаких Strategy/LIVE/deploy прав.
