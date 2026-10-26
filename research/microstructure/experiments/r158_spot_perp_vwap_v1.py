@@ -24,13 +24,17 @@ MINUTES_PER_DAY = 1440
 
 
 def original_archive_path(root: Path, symbol: str, day: date, venue: str) -> Path:
-    """Roots have one subdirectory per symbol; never silently fetch missing files."""
+    """Read actual original on-disk layouts; never fetch or rewrite sources.
+
+    Spot source snapshot root: <root>/<symbol>/<symbol>_<UTC-date>.csv.gz.
+    Existing native Bybit perp root: <root>/<symbol>/public_trades/<symbol><UTC-date>.csv.gz.
+    """
     if symbol not in COHORT or not FIRST_DAY <= day <= LAST_DAY:
         raise ValueError("out-of-cohort symbol or UTC date")
     if venue == "spot":
         return root / symbol / f"{symbol}_{day.isoformat()}.csv.gz"
     if venue == "perpetual":
-        return root / symbol / f"{symbol}{day.isoformat()}.csv.gz"
+        return root / symbol / "public_trades" / f"{symbol}{day.isoformat()}.csv.gz"
     raise ValueError("invalid venue")
 
 
