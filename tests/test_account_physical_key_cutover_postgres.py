@@ -167,6 +167,32 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
         ).fetchall()
         assert matched == [(accounts[0][0], 1), (accounts[1][0], 1)]
 
+        # Exercise the *real* M3 analyst's proven account reader predicate on
+        # colliding exchange exec_id. This is the report's identity selector,
+        # not a copied hand-authored SQL scope. No report tables are written.
+        from operations.monitoring import m3_trade_analyst
+
+        for trading_account_id, _connector, _kind in accounts:
+            status, account = m3_trade_analyst.private_identity(
+                {"identity_status": "PROVEN", "trading_account_id": trading_account_id}
+            )
+            scope, params = m3_trade_analyst.identity_predicate(
+                "x", status, account
+            )
+            report_fills = c.execute(
+                f"""SELECT x.trading_account_id,x.exec_id
+                    FROM runtime.executions x
+                   WHERE {scope} AND x.exec_id=%s""",
+                (*params, execution),
+            ).fetchall()
+            assert report_fills == [(trading_account_id, execution)]
+        with pytest.raises(RuntimeError, match="requires PROVEN"):
+            m3_trade_analyst.private_identity(
+                {"identity_status": "LEGACY_UNKNOWN", "trading_account_id": None}
+            )
+        with pytest.raises(RuntimeError, match="requires PROVEN"):
+            m3_trade_analyst.identity_predicate("x", "LEGACY_UNKNOWN", None)
+
         # An unscoped legacy Supervisor comparison must not join MAIN's
         # position to SUB's same symbol and position index.
         scoped_hot = c.execute(
