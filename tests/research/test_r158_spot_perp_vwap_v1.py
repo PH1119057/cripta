@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parents[2] / "research/microstructure/experiments/r158_spot_perp_vwap_v1.py"
+SRC = (
+    Path(__file__).resolve().parents[2]
+    / "research/microstructure/experiments/r158_spot_perp_vwap_v1.py"
+)
 spec = importlib.util.spec_from_file_location("r158_vwap", SRC)
 assert spec and spec.loader
 m = importlib.util.module_from_spec(spec)
@@ -73,7 +76,11 @@ def test_out_of_day_and_unordered_fail_closed(tmp_path):
     spot, perp = _fixtures(tmp_path)
     path = m.original_archive_path(spot, "APTUSDT", DAY, "spot")
     with gzip.open(path, "wt") as f:
-        f.write("id,timestamp,price,volume,side\n1,1779148860000,2,1,Buy\n2,1779148800000,2,1,Buy\n")
+        f.write(
+            "id,timestamp,price,volume,side\n"
+            "1,1779148860000,2,1,Buy\n"
+            "2,1779148800000,2,1,Buy\n"
+        )
     with pytest.raises(ValueError, match="unsorted"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
     with gzip.open(path, "wt") as f:
