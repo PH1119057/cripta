@@ -122,3 +122,13 @@ def test_perpetual_exact_timestamps_must_not_decrease_within_minute(tmp_path):
     )
     with pytest.raises(ValueError, match="unsorted original exchange timestamps"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_original_archive_paths_match_actual_native_storage_layout(tmp_path):
+    day = DAY.isoformat()
+    spot = m.original_archive_path(tmp_path, "APTUSDT", DAY, "spot")
+    perp = m.original_archive_path(tmp_path, "APTUSDT", DAY, "perpetual")
+    assert spot == tmp_path / "APTUSDT" / f"APTUSDT_{day}.csv.gz"
+    assert perp == (
+        tmp_path / "APTUSDT" / "public_trades" / f"APTUSDT{day}.csv.gz"
+    )
