@@ -1384,7 +1384,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 a.exit_mechanism,a.gross_pnl,a.entry_fee_actual,a.exit_fee_actual,
                 a.actual_net_without_funding,a.actual_net_pnl,
                 a.entry_to_exit_price_move_pct,a.exit_execution_ids,
-                a.economics_completeness,a.link_status
+                a.economics_completeness,a.link_status,
+                o.identity_status,o.trading_account_id
                 FROM runtime.position_exit_attribution a
                 JOIN runtime.position_ownership o USING(position_id,trade_id)
                 WHERE a.link_status='EXACT'
@@ -1408,7 +1409,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ).fetchall()
         control_entry_rows = connection.execute(
             """SELECT c.command_id,c.symbol,c.payload_json,e.order_id,e.exec_id,
-                      e.side,e.exec_qty,e.exec_price,e.exec_fee,e.exec_time_ms
+                      e.side,e.exec_qty,e.exec_price,e.exec_fee,e.exec_time_ms,
+                c.identity_status,c.trading_account_id
                FROM runtime.trade_commands c
                JOIN runtime.executions e
                  ON e.order_id = c.result_json::jsonb->'result'->>'orderId'
@@ -1419,14 +1421,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                        AND e.trading_account_id=%s AND e.identity_status='PROVEN')
                       OR
                       (c.identity_status='LEGACY_UNKNOWN'
-                       AND e.identity_status='LEGACY_UNKNOWN')
+                       AND c.trading_account_id IS NULL
+                       AND e.identity_status='LEGACY_UNKNOWN'
+                       AND e.trading_account_id IS NULL)
                  )
                ORDER BY e.exec_time_ms DESC LIMIT %s""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, 1000 if include_history else 40),
         ).fetchall()
         control_exit_rows = connection.execute(
             """SELECT e.symbol,e.order_id,e.exec_id,e.side,e.exec_qty,
-                      e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json
+                      e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json,
+                      e.identity_status,e.trading_account_id
                FROM runtime.executions e
                WHERE (e.payload_json::jsonb->>'closedSize')::numeric > 0
                  AND (
@@ -1440,10 +1445,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         if include_history and not has_exact_exit_table:
             execution_rows = connection.execute(
                 """SELECT symbol,side,exec_price,exec_qty,exec_fee,
-                          exec_time_ms,order_id,payload_json
+                          exec_time_ms,order_id,payload_json,
+                          identity_status,trading_account_id
                      FROM (
                          SELECT symbol,side,exec_price,exec_qty,exec_fee,
-                                exec_time_ms,order_id,payload_json
+                                exec_time_ms,order_id,payload_json,
+                                identity_status,trading_account_id
                            FROM runtime.executions
                           WHERE (
                                (trading_account_id=%s AND identity_status='PROVEN')
@@ -1605,22 +1612,34 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "strategy_name": None if ownership is None else ownership["strategy_name"],
             }
         )
-    open_lots: dict[tuple[str, str], dict[str, float]] = {}
-    closed_groups: dict[tuple[str, str], dict[str, object]] = {}
+    open_lots: dict[tuple[tuple[str, str | None], str, str], dict[str, float]] = {}
+    closed_groups: dict[tuple[tuple[str, str | None], str, str], dict[str, object]] = {}
     for row in execution_rows:
         raw = json.loads(row[7])
+        report_scope = (
+            str(row[8]),
+            None if row[9] is None else str(row[9]),
+        )
+        if (report_scope[0] == "PROVEN" and not report_scope[1]) or (
+            report_scope[0] == "LEGACY_UNKNOWN" and report_scope[1] is not None
+        ) or report_scope[0] not in {"PROVEN", "LEGACY_UNKNOWN"}:
+            raise RuntimeError("INVALID_CLOSED_EXECUTION_ACCOUNT_PROVENANCE")
         symbol, side = str(row[0]), str(row[1])
         qty, fee = float(row[3]), float(row[4])
         closed_qty = float(raw.get("closedSize") or 0)
         if closed_qty <= 0:
-            lot = open_lots.setdefault((symbol, side), {"qty": 0.0, "fee": 0.0, "notional": 0.0})
+            lot = open_lots.setdefault(
+                (report_scope, symbol, side),
+                {"qty": 0.0, "fee": 0.0, "notional": 0.0},
+            )
             lot["qty"] += qty
             lot["fee"] += fee
             lot["notional"] += qty * float(row[2])
             continue
         opening_side = "Buy" if side == "Sell" else "Sell"
         lot = open_lots.setdefault(
-            (symbol, opening_side), {"qty": 0.0, "fee": 0.0, "notional": 0.0}
+            (report_scope, symbol, opening_side),
+            {"qty": 0.0, "fee": 0.0, "notional": 0.0}
         )
         allocated_entry_fee = 0.0
         allocated_entry_notional = 0.0
@@ -1631,10 +1650,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             lot["qty"] -= allocated_qty
             lot["fee"] = max(0.0, lot["fee"] - allocated_entry_fee)
             lot["notional"] = max(0.0, lot["notional"] - allocated_entry_notional)
-        key = (symbol, str(row[6]))
+        key = (report_scope, symbol, str(row[6]))
         item = closed_groups.setdefault(
             key,
             {
+                "identity_status": report_scope[0],
+                "trading_account_id": report_scope[1],
                 "symbol": symbol,
                 "side": side,
                 "price": 0.0,
@@ -1705,6 +1726,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "exec_ids": list(row[15] or []),
                 "economics_completeness": row[16],
                 "link_status": row[17],
+                "identity_status": row[18],
+                "trading_account_id": row[19],
             }
             for row in exact_exit_rows
         ]
