@@ -118,3 +118,11 @@ def test_unknown_volume_and_symbol_fail_closed(tmp_path):
     _repack(norm / "APTUSDT.csv.gz", columns, rows)
     with pytest.raises(ValueError, match="symbol mismatch"):
         m.calculate("APTUSDT", vendor, norm)
+
+
+def test_original_receipt_hour_must_match_native_object_hour(tmp_path):
+    vendor, norm, original, receipt, columns, rows = _setup(tmp_path)
+    receipt["hour"] = "01"
+    (vendor / "OBJECTS.jsonl").write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="receipt hour"):
+        m.calculate("APTUSDT", vendor, norm)
