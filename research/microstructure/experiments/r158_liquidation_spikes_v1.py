@@ -19,7 +19,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-VERSION = "R158_LIQ_PUBLISHED_OBJECTS_V1"
+VERSION = "R158_LIQ_PUBLISHED_OBJECTS_BY_SIDE_V2"
 COHORT = ("APTUSDT", "INJUSDT", "DOTUSDT", "LTCUSDT", "ARBUSDT")
 START = date(2026, 5, 18)
 END_EXCLUSIVE = date(2026, 6, 17)
@@ -115,6 +115,14 @@ def calculate(
     bins: dict[int, dict[int, tuple[int, Decimal]]] = {
         length: defaultdict(lambda: (0, Decimal(0))) for length in WINDOWS
     }
+    # Position being liquidated (LONG/SHORT), NOT aggressor trade direction.
+    by_side_bins: dict[int, dict[str, dict[int, tuple[int, Decimal]]]] = {
+        length: {
+            side: defaultdict(lambda: (0, Decimal(0)))
+            for side in ("LONG", "SHORT")
+        }
+        for length in WINDOWS
+    }
     events = 0
     notional = Decimal(0)
     sides: Counter[str] = Counter()
@@ -155,15 +163,21 @@ def calculate(
                 key = micros // (60000000 * length)
                 old_count, old_quote = bins[length][key]
                 bins[length][key] = (old_count + 1, old_quote + amount)
+                side = row["liquidated_position_side"]
+                before_count, before_quote = by_side_bins[length][side][key]
+                by_side_bins[length][side][key] = (
+                    before_count + 1, before_quote + amount
+                )
 
-    def window_metrics(length: int) -> dict:
-        sample = bins[length]
+    def peaks(sample: dict, length: int) -> dict:
         max_count = max(sample, key=lambda k: (sample[k][0], -k), default=None)
         max_quote = max(sample, key=lambda k: (sample[k][1], -k), default=None)
         return {
-            "observed_source_file_bins": covered * (60 // length),
             "bins_with_records": len(sample),
-            "bins_with_no_file": (HOURS_PER_MONTH - covered) * (60 // length),
+            "total_events": sum(item[0] for item in sample.values()),
+            "total_notional_usdt": str(sum(
+                (item[1] for item in sample.values()), Decimal(0)
+            )),
             "max_count": sample[max_count][0] if max_count is not None else None,
             "max_count_at_utc": datetime.fromtimestamp(
                 max_count * 60 * length, UTC
@@ -172,6 +186,17 @@ def calculate(
             "max_notional_at_utc": datetime.fromtimestamp(
                 max_quote * 60 * length, UTC
             ).isoformat() if max_quote is not None else None,
+        }
+
+    def window_metrics(length: int) -> dict:
+        return {
+            "observed_source_file_bins": covered * (60 // length),
+            "bins_with_no_file": (HOURS_PER_MONTH - covered) * (60 // length),
+            **peaks(bins[length], length),
+            "by_liquidated_position_side": {
+                side: peaks(by_side_bins[length][side], length)
+                for side in ("LONG", "SHORT")
+            },
         }
 
     return {
