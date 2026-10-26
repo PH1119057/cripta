@@ -1,9 +1,7 @@
 """Causal chronology and no-flatten invariants for P90L90 Entry-only embargo."""
 from decimal import Decimal as D
 
-from scripts.research.p90l90_entry_only_hardstop_embargo_v1 import (
-    EntryEmbargo, SCENARIOS,
-)
+from scripts.research.p90l90_entry_only_hardstop_embargo_v1 import EntryEmbargo, SCENARIOS
 
 STATE = (D("80"), D("120"), D("1"))
 
@@ -34,7 +32,7 @@ def test_first_stop_blocks_new_entry_but_does_not_flatten_any_position():
     book.handle("DOTUSDT", later, 2, D("100"), candidate("DOTUSDT", later), STATE)
     assert book.pos["DOTUSDT"] is not None
     report = book.finish()
-    assert report["counts"]["close_PORTFOLIO_FLATTEN"] == 0
+    assert report["counts"].get("close_PORTFOLIO_FLATTEN", 0) == 0
     assert report["counts"]["accepted"] == 3
 
 
