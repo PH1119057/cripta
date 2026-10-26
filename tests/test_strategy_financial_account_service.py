@@ -12,7 +12,7 @@ from bybit_workbench.strategy_financial_account_service import (
 NOW = datetime(2026, 10, 26, 15, 0, tzinfo=UTC)
 ROW = (
     "venue-bybit", "MAINNET", "ACTIVE", "MAIN", "UNIFIED", "111222",
-    "ta-main", "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE", "ACTIVE",
+    None, "ta-main", "CEX_PRIVATE_RUNTIME", "BYBIT_V5_PRIVATE", "ACTIVE",
     "credential:main", None,
 )
 
@@ -120,7 +120,7 @@ def test_duplicate_or_retired_connector_is_not_bindable() -> None:
     assert not inspect_financial_account_choice(
         duplicate, trading_account_id="ta-main", account_connector_id="ac-main"
     ).ready
-    retired_row = (*ROW[:11], NOW)
+    retired_row = (*ROW[:-1], NOW)
     retired = Connection(account_rows=[retired_row])
     choice = inspect_financial_account_choice(
         retired, trading_account_id="ta-main", account_connector_id="ac-main"
@@ -151,3 +151,24 @@ def test_nonprimary_execution_leg_rejected_until_producer_fanout_exists() -> Non
             effective_from=NOW, operator="owner", reason="candidate",
         )
     assert c.insertions == []
+
+
+def test_owner_asserted_pending_uid_is_not_signed_or_ready_for_binding() -> None:
+    pending = Connection(account_rows=[(*ROW[:6], "OWNER_ASSERTED_PENDING", *ROW[7:])])
+    choice = inspect_financial_account_choice(
+        pending, trading_account_id="ta-main", account_connector_id="ac-main"
+    )
+    assert not choice.ready
+    assert "FINANCIAL_ACCOUNT_UID_PENDING_SIGNED_ATTESTATION" in choice.reasons
+    with pytest.raises(RuntimeError, match="CHOICE_BLOCKED"):
+        bind(pending)
+    assert pending.insertions == []
+
+
+def test_signed_verified_uid_can_be_bound_but_never_arms_live() -> None:
+    verified = Connection(account_rows=[(*ROW[:6], "SIGNED_VERIFIED", *ROW[7:])])
+    assert inspect_financial_account_choice(
+        verified, trading_account_id="ta-main", account_connector_id="ac-main"
+    ).ready
+    bind(verified)
+    assert len(verified.insertions) == 1
