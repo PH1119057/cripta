@@ -158,3 +158,20 @@ def test_gap_and_unsnapshotted_original_delta_are_unknown(tmp_path):
     manifest, minutes = m.calculate_archive(archive, "APTUSDT", DAY)
     assert manifest["reader_qc"]["source_gap_or_order_failures"] == 1
     assert minutes[0]["status"] == "UNKNOWN"
+
+
+def test_later_native_snapshot_poison_resets_minute_even_if_deltas_resume(tmp_path):
+    initial = original_snapshot()
+    first = delta(b=[["300", "12"]])
+    restarted = original_snapshot()
+    restarted["ts"] = TS + 300
+    restarted["data"]["u"] = 200
+    restarted["data"]["seq"] = 2000
+    following = delta(b=[["300", "11"]], uid=201, seq=2001, ts=TS + 400)
+    original = _zip_archive(tmp_path, [initial, first, restarted, following])
+    manifest, minute_rows = m.calculate_archive(original, "APTUSDT", DAY)
+    assert manifest["raw_records_read"] == 4
+    assert minute_rows[0]["status"] == "UNKNOWN"
+    assert minute_rows[0]["unknown_events"] == 1
+    assert minute_rows[0]["events"] == 2
+    assert minute_rows[0]["signed_quote_usdt"] is None
