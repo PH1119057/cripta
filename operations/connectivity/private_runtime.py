@@ -1621,7 +1621,7 @@ def record_protection_or_owner_event(
             ORDER BY position_idx LIMIT 1""",
         (symbol, TRADING_ACCOUNT_ID),
     ).fetchone()
-    after = json.loads(after_row[0]) if after_row else {}
+    after = _db_json_object(after_row[0] if after_row else None)
     before = before or {}
     order_rows = connection.execute(
         """SELECT order_id FROM runtime.hot_orders
@@ -4174,6 +4174,16 @@ def upsert_exchange_order_history(
     )
 
 
+def _db_json_object(raw: object | None) -> dict[str, object]:
+    """Psycopg decodes jsonb to dict, while legacy text may arrive as JSON."""
+    if raw is None:
+        return {}
+    value = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+    if not isinstance(value, dict):
+        raise RuntimeError("PRIVATE_POSITION_PAYLOAD_NOT_OBJECT")
+    return dict(value)
+
+
 def upsert_position(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
     existing = connection.execute(
         """SELECT payload_json FROM runtime.hot_positions
@@ -4185,7 +4195,7 @@ def upsert_position(connection: psycopg.Connection, item: dict[str, object], now
             TRADING_ACCOUNT_ID,
         ),
     ).fetchone()
-    merged = json.loads(existing[0]) if existing else {}
+    merged = _db_json_object(existing[0] if existing else None)
     merged.update(item)
     connection.execute("""INSERT INTO runtime.hot_positions(
         symbol,position_idx,side,size,entry_price,leverage,
