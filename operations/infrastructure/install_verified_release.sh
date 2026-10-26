@@ -205,6 +205,8 @@ unit_specs=(
   "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
   # Source-only templates are installed but never enabled or added to managed_services.
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
+  # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
+  "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
