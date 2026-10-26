@@ -1612,18 +1612,13 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "strategy_name": None if ownership is None else ownership["strategy_name"],
             }
         )
+    from bybit_workbench.closed_trade_reporting import _account_scope
+
     open_lots: dict[tuple[tuple[str, str | None], str, str], dict[str, float]] = {}
     closed_groups: dict[tuple[tuple[str, str | None], str, str], dict[str, object]] = {}
     for row in execution_rows:
         raw = json.loads(row[7])
-        report_scope = (
-            str(row[8]),
-            None if row[9] is None else str(row[9]),
-        )
-        if (report_scope[0] == "PROVEN" and not report_scope[1]) or (
-            report_scope[0] == "LEGACY_UNKNOWN" and report_scope[1] is not None
-        ) or report_scope[0] not in {"PROVEN", "LEGACY_UNKNOWN"}:
-            raise RuntimeError("INVALID_CLOSED_EXECUTION_ACCOUNT_PROVENANCE")
+        report_scope = _account_scope(row[8], row[9])
         symbol, side = str(row[0]), str(row[1])
         qty, fee = float(row[3]), float(row[4])
         closed_qty = float(raw.get("closedSize") or 0)
