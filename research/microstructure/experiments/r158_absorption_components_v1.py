@@ -104,6 +104,9 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                 current = bins[minute]
                 records += 1
                 if item["type"] == "snapshot":
+                    if snapshots:
+                        # Later source resnapshot breaks proved continuous updates.
+                        current["book_unknown"] += 1
                     state = {}
                     for side in SIDE:
                         side_book = {}
