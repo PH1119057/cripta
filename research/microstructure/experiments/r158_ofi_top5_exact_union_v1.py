@@ -158,6 +158,10 @@ class Reader:
             "signed_quote_usdt": str(bid["quote"] - ask["quote"]) if not unknown else None,
             "bid_union_levels": bid["union_count"],
             "ask_union_levels": ask["union_count"],
+            "bid_old_top5_prices": bid["old_top5"],
+            "bid_new_top5_prices": bid["new_top5"],
+            "ask_old_top5_prices": ask["old_top5"],
+            "ask_new_top5_prices": ask["new_top5"],
             "unknown_bid_prices": bid["unknown_prices"],
             "unknown_ask_prices": ask["unknown_prices"],
             "status": "UNKNOWN_VISIBILITY" if unknown else "OBSERVED",
@@ -172,7 +176,8 @@ def _hash(path: Path):
     return digest.hexdigest()
 
 
-def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0):
+def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
+                      emit_event=None):
     if symbol not in COHORT or not START <= day < END_EXCLUSIVE:
         raise ValueError("out-of-contract symbol or UTC day")
     if max_events < 0:
@@ -199,7 +204,12 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0):
                     raise ValueError("unsorted source exchange event timestamps")
                 previous_ts = ts
                 value = reader.on_record(record)
+                if value is None and record["type"] == "delta":
+                    # A source gap/invalid book poisons this UTC minute, not NO_DATA.
+                    minute[(ts - start_ms) // 60000]["unknown_events"] += 1
                 if value is not None:
+                    if emit_event is not None:
+                        emit_event(value)
                     cell = minute[(ts - start_ms) // 60000]
                     cell["events"] += 1
                     if value["status"] != "OBSERVED":
@@ -213,7 +223,8 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0):
     rows = []
     for slot in range(1440):
         cell = minute.get(slot)
-        status = ("NO_DATA" if cell is None or not cell["events"] else
+        status = ("NO_DATA" if cell is None or
+                  not (cell["events"] or cell["unknown_events"]) else
                   "UNKNOWN" if cell["unknown_events"] else "OBSERVED")
         rows.append({
             "minute_utc": slot, "status": status,
@@ -252,10 +263,15 @@ def main():
     p.add_argument("--raw-root", required=True, type=Path)
     p.add_argument("--max-events", type=int, default=0)
     p.add_argument("--minute-rows", action="store_true")
+    p.add_argument("--event-rows", action="store_true")
     a = p.parse_args()
     path = (a.raw_root / a.symbol / "orderbook"
             / f"{a.date}_{a.symbol}_ob200.data.zip")
-    manifest, minutes = calculate_archive(path, a.symbol, a.date, a.max_events)
+    emit = (lambda value: print(json.dumps({"type": "event", **value}, sort_keys=True)))
+    manifest, minutes = calculate_archive(
+        path, a.symbol, a.date, a.max_events,
+        emit_event=emit if a.event_rows else None,
+    )
     print(json.dumps({"type": "manifest", **manifest}, sort_keys=True))
     if a.minute_rows:
         for cell in minutes:
