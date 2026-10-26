@@ -71,7 +71,7 @@ def test_h9_with_two_actual_stops_pauses_entries_but_keeps_other_position():
     assert combo.pos["ARBUSDT"] is None
     assert combo.count["blocked_global_pause"] == 1
     assert not combo.pending
-    assert combo.finish()["counts"]["close_PORTFOLIO_FLATTEN"] == 0
+    assert combo.finish()["counts"].get("close_PORTFOLIO_FLATTEN", 0) == 0
 
 
 def test_h9_no_geometry_fails_closed():
