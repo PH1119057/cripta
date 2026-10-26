@@ -398,3 +398,124 @@ def test_account_wallet_state_survives_new_database_session_without_cross_update
                     "DELETE FROM identity.trading_accounts WHERE trading_account_id=ANY(%s)",
                     (ids,),
                 )
+
+
+def test_actual_private_runtime_writers_keep_two_accounts_isolated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use production writer functions against disposable R10 schema.
+
+    No credentials/network access: the isolated test only invokes three
+    SQL-writing functions and rolls back its synthetic TradingAccounts.
+    """
+    assert DSN is not None
+    from importlib import import_module
+
+    root = Path(__file__).resolve().parents[1]
+    for folder in (
+        root,
+        root / "src",
+        root / "operations/connectivity",
+        root / "operations/monitoring",
+        root / "research/server/connectivity",
+    ):
+        monkeypatch.syspath_prepend(str(folder))
+    writer = import_module("operations.connectivity.private_runtime")
+    prefix = "actual-writer-" + uuid4().hex[:11]
+    accounts = [
+        (prefix + "-main", prefix + "-cmain", "MAIN"),
+        (prefix + "-sub", prefix + "-csub", "SUB"),
+    ]
+    symbol = "CROSSUSDT"
+    order_id = prefix + "-shared-provider-order"
+
+    with psycopg.connect(DSN) as c:
+        if c.execute("SELECT current_database()").fetchone()[0] != "cripta_integration":
+            pytest.skip("production database prohibited")
+        for n, (trading_account_id, connector_id, kind) in enumerate(accounts):
+            c.execute(
+                """INSERT INTO identity.trading_accounts(
+                       trading_account_id,venue_id,account_kind,account_type,
+                       environment,status,external_account_ref)
+                   VALUES (%s,'venue-bybit',%s,'UNIFIED','MAINNET','ACTIVE',%s)""",
+                (trading_account_id, kind, str(700000000 + n)),
+            )
+            c.execute(
+                """INSERT INTO identity.account_connectors(
+                       account_connector_id,trading_account_id,connector_kind,
+                       adapter_id,credential_ref,status)
+                   VALUES (%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                           'DISPOSABLE_TEST_REFERENCE','ACTIVE')""",
+                (connector_id, trading_account_id),
+            )
+            monkeypatch.setattr(writer, "TRADING_ACCOUNT_ID", trading_account_id)
+            monkeypatch.setattr(writer, "ACCOUNT_CONNECTOR_ID", connector_id)
+            amount = "100" if kind == "MAIN" else "200"
+            writer.upsert_wallet(
+                c,
+                {
+                    "totalEquity": amount,
+                    "totalWalletBalance": amount,
+                    "totalAvailableBalance": amount,
+                },
+                1000,
+            )
+            writer.upsert_position(
+                c,
+                {
+                    "symbol": symbol,
+                    "positionIdx": 0,
+                    "side": "Buy",
+                    "size": "1",
+                    "entryPrice": "100",
+                    "leverage": "1",
+                },
+                1000,
+            )
+            writer.upsert_order(
+                c,
+                {
+                    "orderId": order_id,
+                    "orderLinkId": "shared-local",
+                    "symbol": symbol,
+                    "side": "Buy",
+                    "orderStatus": "New",
+                    "qty": "1",
+                    "price": "100",
+                    "leavesQty": "1",
+                },
+                1000,
+            )
+        for relation in (
+            "runtime.wallet_latest",
+            "runtime.hot_positions",
+            "runtime.hot_orders",
+        ):
+            found = c.execute(
+                f"""SELECT trading_account_id,account_connector_id
+                      FROM {relation} WHERE trading_account_id=ANY(%s)
+                      ORDER BY trading_account_id""",
+                ([x[0] for x in accounts],),
+            ).fetchall()
+            assert found == [(a[0], a[1]) for a in accounts], relation
+
+        # Reconcile one account again through its actual runtime writer.
+        monkeypatch.setattr(writer, "TRADING_ACCOUNT_ID", accounts[0][0])
+        monkeypatch.setattr(writer, "ACCOUNT_CONNECTOR_ID", accounts[0][1])
+        writer.upsert_wallet(
+            c,
+            {
+                "totalEquity": "150",
+                "totalWalletBalance": "150",
+                "totalAvailableBalance": "150",
+            },
+            2000,
+        )
+        values = c.execute(
+            """SELECT trading_account_id,total_equity
+                 FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)
+                 ORDER BY trading_account_id""",
+            ([x[0] for x in accounts],),
+        ).fetchall()
+        assert values == [(accounts[0][0], "150"), (accounts[1][0], "200")]
+        c.rollback()
