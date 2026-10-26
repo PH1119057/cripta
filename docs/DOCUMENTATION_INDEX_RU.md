@@ -333,6 +333,18 @@ Owner for refusal classification, correct actor/tool path and retry policy: `doc
 
 **Уточнение OWNER DECISION 2026-10-24:** `DEVELOPMENT_RELEASE §19.5–19.6.1` владеет точной проверкой SentinelX command-prefix allowlist и отдельной однократной попыткой после явного распоряжения владельца при сохранении platform/tool gates. Датированное evidence агента — `CURRENT_PROJECT_MAP §1.4`; owner-facing формулировки — `CHATGPT_INTERACTION_RULES §11.1`. `git` и `sudo -u cripta git` — разные разрешения; success GitHub connector не устраняет локальный Git actor gate. Правка в действующем `docs/owner-directed-tool-retry-20261024` / PR #186 не изменяет source paths, active Source set, mandatory pre-read или trade/runtime/LIVE. README, AGENTS и derived Project Instructions синхронизируются в том же documentation changeset; фактическая ChatGPT UI-копия должна быть отдельно обновлена владельцем.
 
+## 17.1.2 Controlled offline R10 transition — OWNER DECISION 2026-10-27
+
+Release owner remains `DEVELOPMENT_RELEASE §48.2–48.2.1`; account
+ownership/provenance remains `CRIPTA_ARCHITECTURE_RULES §49.2–49.7`.
+The one-time staged cutover retires legacy one-account physical constraints
+while preserving old R1 history and keeping REAL disarmed. It is not a
+historical data rekey, permission to discard private records, automatic
+Strategy fan-out completion or release without backup/restore. The eight
+ordinary §48.2 gates remain required before REAL on the exact loaded release.
+This decision changes no active document set, paths, pre-read routing,
+Project Source size or Project Instructions bootstrap.
+
 ## 17.2 Нумерация и ссылки
 
 Перед renumber section обязателен search по current tree на все ссылки на
