@@ -82,6 +82,7 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
     state = None
     uid = seq = ts0 = None
     snapshots = gaps = records = 0
+    previous_source_ts = None
     with zipfile.ZipFile(path) as archive:
         expected = f"{day}_{symbol}_ob200.data"
         if archive.namelist() != [expected]:
@@ -93,6 +94,9 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                 ts = int(item["ts"])
                 if not day_start <= ts < day_start + 86400000:
                     raise ValueError("OB200 timestamp outside file day")
+                if previous_source_ts is not None and ts < previous_source_ts:
+                    raise ValueError("native OB200 source timestamp out of order")
+                previous_source_ts = ts
                 if (item["topic"] != f"orderbook.200.{symbol}"
                         or data["s"] != symbol):
                     raise ValueError("wrong native OB200 source identity")
@@ -112,6 +116,8 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                         if len(side_book) != 200:
                             raise ValueError("incomplete original OB200 snapshot")
                         state[side] = trim(side_book, side)
+                    if max(state["b"]) >= min(state["a"]):
+                        raise ValueError("crossed original snapshot book")
                     uid, seq, ts0 = int(data["u"]), int(data["seq"]), ts
                     snapshots += 1
                     continue
@@ -184,18 +190,17 @@ def process_trades(path: Path, symbol: str, day: date, bins: dict) -> dict:
         if not needed.issubset(reader.fieldnames or []):
             raise ValueError("invalid native Perp trade file columns")
         for item in reader:
+            native_ts = positive(item["timestamp"])
             minute = int(
-                (positive(item["timestamp"]) / Decimal(60)).to_integral_value(
-                    rounding=ROUND_FLOOR
-                )
+                (native_ts / Decimal(60)).to_integral_value(rounding=ROUND_FLOOR)
             )
             if minute < day_start or minute >= day_start + 1440:
                 raise ValueError("native Perp trade outside UTC source day")
-            if prior is not None and minute < prior:
+            if prior is not None and native_ts < prior:
                 raise ValueError("native Perp trade timestamps are unsorted")
             if item["symbol"] != symbol or item["side"] not in ("Buy", "Sell"):
                 raise ValueError("wrong native Perp trade identity/side")
-            prior = minute
+            prior = native_ts
             price = positive(item["price"])
             qty = positive(item["size"])
             current = bins[minute - day_start]
