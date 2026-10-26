@@ -158,6 +158,19 @@ def make_books():
     return books
 
 
+def verify_reference_traces(period, books, previous_entry, archived_flatten):
+    """Use 90d archive only for 90d, retaining both periods' Entry parity."""
+    if period not in ("90d", "29d"):
+        raise ValueError("unsupported reference period " + str(period))
+    for name, reference_name in ENTRY_REFERENCE.items():
+        if books[name].trades != previous_entry[reference_name]:
+            raise ValueError("exact Entry-only trade ledger parity failed " + name)
+    if period == "90d":
+        for name, reference_name in FLATTEN_REFERENCE_90D.items():
+            if books[name].trades != archived_flatten[reference_name]:
+                raise ValueError("original old forced-flatten parity failed " + name)
+
+
 def run(period: str, output: Path, smoke_hours: int = 0):
     root = preflight(period, output, smoke_hours)
     if period == "90d":
@@ -226,12 +239,7 @@ def run(period: str, output: Path, smoke_hours: int = 0):
             root / "results" / "p90l90_portfolio_pause_20261025_v1",
             set(FLATTEN_REFERENCE_90D.values()),
         )
-    for name, reference_name in ENTRY_REFERENCE.items():
-        if books[name].trades != previous_entry[reference_name]:
-            raise ValueError("exact Entry-only trade ledger parity failed " + name)
-    for name, reference_name in FLATTEN_REFERENCE_90D.items():
-        if books[name].trades != archived_flatten[reference_name]:
-            raise ValueError("original old forced-flatten parity failed " + name)
+    verify_reference_traces(period, books, previous_entry, archived_flatten)
 
     for name, report in reports.items():
         counts = report["counts"]

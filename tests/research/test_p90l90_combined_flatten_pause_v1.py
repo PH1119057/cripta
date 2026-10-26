@@ -1,5 +1,8 @@
 """Research-only causal tests: hybrid Hard Stop flatten + Entry embargo."""
 from decimal import Decimal as D
+from types import SimpleNamespace
+
+import pytest
 
 from scripts.research import p90l90_combined_flatten_pause_v1 as study
 from scripts.research import p90l90_portfolio_pause_v1 as legacy
@@ -90,3 +93,26 @@ def test_hybrid_pause_extends_only_on_new_qualifying_actual_hardstop():
     assert book.pause_until == first_pause_end
     assert book.count["close_PORTFOLIO_FLATTEN"] == 1
     assert book.finish()["counts"]["global_triggers"] == 1
+
+
+def test_29d_skips_90d_only_archive_but_still_checks_all_entry_references():
+    books = {name: SimpleNamespace(trades=[]) for name in study.SCENARIOS}
+    entry_ref = {name: [] for name in study.ENTRY_REFERENCE.values()}
+    # 29d has no historical first-flatten archive. This was the production
+    # KeyError after 41,854,234 ticks; it must not be required in 29d.
+    study.verify_reference_traces("29d", books, entry_ref, {})
+    books["ENTRY_ONLY_SECOND_48H"].trades = [{"unexpected": 1}]
+    with pytest.raises(ValueError, match="Entry-only"):
+        study.verify_reference_traces("29d", books, entry_ref, {})
+
+
+def test_90d_still_requires_and_checks_exact_legacy_flatten_archive():
+    books = {name: SimpleNamespace(trades=[]) for name in study.SCENARIOS}
+    entry_ref = {name: [] for name in study.ENTRY_REFERENCE.values()}
+    with pytest.raises(KeyError, match="PAUSE24"):
+        study.verify_reference_traces("90d", books, entry_ref, {})
+    flatten_ref = {name: [] for name in study.FLATTEN_REFERENCE_90D.values()}
+    study.verify_reference_traces("90d", books, entry_ref, flatten_ref)
+    books["FLATTEN_FIRST_24H"].trades = [{"changed": True}]
+    with pytest.raises(ValueError, match="forced-flatten"):
+        study.verify_reference_traces("90d", books, entry_ref, flatten_ref)

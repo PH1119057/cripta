@@ -160,3 +160,6 @@ resume existing branch/worktree, не reset/overwrite; ambiguity -> HARD_STOP
 
 ## Project Instructions §§13–14 — 2026-10-22
 При длинном job проверять реальный статус/QC и отдельно доставку уведомления; без подтверждённого push не обещать сообщение. Новый чат следует DEV §50.4; UI bootstrap versioned по INDEX §17.10–17.10.1, точный текст — operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt. Это не отдельный канон.
+
+## Owner-approved 30d indicators — 2026-10-26
+Точный research-only контракт №10/13/16/23/24/25 принадлежит `docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`; навигация — `docs/DOCUMENTATION_INDEX_RU.md §57`. Только описательное историческое исследование, не LIVE и не автоматический RESEARCH-READY.

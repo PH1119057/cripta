@@ -32,6 +32,8 @@ Server-side script/service/job с filesystem write или сменой effective
 Историческое research — evidence, не канон. Не переносить старые Entry/Exit, thresholds, horizons, filters, Strategy parameters/defaults; dataset reuse ≠ policy reuse.
 Торговое изменение: `RESEARCH/EVIDENCE → OWNER DECISION → CANON/NEW STRATEGY VERSION → TEST/SHADOW → LIVE EQUIVALENCE → MICRO_LIVE → LIVE`.
 
+#158 (2026-10-26): owner-approved research методы — RESEARCH_COMPUTE §21.8; LIVE не разрешён.
+
 ## 6. Архитектура
 Owner/consumer — ARCH/TRADING_CONTOUR/OBSERVATION_ANALYTICS/GLOSSARY/MAP, архитектуру не дублировать. Перед чувствительной работой проверить актуальный GitHub main, base и routed docs. Research writes только на data-disk; runtime не зависит напрямую от research artifacts.
 Patch/deploy не включает LIVE молча; re-arm — current LIVE-arm contract + explicit owner approval.

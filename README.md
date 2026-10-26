@@ -142,3 +142,6 @@ GitHub PR scope checker проверяет изменённые пути, а з�
 
 ## Project Instructions: длительные jobs и новый чат
 Актуальный [bootstrap](operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt) включает §13 (статус job и проверка доставки) и §14 (DEV §50.4, продолжение задач). Канон и правило UI-синхронизации: INDEX §17.10–17.10.1. Владелец вставляет exact template вручную; GitHub не подтверждает состояние UI-копии.
+
+## Owner-approved 30d indicators — 2026-10-26
+Точный research-only контракт №10/13/16/23/24/25 принадлежит `docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`; навигация — `docs/DOCUMENTATION_INDEX_RU.md §57`. Только описательное историческое исследование, не LIVE и не автоматический RESEARCH-READY.
