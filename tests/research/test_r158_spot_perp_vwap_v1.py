@@ -47,6 +47,12 @@ def test_vwap_divergence_exact_decimal_no_carry(tmp_path):
     assert manifest["observed_minutes"] == 1
     assert manifest["spot"]["rows"] == 3
     assert manifest["perpetual"]["rows"] == 3
+    assert manifest["algorithm"] == "R158_SPOT_PERP_EXECUTED_VWAP_1M_V2"
+    assert (
+        manifest["perpetual"]["native_perpetual_notional_parity"]
+        == "PASS_ALL_ROWS_FLOAT_REPR_ROUNDING_BOUNDED"
+    )
+    assert manifest["perpetual"]["native_perpetual_foreign_rounding_rows"] == 0
     assert rows[0]["spot_vwap"] == "2.5"  # (2*3+4*1)/4
     assert rows[0]["perp_vwap"] == "3"    # (4*1+2*1)/2
     assert rows[0]["divergence_bps"] == "2000"
@@ -168,4 +174,45 @@ def test_original_perp_native_parity_is_required_in_source_schema(tmp_path):
         "1779148800.000,APTUSDT,Buy,1,4,p1\n",
     )
     with pytest.raises(ValueError, match="invalid perpetual archive columns"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_original_native_float_repr_rounding_is_not_false_corruption(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.000,APTUSDT,Buy,70.41,0.8107,p1,70.41,"
+        "57.08138699999999\n",
+    )
+    manifest, minute_rows = m.calculate_day("APTUSDT", DAY, spot, perp)
+    assert manifest["observed_minutes"] == 1
+    assert minute_rows[0]["perp_vwap"] == "0.8107"
+    audit = manifest["perpetual"]
+    assert audit["native_perpetual_foreign_rounding_rows"] == 1
+    assert audit["native_perpetual_max_abs_rounding_usdt"] == "1E-14"
+    assert audit["native_perpetual_max_relative_rounding"] is not None
+    assert audit["native_perpetual_notional_parity"].startswith("PASS_ALL_ROWS")
+
+
+def test_very_small_absolute_rounding_bound_rejects_large_relative_error(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.000,APTUSDT,Buy,1,0.00000001,p1,1,0.00000002\n",
+    )
+    with pytest.raises(ValueError, match="native notional parity mismatch"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_native_foreign_rounding_over_one_part_in_1e14_is_rejected(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.000,APTUSDT,Buy,70.41,0.8107,p1,70.41,"
+        "57.0813869999\n",
+    )
+    with pytest.raises(ValueError, match="native notional parity mismatch"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
