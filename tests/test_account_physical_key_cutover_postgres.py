@@ -502,12 +502,6 @@ def test_actual_private_runtime_writers_keep_two_accounts_isolated(
                 # Keep the real execution handler's SQL inside this test's
                 # explicit rollback transaction, without changing its code.
                 def execute(self, sql: str, params: object = None) -> object:
-                    # The disposable lifecycle bootstrap does not contain
-                    # production's full private_events delivery columns.
-                    # Only the unrelated event-envelope insert is skipped;
-                    # runtime.executions uses its real production SQL.
-                    if "INSERT INTO runtime.private_events" in sql:
-                        return None
                     return c.execute(sql, params)
 
                 def commit(self) -> None:
