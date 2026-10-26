@@ -165,6 +165,6 @@ def test_empty_touch_cohort_still_rejects_accounting_discrepancy():
     try:
         book.finish_touch()
     except ValueError as exc:
-        assert "touch position/outcome accounting failed" in str(exc)
+        assert "accounting mismatch" in str(exc)
     else:
         raise AssertionError("missing entry/position must fail closed")
