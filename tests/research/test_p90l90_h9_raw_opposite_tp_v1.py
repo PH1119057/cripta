@@ -2,7 +2,10 @@
 
 from decimal import Decimal as D
 
-from scripts.research import p90l90_h9_raw_opposite_tp_v1 as study
+from scripts.research import (
+    p90l90_h9_raw_opposite_tp_v1 as study,
+    p90l90_portfolio_pause_v1 as original,
+)
 
 
 L53 = (D("98"), D("102"), D("1"))
@@ -17,8 +20,6 @@ def entry(ts=100, sym="APTUSDT", side="LONG"):
 
 
 def test_exact_baseline_invariance_under_h9_state():
-    from scripts.research import p90l90_portfolio_pause_v1 as original
-
     reference = original.Portfolio(None)
     candidate = study.TPBook("L53_DYNAMIC_BASELINE")
     ticks = [
