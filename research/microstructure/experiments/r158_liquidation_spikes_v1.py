@@ -72,6 +72,8 @@ def original_receipts(
             hour = int(match.group(2))
             if hour not in range(24) or match.group(3) != symbol:
                 raise ValueError("wrong original vendor symbol or hour")
+            if item.get("hour") != f"{hour:02d}":
+                raise ValueError("original vendor receipt hour does not match object key")
             relative = "raw/" + item["key"].removeprefix("bybit/")
             if relative in result:
                 raise ValueError("duplicated original source receipt")
