@@ -297,3 +297,104 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
             and row["trading_account_id"] is None
         ]) == 1
         c.rollback()
+
+
+def test_account_wallet_state_survives_new_database_session_without_cross_update() -> None:
+    """Simulate persisted private state re-opened after a worker restart.
+
+    This is not an actual systemd/Bybit restart, which must be verified
+    separately before the real two-account release can be called ready.
+    """
+    assert DSN is not None
+    p = uuid4().hex[:12]
+    accounts = [
+        (f"restart-{p}-main", f"restart-{p}-cm", "MAIN", str(int(p, 16))),
+        (f"restart-{p}-sub", f"restart-{p}-cs", "SUB", str(int(p, 16) + 1)),
+    ]
+    ids = [entry[0] for entry in accounts]
+    try:
+        with psycopg.connect(DSN) as c:
+            dbname = c.execute("SELECT current_database()").fetchone()[0]
+            if dbname != "cripta_integration":
+                pytest.skip("requires only disposable cripta_integration")
+            for account_id, connector_id, kind, provider_uid in accounts:
+                c.execute(
+                    """INSERT INTO identity.trading_accounts(
+                           trading_account_id,venue_id,account_kind,account_type,
+                           environment,status,external_account_ref)
+                       VALUES (%s,'venue-bybit',%s,'UNIFIED','MAINNET','ACTIVE',%s)""",
+                    (account_id, kind, provider_uid),
+                )
+                c.execute(
+                    """INSERT INTO identity.account_connectors(
+                           account_connector_id,trading_account_id,connector_kind,
+                           adapter_id,credential_ref,status)
+                       VALUES (%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
+                               'DISPOSABLE_TEST_REFERENCE','ACTIVE')""",
+                    (connector_id, account_id),
+                )
+                amount = "100" if kind == "MAIN" else "200"
+                c.execute(
+                    """INSERT INTO runtime.wallet_latest(
+                           singleton,refreshed_at_epoch_ms,total_equity,
+                           wallet_balance,available_balance,payload_json,
+                           trading_account_id,account_connector_id,identity_status)
+                       VALUES (1,1000,%s,%s,%s,'{}',%s,%s,'PROVEN')
+                       ON CONFLICT(trading_account_id,singleton) DO UPDATE
+                         SET total_equity=EXCLUDED.total_equity""",
+                    (amount, amount, amount, account_id, connector_id),
+                )
+        # The initial connection has exited and committed; this is a new DB
+        # session, as after worker restart. Reconcile MAIN without modifying SUB.
+        with psycopg.connect(DSN) as c:
+            before = c.execute(
+                """SELECT trading_account_id,total_equity,account_connector_id
+                     FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)
+                     ORDER BY trading_account_id""",
+                (ids,),
+            ).fetchall()
+            assert len(before) == 2
+            c.execute(
+                """INSERT INTO runtime.wallet_latest(
+                       singleton,refreshed_at_epoch_ms,total_equity,
+                       wallet_balance,available_balance,payload_json,
+                       trading_account_id,account_connector_id,identity_status)
+                   VALUES (1,2000,'150','150','150','{}',%s,%s,'PROVEN')
+                   ON CONFLICT(trading_account_id,singleton) DO UPDATE SET
+                     refreshed_at_epoch_ms=EXCLUDED.refreshed_at_epoch_ms,
+                     total_equity=EXCLUDED.total_equity,
+                     wallet_balance=EXCLUDED.wallet_balance,
+                     available_balance=EXCLUDED.available_balance,
+                     account_connector_id=EXCLUDED.account_connector_id,
+                     identity_status='PROVEN'""",
+                (accounts[0][0], accounts[0][1]),
+            )
+            after = c.execute(
+                """SELECT trading_account_id,total_equity,account_connector_id
+                     FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)
+                     ORDER BY trading_account_id""",
+                (ids,),
+            ).fetchall()
+            assert after == [
+                (accounts[0][0], "150", accounts[0][1]),
+                (accounts[1][0], "200", accounts[1][1]),
+            ]
+    finally:
+        # Never touch any other account. This block runs only in the named
+        # disposable database even if an assertion above fails.
+        if DSN is not None:
+            with psycopg.connect(DSN) as c:
+                if c.execute("SELECT current_database()").fetchone()[0] != "cripta_integration":
+                    raise RuntimeError("CLEANUP_TARGET_NOT_DISPOSABLE")
+                c.execute(
+                    "DELETE FROM runtime.wallet_latest WHERE trading_account_id=ANY(%s)",
+                    (ids,),
+                )
+                c.execute(
+                    "DELETE FROM identity.account_connectors WHERE trading_account_id=ANY(%s)",
+                    (ids,),
+                )
+                c.execute(
+                    "DELETE FROM identity.trading_accounts WHERE trading_account_id=ANY(%s)",
+                    (ids,),
+                )
