@@ -308,7 +308,17 @@ class TouchBook(old.EntryEmbargo):
             self.trackers[symbol] = TouchState(
                 symbol=symbol, side=pos.side, entry=pos.entry,
                 tick=TICK_SIZE[symbol], entry_event_id=pos.entry_event_id,
-                last_px=px, last_bound=target, last_bucket=bucket
+                last_px=px, last_bound=target, last_bucket=bucket,
+                resting_bound=target if (
+                    target is not None
+                    and old.base.take_profit_eligible(pos.side, pos.entry, target)
+                    and before_tp(pos.side, px, target, TICK_SIZE[symbol])
+                ) else None,
+                resting_from_seq=seq if (
+                    target is not None
+                    and old.base.take_profit_eligible(pos.side, pos.entry, target)
+                    and before_tp(pos.side, px, target, TICK_SIZE[symbol])
+                ) else -1
             )
             self.count["accepted"] += 1
 
