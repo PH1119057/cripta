@@ -2,7 +2,7 @@
 from decimal import Decimal as D
 from types import SimpleNamespace
 
-from scripts.research import p90l90_l53_tp_touch1to5_v1 as study
+import scripts.research.p90l90_l53_tp_touch1to5_v1 as study
 
 BOUND = (D("99"), D("100.6"), D("1"))
 
@@ -16,11 +16,13 @@ def ev(symbol, t, side="LONG"):
 
 
 def test_current_tick_assumption_frozen_by_symbol():
-    assert study.TICK_SIZE == {
+    actual_ticks = study.TICK_SIZE
+    expected_ticks = {
         "LTCUSDT": D("0.01"), "DOTUSDT": D("0.0001"),
         "ARBUSDT": D("0.00001"), "APTUSDT": D("0.0001"),
         "INJUSDT": D("0.0010"),
     }
+    assert actual_ticks == expected_ticks
     assert len(study.NAMES) == 6
     assert study.NAMES[0] == study.BASELINE
 
