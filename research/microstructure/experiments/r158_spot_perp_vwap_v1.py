@@ -16,11 +16,16 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 from pathlib import Path
 
-VERSION = "R158_SPOT_PERP_EXECUTED_VWAP_1M_V1"
+VERSION = "R158_SPOT_PERP_EXECUTED_VWAP_1M_V2"
 COHORT = ("APTUSDT", "INJUSDT", "DOTUSDT", "LTCUSDT", "ARBUSDT")
 FIRST_DAY = date(2026, 5, 18)
 LAST_DAY = date(2026, 6, 16)
 MINUTES_PER_DAY = 1440
+# Decimal-parsed source foreignNotional sometimes records binary-float noise:
+# June 4 originals showed <= 3.7e-16 relative for five 100k-row samples.
+# These are source-QC rounding bounds, NOT trade/Strategy thresholds.
+NATIVE_FOREIGN_REL_ROUNDING_BOUND = Decimal("1e-14")
+NATIVE_FOREIGN_ABS_ROUNDING_BOUND = Decimal("1e-16")
 
 
 def original_archive_path(root: Path, symbol: str, day: date, venue: str) -> Path:
@@ -75,11 +80,17 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
             "source_state": "SOURCE_MISSING", "source_path": str(path),
             "source_sha256": None, "rows": 0, "minutes": {},
             "native_perpetual_notional_parity": "NO_SOURCE",
+            "native_perpetual_foreign_rounding_rows": 0,
+            "native_perpetual_max_abs_rounding_usdt": None,
+            "native_perpetual_max_relative_rounding": None,
         }
     sha = _sha256_file(path)
     day_start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() // 60)
     aggregate: dict[int, dict[str, Decimal | int]] = {}
     rows = 0
+    native_foreign_rounding_rows = 0
+    max_abs_rounding = Decimal(0)
+    max_relative_rounding = Decimal(0)
     last_minute: int | None = None
     last_exchange_ts: Decimal | None = None
     with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as fh:
@@ -116,8 +127,22 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
                 # units; do not infer them from price and size alone.
                 native_base = _decimal(row["homeNotional"], positive=True)
                 native_quote = _decimal(row["foreignNotional"], positive=True)
-                if native_base != qty or native_quote != price * qty:
+                expected_quote = price * qty
+                if native_base != qty:
                     raise ValueError("original perpetual native notional parity mismatch")
+                abs_diff = abs(native_quote - expected_quote)
+                allowed = max(
+                    NATIVE_FOREIGN_ABS_ROUNDING_BOUND,
+                    NATIVE_FOREIGN_REL_ROUNDING_BOUND * expected_quote,
+                )
+                if abs_diff > allowed:
+                    raise ValueError("original perpetual native notional parity mismatch")
+                if abs_diff:
+                    native_foreign_rounding_rows += 1
+                    max_abs_rounding = max(max_abs_rounding, abs_diff)
+                    max_relative_rounding = max(
+                        max_relative_rounding, abs_diff / expected_quote
+                    )
                 if not row["trdMatchID"]:
                     raise ValueError("missing original perpetual trade identifier")
             cell = aggregate.setdefault(
@@ -132,7 +157,15 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
         "source_state": "SOURCE_PRESENT", "source_path": str(path),
         "source_sha256": sha, "rows": rows, "minutes": aggregate,
         "native_perpetual_notional_parity": (
-            "PASS_ALL_ROWS" if venue == "perpetual" else "NOT_APPLICABLE"
+            "PASS_ALL_ROWS_FLOAT_REPR_ROUNDING_BOUNDED"
+            if venue == "perpetual" else "NOT_APPLICABLE"
+        ),
+        "native_perpetual_foreign_rounding_rows": native_foreign_rounding_rows,
+        "native_perpetual_max_abs_rounding_usdt": (
+            str(max_abs_rounding) if venue == "perpetual" else None
+        ),
+        "native_perpetual_max_relative_rounding": (
+            str(max_relative_rounding) if venue == "perpetual" else None
         ),
     }
 
@@ -171,6 +204,9 @@ def calculate_day(symbol: str, day: date, spot_root: Path, perp_root: Path) -> t
                     k: pp[k] for k in (
                         "source_state", "source_path", "source_sha256",
                         "rows", "native_perpetual_notional_parity",
+                        "native_perpetual_foreign_rounding_rows",
+                        "native_perpetual_max_abs_rounding_usdt",
+                        "native_perpetual_max_relative_rounding",
                     )
                 },
                 "time_basis": "exchange_event_timestamp_only",
