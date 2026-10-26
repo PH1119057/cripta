@@ -22,6 +22,10 @@ import zipfile
 import psycopg
 
 from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
+from bybit_workbench.strategy_financial_account_service import (
+    inspect_financial_account_choice,
+    record_financial_account_choice,
+)
 from bybit_workbench.account_connector_db_snapshot import read_account_connector_evidence
 from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
@@ -898,6 +902,27 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
                 reasons.extend(
                     "STRATEGY_ACCOUNT_" + item for item in connector_evidence.reasons
                 )
+                # Selection is a StrategyExecutionBinding/TradingAccount fact,
+                # never a StrategyCard parameter or an authorization to arm.
+                # A connector registry reference is not an authenticated UID.
+                for account_id, connector_ids in connector_evidence.account_connectors.items():
+                    if len(connector_ids) != 1:
+                        reasons.append("STRATEGY_FINANCIAL_ACCOUNT_CONNECTOR_AMBIGUOUS")
+                        continue
+                    for connector_id in connector_ids:
+                        try:
+                            selection = inspect_financial_account_choice(
+                                connection,
+                                trading_account_id=account_id,
+                                account_connector_id=connector_id,
+                            )
+                        except (psycopg.Error, ValueError, TypeError):
+                            reasons.append("STRATEGY_FINANCIAL_ACCOUNT_SNAPSHOT_UNAVAILABLE")
+                        else:
+                            reasons.extend(
+                                "STRATEGY_FINANCIAL_ACCOUNT_" + item
+                                for item in selection.reasons
+                            )
     try:
         private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -1384,7 +1409,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 a.exit_mechanism,a.gross_pnl,a.entry_fee_actual,a.exit_fee_actual,
                 a.actual_net_without_funding,a.actual_net_pnl,
                 a.entry_to_exit_price_move_pct,a.exit_execution_ids,
-                a.economics_completeness,a.link_status
+                a.economics_completeness,a.link_status,
+                o.identity_status,o.trading_account_id
                 FROM runtime.position_exit_attribution a
                 JOIN runtime.position_ownership o USING(position_id,trade_id)
                 WHERE a.link_status='EXACT'
@@ -1408,7 +1434,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         ).fetchall()
         control_entry_rows = connection.execute(
             """SELECT c.command_id,c.symbol,c.payload_json,e.order_id,e.exec_id,
-                      e.side,e.exec_qty,e.exec_price,e.exec_fee,e.exec_time_ms
+                      e.side,e.exec_qty,e.exec_price,e.exec_fee,e.exec_time_ms,
+                c.identity_status,c.trading_account_id
                FROM runtime.trade_commands c
                JOIN runtime.executions e
                  ON e.order_id = c.result_json::jsonb->'result'->>'orderId'
@@ -1419,14 +1446,17 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                        AND e.trading_account_id=%s AND e.identity_status='PROVEN')
                       OR
                       (c.identity_status='LEGACY_UNKNOWN'
-                       AND e.identity_status='LEGACY_UNKNOWN')
+                       AND c.trading_account_id IS NULL
+                       AND e.identity_status='LEGACY_UNKNOWN'
+                       AND e.trading_account_id IS NULL)
                  )
                ORDER BY e.exec_time_ms DESC LIMIT %s""",
             (TRADING_ACCOUNT_ID, TRADING_ACCOUNT_ID, 1000 if include_history else 40),
         ).fetchall()
         control_exit_rows = connection.execute(
             """SELECT e.symbol,e.order_id,e.exec_id,e.side,e.exec_qty,
-                      e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json
+                      e.exec_price,e.exec_fee,e.exec_time_ms,e.payload_json,
+                      e.identity_status,e.trading_account_id
                FROM runtime.executions e
                WHERE (e.payload_json::jsonb->>'closedSize')::numeric > 0
                  AND (
@@ -1440,10 +1470,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         if include_history and not has_exact_exit_table:
             execution_rows = connection.execute(
                 """SELECT symbol,side,exec_price,exec_qty,exec_fee,
-                          exec_time_ms,order_id,payload_json
+                          exec_time_ms,order_id,payload_json,
+                          identity_status,trading_account_id
                      FROM (
                          SELECT symbol,side,exec_price,exec_qty,exec_fee,
-                                exec_time_ms,order_id,payload_json
+                                exec_time_ms,order_id,payload_json,
+                                identity_status,trading_account_id
                            FROM runtime.executions
                           WHERE (
                                (trading_account_id=%s AND identity_status='PROVEN')
@@ -1605,22 +1637,29 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "strategy_name": None if ownership is None else ownership["strategy_name"],
             }
         )
-    open_lots: dict[tuple[str, str], dict[str, float]] = {}
-    closed_groups: dict[tuple[str, str], dict[str, object]] = {}
+    from bybit_workbench.closed_trade_reporting import _account_scope
+
+    open_lots: dict[tuple[tuple[str, str | None], str, str], dict[str, float]] = {}
+    closed_groups: dict[tuple[tuple[str, str | None], str, str], dict[str, object]] = {}
     for row in execution_rows:
         raw = json.loads(row[7])
+        report_scope = _account_scope(row[8], row[9])
         symbol, side = str(row[0]), str(row[1])
         qty, fee = float(row[3]), float(row[4])
         closed_qty = float(raw.get("closedSize") or 0)
         if closed_qty <= 0:
-            lot = open_lots.setdefault((symbol, side), {"qty": 0.0, "fee": 0.0, "notional": 0.0})
+            lot = open_lots.setdefault(
+                (report_scope, symbol, side),
+                {"qty": 0.0, "fee": 0.0, "notional": 0.0},
+            )
             lot["qty"] += qty
             lot["fee"] += fee
             lot["notional"] += qty * float(row[2])
             continue
         opening_side = "Buy" if side == "Sell" else "Sell"
         lot = open_lots.setdefault(
-            (symbol, opening_side), {"qty": 0.0, "fee": 0.0, "notional": 0.0}
+            (report_scope, symbol, opening_side),
+            {"qty": 0.0, "fee": 0.0, "notional": 0.0}
         )
         allocated_entry_fee = 0.0
         allocated_entry_notional = 0.0
@@ -1631,10 +1670,12 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             lot["qty"] -= allocated_qty
             lot["fee"] = max(0.0, lot["fee"] - allocated_entry_fee)
             lot["notional"] = max(0.0, lot["notional"] - allocated_entry_notional)
-        key = (symbol, str(row[6]))
+        key = (report_scope, symbol, str(row[6]))
         item = closed_groups.setdefault(
             key,
             {
+                "identity_status": report_scope[0],
+                "trading_account_id": report_scope[1],
                 "symbol": symbol,
                 "side": side,
                 "price": 0.0,
@@ -1705,6 +1746,8 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 "exec_ids": list(row[15] or []),
                 "economics_completeness": row[16],
                 "link_status": row[17],
+                "identity_status": row[18],
+                "trading_account_id": row[19],
             }
             for row in exact_exit_rows
         ]
@@ -3560,6 +3603,8 @@ U6_STRATEGY_CREATE_PATH = "/api/strategies/create"
 U6_STRATEGY_VERSION_PATH = "/api/strategies/version"
 U6_STRATEGY_ACTIVATION_PATH = "/api/strategies/activation"
 U6_STRATEGY_EXECUTION_PERMISSION_PATH = "/api/strategies/execution-permission"
+U6_STRATEGY_FINANCIAL_ACCOUNTS_PATH = "/api/strategies/financial-accounts"
+U6_STRATEGY_FINANCIAL_ACCOUNT_SET_PATH = "/api/strategies/financial-account"
 R1_MICRO_LIVE_PATH = "/api/r1/micro-live"
 R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
 R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"
@@ -3569,6 +3614,7 @@ U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_VERSION_PATH,
     U6_STRATEGY_ACTIVATION_PATH,
     U6_STRATEGY_EXECUTION_PERMISSION_PATH,
+    U6_STRATEGY_FINANCIAL_ACCOUNT_SET_PATH,
     R1_MICRO_LIVE_PATH,
     R1_UNIFIED_MICRO_LIVE_PATH,
 }
@@ -4372,6 +4418,144 @@ def _u6_r1_unified_micro_live(
     _u6_json(handler, 200, result)
 
 
+
+def _u6_financial_account_catalog(handler: object) -> None:
+    """Read-only operator catalog. No credential ref, secret or provider UID exported."""
+    accounts: list[dict[str, object]] = []
+    bindings: list[dict[str, object]] = []
+    try:
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as connection, connection.transaction():
+            connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """SELECT a.trading_account_id,a.account_kind,
+                          a.venue_id,a.account_type,a.environment,a.status,
+                          c.account_connector_id
+                     FROM identity.trading_accounts a
+                     JOIN identity.account_connectors c
+                       ON c.trading_account_id=a.trading_account_id
+                    WHERE c.connector_kind='CEX_PRIVATE_RUNTIME'
+                      AND c.adapter_id='BYBIT_V5_PRIVATE'
+                    ORDER BY a.account_kind,a.trading_account_id,
+                             c.account_connector_id"""
+            ).fetchall()
+            for account, kind, venue, account_type, env, state, connector in rows:
+                decision = inspect_financial_account_choice(
+                    connection, trading_account_id=str(account),
+                    account_connector_id=str(connector),
+                )
+                accounts.append({
+                    "trading_account_id": str(account),
+                    "account_connector_id": str(connector),
+                    "account_kind": str(kind),
+                    "venue": str(venue),
+                    "account_type": str(account_type),
+                    "environment": str(env),
+                    "status": str(state),
+                    "selectable": decision.ready,
+                    "reasons": list(decision.reasons),
+                })
+            bound = connection.execute(
+                """SELECT b.strategy_activation_id,b.execution_leg,
+                          b.trading_account_id,b.binding_state
+                     FROM strategy_entry.strategy_execution_bindings b
+                    WHERE b.binding_state='ACTIVE' AND
+                          (b.effective_to IS NULL OR b.effective_to>now())
+                    ORDER BY b.strategy_activation_id,b.execution_leg"""
+            ).fetchall()
+            bindings = [
+                {
+                    "strategy_activation_id": str(a),
+                    "execution_leg": str(leg),
+                    "trading_account_id": str(account),
+                    "binding_state": str(state),
+                }
+                for a, leg, account, state in bound
+            ]
+        _u6_json(handler, 200, {"accounts": accounts, "bindings": bindings})
+    except (ValueError, psycopg.Error):
+        _u6_json(handler, 503, {"error": "FINANCIAL_ACCOUNT_CATALOG_UNAVAILABLE"})
+
+
+def _u6_financial_account_same_origin(handler: object) -> bool:
+    """Additional fail-closed CSRF boundary for account-binding mutation."""
+    host = str(handler.headers.get("Host") or "")
+    origin = str(handler.headers.get("Origin") or "")
+    fetch_site = str(handler.headers.get("Sec-Fetch-Site") or "")
+    return bool(host) and not any(c in host for c in " /\\\t\r\n") and (
+        fetch_site == "same-origin" and origin == "https://" + host
+    )
+
+
+def _u6_set_financial_account(handler: object, request: dict[str, object]) -> None:
+    """Operator-selected PRIMARY account mapping, never a LIVE permission."""
+    if not _u6_financial_account_same_origin(handler):
+        _u6_json(handler, 403, {"error": "FINANCIAL_ACCOUNT_ORIGIN_UNVERIFIED"})
+        return
+    if request.get("confirmed") is not True:
+        raise ValueError("FINANCIAL_ACCOUNT_OWNER_CONFIRMATION_REQUIRED")
+    operator = handler.session_user()
+    if not operator:
+        _u6_json(handler, 401, {"error": "FINANCIAL_ACCOUNT_OPERATOR_MISSING"})
+        return
+    activation_id = str(request.get("activation_id") or "").strip()
+    strategy_id = str(request.get("strategy_id") or "").strip()
+    version = str(request.get("strategy_version") or "").strip()
+    fingerprint = str(request.get("strategy_config_fingerprint") or "").strip()
+    account = str(request.get("trading_account_id") or "").strip()
+    connector = str(request.get("account_connector_id") or "").strip()
+    reason = str(request.get("reason") or "").strip()
+    if not all((activation_id, strategy_id, version, fingerprint, account, connector, reason)):
+        raise ValueError("FINANCIAL_ACCOUNT_EXACT_SELECTION_REQUIRED")
+    if len(reason) > 500:
+        raise ValueError("FINANCIAL_ACCOUNT_REASON_TOO_LONG")
+    now = datetime.now(UTC)
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        current = connection.execute(
+            """SELECT a.activation_id
+                 FROM strategy_entry.strategy_activations a
+                WHERE a.activation_id=%s AND a.strategy_id=%s
+                  AND a.strategy_version=%s
+                  AND a.strategy_config_fingerprint=%s
+                  AND a.enabled=false""",
+            (activation_id, strategy_id, version, fingerprint),
+        ).fetchall()
+        if len(current) != 1:
+            raise ValueError("FINANCIAL_ACCOUNT_ACTIVATION_NOT_DISABLED_OR_STALE")
+        active_execution = connection.execute(
+            """SELECT 1 FROM strategy_entry.execution_permissions
+                WHERE strategy_id=%s AND strategy_version=%s
+                  AND strategy_config_fingerprint=%s
+                  AND enabled=true LIMIT 1""",
+            (strategy_id, version, fingerprint),
+        ).fetchone()
+        if active_execution is not None:
+            raise ValueError("FINANCIAL_ACCOUNT_EXECUTION_MUST_BE_DISABLED")
+        record_financial_account_choice(
+            connection,
+            strategy_execution_binding_id=f"seb-{secrets.token_hex(16)}",
+            strategy_activation_id=activation_id,
+            execution_leg="PRIMARY",
+            trading_account_id=account,
+            account_connector_id=connector,
+            effective_from=now,
+            operator=operator,
+            reason=reason,
+        )
+    _u6_json(handler, 201, {
+        "status": "FINANCIAL_ACCOUNT_BOUND",
+        "strategy_activation_id": activation_id,
+        "trading_account_id": account,
+        "execution_leg": "PRIMARY",
+        "real_execution_enabled": False,
+        "live_arm_changed": False,
+    })
+
+
 def _u6_handle_post(handler: object, path: str) -> None:
     try:
         request = _u6_request_json(handler)
@@ -4383,6 +4567,8 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_set_activation(handler, request)
         elif path == U6_STRATEGY_EXECUTION_PERMISSION_PATH:
             _u6_set_execution_permission(handler, request)
+        elif path == U6_STRATEGY_FINANCIAL_ACCOUNT_SET_PATH:
+            _u6_set_financial_account(handler, request)
         elif path == R1_MICRO_LIVE_PATH:
             _u6_r1_micro_live(handler, request)
         elif path == R1_UNIFIED_MICRO_LIVE_PATH:
@@ -4502,6 +4688,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
             self.end_headers()
         elif self.require_login():
             return
+        elif path == U6_STRATEGY_FINANCIAL_ACCOUNTS_PATH:
+            _u6_financial_account_catalog(self)
         elif path == "/api/status":
             body = json.dumps(snapshot(), ensure_ascii=False).encode("utf-8")
             self.send_body(200, body, "application/json; charset=utf-8")

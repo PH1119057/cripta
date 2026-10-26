@@ -26,6 +26,7 @@ ACTIVE_READER_FILES = (
 PRESERVATION_OR_SCHEMA_FILES = {
     "operations/dashboard/app.py",
     "operations/dashboard/archive_v2.py",
+    "operations/monitoring/causal_context_correlator.py",
     "operations/monitoring/live_v1_session_audit.py",
     "operations/monitoring/mayak_v2.py",
     "operations/sql/20261016_account_scoped_key_preparation_r5.sql",
@@ -39,7 +40,9 @@ PRESERVATION_OR_SCHEMA_FILES = {
     "operations/sql/20261016_trade_command_account_identity_r6d.sql",
     "operations/sql/20261017_market_instrument_identity_r7a.sql",
     "operations/sql/20261025_account_attempt_fanout.sql",
+    "operations/sql/20261026_account_scoped_physical_key_cutover.sql",
     "operations/sql/p1_exact_close_readonly_audit.sql",
+    "src/bybit_workbench/closed_trade_reporting.py",
     "src/bybit_workbench/strategy_position.py",
     "src/bybit_workbench/universal_entry/storage.py",
     "src/bybit_workbench/universal_exit/contracts.py",

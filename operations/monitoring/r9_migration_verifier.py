@@ -231,20 +231,21 @@ def _private_current_state_gate(
     trading_account_id: str,
     connector_id: str,
 ) -> Gate:
+    """Verify this one account without treating another account's rows as errors."""
     failures: list[str] = []
 
     wallet = connection.execute(
         """SELECT count(*),
                   count(*) FILTER (
                       WHERE identity_status='PROVEN'
-                        AND trading_account_id=%s
                         AND account_connector_id=%s
                   )
-             FROM runtime.wallet_latest""",
-        (trading_account_id, connector_id),
+             FROM runtime.wallet_latest
+            WHERE trading_account_id=%s""",
+        (connector_id, trading_account_id),
     ).fetchone()
-    if wallet is None or int(wallet[0]) < 1 or int(wallet[0]) != int(wallet[1]):
-        failures.append(f"wallet_latest={wallet!r}")
+    if wallet is None or tuple(int(v) for v in wallet) != (1, 1):
+        failures.append("wallet_latest:EXACT_ACCOUNT_ROW_NOT_UNIQUE_OR_UNPROVEN")
 
     for table, order_column in (
         ("runtime.account_state_generations", "started_at"),
@@ -254,29 +255,31 @@ def _private_current_state_gate(
         row = connection.execute(
             f"""SELECT trading_account_id,account_connector_id,identity_status
                   FROM {table}
+                 WHERE trading_account_id=%s
                  ORDER BY {order_column} DESC
-                 LIMIT 1"""
+                 LIMIT 1""",
+            (trading_account_id,),
         ).fetchone()
         if row != (trading_account_id, connector_id, "PROVEN"):
-            failures.append(f"{table}={row!r}")
+            failures.append(f"{table}:NO_LATEST_EXACT_PROVEN_ROW")
 
     for table in ("runtime.hot_positions", "runtime.hot_orders"):
         row = connection.execute(
             f"""SELECT count(*),
                        count(*) FILTER (
                            WHERE identity_status='PROVEN'
-                             AND trading_account_id=%s
                              AND account_connector_id=%s
                        )
-                  FROM {table}""",
-            (trading_account_id, connector_id),
+                  FROM {table}
+                 WHERE trading_account_id=%s""",
+            (connector_id, trading_account_id),
         ).fetchone()
         if row is None or int(row[0]) != int(row[1]):
-            failures.append(f"{table}={row!r}")
+            failures.append(f"{table}:ACCOUNT_SCOPE_MISMATCH")
 
     if failures:
         return Gate("ACCOUNT_SCOPE_PARITY", "FAIL", "; ".join(failures))
-    return Gate("ACCOUNT_SCOPE_PARITY", "PASS", "current private state exact")
+    return Gate("ACCOUNT_SCOPE_PARITY", "PASS", "private facts scoped to exact account")
 
 
 def _market_source_gate(connection: psycopg.Connection[Any]) -> Gate:

@@ -1554,6 +1554,8 @@ class LifecycleSupervisor:
                      FROM runtime.position_ownership p
                      LEFT JOIN runtime.hot_positions h
                        ON h.symbol=p.symbol AND h.position_idx=p.position_idx
+                      AND h.trading_account_id IS NOT DISTINCT FROM p.trading_account_id
+                      AND h.identity_status=p.identity_status
                     WHERE p.bot_instance_id='universal-entry' AND p.state='OPEN'"""
             ).fetchall()
         faults: list[FaultCondition] = []
