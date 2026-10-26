@@ -5,12 +5,15 @@ versioned cutover migration to the ephemeral cripta_integration database.
 """
 from __future__ import annotations
 
+import json
 import os
 from uuid import uuid4
 
 import psycopg
 import pytest
 from psycopg.errors import UniqueViolation
+
+from operations.dashboard import archive_v2
 
 DSN = os.getenv("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(not DSN, reason="disposable PostgreSQL DSN required")
@@ -198,4 +201,40 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
                 WHERE order_id=%s AND identity_status='LEGACY_UNKNOWN'""",
             (legacy_order,),
         ).fetchone()[0] == 1
+        # Exercise the real archive identity validator on PostgreSQL's
+        # canonical to_jsonb(t) export representation. Same provider orderId
+        # must remain distinct across proven accounts; legacy stays unassigned.
+        exported = c.execute(
+            """SELECT to_jsonb(t) FROM runtime.hot_orders t
+               WHERE trading_account_id=ANY(%s)
+                  OR (identity_status='LEGACY_UNKNOWN' AND order_id=%s)
+               ORDER BY identity_status,trading_account_id NULLS FIRST""",
+            ([accounts[0][0], accounts[1][0]], legacy_order),
+        ).fetchall()
+        archive_rows = [
+            json.loads(json.dumps(row[0], default=str)) for row in exported
+        ]
+        assert len(archive_rows) == 3
+        scope_keys = {
+            archive_v2._validate_account_identity(row)
+            for row in archive_rows
+        }
+        assert scope_keys == {
+            ("PROVEN", accounts[0][0]),
+            ("PROVEN", accounts[1][0]),
+            ("LEGACY_UNKNOWN", None),
+        }
+        account_rows = [
+            row for row in archive_rows if row["identity_status"] == "PROVEN"
+        ]
+        assert len({row["order_id"] for row in account_rows}) == 1
+        assert account_rows[0]["order_id"] == order
+        assert len({row["trading_account_id"] for row in account_rows}) == 2
+        legacy_rows = [
+            row for row in archive_rows
+            if row["identity_status"] == "LEGACY_UNKNOWN"
+        ]
+        assert len(legacy_rows) == 1
+        assert legacy_rows[0]["trading_account_id"] is None
+        assert legacy_rows[0]["order_id"] == legacy_order
         c.rollback()
