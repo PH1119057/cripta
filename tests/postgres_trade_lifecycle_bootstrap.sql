@@ -50,7 +50,7 @@ CREATE TABLE runtime.hot_positions (
     leverage text NOT NULL,
     exchange_updated_ms bigint,
     refreshed_at_epoch_ms bigint NOT NULL,
-    payload_json jsonb NOT NULL,
+    payload_json text NOT NULL,
     PRIMARY KEY(symbol,position_idx)
 );
 
@@ -65,7 +65,7 @@ CREATE TABLE runtime.hot_orders (
     leaves_qty text NOT NULL,
     exchange_updated_ms bigint,
     refreshed_at_epoch_ms bigint NOT NULL,
-    payload_json jsonb NOT NULL
+    payload_json text NOT NULL
 );
 
 CREATE TABLE runtime.executions (
@@ -79,7 +79,7 @@ CREATE TABLE runtime.executions (
     exec_fee text NOT NULL,
     exec_time_ms bigint,
     received_at_epoch_ms bigint NOT NULL,
-    payload_json jsonb NOT NULL
+    payload_json text NOT NULL
 );
 
 CREATE TABLE runtime.wallet_latest (
@@ -88,7 +88,7 @@ CREATE TABLE runtime.wallet_latest (
     total_equity text NOT NULL,
     wallet_balance text NOT NULL,
     available_balance text NOT NULL,
-    payload_json jsonb NOT NULL
+    payload_json text NOT NULL
 );
 
 CREATE TABLE runtime.private_events (
