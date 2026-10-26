@@ -5,8 +5,12 @@ versioned cutover migration to the ephemeral cripta_integration database.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import zipfile
+from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -27,7 +31,9 @@ SCOPES = (
 )
 
 
-def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown() -> None:
+def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert DSN is not None
     with psycopg.connect(DSN) as c:
         db = c.execute("SELECT current_database()").fetchone()
@@ -237,4 +243,57 @@ def test_duplicate_provider_local_keys_preserve_two_accounts_and_legacy_unknown(
         assert len(legacy_rows) == 1
         assert legacy_rows[0]["trading_account_id"] is None
         assert legacy_rows[0]["order_id"] == legacy_order
+
+        # Run the actual archive_v2._statistics writer on this same disposable
+        # PostgreSQL transaction; no secondary production DB connection.
+        class _BorrowedConnection:
+            def __enter__(self) -> psycopg.Connection:
+                return c
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+        target = tmp_path / "account_private_export.zip"
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                archive_v2, "TABLE_EXPORTS",
+                tuple(
+                    spec for spec in archive_v2.TABLE_EXPORTS
+                    if spec.table == "runtime.hot_orders"
+                ),
+            )
+            patch.setattr(
+                psycopg, "connect",
+                lambda *_args, **_kwargs: _BorrowedConnection(),
+            )
+            export = archive_v2._statistics(
+                target, datetime(2100, 1, 1, tzinfo=UTC), None
+            )
+        assert export["tables"] == 1
+        with zipfile.ZipFile(target) as bundle:
+            jsonl = bundle.read("execution/hot_orders.jsonl")
+            manifest = json.loads(bundle.read("STATISTICS_MANIFEST.json"))
+        assert len(manifest["tables"]) == 1
+        table_meta = manifest["tables"][0]
+        assert table_meta["table"] == "runtime.hot_orders"
+        assert table_meta["sha256"] == hashlib.sha256(jsonl).hexdigest()
+        assert table_meta["identity_provenance"]["scope"] == "TRADING_ACCOUNT"
+        archived = [json.loads(line) for line in jsonl.splitlines()]
+        relevant = [
+            row for row in archived
+            if row["order_id"] in (order, legacy_order)
+        ]
+        assert len(relevant) == 3
+        assert {
+            archive_v2._validate_account_identity(row) for row in relevant
+        } == scope_keys
+        assert {
+            row["trading_account_id"]
+            for row in relevant if row["identity_status"] == "PROVEN"
+        } == {accounts[0][0], accounts[1][0]}
+        assert len([
+            row for row in relevant
+            if row["identity_status"] == "LEGACY_UNKNOWN"
+            and row["trading_account_id"] is None
+        ]) == 1
         c.rollback()
