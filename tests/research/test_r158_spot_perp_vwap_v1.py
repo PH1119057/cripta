@@ -32,10 +32,11 @@ def _fixtures(root):
            "s1,1779148800000,2,3,Buy\n"
            "s2,1779148800123,4,1,Sell\n"
            "s3,1779148860000,6,1,Buy\n")
-    _write(perp, "APTUSDT", "perpetual", "timestamp,symbol,side,size,price,trdMatchID\n"
-           "1779148800.000,APTUSDT,Buy,1,4,p1\n"
-           "1779148800.700,APTUSDT,Sell,1,2,p2\n"
-           "1779148920.000,APTUSDT,Buy,1,8,p3\n")
+    _write(perp, "APTUSDT", "perpetual",
+           "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+           "1779148800.000,APTUSDT,Buy,1,4,p1,1,4\n"
+           "1779148800.700,APTUSDT,Sell,1,2,p2,1,2\n"
+           "1779148920.000,APTUSDT,Buy,1,8,p3,1,8\n")
     return spot, perp
 
 
@@ -67,7 +68,10 @@ def test_invalid_perp_symbol_fails_closed(tmp_path):
     spot, perp = _fixtures(tmp_path)
     path = m.original_archive_path(perp, "APTUSDT", DAY, "perpetual")
     with gzip.open(path, "wt") as f:
-        f.write("timestamp,symbol,side,size,price,trdMatchID\n1779148800,DOTUSDT,Buy,1,4,x\n")
+        f.write(
+            "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+            "1779148800,DOTUSDT,Buy,1,4,x,1,4\n"
+        )
     with pytest.raises(ValueError, match="symbol mismatch"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
 
@@ -116,9 +120,9 @@ def test_perpetual_exact_timestamps_must_not_decrease_within_minute(tmp_path):
     spot, perp = _fixtures(tmp_path)
     _write(
         perp, "APTUSDT", "perpetual",
-        "timestamp,symbol,side,size,price,trdMatchID\n"
-        "1779148800.900,APTUSDT,Buy,1,4,p1\n"
-        "1779148800.100,APTUSDT,Sell,1,2,p2\n",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.900,APTUSDT,Buy,1,4,p1,1,4\n"
+        "1779148800.100,APTUSDT,Sell,1,2,p2,1,2\n",
     )
     with pytest.raises(ValueError, match="unsorted original exchange timestamps"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
@@ -132,3 +136,36 @@ def test_original_archive_paths_match_actual_native_storage_layout(tmp_path):
     assert perp == (
         tmp_path / "APTUSDT" / "public_trades" / f"APTUSDT{day}.csv.gz"
     )
+
+
+def test_original_perp_native_home_notional_mismatch_fails_closed(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.000,APTUSDT,Buy,1,4,p1,2,4\n",
+    )
+    with pytest.raises(ValueError, match="native notional parity mismatch"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_original_perp_native_foreign_notional_mismatch_fails_closed(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID,homeNotional,foreignNotional\n"
+        "1779148800.000,APTUSDT,Buy,1,4,p1,1,5\n",
+    )
+    with pytest.raises(ValueError, match="native notional parity mismatch"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_original_perp_native_parity_is_required_in_source_schema(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID\n"
+        "1779148800.000,APTUSDT,Buy,1,4,p1\n",
+    )
+    with pytest.raises(ValueError, match="invalid perpetual archive columns"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
