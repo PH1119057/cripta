@@ -178,7 +178,12 @@ def persist_verified_account_enrollment(
         raise RuntimeError("ACCOUNT_ENROLLMENT_EVIDENCE_INVALID")
     updated = connection.execute(
         """UPDATE identity.trading_accounts a
-              SET external_account_ref=%s
+              SET external_account_ref=%s,
+                  metadata=a.metadata || jsonb_build_object(
+                      'uid_registration_source', 'BYBIT_AUTHENTICATED_ACCOUNT_GET',
+                      'uid_registration_operator_ref', %s::text,
+                      'uid_registration_observed_at', %s::timestamptz
+                  )
             WHERE a.trading_account_id=%s
               AND a.venue_id='venue-bybit'
               AND a.environment='MAINNET' AND a.status='ACTIVE'
@@ -202,9 +207,10 @@ def persist_verified_account_enrollment(
               )
           RETURNING a.trading_account_id""",
         (
-            evidence.provider_uid, evidence.trading_account_id,
-            evidence.provider_uid, evidence.account_connector_id,
-            evidence.verified_credential_ref, evidence.provider_uid,
+            evidence.provider_uid, approved_operator_ref, evidence.observed_at,
+            evidence.trading_account_id, evidence.provider_uid,
+            evidence.account_connector_id, evidence.verified_credential_ref,
+            evidence.provider_uid,
         ),
     ).fetchall()
     if len(updated) != 1:
