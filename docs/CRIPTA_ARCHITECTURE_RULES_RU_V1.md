@@ -1063,6 +1063,18 @@ ARCH §48 storage/recoverability rules remain controlling. This section changes
 identity/ownership only and does not authorize DB migration, deletion, deploy,
 LIVE arm or Exchange mutation.
 
+**Legacy-to-multi-account rollout — OWNER DECISION 2026-10-27.**
+Historical single-account R1 rows can stay in their real historical account
+and remain read-only legacy evidence. Adding SUB accounts must not require
+retroactively inventing StrategyExecutionBinding, splitting old trades, or
+reassigning their physical account. The new private state key includes the
+actual TradingAccount, while net performance remains aggregatable by exact
+Strategy and account. The temporary offline infrastructure migration is
+authorized only under `DEVELOPMENT_RELEASE §48.2.1`; it is neither loss of
+historical data nor proof that multi-account execution fan-out is implemented.
+A provisional `OWNER_ASSERTED_PENDING` provider UID never itself verifies a
+mounted exchange key or confers new REAL permission.
+
 ### 49.6 Independent Strategy configurations and multi-account fan-out — OWNER DECISION 2026-10-20
 
 Strategy duplication is a **creation-time UI operation** ("create based on"), not an
