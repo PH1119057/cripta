@@ -1,7 +1,10 @@
 """Causal chronology and no-flatten invariants for P90L90 Entry-only embargo."""
 from decimal import Decimal as D
 
-from scripts.research.p90l90_entry_only_hardstop_embargo_v1 import EntryEmbargo, SCENARIOS
+from scripts.research.p90l90_entry_only_hardstop_embargo_v1 import (
+    EntryEmbargo,
+    SCENARIOS,
+)
 
 STATE = (D("80"), D("120"), D("1"))
 
