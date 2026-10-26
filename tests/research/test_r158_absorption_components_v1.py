@@ -46,8 +46,8 @@ def delta(b=None, a=None, *, u=101, seq=1001, ts=TS + 100):
 
 def stage(tmp_path, records=None, trades=None):
     raw = tmp_path / SYM
-    raw.joinpath("orderbook").mkdir(parents=True)
-    raw.joinpath("public_trades").mkdir(parents=True)
+    raw.joinpath("orderbook").mkdir(parents=True, exist_ok=True)
+    raw.joinpath("public_trades").mkdir(parents=True, exist_ok=True)
     if records is not None:
         name = f"{DAY}_{SYM}_ob200.data"
         path = raw / "orderbook" / f"{name}.zip"
