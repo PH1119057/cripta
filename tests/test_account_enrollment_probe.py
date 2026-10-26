@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from operations.connectivity.account_enrollment_probe import verify_mounted_account
 
@@ -116,3 +117,30 @@ def test_invalid_response_fails_closed_with_stable_codes():
     })
     assert not ready and calls == ["mounted", "signed"]
     assert reasons == ("AUTHENTICATED_EXCHANGE_READ_FAILED",)
+
+
+def test_probe_systemd_template_is_inert_readonly_and_scoped() -> None:
+    unit = Path("operations/systemd/cripta-account-enrollment-probe@.service").read_text(
+        encoding="utf-8"
+    )
+    installer = Path("operations/infrastructure/install_verified_release.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "Type=oneshot" in unit
+    assert "User=cripta" in unit and "Group=cripta" in unit
+    assert "ProtectSystem=strict" in unit
+    assert "NoNewPrivileges=true" in unit
+    assert "CRIPTA_ACCOUNT_ENROLLMENT_READ_ONLY=1" in unit
+    assert "EnvironmentFile=/etc/cripta/account-enrollment-%i.env" in unit
+    assert (
+        "LoadCredentialEncrypted=bybit-%i:/etc/cripta/credentials/bybit-%i.cred"
+        in unit
+    )
+    assert "operations/connectivity/account_enrollment_probe.py" in unit
+    assert "[Install]" not in unit and "WantedBy=" not in unit
+    assert "Restart=always" not in unit
+    assert "ReadWritePaths=" not in unit
+    assert "cripta-account-enrollment-probe@.service|runtime" in installer
+    # Publishing an inert unit is not a grant to start it in release sequencing.
+    services = installer.split("managed_services=(", 1)[1].split(")", 1)[0]
+    assert "cripta-account-enrollment-probe@" not in services
