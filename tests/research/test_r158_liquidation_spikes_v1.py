@@ -82,6 +82,21 @@ def test_normalized_covers_native_objects_not_missing_hours(tmp_path):
     assert fifteen["max_count"] == 3
     assert result["cripta_local_available_after"] is None
     assert result["native_parquet_row_parity"] == "NOT_VERIFIED"
+    assert result["version"] == "R158_LIQ_PUBLISHED_OBJECTS_BY_SIDE_V2"
+    assert one["total_events"] == 3
+    assert one["total_notional_usdt"] == "30"
+    long_1m = one["by_liquidated_position_side"]["LONG"]
+    short_1m = one["by_liquidated_position_side"]["SHORT"]
+    assert long_1m["total_events"] == 2
+    assert long_1m["total_notional_usdt"] == "26"
+    assert long_1m["max_notional_usdt"] == "20"
+    assert short_1m["total_events"] == 1
+    assert short_1m["max_notional_usdt"] == "4"
+    assert five["by_liquidated_position_side"]["LONG"]["max_count"] == 1
+    assert fifteen["by_liquidated_position_side"]["LONG"]["max_count"] == 2
+    assert fifteen["by_liquidated_position_side"]["SHORT"]["max_count"] == 1
+    assert one["bins_with_no_file"] == 719 * 60
+    assert one["by_liquidated_position_side"]["LONG"]["bins_with_records"] == 2
 
 
 def test_original_sha256_mismatch_fails_closed(tmp_path):
@@ -126,3 +141,21 @@ def test_original_receipt_hour_must_match_native_object_hour(tmp_path):
     (vendor / "OBJECTS.jsonl").write_text(json.dumps(receipt) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="receipt hour"):
         m.calculate("APTUSDT", vendor, norm)
+
+
+def test_covered_object_no_rows_does_not_invent_directional_peak(tmp_path):
+    vendor, norm, original, receipt, columns, rows = _setup(tmp_path)
+    _repack(norm / "APTUSDT.csv.gz", columns, [])
+    result = m.calculate("APTUSDT", vendor, norm)
+    assert result["original_object_hours"] == 1
+    assert result["normalized_rows"] == 0
+    for window in result["windows"].values():
+        assert window["bins_with_records"] == 0
+        assert window["max_count"] is None
+        assert window["max_notional_usdt"] is None
+        assert window["bins_with_no_file"] > 0
+        for side in ("LONG", "SHORT"):
+            part = window["by_liquidated_position_side"][side]
+            assert part["total_events"] == 0
+            assert part["max_count"] is None
+            assert part["max_notional_usdt"] is None
