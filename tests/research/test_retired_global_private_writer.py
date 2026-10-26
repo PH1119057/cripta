@@ -21,12 +21,7 @@ def test_retired_global_private_runtime_main_fails_before_side_effects() -> None
         if isinstance(node, ast.FunctionDef) and node.name == "main"
     ]
     assert len(mains) == 1
-    actionable = [
-        node
-        for node in mains[0].body
-        if not isinstance(node, (ast.Global, ast.Expr))
-        or not isinstance(getattr(node, "value", None), ast.Constant)
-    ]
+    actionable = [node for node in mains[0].body if not isinstance(node, ast.Global)]
     assert actionable
     assert isinstance(actionable[0], ast.Raise)
     raised = ast.get_source_segment(source, actionable[0]) or ""
