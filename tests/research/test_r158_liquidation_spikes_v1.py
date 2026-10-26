@@ -86,7 +86,7 @@ def test_normalized_covers_native_objects_not_missing_hours(tmp_path):
 
 def test_original_sha256_mismatch_fails_closed(tmp_path):
     vendor, norm, original, receipt, columns, rows = _setup(tmp_path)
-    original.write_bytes(b"tampered-original-after-receipt")
+    original.write_bytes(b"X" + original.read_bytes()[1:])
     with pytest.raises(ValueError, match="sha256 mismatch"):
         m.calculate("APTUSDT", vendor, norm)
 
