@@ -31,7 +31,7 @@ def test_one_snapshot_has_matching_price_flow_and_compact_return_after_socket_ap
     second = now.timestamp()
     engine.on_trade("spot", "BTCUSDT", second - 120, "Buy", 100.0, 100.0)
     engine.on_trade("linear", "BTCUSDT", second - 120, "Buy", 100.0, 100.0)
-    engine.on_trade("linear", "BTCUSDT", second - 45, "Buy", 100.0, 110.0)
+    engine.on_trade("linear", "BTCUSDT", second - 45, "Buy", 110.0, 100.0)
 
     active_linear = engine.trades[("linear", "BTCUSDT")]
     original = TradeWindow.frozen_view
@@ -42,7 +42,7 @@ def test_one_snapshot_has_matching_price_flow_and_compact_return_after_socket_ap
         frozen = original(self)
         if self is active_linear and not changed:
             changed = True
-            engine.on_trade("linear", "BTCUSDT", second - 5, "Buy", 100.0, 190.0)
+            engine.on_trade("linear", "BTCUSDT", second - 5, "Buy", 190.0, 100.0)
         return frozen
 
     monkeypatch.setattr(TradeWindow, "frozen_view", freeze_and_simulate_socket_arrival)
