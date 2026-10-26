@@ -37,6 +37,7 @@ def inspect_financial_account_choice(
     rows = connection.execute(
         """SELECT a.venue_id,a.environment,a.status,a.account_kind,
                   a.account_type,a.external_account_ref,
+                  a.metadata->>'uid_registration_status',
                   c.trading_account_id,c.connector_kind,c.adapter_id,
                   c.status,c.credential_ref,c.retired_at
              FROM identity.trading_accounts a
@@ -48,8 +49,9 @@ def inspect_financial_account_choice(
     if len(rows) != 1:
         reasons.add("FINANCIAL_ACCOUNT_CONNECTOR_NOT_UNIQUE")
     else:
-        (venue, environment, state, kind, account_type, uid, connector_account,
-         connector_kind, adapter, connector_state, credential_ref, retired) = rows[0]
+        (venue, environment, state, kind, account_type, uid, uid_status,
+         connector_account, connector_kind, adapter, connector_state,
+         credential_ref, retired) = rows[0]
         if (
             venue != "venue-bybit" or environment != "MAINNET"
             or state != "ACTIVE" or kind not in ("MAIN", "SUB")
@@ -62,6 +64,10 @@ def inspect_financial_account_choice(
             or not registered_uid.isdecimal() or int(registered_uid) <= 0
         ):
             reasons.add("FINANCIAL_ACCOUNT_PROVIDER_UID_NOT_REGISTERED")
+        # An owner-asserted UID is a provisional registry value, not a
+        # signed/exchange-authenticated AccountConnector enrollment.
+        if uid_status == "OWNER_ASSERTED_PENDING":
+            reasons.add("FINANCIAL_ACCOUNT_UID_PENDING_SIGNED_ATTESTATION")
         if (
             connector_account != trading_account_id
             or connector_kind != "CEX_PRIVATE_RUNTIME"
