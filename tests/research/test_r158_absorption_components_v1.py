@@ -144,3 +144,20 @@ def test_crossed_original_snapshot_fails(tmp_path):
     root = stage(tmp_path, [snap], [])
     with pytest.raises(ValueError, match="crossed original snapshot"):
         m.calculate(SYM, DAY, root)
+
+
+def test_native_resnapshot_marks_continuity_unknown_not_zero(tmp_path):
+    initial = snapshot()
+    first = delta(b=[["300", "12"]])
+    resumed = snapshot()
+    resumed["ts"] = TS + 300
+    resumed["data"]["u"] = 200
+    resumed["data"]["seq"] = 2000
+    next_delta = delta(b=[["300", "11"]], u=201, seq=2001, ts=TS + 400)
+    root = stage(tmp_path, [initial, first, resumed, next_delta], [])
+    meta, rows = m.calculate(SYM, DAY, root)
+    assert meta["orderbook"]["snapshots"] == 2
+    assert rows[0]["book_deltas_valid"] == 2
+    assert rows[0]["book_deltas_unknown"] == 1
+    assert rows[0]["book_status"] == "UNKNOWN"
+    assert rows[0]["bid_added_quote_usdt"] is None
