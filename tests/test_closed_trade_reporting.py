@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from bybit_workbench.closed_trade_reporting import (
     merge_evidenced_closed_trades,
     owner_controlled_closed_cycles,
@@ -47,3 +49,51 @@ def test_same_exit_never_counts_twice():
 def test_unproven_recovery_does_not_enter_operator_ledger():
     assert recovered_closed_cycles([("res","INJUSDT","Buy","1","1","0","0","0","0",
           {"source":"UNKNOWN","exit_execution_ids":["x"],"closed_at_epoch_ms":1},None)]) == []
+
+
+# Issue #214: these are deliberate strict XFAIL regressions, not evidence of
+# report/replay parity. The upstream caller still strips account provenance,
+# and the owner-visible treatment of unowned history needs an owner decision.
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#214 current operator ledger globally deduplicates provider exec_id",
+)
+def test_r10_proven_accounts_with_same_provider_exec_id_remain_separate():
+    common = {
+        "symbol": "BTCUSDT",
+        "closed_at_epoch_ms": 1800000000000,
+        "exec_ids": ["provider-local-exec-1"],
+        "provenance": "STRATEGY",
+    }
+    main = dict(common, identity_status="PROVEN", trading_account_id="ta-test-main")
+    sub = dict(common, identity_status="PROVEN", trading_account_id="ta-test-sub")
+    result = merge_evidenced_closed_trades([main, sub], [], [])
+    assert len(result) == 2
+    assert {row["trading_account_id"] for row in result} == {
+        "ta-test-main", "ta-test-sub"
+    }
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#214 control close pairing currently drops account identity in rows",
+)
+def test_r10_control_close_must_not_pair_different_proven_accounts():
+    # The extra two columns represent the SQL reader's verified
+    # identity_status and trading_account_id, NOT fields inferred from
+    # provider event payload or from symbol/time.
+    entries = [
+        (
+            "control-main", "BTCUSDT", "{}", "entry-order", "entry-exec",
+            "Buy", "1", "100", "0.1", 1000, "PROVEN", "ta-test-main",
+        )
+    ]
+    exit_rows = [
+        (
+            "BTCUSDT", "exit-order", "exit-exec", "Sell", "1", "110",
+            "0.1", 2000, {"closedSize": "1"}, "PROVEN", "ta-test-sub",
+        )
+    ]
+    assert owner_controlled_closed_cycles(entries, exit_rows) == []
