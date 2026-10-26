@@ -1,5 +1,7 @@
 """#158 #10 exact-price OFI, unknown visibility, gap and UTC tests."""
 import importlib.util
+import json
+import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -59,6 +61,8 @@ def test_new_best_price_union_not_rank_index():
     assert Decimal(event["bid_quote_usdt"]) == 602
     assert Decimal(event["ask_quote_usdt"]) == 0
     assert event["bid_union_levels"] == 6
+    assert event["bid_old_top5_prices"][0] == "300"
+    assert event["bid_new_top5_prices"][0] == "301"
 
 
 def test_200_price_visibility_unproven_is_unknown_not_zero():
@@ -115,3 +119,42 @@ def test_genuine_snapshot_replaces_state_without_cross_snapshot_delta():
     assert reader.on_record(again) is None
     e = reader.on_record(delta(b=[["300", "11"]], uid=201, seq=2001, ts=TS + 400))
     assert e["signed_quote_usdt"] == "300"
+
+
+def _zip_archive(tmp_path, entries):
+    name = "2026-05-18_APTUSDT_ob200.data"
+    archive = tmp_path / (name + ".zip")
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr(name, "\n".join(json.dumps(e) for e in entries) + "\n")
+    return archive
+
+
+def test_original_zip_one_minute_roundtrip_and_no_carry(tmp_path):
+    archive = _zip_archive(tmp_path, [original_snapshot(), delta(b=[["300", "12"]])])
+    events = []
+    manifest, minutes = m.calculate_archive(
+        archive, "APTUSDT", DAY, emit_event=events.append
+    )
+    assert manifest["raw_records_read"] == 2
+    assert manifest["archive_fully_read"] is True
+    assert manifest["native_day_coverage_qc"] == "NOT_VERIFIED"
+    assert manifest["minute_status_counts"] == {
+        "OBSERVED": 1, "UNKNOWN": 0, "NO_DATA": 1439
+    }
+    assert minutes[0]["signed_quote_usdt"] == "600"
+    assert minutes[1]["status"] == "NO_DATA"
+    assert len(events) == 1
+    assert events[0]["seq"] == 1001
+
+
+def test_gap_and_unsnapshotted_original_delta_are_unknown(tmp_path):
+    archive = _zip_archive(tmp_path, [delta(b=[["300", "12"]])])
+    manifest, minutes = m.calculate_archive(archive, "APTUSDT", DAY)
+    assert manifest["reader_qc"]["deltas_without_snapshot"] == 1
+    assert minutes[0]["status"] == "UNKNOWN"
+    assert minutes[0]["unknown_events"] == 1
+    assert minutes[0]["signed_quote_usdt"] is None
+    archive = _zip_archive(tmp_path, [original_snapshot(), delta(uid=102)])
+    manifest, minutes = m.calculate_archive(archive, "APTUSDT", DAY)
+    assert manifest["reader_qc"]["source_gap_or_order_failures"] == 1
+    assert minutes[0]["status"] == "UNKNOWN"
