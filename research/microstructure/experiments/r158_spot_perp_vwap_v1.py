@@ -74,17 +74,22 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
     aggregate: dict[int, dict[str, Decimal | int]] = {}
     rows = 0
     last_minute: int | None = None
+    last_exchange_ts: Decimal | None = None
     with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
         required = {"timestamp", "price", "volume", "side", "id"} if venue == "spot" else {"timestamp", "price", "size", "side", "symbol", "trdMatchID"}
         if not required.issubset(reader.fieldnames or []):
             raise ValueError(f"invalid {venue} archive columns at {path}")
         for row in reader:
+            source_ts = _decimal(row["timestamp"])
             minute = _minute(row["timestamp"], venue)
             if minute < day_start or minute >= day_start + MINUTES_PER_DAY:
                 raise ValueError("out-of-day source timestamp")
-            if last_minute is not None and minute < last_minute:
+            if last_exchange_ts is not None and source_ts < last_exchange_ts:
                 raise ValueError("unsorted original exchange timestamps")
+            if last_minute is not None and minute < last_minute:
+                raise ValueError("unsorted original exchange minutes")
+            last_exchange_ts = source_ts
             last_minute = minute
             if venue == "perpetual" and row["symbol"] != symbol:
                 raise ValueError("perpetual archive symbol mismatch")
