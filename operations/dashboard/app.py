@@ -22,6 +22,9 @@ import zipfile
 import psycopg
 
 from bybit_workbench.account_binding_db_snapshot import read_binding_readiness
+from bybit_workbench.strategy_financial_account_service import (
+    inspect_financial_account_choice,
+)
 from bybit_workbench.account_connector_db_snapshot import read_account_connector_evidence
 from bybit_workbench.fault_delivery import acknowledge_delivery
 from bybit_workbench.legacy_live_arm_account_scope import check_legacy_live_arm_account_scope
@@ -898,6 +901,27 @@ def live_rearm_readiness(connection: psycopg.Connection) -> dict[str, object]:
                 reasons.extend(
                     "STRATEGY_ACCOUNT_" + item for item in connector_evidence.reasons
                 )
+                # Selection is a StrategyExecutionBinding/TradingAccount fact,
+                # never a StrategyCard parameter or an authorization to arm.
+                # A connector registry reference is not an authenticated UID.
+                for account_id, connector_ids in connector_evidence.account_connectors.items():
+                    if len(connector_ids) != 1:
+                        reasons.append("STRATEGY_FINANCIAL_ACCOUNT_CONNECTOR_AMBIGUOUS")
+                        continue
+                    for connector_id in connector_ids:
+                        try:
+                            selection = inspect_financial_account_choice(
+                                connection,
+                                trading_account_id=account_id,
+                                account_connector_id=connector_id,
+                            )
+                        except (psycopg.Error, ValueError, TypeError):
+                            reasons.append("STRATEGY_FINANCIAL_ACCOUNT_SNAPSHOT_UNAVAILABLE")
+                        else:
+                            reasons.extend(
+                                "STRATEGY_FINANCIAL_ACCOUNT_" + item
+                                for item in selection.reasons
+                            )
     try:
         private = json.loads(PRIVATE_RUNTIME_STATE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
