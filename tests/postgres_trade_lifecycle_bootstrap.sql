@@ -92,7 +92,12 @@ CREATE TABLE runtime.wallet_latest (
 );
 
 CREATE TABLE runtime.private_events (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    received_at_epoch_ms bigint NOT NULL,
+    topic text NOT NULL,
+    message_id text NOT NULL,
+    creation_time_ms bigint,
+    payload_json text NOT NULL
 );
 
 CREATE TABLE runtime.connection_events (
