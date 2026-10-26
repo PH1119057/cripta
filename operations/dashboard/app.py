@@ -4426,54 +4426,53 @@ def _u6_financial_account_catalog(handler: object) -> None:
     try:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
-        ) as connection:
-            with connection.transaction():
-                connection.execute("SET TRANSACTION READ ONLY")
-                rows = connection.execute(
-                    """SELECT a.trading_account_id,a.account_kind,
-                              a.venue_id,a.account_type,a.environment,a.status,
-                              c.account_connector_id
-                         FROM identity.trading_accounts a
-                         JOIN identity.account_connectors c
-                           ON c.trading_account_id=a.trading_account_id
-                        WHERE c.connector_kind='CEX_PRIVATE_RUNTIME'
-                          AND c.adapter_id='BYBIT_V5_PRIVATE'
-                        ORDER BY a.account_kind,a.trading_account_id,
-                                 c.account_connector_id"""
-                ).fetchall()
-                for account, kind, venue, account_type, env, state, connector in rows:
-                    decision = inspect_financial_account_choice(
-                        connection, trading_account_id=str(account),
-                        account_connector_id=str(connector),
-                    )
-                    accounts.append({
-                        "trading_account_id": str(account),
-                        "account_connector_id": str(connector),
-                        "account_kind": str(kind),
-                        "venue": str(venue),
-                        "account_type": str(account_type),
-                        "environment": str(env),
-                        "status": str(state),
-                        "selectable": decision.ready,
-                        "reasons": list(decision.reasons),
-                    })
-                bound = connection.execute(
-                    """SELECT b.strategy_activation_id,b.execution_leg,
-                              b.trading_account_id,b.binding_state
-                         FROM strategy_entry.strategy_execution_bindings b
-                        WHERE b.binding_state='ACTIVE' AND
-                              (b.effective_to IS NULL OR b.effective_to>now())
-                        ORDER BY b.strategy_activation_id,b.execution_leg"""
-                ).fetchall()
-                bindings = [
-                    {
-                        "strategy_activation_id": str(a),
-                        "execution_leg": str(leg),
-                        "trading_account_id": str(account),
-                        "binding_state": str(state),
-                    }
-                    for a, leg, account, state in bound
-                ]
+        ) as connection, connection.transaction():
+        connection.execute("SET TRANSACTION READ ONLY")
+            rows = connection.execute(
+                """SELECT a.trading_account_id,a.account_kind,
+                          a.venue_id,a.account_type,a.environment,a.status,
+                          c.account_connector_id
+                     FROM identity.trading_accounts a
+                     JOIN identity.account_connectors c
+                       ON c.trading_account_id=a.trading_account_id
+                    WHERE c.connector_kind='CEX_PRIVATE_RUNTIME'
+                      AND c.adapter_id='BYBIT_V5_PRIVATE'
+                    ORDER BY a.account_kind,a.trading_account_id,
+                             c.account_connector_id"""
+            ).fetchall()
+            for account, kind, venue, account_type, env, state, connector in rows:
+                decision = inspect_financial_account_choice(
+                    connection, trading_account_id=str(account),
+                    account_connector_id=str(connector),
+                )
+                accounts.append({
+                    "trading_account_id": str(account),
+                    "account_connector_id": str(connector),
+                    "account_kind": str(kind),
+                    "venue": str(venue),
+                    "account_type": str(account_type),
+                    "environment": str(env),
+                    "status": str(state),
+                    "selectable": decision.ready,
+                    "reasons": list(decision.reasons),
+                })
+            bound = connection.execute(
+                """SELECT b.strategy_activation_id,b.execution_leg,
+                          b.trading_account_id,b.binding_state
+                     FROM strategy_entry.strategy_execution_bindings b
+                    WHERE b.binding_state='ACTIVE' AND
+                          (b.effective_to IS NULL OR b.effective_to>now())
+                    ORDER BY b.strategy_activation_id,b.execution_leg"""
+            ).fetchall()
+            bindings = [
+                {
+                    "strategy_activation_id": str(a),
+                    "execution_leg": str(leg),
+                    "trading_account_id": str(account),
+                    "binding_state": str(state),
+                }
+                for a, leg, account, state in bound
+            ]
         _u6_json(handler, 200, {"accounts": accounts, "bindings": bindings})
     except (ValueError, psycopg.Error):
         _u6_json(handler, 503, {"error": "FINANCIAL_ACCOUNT_CATALOG_UNAVAILABLE"})
@@ -4484,13 +4483,9 @@ def _u6_financial_account_same_origin(handler: object) -> bool:
     host = str(handler.headers.get("Host") or "")
     origin = str(handler.headers.get("Origin") or "")
     fetch_site = str(handler.headers.get("Sec-Fetch-Site") or "")
-    if (
-        not host or any(c in host for c in " /\\\t\r\n")
-        or fetch_site != "same-origin"
-        or origin != "https://" + host
-    ):
-        return False
-    return True
+    return bool(host) and not any(c in host for c in " /\\\t\r\n") and (
+        fetch_site == "same-origin" and origin == "https://" + host
+    )
 
 
 def _u6_set_financial_account(handler: object, request: dict[str, object]) -> None:
