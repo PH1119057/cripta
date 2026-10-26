@@ -203,7 +203,12 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
                 if previous_ts is not None and ts < previous_ts:
                     raise ValueError("unsorted source exchange event timestamps")
                 previous_ts = ts
+                resnapshot = record["type"] == "snapshot" and record_count > 0
                 value = reader.on_record(record)
+                if resnapshot:
+                    # A later native snapshot does not prove continuous changes.
+                    # Fail closed for this UTC minute; never bridge the reset.
+                    minute[(ts - start_ms) // 60000]["unknown_events"] += 1
                 if value is None and record["type"] == "delta":
                     # A source gap/invalid book poisons this UTC minute, not NO_DATA.
                     minute[(ts - start_ms) // 60000]["unknown_events"] += 1
