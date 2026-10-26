@@ -1,11 +1,8 @@
 """Causal H9 RAW TP experiment. Research-only invariants for Issue #218."""
 
 from decimal import Decimal as D
-
-from scripts.research import (
-    p90l90_h9_raw_opposite_tp_v1 as study,
-    p90l90_portfolio_pause_v1 as original,
-)
+from scripts.research import p90l90_h9_raw_opposite_tp_v1 as study
+from scripts.research import p90l90_portfolio_pause_v1 as original
 
 
 L53 = (D("98"), D("102"), D("1"))
