@@ -181,6 +181,7 @@ def persist_verified_account_enrollment(
               SET external_account_ref=%s,
                   metadata=a.metadata || jsonb_build_object(
                       'uid_registration_source', 'BYBIT_AUTHENTICATED_ACCOUNT_GET',
+                      'uid_registration_status', 'SIGNED_VERIFIED',
                       'uid_registration_operator_ref', %s::text,
                       'uid_registration_observed_at', %s::timestamptz
                   )
