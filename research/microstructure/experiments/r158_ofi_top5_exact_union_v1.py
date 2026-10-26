@@ -242,7 +242,8 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
         "source_script_sha256": _hash(Path(__file__)),
         "symbol": symbol, "date_utc": day.isoformat(),
         "raw_records_read": record_count, "max_events_limit": max_events,
-        "complete_day": max_events == 0,
+        "archive_fully_read": max_events == 0,
+        "native_day_coverage_qc": "NOT_VERIFIED",
         "reader_qc": dict(reader.counts),
         "minute_status_counts": {
             status: sum(r["status"] == status for r in rows)
