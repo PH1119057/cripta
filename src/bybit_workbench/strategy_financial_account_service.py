@@ -98,6 +98,10 @@ def record_financial_account_choice(
         execution_leg.strip(), operator.strip(), reason.strip(),
     )):
         raise RuntimeError("FINANCIAL_ACCOUNT_BINDING_INPUT_MISSING")
+    # The current producer/consumer supports PRIMARY only. Do not imply
+    # multi-leg fan-out until its execution consumers implement exact routing.
+    if execution_leg != "PRIMARY":
+        raise RuntimeError("FINANCIAL_ACCOUNT_EXECUTION_LEG_UNSUPPORTED")
     if effective_from.tzinfo is None or effective_from.utcoffset() is None:
         raise RuntimeError("FINANCIAL_ACCOUNT_BINDING_TIME_INVALID")
     level = connection.execute("SHOW transaction_isolation").fetchone()
