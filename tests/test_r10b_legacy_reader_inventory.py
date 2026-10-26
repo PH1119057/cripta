@@ -42,6 +42,7 @@ PRESERVATION_OR_SCHEMA_FILES = {
     "operations/sql/20261025_account_attempt_fanout.sql",
     "operations/sql/20261026_account_scoped_physical_key_cutover.sql",
     "operations/sql/p1_exact_close_readonly_audit.sql",
+    "src/bybit_workbench/closed_trade_reporting.py",
     "src/bybit_workbench/strategy_position.py",
     "src/bybit_workbench/universal_entry/storage.py",
     "src/bybit_workbench/universal_exit/contracts.py",
