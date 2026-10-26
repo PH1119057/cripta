@@ -71,8 +71,11 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
     file is an error, never NO_DATA. File SHA applies to exact compressed bytes.
     """
     if not path.is_file():
-        return {"source_state": "SOURCE_MISSING", "source_path": str(path),
-                "source_sha256": None, "rows": 0, "minutes": {}}
+        return {
+            "source_state": "SOURCE_MISSING", "source_path": str(path),
+            "source_sha256": None, "rows": 0, "minutes": {},
+            "native_perpetual_notional_parity": "NO_SOURCE",
+        }
     sha = _sha256_file(path)
     day_start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() // 60)
     aggregate: dict[int, dict[str, Decimal | int]] = {}
@@ -81,7 +84,14 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
     last_exchange_ts: Decimal | None = None
     with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
-        required = {"timestamp", "price", "volume", "side", "id"} if venue == "spot" else {"timestamp", "price", "size", "side", "symbol", "trdMatchID"}
+        required = (
+            {"timestamp", "price", "volume", "side", "id"}
+            if venue == "spot"
+            else {
+                "timestamp", "price", "size", "side", "symbol", "trdMatchID",
+                "homeNotional", "foreignNotional",
+            }
+        )
         if not required.issubset(reader.fieldnames or []):
             raise ValueError(f"invalid {venue} archive columns at {path}")
         for row in reader:
@@ -101,13 +111,30 @@ def aggregate_archive(path: Path, symbol: str, day: date, venue: str) -> dict:
                 raise ValueError("invalid exchange trade side")
             price = _decimal(row["price"], positive=True)
             qty = _decimal(row["volume" if venue == "spot" else "size"], positive=True)
-            cell = aggregate.setdefault(minute - day_start, {"count": 0, "base": Decimal(0), "quote": Decimal(0)})
+            if venue == "perpetual":
+                # Original Bybit fields independently verify native base/quote
+                # units; do not infer them from price and size alone.
+                native_base = _decimal(row["homeNotional"], positive=True)
+                native_quote = _decimal(row["foreignNotional"], positive=True)
+                if native_base != qty or native_quote != price * qty:
+                    raise ValueError("original perpetual native notional parity mismatch")
+                if not row["trdMatchID"]:
+                    raise ValueError("missing original perpetual trade identifier")
+            cell = aggregate.setdefault(
+                minute - day_start,
+                {"count": 0, "base": Decimal(0), "quote": Decimal(0)},
+            )
             cell["count"] += 1
             cell["base"] += qty
             cell["quote"] += price * qty
             rows += 1
-    return {"source_state": "SOURCE_PRESENT", "source_path": str(path),
-            "source_sha256": sha, "rows": rows, "minutes": aggregate}
+    return {
+        "source_state": "SOURCE_PRESENT", "source_path": str(path),
+        "source_sha256": sha, "rows": rows, "minutes": aggregate,
+        "native_perpetual_notional_parity": (
+            "PASS_ALL_ROWS" if venue == "perpetual" else "NOT_APPLICABLE"
+        ),
+    }
 
 
 def calculate_day(symbol: str, day: date, spot_root: Path, perp_root: Path) -> tuple[dict, list[dict]]:
@@ -140,7 +167,12 @@ def calculate_day(symbol: str, day: date, spot_root: Path, perp_root: Path) -> t
                 "symbol": symbol, "date_utc": day.isoformat(), "observed_minutes": both,
                 "no_data_minutes": MINUTES_PER_DAY - both,
                 "spot": {k: sp[k] for k in ("source_state", "source_path", "source_sha256", "rows")},
-                "perpetual": {k: pp[k] for k in ("source_state", "source_path", "source_sha256", "rows")},
+                "perpetual": {
+                    k: pp[k] for k in (
+                        "source_state", "source_path", "source_sha256",
+                        "rows", "native_perpetual_notional_parity",
+                    )
+                },
                 "time_basis": "exchange_event_timestamp_only",
                 "local_received_at": None, "available_after": None,
                 "readiness": "DESCRIPTIVE_ONLY_NOT_RESEARCH_READY",
