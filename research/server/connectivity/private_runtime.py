@@ -372,6 +372,12 @@ def trade_loop(key: str, secret: str) -> None:
 
 def main() -> None:
     global running
+    # Historical writer used global provider-local PKs and unscoped DELETEs.
+    # It must never be reactivated against account-scoped production storage.
+    raise RuntimeError(
+        "RETIRED_GLOBAL_PRIVATE_RUNTIME: use "
+        "operations/connectivity/private_runtime.py with exact TradingAccount"
+    )
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     credentials = json.loads((Path(os.environ["CREDENTIALS_DIRECTORY"]) / "bybit-mainnet").read_text(encoding="utf-8"))
     bootstrap = db()
