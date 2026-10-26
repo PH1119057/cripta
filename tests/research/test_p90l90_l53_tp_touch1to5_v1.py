@@ -1,8 +1,32 @@
 """Unit tests: owner-approved research-only L5-3 TP price contact counting."""
+import importlib.util
+import sys
 from decimal import Decimal as D
-from types import SimpleNamespace
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
-import scripts.research.p90l90_l53_tp_touch1to5_v1 as study
+# Some legacy test modules monkeypatch scripts.research in sys.modules at
+# collection-time. Load the exact checked-out research file in an isolated
+# module and restore the pre-existing test import state afterwards.
+_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
+_PRIOR_PKG = sys.modules.get("scripts.research")
+_FRESH_PKG = ModuleType("scripts.research")
+_FRESH_PKG.__path__ = [str(_SCRIPTS / "research")]
+sys.modules["scripts.research"] = _FRESH_PKG
+try:
+    _SPEC = importlib.util.spec_from_file_location(
+        "_p90l90_l53_tp_touch_study", _SCRIPTS / "research"
+        / "p90l90_l53_tp_touch1to5_v1.py"
+    )
+    assert _SPEC is not None and _SPEC.loader is not None
+    study = importlib.util.module_from_spec(_SPEC)
+    sys.modules[_SPEC.name] = study
+    _SPEC.loader.exec_module(study)
+finally:
+    if _PRIOR_PKG is None:
+        sys.modules.pop("scripts.research", None)
+    else:
+        sys.modules["scripts.research"] = _PRIOR_PKG
 
 BOUND = (D("99"), D("100.6"), D("1"))
 
