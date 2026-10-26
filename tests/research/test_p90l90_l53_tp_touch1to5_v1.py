@@ -143,3 +143,28 @@ def test_second_stop_embargo_does_not_flatten_remaining():
     assert book.count["blocked_global_pause"] == 1
     assert book.count.get("close_PORTFOLIO_FLATTEN", 0) == 0
     assert book.finish_touch()["counts"]["close_HARD_STOP"] == 2
+
+def test_empty_touch_cohort_finishes_without_phantom_entries():
+    # The 90d one-hour smoke begins before the first eligible Entry.
+    # All contact variants must safely serialize an empty portfolio.
+    for number in range(1, 6):
+        book = study.TouchBook(number)
+        report = book.finish_touch()
+        assert report["counts"].get("accepted", 0) == 0
+        assert report["reached_at_least"] == {
+            str(k): 0 for k in range(1, 6)
+        }
+        assert book.trades == []
+        assert book.position_outcomes == []
+        assert all(pos is None for pos in book.pos.values())
+
+
+def test_empty_touch_cohort_still_rejects_accounting_discrepancy():
+    book = study.TouchBook(1)
+    book.count["accepted"] = 1
+    try:
+        book.finish_touch()
+    except ValueError as exc:
+        assert "accounting mismatch" in str(exc)
+    else:
+        raise AssertionError("missing entry/position must fail closed")

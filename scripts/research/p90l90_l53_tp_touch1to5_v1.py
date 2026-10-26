@@ -324,7 +324,7 @@ class TouchBook(old.EntryEmbargo):
 
     def finish_touch(self):
         report = self.finish()
-        if report["counts"]["accepted"] != len(self.position_outcomes) + sum(
+        if report["counts"].get("accepted", 0) != len(self.position_outcomes) + sum(
                 pos is not None for pos in self.pos.values()):
             raise ValueError("touch position/outcome accounting failed")
         for sym, pos in self.pos.items():
