@@ -333,3 +333,28 @@ def test_first_pre_cutover_migration_is_transactional_for_safe_recovery() -> Non
     assert "operations/sql/20260920_slot_admission_v1.sql" in migration_list
     assert first.lstrip().startswith("BEGIN;")
     assert first.rstrip().endswith("COMMIT;")
+
+
+def test_staged_offline_cutover_guard_before_release_mutation() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    first_mutation = source.index('install -d -o cripta -g cripta -m 0750 "$RUNTIME_ROOT"')
+    guard = source.index('if [[ "$STAGED_OFFLINE" == "1" ]]; then\n  # Local facts')
+    assert guard < first_mutation
+    assert 'STAGED_OFFLINE_REQUIRES_CONTROL_CHECKPOINT' in source
+    assert 'STAGED_OFFLINE_TRADING_NOT_DISARMED' in source
+    assert 'STAGED_OFFLINE_LOCAL_HOT_INVENTORY_NOT_EMPTY' in source
+    assert 'STAGED_OFFLINE_LOCAL_PREFLIGHT=PASS EXCHANGE_EVIDENCE=EXTERNAL_REQUIRED' in source
+    assert 'SELECT count(*) FROM runtime.hot_positions' in source
+    assert 'SELECT count(*) FROM runtime.hot_orders' in source
+
+
+def test_staged_offline_cutover_retains_all_prior_release_backups() -> None:
+    source = INSTALLER.read_text(encoding="utf-8")
+    assert 'staged_offline=$STAGED_OFFLINE' in source
+    assert 'STAGED_OFFLINE_BACKUP_RETENTION=KEEP_ALL' in source
+    assert '''if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  # Protect all historic archives and release backups during breaking R10.''' in source
+    assert '''else
+  prune_release_backups
+fi''' in source
+    assert 'echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"' in source
