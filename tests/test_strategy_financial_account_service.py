@@ -30,8 +30,9 @@ class Cursor:
 
 class Connection:
     def __init__(self, account_rows=None, *, serializable=True, activation=True,
-                 overlap=False):
+                 overlap=False, connector_rows=None):
         self.account_rows = [ROW] if account_rows is None else account_rows
+        self.connector_rows = [("ac-main",)] if connector_rows is None else connector_rows
         self.serializable = serializable
         self.activation = activation
         self.overlap = overlap
@@ -43,6 +44,9 @@ class Connection:
         if "FROM identity.trading_accounts a" in sql:
             assert params == ("ta-main", "ac-main")
             return Cursor(self.account_rows)
+        if "FROM identity.account_connectors" in sql:
+            assert params == ("ta-main",)
+            return Cursor(self.connector_rows)
         if "FROM strategy_entry.strategy_activations" in sql:
             return Cursor([("activation-1",)] if self.activation else [])
         if "FROM strategy_entry.strategy_execution_bindings" in sql:
@@ -123,3 +127,27 @@ def test_duplicate_or_retired_connector_is_not_bindable() -> None:
     )
     assert not choice.ready
     assert "FINANCIAL_ACCOUNT_PRIVATE_CONNECTOR_NOT_READY" in choice.reasons
+
+
+def test_multi_connector_account_cannot_be_persisted_as_unqualified_binding() -> None:
+    multi = Connection(connector_rows=[("ac-main",), ("ac-other",)])
+    choice = inspect_financial_account_choice(
+        multi, trading_account_id="ta-main", account_connector_id="ac-main"
+    )
+    assert not choice.ready
+    assert "FINANCIAL_ACCOUNT_CONNECTOR_AMBIGUOUS" in choice.reasons
+    with pytest.raises(RuntimeError, match="CHOICE_BLOCKED"):
+        bind(multi)
+    assert multi.insertions == []
+
+
+def test_nonprimary_execution_leg_rejected_until_producer_fanout_exists() -> None:
+    c = Connection()
+    with pytest.raises(RuntimeError, match="EXECUTION_LEG_UNSUPPORTED"):
+        record_financial_account_choice(
+            c, strategy_execution_binding_id="binding-b", 
+            strategy_activation_id="activation-1", execution_leg="LEG_B",
+            trading_account_id="ta-main", account_connector_id="ac-main",
+            effective_from=NOW, operator="owner", reason="candidate",
+        )
+    assert c.insertions == []
