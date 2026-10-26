@@ -98,3 +98,27 @@ def test_invalid_prices_and_cohort(tmp_path):
         f.write("id,timestamp,price,volume,side\n1,1779148800000,NaN,1,Buy\n")
     with pytest.raises(ValueError, match="non-finite"):
         m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_spot_exact_timestamps_must_not_decrease_within_minute(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        spot, "APTUSDT", "spot",
+        "id,timestamp,price,volume,side\n"
+        "1,1779148800900,2,1,Buy\n"
+        "2,1779148800100,2,1,Sell\n",
+    )
+    with pytest.raises(ValueError, match="unsorted original exchange timestamps"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
+
+
+def test_perpetual_exact_timestamps_must_not_decrease_within_minute(tmp_path):
+    spot, perp = _fixtures(tmp_path)
+    _write(
+        perp, "APTUSDT", "perpetual",
+        "timestamp,symbol,side,size,price,trdMatchID\n"
+        "1779148800.900,APTUSDT,Buy,1,4,p1\n"
+        "1779148800.100,APTUSDT,Sell,1,2,p2\n",
+    )
+    with pytest.raises(ValueError, match="unsorted original exchange timestamps"):
+        m.calculate_day("APTUSDT", DAY, spot, perp)
