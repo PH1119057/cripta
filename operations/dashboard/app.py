@@ -4427,7 +4427,7 @@ def _u6_financial_account_catalog(handler: object) -> None:
         with psycopg.connect(
             "dbname=cripta user=cripta host=/var/run/postgresql"
         ) as connection, connection.transaction():
-        connection.execute("SET TRANSACTION READ ONLY")
+            connection.execute("SET TRANSACTION READ ONLY")
             rows = connection.execute(
                 """SELECT a.trading_account_id,a.account_kind,
                           a.venue_id,a.account_type,a.environment,a.status,
