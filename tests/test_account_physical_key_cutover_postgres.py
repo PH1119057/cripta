@@ -486,10 +486,52 @@ def test_actual_private_runtime_writers_keep_two_accounts_isolated(
                 },
                 1000,
             )
+            writer.upsert_exchange_order_history(
+                c,
+                {
+                    "orderId": order_id,
+                    "orderLinkId": "shared-local",
+                    "symbol": symbol,
+                    "side": "Buy",
+                    "orderStatus": "Filled",
+                },
+                1000,
+            )
+
+            class _NoCommitConnection:
+                # Keep the real execution handler's SQL inside this test's
+                # explicit rollback transaction, without changing its code.
+                def execute(self, sql: str, params: object = None) -> object:
+                    return c.execute(sql, params)
+
+                def commit(self) -> None:
+                    return None
+
+            writer.handle_private(
+                _NoCommitConnection(),
+                {
+                    "topic": "execution.linear",
+                    "id": prefix + "-shared-event",
+                    "creationTime": 1000,
+                    "data": [{
+                        "execId": prefix + "-shared-exec",
+                        "orderId": order_id,
+                        "orderLinkId": "shared-local",
+                        "symbol": symbol,
+                        "side": "Buy",
+                        "execQty": "1",
+                        "execPrice": "100",
+                        "execFee": "0.1",
+                        "execTime": 1000,
+                    }],
+                },
+            )
         for relation in (
             "runtime.wallet_latest",
             "runtime.hot_positions",
             "runtime.hot_orders",
+            "runtime.exchange_order_history",
+            "runtime.executions",
         ):
             found = c.execute(
                 f"""SELECT trading_account_id,account_connector_id
