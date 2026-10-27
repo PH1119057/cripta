@@ -2435,6 +2435,18 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
+            if fact.symbol in p90l90_symbols:
+                if cursor is None:
+                    raise ContinuityNotProvable(
+                        "P90L90 Paper Exit requires exact native TradeCursor"
+                    )
+                paper.route_p90l90_native_trade(
+                    symbol=fact.symbol,
+                    exec_id=cursor.exec_id,
+                    exchange_sequence=cursor.seq,
+                    event_at=cursor.traded_at,
+                    price=Decimal(str(attrs["price"])),
+                )
         admission_time = (
             datetime.now(UTC) if real_execution_selected_for else fact.observed_at
         )
