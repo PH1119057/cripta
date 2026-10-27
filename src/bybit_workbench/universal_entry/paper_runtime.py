@@ -446,6 +446,15 @@ class PaperTradeRuntime:
         ).fetchall()
         executable_price = self._last_trade_prices.get(candle.symbol, candle.close)
         for row in rows:
+            paper_payload = dict(_mapping(row[8], "paper position payload"))
+            paper_exit = _mapping(paper_payload.get("exit_policy"), "paper exit_policy")
+            local_zone = _mapping(
+                paper_exit.get("local_zone_exit") or {}, "paper local_zone_exit"
+            )
+            if local_zone.get("operator") == "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                # P90L90 is updated ONLY by explicit account-scoped native-tick
+                # Exit with a persisted checkpoint; never use R1 INNER geometry.
+                continue
             self._reconcile_l53_exit(
                 paper_position_id=str(row[0]),
                 direction=str(row[1]),
