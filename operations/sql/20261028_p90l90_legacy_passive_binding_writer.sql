@@ -64,6 +64,9 @@ BEGIN
     IF session_user <> 'cripta' THEN
         RAISE EXCEPTION 'PASSIVE_BINDING_ACTOR_MISMATCH';
     END IF;
+    IF current_setting('transaction_isolation') <> 'serializable' THEN
+        RAISE EXCEPTION 'PASSIVE_BINDING_SERIALIZABLE_REQUIRED';
+    END IF;
     IF p_binding_id IS NULL OR p_activation_id IS NULL OR
        p_trading_account_id IS NULL THEN
         RAISE EXCEPTION 'PASSIVE_BINDING_NULL_INPUT';
@@ -76,8 +79,7 @@ BEGIN
        AND c.strategy_config_fingerprint=a.strategy_config_fingerprint
      WHERE a.activation_id=p_activation_id
        AND a.enabled=false AND a.disabled_at IS NOT NULL
-       AND a.strategy_version='1.0-p90l90-legacy-passive-20261027'
-     FOR SHARE OF a,c;
+       AND a.strategy_version='1.0-p90l90-legacy-passive-20261027';
     IF NOT FOUND THEN
         RAISE EXCEPTION 'PASSIVE_BINDING_ACTIVATION_NOT_EXACT';
     END IF;
