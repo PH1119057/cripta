@@ -7,7 +7,6 @@ intentionally outside the model until separate owner-approved contracts exist.
 """
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
@@ -380,45 +379,3 @@ def modeled_pnl_after_fees(
         net_usdt=gross - entry_fee - exit_fee,
     )
 
-
-@dataclass(slots=True)
-class P90L90Second48PaperEmbargo:
-    """Research-equivalent entry-only hardstop pause for one EXPLICIT domain.
-
-    The caller MUST choose domain identity; this class never silently
-    merges MAIN/SUB or splits the historical five-symbol portfolio.
-    No real arm, no liquidation, no close of existing positions.
-    """
-
-    domain_id: str
-    hardstop_events: deque[datetime] = field(default_factory=deque)
-    pause_until: datetime | None = None
-    last_at: datetime | None = None
-
-    def __post_init__(self) -> None:
-        if not self.domain_id.strip():
-            raise ValueError("P90L90 SECOND48 requires an explicit portfolio domain")
-
-    def can_enter(self, at: datetime) -> bool:
-        if at.tzinfo is None:
-            raise ValueError("SECOND48 event requires aware UTC time")
-        return self.pause_until is None or at.astimezone(UTC) >= self.pause_until
-
-    def record_exit(self, *, reason: ExitReason, at: datetime) -> None:
-        if at.tzinfo is None:
-            raise ValueError("SECOND48 event requires aware UTC time")
-        when = at.astimezone(UTC)
-        if self.last_at is not None and when < self.last_at:
-            raise ValueError("SECOND48 cannot process noncausal exit order")
-        self.last_at = when
-        if reason != "HARD_STOP":
-            return
-        self.hardstop_events.append(when)
-        while self.hardstop_events and (
-            when - self.hardstop_events[0] > timedelta(hours=48)
-        ):
-            self.hardstop_events.popleft()
-        if len(self.hardstop_events) >= 2:
-            until = when + timedelta(hours=48)
-            if self.pause_until is None or until > self.pause_until:
-                self.pause_until = until
