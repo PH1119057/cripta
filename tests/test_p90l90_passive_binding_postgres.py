@@ -59,8 +59,12 @@ def test_exact_inactive_binding_via_restricted_security_definer() -> None:
                 ).fetchone()
                 assert grant == (True, False, False)
                 conn.execute(
-                    "UPDATE control.execution_gates SET enabled=0 "
-                    "WHERE mode IN ('mainnet','testnet')"
+                    """INSERT INTO control.execution_gates(
+                         mode,enabled,reason,updated_at_epoch_ms
+                       ) VALUES
+                         ('mainnet',0,'disposable-p90l90-ci',0),
+                         ('testnet',0,'disposable-p90l90-ci',0)
+                       ON CONFLICT (mode) DO UPDATE SET enabled=0"""
                 )
                 assert conn.execute(
                     "SELECT count(*) FROM strategy_entry.strategy_activations "
