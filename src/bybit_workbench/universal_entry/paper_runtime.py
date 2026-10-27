@@ -1239,6 +1239,15 @@ class PaperTradeRuntime:
             (symbol,),
         ).fetchall()
         for row in rows:
+            paper_payload = _mapping(row[16], "paper position payload")
+            paper_exit = _mapping(paper_payload.get("exit_policy"), "paper exit_policy")
+            local_zone = _mapping(
+                paper_exit.get("local_zone_exit") or {}, "paper local_zone_exit"
+            )
+            if local_zone.get("operator") == "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                # No fallback to generic trailing or target: P90 requires
+                # native exec-id/sequence and an explicit account-scoped call.
+                continue
             self._update_one(row, price, observed_at, contexts)
 
     def _update_one(
