@@ -39,9 +39,11 @@ PAIRS = {
 
 def test_exact_inactive_binding_via_restricted_security_definer() -> None:
     # Context itself rolls back all prepared data; this is NEVER production.
-    with psycopg.connect(DSN, autocommit=False) as conn:
-        with pytest.raises(RuntimeError, match="ROLLBACK_INTENTIONAL"):
-            with conn.transaction():
+    with (
+        psycopg.connect(DSN, autocommit=False) as conn,
+        pytest.raises(RuntimeError, match="ROLLBACK_INTENTIONAL"),
+        conn.transaction(),
+    ):
                 conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
                 grant = conn.execute(
                     """SELECT
@@ -80,7 +82,8 @@ def test_exact_inactive_binding_via_restricted_security_definer() -> None:
                         ) VALUES (
                            %s,'venue-bybit',%s,'UNIFIED','MAINNET','ACTIVE',
                            '9000000000'
-                        )""", (ta, kind)
+                        ) ON CONFLICT (trading_account_id) DO NOTHING""",
+                        (ta, kind)
                     )
                     conn.execute(
                         """INSERT INTO identity.account_connectors (
@@ -89,7 +92,8 @@ def test_exact_inactive_binding_via_restricted_security_definer() -> None:
                         ) VALUES (
                            %s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
                            'disposable-fixture','ACTIVE'
-                        )""", (connector, ta)
+                        ) ON CONFLICT (account_connector_id) DO NOTHING""",
+                        (connector, ta)
                     )
                 store = StrategyEntryStore(conn)
                 for card in build_passive_legacy_cards(approved_at=WHEN):
@@ -134,8 +138,10 @@ def test_exact_inactive_binding_via_restricted_security_definer() -> None:
                 assert all(enabled is False and state == "INACTIVE"
                            for _, enabled, state, _ in bound)
                 assert {r[3] for r in bound} == {t[1] for t in PAIRS.values()}
-                with pytest.raises(psycopg.errors.RaiseException):
-                    with conn.transaction():  # rollback negative assertion only
+                with (
+                    pytest.raises(psycopg.errors.RaiseException),
+                    conn.transaction(),  # rollback negative assertion only
+                ):
                         conn.execute(
                             "SELECT strategy_entry.register_p90l90_inactive_binding(%s,%s,%s)",
                             (PAIRS[MAIN_ID][4],PAIRS[MAIN_ID][3],PAIRS[SUB_ID][1]),
