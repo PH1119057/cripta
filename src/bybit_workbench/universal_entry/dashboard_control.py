@@ -455,7 +455,7 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
         geometry_raw = watch_raw.get("geometry")
         if isinstance(geometry_raw, Mapping):
             watch_operator = str(geometry_raw.get("operator") or "")
-    if watch_operator == "L53_STABLE_RANGE":
+    if watch_operator in {"L53_STABLE_RANGE", "P90L90_RAW_H9_UNION_CROSSING"}:
         if set(directions) != {"LONG", "SHORT"}:
             raise ValueError(
                 "L53_STABLE_RANGE R1 requires combined LONG and SHORT direction_policy"
@@ -673,6 +673,37 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                         raise ValueError(
                             "L53_STABLE_RANGE requires working_width_min_pct=1"
                         )
+                elif operator == "P90L90_RAW_H9_UNION_CROSSING":
+                    # New immutable *passive* policy vocabulary only: the
+                    # producer and real Entry consumer require separate proof.
+                    if timeframes != ["5", "15"]:
+                        raise ValueError("P90L90 requires 5m and 15m geometry")
+                    counts = _mapping(geometry.get("lookback_bars"), "P90L90 lookback_bars")
+                    for field, value in (("l53_5m", 36), ("h9_5m", 108),
+                                         ("h9_15m", 36)):
+                        if int(str(counts.get(field) or "0")) != value:
+                            raise ValueError(f"P90L90 requires {field}={value}")
+                    if geometry.get("h9_equality") != "EXACT_RAW_SIDE":
+                        raise ValueError("P90L90 requires exact RAW H9 agreement")
+                    if geometry.get("depth_denominator") != "RAW_H9_UNION_SPAN":
+                        raise ValueError("P90L90 requires RAW_H9_UNION_SPAN")
+                    if (str(geometry.get("depth_min_pct")),
+                        str(geometry.get("depth_max_pct"))) != ("0", "15"):
+                        raise ValueError("P90L90 requires depth [0,15]")
+                    if geometry.get("crossing") != "FIRST_ADJACENT_NATIVE_RAW_TRADE":
+                        raise ValueError("P90L90 requires first adjacent RAW crossing")
+                    width = _mapping(geometry.get("width_filter"), "P90L90 width_filter")
+                    if width.get("source") != "PREV7D_COMPLETED_UTC":
+                        raise ValueError("P90L90 requires completed UTC PREV7D")
+                    if int(str(width.get("previous_days") or "0")) != 7:
+                        raise ValueError("P90L90 requires seven previous days")
+                    if str(width.get("tolerance_pp")) != "0.5":
+                        raise ValueError("P90L90 requires width ±0.5 percentage points")
+                    if _decimal(geometry.get("zone_half_width_atr"),
+                                "zone_half_width_atr") != Decimal("0.5"):
+                        raise ValueError("P90L90 requires half ATR 200 for width")
+                    if int(str(geometry.get("atr_period") or "0")) != 200:
+                        raise ValueError("P90L90 requires ATR200")
                 else:
                     raise ValueError("enabled Strategy UI Entry has unsupported geometry")
                 try:
@@ -771,10 +802,13 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
     if local_zone_enabled:
         if str(local_zone_exit.get("geometry") or "") != "L5-3":
             raise ValueError("enabled local_zone_exit currently requires geometry=L5-3")
-        if str(local_zone_exit.get("target") or "") != "OPPOSITE_INNER_BOUNDARY":
-            raise ValueError(
-                "enabled local_zone_exit requires target=OPPOSITE_INNER_BOUNDARY"
-            )
+        expected_target = (
+            "OPPOSITE_RAW_BOUNDARY"
+            if watch_operator == "P90L90_RAW_H9_UNION_CROSSING"
+            else "OPPOSITE_INNER_BOUNDARY"
+        )
+        if str(local_zone_exit.get("target") or "") != expected_target:
+            raise ValueError(f"enabled local_zone_exit requires target={expected_target}")
         if str(local_zone_exit.get("update_mode") or "") != "EACH_CAUSAL_GEOMETRY_CHANGE":
             raise ValueError(
                 "enabled local_zone_exit requires update_mode=EACH_CAUSAL_GEOMETRY_CHANGE"
