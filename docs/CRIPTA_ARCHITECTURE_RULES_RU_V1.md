@@ -648,6 +648,14 @@ global alert delivery or arm-session retirement.
   execution owner**, or proven concurrency-safe exactly-once ownership. A new
   SUB worker must not silently repeat global side effects. Neither a missing
   SUB worker nor its failure may disarm unrelated TradingAccounts by guess.
+- **Specific P0 observed in code:** `LifecycleSupervisor._resolve_cleared_faults`
+  currently queries every `runtime.lifecycle_faults` row in `state='OPEN'`
+  without an account scope. A second account-scoped scan can mark another
+  account's fault `RESOLVED` when it is merely absent from that local scan.
+  Production multi-account supervision is blocked until fault projection,
+  detection, lifecycle IDs, resolution and owner delivery are scoped/combined
+  under one proven all-account consistency boundary. Do not solve this by
+  duplicating the current systemd unit.
 - Entry admission stays blocked for an unproven account. Existing owned Exit
   and recovery remain possible under their current operational-safety contract.
   A Supervisor never creates its own trading/Exit policy or arms LIVE.
