@@ -271,6 +271,9 @@ class P90L90PaperExitCheckpoint:
                 return False, None
             if self.last_trade_at is not None and when < self.last_trade_at:
                 raise ValueError("P90L90 native trade event time regressed")
+        if (seq == self.last_exchange_sequence
+                and len(self.seen_exec_ids) >= _MAX_EXEC_IDS_PER_SEQUENCE):
+            raise ValueError("P90L90 native sequence dedupe capacity exceeded")
         if self.exit_state.closed:
             raise ValueError("P90L90 paper position already closed")
         bucket = int(when.timestamp() // _FIVE_MINUTES.total_seconds())
