@@ -93,8 +93,9 @@ def install(*, dry_run: bool) -> None:
         _require(card.strategy_version == VERSION, "CARD_VERSION_DRIFT")
         readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
         _require(
-            not readiness.execution_ready and not readiness.active_ready,
-            "FAIL_CLOSED_READINESS_EXPECTED_BEFORE_FULL_REPLAY",
+            readiness.policy_ready and readiness.paper_ready
+            and not readiness.execution_ready,
+            "PAPER_ONLY_READY_REAL_MUST_REMAIN_BLOCKED",
         )
     with psycopg.connect("dbname=cripta user=cripta") as connection:
         with connection.transaction():
