@@ -473,6 +473,8 @@ migration_files=(
   # Additive only; no past MAIN safety or M3 observer rows are rewritten.
   operations/sql/20261027_account_safety_observation.sql
   operations/sql/20261027_account_position_observer.sql
+  # Scoped SECURITY DEFINER writer for two PASSIVE P90L90 bindings only.
+  operations/sql/20261028_p90l90_legacy_passive_binding_writer.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
