@@ -64,8 +64,8 @@ def test_no_future_or_gap_or_missing_full_utc_day():
     assert causal_entry_state(f[:-1], q, effective_at=s.effective_at) is None
     assert causal_entry_state(f, q[:-1] + q[-1:], effective_at=s.effective_at) == s
     assert causal_entry_state(f[:100] + f[101:], q, effective_at=s.effective_at) is None
-    assert causal_entry_state(f[288:], q, effective_at=s.effective_at) is None
-    assert causal_entry_state(f, q[:-1], effective_at=s.effective_at) is not None
+    assert causal_entry_state(f[2 * 288:], q, effective_at=s.effective_at) is None
+    assert causal_entry_state(f, q[:-1], effective_at=s.effective_at) is None
     with pytest.raises(ValueError, match="five-minute"):
         causal_entry_state(f, q, effective_at=s.effective_at + timedelta(seconds=1))
 
