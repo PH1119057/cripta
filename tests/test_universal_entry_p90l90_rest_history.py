@@ -50,7 +50,7 @@ def test_p90l90_prev7d_seed_paginates_only_when_requested(monkeypatch):
     assert len({x.opened_at for x in five}) == 2600
     assert all(
         b.closed_at - a.closed_at == timedelta(minutes=5)
-        for a, b in zip(five, five[1:], strict=True)
+        for a, b in zip(five[:-1], five[1:], strict=True)
     )
 
     calls.clear()
