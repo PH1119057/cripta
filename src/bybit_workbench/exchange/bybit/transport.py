@@ -69,7 +69,8 @@ class LifecycleAccountReadTransport:
     amend, close or other Exchange mutation method exists in this class.
     """
 
-    _PRIVATE = frozenset({"/v5/position/list", "/v5/order/realtime", "/v5/user/query-api"})
+    _PRIVATE = frozenset({"/v5/position/list", "/v5/order/realtime",
+                          "/v5/user/query-api", "/v5/account/wallet-balance"})
     _PUBLIC = frozenset({"/v5/market/instruments-info"})
 
     def __init__(self, *, api_key: str, api_secret: str,
