@@ -408,7 +408,7 @@ class PaperTradeRuntime:
                 side=signal.direction.value,
                 entry_price=native_trade_price,
                 entry_sequence=0,
-                state_bucket=int(effective.timestamp() // 300) * 300,
+                state_bucket=int(effective.timestamp() // 300),
             )
             checkpoint = P90L90PaperExitCheckpoint(
                 trading_account_id=account_id,
