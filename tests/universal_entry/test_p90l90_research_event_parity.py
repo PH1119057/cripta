@@ -9,14 +9,15 @@ from decimal import Decimal
 
 import pytest
 
-from scripts.research.p90l90_exit_90d_v2 import (
-    gross_and_net,
-    initial_position,
-    on_trade,
-)
 from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90CausalExit,
     modeled_pnl_after_fees,
+)
+from scripts.research.p90l90_exit_90d_v2 import (
+    Position,
+    gross_and_net,
+    initial_position,
+    on_trade,
 )
 
 D = Decimal
@@ -71,7 +72,6 @@ def test_p90l90_reference_exit_native_tick_parity(side, prices, targets):
         # The reference position is None at closure, hence the fee ledger
         # is calculated on the same modeled reference Entry and target price.
         # gross_and_net only relies on the reference position's Entry fields.
-        from scripts.research.p90l90_exit_90d_v2 import Position
         ref_for_fees = Position(
             side=side, entry=D("100"), entry_seq=0, entry_ts=1.,
             state_bucket=0, stop=D("90") if side == "LONG" else D("110"),
