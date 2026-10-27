@@ -221,6 +221,9 @@ unit_specs=(
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
   # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
+  # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
+  "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
+  "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
@@ -342,14 +345,16 @@ managed_services=(
 discovered_sub_text="$(
   systemctl list-units --all --type=service --plain --no-legend \
     'cripta-private-runtime@*.service' \
-    'cripta-universal-entry-consumer@*.service' | awk '{print $1}' | sort -u
+    'cripta-universal-entry-consumer@*.service' \
+    'cripta-lifecycle-account@*.service' \
+    'cripta-account-position@*.service' | awk '{print $1}' | sort -u
 )" || die "SUB unit enumeration failed; release identity cannot be verified"
 discovered_sub_units=()
 if [[ -n "$discovered_sub_text" ]]; then
   mapfile -t discovered_sub_units <<< "$discovered_sub_text"
 fi
 for unit in "${discovered_sub_units[@]}"; do
-  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer)@[A-Za-z0-9_.-]+\.service$ ]] ||
+  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer|lifecycle-account|account-position)@[A-Za-z0-9_.-]+\.service$ ]] ||
     die "unexpected SUB unit identity while preparing release: $unit"
   managed_services+=("$unit")
 done
@@ -464,6 +469,10 @@ migration_files=(
   # Cut over all five physical current-state keys after additive account indexes
   # and complete writer/reader parity gates; no pre-existing rows are rewritten.
   operations/sql/20261026_account_scoped_physical_key_cutover.sql
+  # Independent account-scoped Lifecycle/Safety and partial Position observations.
+  # Additive only; no past MAIN safety or M3 observer rows are rewritten.
+  operations/sql/20261027_account_safety_observation.sql
+  operations/sql/20261027_account_position_observer.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

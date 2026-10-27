@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol, cast
@@ -101,6 +101,11 @@ _MANAGED_FAULT_CODES = frozenset(
 )
 
 
+# These are StrategyActivation / plan checks, not one private account's faults.
+# The single global coordinator retains these duties after account scoping.
+_GLOBAL_FAULT_CODES = frozenset({"PLAN_PAIR_INCOMPLETE", "ENTRY_PLAN_NOT_CONSUMED"})
+
+
 class LifecycleSupervisor:
     """Read/control-plane lifecycle auditor with no trading mutation rights."""
 
@@ -113,8 +118,16 @@ class LifecycleSupervisor:
         # None = unproven snapshot; () = proven empty inventory.
         exchange_exposure: Sequence[Mapping[str, object]] | None = None,
         trading_account_id: str | None = None,
+        owns_global_faults: bool | None = None,
     ) -> None:
         self._connection = connection
+        # Legacy unscoped test/replay keeps its historical single-owner behavior.
+        # Account-scoped processes must opt in to global responsibility explicitly.
+        self._owns_global_faults = (
+            not bool(trading_account_id)
+            if owns_global_faults is None
+            else owns_global_faults
+        )
         self._policy = policy or LifecycleSupervisorPolicy()
         self._trading_account_id = (
             None if trading_account_id is None else trading_account_id.strip()
@@ -210,11 +223,15 @@ class LifecycleSupervisor:
     def _project_events(self, now: datetime) -> int:
         total = 0
 
-        activations = self._connection.execute(
+        activations = (
+            self._connection.execute(
             """SELECT activation_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,enabled_at
                  FROM strategy_entry.strategy_activations"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in activations:
             exact = {
                 "strategy_activation_id": row["activation_id"],
@@ -232,7 +249,8 @@ class LifecycleSupervisor:
                 strategy_activation_id=str(row["activation_id"]),
             )
 
-        pairs = self._connection.execute(
+        pairs = (
+            self._connection.execute(
             """SELECT a.activation_id,a.strategy_id,a.strategy_version,
                       a.strategy_config_fingerprint,a.enabled_at,
                       e.entry_plan_fingerprint,e.created_at AS entry_created_at,
@@ -246,7 +264,10 @@ class LifecycleSupervisor:
                    ON x.strategy_id=a.strategy_id
                   AND x.strategy_version=a.strategy_version
                   AND x.strategy_config_fingerprint=a.strategy_config_fingerprint"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in pairs:
             occurred = max(
                 _as_datetime(row["enabled_at"], "StrategyActivation.enabled_at"),
@@ -270,13 +291,17 @@ class LifecycleSupervisor:
                     exit_plan_fingerprint=str(row["exit_plan_fingerprint"]),
                 )
 
-        consumptions = self._connection.execute(
+        consumptions = (
+            self._connection.execute(
             """SELECT plan_consumption_id,entry_plan_fingerprint,
                       strategy_activation_id,consumer_instance_id,loaded_at,status
                  FROM runtime.plan_consumptions
                 WHERE plan_kind='ENTRY' AND consumer_kind='ENTRY_ENGINE'
                   AND status='LOADED'"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in consumptions:
             total += self._insert_event(
                 "ENTRY_PLAN_CONSUMED",
@@ -289,12 +314,16 @@ class LifecycleSupervisor:
                 strategy_activation_id=str(row["strategy_activation_id"]),
             )
 
-        signals = self._connection.execute(
+        signals = (
+            self._connection.execute(
             """SELECT signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,strategy_activation_id,
                       detected_at,entry_plan_fingerprint
                  FROM strategy_entry.strategy_signals"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in signals:
             total += self._insert_event(
                 "STRATEGY_SIGNAL_CREATED",
@@ -310,11 +339,15 @@ class LifecycleSupervisor:
                 signal_id=str(row["signal_id"]),
             )
 
-        attempts = self._connection.execute(
+        attempts = (
+            self._connection.execute(
             """SELECT strategy_attempt_id,signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,strategy_activation_id,created_at
                  FROM strategy_entry.strategy_attempts"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in attempts:
             total += self._insert_event(
                 "ENTRY_ATTEMPT_CREATED",
@@ -446,7 +479,8 @@ class LifecycleSupervisor:
                     capital_reservation_id=str(row["reservation_id"]),
                 )
 
-        decisions = self._connection.execute(
+        decisions = (
+            self._connection.execute(
             """SELECT d.entry_decision_id,d.strategy_attempt_id,d.signal_id,
                       d.decided_at,d.decision_code,d.capital_reservation_id,
                       d.exchange_position_slot_claim_id,d.position_mode_state_ref,
@@ -454,7 +488,10 @@ class LifecycleSupervisor:
                  FROM strategy_entry.entry_decisions d
                  JOIN strategy_entry.strategy_attempts a
                    ON a.strategy_attempt_id=d.strategy_attempt_id"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in decisions:
             total += self._insert_event(
                 "ENTRY_DECIDED",
@@ -507,14 +544,18 @@ class LifecycleSupervisor:
                     ),
                 )
 
-        requests = self._connection.execute(
+        requests = (
+            self._connection.execute(
             """SELECT execution_request_id,strategy_attempt_id,entry_decision_id,
                       signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,exit_plan_fingerprint,requested_at,
                       capital_reservation_id,exchange_position_slot_claim_id,
                       position_mode_state_ref
                  FROM strategy_entry.execution_requests"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in requests:
             total += self._insert_event(
                 "ENTRY_REQUEST_CREATED",
@@ -546,7 +587,8 @@ class LifecycleSupervisor:
                 ),
             )
 
-        request_states = self._connection.execute(
+        request_states = (
+            self._connection.execute(
             """SELECT e.request_state_event_id,e.execution_request_id,e.state,
                       e.occurred_at,e.reason,r.strategy_attempt_id,
                       r.entry_decision_id,r.signal_id,r.strategy_id,
@@ -556,7 +598,10 @@ class LifecycleSupervisor:
                  FROM strategy_entry.execution_request_state_events e
                  JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=e.execution_request_id"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in request_states:
             total += self._insert_event(
                 "ENTRY_REQUEST_STATE_CHANGED",
@@ -842,7 +887,8 @@ class LifecycleSupervisor:
                 exit_execution_request_id=str(row["execution_request_id"]),
             )
 
-        exit_dispatches = self._connection.execute(
+        exit_dispatches = (
+            self._connection.execute(
             """SELECT d.execution_request_id,d.command_id,d.created_at,
                       r.exit_decision_id,r.strategy_position_id,r.strategy_id,
                       r.strategy_version,r.strategy_config_fingerprint,
@@ -851,7 +897,10 @@ class LifecycleSupervisor:
                  JOIN strategy_exit.execution_requests r
                    ON r.execution_request_id=d.execution_request_id
                 WHERE d.state='DISPATCHED'"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in exit_dispatches:
             total += self._insert_event(
                 "EXIT_REQUEST_DISPATCHED",
@@ -952,7 +1001,7 @@ class LifecycleSupervisor:
     def _detect_faults(self, now: datetime) -> tuple[FaultCondition, ...]:
         faults: list[FaultCondition] = []
 
-        active = self._connection.execute(
+        active = (self._connection.execute(
             """SELECT a.activation_id,a.strategy_id,a.strategy_version,
                       a.strategy_config_fingerprint,
                       count(DISTINCT e.entry_plan_fingerprint) AS entry_plan_count,
@@ -971,7 +1020,7 @@ class LifecycleSupervisor:
                 WHERE a.enabled=true
                 GROUP BY a.activation_id,a.strategy_id,a.strategy_version,
                          a.strategy_config_fingerprint"""
-        ).fetchall()
+        ).fetchall() if self._owns_global_faults else ())
         for row in active:
             activation_id = str(row["activation_id"])
             entry_count = int(str(row["entry_plan_count"]))
@@ -1587,11 +1636,28 @@ class LifecycleSupervisor:
                 )
         return tuple(faults)
 
+    def _scoped_fault(self, condition: FaultCondition) -> FaultCondition:
+        """Attach proven scan ownership to NEW faults; never reinterpret legacy rows."""
+        exact = dict(condition.exact_ids)
+        if condition.code in _GLOBAL_FAULT_CODES:
+            if not self._owns_global_faults or exact.get("trading_account_id"):
+                raise RuntimeError("global lifecycle fault has no verified global owner")
+            exact["fault_scope_kind"] = "GLOBAL"
+        elif self._trading_account_id is not None:
+            if exact.get("trading_account_id") not in (None, self._trading_account_id):
+                raise RuntimeError("lifecycle fault belongs to another TradingAccount")
+            exact["fault_scope_kind"] = "ACCOUNT"
+            exact["trading_account_id"] = self._trading_account_id
+        return replace(condition, exact_ids=exact)
+
     def _fault_id(self, condition: FaultCondition) -> str:
-        return (
-            "lifecycle-fault-"
-            + fingerprint({"fault_code": condition.code, "scope_key": condition.scope_key})[:32]
-        )
+        identity: dict[str, object] = {
+            "fault_code": condition.code,
+            "scope_key": condition.scope_key,
+        }
+        if condition.code not in _GLOBAL_FAULT_CODES and self._trading_account_id:
+            identity["trading_account_id"] = self._trading_account_id
+        return "lifecycle-fault-" + fingerprint(identity)[:32]
 
     def _ensure_critical_delivery(
         self,
@@ -1669,6 +1735,7 @@ class LifecycleSupervisor:
         )
 
     def _upsert_fault(self, condition: FaultCondition, now: datetime) -> int:
+        condition = self._scoped_fault(condition)
         fault_id = self._fault_id(condition)
         existing = self._connection.execute(
             "SELECT state FROM runtime.lifecycle_faults WHERE fault_id=%s",
@@ -1731,7 +1798,7 @@ class LifecycleSupervisor:
     ) -> int:
         active_ids = {self._fault_id(item) for item in active}
         rows = self._connection.execute(
-            """SELECT fault_id,fault_code
+            """SELECT fault_id,fault_code,exact_ids
                  FROM runtime.lifecycle_faults
                 WHERE state='OPEN'"""
         ).fetchall()
@@ -1740,6 +1807,22 @@ class LifecycleSupervisor:
             fault_code = str(row["fault_code"])
             if fault_code not in _MANAGED_FAULT_CODES:
                 continue
+            exact_ids = row["exact_ids"]
+            if not isinstance(exact_ids, Mapping):
+                continue  # UNKNOWN is not permission to resolve a fault.
+            if fault_code in _GLOBAL_FAULT_CODES:
+                if not self._owns_global_faults:
+                    continue
+                if exact_ids.get("fault_scope_kind") not in (None, "GLOBAL"):
+                    continue
+            elif self._trading_account_id is not None:
+                if (
+                    exact_ids.get("fault_scope_kind") != "ACCOUNT"
+                    or exact_ids.get("trading_account_id") != self._trading_account_id
+                ):
+                    continue  # Foreign/legacy provenance must remain OPEN.
+            elif exact_ids.get("fault_scope_kind") == "ACCOUNT":
+                continue  # Legacy global scans cannot retire proven account faults.
             if (
                 fault_code == "EXCHANGE_STATE_DIVERGED"
                 and self._fresh_exchange_reconciliation(now) is None

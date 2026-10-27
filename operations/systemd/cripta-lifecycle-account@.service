@@ -1,0 +1,41 @@
+# Dormant systemd template: per-SUB signed GET-only lifecycle/safety evidence.
+# Install/start only after owner-approved release, actor/path/backup gates
+# and exact SUB connector/credential attestation. NO [Install] auto-enablement.
+[Unit]
+Description=Cripta independent account-local Lifecycle/Safety supervisor (%i)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_WORKER=ENABLED
+Environment=CRIPTA_TRADING_ACCOUNT_ID=%i
+Environment=CRIPTA_LIFECYCLE_CREDENTIAL_NAME=bybit-sub-%i
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_STATUS_PATH=/var/lib/cripta/lifecycle_account/account-%i/status.json
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_POLL_SECONDS=15
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+EnvironmentFile=/etc/cripta/lifecycle-account-%i.env
+LoadCredentialEncrypted=bybit-sub-%i:/etc/cripta/credentials/bybit-sub-%i.cred
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/account_lifecycle_worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/srv/cripta/runtime/current
+ReadWritePaths=/var/lib/cripta/lifecycle_account/account-%i
+
+# Intentionally NO [Install] stanza.
