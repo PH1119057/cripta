@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol, cast
@@ -101,6 +101,11 @@ _MANAGED_FAULT_CODES = frozenset(
 )
 
 
+# These are StrategyActivation / plan checks, not one private account's faults.
+# The single global coordinator retains these duties after account scoping.
+_GLOBAL_FAULT_CODES = frozenset({"PLAN_PAIR_INCOMPLETE", "ENTRY_PLAN_NOT_CONSUMED"})
+
+
 class LifecycleSupervisor:
     """Read/control-plane lifecycle auditor with no trading mutation rights."""
 
@@ -113,8 +118,16 @@ class LifecycleSupervisor:
         # None = unproven snapshot; () = proven empty inventory.
         exchange_exposure: Sequence[Mapping[str, object]] | None = None,
         trading_account_id: str | None = None,
+        owns_global_faults: bool | None = None,
     ) -> None:
         self._connection = connection
+        # Legacy unscoped test/replay keeps its historical single-owner behavior.
+        # Account-scoped processes must opt in to global responsibility explicitly.
+        self._owns_global_faults = (
+            not bool(trading_account_id)
+            if owns_global_faults is None
+            else owns_global_faults
+        )
         self._policy = policy or LifecycleSupervisorPolicy()
         self._trading_account_id = (
             None if trading_account_id is None else trading_account_id.strip()
@@ -952,7 +965,7 @@ class LifecycleSupervisor:
     def _detect_faults(self, now: datetime) -> tuple[FaultCondition, ...]:
         faults: list[FaultCondition] = []
 
-        active = self._connection.execute(
+        active = (self._connection.execute(
             """SELECT a.activation_id,a.strategy_id,a.strategy_version,
                       a.strategy_config_fingerprint,
                       count(DISTINCT e.entry_plan_fingerprint) AS entry_plan_count,
@@ -971,7 +984,7 @@ class LifecycleSupervisor:
                 WHERE a.enabled=true
                 GROUP BY a.activation_id,a.strategy_id,a.strategy_version,
                          a.strategy_config_fingerprint"""
-        ).fetchall()
+        ).fetchall() if self._owns_global_faults else ())
         for row in active:
             activation_id = str(row["activation_id"])
             entry_count = int(str(row["entry_plan_count"]))
@@ -1587,11 +1600,28 @@ class LifecycleSupervisor:
                 )
         return tuple(faults)
 
+    def _scoped_fault(self, condition: FaultCondition) -> FaultCondition:
+        """Attach proven scan ownership to NEW faults; never reinterpret legacy rows."""
+        exact = dict(condition.exact_ids)
+        if condition.code in _GLOBAL_FAULT_CODES:
+            if not self._owns_global_faults or exact.get("trading_account_id"):
+                raise RuntimeError("global lifecycle fault has no verified global owner")
+            exact["fault_scope_kind"] = "GLOBAL"
+        elif self._trading_account_id is not None:
+            if exact.get("trading_account_id") not in (None, self._trading_account_id):
+                raise RuntimeError("lifecycle fault belongs to another TradingAccount")
+            exact["fault_scope_kind"] = "ACCOUNT"
+            exact["trading_account_id"] = self._trading_account_id
+        return replace(condition, exact_ids=exact)
+
     def _fault_id(self, condition: FaultCondition) -> str:
-        return (
-            "lifecycle-fault-"
-            + fingerprint({"fault_code": condition.code, "scope_key": condition.scope_key})[:32]
-        )
+        identity: dict[str, object] = {
+            "fault_code": condition.code,
+            "scope_key": condition.scope_key,
+        }
+        if condition.code not in _GLOBAL_FAULT_CODES and self._trading_account_id:
+            identity["trading_account_id"] = self._trading_account_id
+        return "lifecycle-fault-" + fingerprint(identity)[:32]
 
     def _ensure_critical_delivery(
         self,
@@ -1669,6 +1699,7 @@ class LifecycleSupervisor:
         )
 
     def _upsert_fault(self, condition: FaultCondition, now: datetime) -> int:
+        condition = self._scoped_fault(condition)
         fault_id = self._fault_id(condition)
         existing = self._connection.execute(
             "SELECT state FROM runtime.lifecycle_faults WHERE fault_id=%s",
@@ -1731,7 +1762,7 @@ class LifecycleSupervisor:
     ) -> int:
         active_ids = {self._fault_id(item) for item in active}
         rows = self._connection.execute(
-            """SELECT fault_id,fault_code
+            """SELECT fault_id,fault_code,exact_ids
                  FROM runtime.lifecycle_faults
                 WHERE state='OPEN'"""
         ).fetchall()
@@ -1740,6 +1771,22 @@ class LifecycleSupervisor:
             fault_code = str(row["fault_code"])
             if fault_code not in _MANAGED_FAULT_CODES:
                 continue
+            exact_ids = row["exact_ids"]
+            if not isinstance(exact_ids, Mapping):
+                continue  # UNKNOWN is not permission to resolve a fault.
+            if fault_code in _GLOBAL_FAULT_CODES:
+                if not self._owns_global_faults:
+                    continue
+                if exact_ids.get("fault_scope_kind") not in (None, "GLOBAL"):
+                    continue
+            elif self._trading_account_id is not None:
+                if (
+                    exact_ids.get("fault_scope_kind") != "ACCOUNT"
+                    or exact_ids.get("trading_account_id") != self._trading_account_id
+                ):
+                    continue  # Foreign/legacy provenance must remain OPEN.
+            elif exact_ids.get("fault_scope_kind") == "ACCOUNT":
+                continue  # Legacy global scans cannot retire proven account faults.
             if (
                 fault_code == "EXCHANGE_STATE_DIVERGED"
                 and self._fresh_exchange_reconciliation(now) is None
