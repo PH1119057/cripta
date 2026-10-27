@@ -195,6 +195,89 @@ class PaperTradeRuntime:
             bundle.exact_identity: bundle for bundle in bundles
         }
 
+    def route_p90l90_native_trade(
+        self,
+        *,
+        symbol: str,
+        exec_id: str,
+        exchange_sequence: int,
+        event_at: datetime,
+        price: Decimal,
+    ) -> int:
+        """Route a verified publicTrade cursor to existing account-owned PAPER positions.
+
+        Only the explicit binding and exact persisted checkpoint supply the
+        TradingAccount. No default MAIN/SUB, no generated position and NO order.
+        Missing/ambiguous lineage, stale closed-5m RAW geometry and sequence
+        gaps fail closed; the existing position is never handed to R1 Exit.
+        """
+        if event_at.tzinfo is None or price <= 0 or not price.is_finite():
+            raise ValueError("P90L90 native source event invalid")
+        rows = self._connection.execute(
+            """SELECT p.paper_position_id,p.strategy_id,
+                      b.trading_account_id
+                 FROM strategy_entry.paper_positions p
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=p.strategy_activation_id
+                  AND b.execution_leg='PRIMARY'
+                  AND b.execution_role='PRIMARY'
+                  AND b.binding_state IN ('INACTIVE','ACTIVE')
+                WHERE p.state='OPEN' AND p.leg_type='PRIMARY'
+                  AND p.symbol=%s
+                  AND p.payload ? 'p90l90_exit_checkpoint'
+                ORDER BY p.paper_position_id,b.trading_account_id""",
+            (symbol,),
+        ).fetchall()
+        seen: set[str] = set()
+        for position_id, strategy_id, account_id in rows:
+            key = str(position_id)
+            if key in seen:
+                raise RuntimeError("P90L90_PAPER_AMBIGUOUS_ACCOUNT_BINDING")
+            seen.add(key)
+            if strategy_id not in {
+                "p90l90_legacy_main_ltc_inj",
+                "p90l90_legacy_sub_dot_arb_apt",
+            }:
+                raise RuntimeError("P90L90_PAPER_UNEXPECTED_STRATEGY")
+            at = event_at.astimezone(UTC)
+            boundary = datetime.fromtimestamp(
+                int(at.timestamp() // 300) * 300, UTC
+            )
+            history = tuple(self._l53_candles[symbol])
+            geometry_at = None
+            target = None
+            if len(history) >= 36 and history[-1].closed_at == boundary:
+                geometry_at = boundary
+                # The opposing RAW L5-3 extreme depends on the position
+                # side, and is recomputed only on a fully closed 5m state.
+                direction_row = self._connection.execute(
+                    """SELECT direction FROM strategy_entry.paper_positions
+                       WHERE paper_position_id=%s AND state='OPEN'""",
+                    (key,),
+                ).fetchone()
+                if direction_row is None:
+                    raise RuntimeError("P90L90_PAPER_POSITION_DISAPPEARED")
+                side = str(direction_row[0])
+                if side == "LONG":
+                    target = max(c.high for c in history[-36:])
+                elif side == "SHORT":
+                    target = min(c.low for c in history[-36:])
+                else:
+                    raise RuntimeError("P90L90_PAPER_UNEXPECTED_SIDE")
+            self.on_p90l90_native_trade(
+                trading_account_id=str(account_id),
+                strategy_id=str(strategy_id),
+                paper_position_id=key,
+                symbol=symbol,
+                exec_id=exec_id,
+                exchange_sequence=exchange_sequence,
+                event_at=at,
+                price=price,
+                geometry_effective_at=geometry_at,
+                candidate_opposite_raw_tp=target,
+            )
+        return len(seen)
+
     def on_p90l90_native_trade(
         self,
         *,
