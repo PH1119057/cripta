@@ -6,10 +6,11 @@ unresolved SECOND48 cross-account domain, or modify any database.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping
+from typing import Any
 
 from .p90l90_causal import P90L90CausalExit, P90L90PaperClose, Side
 
