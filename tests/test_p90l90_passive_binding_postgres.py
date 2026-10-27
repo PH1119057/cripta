@@ -42,6 +42,7 @@ def test_exact_inactive_binding_via_restricted_security_definer() -> None:
     with psycopg.connect(DSN, autocommit=False) as conn:
         with pytest.raises(RuntimeError, match="ROLLBACK_INTENTIONAL"):
             with conn.transaction():
+                conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
                 grant = conn.execute(
                     """SELECT
                         has_function_privilege(
