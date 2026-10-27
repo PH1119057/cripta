@@ -16,7 +16,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import psycopg
@@ -53,19 +53,22 @@ def validated_scope(
         raise RuntimeError("ACCOUNT_LOCAL_CONNECTOR_MISSING")
     if not _CREDENTIAL_NAME.fullmatch(credential_name):
         raise RuntimeError("ACCOUNT_LOCAL_CREDENTIAL_NAME_INVALID")
-    directory = Path(credential_directory)
+    # Validate the target Linux systemd paths with POSIX semantics even when
+    # source tests execute on Windows CI. Native Path handles file I/O later.
+    directory = PurePosixPath(credential_directory)
     if (
         not directory.is_absolute()
-        or directory.parent != Path("/run/credentials")
+        or directory.parent != PurePosixPath("/run/credentials")
         or not directory.name.startswith("cripta-lifecycle-account@")
     ):
         raise RuntimeError("ACCOUNT_LOCAL_CREDENTIAL_MOUNT_UNTRUSTED")
-    credential = directory / credential_name
-    output = Path(status_path)
-    if not output.is_absolute() or output.name != "status.json":
+    credential = Path(str(directory / credential_name))
+    output_contract = PurePosixPath(status_path)
+    if not output_contract.is_absolute() or output_contract.name != "status.json":
         raise RuntimeError("ACCOUNT_LOCAL_STATUS_PATH_INVALID")
-    if output.parent.name != "account-" + account_id:
+    if output_contract.parent.name != "account-" + account_id:
         raise RuntimeError("ACCOUNT_LOCAL_STATUS_NOT_ACCOUNT_SCOPED")
+    output = Path(str(output_contract))
     if credential_name == "bybit-mainnet":
         # This is the existing MAIN-only credential. No SUB impersonation.
         raise RuntimeError("ACCOUNT_LOCAL_MAIN_CREDENTIAL_NOT_PERMITTED")
