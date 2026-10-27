@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 def test_exact_strategy_coin_partition_and_second48_only():
     # Other historical research tests replace scripts.research in
     # sys.modules during pytest collection; import in a clean process.
