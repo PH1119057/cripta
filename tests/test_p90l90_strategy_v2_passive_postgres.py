@@ -15,7 +15,9 @@ import pytest
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-    MAIN_ID, SUB_ID, build_passive_legacy_cards,
+    MAIN_ID,
+    SUB_ID,
+    build_passive_legacy_cards,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
@@ -68,7 +70,8 @@ def test_v2_binding_only_exact_new_versions_with_old_v1_unchanged():
                      trading_account_id,venue_id,account_kind,account_type,
                      environment,status,external_account_ref)
                    VALUES (%s,'venue-bybit',%s,'UNIFIED','MAINNET','ACTIVE',
-                     '9000000000')""",
+                     '9000000000')
+                   ON CONFLICT(trading_account_id) DO NOTHING""",
                 (account,kind),
             )
             c.execute(
@@ -76,7 +79,8 @@ def test_v2_binding_only_exact_new_versions_with_old_v1_unchanged():
                      account_connector_id,trading_account_id,
                      connector_kind,adapter_id,credential_ref,status)
                    VALUES (%s,%s,'CEX_PRIVATE_RUNTIME','BYBIT_V5_PRIVATE',
-                     'disposable-fixture','ACTIVE')""",
+                     'disposable-fixture','ACTIVE')
+                   ON CONFLICT(account_connector_id) DO NOTHING""",
                 (connector,account),
             )
         store = StrategyEntryStore(c)
