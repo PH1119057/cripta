@@ -59,7 +59,7 @@ async def read_account_safety(reader: LifecycleAccountReadTransport) -> AccountS
     seen_orders: set[str] = set()
     cursor = ""
     for _ in range(20):
-        params = {"category": "linear", "openOnly": "0", "limit": "50"}
+        params = {"category": "linear", "settleCoin": "USDT", "openOnly": "0", "limit": "50"}
         if cursor:
             params["cursor"] = cursor
         reply = await reader.get("/v5/order/realtime", params, authenticated=True)
