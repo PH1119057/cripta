@@ -236,6 +236,20 @@ Materializer/readiness обязаны fail-closed, если Strategy заявл�
 
 **CURRENT OWNER DECISION 2026-10-26:** R1 и конкретная `r1_five_symbols` StrategyActivation более не действуют как текущая торговая Strategy. Владелец явно снял R1 с дальнейшей проверки Universal Entry; нельзя включать или копировать её Entry/Exit policy, параметры, one-account owner-arm или старые MICRO_LIVE исключения в новую Strategy без нового исследования, отдельного решения и версионирования. Ранее опубликованные ниже R1 параметры сохраняются **исключительно как исторический контракт и evidence**, не как активные defaults или разрешение на LIVE. Производственный R1 был деактивирован штатным CAS-контролем: `enabled=false`, `disabled_at IS NOT NULL`, наблюдатель перешёл в IDLE. Дальнейшая цель — отдельно проверить MAIN/SUB на будущей явно утверждённой Strategy и universal Entry/Exit, сохранив все safety gates. 
 
+**OWNER DECISION 2026-10-27 — reversible R1 service retirement:**
+while the R1 Strategy remains retired, its old `cripta-exit-runtime.service`
+(V36.1, legacy MAIN BE/trailing) is to be **stopped and disabled from autostart**,
+not deleted from source or database. Current production check found no
+open legacy Exchange positions or queued/running old Exit commands, and
+the systemd stop/disable was verified. Retain its code, unit definition and
+historical observations for 1–2 release cycles / approximately a week of
+stability; physical cleanup requires a later separate owner decision and
+release. The already-disabled `cripta-r1-reverse-worker.service` remains
+inactive. New Universal ExitPlan execution must never fall back to historical
+R1 Exit rules. This does not authorize disabling canonical Position Supervisor,
+Lifecycle Supervisor or account-safety coverage: those are still required by
+ARCH §9 and its account-scope replacement checks.
+
 HISTORICAL OWNER DECISION 2026-10-04: `R1` была label исследованной L5-3 Strategy Candidate, но ниже зафиксирован exact implementation target, разрешённый для реализации и SHADOW/test validation. Это всё ещё не production Strategy ID и не разрешение MICRO_LIVE/LIVE.
 
 ```text
