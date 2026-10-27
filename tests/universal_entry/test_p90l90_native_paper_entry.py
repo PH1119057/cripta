@@ -52,6 +52,7 @@ class _ShadowDb:
         self.events = []
         self.active_account = "ta-main"
         self.lock_count = 0
+        self.hardstops = []
 
     @contextmanager
     def transaction(self):
@@ -63,6 +64,11 @@ class _ShadowDb:
             return _Cursor()
         if "FROM strategy_entry.strategy_execution_bindings b" in sql:
             return _Cursor(rows=[(self.active_account,)])
+        if "SELECT paper_position_id,closed_at" in sql:
+            return _Cursor(rows=[
+                (pid, at) for pid, at, strategy in self.hardstops
+                if strategy == args[0]
+            ])
         if "SELECT paper_position_id,payload FROM strategy_entry.paper_positions" in sql:
             return _Cursor(rows=[
                 (k, v) for k, v in self.rows.items()
@@ -203,3 +209,29 @@ def test_v1_unresolved_contract_cannot_enter_paper():
     )
     with pytest.raises(ValueError, match="EXACT_STRATEGY_IDENTITY"):
         invoke(PaperTradeRuntime(_ShadowDb()), eval_, mutated_bundle)
+
+
+def test_second48_applies_to_both_sides_of_one_strategy_without_cross_account():
+    db = _ShadowDb()
+    db.hardstops = [
+        ("hardstop-main-1", T0-timedelta(hours=2), MAIN_ID),
+        ("hardstop-main-2", T0-timedelta(hours=1), MAIN_ID),
+    ]
+    runtime = PaperTradeRuntime(db)
+    main, evaluation = setup(MAIN_ID)
+    assert invoke(runtime, evaluation, main) is None
+    assert not db.rows and not db.events
+
+    # SUB on its own policy/Strategy identity remains independently allowed.
+    db.active_account = "ta-sub"
+    sub, sub_eval = setup(SUB_ID)
+    assert invoke(runtime, sub_eval, sub) is not None
+    assert len(db.rows) == 1
+
+
+def test_second48_is_not_triggered_by_only_one_hardstop():
+    db = _ShadowDb()
+    db.hardstops = [("main-1", T0-timedelta(hours=1), MAIN_ID)]
+    runtime = PaperTradeRuntime(db)
+    main, evaluation = setup(MAIN_ID)
+    assert invoke(runtime, evaluation, main) is not None
