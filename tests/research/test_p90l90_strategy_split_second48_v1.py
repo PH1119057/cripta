@@ -6,19 +6,27 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.research.p90l90_strategy_split_second48_v1 import (
-    GROUPS,
-    SCENARIOS,
-)
-
-
 def test_exact_strategy_coin_partition_and_second48_only():
-    assert GROUPS == (
-        ("MAIN_LTC_INJ", ("LTCUSDT", "INJUSDT")),
-        ("SUB_DOT_ARB_APT", ("DOTUSDT", "ARBUSDT", "APTUSDT")),
+    # Other historical research tests replace scripts.research in
+    # sys.modules during pytest collection; import in a clean process.
+    root = Path(__file__).resolve().parents[2]
+    process = subprocess.run(
+        [sys.executable, "-c", (
+            "import json; from scripts.research import "
+            "p90l90_strategy_split_second48_v1 as r; "
+            "print(json.dumps({'groups':r.GROUPS,'scenarios':r.SCENARIOS}))"
+        )],
+        cwd=root, check=True, capture_output=True, text=True, timeout=20,
     )
-    assert SCENARIOS == {"BASELINE": (0, None), "SECOND_48H": (2, 48)}
-    symbols = [symbol for _, group in GROUPS for symbol in group]
+    obj = json.loads(process.stdout)
+    assert obj["groups"] == [
+        ["MAIN_LTC_INJ", ["LTCUSDT", "INJUSDT"]],
+        ["SUB_DOT_ARB_APT", ["DOTUSDT", "ARBUSDT", "APTUSDT"]],
+    ]
+    assert obj["scenarios"] == {
+        "BASELINE": [0, None], "SECOND_48H": [2, 48]
+    }
+    symbols = [symbol for _, group in obj["groups"] for symbol in group]
     assert len(symbols) == len(set(symbols)) == 5
 
 
