@@ -238,6 +238,10 @@ def test_universal_market_watch_emits_only_causal_native_raw_crossing():
     assert found[0].direction == "LONG"
     assert found[0].attributes.to_dict()["modeled_exchange_fill"] is False
     assert found[0].attributes.to_dict()["entry_price"] == "90"
+    assert found[0].attributes.to_dict()["p90l90"]["candidate_price"] == "90"
+    assert found[0].attributes.to_dict()["p90l90"][
+        "opposite_raw_l53_target"
+    ] == "110"
     watch.process(plan, fact(3, "91"), allow_candidate=True)
     assert watch.process(plan, fact(4, "89"), allow_candidate=True) == ()
     # Readiness remains a separate fail-closed gate; a candidate does not
