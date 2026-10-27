@@ -342,6 +342,16 @@ Tool policy, фактический Unix actor и разрешение влад�
 по DEVELOPMENT_RELEASE §19.5–19.6. Изменений `config.yaml`, allowlist,
 прав Unix, сервиса SentinelX или торговых runtime здесь **не выполнялось**.
 
+### SentinelX scoped postgres installer rail — CHECKED HERE 2026-10-28
+
+OWNER instruction: add only a dedicated postgres-actor installer command for two NEW passive P90L90 LEGACY StrategyCards, without enabling trading. On connected host robot agent v0.11.14:
+
+- /etc/sentinelx/config.yaml was backed up by the structured SentinelX editor to /etc/sentinelx/config.yaml.bak.20261027-190436-916974.
+- The editor performed exactly one literal replace and validated YAML successfully, adding the narrow allowlisted prefix: `sudo -u postgres python3 /srv/cripta/runtime/current/operations/implementation/install_p90l90_legacy_passive.py`.
+- The SentinelX self-restart request lost the connection while in flight (`agent_disconnected/read_loop_ended`); no duplicate restart was attempted. New `sentinel_ping` succeeded and a fresh `sentinel_capabilities(detail=full)` explicitly returned the exact new postgres prefix. **CONFIG_APPLIED=PASS.**
+- This is NOT a general `sudo -u postgres python3` grant, NOT proof of a deployed or executable installer, NOT a DB mutation, NOT an installed StrategyCard/EntryPlan/ExitPlan, NOT a TradingAccount binding and NOT an Exchange/LIVE authorization. A file metadata check from the SentinelX management identity returned Unix `Permission denied`; installed script bytes/existence were NOT confirmed by that read.
+- Future registration and the script itself require exact GitHub-reviewed code, released/installed script identity, actual `postgres` actor and filesystem/DB permission preflight, atomic identity-preserving transaction, disabled StrategyActivation, financial-account binding scope and post-write readback. Project gates in DEVELOPMENT_RELEASE §§5,19,48,50 and TRADING_CONTOUR §7.6 remain controlling.
+
 ### Current writable roots relevant to CRIPTA jobs/reports
 
 ```text
