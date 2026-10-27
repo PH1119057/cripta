@@ -106,6 +106,23 @@ def assess_strategy_runtime_readiness(
             )
         )
 
+    geometry = _mapping(watch.get("geometry"))
+    if str(geometry.get("operator") or "") == "P90L90_RAW_H9_UNION_CROSSING":
+        policy_reasons.append(
+            RuntimeReadinessReason(
+                "P90L90_RAW_ENTRY_PRODUCER_NOT_WIRED",
+                "ENTRY",
+                "RAW H9/PREV7D crossing is passive authoring; no verified live producer.",
+            )
+        )
+        paper_reasons.append(
+            RuntimeReadinessReason(
+                "P90L90_RAW_EXIT_CONSUMER_NOT_WIRED",
+                "PAPER_EXIT",
+                "RAW opposite L5-3 TP and TRAIL035 need proven causal Exit consumer.",
+            )
+        )
+
     # Entry reference/local/context policies are materialized and consumed by the
     # Universal Entry engine.  Authoring validation owns their field completeness.
     typed_contexts = card.mayak_context_policy + card.dispatcher_context_policy
