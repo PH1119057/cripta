@@ -17,6 +17,7 @@ from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90CausalEntry,
     P90L90CausalExit,
+    P90L90Second48PaperEmbargo,
     causal_entry_state,
     modeled_pnl_after_fees,
 )
@@ -267,3 +268,24 @@ def test_fee_accounting_matches_12_decimal_research_notional():
     assert short.gross_usdt == D("0.2")
     assert short.exit_fee_usdt == D("0.00539")
     assert short.net_usdt == D("0.18911")
+
+
+def test_second48_paper_embargo_requires_explicit_scope_and_never_flattens():
+    with pytest.raises(ValueError, match="explicit portfolio domain"):
+        P90L90Second48PaperEmbargo(domain_id="")
+    base = datetime(2026, 10, 28, tzinfo=UTC)
+    main = P90L90Second48PaperEmbargo(domain_id="explicit-MAIN")
+    sub = P90L90Second48PaperEmbargo(domain_id="explicit-SUB")
+    main.record_exit(reason="HARD_STOP", at=base)
+    assert main.can_enter(base)
+    main.record_exit(reason="PROTECTED_STOP", at=base + timedelta(hours=1))
+    assert main.can_enter(base + timedelta(hours=1))
+    main.record_exit(reason="HARD_STOP", at=base + timedelta(hours=2))
+    assert not main.can_enter(base + timedelta(hours=3))
+    assert main.pause_until == base + timedelta(hours=50)
+    assert sub.can_enter(base + timedelta(hours=3))
+    main.record_exit(reason="HARD_STOP", at=base + timedelta(hours=4))
+    assert main.pause_until == base + timedelta(hours=52)
+    assert main.can_enter(base + timedelta(hours=52))
+    with pytest.raises(ValueError, match="noncausal"):
+        main.record_exit(reason="HARD_STOP", at=base)
