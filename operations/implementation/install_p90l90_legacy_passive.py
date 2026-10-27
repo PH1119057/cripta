@@ -1,8 +1,9 @@
 """Atomic installer for two owner-approved *passive* P90L90 Strategy versions.
 
-Run ONLY with an exact approved/released binary under the dedicated postgres
-operational actor. No Exchange interaction, credentials, trading activations,
-execution permission or LIVE-arm. Non-effective account assignments only.
+Run only by application Unix/DB actor cripta from an exact installed release.
+Postgres owns the narrowly audited SECURITY DEFINER binding registration
+function (versioned SQL migration); cripta never receives arbitrary INSERT
+on the bindings table. No Exchange, credentials, live arm or REAL activation.
 """
 from __future__ import annotations
 
@@ -61,8 +62,8 @@ def _require(predicate: bool, code: str) -> None:
 
 
 def install(*, dry_run: bool = False) -> None:
-    # Security context is part of the installer identity, not a suggestion.
-    _require(os.geteuid() == pwd.getpwnam("postgres").pw_uid, "WRONG_UNIX_ACTOR")
+    # The app actor builds cards; a dedicated DB function owns the inactive binding write.
+    _require(os.geteuid() == pwd.getpwnam("cripta").pw_uid, "WRONG_UNIX_ACTOR")
     _require(Path(__file__).resolve() == (ROOT / "operations/implementation"
                                           / "install_p90l90_legacy_passive.py").resolve(),
              "WRONG_INSTALLED_SCRIPT_PATH")
@@ -73,7 +74,7 @@ def install(*, dry_run: bool = False) -> None:
         readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
         _require(not readiness.active_ready and not readiness.execution_ready,
                  "CARD_NOT_FAIL_CLOSED")
-    with psycopg.connect("dbname=cripta user=postgres") as connection:
+    with psycopg.connect("dbname=cripta user=cripta") as connection:
         with connection.transaction():
             connection.execute(
                 "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, "
@@ -85,6 +86,12 @@ def install(*, dry_run: bool = False) -> None:
             # Scoped lock prevents concurrent installers for these exact identities.
             if not dry_run:
                 connection.execute("SELECT pg_advisory_xact_lock(20901290, 243)")
+            _require(connection.execute(
+                """SELECT has_function_privilege(
+                    'cripta',
+                    'strategy_entry.register_p90l90_inactive_binding(text,text,text)',
+                    'EXECUTE')"""
+            ).fetchone() == (True,), "PASSIVE_BINDING_MIGRATION_NOT_INSTALLED")
             states = connection.execute(
                 "SELECT mode, enabled FROM control.execution_gates "
                 "WHERE mode IN ('mainnet','testnet')"
@@ -165,17 +172,12 @@ def install(*, dry_run: bool = False) -> None:
                 store.insert_activation(activation, reason=REASON)
                 store.insert_entry_plan(entry)
                 store.insert_exit_plan(exit_plan)
-                connection.execute(
-                    """INSERT INTO strategy_entry.strategy_execution_bindings(
-                      strategy_execution_binding_id,strategy_activation_id,
-                      execution_leg,execution_role,trading_account_id,
-                      allocation_mode,binding_state,effective_from,effective_to,
-                      operator,source,reason
-                    ) VALUES (%s,%s,'PRIMARY','PRIMARY',%s,
-                              'DEDICATED_STRATEGY','INACTIVE',%s,NULL,
-                              'owner',%s,%s)""",
-                    (binding_id, activation_id, ta_id, when, REASON, REASON),
-                )
+                result = connection.execute(
+                    """SELECT strategy_entry.register_p90l90_inactive_binding(
+                        %s, %s, %s
+                    )""", (binding_id, activation_id, ta_id)
+                ).fetchone()
+                _require(result == (binding_id,), "BINDING_FUNCTION_RESULT:" + kind)
                 _require(connection.execute(
                     """SELECT a.enabled,b.binding_state,ec.enabled
                        FROM strategy_entry.strategy_activations a
