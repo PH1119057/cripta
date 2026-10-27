@@ -679,9 +679,9 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     if timeframes != ["5", "15"]:
                         raise ValueError("P90L90 requires 5m and 15m geometry")
                     counts = _mapping(geometry.get("lookback_bars"), "P90L90 lookback_bars")
-                    for field, value in (("l53_5m", 36), ("h9_5m", 108),
-                                         ("h9_15m", 36)):
-                        if int(str(counts.get(field) or "0")) != value:
+                    for field, expected_bars in (("l53_5m", 36), ("h9_5m", 108),
+                                                 ("h9_15m", 36)):
+                        if int(str(counts.get(field) or "0")) != expected_bars:
                             raise ValueError(f"P90L90 requires {field}={value}")
                     if geometry.get("h9_equality") != "EXACT_RAW_SIDE":
                         raise ValueError("P90L90 requires exact RAW H9 agreement")
