@@ -1,6 +1,6 @@
 """Passive P90L90 twin card authoring: exact identity, no LIVE readiness."""
-from datetime import UTC, datetime
 from copy import deepcopy
+from datetime import UTC, datetime
 
 import pytest
 
@@ -8,8 +8,12 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActi
 from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-    MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS,
-    build_passive_legacy_cards, exact_legacy_policy,
+    MAIN_ID,
+    MAIN_SYMBOLS,
+    SUB_ID,
+    SUB_SYMBOLS,
+    build_passive_legacy_cards,
+    exact_legacy_policy,
 )
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 
