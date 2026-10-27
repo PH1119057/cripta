@@ -15,13 +15,18 @@ import signal
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
 
+from bybit_workbench.exchange.bybit.account_safety_reader import (
+    AccountSafetyFacts, read_account_safety,
+)
 from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
+from bybit_workbench.exchange.bybit.transport import LifecycleAccountReadTransport
 from bybit_workbench.exchange.bybit.protection_supervisor_bridge import (
     account_protection_verdicts,
 )
@@ -151,6 +156,42 @@ def inspect_account_once(
     }
 
 
+def record_proven_safety(
+    connection: Any, *, account_id: str, connector_id: str,
+    observed_at: datetime, snapshot: Mapping[str, object],
+    lifecycle: Mapping[str, object], facts: AccountSafetyFacts,
+) -> None:
+    if lifecycle.get("state") != "VERIFIED_ACCOUNT_SCAN":
+        raise RuntimeError("ACCOUNT_SAFETY_SIGNED_UID_NOT_VERIFIED")
+    positions = snapshot.get("account_wide_positions")
+    if snapshot.get("account_wide_pagination_complete") is not True or not isinstance(positions, list):
+        raise RuntimeError("ACCOUNT_SAFETY_POSITION_INVENTORY_INCOMPLETE")
+    count = 0
+    for item in positions:
+        if not isinstance(item, Mapping):
+            raise RuntimeError("ACCOUNT_SAFETY_POSITION_ROW_INVALID")
+        size = Decimal(str(item.get("size")))
+        if not size.is_finite() or size < 0:
+            raise RuntimeError("ACCOUNT_SAFETY_POSITION_SIZE_INVALID")
+        count += int(size > 0)
+    protections = lifecycle.get("protection_states")
+    if not isinstance(protections, dict):
+        raise RuntimeError("ACCOUNT_SAFETY_PROTECTION_STATES_INVALID")
+    connection.execute(
+        """INSERT INTO safety.account_exchange_snapshots(
+            trading_account_id,account_connector_id,observed_at,source,
+            evidence_status,total_equity,available_balance,wallet_balance,
+            open_positions,open_orders,protection_checked_count,
+            protection_verified_count
+        ) VALUES (%s,%s,%s,'SIGNED_BYBIT_ACCOUNT_GET','VERIFIED',
+                  %s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+        (account_id, connector_id, observed_at,
+         facts.total_equity, facts.available_balance, facts.wallet_balance,
+         count, facts.open_orders, len(protections),
+         sum(x == "VERIFIED" for x in protections.values())),
+    )
+
+
 def _status(path: Path, data: Mapping[str, object]) -> None:
     # Writable parent must be prepared by exact cripta actor before start.
     if not path.parent.is_dir():
@@ -198,10 +239,16 @@ def main() -> int:
                 symbols = tuple(sorted({str(x["symbol"]) for x in positions}))
                 # No credential values, UID or Bybit response are persisted/logged.
                 fields = json.loads(credential.read_text(encoding="utf-8"))
+                base_url = os.environ.get("BYBIT_REST", "https://api.bybit.kz")
                 snapshot = asyncio.run(direct_account_snapshot(
                     symbols, api_key=str(fields["api_key"]),
-                    api_secret=str(fields["api_secret"]),
-                    base_url=os.environ.get("BYBIT_REST", "https://api.bybit.kz"),
+                    api_secret=str(fields["api_secret"]), base_url=base_url,
+                ))
+                safety_facts = asyncio.run(read_account_safety(
+                    LifecycleAccountReadTransport(
+                        api_key=str(fields["api_key"]),
+                        api_secret=str(fields["api_secret"]), base_url=base_url,
+                    )
                 ))
                 with connection.transaction():
                     result = inspect_account_once(
@@ -209,6 +256,13 @@ def main() -> int:
                         credential_ref=credential_ref,
                         account_snapshot=snapshot, now=datetime.now(UTC),
                     )
+                    if result.get("state") == "VERIFIED_ACCOUNT_SCAN":
+                        record_proven_safety(
+                            connection, account_id=account_id,
+                            connector_id=connector_id,
+                            observed_at=datetime.now(UTC), snapshot=snapshot,
+                            lifecycle=result, facts=safety_facts,
+                        )
                 state = {"observed_at": datetime.now(UTC).isoformat(), **result}
             except Exception as exc:
                 connection.rollback()
