@@ -5,6 +5,7 @@ import json
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -180,3 +181,16 @@ def test_two_accounts_isolated_and_generic_tick_does_not_touch_p90() -> None:
     assert db.positions["paper-main"]["stop"] == D("100.25")
     assert db.positions["paper-sub"]["state"] == "OPEN"
     assert db.positions["paper-sub"]["payload"]["p90l90_exit_checkpoint"]["exit"]["stop"] == "90"
+
+
+def test_generic_p90_paper_order_is_refused_before_any_db_write() -> None:
+    db = _PaperConnection()
+    card = SimpleNamespace(entry_policy=SimpleNamespace(to_dict=lambda: {
+        "watch_policy": {"geometry": {"operator": "P90L90_RAW_H9_UNION_CROSSING"}}
+    }))
+    bundle = SimpleNamespace(card=card, activation=object(), exit_plan=object())
+    evaluation = SimpleNamespace(execution_intent=object())
+    with pytest.raises(RuntimeError, match="P90L90_PAPER_ENTRY_NOT_APPROVED"):
+        PaperTradeRuntime(db).create_order(evaluation, bundle, now=T0)
+    assert db.updates == 0
+    assert not db.events
