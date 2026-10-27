@@ -62,7 +62,7 @@ def test_exact_systemd_credential_and_status_scope_required() -> None:
     file, path, ref = imported.validated_scope(B, C, NAME, CREDS, STATUS)
     assert file.name == NAME
     assert path.name == "status.json"
-    assert ref == "systemd-credential:" + NAME
+    assert ref == "systemd:" + NAME
     with pytest.raises(RuntimeError, match="MAIN_CREDENTIAL"):
         imported.validated_scope(B, C, "bybit-mainnet", CREDS, STATUS)
     with pytest.raises(RuntimeError, match="MOUNT_UNTRUSTED"):
@@ -78,7 +78,7 @@ def test_main_account_identity_rejected_before_any_scan() -> None:
     with pytest.raises(RuntimeError, match="SUB_IDENTITY_NOT_READY"):
         imported.inspect_account_once(
             db, account_id=B, connector_id=C,
-            credential_ref="systemd-credential:" + NAME,
+            credential_ref="systemd:" + NAME,
             account_snapshot={}, now=NOW,
         )
     assert len(db.queries) == 1
@@ -96,7 +96,7 @@ def test_failed_signed_exchange_check_cannot_resolve_old_faults(
     monkeypatch.setattr(imported, "LifecycleSupervisor", _never_scan)
     got = imported.inspect_account_once(
         db, account_id=B, connector_id=C,
-        credential_ref="systemd-credential:" + NAME,
+        credential_ref="systemd:" + NAME,
         account_snapshot={"complete": False}, now=NOW,
     )
     assert got["state"] == "UNKNOWN"
@@ -111,7 +111,7 @@ def test_proven_sub_passes_exact_isolated_scope_to_lifecycle(
     def _audit(*_: Any, **params: Any) -> ExposureAuditResult:
         assert params["trading_account_id"] == B
         assert params["account_connector_id"] == C
-        assert params["verified_credential_ref"] == "systemd-credential:" + NAME
+        assert params["verified_credential_ref"] == "systemd:" + NAME
         return ExposureAuditResult((), "VERIFIED", ())
     monkeypatch.setattr(imported, "verified_account_exposure", _audit)
     def _protection(*_: Any, **params: Any) -> dict[str, dict[str, str]]:
@@ -127,7 +127,7 @@ def test_proven_sub_passes_exact_isolated_scope_to_lifecycle(
     monkeypatch.setattr(imported, "LifecycleSupervisor", _Supervisor)
     got = imported.inspect_account_once(
         db, account_id=B, connector_id=C,
-        credential_ref="systemd-credential:" + NAME,
+        credential_ref="systemd:" + NAME,
         account_snapshot={"complete": True}, now=NOW,
     )
     assert got["state"] == "VERIFIED_ACCOUNT_SCAN"
