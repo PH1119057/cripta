@@ -274,20 +274,52 @@ def _fetch_history(
     symbol: str,
     observed_at: datetime,
     intervals: tuple[str, ...] = ("5", "15", "60"),
+    *,
+    p90l90_full_prev7d: bool = False,
 ) -> dict[str, tuple[Candle, ...]]:
     history: dict[str, tuple[Candle, ...]] = {}
     for interval in intervals:
-        payload = _get_json(
-            "/v5/market/kline",
-            {"category": "linear", "symbol": symbol, "interval": interval, "limit": 1000},
+        # P90L90 needs seven whole PREVIOUS UTC days plus ATR200 warmup and
+        # the current partial day. Bybit REST returns at most 1000 candles
+        # per page. Other Strategies retain the old single-page contract.
+        required = 2600 if interval == "5" and p90l90_full_prev7d else 1000
+        merged: dict[datetime, Candle] = {}
+        end_ms: int | None = None
+        while len(merged) < required:
+            params: dict[str, object] = {
+                "category": "linear", "symbol": symbol,
+                "interval": interval, "limit": 1000,
+            }
+            if end_ms is not None:
+                params["end"] = end_ms
+            payload = _get_json("/v5/market/kline", params)
+            raw_rows = cast(list[list[Any]], _result_list(payload))
+            candles = map_rest_klines(
+                raw_rows, symbol=symbol, interval=interval,
+                observed_at=observed_at,
+            )
+            if not candles:
+                break
+            for candle in candles:
+                if candle.is_closed:
+                    current = merged.get(candle.opened_at)
+                    if current is not None and current != candle:
+                        raise ValueError("Bybit P90L90 REST duplicate candle conflict")
+                    merged[candle.opened_at] = candle
+            oldest = min(candle.opened_at for candle in candles)
+            next_end_ms = int(oldest.timestamp() * 1000) - 1
+            if end_ms is not None and next_end_ms >= end_ms:
+                raise ValueError("Bybit P90L90 REST cursor did not advance")
+            end_ms = next_end_ms
+            if required <= 1000 or len(raw_rows) < 1000:
+                break
+        history[interval] = tuple(
+            sorted(merged.values(), key=lambda item: item.opened_at)[-required:]
         )
-        candles = map_rest_klines(
-            cast(list[list[Any]], _result_list(payload)),
-            symbol=symbol,
-            interval=interval,
-            observed_at=observed_at,
-        )
-        history[interval] = tuple(item for item in candles if item.is_closed)
+        if interval == "5" and p90l90_full_prev7d and len(history[interval]) < 2216:
+            raise RuntimeError(
+                f"P90L90_7D_PLUS_ATR200_SEED_INCOMPLETE:{symbol}:{len(history[interval])}"
+            )
     return history
 
 
@@ -2070,10 +2102,21 @@ def _run_observer_epoch(
         for symbol in bundle.entry_plan.symbols
     }
 
+    p90l90_symbols = {
+        symbol
+        for raw_bundle in bundles
+        for symbol in cast(Any, raw_bundle).entry_plan.symbols
+        if cast(Any, raw_bundle).entry_plan.watch_policy.to_dict().get(
+            "geometry", {}
+        ).get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
+    }
     closed_boundaries: dict[tuple[str, str], datetime] = {}
     for symbol in symbols:
         observed = datetime.now(UTC)
-        history = _fetch_history(symbol, observed, intervals)
+        history = _fetch_history(
+            symbol, observed, intervals,
+            p90l90_full_prev7d=symbol in p90l90_symbols,
+        )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
         for timeframe in intervals:
             rows = history.get(timeframe, ())
