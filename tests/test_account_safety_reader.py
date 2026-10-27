@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-from typing import Any
-
 import pytest
 
 from bybit_workbench.exchange.bybit.account_safety_reader import (
@@ -19,7 +17,7 @@ class _Reader:
 
     async def get(
         self, path: str, params: dict[str, str], *, authenticated: bool,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         assert authenticated and path.startswith("/v5/")
         assert path in {"/v5/account/wallet-balance", "/v5/order/realtime"}
         self.calls.append(path)
