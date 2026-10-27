@@ -13,9 +13,10 @@ import os
 import re
 import signal
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -188,7 +189,6 @@ def main() -> int:
         row_factory=dict_row,
     ) as connection:
         while _running:
-            now = datetime.now(UTC)
             try:
                 with connection.transaction():
                     require_sub_account(
