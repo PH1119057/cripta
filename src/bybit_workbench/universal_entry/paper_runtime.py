@@ -723,6 +723,13 @@ class PaperTradeRuntime:
         exit_plan = bundle.exit_plan
 
         entry_policy = card.entry_policy.to_dict()
+        watch = _mapping(entry_policy.get("watch_policy") or {}, "paper watch_policy")
+        geometry = _mapping(watch.get("geometry") or {}, "paper watch geometry")
+        if geometry.get("operator") == "P90L90_RAW_H9_UNION_CROSSING":
+            raise RuntimeError(
+                "P90L90_PAPER_ENTRY_NOT_APPROVED: explicit no-order paper capital "
+                "and native fill contract are not yet owner-approved"
+            )
         execution_policy = _mapping(
             entry_policy.get("execution_policy"), "paper execution_policy"
         )
