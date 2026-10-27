@@ -53,8 +53,8 @@ def collect_once(connection: Any, *, trading_account_id: str, now: datetime) -> 
                ON h.trading_account_id=p.trading_account_id
               AND h.identity_status='PROVEN'
               AND h.symbol=p.symbol AND h.position_idx=p.position_idx
-            WHERE p.state='OPEN' AND p.bot_instance_id='universal-entry'
-              AND p.identity_status='PROVEN' AND p.trading_account_id=%s
+            WHERE p.state='OPEN' AND p.identity_status='PROVEN'
+              AND p.trading_account_id=%s
             ORDER BY p.position_id""", (trading_account_id,)
     ).fetchall()
     count = 0
