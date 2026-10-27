@@ -223,11 +223,15 @@ class LifecycleSupervisor:
     def _project_events(self, now: datetime) -> int:
         total = 0
 
-        activations = self._connection.execute(
+        activations = (
+            self._connection.execute(
             """SELECT activation_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,enabled_at
                  FROM strategy_entry.strategy_activations"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in activations:
             exact = {
                 "strategy_activation_id": row["activation_id"],
@@ -245,7 +249,8 @@ class LifecycleSupervisor:
                 strategy_activation_id=str(row["activation_id"]),
             )
 
-        pairs = self._connection.execute(
+        pairs = (
+            self._connection.execute(
             """SELECT a.activation_id,a.strategy_id,a.strategy_version,
                       a.strategy_config_fingerprint,a.enabled_at,
                       e.entry_plan_fingerprint,e.created_at AS entry_created_at,
@@ -259,7 +264,10 @@ class LifecycleSupervisor:
                    ON x.strategy_id=a.strategy_id
                   AND x.strategy_version=a.strategy_version
                   AND x.strategy_config_fingerprint=a.strategy_config_fingerprint"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in pairs:
             occurred = max(
                 _as_datetime(row["enabled_at"], "StrategyActivation.enabled_at"),
@@ -283,13 +291,17 @@ class LifecycleSupervisor:
                     exit_plan_fingerprint=str(row["exit_plan_fingerprint"]),
                 )
 
-        consumptions = self._connection.execute(
+        consumptions = (
+            self._connection.execute(
             """SELECT plan_consumption_id,entry_plan_fingerprint,
                       strategy_activation_id,consumer_instance_id,loaded_at,status
                  FROM runtime.plan_consumptions
                 WHERE plan_kind='ENTRY' AND consumer_kind='ENTRY_ENGINE'
                   AND status='LOADED'"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in consumptions:
             total += self._insert_event(
                 "ENTRY_PLAN_CONSUMED",
@@ -302,12 +314,16 @@ class LifecycleSupervisor:
                 strategy_activation_id=str(row["strategy_activation_id"]),
             )
 
-        signals = self._connection.execute(
+        signals = (
+            self._connection.execute(
             """SELECT signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,strategy_activation_id,
                       detected_at,entry_plan_fingerprint
                  FROM strategy_entry.strategy_signals"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in signals:
             total += self._insert_event(
                 "STRATEGY_SIGNAL_CREATED",
@@ -323,11 +339,15 @@ class LifecycleSupervisor:
                 signal_id=str(row["signal_id"]),
             )
 
-        attempts = self._connection.execute(
+        attempts = (
+            self._connection.execute(
             """SELECT strategy_attempt_id,signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,strategy_activation_id,created_at
                  FROM strategy_entry.strategy_attempts"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in attempts:
             total += self._insert_event(
                 "ENTRY_ATTEMPT_CREATED",
@@ -459,7 +479,8 @@ class LifecycleSupervisor:
                     capital_reservation_id=str(row["reservation_id"]),
                 )
 
-        decisions = self._connection.execute(
+        decisions = (
+            self._connection.execute(
             """SELECT d.entry_decision_id,d.strategy_attempt_id,d.signal_id,
                       d.decided_at,d.decision_code,d.capital_reservation_id,
                       d.exchange_position_slot_claim_id,d.position_mode_state_ref,
@@ -467,7 +488,10 @@ class LifecycleSupervisor:
                  FROM strategy_entry.entry_decisions d
                  JOIN strategy_entry.strategy_attempts a
                    ON a.strategy_attempt_id=d.strategy_attempt_id"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in decisions:
             total += self._insert_event(
                 "ENTRY_DECIDED",
@@ -520,14 +544,18 @@ class LifecycleSupervisor:
                     ),
                 )
 
-        requests = self._connection.execute(
+        requests = (
+            self._connection.execute(
             """SELECT execution_request_id,strategy_attempt_id,entry_decision_id,
                       signal_id,strategy_id,strategy_version,
                       strategy_config_fingerprint,exit_plan_fingerprint,requested_at,
                       capital_reservation_id,exchange_position_slot_claim_id,
                       position_mode_state_ref
                  FROM strategy_entry.execution_requests"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in requests:
             total += self._insert_event(
                 "ENTRY_REQUEST_CREATED",
@@ -559,7 +587,8 @@ class LifecycleSupervisor:
                 ),
             )
 
-        request_states = self._connection.execute(
+        request_states = (
+            self._connection.execute(
             """SELECT e.request_state_event_id,e.execution_request_id,e.state,
                       e.occurred_at,e.reason,r.strategy_attempt_id,
                       r.entry_decision_id,r.signal_id,r.strategy_id,
@@ -569,7 +598,10 @@ class LifecycleSupervisor:
                  FROM strategy_entry.execution_request_state_events e
                  JOIN strategy_entry.execution_requests r
                    ON r.execution_request_id=e.execution_request_id"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in request_states:
             total += self._insert_event(
                 "ENTRY_REQUEST_STATE_CHANGED",
@@ -855,7 +887,8 @@ class LifecycleSupervisor:
                 exit_execution_request_id=str(row["execution_request_id"]),
             )
 
-        exit_dispatches = self._connection.execute(
+        exit_dispatches = (
+            self._connection.execute(
             """SELECT d.execution_request_id,d.command_id,d.created_at,
                       r.exit_decision_id,r.strategy_position_id,r.strategy_id,
                       r.strategy_version,r.strategy_config_fingerprint,
@@ -864,7 +897,10 @@ class LifecycleSupervisor:
                  JOIN strategy_exit.execution_requests r
                    ON r.execution_request_id=d.execution_request_id
                 WHERE d.state='DISPATCHED'"""
-        ).fetchall()
+            ).fetchall()
+            if self._owns_global_faults
+            else ()
+        )
         for row in exit_dispatches:
             total += self._insert_event(
                 "EXIT_REQUEST_DISPATCHED",
