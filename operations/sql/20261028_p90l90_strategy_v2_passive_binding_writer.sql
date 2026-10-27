@@ -26,6 +26,8 @@ $verify_prior$;
 
 -- Temporary only: the NOLOGIN owner needs CREATE to become owner of this
 -- one function. Revoked BEFORE COMMIT. No broad UPDATE/INSERT to cripta.
+GRANT SELECT ON control.account_live_arm_sessions
+  TO cripta_p90l90_passive_binding;
 GRANT CREATE ON SCHEMA strategy_entry TO cripta_p90l90_passive_binding;
 
 CREATE FUNCTION strategy_entry.register_p90l90_v2_inactive_binding(
