@@ -101,11 +101,45 @@ def _p90l90_exact_no_order_paper_model(card: StrategyCard) -> bool:
     protection = _mapping(
         card.protection_policy.to_dict().get("initial_protection")
     )
-    embargo = _mapping(
-        card.lifecycle_policy.to_dict().get("second_hardstop_embargo")
-    )
+    lifecycle = card.lifecycle_policy.to_dict()
+    embargo = _mapping(lifecycle.get("second_hardstop_embargo"))
+    trailing = _mapping(exit_policy.get("trailing"))
+    width_filter = _mapping(geometry.get("width_filter"))
     if (
         watch.get("enabled") is not True
+        or geometry.get("lookback_bars") != {
+            "l53_5m": 36, "h9_5m": 108, "h9_15m": 36
+        }
+        or geometry.get("atr_period") != 200
+        or geometry.get("zone_half_width_atr") != "0.5"
+        or geometry.get("h9_equality") != "EXACT_RAW_SIDE"
+        or geometry.get("crossing") != "FIRST_ADJACENT_NATIVE_RAW_TRADE"
+        or geometry.get("depth_denominator") != "RAW_H9_UNION_SPAN"
+        or geometry.get("depth_min_pct") != "0"
+        or geometry.get("depth_max_pct") != "15"
+        or width_filter != {
+            "source": "PREV7D_COMPLETED_UTC",
+            "previous_days": 7,
+            "tolerance_pp": "0.5",
+        }
+        or trailing != {
+            "enabled": True,
+            "activation_profit_pct": "0.5",
+            "distance_pct": "0.35",
+            "reference": "BEST_FAVORABLE_PRICE_SINCE_ENTRY",
+            "update_effective_from": "NEXT_ORDERED_TRADE",
+            "never_loosen": True,
+        }
+        or local.get("target") != "OPPOSITE_RAW_BOUNDARY"
+        or local.get("minimum_favorable_pct") != "0.5"
+        or local.get("target_fact_path") != "fact.p90l90.opposite_raw_l53_target"
+        or local.get("priority") != [
+            "EXISTING_STOP", "EXISTING_RESTING_TP",
+            "NEW_MARKETABLE_TP", "TIGHTEN_STOP",
+        ]
+        or lifecycle.get("position_mode") != "ONE_WAY"
+        or lifecycle.get("max_open_positions_per_symbol") != 1
+        or watch.get("enabled") is not True
         or geometry.get("operator") != "P90L90_RAW_H9_UNION_CROSSING"
         or execution.get("order_type") != "NOT_APPROVED"
         or execution.get("reference_value_path") != "fact.p90l90.candidate_price"
