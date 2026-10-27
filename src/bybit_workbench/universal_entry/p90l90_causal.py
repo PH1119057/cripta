@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from decimal import ROUND_HALF_EVEN, Decimal
+from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from statistics import median
 from typing import Literal
 
@@ -76,6 +76,19 @@ class P90L90EntryState:
 
 
 def causal_entry_state(
+    candles_5m: tuple[Candle, ...],
+    candles_15m: tuple[Candle, ...],
+    *,
+    effective_at: datetime,
+) -> P90L90EntryState | None:
+    # Historical P90L90 v2 computes with 50-digit Decimal precision.
+    with localcontext(prec=50):
+        return _causal_entry_state_precise(
+            candles_5m, candles_15m, effective_at=effective_at
+        )
+
+
+def _causal_entry_state_precise(
     candles_5m: tuple[Candle, ...],
     candles_15m: tuple[Candle, ...],
     *,
