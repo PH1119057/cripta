@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from statistics import median
 from typing import Literal
 
@@ -321,3 +321,47 @@ class P90L90CausalExit:
                 self.stop = proposed
                 self.protected = True
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class P90L90ModeledPnl:
+    gross_usdt: Decimal
+    entry_fee_usdt: Decimal
+    exit_fee_usdt: Decimal
+    net_usdt: Decimal
+    modeled_exchange_fill: bool = False
+
+
+def modeled_pnl_after_fees(
+    *,
+    side: Side,
+    entry_price: Decimal,
+    exit_price: Decimal,
+    entry_notional_usdt: Decimal,
+    maker_exit: bool,
+) -> P90L90ModeledPnl:
+    """Historical research fee proxy, never evidence of actual exchange fills."""
+    if side not in {"LONG", "SHORT"} or min(
+        entry_price, exit_price, entry_notional_usdt
+    ) <= 0:
+        raise ValueError("invalid modeled P90L90 trade economics")
+    quantum = Decimal("0.000000000001")
+    taker_rate = Decimal("0.00055")
+    maker_rate = Decimal("0.0002")
+    ratio = exit_price / entry_price
+    gross = entry_notional_usdt * (ratio - 1)
+    if side == "SHORT":
+        gross = -gross
+    gross = gross.quantize(quantum, rounding=ROUND_HALF_EVEN)
+    entry_fee = (entry_notional_usdt * taker_rate).quantize(
+        quantum, rounding=ROUND_HALF_EVEN
+    )
+    exit_fee = (
+        entry_notional_usdt * ratio * (maker_rate if maker_exit else taker_rate)
+    ).quantize(quantum, rounding=ROUND_HALF_EVEN)
+    return P90L90ModeledPnl(
+        gross_usdt=gross,
+        entry_fee_usdt=entry_fee,
+        exit_fee_usdt=exit_fee,
+        net_usdt=gross - entry_fee - exit_fee,
+    )
