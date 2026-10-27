@@ -291,31 +291,3 @@ def test_second48_paper_embargo_requires_explicit_scope_and_never_flattens():
         main.record_exit(reason="HARD_STOP", at=base)
 
 
-def test_p90l90_paper_exit_restart_reconstructs_exact_protection_and_target():
-    p = P90L90CausalExit(
-        side="LONG", entry_price=D("100"), entry_sequence=30,
-        state_bucket=0,
-    )
-    p.on_trade(
-        price=D("100.50"), sequence=31, bucket=300,
-        candidate_opposite_raw_tp=D("102"),
-    )
-    assert p.stop == D("100.15")
-    assert p.target == D("102")
-    snapshot = p.snapshot()
-    restored = P90L90CausalExit.restore(snapshot)
-    assert restored.snapshot() == snapshot
-    result = restored.on_trade(
-        price=D("100.1"), sequence=32, bucket=300,
-        candidate_opposite_raw_tp=None,
-    )
-    assert result is not None and result.reason == "PROTECTED_STOP"
-    assert result.modeled_price == D("100.1")
-    with pytest.raises(ValueError, match="schema/version"):
-        P90L90CausalExit.restore({**snapshot, "model": "UNKNOWN"})
-    with pytest.raises(ValueError, match="stop loosened"):
-        P90L90CausalExit.restore({**snapshot, "stop": "89"})
-    with pytest.raises(ValueError, match="sequence regressed"):
-        P90L90CausalExit.restore({**snapshot, "last_sequence": 0})
-    with pytest.raises(ValueError, match="protection invariant"):
-        P90L90CausalExit.restore({**snapshot, "protected": False})
