@@ -139,7 +139,6 @@ def _p90l90_exact_no_order_paper_model(card: StrategyCard) -> bool:
         ]
         or lifecycle.get("position_mode") != "ONE_WAY"
         or lifecycle.get("max_open_positions_per_symbol") != 1
-        or watch.get("enabled") is not True
         or geometry.get("operator") != "P90L90_RAW_H9_UNION_CROSSING"
         or execution.get("order_type") != "NOT_APPROVED"
         or execution.get("reference_value_path") != "fact.p90l90.candidate_price"
