@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from types import MethodType, SimpleNamespace
+from types import MethodType
 
 import pytest
 
@@ -54,7 +54,7 @@ def test_p90l90_route_uses_native_cursor_account_mapping_and_raw_opposite():
         ("paper-sub", "p90l90_legacy_sub_dot_arb_apt", "ta-sub"),
     ])
     runtime = PaperTradeRuntime(data)
-    runtime._l53_candles["LTCUSDT"] = deque((candle(i) for i in range(36)))
+    runtime._l53_candles["LTCUSDT"] = deque(candle(i) for i in range(36))
     calls = []
 
     def capture(_self, **kwargs):
