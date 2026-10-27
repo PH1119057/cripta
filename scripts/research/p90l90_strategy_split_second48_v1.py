@@ -19,6 +19,14 @@ import shutil
 from decimal import Decimal
 from pathlib import Path
 
+# The approved SentinelX actor executes the absolute script path, not -m.
+# Preserve imports of the versioned research package from any working dir.
+# This modifies ONLY the Python search path, never Unix actor/security policy.
+if __package__ in (None, ""):
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.research import p90l90_entry_only_hardstop_embargo_v1 as replay
 
 OWNER_DECISION = "2026-10-28-issue-243-STRATEGY_VERSION-SECOND48"

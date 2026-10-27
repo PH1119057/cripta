@@ -78,3 +78,15 @@ print(json.dumps({"ok": True}))
         cwd=root, capture_output=True, text=True, check=True, timeout=20,
     )
     assert json.loads(result.stdout) == {"ok": True}
+
+
+def test_absolute_path_entrypoint_imports_from_foreign_working_dir():
+    root = Path(__file__).resolve().parents[2]
+    entrypoint = root / "scripts/research/p90l90_strategy_split_second48_v1.py"
+    run = subprocess.run(
+        [sys.executable, str(entrypoint), "--help"],
+        cwd=root.parent, capture_output=True, text=True,
+        check=True, timeout=20,
+    )
+    assert "--smoke-hours" in run.stdout
+    assert "--suffix" in run.stdout
