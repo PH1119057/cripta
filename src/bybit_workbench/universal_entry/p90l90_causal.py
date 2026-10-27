@@ -96,7 +96,15 @@ def causal_entry_state(
     fifteens = _closed_bars(candles_15m, timeframe="15", effective_at=when)
     if fives is None or fifteens is None:
         return None
-    if fives[-1].closed_at != when or len(fives) < 200 or len(fifteens) < 200:
+    last_fifteen_boundary = when.replace(
+        minute=(when.minute // 15) * 15,
+    )
+    if (
+        fives[-1].closed_at != when
+        or fifteens[-1].closed_at != last_fifteen_boundary
+        or len(fives) < 200
+        or len(fifteens) < 200
+    ):
         return None
     # Wilder warmup of the 15m geometry must be independently complete.
     if wilder_atr(fifteens, 200)[-1] is None:
