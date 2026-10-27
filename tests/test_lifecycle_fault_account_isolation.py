@@ -158,3 +158,58 @@ def test_legacy_unscoped_is_not_authorized_to_clear_explicit_account_fault() -> 
     legacy = LifecycleSupervisor(db)
     assert legacy._resolve_cleared_faults((), NOW) == 0
     assert db.rows["b-open"]["state"] == "OPEN"
+
+
+class _ProjectionConnection:
+    """Empty state with a real SQL-call ledger for account-vs-global assertions."""
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def execute(self, statement: str, parameters: tuple[object, ...] = ()) -> _Cursor:
+        self.statements.append(statement)
+        return _Cursor([])
+
+
+def test_account_local_projection_does_not_replay_global_sources() -> None:
+    db = _ProjectionConnection()
+    local = LifecycleSupervisor(db, trading_account_id=ACCOUNT_B, owns_global_faults=False)
+    assert local._project_events(NOW) == 0
+    assert any("FROM runtime.exchange_position_slot_claims" in stmt for stmt in db.statements)
+    for source in (
+        "FROM strategy_entry.strategy_activations",
+        "FROM runtime.plan_consumptions",
+        "FROM strategy_entry.strategy_signals",
+        "FROM strategy_entry.strategy_attempts",
+        "FROM strategy_entry.entry_decisions",
+        "FROM strategy_entry.execution_requests",
+        "FROM strategy_entry.execution_request_state_events",
+        "FROM strategy_exit.execution_dispatches",
+    ):
+        assert all(source not in stmt for stmt in db.statements), source
+
+
+def test_global_coordinator_retains_all_required_plan_projections() -> None:
+    db = _ProjectionConnection()
+    global_owner = LifecycleSupervisor(
+        db, trading_account_id=ACCOUNT_A, owns_global_faults=True
+    )
+    assert global_owner._project_events(NOW) == 0
+    assert any(
+        "FROM strategy_entry.strategy_activations" in stmt
+        for stmt in db.statements
+    )
+    assert any("FROM runtime.plan_consumptions" in stmt for stmt in db.statements)
+    assert any(
+        "FROM strategy_exit.execution_dispatches" in stmt for stmt in db.statements
+    )
+
+
+def test_account_local_fault_detector_never_claims_global_strategy_plan_owner() -> None:
+    db = _ProjectionConnection()
+    local = LifecycleSupervisor(db, trading_account_id=ACCOUNT_B, owns_global_faults=False)
+    assert local._detect_faults(NOW) == ()
+    assert not any(
+        "FROM strategy_entry.strategy_activations a" in stmt
+        for stmt in db.statements
+    )
