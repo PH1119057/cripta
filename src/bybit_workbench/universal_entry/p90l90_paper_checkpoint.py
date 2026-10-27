@@ -97,7 +97,7 @@ def _restore_exit(raw: object) -> P90L90CausalExit:
     entry_sequence = _integer(raw["entry_sequence"], "entry_sequence")
     bucket = _integer(raw["state_bucket"], "state_bucket")
     result = P90L90CausalExit(
-        side=side,  # type: ignore[arg-type]
+        side=side,
         entry_price=entry_price,
         entry_sequence=entry_sequence,
         state_bucket=bucket,
