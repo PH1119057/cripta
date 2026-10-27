@@ -96,36 +96,60 @@ def test_v2_binding_only_exact_new_versions_with_old_v1_unchanged():
                 }
             )
         }
-        for strategy_id, _, _, _, act1, _, act2, _ in VALUES:
-            for card, activation_id in (
-                (cards_v1[strategy_id],act1), (cards_v2[strategy_id],act2),
-            ):
-                act = StrategyActivation(
-                    activation_id=activation_id,
-                    strategy_id=card.strategy_id,
-                    strategy_version=card.strategy_version,
-                    strategy_config_fingerprint=card.strategy_config_fingerprint,
-                    enabled=False, enabled_at=AT, disabled_at=AT,
-                    scope=FrozenPolicy.from_mapping({
-                        "mode":"EXACT_STRATEGY_VERSION",
-                    }),
-                    operator="CI",source="disposable",
-                )
-                entry,exit_plan = materialize_plans(card,act)
-                store.insert_strategy_card(card)
-                store.insert_activation(act,reason="CI")
-                store.insert_entry_plan(entry)
-                store.insert_exit_plan(exit_plan)
+        # The legacy v1 SECURITY DEFINER checks there is exactly ONE
+        # card with its Strategy symbol universe. Register old v1 binding
+        # BEFORE authoring the new immutable version for the same Strategy.
+        for strategy_id, _, _, _, act1, _, _, _ in VALUES:
+            card = cards_v1[strategy_id]
+            activation = StrategyActivation(
+                activation_id=act1,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=False, enabled_at=AT, disabled_at=AT,
+                scope=FrozenPolicy.from_mapping({
+                    "mode": "EXACT_STRATEGY_VERSION",
+                }),
+                operator="CI", source="disposable",
+            )
+            plan, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="CI")
+            store.insert_entry_plan(plan)
+            store.insert_exit_plan(exit_plan)
         c.execute("SET SESSION AUTHORIZATION cripta")
-        assert c.execute("SELECT session_user,current_user").fetchone()==("cripta","cripta")
-        for strategy_id, _, account, _, act1,bind1,act2,bind2 in VALUES:
+        assert c.execute("SELECT session_user,current_user").fetchone() == (
+            "cripta", "cripta"
+        )
+        for _, _, account, _, act1, bind1, _, _ in VALUES:
             assert c.execute(
                 "SELECT strategy_entry.register_p90l90_inactive_binding(%s,%s,%s)",
-                (bind1,act1,account)
+                (bind1, act1, account),
             ).fetchone() == (bind1,)
+        # Now persist new v2 immutable cards and bind them INACTIVE through
+        # an independent, narrower actor-gated function.
+        for strategy_id, _, _, _, _, _, act2, _ in VALUES:
+            card = cards_v2[strategy_id]
+            activation = StrategyActivation(
+                activation_id=act2,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=False, enabled_at=AT, disabled_at=AT,
+                scope=FrozenPolicy.from_mapping({
+                    "mode": "EXACT_STRATEGY_VERSION",
+                }),
+                operator="CI", source="disposable",
+            )
+            plan, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="CI")
+            store.insert_entry_plan(plan)
+            store.insert_exit_plan(exit_plan)
+        for strategy_id, _, account, _, _, _, act2, bind2 in VALUES:
             assert c.execute(
                 "SELECT strategy_entry.register_p90l90_v2_inactive_binding(%s,%s,%s)",
-                (bind2,act2,account)
+                (bind2, act2, account),
             ).fetchone() == (bind2,)
             assert cards_v1[strategy_id].strategy_config_fingerprint != (
                 cards_v2[strategy_id].strategy_config_fingerprint
