@@ -660,6 +660,21 @@ global alert delivery or arm-session retirement.
   evidence are PASS. This paragraph specifies a required safety boundary, not
   permission to launch duplicate service instances.
 
+### 9.1.2 Independent read-only safety evidence — account-scope finding
+
+**FINDING:** the installed legacy `cripta-safety-observer.service`
+authenticates with a single MAIN credential and cannot be counted as an
+independent SUB account evidence source. The per-account private reconciliation
+proves account data synchronization, but does **not automatically prove**
+the independently owned safety-observer or Lifecycle protection contract.
+
+**Required:** before multi-account REAL enable, identify exact consumer(s)
+of the existing safety observer, account-scope its required Exchange facts or
+provide a validated equivalent independent per-account reader, preserve
+durable alert/restart/audit behavior, and test MAIN/SUB failure isolation.
+Do not share MAIN credentials as a substitute for SUB's connector; do not
+remove the old producer before its required read consumers have parity.
+
 ## 9.2 Position Supervisor
 
 `Position Supervisor` наблюдает фактическое состояние конкретной открытой
