@@ -102,7 +102,7 @@ def test_configurable_threshold_window_pause_disabled_and_no_silent_old_contract
     custom = {**DEFAULT, "hardstop_count": 3, "rolling_hours": 6,
               "new_entry_pause_hours": 2}
     state = tracker("strategy-custom", custom)
-    for index, offset in enumerate((0, 5, 11)):
+    for index, offset in enumerate((0, 6, 11)):
         state.record_exit(
             exit_event_id=f"hard-{index}", exit_reason="HARD_STOP",
             at=T0+timedelta(hours=offset),
