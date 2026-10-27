@@ -18,6 +18,7 @@ from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90CausalEntry,
     P90L90CausalExit,
     causal_entry_state,
+    modeled_pnl_after_fees,
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
     build_passive_legacy_cards,
@@ -241,3 +242,28 @@ def test_universal_market_watch_emits_only_causal_native_raw_crossing():
     assert watch.process(plan, fact(4, "89"), allow_candidate=True) == ()
     # Readiness remains a separate fail-closed gate; a candidate does not
     # authorize paper orders, account binding, or REAL execution.
+
+
+def test_fee_accounting_matches_12_decimal_research_notional():
+    pnl = modeled_pnl_after_fees(
+        side="LONG",
+        entry_price=D("100"),
+        exit_price=D("102"),
+        entry_notional_usdt=D("10"),
+        maker_exit=True,
+    )
+    assert pnl.gross_usdt == D("0.2")
+    assert pnl.entry_fee_usdt == D("0.0055")
+    assert pnl.exit_fee_usdt == D("0.00204")
+    assert pnl.net_usdt == D("0.19246")
+    assert not pnl.modeled_exchange_fill
+    short = modeled_pnl_after_fees(
+        side="SHORT",
+        entry_price=D("100"),
+        exit_price=D("98"),
+        entry_notional_usdt=D("10"),
+        maker_exit=False,
+    )
+    assert short.gross_usdt == D("0.2")
+    assert short.exit_fee_usdt == D("0.00539")
+    assert short.net_usdt == D("0.18911")
