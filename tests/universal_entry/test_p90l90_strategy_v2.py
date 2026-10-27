@@ -1,4 +1,5 @@
 """Immutable P90L90 v2 test: each Strategy owns its own SECOND48."""
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -11,6 +12,8 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
+from bybit_workbench.universal_entry.contracts import FrozenPolicy
+from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import (
     VERSION,
     new_version_cards,
@@ -66,3 +69,53 @@ def test_strategy_v2_refuses_missing_or_cross_account_policy():
         )
     with pytest.raises(ValueError, match="not owner-approved"):
         v2_authoring_payload(strategy_id="historical-r1", policy=embargo(48))
+
+
+def test_exact_v2_model_has_technical_paper_readiness_but_never_real_order():
+    main, sub = new_version_cards(
+        approved_at=WHEN, policy_by_strategy_id={
+            MAIN_ID: embargo(48), SUB_ID: embargo(48)
+        },
+    )
+    for card in (main, sub):
+        checked = assess_strategy_runtime_readiness(card, observer_ready=True)
+        assert checked.policy_ready is True
+        assert checked.paper_ready is True
+        assert checked.active_ready is True
+        assert checked.execution_ready is False
+        assert "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in {
+            reason.code for reason in checked.reasons
+        }
+        without_observer = assess_strategy_runtime_readiness(
+            card, observer_ready=False
+        )
+        assert without_observer.paper_ready
+        assert not without_observer.active_ready
+        assert not without_observer.execution_ready
+
+    old = build_passive_legacy_cards(approved_at=WHEN)
+    assert all(
+        not assess_strategy_runtime_readiness(
+            card, observer_ready=True
+        ).active_ready
+        for card in old
+    )
+
+
+def test_tampered_v2_paper_capital_remains_fail_closed():
+    main, _ = new_version_cards(
+        approved_at=WHEN, policy_by_strategy_id={
+            MAIN_ID: embargo(48), SUB_ID: embargo(48)
+        },
+    )
+    policy = main.capital_policy.to_dict()
+    policy["paper_simulation"]["notional_usdt"] = "100"
+    broken = replace(
+        main, capital_policy=FrozenPolicy.from_mapping(policy)
+    )
+    state = assess_strategy_runtime_readiness(broken, observer_ready=True)
+    assert state.active_ready is False
+    assert state.execution_ready is False
+    assert "P90L90_PAPER_MODEL_OR_PRODUCER_NOT_PROVEN" in {
+        reason.code for reason in state.reasons
+    }
