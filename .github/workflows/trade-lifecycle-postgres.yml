@@ -81,6 +81,8 @@ jobs:
             operations/sql/20261025_account_entry_safety_blocks.sql
             operations/sql/20261025_account_attempt_fanout.sql
             operations/sql/20261026_account_scoped_physical_key_cutover.sql
+            operations/sql/20261027_account_position_observer.sql
+            operations/sql/20261027_account_safety_observation.sql
           )
           for migration in "${migrations[@]}"; do
             if [[ "$migration" == "operations/sql/20261026_account_scoped_physical_key_cutover.sql" ]]; then
