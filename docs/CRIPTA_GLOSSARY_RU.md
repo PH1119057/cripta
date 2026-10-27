@@ -918,6 +918,8 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 
 **PREV7D** — причинный фильтр ширины L5-3 по медиане семи полностью завершённых предыдущих UTC calendar days.
 
+**SECOND48 / Strategy-scoped Hard-Stop Embargo** — настраиваемое правило `Strategy.lifecycle_policy`, при котором два (или заданное число) фактически зафиксированных катастрофических `HARD_STOP` в указанном скользящем UTC-окне запрещают только **новые** Entry на заданную продолжительность. Область счётчика и deadline — точная Strategy ID+Version+Fingerprint, общая для её символов и LONG/SHORT, независимая от другой Strategy и её TradingAccount. Открытые позиции не закрываются. Старый единый пяти-монетный исследовательский SECOND48 и две самостоятельные Strategy — разные модели. Настройки и владелец семантики — исключительно `TRADING_CONTOUR §7.6` (OWNER DECISION 2026-10-28); изменение параметров требует новой immutable StrategyVersion и исследования, не перезаписи карточки.
+
 **RAW Boundary Crossing Candidate** — исследовательское событие первого пересечения RAW-границы L5-3 соседними записями public trades; само по себе не доказывает ни отправку ордера, ни подтверждённое исполнение.
 
 Детальная методика, TP/SL/Exit, комиссии, QC и разделение старой/новой research версии: `RESEARCH_COMPUTE §22/§22.1`. Глоссарий не является вторым владельцем их параметров.
