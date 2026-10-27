@@ -72,7 +72,7 @@ def validated_scope(
     if credential_name == "bybit-mainnet":
         # This is the existing MAIN-only credential. No SUB impersonation.
         raise RuntimeError("ACCOUNT_LOCAL_MAIN_CREDENTIAL_NOT_PERMITTED")
-    return credential, output, "systemd-credential:" + credential_name
+    return credential, output, "systemd:" + credential_name
 
 
 def account_positions(connection: Any, *, account_id: str) -> list[dict[str, Any]]:
