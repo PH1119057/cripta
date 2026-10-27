@@ -78,16 +78,22 @@ def account_positions(connection: Any, *, account_id: str) -> list[dict[str, Any
 
 def require_sub_account(connection: Any, *, account_id: str, connector_id: str) -> None:
     rows = connection.execute(
-        """SELECT a.account_kind,a.status,c.status,c.trading_account_id
+        """SELECT a.account_kind,a.status AS account_status,
+                    c.status AS connector_status,c.trading_account_id
              FROM identity.trading_accounts a
              JOIN identity.account_connectors c
                ON c.trading_account_id=a.trading_account_id
             WHERE a.trading_account_id=%s AND c.account_connector_id=%s""",
         (account_id, connector_id),
     ).fetchall()
+    if len(rows) != 1:
+        raise RuntimeError("ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY")
+    row = rows[0]
     if (
-        len(rows) != 1
-        or tuple(rows[0]) != ("SUB", "ACTIVE", "ACTIVE", account_id)
+        row["account_kind"] != "SUB"
+        or row["account_status"] != "ACTIVE"
+        or row["connector_status"] != "ACTIVE"
+        or row["trading_account_id"] != account_id
     ):
         raise RuntimeError("ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY")
 
