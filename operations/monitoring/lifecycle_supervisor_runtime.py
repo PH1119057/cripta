@@ -156,6 +156,10 @@ def scan_once(
             exchange_protection=protection,
             exchange_exposure=account_exposure,
             trading_account_id=TRADING_ACCOUNT_ID,
+            # Singleton MAIN coordinator: global plan faults, alert delivery and
+            # old-release arm retirement remain owned by THIS service only.
+            # Never copy this setting into an account-local SUB worker.
+            owns_global_faults=True,
         ).scan(now=now.astimezone(UTC))
 
 
