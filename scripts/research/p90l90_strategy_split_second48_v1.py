@@ -47,6 +47,20 @@ def _output_path(name: str) -> Path:
     return result
 
 
+def _run_reference_group(
+    *, symbols: tuple[str, ...], output: Path, smoke_hours: int
+) -> dict[str, object]:
+    prior_symbols, prior_scenarios = replay.SYMBOLS, replay.SCENARIOS
+    try:
+        replay.SYMBOLS = symbols
+        replay.SCENARIOS = SCENARIOS
+        return replay.run("90d", output, smoke_hours)
+    finally:
+        # Do not contaminate other research replays or pytest collections.
+        replay.SYMBOLS = prior_symbols
+        replay.SCENARIOS = prior_scenarios
+
+
 def run(*, suffix: str, smoke_hours: int) -> dict[str, object]:
     if os.geteuid() != 107:
         raise PermissionError("P90L90 research actor must be cripta uid107")
@@ -75,15 +89,15 @@ def run(*, suffix: str, smoke_hours: int) -> dict[str, object]:
         raise ValueError("owner-approved Strategy universes not exact historical set")
     if len({sym for _, group in GROUPS for sym in group}) != 5:
         raise ValueError("Strategy universe overlap/duplicate")
-    replay.SCENARIOS = SCENARIOS
     per_strategy = {}
     totals = {k: Decimal("0") for k in SCENARIOS}
     total_rows = 0
     for name, symbols in GROUPS:
-        replay.SYMBOLS = symbols
         # The frozen reference gets only this Strategy's native-tick stream.
         # Its per-book Hard Stop state therefore cannot affect another Strategy.
-        response = replay.run("90d", names[name], smoke_hours)
+        response = _run_reference_group(
+            symbols=symbols, output=names[name], smoke_hours=smoke_hours
+        )
         if smoke_hours:
             if response["status"] != "SMOKE_PASS":
                 raise RuntimeError("split P90L90 smoke did not pass")
