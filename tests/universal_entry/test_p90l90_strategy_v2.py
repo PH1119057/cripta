@@ -13,12 +13,12 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
-from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import (
     VERSION,
     new_version_cards,
     v2_authoring_payload,
 )
+from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 
 WHEN = datetime(2026, 10, 28, 0, 0, tzinfo=UTC)
 
