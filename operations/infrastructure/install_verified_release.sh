@@ -221,6 +221,8 @@ unit_specs=(
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
   # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
+  # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
+  "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
