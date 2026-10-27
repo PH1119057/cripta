@@ -856,6 +856,8 @@ class ParameterizedCausalMarketWatch:
             rows = candles.get(tf, ())
             if any(bar.symbol != symbol or bar.timeframe != tf for bar in rows):
                 raise ValueError("P90L90 seed symbol/timeframe mismatch")
+            if any(bar.closed_at > observed_at for bar in rows):
+                raise ValueError("P90L90 seed contains future completed candle")
             state.candles[tf] = deque(
                 sorted((bar for bar in rows if bar.is_closed), key=lambda b: b.closed_at),
                 maxlen=2800,
