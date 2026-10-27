@@ -14,13 +14,13 @@ from bybit_workbench.universal_entry.contracts import (
 )
 from bybit_workbench.universal_entry.market_watch import ParameterizedCausalMarketWatch
 from bybit_workbench.universal_entry.materializer import materialize_plans
-from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-    build_passive_legacy_cards,
-)
 from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90CausalEntry,
     P90L90CausalExit,
     causal_entry_state,
+)
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
+    build_passive_legacy_cards,
 )
 
 D = Decimal
