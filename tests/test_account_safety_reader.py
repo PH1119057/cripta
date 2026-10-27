@@ -6,7 +6,8 @@ import asyncio
 import pytest
 
 from bybit_workbench.exchange.bybit.account_safety_reader import (
-    read_account_safety, validate_wallet,
+    read_account_safety,
+    validate_wallet,
 )
 
 
