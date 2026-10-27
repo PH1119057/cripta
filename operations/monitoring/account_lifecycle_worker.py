@@ -166,7 +166,10 @@ def record_proven_safety(
     if lifecycle.get("state") != "VERIFIED_ACCOUNT_SCAN":
         raise RuntimeError("ACCOUNT_SAFETY_SIGNED_UID_NOT_VERIFIED")
     positions = snapshot.get("account_wide_positions")
-    if snapshot.get("account_wide_pagination_complete") is not True or not isinstance(positions, list):
+    if (
+        snapshot.get("account_wide_pagination_complete") is not True
+        or not isinstance(positions, list)
+    ):
         raise RuntimeError("ACCOUNT_SAFETY_POSITION_INVENTORY_INCOMPLETE")
     count = 0
     for item in positions:
