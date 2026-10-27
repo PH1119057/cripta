@@ -8,7 +8,6 @@ intentionally outside the model until separate owner-approved contracts exist.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
@@ -279,83 +278,6 @@ class P90L90CausalExit:
             raise ValueError("invalid paper Entry")
         self.stop = self._threshold(Decimal("-10"))
         self.last_sequence = self.entry_sequence
-
-    def snapshot(self) -> dict[str, object]:
-        """Exact JSON-safe persisted paper state, independent of process memory."""
-        return {
-            "model": "P90L90_TRAIL035_RAWTP_V1",
-            "side": self.side,
-            "entry_price": str(self.entry_price),
-            "entry_sequence": self.entry_sequence,
-            "state_bucket": self.state_bucket,
-            "stop": str(self.stop),
-            "best_favorable_pct": str(self.best_favorable_pct),
-            "protected": self.protected,
-            "target": None if self.target is None else str(self.target),
-            "target_live_after_sequence": self.target_live_after_sequence,
-            "last_sequence": self.last_sequence,
-            "closed": self.closed,
-        }
-
-    @classmethod
-    def restore(cls, raw: Mapping[str, object]) -> P90L90CausalExit:
-        """Fail closed on incompatible, incomplete or inconsistent restart data."""
-        if set(raw) != {
-            "model", "side", "entry_price", "entry_sequence",
-            "state_bucket", "stop", "best_favorable_pct", "protected",
-            "target", "target_live_after_sequence", "last_sequence", "closed",
-        } or raw["model"] != "P90L90_TRAIL035_RAWTP_V1":
-            raise ValueError("P90L90 restart snapshot schema/version mismatch")
-        side = raw["side"]
-        if side not in ("LONG", "SHORT"):
-            raise ValueError("P90L90 snapshot direction invalid")
-        if any(
-            type(raw[key]) is not int
-            for key in (
-                "entry_sequence", "state_bucket",
-                "target_live_after_sequence", "last_sequence",
-            )
-        ) or any(type(raw[key]) is not bool for key in ("protected", "closed")):
-            raise ValueError("P90L90 snapshot type mismatch")
-        entry = Decimal(str(raw["entry_price"]))
-        stop = Decimal(str(raw["stop"]))
-        best = Decimal(str(raw["best_favorable_pct"]))
-        target = None if raw["target"] is None else Decimal(str(raw["target"]))
-        if not (
-            all(v.is_finite() for v in (entry, stop, best))
-            and entry > 0 and stop > 0 and best >= 0
-            and (target is None or (target.is_finite() and target > 0))
-        ):
-            raise ValueError("P90L90 snapshot price/return invalid")
-        state = cls(
-            side=side,  # type: ignore[arg-type]
-            entry_price=entry,
-            entry_sequence=raw["entry_sequence"],
-            state_bucket=raw["state_bucket"],
-        )
-        if raw["last_sequence"] < state.entry_sequence:
-            raise ValueError("P90L90 snapshot sequence regressed")
-        if raw["target_live_after_sequence"] > raw["last_sequence"]:
-            raise ValueError("P90L90 snapshot future TP activation")
-        initial_stop = state.stop
-        if side == "LONG" and stop < initial_stop or (
-            side == "SHORT" and stop > initial_stop
-        ):
-            raise ValueError("P90L90 snapshot stop loosened")
-        if raw["protected"] != (
-            stop > initial_stop if side == "LONG" else stop < initial_stop
-        ):
-            raise ValueError("P90L90 snapshot protection invariant")
-        if raw["protected"] and best < D05:
-            raise ValueError("P90L90 snapshot early trailing protection")
-        state.stop = stop
-        state.best_favorable_pct = best
-        state.protected = raw["protected"]
-        state.target = target
-        state.target_live_after_sequence = raw["target_live_after_sequence"]
-        state.last_sequence = raw["last_sequence"]
-        state.closed = raw["closed"]
-        return state
 
     def _threshold(self, pct: Decimal) -> Decimal:
         return self.entry_price * (1 + pct / D100) if self.side == "LONG" else (
