@@ -23,16 +23,18 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.exchange.bybit.account_safety_reader import (
-    AccountSafetyFacts, read_account_safety,
+    AccountSafetyFacts,
+    read_account_safety,
 )
 from bybit_workbench.exchange.bybit.protection_probe import direct_account_snapshot
-from bybit_workbench.exchange.bybit.transport import LifecycleAccountReadTransport
 from bybit_workbench.exchange.bybit.protection_supervisor_bridge import (
     account_protection_verdicts,
 )
+from bybit_workbench.exchange.bybit.transport import LifecycleAccountReadTransport
 from bybit_workbench.lifecycle_exposure_bridge import verified_account_exposure
 from bybit_workbench.lifecycle_supervisor import (
-    LifecycleSupervisor, LifecycleSupervisorPolicy,
+    LifecycleSupervisor,
+    LifecycleSupervisorPolicy,
 )
 
 _ACCOUNT_ID = re.compile(r"^ta-[0-9a-f]{32}$")
