@@ -207,6 +207,7 @@ class PaperTradeRuntime:
         exchange_sequence: int,
         event_at: datetime,
         native_trade_price: Decimal,
+        raw_trade_fact_id: str,
     ) -> str | None:
         """Atomically create ONE purely modeled position, never an order.
 
@@ -292,6 +293,8 @@ class PaperTradeRuntime:
             or event_at.tzinfo is None
             or not native_trade_price.is_finite() or native_trade_price <= 0
             or attributes.get("modeled_exchange_fill") is not False
+            or not raw_trade_fact_id
+            or attributes.get("trade_fact_id") != raw_trade_fact_id
             or _decimal(nested.get("candidate_price"), "P90 native proxy") != native_trade_price
         ):
             raise RuntimeError("P90L90_PAPER_ENTRY_NOT_PROVEN_NATIVE_CROSSING")
