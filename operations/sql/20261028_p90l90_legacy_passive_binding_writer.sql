@@ -36,6 +36,10 @@ GRANT SELECT ON
 GRANT INSERT ON strategy_entry.strategy_execution_bindings
     TO cripta_p90l90_passive_binding;
 
+-- Ownership transfer needs CREATE temporarily for the new NOLOGIN owner.
+-- It is REVOKED in the same migration before COMMIT.
+GRANT CREATE ON SCHEMA strategy_entry TO cripta_p90l90_passive_binding;
+
 -- The authoring actor can invoke this one deliberately constrained function;
 -- the function's NOLOGIN owner holds INSERT, not the runtime role.
 CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_inactive_binding(
@@ -163,6 +167,7 @@ $function$;
 
 ALTER FUNCTION strategy_entry.register_p90l90_inactive_binding(text,text,text)
     OWNER TO cripta_p90l90_passive_binding;
+REVOKE CREATE ON SCHEMA strategy_entry FROM cripta_p90l90_passive_binding;
 REVOKE ALL ON FUNCTION strategy_entry.register_p90l90_inactive_binding(text,text,text)
     FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION strategy_entry.register_p90l90_inactive_binding(text,text,text)
