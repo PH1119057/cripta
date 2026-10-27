@@ -345,6 +345,18 @@ ordinary §48.2 gates remain required before REAL on the exact loaded release.
 This decision changes no active document set, paths, pre-read routing,
 Project Source size or Project Instructions bootstrap.
 
+## 17.1.3 Reversible R1 service disable and multi-account supervision gaps — 2026-10-27
+
+- Source of R1 legacy runtime disable/retention decision: `TRADING_CONTOUR §1.10`.
+- Canonical capability/ownership requirements and missing per-account
+  Lifecycle, Safety and Position Supervisor implementation:
+  `CRIPTA_ARCHITECTURE_RULES §9.1.1–§9.2.1`; legacy observer must not be
+  disabled until equivalent consumer/restart/audit parity is proven.
+- Execution/deploy/tool-actor gates: `DEVELOPMENT_RELEASE §8, §19, §50`.
+- Execution checkpoint and explicit BEFORE/AFTER matrix: GitHub Issue #235.
+- No changes to the current 11-file Project Source set, bootstrap/pre-read
+  routing, document paths or Project Instructions.
+
 ## 17.2 Нумерация и ссылки
 
 Перед renumber section обязателен search по current tree на все ссылки на
