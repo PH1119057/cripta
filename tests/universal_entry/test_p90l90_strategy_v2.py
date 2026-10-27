@@ -119,3 +119,27 @@ def test_tampered_v2_paper_capital_remains_fail_closed():
     assert "P90L90_PAPER_MODEL_OR_PRODUCER_NOT_PROVEN" in {
         reason.code for reason in state.reasons
     }
+
+
+def test_p90l90_tampered_exit_distance_or_geometry_never_ready():
+    main, _ = new_version_cards(
+        approved_at=WHEN, policy_by_strategy_id={
+            MAIN_ID: embargo(48), SUB_ID: embargo(48)
+        },
+    )
+    exit_policy = main.exit_policy.to_dict()
+    exit_policy["trailing"]["distance_pct"] = "0.2"
+    changed_exit = replace(
+        main, exit_policy=FrozenPolicy.from_mapping(exit_policy)
+    )
+    assert not assess_strategy_runtime_readiness(
+        changed_exit, observer_ready=True
+    ).paper_ready
+    entry = main.entry_policy.to_dict()
+    entry["watch_policy"]["geometry"]["depth_max_pct"] = "25"
+    changed_entry = replace(
+        main, entry_policy=FrozenPolicy.from_mapping(entry)
+    )
+    assert not assess_strategy_runtime_readiness(
+        changed_entry, observer_ready=True
+    ).active_ready
