@@ -28,9 +28,9 @@ from .market_watch import (
 )
 from .p90l90_causal import P90L90CausalExit, P90L90PaperClose, Side, modeled_pnl_after_fees
 from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
+from .p90l90_paper_checkpoint import P90L90PaperExitCheckpoint
 from .p90l90_strategy_embargo import StrategyHardStopEmbargo, StrategyHardStopEmbargoPolicy
 from .p90l90_strategy_v2 import VERSION as P90L90_PAPER_VERSION
-from .p90l90_paper_checkpoint import P90L90PaperExitCheckpoint
 from .reverse_intent import build_reverse_transition_intent
 from .runtime_loader import ActiveStrategyBundle, load_strategy_bundle_exact_identity
 
