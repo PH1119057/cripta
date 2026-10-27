@@ -6,8 +6,8 @@ or claim full 90-day cross-portfolio replay equivalence.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Mapping
 
 from .contracts import StrategyCard
 from .dashboard_control import card_from_editable
