@@ -7,6 +7,16 @@ from decimal import Decimal
 import pytest
 
 from bybit_workbench.domain.models import Candle
+from bybit_workbench.universal_entry.contracts import (
+    FrozenPolicy,
+    MarketFactEnvelope,
+    StrategyActivation,
+)
+from bybit_workbench.universal_entry.market_watch import ParameterizedCausalMarketWatch
+from bybit_workbench.universal_entry.materializer import materialize_plans
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
+    build_passive_legacy_cards,
+)
 from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90CausalEntry,
     P90L90CausalExit,
@@ -183,3 +193,51 @@ def test_hard_stop_priority_and_dynamic_raw_tp_resting_vs_marketable():
     )
     assert hard is not None and hard.reason == "HARD_STOP"
     assert hard.modeled_price == D("88")
+
+
+def test_universal_market_watch_emits_only_causal_native_raw_crossing():
+    candles_5m, candles_15m, state = _ready()
+    card = build_passive_legacy_cards(approved_at=state.effective_at)[0]
+    activation = StrategyActivation(
+        activation_id="test-p90l90-watch-inert",
+        strategy_id=card.strategy_id,
+        strategy_version=card.strategy_version,
+        strategy_config_fingerprint=card.strategy_config_fingerprint,
+        enabled=False,
+        enabled_at=state.effective_at,
+        disabled_at=state.effective_at,
+        scope=FrozenPolicy.from_mapping({"mode": "EXACT_STRATEGY_VERSION"}),
+        operator="test",
+        source="test-no-live",
+    )
+    plan, _ = materialize_plans(card, activation)
+    watch = ParameterizedCausalMarketWatch()
+    watch.load_history(
+        plan, "LTCUSDT", {"5": candles_5m, "15": candles_15m}, (),
+        observed_at=state.effective_at,
+    )
+
+    def fact(seq: int, px: str) -> MarketFactEnvelope:
+        at = state.effective_at + timedelta(seconds=seq)
+        return MarketFactEnvelope(
+            fact_id=f"raw-trade-{seq}",
+            event_kind="PUBLIC_TRADE",
+            symbol="LTCUSDT",
+            observed_at=at,
+            event_at=at,
+            received_at=at,
+            source_refs=(f"bybit:publicTrade:LTCUSDT:{seq}",),
+            attributes=FrozenPolicy.from_mapping({"price": px}),
+        )
+
+    assert watch.process(plan, fact(1, "91"), allow_candidate=True) == ()
+    found = watch.process(plan, fact(2, "90"), allow_candidate=True)
+    assert len(found) == 1
+    assert found[0].event_kind == "P90L90_RAW_H9_PREV7D_CROSSING"
+    assert found[0].direction == "LONG"
+    assert found[0].attributes.to_dict()["modeled_exchange_fill"] is False
+    assert found[0].attributes.to_dict()["entry_price"] == "90"
+    watch.process(plan, fact(3, "91"), allow_candidate=True)
+    assert watch.process(plan, fact(4, "89"), allow_candidate=True) == ()
+    # Readiness remains a separate fail-closed gate; a candidate does not
+    # authorize paper orders, account binding, or REAL execution.
