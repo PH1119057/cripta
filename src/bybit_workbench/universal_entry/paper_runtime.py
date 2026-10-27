@@ -28,7 +28,7 @@ from .market_watch import (
 )
 from .p90l90_causal import P90L90CausalExit, P90L90PaperClose, Side, modeled_pnl_after_fees
 from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
-from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
+from .p90l90_strategy_embargo import StrategyHardStopEmbargo, StrategyHardStopEmbargoPolicy
 from .p90l90_strategy_v2 import VERSION as P90L90_PAPER_VERSION
 from .p90l90_paper_checkpoint import P90L90PaperExitCheckpoint
 from .reverse_intent import build_reverse_transition_intent
@@ -275,7 +275,7 @@ class PaperTradeRuntime:
         notional = _decimal(config["notional_usdt"], "P90 paper nominal", positive=True)
         if notional != Decimal("10"):
             raise RuntimeError("P90L90_PAPER_ENTRY_HISTORICAL_PARITY_NOMINAL_CHANGED")
-        StrategyHardStopEmbargoPolicy.parse(
+        hardstop_policy = StrategyHardStopEmbargoPolicy.parse(
             _mapping(
                 card.lifecycle_policy.to_dict().get("second_hardstop_embargo"),
                 "P90 SECOND48",
@@ -343,6 +343,39 @@ class PaperTradeRuntime:
             ).fetchall()
             if len(bindings) != 1 or not str(bindings[0][0]).strip():
                 raise RuntimeError("P90L90_PAPER_ENTRY_EXACT_ACCOUNT_BINDING_REQUIRED")
+            # The persisted closed PAPER rows are the only authoritative
+            # Strategy-specific HARD_STOP history. Rebuild independently
+            # under the same Strategy+symbol advisory lock on restart.
+            # One Strategy counter covers its LONG/SHORT and every symbol.
+            hardstop_rows = self._connection.execute(
+                """SELECT paper_position_id,closed_at
+                     FROM strategy_entry.paper_positions
+                    WHERE strategy_id=%s AND strategy_version=%s
+                      AND strategy_config_fingerprint=%s
+                      AND leg_type='PRIMARY' AND state='CLOSED'
+                      AND exit_reason='HARD_STOP' AND closed_at IS NOT NULL
+                    ORDER BY closed_at,paper_position_id""",
+                (
+                    signal.strategy_id, signal.strategy_version,
+                    signal.strategy_config_fingerprint,
+                ),
+            ).fetchall()
+            embargo = StrategyHardStopEmbargo(
+                strategy_id=signal.strategy_id,
+                strategy_version=signal.strategy_version,
+                strategy_config_fingerprint=signal.strategy_config_fingerprint,
+                policy=hardstop_policy,
+            )
+            for previous_position, previous_close_at in hardstop_rows:
+                if previous_close_at > when:
+                    raise RuntimeError("P90L90_PAPER_ENTRY_FUTURE_HARDSTOP_HISTORY")
+                embargo.record_exit(
+                    exit_event_id=str(previous_position),
+                    exit_reason="HARD_STOP",
+                    at=previous_close_at,
+                )
+            if not embargo.allows_new_entry(when):
+                return None
             other = self._connection.execute(
                 """SELECT paper_position_id,payload FROM strategy_entry.paper_positions
                   WHERE strategy_id=%s AND strategy_version=%s
