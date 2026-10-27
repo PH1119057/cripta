@@ -40,6 +40,19 @@ def v2_authoring_payload(
     lifecycle = payload["lifecycle_policy"]
     assert isinstance(lifecycle, dict)
     lifecycle["second_hardstop_embargo"] = policy.snapshot()
+    capital = payload["capital_policy"]
+    assert isinstance(capital, dict)
+    # 10 USDT is an explicit paper RESEARCH proxy, never real capital.
+    # A database schema-required leverage=1 is a bookkeeping denomination,
+    # not an approved Bybit leverage or margin/execution configuration.
+    capital["paper_simulation"] = {
+        "enabled": True,
+        "mode": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+        "notional_usdt": "10",
+        "schema_leverage": 1,
+        "fees": "TAKER_ENTRY_RESEARCH_PROXY",
+        "exchange_fill_confirmed": False,
+    }
     return payload
 
 
