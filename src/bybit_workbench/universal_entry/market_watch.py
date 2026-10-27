@@ -934,6 +934,17 @@ class ParameterizedCausalMarketWatch:
                     "raw_entry_boundary": item.boundary,
                     "depth_pct": item.depth_pct,
                     "state_effective_at": item.effective_at,
+                    "p90l90": {
+                        "candidate_price": item.current_price,
+                        "opposite_raw_l53_target": (
+                            state.p90l90.state.opposite_tp(item.side)
+                            if state.p90l90 is not None
+                            and state.p90l90.state is not None
+                            else None
+                        ),
+                        "state_effective_at": item.effective_at,
+                        "depth_pct": item.depth_pct,
+                    },
                     "modeled_exchange_fill": False,
                     "trade_fact_id": fact.fact_id,
                 }),
