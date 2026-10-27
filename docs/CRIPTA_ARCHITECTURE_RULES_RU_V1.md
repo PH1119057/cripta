@@ -626,6 +626,63 @@ Critical fault обязан иметь durable owner-notification delivery contr
 явный escalation state. UI alone не считается доставкой. Потеря delivery сама
 является operational fault и не разрешает торговую mutation.
 
+### 9.1.1 Multi-account Supervisor coverage — 2026-10-27 remediation boundary
+
+**FINDING (current implementation, not a new trading policy):**
+the deployed Lifecycle Supervisor process is MAIN-only: its unit fixes one
+`CRIPTA_TRADING_ACCOUNT_ID` and one MAIN credential. The same process
+currently performs both account-specific protection/ownership/fault scans and
+global cross-account functions (stale-release LIVE-arm retirement and owner
+fault-delivery processing). Making two copies of that process is **not** itself
+multi-account coverage: a SUB copy must never read MAIN with SUB's
+TradingAccount ID, impersonate another account, or independently duplicate
+global alert delivery or arm-session retirement.
+
+**Mandatory replacement contract before any multi-account REAL admission:**
+- Account-specific lifecycle checks cover **every** independently authorized
+  active TradingAccount with the matching AccountConnector, exact authenticated
+  Exchange evidence, verified credential provenance and scoped durable faults.
+  Freshness, lack of protection, unresolved mutations and Exit owner failures
+  cannot be satisfied by the other account's successful snapshot.
+- Global delivery/escalation and release-arm invariants have **one explicit
+  execution owner**, or proven concurrency-safe exactly-once ownership. A new
+  SUB worker must not silently repeat global side effects. Neither a missing
+  SUB worker nor its failure may disarm unrelated TradingAccounts by guess.
+- **Specific P0 observed in code:** `LifecycleSupervisor._resolve_cleared_faults`
+  currently queries every `runtime.lifecycle_faults` row in `state='OPEN'`
+  without an account scope. A second account-scoped scan can mark another
+  account's fault `RESOLVED` when it is merely absent from that local scan.
+  Production multi-account supervision is blocked until fault projection,
+  detection, lifecycle IDs, resolution and owner delivery are scoped/combined
+  under one proven all-account consistency boundary. Do not solve this by
+  duplicating the current systemd unit.
+- Entry admission stays blocked for an unproven account. Existing owned Exit
+  and recovery remain possible under their current operational-safety contract.
+  A Supervisor never creates its own trading/Exit policy or arms LIVE.
+- Replacement requires account-local status/audit, restart/reconciliation,
+  negative tests for mismatched credentials and account IDs, and
+  consumer/reporting parity. Source/code presence and systemd liveness are
+  insufficient.
+- Old MAIN-only Lifecycle Supervisor must not be retired or declared
+  multi-account-ready until the exact consumer/provider tests and deployment
+  evidence are PASS. This paragraph specifies a required safety boundary, not
+  permission to launch duplicate service instances.
+
+### 9.1.2 Independent read-only safety evidence — account-scope finding
+
+**FINDING:** the installed legacy `cripta-safety-observer.service`
+authenticates with a single MAIN credential and cannot be counted as an
+independent SUB account evidence source. The per-account private reconciliation
+proves account data synchronization, but does **not automatically prove**
+the independently owned safety-observer or Lifecycle protection contract.
+
+**Required:** before multi-account REAL enable, identify exact consumer(s)
+of the existing safety observer, account-scope its required Exchange facts or
+provide a validated equivalent independent per-account reader, preserve
+durable alert/restart/audit behavior, and test MAIN/SUB failure isolation.
+Do not share MAIN credentials as a substitute for SUB's connector; do not
+remove the old producer before its required read consumers have parity.
+
 ## 9.2 Position Supervisor
 
 `Position Supervisor` наблюдает фактическое состояние конкретной открытой
@@ -633,6 +690,22 @@ StrategyPosition и Exchange state: qty, price, protection, MFE/MAE, geometry,
 context, reconciliation.
 
 Он не является владельцем Exit policy.
+
+### 9.2.1 Current legacy observer and retirement gate — 2026-10-27
+
+**FINDING:** the currently installed `cripta-position-supervisor.service`
+is bound to MAIN, analyzes historical M3 HOLD profiles and persists
+`supervisor.snapshots`, `supervisor.transitions` and related audit context.
+This is **not** an implemented two-account Position Supervisor. The canonical
+Position Supervisor capability (§9.2) remains required for each relevant
+OPEN StrategyPosition and cannot be dropped merely because R1 was retired.
+
+**Before/after ownership:** before = MAIN-only legacy provider of
+MFE/MAE, market structure and observation/audit; after = an account-scoped
+Position Supervisor or a separately owner-approved equivalent provider with
+the same required facts, audited lineage and verified consumers for all
+TradingAccounts. Do not disable the legacy provider before proving the
+replacement, or invent an Exit rule from former M3 features.
 
 ## 9.3 Analyst
 
