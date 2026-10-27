@@ -232,13 +232,16 @@ class PaperTradeRuntime:
         for position_id, strategy_id, account_id in rows:
             key = str(position_id)
             if key in seen:
+                # Prevalidate the whole batch BEFORE any position state changes.
                 raise RuntimeError("P90L90_PAPER_AMBIGUOUS_ACCOUNT_BINDING")
             seen.add(key)
             if strategy_id not in {
                 "p90l90_legacy_main_ltc_inj",
                 "p90l90_legacy_sub_dot_arb_apt",
-            }:
-                raise RuntimeError("P90L90_PAPER_UNEXPECTED_STRATEGY")
+            } or not account_id:
+                raise RuntimeError("P90L90_PAPER_UNEXPECTED_STRATEGY_OR_ACCOUNT")
+        for position_id, strategy_id, account_id in rows:
+            key = str(position_id)
             at = event_at.astimezone(UTC)
             boundary = datetime.fromtimestamp(
                 int(at.timestamp() // 300) * 300, UTC
