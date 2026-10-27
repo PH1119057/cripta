@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_exit.contracts import (
@@ -20,6 +20,8 @@ from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutati
 from .context_features import compare_context_value, extract_context_feature
 from .contracts import EntryEvaluation, FrozenPolicy, ObjectiveContext, TradeDirection
 from .fingerprint import canonical_json, fingerprint
+from .p90l90_causal import P90L90PaperClose, Side, modeled_pnl_after_fees
+from .p90l90_paper_checkpoint import P90L90PaperExitCheckpoint
 from .market_watch import (
     GenericZone,
     compute_l53_zone,
@@ -192,6 +194,161 @@ class PaperTradeRuntime:
         self._bundle_by_exact_identity = {
             bundle.exact_identity: bundle for bundle in bundles
         }
+
+    def on_p90l90_native_trade(
+        self,
+        *,
+        trading_account_id: str,
+        strategy_id: str,
+        paper_position_id: str,
+        symbol: str,
+        exec_id: str,
+        exchange_sequence: int,
+        event_at: datetime,
+        price: Decimal,
+        geometry_effective_at: datetime | None,
+        candidate_opposite_raw_tp: Decimal | None,
+    ) -> P90L90PaperClose | None:
+        """Advance one EXISTING P90L90 paper position with a durable DB checkpoint.
+
+        This explicit account-scoped, no-order Exit bridge is intentionally NOT
+        attached to the generic public-trade observer. The caller must provide
+        verified native trade order, exact account binding and closed 5m RAW
+        geometry; Entry capital/order simulation and SECOND48 remain unapproved.
+        Each update and its paper event are one PostgreSQL transaction.
+        """
+        with self._connection.transaction():
+            row = self._connection.execute(
+                """SELECT strategy_id,symbol,direction,entry_price,quantity,
+                          notional_usdt,best_price,mfe_pct,mae_pct,payload,state
+                     FROM strategy_entry.paper_positions
+                    WHERE paper_position_id=%s AND leg_type='PRIMARY'
+                    FOR UPDATE""",
+                (paper_position_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("P90L90 paper position identity not found")
+            if str(row[0]) != strategy_id or str(row[1]) != symbol:
+                raise ValueError("P90L90 paper position Strategy/symbol mismatch")
+            if str(row[10]) == "CLOSED":
+                return None
+            if str(row[10]) != "OPEN":
+                raise RuntimeError("P90L90 paper position is not OPEN")
+            direction = str(row[2])
+            if direction not in {"LONG", "SHORT"}:
+                raise ValueError("P90L90 paper direction invalid")
+            entry = _decimal(row[3], "P90L90 paper entry", positive=True)
+            quantity = _decimal(row[4], "P90L90 paper quantity", positive=True)
+            notional = _decimal(row[5], "P90L90 paper notional", positive=True)
+            old_best = _decimal(row[6], "P90L90 paper best", positive=True)
+            old_mfe = _decimal(row[7], "P90L90 paper mfe")
+            old_mae = _decimal(row[8], "P90L90 paper mae")
+            payload = dict(_mapping(row[9], "P90L90 paper payload"))
+            exit_policy = _mapping(payload.get("exit_policy"), "P90L90 exit policy")
+            local_zone = _mapping(
+                exit_policy.get("local_zone_exit"), "P90L90 local zone"
+            )
+            if str(local_zone.get("operator")) != "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                raise ValueError("P90L90 paper Exit operator mismatch")
+            checkpoint_raw = _mapping(
+                payload.get("p90l90_exit_checkpoint"), "P90L90 checkpoint"
+            )
+            checkpoint = P90L90PaperExitCheckpoint.restore(
+                checkpoint_raw,
+                trading_account_id=trading_account_id,
+                strategy_id=strategy_id,
+                paper_position_id=paper_position_id,
+                symbol=symbol,
+                side=cast(Side, direction),
+                entry_price=entry,
+            )
+            accepted, close = checkpoint.on_native_trade(
+                exec_id=exec_id,
+                exchange_sequence=exchange_sequence,
+                event_at=event_at,
+                price=price,
+                geometry_effective_at=geometry_effective_at,
+                candidate_opposite_raw_tp=candidate_opposite_raw_tp,
+            )
+            if not accepted:
+                return None
+            payload["p90l90_exit_checkpoint"] = checkpoint.snapshot()
+            move = _directional_move(entry, price, direction)
+            mfe = max(old_mfe, move)
+            mae = min(old_mae, move)
+            best = max(old_best, price) if direction == "LONG" else min(old_best, price)
+            stop = checkpoint.exit_state.stop
+            protected = checkpoint.exit_state.protected
+            if close is None:
+                changed = self._connection.execute(
+                    """UPDATE strategy_entry.paper_positions
+                          SET best_price=%s,mfe_pct=%s,mae_pct=%s,
+                              active_stop_price=%s,trailing_active=%s,
+                              payload=%s::jsonb,updated_at=clock_timestamp()
+                        WHERE paper_position_id=%s AND state='OPEN'
+                        RETURNING paper_position_id""",
+                    (
+                        best, mfe, mae, stop, protected, canonical_json(payload),
+                        paper_position_id,
+                    ),
+                ).fetchone()
+                if changed is None:
+                    raise RuntimeError("P90L90 paper Exit lost open-position lease")
+                return None
+            modeled = modeled_pnl_after_fees(
+                side=cast(Side, direction),
+                entry_price=entry,
+                exit_price=close.modeled_price,
+                entry_notional_usdt=notional,
+                maker_exit=close.resting_maker_proxy,
+            )
+            payload["p90l90_modeled_economics"] = {
+                "gross_usdt": str(modeled.gross_usdt),
+                "entry_fee_usdt": str(modeled.entry_fee_usdt),
+                "exit_fee_usdt": str(modeled.exit_fee_usdt),
+                "net_usdt": str(modeled.net_usdt),
+                "modeled_exchange_fill": False,
+                "maker_exit_proxy": close.resting_maker_proxy,
+            }
+            gross = _pnl(quantity, entry, close.modeled_price, direction)
+            return_pct = _directional_move(entry, close.modeled_price, direction)
+            changed = self._connection.execute(
+                """UPDATE strategy_entry.paper_positions
+                      SET state='CLOSED',closed_at=%s,exit_price=%s,exit_reason=%s,
+                          best_price=%s,mfe_pct=%s,mae_pct=%s,
+                          active_stop_price=%s,trailing_active=%s,
+                          gross_pnl_usdt=%s,gross_return_pct=%s,
+                          payload=%s::jsonb,updated_at=clock_timestamp()
+                    WHERE paper_position_id=%s AND state='OPEN'
+                    RETURNING paper_position_id""",
+                (
+                    event_at.astimezone(UTC), close.modeled_price, close.reason,
+                    best, mfe, mae, stop, protected, gross, return_pct,
+                    canonical_json(payload), paper_position_id,
+                ),
+            ).fetchone()
+            if changed is None:
+                raise RuntimeError("P90L90 paper Exit lost open-position lease")
+            self._event(
+                paper_position_id,
+                event_at,
+                "CLOSED",
+                close.modeled_price,
+                gross,
+                return_pct,
+                {
+                    "reason": close.reason,
+                    "trading_account_id": trading_account_id,
+                    "strategy_id": strategy_id,
+                    "native_exec_id": exec_id,
+                    "native_exchange_sequence": exchange_sequence,
+                    "observed_native_price": str(price),
+                    "modeled_exchange_fill": False,
+                    "modeled_net_usdt": str(modeled.net_usdt),
+                    "resting_maker_proxy": close.resting_maker_proxy,
+                },
+            )
+            return close
 
     def bootstrap_l53_history(
         self, symbol: str, candles: tuple[Candle, ...]
