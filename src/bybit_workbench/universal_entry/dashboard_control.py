@@ -682,7 +682,7 @@ def _validate_authoring_extensions(raw: Mapping[str, object]) -> None:
                     for field, expected_bars in (("l53_5m", 36), ("h9_5m", 108),
                                                  ("h9_15m", 36)):
                         if int(str(counts.get(field) or "0")) != expected_bars:
-                            raise ValueError(f"P90L90 requires {field}={value}")
+                            raise ValueError(f"P90L90 requires {field}={expected_bars}")
                     if geometry.get("h9_equality") != "EXACT_RAW_SIDE":
                         raise ValueError("P90L90 requires exact RAW H9 agreement")
                     if geometry.get("depth_denominator") != "RAW_H9_UNION_SPAN":
