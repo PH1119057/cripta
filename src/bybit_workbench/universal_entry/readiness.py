@@ -178,18 +178,25 @@ def assess_strategy_runtime_readiness(
     )
     p90_paper_exact = p90_operator and _p90l90_exact_no_order_paper_model(card)
     if p90_operator and not p90_paper_exact:
+        legacy_v1 = card.strategy_version == "1.0-p90l90-legacy-passive-20261027"
         policy_reasons.append(
             RuntimeReadinessReason(
-                "P90L90_PAPER_MODEL_OR_PRODUCER_NOT_PROVEN",
+                (
+                    "P90L90_RAW_ENTRY_PRODUCER_NOT_WIRED" if legacy_v1
+                    else "P90L90_PAPER_MODEL_OR_PRODUCER_NOT_PROVEN"
+                ),
                 "ENTRY",
-                "P90 RAW authoring must match exact reviewed no-order v2.",
+                "P90 RAW strategy needs the exact reviewed no-order v2 producer.",
             )
         )
         paper_reasons.append(
             RuntimeReadinessReason(
-                "P90L90_PAPER_EXIT_IDENTITY_NOT_PROVEN",
+                (
+                    "P90L90_RAW_EXIT_CONSUMER_NOT_WIRED" if legacy_v1
+                    else "P90L90_PAPER_EXIT_IDENTITY_NOT_PROVEN"
+                ),
                 "PAPER_EXIT",
-                "P90 paper Exit needs exact v2 native-trade checkpoint model.",
+                "P90 paper Exit requires exact v2 native-trade checkpoint model.",
             )
         )
 
