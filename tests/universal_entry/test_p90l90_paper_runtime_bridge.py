@@ -194,3 +194,33 @@ def test_generic_p90_paper_order_is_refused_before_any_db_write() -> None:
         PaperTradeRuntime(db).create_order(evaluation, bundle, now=T0)
     assert db.updates == 0
     assert not db.events
+
+
+def test_p90_paper_resting_target_persists_and_models_maker_exit() -> None:
+    db = _PaperConnection()
+    _add_position(db, account="ta-main", strategy="p90-main", position="paper-main")
+    _advance(
+        db, account="ta-main", strategy="p90-main", position="paper-main",
+        exec_id="native-1", seq=10, price="100.6", seconds=1,
+    )
+    assert PaperTradeRuntime(db).on_p90l90_native_trade(
+        trading_account_id="ta-main", strategy_id="p90-main",
+        paper_position_id="paper-main", symbol="LTCUSDT",
+        exec_id="native-2", exchange_sequence=11,
+        event_at=T0 + timedelta(minutes=5, seconds=1), price=D("100.7"),
+        geometry_effective_at=T0 + timedelta(minutes=5),
+        candidate_opposite_raw_tp=D("101"),
+    ) is None
+    close = PaperTradeRuntime(db).on_p90l90_native_trade(
+        trading_account_id="ta-main", strategy_id="p90-main",
+        paper_position_id="paper-main", symbol="LTCUSDT",
+        exec_id="native-3", exchange_sequence=12,
+        event_at=T0 + timedelta(minutes=5, seconds=2), price=D("101.2"),
+        geometry_effective_at=None, candidate_opposite_raw_tp=None,
+    )
+    assert close is not None and close.reason == "RESTING_TP"
+    assert close.modeled_price == D("101")
+    pos = db.positions["paper-main"]
+    assert pos["exit_price"] == D("101")
+    assert pos["payload"]["p90l90_modeled_economics"]["maker_exit_proxy"] is True
+    assert pos["payload"]["p90l90_modeled_economics"]["modeled_exchange_fill"] is False
