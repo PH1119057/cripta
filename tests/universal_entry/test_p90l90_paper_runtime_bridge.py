@@ -180,7 +180,7 @@ def test_two_accounts_isolated_and_generic_tick_does_not_touch_p90() -> None:
     )
     assert db.positions["paper-main"]["stop"] == D("100.25")
     assert db.positions["paper-sub"]["state"] == "OPEN"
-    assert db.positions["paper-sub"]["payload"]["p90l90_exit_checkpoint"]["exit"]["stop"] == "90"
+    assert D(db.positions["paper-sub"]["payload"]["p90l90_exit_checkpoint"]["exit"]["stop"]) == D("90")
 
 
 def test_generic_p90_paper_order_is_refused_before_any_db_write() -> None:
