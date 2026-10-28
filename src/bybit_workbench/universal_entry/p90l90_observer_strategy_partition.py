@@ -138,7 +138,7 @@ def require_p90_policy_before_registry(split: ObserverStrategySplit) -> None:
         ):
             raise RuntimeError("P90L90_REAL_OBSERVER_POLICY_NOT_EXACT")
     for raw in split.p90_paper:
-        bundle: Any = raw
+        bundle = raw
         try:
             status = assess_strategy_runtime_readiness(
                 bundle.card, observer_ready=True,
