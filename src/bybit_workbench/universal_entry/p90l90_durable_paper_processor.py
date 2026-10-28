@@ -44,6 +44,7 @@ class P90L90DurablePaperProcessor:
         accepted_source_commits: frozenset[str] | None = None,
         on_native_exit: NativeExitHandler,
         on_closed_candle: CandleHandler,
+        bar_ledger: Any | None = None,
         candidate_entry_plan_fingerprint: str | None = None,
         on_proven_candidate: ProvenCandidateHandler | None = None,
     ) -> None:
@@ -53,10 +54,12 @@ class P90L90DurablePaperProcessor:
             connection, source_commit=source_commit,
             writer_release_commit=producer_release_commit,
         )
-        self._bars = P90L90ImmutableBarLedger(
-            connection, source_commit=source_commit,
-            producer_release_commit=producer_release_commit,
-            accepted_source_commits=accepted_source_commits,
+        self._bars = (
+            bar_ledger if bar_ledger is not None else P90L90ImmutableBarLedger(
+                connection, source_commit=source_commit,
+                producer_release_commit=producer_release_commit,
+                accepted_source_commits=accepted_source_commits,
+            )
         )
         self._on_exit = on_native_exit
         self._on_candle = on_closed_candle
