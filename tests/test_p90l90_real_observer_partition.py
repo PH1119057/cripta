@@ -15,9 +15,9 @@ from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
     require_p90_atomic_observer_connection,
     require_p90_policy_before_registry,
 )
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     VERSION as REAL_VERSION,
-    real_v3_cards,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
