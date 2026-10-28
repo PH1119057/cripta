@@ -148,7 +148,7 @@ def test_private_account_or_stale_exchange_evidence_is_rejected(
 ) -> None:
     position, _, state, cursor, private, price = _scope()
     with pytest.raises(P90RealObservationUnverified):
-        _observation(position, state, cursor, replace(private, **{field: value}))
+        _observation(position, state, cursor, replace(private, **{field: value}), price)
 
 
 @pytest.mark.parametrize(("field", "value"), (
