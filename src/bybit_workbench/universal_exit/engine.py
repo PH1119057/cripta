@@ -19,10 +19,7 @@ from bybit_workbench.universal_entry.dsl import (
     predicate_from_mapping,
 )
 from bybit_workbench.universal_entry.fingerprint import fingerprint
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-    ALLOWED_SYMBOLS as P90_REAL_SYMBOLS,
-    VERSION as P90_REAL_VERSION,
-)
+from bybit_workbench.universal_entry import p90l90_real_contract_v3
 
 from .contracts import (
     ExitActionKind,
@@ -282,8 +279,8 @@ class UniversalExitEngine:
             return _blocked(position, plan, observation, "EXIT_PLAN_POSITION_LINEAGE_MISMATCH")
 
         if (
-            position.strategy_id in P90_REAL_SYMBOLS
-            and position.strategy_version == P90_REAL_VERSION
+            position.strategy_id in p90l90_real_contract_v3.ALLOWED_SYMBOLS
+            and position.strategy_version == p90l90_real_contract_v3.VERSION
         ):
             # An immutable v3 P90 ExitPlan has explicit trailing/RAW geometry
             # policy but no generic DSL rules. Project it through the shared
