@@ -1784,16 +1784,20 @@ def _universal_exit_position(
         raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISMATCH")
     if expected_owner[1] != "BYBIT:UNIFIED":
         raise RuntimeError("STRATEGY_EXIT_ACCOUNT_UNSUPPORTED")
-    p90_key = p90_real_exchange_position_key(
-        payload,
-        trading_account_id=TRADING_ACCOUNT_ID,
-        symbol=symbol,
-        position_idx=expected_idx,
-    )
-    expected_key = (
-        p90_key if p90_key is not None
-        else f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
-    )
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        expected_key = p90_real_exchange_position_key(
+            payload,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            symbol=symbol,
+            position_idx=expected_idx,
+        )
+    else:
+        expected_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
     if expected_owner[2] != expected_key:
         raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
 
@@ -1924,15 +1928,21 @@ def _execute_universal_exit_command(
     if not isinstance(mutation_raw, dict):
         raise RuntimeError("STRATEGY_EXIT_MUTATION_INVALID")
     mutation = validate_exit_mutation(action_kind, mutation_raw)
-    verify_p90_real_exchange_mutation(
-        payload=payload,
-        trading_account_id=TRADING_ACCOUNT_ID,
-        symbol=symbol,
-        position=position,
-        action_kind=action_kind,
-        mutation=mutation,
-        tick=tick,
-    )
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        verify_p90_real_exchange_mutation(
+            payload=payload,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            symbol=symbol,
+            position=position,
+            action_kind=action_kind,
+            mutation=mutation,
+            tick=tick,
+        )
     position_idx = int(position.get("positionIdx") or 0)
 
     if action_kind is ExitActionKind.SET_STOP:
