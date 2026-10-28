@@ -5,9 +5,9 @@ or a substitute for ordered WS publicTrade/bar boundary proof.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC
-from typing import Mapping
+from datetime import UTC, datetime
 
 from bybit_workbench.domain.models import Candle
 
