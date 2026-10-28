@@ -101,10 +101,12 @@ def test_unproven_durable_exit_fails_before_entry_callback() -> None:
     account = SimpleNamespace(binding=SimpleNamespace(trading_account_id="ta-main"))
     consumer = _consumer(calls, admissions=(account,), proven=True)
     fact, cursor = _fact()
-    with patch(
-        "bybit_workbench.universal_entry.p90l90_observer_real_consumer.read_real_second48",
-        side_effect=RuntimeError("P90_REAL_SECOND48_EXACT_EXIT_UNPROVEN"),
+    with (
+        patch(
+            "bybit_workbench.universal_entry.p90l90_observer_real_consumer.read_real_second48",
+            side_effect=RuntimeError("P90_REAL_SECOND48_EXACT_EXIT_UNPROVEN"),
+        ),
+        pytest.raises(RuntimeError, match="SECOND48_EXACT_EXIT_UNPROVEN"),
     ):
-        with pytest.raises(RuntimeError, match="SECOND48_EXACT_EXIT_UNPROVEN"):
-            consumer._on_candidate(fact, cursor)
+        consumer._on_candidate(fact, cursor)
     assert calls == []
