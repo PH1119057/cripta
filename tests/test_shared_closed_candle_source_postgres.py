@@ -93,24 +93,23 @@ def test_pg16_shared_candle_one_row_per_source_not_per_strategy() -> None:
             two.ingest((_candle(1, "100.6"),), **metadata)
         # DB protection is independent of the ingestion Python path.
         # A provider can mark a bar closed=True before its actual close.
-        with pytest.raises(psycopg.errors.CheckViolation):
-            with conn.transaction():
-                conn.execute(
-                    """INSERT INTO analytics.closed_candles (
-                       market_source_id,venue_id,instrument_id,external_symbol,
-                       product_category,timeframe,opened_at,closed_at,
-                       open,high,low,close,volume,source_transport,
-                       producer_release_commit,observed_at)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (
-                        KEY.market_source_id, KEY.venue_id, KEY.instrument_id,
-                        KEY.external_symbol, KEY.product_category, "5",
-                        T + timedelta(minutes=5), T + timedelta(minutes=10),
-                        Decimal("100"), Decimal("101"), Decimal("99"),
-                        Decimal("100.5"), Decimal("8"), "BYBIT_WS_KLINE",
-                        "a" * 40, T,
-                    ),
-                )
+        with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+            conn.execute(
+                """INSERT INTO analytics.closed_candles (
+                   market_source_id,venue_id,instrument_id,external_symbol,
+                   product_category,timeframe,opened_at,closed_at,
+                   open,high,low,close,volume,source_transport,
+                   producer_release_commit,observed_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (
+                    KEY.market_source_id, KEY.venue_id, KEY.instrument_id,
+                    KEY.external_symbol, KEY.product_category, "5",
+                    T + timedelta(minutes=5), T + timedelta(minutes=10),
+                    Decimal("100"), Decimal("101"), Decimal("99"),
+                    Decimal("100.5"), Decimal("8"), "BYBIT_WS_KLINE",
+                    "a" * 40, T,
+                ),
+            )
         # Failed equality check never silently changes original source.
         assert two.history(through=candles[-1].closed_at, required=2) == candles
         raise RuntimeError("ROLLBACK_SHARED_CANDLE")
