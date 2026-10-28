@@ -86,6 +86,9 @@ class P90L90ObserverPaperConsumer:
         self._entry = UniversalEntryEngine(registry)
         self._store = StrategyEntryStore(connection)
         self._paper = PaperTradeRuntime(connection, bundles=tuple(p90_bundles))
+        # Both stores expose the same causal read contract, but only the
+        # MarketSource bridge is allowed in production after migration.
+        self._archive: Any
         if shared_candle_source:
             from .p90l90_shared_candle_bridge import P90SharedCandleLedger
 
