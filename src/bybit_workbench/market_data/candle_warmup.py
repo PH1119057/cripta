@@ -81,7 +81,12 @@ def cache_approved_bybit_history(
         raise RuntimeError("CANDLE_APPROVED_BYBIT_MARKET_SOURCE_AMBIGUOUS")
     result: dict[str, tuple[Candle, ...]] = {}
     for tf, rows in history.items():
-        key = MarketCandleKey(*matches[0], timeframe=tf)
+        (source_id, venue_id, instrument_id, exact_symbol, product) = matches[0]
+        key = MarketCandleKey(
+            market_source_id=source_id, venue_id=venue_id,
+            instrument_id=instrument_id, external_symbol=exact_symbol,
+            product_category=product, timeframe=tf,
+        )
         # A provider gap is not silently forward-filled even if another
         # strategy already has a cached subset of this source.
         full = verify_closed_window(key, rows)
