@@ -59,6 +59,7 @@ def test_discontinuous_or_future_source_cannot_be_interpolated():
     five[50] = replace(
         five[50],
         opened_at=five[50].opened_at+timedelta(minutes=5),
+        closed_at=five[50].closed_at+timedelta(minutes=5),
     )
     with pytest.raises(RuntimeError, match="CAUSAL_GEOMETRY_NOT_READY"):
         plan_p90l90_offline_seed(
