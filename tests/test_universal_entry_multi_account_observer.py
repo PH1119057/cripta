@@ -433,3 +433,23 @@ def test_p90_real_main_must_not_bind_to_signed_sub_even_if_armed() -> None:
     )
     arm.assert_not_called()
     capacity.assert_not_called()
+
+
+def test_p90_real_main_cannot_reuse_legacy_main_primary_arm_path() -> None:
+    main = StrategyExecutionBindingRef(
+        "binding-p90-main", "act-main-v3", "PRIMARY", "ta-main",
+    )
+    roster = CandidateDB([(
+        main.strategy_execution_binding_id,
+        main.strategy_activation_id,
+        main.execution_leg,
+        main.trading_account_id,
+    )])
+    with patch(
+        "operations.monitoring.universal_entry_shadow.TRADING_ACCOUNT_ID",
+        "ta-main",
+    ):
+        selected = _unarmed_multi_account_candidate_bindings(
+            roster, (_P90MainBundle(),), observed_at=NOW,
+        )
+    assert selected == {"act-main-v3": (main,)}
