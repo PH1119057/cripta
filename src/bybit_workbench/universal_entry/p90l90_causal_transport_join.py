@@ -24,6 +24,12 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+def _sequence_before(new: int | None, previous: int | None) -> bool:
+    if new is None:
+        raise ValueError("P90L90 native cursor sequence missing")
+    return previous is not None and new < previous
+
+
 def _floor(value: datetime, interval: int) -> datetime:
     at = _utc(value)
     minute = (at.minute // interval) * interval
@@ -153,10 +159,7 @@ class P90L90CausalTransportJoin:
                 and event.exec_id in self.last_emitted_exec_ids
             ):
                 return ()  # exact replay after checkpoint commit/restart
-            if (
-                self.last_emitted_trade_sequence is not None
-                and sequence < self.last_emitted_trade_sequence
-            ):
+            if _sequence_before(sequence, self.last_emitted_trade_sequence):
                 raise RuntimeError("P90L90 replay regressed before committed sequence")
             if any(
                 e.kind == "PUBLIC_TRADE"
@@ -178,9 +181,7 @@ class P90L90CausalTransportJoin:
                 event.event_at < self.last_trade_event_at
             ):
                 raise RuntimeError("P90L90 native trade time regressed")
-            if self.last_trade_sequence is not None and (
-                sequence < self.last_trade_sequence
-            ):
+            if _sequence_before(sequence, self.last_trade_sequence):
                 raise RuntimeError("P90L90 native trade sequence regressed")
             if (
                 self.last_emitted_trade_at is not None
@@ -270,9 +271,8 @@ class P90L90CausalTransportJoin:
                     self.last_emitted_trade_at is not None
                     and trade.event_at < self.last_emitted_trade_at
                 )
-                or (
-                    self.last_emitted_trade_sequence is not None
-                    and trade_seq < self.last_emitted_trade_sequence
+                or _sequence_before(
+                    trade_seq, self.last_emitted_trade_sequence
                 )
             ):
                 raise RuntimeError("P90L90 causally late trade vs committed bar")
