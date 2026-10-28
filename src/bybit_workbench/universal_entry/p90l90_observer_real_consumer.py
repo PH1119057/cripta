@@ -26,7 +26,7 @@ from .transport_continuity import TradeCursor
 
 AccountAdmissionProvider = Callable[
     [str, datetime],
-    tuple[tuple[AccountAdmissionContext, ...], bool],
+    tuple[tuple[AccountAdmissionContext, ...], bool, bool, bool],
 ]
 RealExitTickPort = Callable[[MarketFactEnvelope, TradeCursor], None]
 RealClosedCandlePort = Callable[[MarketFactEnvelope], None]
@@ -174,11 +174,17 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         if owner is None:
             raise RuntimeError("P90_REAL_NATIVE_CANDIDATE_NO_EXACT_OWNER")
         at = datetime.now(UTC)
-        admissions, proven = self._admission_provider(fact.symbol, at)
+        admissions, proven, embargo_proven, embargo_allows_entry = (
+            self._admission_provider(fact.symbol, at)
+        )
+        # SECOND48 is per immutable StrategyVersion. Missing durable
+        # finalized-hardstop evidence is NOT an allowed new-entry decision.
+        if not embargo_proven:
+            raise RuntimeError("P90_REAL_SECOND48_DURABLE_STATE_NOT_VERIFIED")
         owner.accept(
             fact, cursor,
             account_admissions=admissions,
             arm_and_source_verified=proven,
             admitted_at=at,
-            allow_new_signals=True,
+            allow_new_signals=embargo_allows_entry,
         )
