@@ -121,6 +121,7 @@ class P90L90CausalTransportJoin:
     last_trade_sequence: int | None = None
     last_emitted_trade_at: datetime | None = None
     last_emitted_trade_sequence: int | None = None
+    last_emitted_exec_ids: set[str] = field(default_factory=set)
     last_5m_event_id: str = ""
     last_15m_event_id: str = ""
 
@@ -141,6 +142,24 @@ class P90L90CausalTransportJoin:
             raise ValueError("P90L90 cross-symbol public fact prohibited")
         if event.event_id in {e.event_id for e in self.pending}:
             return ()
+        if event.kind == "PUBLIC_TRADE":
+            if (
+                event.exchange_sequence == self.last_emitted_trade_sequence
+                and event.exec_id in self.last_emitted_exec_ids
+            ):
+                return ()  # exact replay after checkpoint commit/restart
+            if (
+                self.last_emitted_trade_sequence is not None
+                and event.exchange_sequence < self.last_emitted_trade_sequence
+            ):
+                raise RuntimeError("P90L90 replay regressed before committed sequence")
+            if any(
+                e.kind == "PUBLIC_TRADE"
+                and e.exchange_sequence == event.exchange_sequence
+                and e.exec_id == event.exec_id
+                for e in self.pending
+            ):
+                return ()
         if len(self.pending) >= _MAX_PENDING:
             raise RuntimeError("P90L90 causal transport backlog capacity exceeded")
         if event.kind == "PUBLIC_TRADE":
@@ -236,7 +255,12 @@ class P90L90CausalTransportJoin:
                 raise RuntimeError("P90L90 causally late trade vs committed bar")
             self.pending.remove(trade)
             self.last_emitted_trade_at = _utc(trade.event_at)
+            if self.last_emitted_trade_sequence != trade.exchange_sequence:
+                self.last_emitted_exec_ids.clear()
             self.last_emitted_trade_sequence = trade.exchange_sequence
+            if len(self.last_emitted_exec_ids) >= 512:
+                raise RuntimeError("P90L90 same-sequence cursor capacity exceeded")
+            self.last_emitted_exec_ids.add(str(trade.exec_id))
             emitted.append(trade)
         return tuple(emitted)
 
@@ -257,6 +281,7 @@ class P90L90CausalTransportJoin:
                 else self.last_emitted_trade_at.isoformat()
             ),
             "last_emitted_trade_sequence": self.last_emitted_trade_sequence,
+            "last_emitted_exec_ids": sorted(self.last_emitted_exec_ids),
             "last_5m_event_id": self.last_5m_event_id,
             "last_15m_event_id": self.last_15m_event_id,
         }
@@ -267,7 +292,7 @@ class P90L90CausalTransportJoin:
             "schema", "symbol", "closed_5m_at", "closed_15m_at",
             "pending", "last_trade_event_at", "last_trade_sequence",
             "last_emitted_trade_at", "last_emitted_trade_sequence",
-            "last_5m_event_id", "last_15m_event_id",
+            "last_emitted_exec_ids", "last_5m_event_id", "last_15m_event_id",
         } or raw["schema"] != _SCHEMA:
             raise ValueError("P90L90 causal join snapshot schema unsupported")
         def date(value: object) -> datetime | None:
@@ -286,6 +311,14 @@ class P90L90CausalTransportJoin:
             type(raw["last_emitted_trade_sequence"]) not in (int, type(None))
         ):
             raise ValueError("P90L90 causal join snapshot cursor invalid")
+        ids = raw["last_emitted_exec_ids"]
+        if (
+            not isinstance(ids, list)
+            or len(ids) > 512
+            or any(not isinstance(x, str) or not x for x in ids)
+            or len(set(ids)) != len(ids)
+        ):
+            raise ValueError("P90L90 join last emitted cursor IDs invalid")
         state = cls(
             symbol=raw["symbol"],
             closed_5m_at=bars_5,
@@ -294,6 +327,7 @@ class P90L90CausalTransportJoin:
             last_trade_sequence=raw["last_trade_sequence"],
             last_emitted_trade_at=date(raw["last_emitted_trade_at"]),
             last_emitted_trade_sequence=raw["last_emitted_trade_sequence"],
+            last_emitted_exec_ids=set(ids),
             last_5m_event_id=raw["last_5m_event_id"],
             last_15m_event_id=raw["last_15m_event_id"],
         )
