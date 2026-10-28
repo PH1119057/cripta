@@ -28,6 +28,62 @@ BEGIN
 END
 $constraint$;
 
+-- Immutable P90 5m/15m normalized source-fact ledger. Unlike per-trade Entry
+-- state this bar history is appended ONCE and never overwritten by runtime.
+-- Exact native source vendor JSON is still an independent ingress proof.
+CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_causal_closed_bars (
+    symbol text NOT NULL
+        CHECK (symbol IN ('LTCUSDT','INJUSDT','DOTUSDT','ARBUSDT','APTUSDT')),
+    timeframe text NOT NULL CHECK (timeframe IN ('5','15')),
+    closed_at timestamptz NOT NULL,
+    event_json jsonb NOT NULL
+        CHECK (jsonb_typeof(event_json)='object'
+               AND event_json->>'kind'='CANDLE_CLOSED'),
+    source_commit text NOT NULL CHECK (source_commit ~ '^[0-9a-f]{40}-- never delete, truncate, own the table or bypass a missing checkpoint.
+REVOKE ALL ON strategy_entry.p90l90_causal_transport_checkpoints FROM PUBLIC;
+REVOKE DELETE, TRUNCATE
+    ON strategy_entry.p90l90_causal_transport_checkpoints FROM cripta;
+DO $verify$
+BEGIN
+    IF NOT has_table_privilege(
+        'cripta','strategy_entry.p90l90_causal_transport_checkpoints',
+        'SELECT,INSERT,UPDATE'
+    ) OR has_table_privilege(
+        'cripta','strategy_entry.p90l90_causal_transport_checkpoints','DELETE'
+    ) THEN
+        RAISE EXCEPTION 'P90L90_ATOMIC_ENTRY_CHECKPOINT_ACTOR_GRANT_INVALID';
+    END IF;
+END
+$verify$;
+COMMIT;
+),
+    recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    PRIMARY KEY (symbol,timeframe,closed_at),
+    CONSTRAINT p90l90_causal_bar_symbol_matches
+        CHECK (event_json->>'symbol'=symbol
+               AND event_json->>'timeframe'=timeframe)
+);
+
+REVOKE ALL ON strategy_entry.p90l90_causal_closed_bars FROM PUBLIC;
+GRANT SELECT, INSERT ON strategy_entry.p90l90_causal_closed_bars TO cripta;
+REVOKE UPDATE, DELETE, TRUNCATE
+    ON strategy_entry.p90l90_causal_closed_bars FROM cripta;
+
+DO $bar_verify$
+BEGIN
+    IF NOT has_table_privilege(
+        'cripta','strategy_entry.p90l90_causal_closed_bars',
+        'SELECT,INSERT'
+    ) OR has_table_privilege(
+        'cripta','strategy_entry.p90l90_causal_closed_bars','UPDATE'
+    ) OR has_table_privilege(
+        'cripta','strategy_entry.p90l90_causal_closed_bars','DELETE'
+    ) THEN
+        RAISE EXCEPTION 'P90L90_IMMUTABLE_BAR_ARCHIVE_ACTOR_GRANT_INVALID';
+    END IF;
+END
+$bar_verify$;
+
 -- cripta can update only the already-scoped five-symbol table. It must
 -- never delete, truncate, own the table or bypass a missing checkpoint.
 REVOKE ALL ON strategy_entry.p90l90_causal_transport_checkpoints FROM PUBLIC;
