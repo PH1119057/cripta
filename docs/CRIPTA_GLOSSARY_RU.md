@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.10
-**Дата:** 2026-10-26
+**Версия:** 3.11
+**Дата:** 2026-10-28
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -935,3 +935,15 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 **10D disjoint bin / rolling 10D** — соответственно девять непересекающихся UTC окон по 10 суток от 18 мая и ежедневное скользящее 10-дневное окно. Realized model net относится к UTC времени **закрытия**, а не открытия; censored исключены из реализованного PnL. Первое — аддитивная разбивка, второе — перекрывающаяся диагностика, которую нельзя складывать как независимые интервалы.
 
 Версия, ATR seed, исходные файлы и итоговые журналы принадлежат `RESEARCH_COMPUTE §22.2`; торговые Strategy/LIVE контракты не меняются.
+
+
+## 38. P90L90 lineage versus executable release — OWNER DECISION 2026-10-28
+
+**P90_DATA_LINEAGE_ID** — stable, immutable, audited identity of one exact five-symbol P90L90 causal 5m/15m market fact lineage and its restart-boundary seed evidence. Not an alias of GitHub `main`, `source_commit`, `INSTALLED_COMMIT` or `LOADED_COMMIT`.
+
+**PRODUCER_RELEASE_COMMIT** — exact Git release of the code that actually wrote an individual newly committed P90 market fact or checkpoint generation. Historical rows retain their original persisted `source_commit` as origin evidence, without rewriting to another SHA.
+
+**P90_LINEAGE_COMPATIBILITY_ATTESTATION** — durable, versioned and append-only checked mapping from one `P90_DATA_LINEAGE_ID` and its verified original source digest/schema to one exact verified loaded release and compatible causal consumer contract. Neither a successful source sync nor a newer code SHA alone is proof of compatibility.
+
+**P90_LINEAGE_COMPATIBILITY=PASS / NOT_VERIFIED / BLOCKED** — evidence status for the exact data lineage plus loaded release. `PASS` requires the stored signed-off compatibility record, immutable data/geometry verification and approved source/actor/CI/runtime checks; no status automatically grants PAPER, REAL or LIVE.
+
