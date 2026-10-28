@@ -129,7 +129,7 @@ def build_real_native_exit_observation(
     if (
         str(raw.get("symbol") or "") != position.symbol
         or str(raw.get("side") or "") != signed_side
-        or str(raw.get("positionIdx") or "") != str(position.position_idx)
+        or str(raw.get("positionIdx")) != str(position.position_idx)
         or _positive(raw.get("avgPrice"), "P90_REAL_FILL_INVALID")
         != position.actual_avg_fill
         or _positive(raw.get("size"), "P90_REAL_SIZE_INVALID")
