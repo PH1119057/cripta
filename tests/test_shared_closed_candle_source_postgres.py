@@ -93,8 +93,8 @@ def test_pg16_shared_candle_one_row_per_source_not_per_strategy() -> None:
             two.ingest((_candle(1, "100.6"),), **metadata)
         # DB protection is independent of the ingestion Python path.
         # A provider can mark a bar closed=True before its actual close.
-        with conn.transaction():
-            with pytest.raises(psycopg.errors.CheckViolation):
+        with pytest.raises(psycopg.errors.CheckViolation):
+            with conn.transaction():
                 conn.execute(
                     """INSERT INTO analytics.closed_candles (
                        market_source_id,venue_id,instrument_id,external_symbol,
