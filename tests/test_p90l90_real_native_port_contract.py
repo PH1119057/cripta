@@ -68,11 +68,13 @@ def test_missing_exact_account_denied_before_any_embargo_or_entry() -> None:
     calls: list[dict[str, object]] = []
     consumer = _consumer(calls, admissions=(), proven=True)
     fact, cursor = _fact()
-    with patch(
-        "bybit_workbench.universal_entry.p90l90_observer_real_consumer.read_real_second48"
-    ) as reader:
-        with pytest.raises(RuntimeError, match="ACCOUNT_ADMISSION_NOT_VERIFIED"):
-            consumer._on_candidate(fact, cursor)
+    with (
+        patch(
+            "bybit_workbench.universal_entry.p90l90_observer_real_consumer.read_real_second48"
+        ) as reader,
+        pytest.raises(RuntimeError, match="ACCOUNT_ADMISSION_NOT_VERIFIED"),
+    ):
+        consumer._on_candidate(fact, cursor)
         reader.assert_not_called()
     assert calls == []
 
