@@ -7,9 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
-from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
-    P90L90ObserverRealConsumer,
-)
+from bybit_workbench.universal_entry.p90l90_observer_real_consumer import P90L90ObserverRealConsumer
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 
