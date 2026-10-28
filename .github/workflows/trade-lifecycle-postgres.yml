@@ -85,6 +85,7 @@ jobs:
             operations/sql/20261027_account_safety_observation.sql
             operations/sql/20261028_p90l90_legacy_passive_binding_writer.sql
             operations/sql/20261028_p90l90_strategy_v2_passive_binding_writer.sql
+            operations/sql/20261028_p90l90_causal_transport_checkpoints.sql
           )
           for migration in "${migrations[@]}"; do
             if [[ "$migration" == "operations/sql/20261026_account_scoped_physical_key_cutover.sql" ]]; then
