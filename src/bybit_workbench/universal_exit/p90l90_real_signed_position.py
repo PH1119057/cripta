@@ -72,7 +72,8 @@ class P90RealSignedPositionReader:
             or not callable(signed_get)
             or not callable(verified_private_ws_continuity)
             or not callable(no_pending_exit_command)
-            or type(max_age_seconds) is not int or max_age_seconds <= 0
+            or type(max_age_seconds) is not int
+            or not 0 < max_age_seconds <= 15
         ):
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_SIGNED_READER_CONFIG_INVALID"
