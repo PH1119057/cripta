@@ -126,3 +126,51 @@ def test_signed_lifecycle_transport_has_no_exchange_mutation_endpoint():
         pass
     else:
         raise AssertionError("Lifecycle must never expose mutation endpoints")
+
+
+def test_p90_real_initial_sl_only_waits_for_owner_exit_tp_gate():
+    initial = {"initial_protection": {
+        "stop_loss_enabled": True, "stop_loss_pct": "10",
+        "stop_loss_price_basis": "ACTUAL_EXECUTED_AVERAGE_ENTRY",
+        "take_profit_enabled": False,
+    }}
+    stop, target, kind = expected_protection(
+        position_id="pos-test-1", entry_command_id="entry-1",
+        side="Buy", entry_price="100", tick="0.01",
+        entry_payload=initial, completed_commands=[],
+    )
+    assert (stop, target, kind) == (Decimal("90"), None, "DISABLED")
+    assert _check(_evidence(tp="0"), kind=kind, tp=target) == "VERIFIED"
+    assert _check(_evidence(tp="110"), kind=kind, tp=target) == "NOT_VERIFIED"
+    assert _check(_evidence(stop="0", tp="0"), kind=kind, tp=target) == "NOT_VERIFIED"
+    assert _check(None, kind=kind, tp=target) == "UNKNOWN"
+
+    prefix = "utp" + hashlib.sha256(b"pos-test-1").hexdigest()[:12] + "-"
+    stray = {
+        "symbol": "APTUSDT", "positionIdx": 0, "side": "Sell",
+        "orderLinkId": prefix + "premature", "orderStatus": "New",
+        "reduceOnly": True, "leavesQty": "1", "price": "110",
+    }
+    assert (
+        _check(_evidence(tp="0", orders=[stray]), kind=kind, tp=target)
+        == "NOT_VERIFIED"
+    )
+
+    # A separately approved dynamic Exit command changes TP expectations
+    # only after its independently confirmed mutation identity.
+    action = {
+        "command_type": "strategy_exit",
+        "payload": {
+            "strategy_position_id": "pos-test-1",
+            "action_kind": "SET_TP",
+            "requested_mutation": {
+                "take_profit_price": "115", "order_type": "MARKET",
+            },
+        },
+        "result": {"retCode": 0},
+    }
+    assert expected_protection(
+        position_id="pos-test-1", entry_command_id="entry-1",
+        side="Buy", entry_price="100", tick="0.01",
+        entry_payload=initial, completed_commands=[action],
+    ) == (Decimal("90"), Decimal("115"), "POSITION")
