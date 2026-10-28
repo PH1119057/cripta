@@ -362,7 +362,7 @@ def test_pg16_two_new_p90_v2_strategy_engine_to_paper_position_no_r1():
             )
             consumer._on_candidate(fact, cursor)
         rows = conn.execute(
-            """SELECT strategy_id,symbol,trading_account_id,notional_usdt,
+            """SELECT strategy_id,symbol,notional_usdt,
                       paper_order_id,state,payload
                  FROM strategy_entry.paper_positions
                 WHERE strategy_version=%s
@@ -370,9 +370,11 @@ def test_pg16_two_new_p90_v2_strategy_engine_to_paper_position_no_r1():
             (card_main.strategy_version,),
         ).fetchall()
         assert len(rows) == 2
-        for strategy_id, symbol, account, nominal, order_id, state, payload in rows:
+        for strategy_id, symbol, nominal, order_id, state, payload in rows:
             assert strategy_id in {MAIN_ID, SUB_ID}
-            assert account == accounts[strategy_id]
+            assert payload["p90l90_exit_checkpoint"]["trading_account_id"] == (
+                accounts[strategy_id]
+            )
             assert symbol in (
                 card_main.symbols if strategy_id == MAIN_ID else card_sub.symbols
             )
