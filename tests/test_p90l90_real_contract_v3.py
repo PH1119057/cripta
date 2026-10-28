@@ -79,6 +79,12 @@ def test_exact_two_versions_materialize_but_do_not_self_arm() -> None:
         )
         # Card authoring CANNOT assert unproven native execution readiness.
         assert result.execution_ready is False
+        assert "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED" in {
+            item.code for item in result.reasons
+        }
+        assert "P90L90_EXCHANGE_ORDER_NOT_APPROVED" not in {
+            item.code for item in result.reasons
+        }
 
 
 def test_real_cap_enforces_pending_plus_open_and_exact_slot() -> None:
