@@ -50,7 +50,12 @@ from bybit_workbench.private_worker_status import (
     private_worker_status_path,
 )
 from bybit_workbench.market_identity import bybit_instrument_id
-from bybit_workbench.private_ws_subscriptions import confirm_private_subscriptions
+from bybit_workbench.private_ws_subscriptions import (
+    PRIVATE_TOPICS,
+    confirm_private_subscriptions,
+)
+from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
+from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -1041,6 +1046,22 @@ def record_entry_decision(
             json.dumps(details, ensure_ascii=False),
             policy, policy_version, settings_version, mayak_snapshot_id, mayak_snapshot_time,
         ),
+    )
+
+
+def current_p90_real_private_ws_epoch(position: StrategyPosition) -> bool:
+    """Read only THIS live process's private WS session; never status.json."""
+    if position.trading_account_id != TRADING_ACCOUNT_ID:
+        return False
+    with status_lock:
+        snapshot = {
+            "identity": dict(status.get("identity", {})),
+            "private": dict(status.get("private", {})),
+        }
+    return verified_private_ws_epoch(
+        snapshot, trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        now_epoch=int(time.time()),
     )
 
 
@@ -4483,7 +4504,7 @@ def private_loop(key: str, secret: str) -> None:
                 topics=list(confirmed_topics), reconnects=reconnects,
             )
             connection_event(connection, "private", "connected", reconnects=reconnects)
-            atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
+            atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "subscriptions_confirmed_at_epoch": int(time.time()), "subscriptions_topics": list(confirmed_topics), "reconnects": reconnects, "last_message_epoch": None, "last_verified_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
             if recovering:
                 restored = False
                 if (
@@ -4518,7 +4539,11 @@ def private_loop(key: str, secret: str) -> None:
                     message = json.loads(raw)
                     handle_private(connection, message)
                     previous = status.get("private", {})
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": int(time.time()), "hot_positions": previous.get("hot_positions", 0), "hot_orders": previous.get("hot_orders", 0)})
+                    authenticated_frame = (
+                        message.get("op") == "pong"
+                        or message.get("topic") in PRIVATE_TOPICS
+                    )
+                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"), "subscriptions_topics": previous.get("subscriptions_topics"), "reconnects": reconnects, "last_message_epoch": int(time.time()), "last_verified_message_epoch": (int(time.time()) if authenticated_frame else previous.get("last_verified_message_epoch")), "hot_positions": previous.get("hot_positions", 0), "hot_orders": previous.get("hot_orders", 0)})
                 if time.monotonic() >= next_ping:
                     ws.send('{"op":"ping"}')
                     next_ping = time.monotonic() + 20
@@ -4542,8 +4567,11 @@ def private_loop(key: str, secret: str) -> None:
                             {
                                 "state": "connected",
                                 "connected_at_epoch": previous.get("connected_at_epoch"),
+                                "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"),
+                                "subscriptions_topics": previous.get("subscriptions_topics"),
                                 "reconnects": reconnects,
                                 "last_message_epoch": previous.get("last_message_epoch"),
+                                "last_verified_message_epoch": previous.get("last_verified_message_epoch"),
                                 "hot_positions": previous.get("hot_positions", 0),
                                 "hot_orders": previous.get("hot_orders", 0),
                                 "reconciliation_error": _private_worker_safe_error(exc),
@@ -4554,7 +4582,7 @@ def private_loop(key: str, secret: str) -> None:
                         next_reconcile = time.monotonic() + 1.0
                         continue
                     previous = status.get("private", {})
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
+                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"), "subscriptions_topics": previous.get("subscriptions_topics"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "last_verified_message_epoch": previous.get("last_verified_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
                     cadence = 1.0 if hot_positions else 5.0
                     next_reconcile = max(
                         reconcile_started_monotonic + cadence,
