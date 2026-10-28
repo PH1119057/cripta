@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import AccountAdmissionContext, UniversalEntryEngine
