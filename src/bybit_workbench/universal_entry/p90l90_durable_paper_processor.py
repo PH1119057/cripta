@@ -15,7 +15,7 @@ from typing import Any
 
 from .contracts import MarketFactEnvelope
 from .p90l90_atomic_paper_checkpoint import P90L90AtomicPaperCheckpointStore
-from .p90l90_causal import P90L90CausalEntry, P90L90Crossing, P90L90EntryState
+from .p90l90_causal import P90L90CausalEntry, P90L90EntryState
 from .p90l90_causal_fact_codec import restore_p90l90_fact
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin, P90TransportEvent
 from .p90l90_crossing_fact import p90l90_crossing_fact
@@ -23,9 +23,6 @@ from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
 from .transport_continuity import TradeCursor
 
 NativeExitHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
-PaperCrossingHandler = Callable[
-    [MarketFactEnvelope, TradeCursor, tuple[P90L90Crossing, ...]], None
-]
 CandleHandler = Callable[[MarketFactEnvelope], None]
 ProvenCandidateHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
 
@@ -44,7 +41,6 @@ class P90L90DurablePaperProcessor:
         *,
         source_commit: str,
         on_native_exit: NativeExitHandler,
-        on_crossing: PaperCrossingHandler,
         on_closed_candle: CandleHandler,
         candidate_entry_plan_fingerprint: str | None = None,
         on_proven_candidate: ProvenCandidateHandler | None = None,
@@ -58,7 +54,6 @@ class P90L90DurablePaperProcessor:
             connection, source_commit=source_commit,
         )
         self._on_exit = on_native_exit
-        self._on_crossing = on_crossing
         self._on_candle = on_closed_candle
         self._candidate_plan = candidate_entry_plan_fingerprint
         self._on_proven_candidate = on_proven_candidate
@@ -183,7 +178,6 @@ class P90L90DurablePaperProcessor:
                             geometry=entry.state,
                         )
                         self._on_proven_candidate(candidate, cursor)
-                    self._on_crossing(fact, cursor, crossings)
 
         try:
             return self._atomic.deliver(
