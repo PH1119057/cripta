@@ -2440,18 +2440,13 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         # leverage=1 order. Bybit UTA's /v5/position/list tradeMode is
         # deprecated (always 0), so read the SIGNED account-level marginMode.
         # Never switch the whole account's margin mode on behalf of Strategy.
-        from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-            MAX_ACCOUNT_COMMITTED,
-            VERSION as P90_REAL_VERSION,
-            validate_real_v3_exchange_entry,
-            validate_real_v3_instrument_lot,
-        )
+        from bybit_workbench.universal_entry import p90l90_real_contract_v3 as p90v3
         if (
-            str(payload.get("strategy_id") or "") in MAX_ACCOUNT_COMMITTED
-            or str(payload.get("strategy_version") or "") == P90_REAL_VERSION
+            str(payload.get("strategy_id") or "") in p90v3.MAX_ACCOUNT_COMMITTED
+            or str(payload.get("strategy_version") or "") == p90v3.VERSION
         ):
             try:
-                validate_real_v3_instrument_lot(
+                p90v3.validate_real_v3_instrument_lot(
                     symbol=symbol, instrument=instrument,
                     quantity=qty, signal_price=price,
                 )
@@ -2462,7 +2457,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # The exact signed account-info validator below validates both
             # response shape and retCode without the inventory-list helper.
             try:
-                validate_real_v3_exchange_entry(
+                p90v3.validate_real_v3_exchange_entry(
                     payload=payload, symbol=symbol,
                     trading_account_id=TRADING_ACCOUNT_ID,
                     signed_account_info=signed_info,
