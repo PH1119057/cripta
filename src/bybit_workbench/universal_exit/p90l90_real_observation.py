@@ -7,10 +7,10 @@ Constructing these data objects is NOT signed evidence or permission to trade.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Mapping
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.strategy_position import StrategyPosition
@@ -178,7 +178,6 @@ def build_real_native_exit_observation(
         "source_commit": checkpoint.source_commit,
         "trade_seq": cursor.seq,
         "trade_exec_id": cursor.exec_id,
-        "private_generation_id": private.generation_id,
     })[:32]
     return ExitObservation(
         observation_id=observation_id,
