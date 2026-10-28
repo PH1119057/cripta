@@ -135,10 +135,18 @@ class P90L90AtomicPaperCheckpointStore:
         """Restart atomically against the saved source and as-of candle ledger."""
         self._symbol(symbol)
         with self._db.transaction():
+            # Activation preflight is a SERIALIZABLE READ ONLY transaction:
+            # PostgreSQL forbids SELECT FOR UPDATE there. Its MVCC snapshot
+            # already supplies consistent source/Entry restart evidence.
+            # Keep the row lock for writable live Observer recovery.
+            mode = self._db.execute("SHOW transaction_read_only").fetchone()
+            if mode not in (("on",), ("off",)):
+                raise RuntimeError("P90L90_ATOMIC_RESTART_TX_MODE_UNPROVEN")
+            lock = " FOR UPDATE" if mode[0] == "off" else ""
             row = self._db.execute(
                 """SELECT checkpoint_json,entry_checkpoint_json,source_commit
                      FROM strategy_entry.p90l90_causal_transport_checkpoints
-                    WHERE symbol=%s FOR UPDATE""",
+                    WHERE symbol=%s""" + lock,
                 (symbol,),
             ).fetchone()
             if row is None or row[2] != self._sha or row[1] is None:
