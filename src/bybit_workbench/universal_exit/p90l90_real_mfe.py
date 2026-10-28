@@ -188,7 +188,7 @@ class P90RealMfeCheckpoint:
             cursor.seq < self.cursor_seq
             or at < self.cursor_at
             or (cursor.seq == self.cursor_seq and at <= self.cursor_at)
-            or (cursor.seq == self.cursor_seq and cursor.exec_id == self.cursor_exec_id)
+            or cursor.exec_id == self.cursor_exec_id
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_NATIVE_ORDER_NOT_PROVEN")
         best = (
@@ -281,9 +281,13 @@ class P90RealMfeCheckpoint:
                 value.account_id, value.symbol, 0,
             )
             or (
-                value.best_favorable_price < value.fill_price
+                value.best_favorable_price < max(
+                    value.fill_price, value.last_native_price,
+                )
                 if value.direction is TradeDirection.LONG
-                else value.best_favorable_price > value.fill_price
+                else value.best_favorable_price > min(
+                    value.fill_price, value.last_native_price,
+                )
             )
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_SNAPSHOT_IDENTITY_INVALID")
