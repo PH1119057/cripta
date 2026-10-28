@@ -50,6 +50,7 @@ class P90TransportEvent:
         if self.kind == "PUBLIC_TRADE":
             if (
                 self.timeframe is not None
+                or self.exchange_sequence is None
                 or type(self.exchange_sequence) is not int
                 or self.exchange_sequence < 0
                 or not self.exec_id
@@ -143,14 +144,17 @@ class P90L90CausalTransportJoin:
         if event.event_id in {e.event_id for e in self.pending}:
             return ()
         if event.kind == "PUBLIC_TRADE":
+            sequence = event.exchange_sequence
+            if sequence is None:
+                raise ValueError("P90L90 native trade sequence missing")
             if (
-                event.exchange_sequence == self.last_emitted_trade_sequence
+                sequence == self.last_emitted_trade_sequence
                 and event.exec_id in self.last_emitted_exec_ids
             ):
                 return ()  # exact replay after checkpoint commit/restart
             if (
                 self.last_emitted_trade_sequence is not None
-                and event.exchange_sequence < self.last_emitted_trade_sequence
+                and sequence < self.last_emitted_trade_sequence
             ):
                 raise RuntimeError("P90L90 replay regressed before committed sequence")
             if any(
@@ -168,7 +172,7 @@ class P90L90CausalTransportJoin:
             ):
                 raise RuntimeError("P90L90 native trade time regressed")
             if self.last_trade_sequence is not None and (
-                event.exchange_sequence < self.last_trade_sequence
+                sequence < self.last_trade_sequence
             ):
                 raise RuntimeError("P90L90 native trade sequence regressed")
             if (
@@ -249,6 +253,9 @@ class P90L90CausalTransportJoin:
                 break
             if self.closed_5m_at < needed_5 or self.closed_15m_at < needed_15:
                 break
+            trade_seq = trade.exchange_sequence
+            if trade_seq is None:
+                raise RuntimeError("P90L90 native queued trade cursor invalid")
             if (
                 self.closed_5m_at > needed_5
                 or self.closed_15m_at > needed_15
@@ -258,7 +265,7 @@ class P90L90CausalTransportJoin:
                 )
                 or (
                     self.last_emitted_trade_sequence is not None
-                    and trade.exchange_sequence < self.last_emitted_trade_sequence
+                    and trade_seq < self.last_emitted_trade_sequence
                 )
             ):
                 raise RuntimeError("P90L90 causally late trade vs committed bar")
