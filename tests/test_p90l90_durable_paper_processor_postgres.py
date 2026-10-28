@@ -34,7 +34,7 @@ SHA = "6" * 40
 
 def bar(tf: str, boundary: datetime):
     normalized = MarketFactEnvelope(
-        fact_id=f"eth-no-not-eth:{tf}:{boundary.isoformat()}",
+        fact_id=f"apt-bar:{tf}:{boundary.isoformat()}",
         symbol="APTUSDT", event_kind="CANDLE_CLOSED",
         event_at=boundary, observed_at=boundary,
         received_at=boundary+timedelta(seconds=3),
@@ -140,10 +140,9 @@ def test_bar_reconstruction_and_native_paper_db_effects_roll_back_together():
         assert conn.execute(
             "SELECT COUNT(*) FROM pg_temp.p90_durable_effects"
         ).fetchone() == (0,)
-        with pytest.raises(RuntimeError, match="source not proven"):
-            archive.closed_at_or_before(
-                symbol="APTUSDT", timeframe="5", through=B,
-            )
+        assert archive.closed_at_or_before(
+            symbol="APTUSDT", timeframe="5", through=B,
+        ) == B-timedelta(minutes=5)
 
         restarted = P90L90DurablePaperProcessor(
             conn, source_commit=SHA,
