@@ -193,7 +193,7 @@ def test_historical_paper_v2_never_upgrades_to_real_entry() -> None:
         real_admission_ready_for=None, entry_admission_port=None,
         account_admissions=None,
     )
-    with pytest.raises(RuntimeError, match="REAL_NATIVE_ADMISSION_NOT_VERIFIED"):
+    with pytest.raises(RuntimeError, match="PRECOMPUTED_REAL_ADMISSION_FORBIDDEN"):
         engine.process(
             fact, proven_p90_native_cursor=cursor,
             real_admission_required_for=frozenset({activation}),
