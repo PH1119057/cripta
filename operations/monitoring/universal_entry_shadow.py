@@ -75,6 +75,10 @@ from bybit_workbench.universal_entry.oi30s_source import (
     slot_at,
 )
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
+from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l90_fact
+from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
+    P90L90ObserverPaperConsumer,
+)
 from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
     partition_observer_strategies,
     require_p90_atomic_observer_connection,
@@ -2026,12 +2030,28 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_atomic_observer_connection(observer_split)
+    p90_consumer = (
+        P90L90ObserverPaperConsumer(
+            connection,
+            bundles=observer_split.p90_paper,
+            source_commit=LOADED_COMMIT,
+            provenance=FrozenPolicy.from_mapping({
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+            }),
+        )
+        if observer_split.p90_paper else None
+    )
+    # A missing/mismatched PostgreSQL checkpoint blocks active P90 before
+    # the ordinary plan registry or any evaluation is mutated.
+    if p90_consumer is not None:
+        p90_consumer.recover_all()
     registry = ActivePlanRegistry()
     consumer_instance_id = (
         f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
         f"{service_started_at.isoformat()}"
     )
-    for raw_bundle in bundles:
+    for raw_bundle in observer_split.ordinary:
         bundle = cast(Any, raw_bundle)
         registry.register_card(bundle.card)
         materialized = registry.activate(bundle.activation)
@@ -2053,7 +2073,14 @@ def _run_observer_epoch(
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
-    paper = PaperTradeRuntime(connection, bundles=tuple(cast(Any, bundles)))
+    paper = PaperTradeRuntime(
+        connection, bundles=tuple(cast(Any, observer_split.ordinary))
+    )
+    ordinary_symbols = {
+        symbol
+        for item in observer_split.ordinary
+        for symbol in cast(Any, item).entry_plan.symbols
+    }
     real_execution_selected_for = _real_execution_selected_activation_ids(
         connection, bundles
     )
@@ -2133,13 +2160,14 @@ def _run_observer_epoch(
             if not rows:
                 raise RuntimeError(f"observer causal history seed missing {symbol}:{timeframe}")
             closed_boundaries[(symbol, timeframe)] = max(item.closed_at for item in rows)
-        engine.load_watch_history(
-            symbol,
-            {key: tuple(value) for key, value in history.items()},
-            tuple(oi_history),
-            observed_at=observed,
-        )
-        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        if symbol in ordinary_symbols:
+            engine.load_watch_history(
+                symbol,
+                {key: tuple(value) for key, value in history.items()},
+                tuple(oi_history),
+                observed_at=observed,
+            )
+            paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
