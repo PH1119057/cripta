@@ -126,3 +126,9 @@ def test_15m_candle_first_must_wait_for_matching_5m_and_restart_safely():
         _bar("5", 0), _bar("15", 0), _trade(15, 1),
     )
     assert restarted.pending == []
+
+
+def test_rest_seed_duplicate_bar_without_identical_source_id_fails_closed():
+    gate = _gate()
+    with pytest.raises(RuntimeError, match="unproven source identity"):
+        gate.accept(_bar("5", -5))
