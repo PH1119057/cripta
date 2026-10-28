@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bybit_workbench.universal_entry import p90l90_real_contract_v3
 from bybit_workbench.universal_entry.contracts import StrategyActivation
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
@@ -14,10 +15,6 @@ from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
     partition_observer_strategies,
     require_p90_atomic_observer_connection,
     require_p90_policy_before_registry,
-)
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-    VERSION as REAL_VERSION,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
@@ -36,7 +33,7 @@ SECOND48 = StrategyHardStopEmbargoPolicy(
 
 
 def _bundles(*, real: bool) -> tuple[object, ...]:
-    make = real_v3_cards if real else new_version_cards
+    make = p90l90_real_contract_v3.real_v3_cards if real else new_version_cards
     cards = make(
         approved_at=AT,
         policy_by_strategy_id={MAIN_ID: SECOND48, SUB_ID: SECOND48},
@@ -66,7 +63,7 @@ def test_new_real_strategy_is_routed_to_an_explicitly_separate_owner() -> None:
     assert split.ordinary == ()
     assert split.p90_paper == ()
     assert len(split.p90_real) == 2
-    assert all(item.card.strategy_version == REAL_VERSION for item in split.p90_real)
+    assert all(item.card.strategy_version == p90l90_real_contract_v3.VERSION for item in split.p90_real)
     require_p90_policy_before_registry(split)
     with pytest.raises(RuntimeError, match="REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED"):
         require_p90_atomic_observer_connection(split)
