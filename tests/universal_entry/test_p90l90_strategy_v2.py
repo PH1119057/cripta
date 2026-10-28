@@ -71,7 +71,7 @@ def test_strategy_v2_refuses_missing_or_cross_account_policy():
         v2_authoring_payload(strategy_id="historical-r1", policy=embargo(48))
 
 
-def test_exact_v2_model_has_technical_paper_readiness_but_never_real_order():
+def test_exact_v2_model_remains_paper_and_real_blocked_until_ordered_boundary_proof():
     main, sub = new_version_cards(
         approved_at=WHEN, policy_by_strategy_id={
             MAIN_ID: embargo(48), SUB_ID: embargo(48)
@@ -80,16 +80,19 @@ def test_exact_v2_model_has_technical_paper_readiness_but_never_real_order():
     for card in (main, sub):
         checked = assess_strategy_runtime_readiness(card, observer_ready=True)
         assert checked.policy_ready is True
-        assert checked.paper_ready is True
-        assert checked.active_ready is True
+        assert checked.paper_ready is False
+        assert checked.active_ready is False
         assert checked.execution_ready is False
+        assert "P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN" in {
+            reason.code for reason in checked.reasons
+        }
         assert "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in {
             reason.code for reason in checked.reasons
         }
         without_observer = assess_strategy_runtime_readiness(
             card, observer_ready=False
         )
-        assert without_observer.paper_ready
+        assert not without_observer.paper_ready
         assert not without_observer.active_ready
         assert not without_observer.execution_ready
 
