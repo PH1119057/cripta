@@ -84,6 +84,9 @@ def test_no_cross_symbol_trade_and_no_stale_earlier_sequence():
     assert gate.accept(_bar("5", 0)) == (_bar("5", 0),)
     assert gate.accept(_bar("15", 0)) == (_bar("15", 0),)
     assert gate.accept(_trade(4, 1)) == (_trade(4, 1),)
+    assert P90L90CausalTransportJoin.restore(
+        gate.snapshot()
+    ).accept(_trade(4, 1)) == ()
     with pytest.raises(RuntimeError, match="sequence regressed"):
         gate.accept(_trade(3, 2))
     with pytest.raises(RuntimeError, match="time regressed"):
