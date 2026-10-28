@@ -58,6 +58,7 @@ def ensure_closed_history(
 def cache_approved_bybit_history(
     connection: Any, *, symbol: str, history: dict[str, tuple[Candle, ...]],
     observed_at: datetime, producer_release_commit: str,
+    source_transport: str = "BYBIT_REST_KLINE",
 ) -> dict[str, tuple[Candle, ...]]:
     """One PostgreSQL source across consumers; only the Bybit REST adapter.
 
@@ -93,7 +94,7 @@ def cache_approved_bybit_history(
         store = SharedClosedCandleStore(connection, key)
         store.ingest(
             full, producer_release_commit=producer_release_commit,
-            transport="BYBIT_REST_KLINE", observed_at=observed_at,
+            transport=source_transport, observed_at=observed_at,
         )
         result[tf] = store.history(through=full[-1].closed_at,
                                    required=len(full))
