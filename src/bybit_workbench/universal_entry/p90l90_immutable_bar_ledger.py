@@ -29,7 +29,8 @@ _TABLE = "strategy_entry.p90l90_causal_closed_bars"
 
 
 def _as_candle(event: P90TransportEvent) -> Candle:
-    if event.kind != "CANDLE_CLOSED" or event.timeframe not in _INTERVALS:
+    tf = event.timeframe
+    if event.kind != "CANDLE_CLOSED" or tf is None or tf not in _INTERVALS:
         raise ValueError("P90L90 bar ledger accepts only completed 5m/15m")
     fact, cursor = restore_p90l90_fact(event)
     if cursor is not None:
@@ -37,7 +38,7 @@ def _as_candle(event: P90TransportEvent) -> Candle:
     raw = fact.attributes.to_dict()
     candle = Candle(
         symbol=event.symbol,
-        timeframe=event.timeframe,
+        timeframe=tf,
         opened_at=datetime.fromisoformat(str(raw["opened_at"])),
         closed_at=event.event_at,
         open=Decimal(str(raw["open"])),
@@ -47,7 +48,7 @@ def _as_candle(event: P90TransportEvent) -> Candle:
         volume=Decimal(str(raw["volume"])),
         is_closed=True,
     )
-    if candle.opened_at + _INTERVALS[event.timeframe] != candle.closed_at:
+    if candle.opened_at + _INTERVALS[tf] != candle.closed_at:
         raise ValueError("P90L90 closed bar duration not exact")
     if candle.low > min(candle.open, candle.close, candle.high) or (
         candle.high < max(candle.open, candle.close, candle.low)
