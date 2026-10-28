@@ -7,7 +7,7 @@ persisted effective boundary and assert exact equality before replaying.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, fields
+from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
@@ -108,13 +108,11 @@ def restore_entry_restart_snapshot(
             )
             for key in _NUMERIC_FIELDS
         }
-        if numbers["long_depth_pct"] is not None and not (
-            0 <= numbers["long_depth_pct"] <= 15
-        ):
+        long_depth = numbers["long_depth_pct"]
+        short_depth = numbers["short_depth_pct"]
+        if long_depth is not None and not (0 <= long_depth <= 15):
             raise ValueError("P90L90 entry restart long depth invalid")
-        if numbers["short_depth_pct"] is not None and not (
-            0 <= numbers["short_depth_pct"] <= 15
-        ):
+        if short_depth is not None and not (0 <= short_depth <= 15):
             raise ValueError("P90L90 entry restart short depth invalid")
         restored = P90L90EntryState(
             effective_at=effective_at,
@@ -129,8 +127,8 @@ def restore_entry_restart_snapshot(
             previous_seven_day_median=cast(
                 Decimal, numbers["previous_seven_day_median"]
             ),
-            long_depth_pct=numbers["long_depth_pct"],
-            short_depth_pct=numbers["short_depth_pct"],
+            long_depth_pct=long_depth,
+            short_depth_pct=short_depth,
         )
     if restored != seeded_geometry:
         raise RuntimeError(
@@ -145,7 +143,7 @@ def restore_entry_restart_snapshot(
     if (
         not isinstance(seen_raw, list)
         or len(set(map(str, seen_raw))) != len(seen_raw)
-        or any(side not in {"LONG", "SHORT"} for side in seen_raw)
+        or any(not isinstance(side, str) or side not in {"LONG", "SHORT"} for side in seen_raw)
         or (restored is None and seen_raw)
         or (previous is None and seen_raw)
     ):
