@@ -276,3 +276,48 @@ def test_real_mfe_ledger_fails_closed_before_unproven_fill_forward_seed() -> Non
             native_continuity_proven=True,
         )
     assert db.saved == {}
+
+
+def test_real_5m_exit_recovers_latest_signed_scope_mfe_without_reseeding() -> None:
+    pos = _position()
+    db = _MfeDB()
+    ledger = P90RealMfeLedger(db)
+    first = _cursor(pos, seq=101, exec_id="native-first", millis=3)
+    args = {
+        "position": pos, "source_commit": SHA,
+        "fact_id": "native-fact", "cursor": first,
+        "price": D("100.8"),
+        "received_at": first.traded_at + timedelta(milliseconds=1),
+        "source_refs": ("bybit:publicTrade:proof-1",),
+        "first_fill_forward_coverage_proven": True,
+        "native_continuity_proven": True,
+    }
+    committed = ledger.on_trade(**args)
+    restored, native_fact_id, refs = P90RealMfeLedger(db).load_latest(
+        position=pos, source_commit=SHA,
+    )
+    assert restored == committed
+    assert native_fact_id == "native-fact"
+    assert refs == ("bybit:publicTrade:proof-1",)
+    assert db.audit[-2:] == ["lock", "read"]
+
+
+def test_real_5m_exit_rejects_missing_or_drifted_mfe_ledger() -> None:
+    pos = _position()
+    db = _MfeDB()
+    with pytest.raises(P90RealMfeUnverified, match="STATE_MISSING"):
+        P90RealMfeLedger(db).load_latest(position=pos, source_commit=SHA)
+    cursor = _cursor(pos)
+    ledger = P90RealMfeLedger(db)
+    ledger.on_trade(
+        position=pos, source_commit=SHA,
+        fact_id="native", cursor=cursor, price=D("100.2"),
+        received_at=cursor.traded_at + timedelta(milliseconds=1),
+        source_refs=("native:original",),
+        first_fill_forward_coverage_proven=True,
+        native_continuity_proven=True,
+    )
+    with pytest.raises(P90RealMfeUnverified, match="SOURCE_RELEASE_DRIFT"):
+        ledger.load_latest(position=pos, source_commit="b" * 40)
+    with pytest.raises(P90RealMfeUnverified, match="ACCOUNT_DRIFT"):
+        ledger.load_latest(position=_position(sub=True), source_commit=SHA)
