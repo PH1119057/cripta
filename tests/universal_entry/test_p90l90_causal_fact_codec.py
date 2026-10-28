@@ -96,11 +96,11 @@ def test_corrupt_record_cannot_be_dispatched_as_another_trade_or_candle():
         restore_p90l90_fact(replace(
             envelope, source_json=json.dumps(payload),
         ))
-    with pytest.raises(ValueError, match="candle cursor"):
-        restore_p90l90_fact(replace(
+    with pytest.raises(ValueError, match="closed kline identity"):
+        replace(
             encode_p90l90_fact(_bar("5")),
             exchange_sequence=12, exec_id="fake",
-        ))
+        )
 
 
 def test_bad_source_and_future_or_missing_geometry_fail_closed():
