@@ -81,6 +81,13 @@ def read_real_second48(
     expected_kind = (
         "MAIN" if strategy_id == "p90l90_legacy_main_ltc_inj" else "SUB"
     )
+    # The same xact-scoped account lock used by private reconciliation and
+    # Entry admission serializes actual CLOSED attribution vs a new Entry.
+    # Caller MUST retain this exact transaction until capital/slot admission.
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+        (trading_account_id,),
+    )
     rows = connection.execute(
         """SELECT p.position_id,p.state,p.closed_at,p.close_link_status,
                   p.identity_status,p.trading_account_id,
