@@ -6,6 +6,7 @@ from datetime import UTC
 from enum import StrEnum
 from typing import Protocol
 
+from bybit_workbench.universal_entry import p90l90_real_contract_v3
 from bybit_workbench.universal_entry.contracts import (
     ExitPlan,
     FrozenPolicy,
@@ -19,7 +20,6 @@ from bybit_workbench.universal_entry.dsl import (
     predicate_from_mapping,
 )
 from bybit_workbench.universal_entry.fingerprint import fingerprint
-from bybit_workbench.universal_entry import p90l90_real_contract_v3
 
 from .contracts import (
     ExitActionKind,
