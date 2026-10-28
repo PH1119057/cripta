@@ -19,7 +19,7 @@ def _state() -> dict[str, object]:
             "state": "connected",
             "subscriptions_topics": list(PRIVATE_TOPICS),
             "subscriptions_confirmed_at_epoch": 1980,
-            "connected_at_epoch": 1981, "last_message_epoch": 1995,
+            "connected_at_epoch": 1981, "last_verified_message_epoch": 1995,
             "reconnects": 1, "hot_positions": 0, "hot_orders": 0,
         },
     }
@@ -40,7 +40,7 @@ def test_current_live_private_ws_ack_and_authenticated_message() -> None:
     ("state", "reconnecting"),
     ("subscriptions_confirmed_at_epoch", None),
     ("connected_at_epoch", None),
-    ("last_message_epoch", None),
+    ("last_verified_message_epoch", None),
     ("reconnects", -1),
     ("subscriptions_topics", ["wallet"]),
 ])
