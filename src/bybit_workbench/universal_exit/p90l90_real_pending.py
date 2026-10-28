@@ -8,7 +8,7 @@ authenticated position/protection readback is required independently.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from typing import Protocol
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.strategy_position import StrategyPosition
