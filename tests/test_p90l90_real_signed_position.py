@@ -153,7 +153,7 @@ def test_stale_generation_and_wrong_connector_fail_before_signed_transport() -> 
     db.age = timedelta(seconds=16)
     with pytest.raises(P90RealSignedPositionUnverified, match="GENERATION_STALE"):
         reader()(position, cursor)
-    db.age = timedelta(seconds=1)
+    db.age = timedelta(milliseconds=1)
     db.wrong_connector = True
     with pytest.raises(P90RealSignedPositionUnverified, match="CONNECTOR_MISMATCH"):
         reader()(position, cursor)
