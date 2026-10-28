@@ -75,6 +75,10 @@ from bybit_workbench.universal_entry.oi30s_source import (
     slot_at,
 )
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
+from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
+    partition_observer_strategies,
+    require_p90_atomic_observer_connection,
+)
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
 from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
@@ -2016,6 +2020,12 @@ def _run_observer_epoch(
     signature = _observer_light_signature(connection)
     if not signature:
         return "RELOAD"
+    # Phase 2 P90L90: reject legacy shared-Engine native trade routing BEFORE
+    # activating a plan or acknowledging any source event. Ordinary R1/other
+    # strategies keep the original path. The real dual-owner bridge is still
+    # gated on exact durable restart and 90-day code/ledger parity.
+    observer_split = partition_observer_strategies(bundles)
+    require_p90_atomic_observer_connection(observer_split)
     registry = ActivePlanRegistry()
     consumer_instance_id = (
         f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
