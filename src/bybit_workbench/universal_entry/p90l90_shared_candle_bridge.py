@@ -48,6 +48,10 @@ class P90SharedCandleLedger:
             accepted_source_commits=accepted_source_commits,
         )
         self._seed: dict[tuple[str, str], datetime] = {}
+        # MarketSource may have *future* preloaded closed bars. Only bars
+        # actually emitted by the causal transport are visible to geometry.
+        # On rollback the entire poisoned consumer epoch is discarded.
+        self._emitted: dict[tuple[str, str], datetime] = {}
         self._key: dict[tuple[str, str], MarketCandleKey] = {}
         for symbol in sorted(_SYMBOLS):
             row = connection.execute(
@@ -69,6 +73,7 @@ class P90SharedCandleLedger:
                 ) != boundary:
                     raise RuntimeError("P90_SHARED_LEGACY_ORIGIN_NOT_PROVEN")
                 self._seed[symbol, tf] = boundary
+                self._emitted[symbol, tf] = boundary
                 sources = connection.execute(
                     """SELECT s.market_source_id,s.venue_id,i.instrument_id,
                               i.external_symbol,i.product_category
@@ -127,6 +132,12 @@ class P90SharedCandleLedger:
         )[0]
         if actual != incoming:
             raise RuntimeError("P90_SHARED_CANDLE_NOT_EQUAL_TO_MARKET_SOURCE")
+        key = event.symbol, tf
+        previous = self._emitted.get(key)
+        step = timedelta(minutes=int(tf))
+        if previous is None or event.event_at != previous + step:
+            raise RuntimeError("P90_SHARED_CAUSAL_EMISSION_GAP")
+        self._emitted[key] = event.event_at
         return False
 
     def closed_at_or_before(
@@ -139,8 +150,12 @@ class P90SharedCandleLedger:
             return self._legacy.closed_at_or_before(
                 symbol=symbol, timeframe=timeframe, through=through,
             )
+        visible = self._emitted.get((symbol, timeframe), cutoff)
+        if through >= visible:
+            return visible
         if through == cutoff:
             return cutoff
+        # This as-of query cannot observe provider-preloaded future bars.
         return self._canonical(symbol, timeframe, through=through, count=1)[0].closed_at
 
     def history(
