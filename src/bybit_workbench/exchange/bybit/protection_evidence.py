@@ -77,7 +77,14 @@ def evaluate_protection(
     if expected_tp_kind == "DISABLED":
         if expected_tp is not None:
             return "UNKNOWN", "disabled initial TP has an unexpected approved target"
-        if _decimal(pos.get("takeProfit")) > 0:
+        raw_tp = pos.get("takeProfit")
+        try:
+            observed_tp = Decimal(str(raw_tp if raw_tp not in (None, "") else 0))
+        except (InvalidOperation, ValueError, TypeError):
+            return "UNKNOWN", "Exchange initial TP truth is not numeric"
+        if not observed_tp.is_finite() or observed_tp < 0:
+            return "UNKNOWN", "Exchange initial TP truth is invalid"
+        if observed_tp > 0:
             return "NOT_VERIFIED", "unapproved Exchange position TP before Exit gate"
         prefix = "utp" + hashlib.sha256(position_id.encode()).hexdigest()[:12] + "-"
         if any(
