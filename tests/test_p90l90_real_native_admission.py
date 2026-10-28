@@ -12,6 +12,7 @@ from decimal import Decimal
 import pytest
 
 from bybit_workbench.universal_entry.contracts import (
+    EntryDecisionCode,
     FrozenPolicy,
     MarketFactEnvelope,
     StrategyActivation,
@@ -146,6 +147,20 @@ def test_native_real_fact_requires_separate_account_and_release_proof(side: str)
         entry_admission_port=None,
         account_admissions=_admissions(activation),
     )
+    evaluations = engine.process(
+        fact, proven_p90_native_cursor=cursor,
+        real_admission_required_for=frozenset({activation}),
+        real_admission_ready_for=frozenset({activation}),
+        account_admissions=_admissions(activation),
+    )
+    assert len(evaluations) == 1
+    evaluation = evaluations[0]
+    assert evaluation.decision is None
+    assert evaluation.execution_request is None
+    assert len(evaluation.account_outcomes) == 1
+    outcome = evaluation.account_outcomes[0]
+    assert outcome.decision.code is EntryDecisionCode.OPERATIONAL_SAFETY_BLOCKED
+    assert outcome.execution_request is None
 
 
 @pytest.mark.parametrize("side", ("LONG", "SHORT"))
