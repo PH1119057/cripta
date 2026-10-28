@@ -7,6 +7,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from test_p90l90_real_observation import _scope
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
@@ -15,8 +16,6 @@ from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import P90RealC
 from bybit_workbench.universal_exit.p90l90_real_closed_geometry import (
     P90RealClosedGeometryUnverified,
 )
-from test_p90l90_real_observation import _scope
-
 AT = datetime(2026, 10, 29, 2, 15, tzinfo=UTC)
 D = Decimal
 
