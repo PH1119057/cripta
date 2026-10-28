@@ -129,3 +129,18 @@ def test_real_closed_15m_is_geometry_only_and_5m_routes_to_exit() -> None:
         )
         consumer._on_closed_candle(fact)
     assert calls == ["LTCUSDT"]
+
+
+def test_real_gap_cannot_borrow_paper_ohlc_only_replay_even_without_exposure() -> None:
+    class _EmptyRow:
+        def fetchone(self):
+            return (0,)
+
+    class _EmptyDB:
+        def execute(self, _sql, _params=()):
+            return _EmptyRow()
+
+    consumer = object.__new__(P90L90ObserverRealConsumer)
+    consumer._connection = _EmptyDB()
+    with pytest.raises(RuntimeError, match="REQUIRES_EXACT_SOURCE_EPOCH"):
+        consumer.catch_up_closed_histories({})
