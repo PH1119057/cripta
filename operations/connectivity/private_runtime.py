@@ -2557,6 +2557,26 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             tick=tick,
             contract=contract,
         )
+        if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+            # Verify attached TP and SL against a new public Bybit LastPrice
+            # AFTER resolving the immutable causal RAW target, immediately
+            # BEFORE the first Exchange mutation. This cannot guarantee the
+            # future fill and is not a replacement for the signed readback.
+            current_ticker, _ = api_get(
+                "/v5/market/tickers",
+                {"category": "linear", "symbol": symbol},
+            )
+            try:
+                p90v3.validate_real_v3_attached_protection_at_last_price(
+                    symbol=symbol,
+                    side=side,
+                    instrument_tick=tick,
+                    stop_loss=stop,
+                    take_profit=target,
+                    ticker_response=current_ticker,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
         # Entry submits server-side initial protection atomically with the order.
         # R1 carries catastrophic SL plus exact causal opposite-inner TP.
         order: dict[str, object] = {
