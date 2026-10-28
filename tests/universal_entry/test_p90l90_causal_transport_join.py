@@ -67,18 +67,12 @@ def test_two_native_buckets_preserve_cursor_and_restart_pending_payload():
     payload = gate.snapshot()
     restarted = P90L90CausalTransportJoin.restore(payload)
     assert restarted.snapshot() == payload
-    # Receive 5m bars in reverse order; older native trade cannot see the
-    # future bar and the gap is detected until its actual candle is supplied.
-    with pytest.raises(RuntimeError, match="missing/noncausal completed 5m"):
-        restarted.accept(_bar("5", 5))
-    # A failed transaction must roll back the snapshot at the caller.
-    restarted = P90L90CausalTransportJoin.restore(payload)
+    # A future close arrives early. It must remain withheld until the
+    # older native trade has exact closed geometry (no lookahead).
+    assert restarted.accept(_bar("5", 5)) == ()
     assert restarted.accept(_bar("5", 0)) == (_bar("5", 0),)
     assert restarted.accept(_bar("15", 0)) == (
-        _bar("15", 0), _trade(10, 1),
-    )
-    assert restarted.accept(_bar("5", 5)) == (
-        _bar("5", 5), _trade(11, 301),
+        _bar("15", 0), _trade(10, 1), _bar("5", 5), _trade(11, 301),
     )
     assert restarted.pending == []
 
@@ -109,3 +103,9 @@ def test_unresolved_boundary_snapshot_is_not_silent_skip():
             **gate.snapshot(),
             "last_trade_event_at": "2026-10-28T05:00:01",
         })
+
+
+def test_missing_five_minute_candle_is_a_hard_failure():
+    gate = _gate()
+    with pytest.raises(RuntimeError, match="missing/noncausal completed 5m"):
+        gate.accept(_bar("5", 5))
