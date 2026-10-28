@@ -19,7 +19,9 @@ EXPECTED_EXISTING_PROSRC_MD5 = "0cc5b305c9dc372dcef0c288c09630f7"
 
 def test_replay_guard_matches_exact_approved_function_body() -> None:
     sql = SQL.read_text(encoding="utf-8")
-    assert sql.count("CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_v2_inactive_binding(") == 1
+    assert sql.count(
+        "CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_v2_inactive_binding("
+    ) == 1
     assert sql.count("AS $function$\n") == 1
     assert sql.count("\n$function$;") == 1
     body = sql.split("AS $function$\n", 1)[1].split("\n$function$;", 1)[0]
