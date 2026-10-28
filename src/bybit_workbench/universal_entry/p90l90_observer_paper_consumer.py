@@ -103,14 +103,25 @@ class P90L90ObserverPaperConsumer:
             raise RuntimeError("P90L90_CONSUMER_DOUBLE_RECOVERY")
         for symbol in sorted(self._processors):
             join, entry = self._processors[symbol].recover()
+            if entry.state is None:
+                raise RuntimeError(
+                    "P90L90_CONSUMER_SEED_NOT_CAUSALLY_WARMED"
+                )
+            if entry.state.effective_at > join.closed_5m_at:
+                raise RuntimeError("P90L90_CONSUMER_FUTURE_ENTRY_GEOMETRY")
+            # The existing Entry checkpoint must match an independently
+            # reconstructed seven-day/ATR200 geometry from immutable candles.
+            # Also verify that the paired 15m watermark names an actual bar.
+            last_15 = self._archive.closed_at_or_before(
+                symbol=symbol, timeframe="15",
+                through=join.closed_15m_at,
+            )
+            if last_15 != join.closed_15m_at:
+                raise RuntimeError("P90L90_CONSUMER_UNVERIFIED_15M_WATERMARK")
             bars = self._archive.history(
                 symbol=symbol, timeframe="5",
                 through=join.closed_5m_at, limit=260,
             )
-            if entry.state is not None and (
-                entry.state.effective_at > join.closed_5m_at
-            ):
-                raise RuntimeError("P90L90_CONSUMER_FUTURE_ENTRY_GEOMETRY")
             self._paper.bootstrap_p90_l53_history(symbol, bars)
         self._recovered = True
 
