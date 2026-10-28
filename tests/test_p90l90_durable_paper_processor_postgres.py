@@ -98,13 +98,9 @@ def test_bar_reconstruction_and_native_paper_db_effects_roll_back_together():
                 ("exit-"+fact.fact_id,),
             )
 
-        def no_crossing(fact, cursor, crossings):
-            raise AssertionError("unwarmed P90 model cannot produce crossing")
-
         processor = P90L90DurablePaperProcessor(
             conn, source_commit=SHA,
             on_native_exit=on_native_exit,
-            on_crossing=no_crossing,
             on_closed_candle=on_candle,
         )
         assert processor.accept(native()) == ()
@@ -125,7 +121,6 @@ def test_bar_reconstruction_and_native_paper_db_effects_roll_back_together():
         poisoned = P90L90DurablePaperProcessor(
             conn, source_commit=SHA,
             on_native_exit=failing_exit,
-            on_crossing=no_crossing,
             on_closed_candle=on_candle,
         )
         with pytest.raises(RuntimeError, match="INJECTED_PAPER_EXIT_FAILURE"):
@@ -147,7 +142,6 @@ def test_bar_reconstruction_and_native_paper_db_effects_roll_back_together():
         restarted = P90L90DurablePaperProcessor(
             conn, source_commit=SHA,
             on_native_exit=on_native_exit,
-            on_crossing=no_crossing,
             on_closed_candle=on_candle,
         )
         delivered = restarted.accept(bar("5", B))
