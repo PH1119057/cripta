@@ -13,6 +13,7 @@ from bybit_workbench.universal_entry.p90l90_causal_fact_codec import (
     encode_p90l90_fact,
     restore_p90l90_fact,
 )
+from bybit_workbench.universal_entry.transport_continuity import ContinuityNotProvable
 from operations.monitoring.universal_entry_shadow import (
     _trade_cursor,
     _trade_fact,
@@ -47,5 +48,5 @@ def test_original_observer_exact_native_cursor_does_not_guess_missing_seq():
     }
     fact = _trade_fact(raw, traded_at+timedelta(seconds=1))
     assert fact.fact_id == "trade-native-123-abc"
-    with pytest.raises(Exception, match="exact execId/seq/time cursor"):
+    with pytest.raises(ContinuityNotProvable, match="exact execId/seq/time cursor"):
         _trade_cursor(raw)
