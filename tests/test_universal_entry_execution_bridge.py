@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -609,3 +610,76 @@ def test_price_based_initial_protection_resolves_exact_signal_target() -> None:
     assert initial["take_profit_price"] == "8.25"
     assert initial["take_profit_reference_path"] == "fact.r1_opposite_inner_target"
     assert "take_profit_pct" not in initial
+
+
+@pytest.mark.parametrize(
+    ("direction", "raw_target"),
+    (
+        (TradeDirection.LONG, "8.25"),
+        (TradeDirection.SHORT, "6.75"),
+    ),
+)
+def test_p90_real_initial_tp_uses_opposite_l53_without_trailing_gate(
+    direction: TradeDirection, raw_target: str,
+) -> None:
+    base = _request(direction=direction)
+    data = base.payload.to_dict()
+    fact = dict(data["signal_fact"])
+    fact["attributes"] = {
+        **fact["attributes"],
+        "p90l90": {
+            "candidate_price": "7.50",
+            "opposite_raw_l53_target": raw_target,
+        },
+    }
+    data["signal_fact"] = fact
+    request = replace(base, payload=FrozenPolicy.from_mapping(data))
+    bundle = _bundle()
+    card = dict(bundle.strategy_card)
+    entry = dict(card["entry_policy"])
+    execution = dict(entry["execution_policy"])
+    execution["reference_value_path"] = "fact.p90l90.candidate_price"
+    entry["execution_policy"] = execution
+    card["entry_policy"] = entry
+    exit_plan = dict(bundle.exit_plan)
+    protection = dict(exit_plan["protection_policy"])
+    protection["initial_protection"] = {
+        "stop_loss_enabled": True,
+        "stop_loss_pct": "10",
+        "take_profit_enabled": True,
+        "take_profit_reference_path": "fact.p90l90.opposite_raw_l53_target",
+        "trigger_by": "LastPrice",
+        "tpsl_mode": "Full",
+    }
+    exit_plan["protection_policy"] = protection
+    exact_bundle = BridgePolicyBundle(
+        card, bundle.entry_plan, exit_plan, bundle.activation,
+    )
+    prepared = prepare_runtime_entry_command(
+        request, exact_bundle, now=NOW + timedelta(seconds=1),
+    )
+    initial = prepared.payload["initial_protection"]
+    assert prepared.payload["entry_offset_pct"] == "0"
+    assert prepared.payload["price"] == "7.50"
+    assert initial["stop_loss_pct"] == "10"
+    assert initial["take_profit_enabled"] is True
+    assert initial["take_profit_price"] == raw_target
+    assert initial["take_profit_reference_path"] == (
+        "fact.p90l90.opposite_raw_l53_target"
+    )
+    assert "take_profit_pct" not in initial
+
+    # No causal opposite-side price => reject instead of omitting initial TP.
+    fact["attributes"] = {
+        **fact["attributes"],
+        "p90l90": {"candidate_price": "7.50"},
+    }
+    missing = replace(
+        base,
+        payload=FrozenPolicy.from_mapping({**data, "signal_fact": fact}),
+    )
+    with pytest.raises(ExecutionBridgeBlocked) as caught:
+        prepare_runtime_entry_command(
+            missing, exact_bundle, now=NOW + timedelta(seconds=1),
+        )
+    assert caught.value.code is ExecutionBridgeBlockCode.REFERENCE_PRICE_MISSING
