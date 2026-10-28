@@ -114,6 +114,16 @@ class UniversalEntryEngine:
         admission_time: datetime | None = None,
         proven_p90_native_cursor: TradeCursor | None = None,
     ) -> tuple[EntryEvaluation, ...]:
+        # REAL v3 may only consume the original, source-pinned native
+        # crossing delivered by the atomic P90 owner. Generic MarketWatch
+        # must never become an uncheckpointed REAL Entry producer.
+        if proven_p90_native_cursor is None and any(
+            plan.strategy_version == REAL_VERSION
+            and plan.watch_policy.to_dict().get("geometry", {}).get("operator")
+            == "P90L90_RAW_H9_UNION_CROSSING"
+            for plan in self._registry.plans_for(fact.symbol)
+        ):
+            raise RuntimeError("P90L90_REAL_NATIVE_CURSOR_REQUIRED")
         if proven_p90_native_cursor is not None:
             # Only the source-pinned atomic P90 transport owner may provide
             # this cursor. REAL requires the independently released,
