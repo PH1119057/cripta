@@ -41,6 +41,9 @@ from bybit_workbench.universal_entry.materializer import materialize_plans  # no
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import (  # noqa: E402
     MAIN_ID, SUB_ID,
 )
+from bybit_workbench.universal_entry.p90l90_data_lineage import (  # noqa: E402
+    inspect_p90_data_lineage,
+)
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (  # noqa: E402
     P90L90ObserverPaperConsumer,
 )
@@ -200,12 +203,15 @@ def preflight(connection: psycopg.Connection, commit: str) -> tuple[
         symbol for bundle in bundles for symbol in bundle.card.symbols
     )
     require(len(all_symbols) == 5, "P90_FIVE_EXACT_SYMBOLS_REQUIRED")
+    lineage = inspect_p90_data_lineage(connection, loaded_commit=commit)
     source_rows = connection.execute(
         """SELECT symbol,source_commit FROM
            strategy_entry.p90l90_causal_transport_checkpoints ORDER BY symbol"""
     ).fetchall()
     require(
-        source_rows == [(symbol, commit) for symbol in sorted(all_symbols)],
+        source_rows == [
+            (symbol, lineage.origin_commit) for symbol in sorted(all_symbols)
+        ],
         "INCOMPLETE_OR_FOREIGN_CAUSAL_CHECKPOINT",
     )
     bars = connection.execute(
@@ -232,11 +238,16 @@ def prove_native_source(
 ) -> P90NativeBarRuntimeProof:
     # Uses the exact running-code consumer in read-only mode, not a custom
     # substitute for Entry/Exit recovery.
+    lineage = inspect_p90_data_lineage(connection, loaded_commit=commit)
     consumer = P90L90ObserverPaperConsumer(
-        connection, bundles=bundles, source_commit=commit,
+        connection, bundles=bundles, source_commit=lineage.origin_commit,
+        producer_release_commit=commit,
+        accepted_source_commits=lineage.approved_producer_commits,
         provenance=FrozenPolicy.from_mapping({
             "source": "P90_OWNER_PAPER_ACTIVATION_CHECK",
             "source_commit": commit,
+            "data_lineage_id": lineage.data_lineage_id,
+            "data_origin_commit": lineage.origin_commit,
         }),
     )
     consumer.recover_all()
