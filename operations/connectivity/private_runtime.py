@@ -2628,14 +2628,33 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
                 )
                 _require_entry_bybit_read_ok(current, "/v5/position/list")
-                filled_position = next(
-                    (
-                        item
-                        for item in ((current.get("result") or {}).get("list") or [])
-                        if Decimal(str(item.get("size") or 0)) > 0
-                    ),
-                    None,
-                )
+                if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+                    from bybit_workbench.universal_entry.p90l90_real_market_fill import (
+                        P90RealMarketPositionUnverified,
+                        exact_open_market_position,
+                    )
+
+                    try:
+                        filled_position = exact_open_market_position(
+                            current["result"]["list"],
+                            symbol=symbol,
+                            side=side,
+                        )
+                    except P90RealMarketPositionUnverified as exc:
+                        # Entry was already acknowledged by Bybit. Stop this
+                        # attempt for independent reconciliation; NEVER retry.
+                        raise ExchangeMutationBarrier(
+                            f"REAL_MARKET_POSITION_READBACK_UNVERIFIED:{exc}"
+                        ) from None
+                else:
+                    filled_position = next(
+                        (
+                            item
+                            for item in ((current.get("result") or {}).get("list") or [])
+                            if Decimal(str(item.get("size") or 0)) > 0
+                        ),
+                        None,
+                    )
                 if filled_position:
                     break
                 time.sleep(0.25)
