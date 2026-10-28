@@ -147,6 +147,7 @@ class UniversalEntryEngine:
             candidate_allowed = not self._cooldown_active(
                 plan, state, fact.observed_at, account_ref
             )
+            evaluation_facts: tuple[MarketFactEnvelope, ...]
             if proven_p90_native_cursor is not None:
                 # The prior source-native tick and fully closed geometry were
                 # already consumed and checkpointed by the durable P90 owner.
