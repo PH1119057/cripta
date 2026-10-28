@@ -6,9 +6,10 @@ Frozen historical P90L90 records remain legacy audit evidence, not a new writer.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Iterable
+from typing import Any
 
 from bybit_workbench.domain.models import Candle
 
