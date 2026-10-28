@@ -4504,7 +4504,8 @@ def private_loop(key: str, secret: str) -> None:
                 topics=list(confirmed_topics), reconnects=reconnects,
             )
             connection_event(connection, "private", "connected", reconnects=reconnects)
-            atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "subscriptions_confirmed_at_epoch": int(time.time()), "subscriptions_topics": list(confirmed_topics), "reconnects": reconnects, "last_message_epoch": None, "last_verified_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
+            confirmed_epoch = int(time.time())
+            atomic_status("private", {"state": "connected", "connected_at_epoch": confirmed_epoch, "subscriptions_confirmed_at_epoch": confirmed_epoch, "subscriptions_topics": list(confirmed_topics), "reconnects": reconnects, "last_message_epoch": None, "last_verified_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
             if recovering:
                 restored = False
                 if (
