@@ -98,17 +98,22 @@ def verify_p90_real_exchange_mutation(
         raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_ACCOUNT_POSITION_MISMATCH")
     if not tick.is_finite() or tick <= 0:
         raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_TICK_INVALID")
+    _positive(position.get("size"), "LIVE_SIZE")
+    # CLOSE is reduceOnly, not a protection replacement. It must remain
+    # possible during an emergency even if the stop/TP disappeared or mark
+    # already crossed the stop; blocking CLOSE would trap unprotected exposure.
+    if action_kind is ExitActionKind.CLOSE:
+        return
     actual_fill = _positive(position.get("avgPrice"), "FILL")
     live_stop = _positive(position.get("stopLoss"), "LIVE_STOP")
     live_tp = _positive(position.get("takeProfit"), "LIVE_TP")
     mark = _positive(position.get("markPrice"), "SIGNED_MARK")
-    amount = _positive(position.get("size"), "LIVE_SIZE")
-    if amount <= 0:
-        raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_SIZE_INVALID")
     long = str(position["side"]) == "Buy"
+    # The original catastrophic stop can legitimately become a profitable
+    # trailing stop. Never require it to stay adverse to the Entry price.
     if (
-        not (live_stop < actual_fill < live_tp if long else live_tp < actual_fill < live_stop)
-        or (mark <= live_stop if long else mark >= live_stop)
+        not (live_stop < mark and live_tp > actual_fill if long
+             else live_stop > mark and live_tp < actual_fill)
     ):
         raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_EXISTING_PROTECTION_NOT_PROVEN")
     if action_kind is ExitActionKind.SET_STOP:
