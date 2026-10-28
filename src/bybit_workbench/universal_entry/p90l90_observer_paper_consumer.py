@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import UniversalEntryEngine
@@ -160,7 +160,7 @@ class P90L90ObserverPaperConsumer:
             raise ValueError("P90_SHARED_UNRECOGNIZED_SYMBOL")
         if not hasattr(self._archive, "restart_watermarks"):
             raise RuntimeError("P90_SHARED_STORE_NOT_SELECTED")
-        return self._archive.restart_watermarks(symbol)
+        return cast(dict[str, datetime], self._archive.restart_watermarks(symbol))
 
     def catch_up_closed_histories(
         self, targets: Mapping[str, tuple[datetime, datetime]],
