@@ -32,7 +32,6 @@ from .p90l90_real_closed_geometry import (
     P90RealClosedGeometryUnverified,
     opposite_raw_l53_from_closed_fives,
 )
-from .p90l90_real_mfe import P90RealMfeCheckpoint
 from .p90l90_real_mfe_ledger import P90RealMfeLedger
 from .p90l90_real_observation import (
     ScopedPrivatePositionEvidence,
