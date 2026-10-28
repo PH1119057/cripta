@@ -23,8 +23,9 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_exit.contracts import (
-    ExitActionKind, ExitObservation,
+    ExitActionKind, ExitEvaluationStatus, ExitObservation,
 )
+from bybit_workbench.universal_exit.engine import UniversalExitEngine
 from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
 from bybit_workbench.universal_exit.p90l90_real_v3 import (
     P90RealExitUnverified, project_p90l90_real_exit,
@@ -229,3 +230,43 @@ def test_real_projection_preserves_v3_and_independent_account_lineage() -> None:
     fact = _observation(position, best="101", price="100.9", stop="90", tp="110")
     result = project_p90l90_real_exit(position, plan, fact)
     assert result is not None and result[0] is ExitActionKind.SET_STOP
+
+
+@pytest.mark.parametrize("side,best,last,stop,tp", [
+    ("LONG", "101", "100.9", "90", "110"),
+    ("SHORT", "99", "99.1", "110", "90"),
+])
+def test_shared_universal_exit_engine_creates_real_p90_tighten_decision(
+    side: str, best: str, last: str, stop: str, tp: str,
+) -> None:
+    position, plan = _scope(side=side)
+    fact = _observation(position, best=best, price=last, stop=stop, tp=tp)
+    result = UniversalExitEngine().evaluate(position, plan, fact)
+    assert result.status is ExitEvaluationStatus.DECISION_CREATED
+    assert result.decision is not None
+    assert result.decision.action_kind is ExitActionKind.SET_STOP
+    assert result.decision.strategy_position_id == position.strategy_position_id
+    assert result.decision.exit_plan_fingerprint == plan.exit_plan_fingerprint
+    assert result.decision.source_refs == fact.source_refs
+    assert (
+        result.decision.requested_mutation.to_dict()["stop_price"]
+        == ("100.65" if side == "LONG" else "99.35")
+    )
+    assert UniversalExitEngine().evaluate(position, plan, fact).decision == result.decision
+
+
+def test_shared_universal_exit_engine_never_promotes_unproven_real_fact() -> None:
+    position, plan = _scope()
+    fact = _observation(
+        position, best="101", price="100.9", stop="90", tp="110",
+    )
+    attrs = fact.attributes.to_dict()
+    original = dict(attrs["p90l90_real"])
+    original["durable_cursor_verified"] = False
+    attrs["p90l90_real"] = original
+    blocked = UniversalExitEngine().evaluate(
+        position, plan, replace(fact, attributes=FrozenPolicy.from_mapping(attrs)),
+    )
+    assert blocked.status is ExitEvaluationStatus.BLOCKED
+    assert blocked.decision is None
+    assert "UNPROVEN" in blocked.reason
