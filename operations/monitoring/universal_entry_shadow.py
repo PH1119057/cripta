@@ -2549,6 +2549,7 @@ def _run_observer_epoch(
                     history={timeframe: (native_closed,)},
                     observed_at=datetime.now(UTC),
                     producer_release_commit=LOADED_COMMIT,
+                    source_transport="BYBIT_WS_KLINE",
                 )
             prior = closed_boundaries.get((fact.symbol, timeframe))
             if prior is not None and boundary < prior:
