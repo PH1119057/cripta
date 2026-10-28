@@ -12,23 +12,29 @@ import pytest
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import (
-    FrozenPolicy, StrategyActivation, TradeDirection,
+    FrozenPolicy,
+    StrategyActivation,
+    TradeDirection,
 )
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-    VERSION, real_v3_cards,
+    VERSION,
+    real_v3_cards,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_exit.contracts import (
-    ExitActionKind, ExitEvaluationStatus, ExitObservation,
+    ExitActionKind,
+    ExitEvaluationStatus,
+    ExitObservation,
 )
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
 from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
 from bybit_workbench.universal_exit.p90l90_real_v3 import (
-    P90RealExitUnverified, project_p90l90_real_exit,
+    P90RealExitUnverified,
+    project_p90l90_real_exit,
 )
 
 AT = datetime(2026, 10, 28, 19, 0, tzinfo=UTC)
