@@ -19,6 +19,8 @@ from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_observer_paper_consumer import P90L90ObserverPaperConsumer
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from .p90l90_real_native_candidate_owner import P90L90RealNativeCandidateOwner
+from .p90l90_real_second48 import read_real_second48
+from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from .p90l90_shared_candle_bridge import P90SharedCandleLedger
 from .registry import ActivePlanRegistry
 from .storage import StrategyEntryStore
@@ -26,7 +28,7 @@ from .transport_continuity import TradeCursor
 
 AccountAdmissionProvider = Callable[
     [str, datetime],
-    tuple[tuple[AccountAdmissionContext, ...], bool, bool, bool],
+    tuple[tuple[AccountAdmissionContext, ...], bool],
 ]
 RealExitTickPort = Callable[[MarketFactEnvelope, TradeCursor], None]
 RealClosedCandlePort = Callable[[MarketFactEnvelope], None]
@@ -174,17 +176,30 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         if owner is None:
             raise RuntimeError("P90_REAL_NATIVE_CANDIDATE_NO_EXACT_OWNER")
         at = datetime.now(UTC)
-        admissions, proven, embargo_proven, embargo_allows_entry = (
-            self._admission_provider(fact.symbol, at)
+        admissions, proven = self._admission_provider(fact.symbol, at)
+        # The source checkpoint's transaction also reads all actual CLOSED
+        # exchange-attributed exits: callers cannot override a durable
+        # SECOND48 prohibition via an independently supplied boolean.
+        if len(admissions) != 1 or not proven:
+            raise RuntimeError("P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED")
+        bundle = self._by_symbol[fact.symbol]
+        lifecycle = bundle.card.lifecycle_policy.to_dict()
+        policy = StrategyHardStopEmbargoPolicy.parse(
+            lifecycle["second_hardstop_embargo"]
         )
-        # SECOND48 is per immutable StrategyVersion. Missing durable
-        # finalized-hardstop evidence is NOT an allowed new-entry decision.
-        if not embargo_proven:
-            raise RuntimeError("P90_REAL_SECOND48_DURABLE_STATE_NOT_VERIFIED")
+        allows_entry, _snapshot = read_real_second48(
+            self._connection,
+            strategy_id=bundle.card.strategy_id,
+            strategy_version=bundle.card.strategy_version,
+            strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+            trading_account_id=admissions[0].binding.trading_account_id,
+            policy=policy,
+            evaluated_at=at,
+        )
         owner.accept(
             fact, cursor,
             account_admissions=admissions,
             arm_and_source_verified=proven,
             admitted_at=at,
-            allow_new_signals=embargo_allows_entry,
+            allow_new_signals=allows_entry,
         )
