@@ -2457,7 +2457,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             except ValueError as exc:
                 raise PreMutationSafetyBlock(str(exc)) from exc
             signed_info, _ = api_get("/v5/account/info", {}, key, secret)
-            _require_entry_bybit_read_ok(signed_info, "/v5/account/info")
+            # /v5/account/info returns result.marginMode, NOT result.list.
+            # The exact signed account-info validator below validates both
+            # response shape and retCode without the inventory-list helper.
             try:
                 validate_real_v3_exchange_entry(
                     payload=payload, symbol=symbol,
