@@ -87,6 +87,9 @@ class SharedClosedCandleStore:
         if observed_at.utcoffset() != timedelta(0):
             raise ValueError("CANDLE_OBSERVED_NOT_UTC")
         items = verify_closed_window(self.key, bars)
+        if items[-1].closed_at > observed_at:
+            # Provider is_closed=True alone is never evidence of a close.
+            raise RuntimeError("CANDLE_FUTURE_CLOSE_NOT_OBSERVED")
         # Batch source rows: per-bar readback makes multi-day P90 warmup
         # unnecessarily slow on every Observer restart.
         with self._db.transaction():
