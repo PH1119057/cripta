@@ -44,6 +44,9 @@ from bybit_workbench.universal_entry.p90l90_legacy_strategy import (  # noqa: E4
 from bybit_workbench.universal_entry.p90l90_data_lineage import (  # noqa: E402
     inspect_p90_data_lineage,
 )
+from bybit_workbench.universal_entry.p90l90_shared_candle_bridge import (  # noqa: E402
+    P90SharedCandleLedger,
+)
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (  # noqa: E402
     P90L90ObserverPaperConsumer,
 )
@@ -227,6 +230,36 @@ def preflight(connection: psycopg.Connection, commit: str) -> tuple[
             for row in bars
         ), "P90_FULL_PREV7D_CANDLE_HISTORY_REQUIRED",
     )
+    # Unlike the original legacy preflight, verify that the one canonical
+    # source has ALL actual closed bars between the frozen checkpoint and
+    # a fresh Bybit watermark. No PAPER position/Entry can be inferred from
+    # these historical bars, and no SQL write occurs in this check.
+    bridge = P90SharedCandleLedger(
+        connection, source_commit=lineage.origin_commit,
+        producer_release_commit=commit,
+        accepted_source_commits=lineage.approved_producer_commits,
+    )
+    for symbol in sorted(all_symbols):
+        endpoints = []
+        for tf in ("5", "15"):
+            key = bridge._key[symbol, tf]
+            endpoint = connection.execute(
+                """SELECT max(closed_at) FROM analytics.closed_candles
+                    WHERE market_source_id=%s AND instrument_id=%s
+                      AND timeframe=%s""",
+                (key.market_source_id, key.instrument_id, tf),
+            ).fetchone()[0]
+            require(
+                endpoint is not None and
+                timedelta(0) <= datetime.now(UTC)-endpoint <
+                timedelta(minutes=10 if tf == "5" else 20),
+                "SHARED_CLOSED_SOURCE_NOT_FRESH_" + symbol + "_" + tf,
+            )
+            endpoints.append(endpoint)
+        bridge.closed_gap_plan(
+            symbol=symbol,
+            through_5m=endpoints[0], through_15m=endpoints[1],
+        )
     return tuple(bundles), all_symbols
 
 
@@ -243,6 +276,7 @@ def prove_native_source(
         connection, bundles=bundles, source_commit=lineage.origin_commit,
         producer_release_commit=commit,
         accepted_source_commits=lineage.approved_producer_commits,
+        shared_candle_source=True,
         provenance=FrozenPolicy.from_mapping({
             "source": "P90_OWNER_PAPER_ACTIVATION_CHECK",
             "source_commit": commit,
