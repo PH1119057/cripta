@@ -6,9 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-    MAIN_ID, SUB_ID,
-)
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     VERSION,
     check_source_scoped_capital,
@@ -18,12 +16,8 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
-from bybit_workbench.universal_entry.p90l90_strategy_v2 import (
-    v2_authoring_payload,
-)
-from bybit_workbench.universal_entry.readiness import (
-    assess_strategy_runtime_readiness,
-)
+from bybit_workbench.universal_entry.p90l90_strategy_v2 import v2_authoring_payload
+from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 
 POLICY = StrategyHardStopEmbargoPolicy(
     enabled=True, hardstop_count=2, rolling_hours=48,
