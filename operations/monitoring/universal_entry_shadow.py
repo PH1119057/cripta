@@ -1422,9 +1422,7 @@ def _multi_account_admissions(
         MAIN_ID as P90_MAIN_ID,
         SUB_ID as P90_SUB_ID,
     )
-    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-        VERSION as P90_REAL_VERSION,
-    )
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
 
     if not real_selected_for:
         return (
