@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import csv
 import gzip
-import hashlib
 import importlib.util
 import json
 from datetime import UTC, datetime, timedelta
@@ -117,7 +116,7 @@ def _create(root, *, bad_trade_id=False, bad_net=False, regress=False):
         "net_usdt": str(fee.net_usdt),
     }
     (result / "result.json").write_text(json.dumps({
-        "ledger_sha256": hashlib.sha256(payload.encode()).hexdigest(),
+        "ledger_sha256": audit._sha256(result / "trade_ledger.jsonl"),
         "ledger_rows": 2,
         "net_pnl_usdt": {
             "BASELINE": str(fee.net_usdt),
