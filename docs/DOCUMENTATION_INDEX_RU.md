@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.42
-**Дата:** 2026-10-26
+**Версия:** 3.43
+**Дата:** 2026-10-28
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -1484,3 +1484,15 @@ Project Source set still 11; current doc paths, base/routed pre-read, README/AGE
 **Intent:** two separately saved, passive, immutable StrategyCards and own plans/disabled activations, with MAIN LTCUSDT+INJUSDT and SUB DOTUSDT+ARBUSDT+APTUSDT linked only via their own correct financial-account bindings. Strategy authoring and DB persistence are not LIVE trading or owner arm. Old recorded Strategy artifacts must not be rewritten or reused.
 
 **Gates:** exact new policy consumer/authoring support and independent tests, lawful DB producer/actor and INACTIVE binding behavior, signed account identity and non-overlapping effective binding, explicit new real capital/order/SECOND48 cross-account semantics before REAL. Missing gates fail closed; do not mislabel historical research logic as deployed Entry/Exit. User has not authorized LIVE. This docs-only change creates no DB records and does not alter Source file set, routing, Project Source count, bootstrap or active release.
+
+
+# 59. P90L90 causal provenance versus executable release — OWNER DECISION 2026-10-28 (Issue #243)
+
+Owner explicitly approved **separating immutable P90 market-data lineage from the installed/loaded code release** while retaining all existing original 5m/15m candles and five transport/Entry checkpoints without rewriting or deleting their original source identities.
+
+**Canonical owners:** ARCH §48.2 — lineage identity, append-only attestations, compatibility, immutable storage/producer provenance and release-transition gates; GLOSSARY §38 — exact terms; TRADING_CONTOUR §7.6.1 — PAPER activation/Strategy constraint. DEVELOPMENT_RELEASE §§8,19,44,50 still exclusively own Git/actor/installer/rollback. Research lineage and historical evidence stay RESEARCH_COMPUTE §§22.1–22.2. MAP is dated implementation evidence, not a second authority.
+
+**Before implementation:** verify the original existing five-symbol corpus and checkpoint digest/counts, exact current installed/loaded SHA, cross-release consumer equivalence, writer/DDL permissions and actor, no LIVE/REAL, no active writer conflict. Preserve all historical `source_commit` fields; new producer releases must remain individually identifiable. This docs publication does not create the compatibility record, authorize destructive PostgreSQL mutation, deploy, or activate PAPER. Status until separately tested and installed: `OWNER DECISION=YES`, `CANON=published only after this docs merge`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `P90_LINEAGE_COMPATIBILITY=NOT_VERIFIED`.
+
+No change to Project Source set (11 documents), base pre-read, routed document paths, ownership topology, or root bootstrap references; INDEX §17 topology-maintenance propagation therefore does not apply.
+
