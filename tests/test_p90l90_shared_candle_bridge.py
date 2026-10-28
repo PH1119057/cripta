@@ -47,6 +47,7 @@ def test_p90_new_closed_candle_is_verify_only_never_legacy_writer() -> None:
     event = _closed_event()
     adapter = object.__new__(P90SharedCandleLedger)
     adapter._seed = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
+    adapter._emitted = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
     exact = Candle(
         "LTCUSDT", "5", T-timedelta(minutes=5), T,
         Decimal("100"), Decimal("101"), Decimal("99"),
@@ -62,9 +63,11 @@ def test_p90_conflicting_or_earlier_candle_never_rewrites_seed() -> None:
     event = _closed_event()
     adapter = object.__new__(P90SharedCandleLedger)
     adapter._seed = {("LTCUSDT", "5"): T}
+    adapter._emitted = {("LTCUSDT", "5"): T}
     with pytest.raises(RuntimeError, match="CANNOT_REWRITE_ORIGINAL"):
         adapter.append(event)
     adapter._seed = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
+    adapter._emitted = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
     wrong = Candle(
         "LTCUSDT", "5", T-timedelta(minutes=5), T,
         Decimal("100"), Decimal("101"), Decimal("99"),
@@ -78,6 +81,7 @@ def test_p90_conflicting_or_earlier_candle_never_rewrites_seed() -> None:
 def test_p90_original_checkpoint_uses_only_frozen_legacy_archive() -> None:
     adapter = object.__new__(P90SharedCandleLedger)
     adapter._seed = {("LTCUSDT", "5"): T}
+    adapter._emitted = {("LTCUSDT", "5"): T}
     class FrozenArchive:
         def __init__(self) -> None:
             self.called = False
@@ -99,6 +103,7 @@ def test_p90_original_checkpoint_uses_only_frozen_legacy_archive() -> None:
 def test_missing_shared_new_history_is_not_silently_reset() -> None:
     adapter = object.__new__(P90SharedCandleLedger)
     adapter._seed = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
+    adapter._emitted = {("LTCUSDT", "5"): T-timedelta(minutes=5)}
     def missing(*_args, **_kwargs):
         raise RuntimeError("CANDLE_WARMUP_INCOMPLETE")
     adapter._canonical = missing
@@ -181,3 +186,28 @@ def test_gap_plan_never_invents_public_trades() -> None:
     assert plan[0][0] == "5"
     # A real native event has execId/seq; no such field is created here.
     assert all(isinstance(event, Candle) for _, event in plan)
+
+
+def test_shared_market_source_future_cached_15m_is_not_causal_15m() -> None:
+    adapter = object.__new__(P90SharedCandleLedger)
+    adapter._seed = {
+        ("LTCUSDT", "5"): T,
+        ("LTCUSDT", "15"): T,
+    }
+    adapter._emitted = {
+        ("LTCUSDT", "5"): T,
+        ("LTCUSDT", "15"): T,
+    }
+    # A global cache may already contain a future 15m close. It must not
+    # advance geometry before the exact causal join emits that 15m bar.
+    adapter._canonical = lambda *_args, **_kwargs: pytest.fail(
+        "preloaded future bar cannot be a causal watermark"
+    )
+    assert adapter.closed_at_or_before(
+        symbol="LTCUSDT", timeframe="15",
+        through=T+timedelta(minutes=5),
+    ) == T
+    assert adapter.closed_at_or_before(
+        symbol="LTCUSDT", timeframe="5",
+        through=T+timedelta(minutes=5),
+    ) == T
