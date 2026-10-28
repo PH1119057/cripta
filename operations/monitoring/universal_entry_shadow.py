@@ -79,6 +79,11 @@ from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l
 from bybit_workbench.universal_entry.p90l90_data_lineage import (
     inspect_p90_data_lineage,
 )
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
+    MAIN_ID as P90_MAIN_ID,
+    SUB_ID as P90_SUB_ID,
+)
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
     P90L90ObserverPaperConsumer,
 )
@@ -1418,12 +1423,6 @@ def _multi_account_admissions(
     provider identity attestation. The private runtime repeats signed Bybit UID
     authentication for this worker immediately before exchange Entry mutation.
     """
-    from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-        MAIN_ID as P90_MAIN_ID,
-        SUB_ID as P90_SUB_ID,
-    )
-    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
-
     if not real_selected_for:
         return (
             _blocked_multi_account_admissions(
