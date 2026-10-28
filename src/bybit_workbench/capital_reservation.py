@@ -334,7 +334,7 @@ class PostgresCapitalReservationPort:
             raise ValueError("P90_REAL_CAPITAL_LEDGER_INVALID")
         cap = MAX_ACCOUNT_COMMITTED[request.strategy_id]
         remaining = max(Decimal("0"), cap - current)
-        if REQUESTED_USDT > remaining:
+        if remaining < REQUESTED_USDT:
             raise InsufficientCapital(REQUESTED_USDT, remaining)
 
     def _guard_unified_r1_envelope(
