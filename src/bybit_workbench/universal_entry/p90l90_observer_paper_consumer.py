@@ -14,7 +14,11 @@ from typing import Any
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import UniversalEntryEngine
-from .p90l90_causal_transport_join import P90TransportEvent
+from .fingerprint import canonical_json
+from .p90l90_causal_transport_join import (
+    P90L90CausalTransportJoin,
+    P90TransportEvent,
+)
 from .p90l90_causal_fact_codec import encode_p90l90_fact
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
@@ -279,7 +283,8 @@ class P90L90ObserverPaperConsumer:
                                %s,%s,%s,%s,%s)""",
                     (
                         symbol, before[3], after[3],
-                        before[0], before[1], before[2],
+                        canonical_json(before[0]),
+                        canonical_json(before[1]), before[2],
                         before_join.closed_5m_at,
                         before_join.closed_15m_at, target5, target15,
                         len(items), self._archive.source_id(symbol),
