@@ -126,6 +126,34 @@ class P90L90AtomicPaperCheckpointStore:
             raise RuntimeError("P90L90 restored Entry geometry ahead of causal bars")
         return join, entry
 
+    def inspect_verified(
+        self,
+        *,
+        symbol: str,
+        recompute_geometry: Callable[[str, object], P90L90EntryState | None],
+    ) -> tuple[P90L90CausalTransportJoin, P90L90CausalEntry]:
+        """Restart atomically against the saved source and as-of candle ledger."""
+        self._symbol(symbol)
+        with self._db.transaction():
+            row = self._db.execute(
+                """SELECT checkpoint_json,entry_checkpoint_json,source_commit
+                     FROM strategy_entry.p90l90_causal_transport_checkpoints
+                    WHERE symbol=%s FOR UPDATE""",
+                (symbol,),
+            ).fetchone()
+            if row is None or row[2] != self._sha or row[1] is None:
+                raise RuntimeError("P90L90 verified restart durable state missing")
+            join = P90L90CausalTransportJoin.restore(row[0])
+            geometry = recompute_geometry(symbol, row[1])
+            entry = restore_entry_restart_snapshot(
+                row[1], seeded_geometry=geometry,
+            )
+            if entry.state is not None and (
+                entry.state.effective_at > join.closed_5m_at
+            ):
+                raise RuntimeError("P90L90 verified restart has future Entry geometry")
+            return join, entry
+
     def deliver(
         self,
         event: P90TransportEvent,
