@@ -2249,7 +2249,7 @@ def _run_observer_epoch(
 
     def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
         rows: list[Mapping[str, object]] = []
-        for raw_bundle in bundles:
+        for raw_bundle in observer_split.ordinary:
             bundle = cast(Any, raw_bundle)
             plan = bundle.entry_plan
             for symbol in plan.symbols:
@@ -2392,6 +2392,33 @@ def _run_observer_epoch(
                             "updated_at": now.isoformat(),
                         }
                     )
+        for raw_bundle in observer_split.p90_paper:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                for direction in plan.directions:
+                    rows.append({
+                        "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                        "strategy_id": plan.strategy_id,
+                        "strategy_version": plan.strategy_version,
+                        "strategy_name": bundle.card.name,
+                        "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                        "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                        "activation_id": plan.strategy_activation_id,
+                        "symbol": symbol,
+                        "direction": direction.value,
+                        "state": "P90_PAPER_ATOMIC_RESTORED",
+                        "current_price": (
+                            None if symbol not in last_trade_prices
+                            else str(last_trade_prices[symbol])
+                        ),
+                        "entry_price": None,
+                        "distance_pct": None,
+                        "geometry": {},
+                        "source_commit": LOADED_COMMIT,
+                        "model": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+                        "updated_at": now.isoformat(),
+                    })
         return tuple(rows)
 
     def refresh_inputs(fact_at: datetime) -> None:
