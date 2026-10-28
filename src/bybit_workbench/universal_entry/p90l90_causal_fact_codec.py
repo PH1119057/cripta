@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Literal
 
 from .contracts import FrozenPolicy, MarketFactEnvelope, TradeDirection
 from .fingerprint import canonical_json
@@ -66,7 +66,9 @@ def encode_p90l90_fact(
     if _utc(fact.received_at) < _utc(fact.event_at):
         raise ValueError("P90L90 fact received before exchange event")
     attrs = fact.attributes.to_dict()
+    kind: Literal["PUBLIC_TRADE", "CANDLE_CLOSED"]
     if fact.event_kind == "PUBLIC_TRADE":
+        kind = "PUBLIC_TRADE"
         if (
             cursor is None or cursor.symbol != fact.symbol
             or _utc(cursor.traded_at) != _utc(fact.event_at)
@@ -78,6 +80,7 @@ def encode_p90l90_fact(
         tf = None
         seq, exec_id = cursor.seq, cursor.exec_id
     elif fact.event_kind == "CANDLE_CLOSED":
+        kind = "CANDLE_CLOSED"
         if cursor is not None:
             raise ValueError("P90L90 closed kline must not contain trade cursor")
         tf = str(attrs.get("timeframe") or "")
@@ -103,7 +106,7 @@ def encode_p90l90_fact(
         "direction": None if fact.direction is None else fact.direction.value,
     }
     return P90TransportEvent(
-        event_id=fact.fact_id, symbol=fact.symbol, kind=fact.event_kind,
+        event_id=fact.fact_id, symbol=fact.symbol, kind=kind,
         event_at=_utc(fact.event_at), source_json=canonical_json(payload),
         timeframe=tf, exchange_sequence=seq, exec_id=exec_id,
     )
