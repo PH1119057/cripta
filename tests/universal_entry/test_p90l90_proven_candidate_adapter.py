@@ -84,9 +84,6 @@ def test_candidate_projection_uses_exact_source_plan_and_exit_before_entry():
     processor = P90L90DurablePaperProcessor(
         SimpleNamespace(), source_commit=SHA,
         on_native_exit=lambda fact, cursor: callbacks.append(("exit", fact.fact_id)),
-        on_crossing=lambda fact, cursor, crossings: callbacks.append(
-            ("crossing", len(crossings))
-        ),
         on_closed_candle=lambda fact: callbacks.append(("candle", fact.fact_id)),
         candidate_entry_plan_fingerprint="entry-exact-abc",
         on_proven_candidate=lambda fact, cursor: callbacks.append(
@@ -96,7 +93,7 @@ def test_candidate_projection_uses_exact_source_plan_and_exit_before_entry():
     fake = AtomicSimulation()
     processor._atomic = fake
     processor.accept(_native())
-    assert [c[0] for c in callbacks] == ["exit", "candidate", "crossing"]
+    assert [c[0] for c in callbacks] == ["exit", "candidate"]
     candidate = callbacks[1][1]
     assert candidate.event_kind == "P90L90_RAW_H9_PREV7D_CROSSING"
     assert candidate.attributes.to_dict()["modeled_exchange_fill"] is False
@@ -110,7 +107,6 @@ def test_missing_candidate_owner_poisoned_and_never_falls_back():
     processor = P90L90DurablePaperProcessor(
         SimpleNamespace(), source_commit=SHA,
         on_native_exit=lambda fact, cursor: None,
-        on_crossing=lambda fact, cursor, crossings: None,
         on_closed_candle=lambda fact: None,
     )
     fake = AtomicSimulation()
@@ -127,7 +123,6 @@ def test_partial_candidate_owner_configuration_rejected():
         P90L90DurablePaperProcessor(
             SimpleNamespace(), source_commit=SHA,
             on_native_exit=lambda fact, cursor: None,
-            on_crossing=lambda fact, cursor, crossings: None,
-            on_closed_candle=lambda fact: None,
+                on_closed_candle=lambda fact: None,
             candidate_entry_plan_fingerprint="fp",
         )
