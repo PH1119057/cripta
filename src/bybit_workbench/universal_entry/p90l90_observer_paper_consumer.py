@@ -7,12 +7,15 @@ PostgreSQL transport source only; it creates no Bybit requests or real orders.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import UniversalEntryEngine
 from .p90l90_causal_transport_join import P90TransportEvent
+from .p90l90_causal_fact_codec import encode_p90l90_fact
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
 from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
@@ -151,6 +154,140 @@ class P90L90ObserverPaperConsumer:
         if not hasattr(self._archive, "restart_watermarks"):
             raise RuntimeError("P90_SHARED_STORE_NOT_SELECTED")
         return self._archive.restart_watermarks(symbol)
+
+    def catch_up_closed_histories(
+        self, targets: Mapping[str, tuple[datetime, datetime]],
+    ) -> int:
+        """Atomically advance source-verified closed bars, NEVER missed trades.
+
+        Only a previously disabled, trade-cursor-free P90 epoch with NO PAPER
+        position/order can safely be caught up by OHLC alone. This preserves
+        original source facts and writes audit of each previous checkpoint
+        before its normal forward-only generation advance. Any uncertainty
+        fails before the first effect; real/native trade cursor comes later.
+        """
+        if not self._recovered:
+            raise RuntimeError("P90_SHARED_RECOVERY_BEFORE_CHECKPOINT_PROOF")
+        from .p90l90_shared_candle_bridge import P90SharedCandleLedger
+
+        if not isinstance(self._archive, P90SharedCandleLedger):
+            raise RuntimeError("P90_SHARED_CANDLE_STORE_NOT_SELECTED")
+        if set(targets) != set(self._processors):
+            raise RuntimeError("P90_SHARED_RECOVERY_MISSING_STRATEGY_SYMBOL")
+        total = 0
+        with self._connection.transaction():
+            forbidden = self._connection.execute(
+                """SELECT count(*) FROM strategy_entry.paper_positions
+                    WHERE strategy_id IN (%s,%s) AND state='OPEN'""",
+                (MAIN_ID, SUB_ID),
+            ).fetchone()
+            if forbidden != (0,):
+                raise RuntimeError("P90_SHARED_RECOVERY_OPEN_PAPER_POSITION")
+            orders = self._connection.execute(
+                """SELECT count(*) FROM strategy_entry.paper_orders
+                    WHERE strategy_id IN (%s,%s)""",
+                (MAIN_ID, SUB_ID),
+            ).fetchone()
+            if orders != (0,):
+                raise RuntimeError("P90_SHARED_RECOVERY_LEGACY_PAPER_ORDER")
+            # Preflight ALL symbols before mutating any checkpoint, including
+            # complete shared-source 5m/15m continuity and old native cursor.
+            plans: dict[str, tuple[tuple[str, Any], ...]] = {}
+            originals: dict[str, tuple[Any, ...]] = {}
+            for symbol in sorted(targets):
+                join, entry = self._processors[symbol].recover(symbol=symbol)
+                if (
+                    join.pending or entry.previous_price is not None
+                    or entry.previous_at is not None or entry.seen
+                    or join.last_emitted_trade_sequence is not None
+                ):
+                    raise RuntimeError("P90_SHARED_RECOVERY_NATIVE_TRADES_UNPROVEN")
+                row = self._connection.execute(
+                    """SELECT checkpoint_json,entry_checkpoint_json,
+                              source_commit,generation
+                         FROM strategy_entry.p90l90_causal_transport_checkpoints
+                        WHERE symbol=%s FOR UPDATE""",
+                    (symbol,),
+                ).fetchone()
+                if row is None:
+                    raise RuntimeError("P90_SHARED_RECOVERY_CHECKPOINT_MISSING")
+                originals[symbol] = row
+                target5, target15 = targets[symbol]
+                plans[symbol] = self._archive.closed_gap_plan(
+                    symbol=symbol, through_5m=target5,
+                    through_15m=target15,
+                )
+            # The existing atomic processor emits only actual closed OHLC
+            # boundary facts; it sees no historical PUBLIC_TRADE, so no
+            # past Entry/Exit event can be fabricated.
+            for symbol in sorted(targets):
+                items = plans[symbol]
+                for timeframe, candle in items:
+                    fact = MarketFactEnvelope(
+                        fact_id=(
+                            f"p90-source-gap:{symbol}:{timeframe}:"
+                            f"{candle.closed_at.isoformat()}"
+                        ),
+                        event_kind="CANDLE_CLOSED",
+                        symbol=symbol, event_at=candle.closed_at,
+                        observed_at=candle.closed_at,
+                        received_at=datetime.now(UTC),
+                        source_refs=(
+                            f"bybit:REST:linear:kline:{symbol}:"
+                            f"{timeframe}:{candle.opened_at.isoformat()}",
+                        ),
+                        attributes=FrozenPolicy.from_mapping({
+                            "timeframe": timeframe,
+                            "opened_at": candle.opened_at.isoformat(),
+                            "closed_at": candle.closed_at.isoformat(),
+                            "open": str(candle.open),
+                            "high": str(candle.high),
+                            "low": str(candle.low),
+                            "close": str(candle.close),
+                            "volume": str(candle.volume),
+                        }),
+                    )
+                    self._processors[symbol].accept(
+                        encode_p90l90_fact(fact),
+                    )
+                if not items:
+                    continue
+                before = originals[symbol]
+                after = self._connection.execute(
+                    """SELECT checkpoint_json,entry_checkpoint_json,
+                              source_commit,generation
+                         FROM strategy_entry.p90l90_causal_transport_checkpoints
+                        WHERE symbol=%s FOR UPDATE""",
+                    (symbol,),
+                ).fetchone()
+                if (
+                    after is None or after[2] != before[2]
+                    or after[3] != before[3] + len(items)
+                ):
+                    raise RuntimeError("P90_SHARED_RECOVERY_GENERATION_DRIFT")
+                before_join = P90L90CausalTransportJoin.restore(before[0])
+                target5, target15 = targets[symbol]
+                self._connection.execute(
+                    """INSERT INTO strategy_entry.p90l90_candle_gap_recovery_audit
+                       (symbol,old_generation,new_generation,
+                        old_checkpoint_json,old_entry_checkpoint_json,
+                        old_source_commit,old_5m_closed_at,old_15m_closed_at,
+                        through_5m_closed_at,through_15m_closed_at,
+                        recovered_bar_count,market_source_id,
+                        producer_release_commit)
+                       VALUES (%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,
+                               %s,%s,%s,%s,%s)""",
+                    (
+                        symbol, before[3], after[3],
+                        before[0], before[1], before[2],
+                        before_join.closed_5m_at,
+                        before_join.closed_15m_at, target5, target15,
+                        len(items), self._archive.source_id(symbol),
+                        self._provenance.to_dict()["source_commit"],
+                    ),
+                )
+                total += len(items)
+        return total
 
     @property
     def recovered_symbols(self) -> frozenset[str]:
