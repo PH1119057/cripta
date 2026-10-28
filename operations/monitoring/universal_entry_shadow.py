@@ -2197,6 +2197,17 @@ def _run_observer_epoch(
             symbol, observed, intervals,
             p90l90_full_prev7d=symbol in p90l90_symbols,
         )
+        # One MarketSource OHLC repository, never per-Strategy/per-account
+        # copies. Every startup checks current REST history and exact source
+        # identity before a consumer receives any candle.
+        from bybit_workbench.market_data.candle_warmup import (
+            cache_approved_bybit_history,
+        )
+
+        history = cache_approved_bybit_history(
+            connection, symbol=symbol, history=history,
+            observed_at=observed, producer_release_commit=LOADED_COMMIT,
+        )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
         for timeframe in intervals:
             rows = history.get(timeframe, ())
