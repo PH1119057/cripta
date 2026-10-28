@@ -6,7 +6,7 @@ or a substitute for ordered WS publicTrade/bar boundary proof.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC
 from typing import Mapping
 
 from bybit_workbench.domain.models import Candle
