@@ -5,6 +5,9 @@ It does not decide Strategy admission, create PAPER positions or send orders.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+from decimal import Decimal
+
 from .contracts import FrozenPolicy, MarketFactEnvelope, TradeDirection
 from .fingerprint import fingerprint
 from .p90l90_causal import P90L90Crossing, P90L90EntryState
@@ -24,7 +27,7 @@ def p90l90_crossing_fact(
         crossing.event_at != source_fact.event_at
         or crossing.effective_at != geometry.effective_at
         or not geometry.effective_at <= crossing.event_at
-        or crossing.event_at >= geometry.effective_at + __import__("datetime").timedelta(minutes=5)
+        or crossing.event_at >= geometry.effective_at + timedelta(minutes=5)
         or crossing.modeled_exchange_fill
     ):
         raise ValueError("P90L90 crossing and causal geometry not equivalent")
@@ -33,7 +36,6 @@ def p90l90_crossing_fact(
         raise ValueError("P90L90 crossing not supported by frozen raw Entry")
     source_price = source_fact.attributes.to_dict().get("price")
     if str(source_price) != str(crossing.current_price):
-        from decimal import Decimal
         if source_price is None or Decimal(str(source_price)) != crossing.current_price:
             raise ValueError("P90L90 crossing native trade price mismatch")
     return MarketFactEnvelope(
