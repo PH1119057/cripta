@@ -2457,7 +2457,7 @@ def _run_observer_epoch(
         )
         last_inputs_refresh = now_mono
 
-    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+    def _process_fact_body(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
         nonlocal facts_received, evaluations_count, signals_count
         if not deduper.accept(fact.fact_id):
             return
@@ -2645,6 +2645,19 @@ def _run_observer_epoch(
                 p90_consumer.accept(
                     encode_p90l90_fact(fact, cursor=cursor)
                 )
+
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        # One source event is an atomic mixed-Strategy PAPER epoch on shared
+        # symbols. The nested P90 join, Entry, positions and ordinary PAPER
+        # records use this exact connection and roll back as ONE DB unit.
+        # In-memory state MUST be discarded by ending the whole epoch on any
+        # exception; the enclosing Observer restart handles that boundary.
+        if p90_consumer is not None and fact.symbol in p90l90_symbols:
+            with connection.transaction():
+                _process_fact_body(fact, cursor)
+            return
+        # No-P90 path is byte-for-byte the original transaction behavior.
+        _process_fact_body(fact, cursor)
 
     try:
         trade_mirror_thread.start()
