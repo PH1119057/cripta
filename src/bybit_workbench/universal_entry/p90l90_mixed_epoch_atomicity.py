@@ -7,12 +7,10 @@ independently. The ordinary-only branch is unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable, Collection
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 
-def dispatch_observer_fact_atomically(
+def dispatch_observer_fact_atomically[T](
     connection: Any,
     *,
     symbol: str,
