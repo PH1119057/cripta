@@ -102,7 +102,7 @@ class P90L90ObserverPaperConsumer:
         if self._recovered:
             raise RuntimeError("P90L90_CONSUMER_DOUBLE_RECOVERY")
         for symbol in sorted(self._processors):
-            join, entry = self._processors[symbol].recover()
+            join, entry = self._processors[symbol].recover(symbol=symbol)
             if entry.state is None:
                 raise RuntimeError(
                     "P90L90_CONSUMER_SEED_NOT_CAUSALLY_WARMED"
