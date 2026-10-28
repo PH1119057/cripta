@@ -10,13 +10,8 @@ import pytest
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
-from bybit_workbench.universal_exit.contracts import (
-    ExitActionKind,
-    ExitEvaluationStatus,
-)
-from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import (
-    P90RealClosedExitPort,
-)
+from bybit_workbench.universal_exit.contracts import ExitActionKind, ExitEvaluationStatus
+from bybit_workbench.universal_exit.p90l90_real_closed_exit_port import P90RealClosedExitPort
 from bybit_workbench.universal_exit.p90l90_real_closed_geometry import (
     P90RealClosedGeometryUnverified,
 )
