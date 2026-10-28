@@ -8,14 +8,26 @@ from __future__ import annotations
 import csv
 import gzip
 import hashlib
+import importlib.util
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from bybit_workbench.universal_entry.p90l90_causal import modeled_pnl_after_fees
-from scripts.research import p90l90_source_order_ledger_audit_v1 as audit
+
+# Other historical research test suites stub scripts.research at collection.
+# Load THIS exact file instead of guessing the mutable module namespace.
+_SPEC = importlib.util.spec_from_file_location(
+    "p90l90_source_order_audit_under_test",
+    Path(__file__).resolve().parents[2]
+    / "scripts/research/p90l90_source_order_ledger_audit_v1.py",
+)
+assert _SPEC is not None and _SPEC.loader is not None
+audit = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(audit)
 
 SHA = "a" * 40
 START = datetime(2026, 5, 8, tzinfo=UTC)
