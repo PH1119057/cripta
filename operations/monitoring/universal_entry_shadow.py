@@ -2216,6 +2216,7 @@ def _run_observer_epoch(
         ).get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
     }
     closed_boundaries: dict[tuple[str, str], datetime] = {}
+    p90_closed_recovery_targets: dict[str, tuple[datetime, datetime]] = {}
     for symbol in symbols:
         observed = datetime.now(UTC)
         recovery_from = (
@@ -2240,6 +2241,10 @@ def _run_observer_epoch(
             observed_at=observed, producer_release_commit=LOADED_COMMIT,
         )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
+        if p90_consumer is not None and symbol in p90l90_symbols:
+            p90_closed_recovery_targets[symbol] = (
+                history["5"][-1].closed_at, history["15"][-1].closed_at,
+            )
         for timeframe in intervals:
             rows = history.get(timeframe, ())
             if not rows:
@@ -2258,6 +2263,13 @@ def _run_observer_epoch(
         if symbol in ordinary_symbols:
             paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
+
+    if p90_consumer is not None:
+        # All historical source slices are already closed, validated, persisted
+        # in ONE MarketSource store and ready for atomic all-symbol restart.
+        # Only no-position/no-native-cursor inactive gaps can be replayed as
+        # candles; the actual publicTrade epoch is proven by WS afterwards.
+        p90_consumer.catch_up_closed_histories(p90_closed_recovery_targets)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
     last_trade_prices: dict[str, Decimal] = {}
