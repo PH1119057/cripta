@@ -119,3 +119,29 @@ def test_working_observer_calls_guard_before_any_registry_activation():
     assert epoch.index("require_p90_atomic_observer_connection(observer_split)") < (
         epoch.index("registry = ActivePlanRegistry()")
     )
+
+
+
+def test_actual_observer_has_one_p90_consumer_and_no_legacy_double_dispatch():
+    source = (Path(__file__).resolve().parents[2]
+              / "operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    epoch = source.split("def _run_observer_epoch(", 1)[1].split(
+        "def _run_multi_strategy_observer(", 1
+    )[0]
+    assert "P90L90ObserverPaperConsumer(" in epoch
+    assert "p90_consumer.recover_all()" in epoch
+    assert "p90_consumer.accept(" in epoch
+    assert epoch.index("p90_consumer.recover_all()") < epoch.index(
+        "registry = ActivePlanRegistry()"
+    )
+    assert "for raw_bundle in observer_split.ordinary" in epoch
+    assert "observer_split.p90_paper" in epoch
+    assert "paper.route_p90l90_native_trade(" not in epoch
+    assert "paper.create_p90l90_native_paper_entry(" not in epoch
+    assert "P90L90_ENTRY_REACHED_ORDINARY_OBSERVER_OWNER" in epoch
+    assert "observer_split.ordinary" in epoch
+    # Existing position Exit remains owned by the generic PAPER runtime.
+    assert "paper.bootstrap_l53_history(symbol" in epoch
+    assert "paper.on_public_trade(" in epoch
