@@ -9,6 +9,7 @@ import pytest
 from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
     partition_observer_strategies,
     require_p90_atomic_observer_connection,
+    require_p90_policy_before_registry,
 )
 
 P90 = "P90L90_RAW_H9_UNION_CROSSING"
