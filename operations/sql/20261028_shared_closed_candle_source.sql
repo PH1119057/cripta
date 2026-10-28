@@ -66,8 +66,9 @@ BEGIN
     THEN RAISE EXCEPTION 'CLOSED_CANDLE_OWNER_GRANTS_NOT_FAIL_CLOSED';
     END IF;
 END $grants$;
--- Preserve the pre-gap causal checkpoint as immutable evidence before
--- replaying actual provider-verified CLOSED bars (never synthetic trades).
+
+-- Preserve pre-gap native/Entry checkpoint bytes as immutable audit evidence.
+-- Existing original P90L90 bar records remain unchanged.
 CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_candle_gap_recovery_audit (
     symbol text NOT NULL CHECK (
         symbol IN ('LTCUSDT','INJUSDT','DOTUSDT','ARBUSDT','APTUSDT')
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_candle_gap_recovery_audit (
     old_checkpoint_json jsonb NOT NULL,
     old_entry_checkpoint_json jsonb NOT NULL,
     old_source_commit text NOT NULL
-        CHECK (old_source_commit ~ '^[0-9a-f]{40}),
+        CHECK (old_source_commit ~ '^[0-9a-f]{40}$'),
     old_5m_closed_at timestamptz NOT NULL,
     old_15m_closed_at timestamptz NOT NULL,
     through_5m_closed_at timestamptz NOT NULL,
@@ -85,46 +86,7 @@ CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_candle_gap_recovery_audit (
     recovered_bar_count integer NOT NULL CHECK (recovered_bar_count > 0),
     market_source_id text NOT NULL,
     producer_release_commit text NOT NULL
-        CHECK (producer_release_commit ~ '^[0-9a-f]{40}
-),
-    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    PRIMARY KEY (symbol,old_generation),
-    FOREIGN KEY (market_source_id)
-        REFERENCES identity.market_sources(market_source_id),
-    CHECK (through_5m_closed_at >= old_5m_closed_at),
-    CHECK (through_15m_closed_at >= old_15m_closed_at)
-);
-REVOKE ALL ON strategy_entry.p90l90_candle_gap_recovery_audit FROM PUBLIC;
-GRANT SELECT, INSERT ON strategy_entry.p90l90_candle_gap_recovery_audit TO cripta;
-REVOKE UPDATE, DELETE, TRUNCATE ON
-    strategy_entry.p90l90_candle_gap_recovery_audit FROM cripta;
-
-COMMIT;
-),
-),
-    old_5m_closed_at timestamptz NOT NULL,
-    old_15m_closed_at timestamptz NOT NULL,
-    through_5m_closed_at timestamptz NOT NULL,
-    through_15m_closed_at timestamptz NOT NULL,
-    recovered_bar_count integer NOT NULL CHECK (recovered_bar_count > 0),
-    market_source_id text NOT NULL,
-    producer_release_commit text NOT NULL
-        CHECK (producer_release_commit ~ '^[0-9a-f]{40}),
-    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    PRIMARY KEY (symbol,old_generation),
-    FOREIGN KEY (market_source_id)
-        REFERENCES identity.market_sources(market_source_id),
-    CHECK (through_5m_closed_at >= old_5m_closed_at),
-    CHECK (through_15m_closed_at >= old_15m_closed_at)
-);
-REVOKE ALL ON strategy_entry.p90l90_candle_gap_recovery_audit FROM PUBLIC;
-GRANT SELECT, INSERT ON strategy_entry.p90l90_candle_gap_recovery_audit TO cripta;
-REVOKE UPDATE, DELETE, TRUNCATE ON
-    strategy_entry.p90l90_candle_gap_recovery_audit FROM cripta;
-
-COMMIT;
-),
-),
+        CHECK (producer_release_commit ~ '^[0-9a-f]{40}$'),
     created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (symbol,old_generation),
     FOREIGN KEY (market_source_id)
