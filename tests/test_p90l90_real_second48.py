@@ -28,8 +28,14 @@ class _DB:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self.rows = rows
         self.params: tuple[object, ...] | None = None
+        self.locked_account: str | None = None
 
     def execute(self, sql: str, params: tuple[object, ...]) -> SimpleNamespace:
+        if "pg_advisory_xact_lock" in sql:
+            assert len(params) == 1
+            self.locked_account = str(params[0])
+            return SimpleNamespace(fetchall=lambda: [])
+        assert self.locked_account is not None
         assert "FROM runtime.position_ownership p" in sql
         assert "runtime.position_exit_attribution a" in sql
         assert "identity.trading_accounts ta" in sql
@@ -76,6 +82,7 @@ def _read(
         evaluated_at=now,
     )
     assert db.params == (strategy_id, VERSION, "fingerprint-p90-exact")
+    assert db.locked_account == account
     return result
 
 
