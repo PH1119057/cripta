@@ -114,6 +114,25 @@ class P90L90ImmutableBarLedger:
             raise RuntimeError("P90L90 latest immutable candle source not proven")
         return row[0].astimezone(UTC)
 
+    def closed_at_or_before(
+        self, *, symbol: str, timeframe: str, through: datetime
+    ) -> datetime:
+        """Find only the last candle already effective at this source boundary."""
+        if symbol not in _SYMBOLS or timeframe not in _INTERVALS:
+            raise ValueError("P90L90 as-of candle outside exact Strategy scope")
+        if through.tzinfo is None or through.utcoffset() != timedelta():
+            raise ValueError("P90L90 as-of candle requires aware UTC boundary")
+        row = self._db.execute(
+            """SELECT closed_at,source_commit
+                 FROM strategy_entry.p90l90_causal_closed_bars
+                WHERE symbol=%s AND timeframe=%s AND closed_at <= %s
+                ORDER BY closed_at DESC LIMIT 1""",
+            (symbol, timeframe, through),
+        ).fetchone()
+        if row is None or row[1] != self._sha:
+            raise RuntimeError("P90L90 as-of candle missing/source not proven")
+        return row[0].astimezone(UTC)
+
     def history(
         self,
         *,
