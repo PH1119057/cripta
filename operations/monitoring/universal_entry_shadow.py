@@ -1328,9 +1328,9 @@ def _unarmed_multi_account_candidate_bindings(
         cast(Any, bundle).activation.activation_id
         for bundle in bundles
         if (
-            cast(Any, bundle).card.strategy_id
+            getattr(getattr(bundle, "card", None), "strategy_id", None)
             in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
-            and cast(Any, bundle).card.strategy_version
+            and getattr(getattr(bundle, "card", None), "strategy_version", None)
             == "2.0-p90l90-real-main-sub-20261028"
         )
     }
