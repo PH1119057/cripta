@@ -54,7 +54,8 @@ from .market_watch import (
     ParameterizedCausalMarketWatch,
     WatchTracePoint,
 )
-from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION as REAL_VERSION
+from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS
+from .p90l90_real_contract_v3 import VERSION as REAL_VERSION
 from .references import resolve_causal_timestamp
 from .registry import ActivePlanRegistry
 from .transport_continuity import TradeCursor
