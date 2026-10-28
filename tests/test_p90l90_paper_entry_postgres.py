@@ -237,3 +237,153 @@ def test_pg16_p90l90_open_checkpoint_replay_and_closed_net_no_paper_orders():
             "trading_account_id"
         ] == account
         raise RuntimeError("ROLLBACK_P90_ENTRY")
+
+
+def test_pg16_two_new_p90_v2_strategy_engine_to_paper_position_no_r1():
+    """Exercise the actual dedicated P90 Engine/PAPER adapter for MAIN and SUB.
+
+    The atomic native/bar transport and ATR seed are separately exercised in
+    test_p90l90_full_warmup_seed_postgres; here the accepted causal candidate
+    flows through the exact P90 Strategy Engine, evaluation store and persisted
+    P90 PAPER position. Not an exchange order and never an archived R1 Strategy.
+    """
+    from bybit_workbench.universal_entry.contracts import MarketFactEnvelope
+    from bybit_workbench.universal_entry.p90l90_causal import (
+        P90L90Crossing,
+        P90L90EntryState,
+    )
+    from bybit_workbench.universal_entry.p90l90_crossing_fact import (
+        p90l90_crossing_fact,
+    )
+    from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
+        P90L90ObserverPaperConsumer,
+    )
+    from bybit_workbench.universal_entry.transport_continuity import TradeCursor
+
+    with (
+        psycopg.connect(DSN) as conn,
+        pytest.raises(RuntimeError, match="ROLLBACK_P90_V2_ENGINE_PIPELINE"),
+        conn.transaction(),
+    ):
+        card_main, card_sub = new_version_cards(
+            approved_at=T0,
+            policy_by_strategy_id={MAIN_ID: POLICY, SUB_ID: POLICY},
+        )
+        bundles = []
+        accounts = {}
+        store = StrategyEntryStore(conn)
+        for card in (card_main, card_sub):
+            account = "ta-p90-engine-"+uuid4().hex
+            accounts[card.strategy_id] = account
+            conn.execute(
+                """INSERT INTO identity.trading_accounts(
+                       trading_account_id,venue_id,account_kind,account_type,
+                       environment,status,external_account_ref)
+                   VALUES(%s,'venue-bybit',%s,'UNIFIED','MAINNET','ACTIVE',
+                          '9000000000')""",
+                (
+                    account,
+                    "MAIN" if card.strategy_id == MAIN_ID else "SUB",
+                ),
+            )
+            activation = StrategyActivation(
+                activation_id="p90-pipeline-"+uuid4().hex,
+                strategy_id=card.strategy_id,
+                strategy_version=card.strategy_version,
+                strategy_config_fingerprint=card.strategy_config_fingerprint,
+                enabled=True, enabled_at=T0,
+                operator="CI", source="disposable-only",
+            )
+            plan, exit_plan = materialize_plans(card, activation)
+            store.insert_strategy_card(card)
+            store.insert_activation(activation, reason="test-disposable")
+            store.insert_entry_plan(plan)
+            store.insert_exit_plan(exit_plan)
+            conn.execute(
+                """INSERT INTO strategy_entry.strategy_execution_bindings(
+                       strategy_execution_binding_id,strategy_activation_id,
+                       execution_leg,execution_role,trading_account_id,
+                       allocation_mode,binding_state,effective_from,
+                       operator,source,reason)
+                   VALUES(%s,%s,'PRIMARY','PRIMARY',%s,
+                          'DEDICATED_STRATEGY','INACTIVE',%s,'CI',
+                          'disposable-test','paper-only')""",
+                ("binding-ci-"+uuid4().hex, activation.activation_id,
+                 account, T0),
+            )
+            bundles.append(ActiveStrategyBundle(
+                card, activation, plan, exit_plan, T0,
+            ))
+        consumer = P90L90ObserverPaperConsumer(
+            conn, bundles=tuple(bundles), source_commit="f"*40,
+            provenance=FrozenPolicy.from_mapping({
+                "source": "P90_PAPER_DISPOSABLE_FULL_STRATEGY_ENGINE",
+            }),
+        )
+        orders_before = conn.execute(
+            "SELECT count(*) FROM strategy_entry.paper_orders"
+        ).fetchone()[0]
+        geo = P90L90EntryState(
+            effective_at=T0,
+            l53_low_raw=D("100"), l53_high_raw=D("110"),
+            h9_5m_low_raw=D("98"), h9_5m_high_raw=D("112"),
+            h9_15m_low_raw=D("98"), h9_15m_high_raw=D("112"),
+            raw_h9_union_span=D("14"),
+            working_width_pct=D("1"),
+            previous_seven_day_median=D("1"),
+            long_depth_pct=D("4"), short_depth_pct=None,
+        )
+        for index, bundle in enumerate(bundles):
+            sym = bundle.entry_plan.symbols[0]
+            at = T0+timedelta(seconds=1+index)
+            cursor = TradeCursor(
+                sym, "native-p90-"+str(index), 1000+index, at,
+            )
+            native = MarketFactEnvelope(
+                fact_id="trade-"+cursor.exec_id,
+                event_kind="PUBLIC_TRADE", symbol=sym,
+                observed_at=at, event_at=at,
+                received_at=at+timedelta(milliseconds=50),
+                source_refs=(
+                    f"bybit:publicTrade:{sym}:{cursor.exec_id}",
+                ),
+                attributes=FrozenPolicy.from_mapping({
+                    "price": "99", "size": "1", "taker_side": "Sell",
+                }),
+            )
+            crossing = P90L90Crossing(
+                side="LONG", event_at=at, effective_at=T0,
+                previous_price=D("101"), current_price=D("99"),
+                boundary=D("100"), depth_pct=D("4"),
+            )
+            fact = p90l90_crossing_fact(
+                entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+                source_fact=native, crossing=crossing, geometry=geo,
+            )
+            consumer._on_candidate(fact, cursor)
+        rows = conn.execute(
+            """SELECT strategy_id,symbol,trading_account_id,notional_usdt,
+                      paper_order_id,state,payload
+                 FROM strategy_entry.paper_positions
+                WHERE strategy_version=%s
+                ORDER BY strategy_id""",
+            (card_main.strategy_version,),
+        ).fetchall()
+        assert len(rows) == 2
+        for strategy_id, symbol, account, nominal, order_id, state, payload in rows:
+            assert strategy_id in {MAIN_ID, SUB_ID}
+            assert account == accounts[strategy_id]
+            assert symbol in (
+                card_main.symbols if strategy_id == MAIN_ID else card_sub.symbols
+            )
+            assert nominal == D("10")
+            assert order_id is None
+            assert state == "OPEN"
+            assert payload["modeled_exchange_fill"] is False
+        assert conn.execute(
+            "SELECT count(*) FROM strategy_entry.paper_orders"
+        ).fetchone()[0] == orders_before
+        assert conn.execute(
+            "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled"
+        ).fetchone() == (0,)
+        raise RuntimeError("ROLLBACK_P90_V2_ENGINE_PIPELINE")
