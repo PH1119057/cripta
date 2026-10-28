@@ -68,11 +68,14 @@ class P90SharedCandleLedger:
             for tf, boundary in (
                 ("5", join.closed_5m_at), ("15", join.closed_15m_at),
             ):
-                if self._legacy.closed_at_or_before(
-                    symbol=symbol, timeframe=tf, through=boundary,
-                ) != boundary:
-                    raise RuntimeError("P90_SHARED_LEGACY_ORIGIN_NOT_PROVEN")
-                self._seed[symbol, tf] = boundary
+                frozen_boundary = self._legacy.latest_closed_at(
+                    symbol=symbol, timeframe=tf,
+                )
+                if boundary < frozen_boundary:
+                    raise RuntimeError("P90_SHARED_CHECKPOINT_BEFORE_FROZEN_SEED")
+                # The immutable original archive never advances after cutover.
+                # The durable checkpoint may advance in a later verified epoch.
+                self._seed[symbol, tf] = frozen_boundary
                 self._emitted[symbol, tf] = boundary
                 sources = connection.execute(
                     """SELECT s.market_source_id,s.venue_id,i.instrument_id,
