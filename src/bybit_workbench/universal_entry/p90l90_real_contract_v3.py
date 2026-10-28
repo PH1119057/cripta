@@ -170,6 +170,7 @@ def check_source_scoped_capital(
 def validate_real_v3_exchange_entry(
     *,
     payload: Mapping[str, object],
+    symbol: str,
     trading_account_id: str,
     signed_account_info: Mapping[str, object],
 ) -> bool:
@@ -190,11 +191,10 @@ def validate_real_v3_exchange_entry(
         raise ValueError("P90_REAL_TRADING_ACCOUNT_IDENTITY_UNPROVEN")
     if str(payload.get("source") or "") != "universal_entry":
         raise ValueError("P90_REAL_ORDER_SOURCE_UNVERIFIED")
-    symbol = str(payload.get("symbol") or "")
-    # The transport command symbol is separate; the caller must additionally
-    # compare it with the outer runtime.trade_commands.symbol.
-    if symbol and symbol not in ALLOWED_SYMBOLS[strategy_id]:
+    if symbol not in ALLOWED_SYMBOLS[strategy_id]:
         raise ValueError("P90_REAL_SYMBOL_OUTSIDE_APPROVED_UNIVERSE")
+    if payload.get("symbol") not in (None, symbol):
+        raise ValueError("P90_REAL_SYMBOL_IDENTITY_MISMATCH")
     for name in (
         "capital_reservation_id",
         "exchange_position_slot_claim_id",
