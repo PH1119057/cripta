@@ -97,7 +97,7 @@ def test_p90_precomputed_uses_native_candidate_but_never_updates_market_watch():
     assert output[0].signal.fact_id == candidate.fact_id
     assert output[0].signal.direction == TradeDirection.LONG
     assert output[0].decision is None
-    assert output[0].request is None
+    assert output[0].execution_request is None
     # An independent Watch on a raw public trade would still be unseeded.
     fresh, _ = _engine()
     raw = replace(candidate, event_kind="PUBLIC_TRADE")
