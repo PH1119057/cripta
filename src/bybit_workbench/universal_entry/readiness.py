@@ -211,10 +211,8 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
         and initial.get("stop_loss_pct") == "10"
         and initial.get("exchange_resident_required") is True
         and initial.get("stop_loss_price_basis") == "ACTUAL_EXECUTED_AVERAGE_ENTRY"
-        # An opening TP bypasses P90's mandatory +0.5%-favorable Exit gate.
-        and initial.get("take_profit_enabled") is False
-        and "take_profit_reference_path" not in initial
-        and "take_profit_price" not in initial
+        and initial.get("take_profit_enabled") is True
+        and initial.get("take_profit_reference_path") == "fact.p90l90.opposite_raw_l53_target"
         and initial.get("tpsl_mode") == "Full"
         and initial.get("trigger_by") == "LastPrice"
     )
