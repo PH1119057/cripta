@@ -481,6 +481,8 @@ migration_files=(
   operations/sql/20261028_p90l90_atomic_entry_checkpoint.sql
   # Additive provenance split: no historical bar/checkpoint UPDATE.
   operations/sql/20261028_p90l90_data_lineage_compatibility.sql
+  # One strategy-agnostic cache owner for verified closed OHLCV, independent of TradingAccount.
+  operations/sql/20261028_shared_closed_candle_source.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

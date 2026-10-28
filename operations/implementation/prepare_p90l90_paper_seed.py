@@ -55,6 +55,21 @@ from bybit_workbench.universal_entry.p90l90_offline_seed_plan import (  # noqa: 
     plan_p90l90_offline_seed,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import VERSION  # noqa: E402
+from bybit_workbench.universal_entry.p90l90_data_lineage import (  # noqa: E402
+    inspect_p90_data_lineage,
+)
+from bybit_workbench.universal_entry.p90l90_causal_transport_join import (  # noqa: E402
+    P90L90CausalTransportJoin,
+)
+from bybit_workbench.market_data.candle_warmup import (  # noqa: E402
+    cache_approved_bybit_history,
+)
+from bybit_workbench.market_data.shared_closed_candles import (  # noqa: E402
+    MarketCandleKey, verify_closed_window,
+)
+from bybit_workbench.universal_entry.p90l90_shared_candle_bridge import (  # noqa: E402
+    P90SharedCandleLedger,
+)
 from operations.monitoring.universal_entry_shadow import (  # noqa: E402
     _candle_fact,
     _fetch_history,
@@ -140,6 +155,122 @@ def _check_db(connection: psycopg.Connection, symbol: str) -> None:
         """SELECT count(*) FROM strategy_entry.p90l90_causal_closed_bars
             WHERE symbol=%s""", (symbol,),
     ).fetchone() == (0,), "EXISTING_CANDLE_LEDGER_MUST_NOT_BE_RESET")
+
+
+def fill_shared_cache(*, symbol: str, commit: str, dry_run: bool) -> None:
+    """Explicit no-Strategy-activation source refill, never old P90 archive."""
+    _actor_identity(commit)
+    _require(symbol in SYMBOLS, "OUTSIDE_OWNER_UNIVERSE")
+    with psycopg.connect("dbname=cripta user=cripta") as conn:
+        with conn.transaction():
+            conn.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, "
+                + ("READ ONLY" if dry_run else "READ WRITE")
+            )
+            _require(
+                conn.execute("SELECT session_user,current_user").fetchone()
+                == ("cripta", "cripta"), "DB_ACTOR",
+            )
+            _require(
+                conn.execute(
+                    "SELECT to_regclass('analytics.closed_candles')::text"
+                ).fetchone() == ("analytics.closed_candles",),
+                "SHARED_SOURCE_SCHEMA_MISSING",
+            )
+            grants = conn.execute(
+                """SELECT has_table_privilege(
+                     'cripta','analytics.closed_candles','SELECT,INSERT'),
+                   has_table_privilege(
+                     'cripta','analytics.closed_candles','UPDATE'),
+                   has_table_privilege(
+                     'cripta','analytics.closed_candles','DELETE')"""
+            ).fetchone()
+            _require(grants == (True, False, False),
+                     "SHARED_SOURCE_ACTOR_NOT_FAIL_CLOSED")
+            lineage = inspect_p90_data_lineage(conn, loaded_commit=commit)
+            _require(lineage.origin_commit != commit,
+                     "P90_ORIGIN_MUST_NOT_BE_RELABELED")
+            for sql in (
+                "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'",
+                "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled",
+                "SELECT count(*) FROM strategy_entry.strategy_activations WHERE enabled",
+                "SELECT count(*) FROM strategy_entry.paper_positions "
+                "WHERE strategy_id IN ('p90l90_legacy_main_ltc_inj',"
+                "'p90l90_legacy_sub_dot_arb_apt') AND state='OPEN'",
+            ):
+                _require(conn.execute(sql).fetchone() == (0,),
+                         "P90_SHARED_RECOVERY_NONEMPTY_EFFECTIVE_STATE")
+            row = conn.execute(
+                """SELECT checkpoint_json,source_commit
+                     FROM strategy_entry.p90l90_causal_transport_checkpoints
+                    WHERE symbol=%s""", (symbol,),
+            ).fetchone()
+            _require(row is not None and row[1] == lineage.origin_commit,
+                     "P90_ORIGINAL_CHECKPOINT_NOT_PROVEN")
+            checkpoint = P90L90CausalTransportJoin.restore(row[0])
+            _require(not checkpoint.pending and
+                     checkpoint.last_emitted_trade_sequence is None,
+                     "P90_OLD_NATIVE_QUEUE_UNRESOLVED")
+            observed = datetime.now(UTC)
+            history = _fetch_history(
+                symbol, observed, ("5", "15"),
+                p90l90_full_prev7d=True,
+                p90_gap_from={
+                    "5": checkpoint.closed_5m_at,
+                    "15": checkpoint.closed_15m_at,
+                },
+            )
+            for tf in ("5", "15"):
+                _require(
+                    bool(verify_closed_window(
+                        _bybit_candle_key(conn, symbol, tf),
+                        history[tf], minimum=len(history[tf]),
+                    )), "P90_SHARED_REST_CLOSED_WINDOW_UNVERIFIED",
+                )
+            if dry_run:
+                print(
+                    f"P90_SHARED_CACHE_CHECK=PASS SYMBOL={symbol} "
+                    f"5M={len(history['5'])} 15M={len(history['15'])} "
+                    "WRITES=0 ACTIVATION=DISABLED"
+                )
+                return
+            cache_approved_bybit_history(
+                conn, symbol=symbol, history=history, observed_at=observed,
+                producer_release_commit=commit,
+            )
+            bridge = P90SharedCandleLedger(
+                conn, source_commit=lineage.origin_commit,
+                producer_release_commit=commit,
+                accepted_source_commits=lineage.approved_producer_commits,
+            )
+            verified = bridge.closed_gap_plan(
+                symbol=symbol, through_5m=history["5"][-1].closed_at,
+                through_15m=history["15"][-1].closed_at,
+            )
+    print(
+        f"P90_SHARED_CACHE_FILLED=YES SYMBOL={symbol} "
+        f"VERIFIED_MISSING_CLOSED_BARS={len(verified)} "
+        "ORIGINAL_P90_ARCHIVE_UNCHANGED=YES PAPER=OFF"
+    )
+
+
+def _bybit_candle_key(
+    connection: psycopg.Connection, symbol: str, timeframe: str,
+) -> MarketCandleKey:
+    rows = connection.execute(
+        """SELECT s.market_source_id,s.venue_id,i.instrument_id,
+                  i.external_symbol,i.product_category
+             FROM identity.market_sources s
+             JOIN identity.instruments i ON i.venue_id=s.venue_id
+            WHERE s.venue_id='venue-bybit'
+              AND s.source_kind='DIRECT_PUBLIC_COMPOSITE'
+              AND s.status='ACTIVE'
+              AND i.external_symbol=%s AND i.product_category='LINEAR'""",
+        (symbol,),
+    ).fetchall()
+    _require(len(rows) == 1, "P90_SOURCE_IDENTITY_AMBIGUOUS")
+    source,venue,instrument,external,product = rows[0]
+    return MarketCandleKey(source,venue,instrument,external,product,timeframe)
 
 
 def prepare(*, symbol: str, commit: str, dry_run: bool) -> None:
@@ -230,11 +361,19 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--seed-disabled-only", action="store_true")
+    mode.add_argument("--check-shared-cache", action="store_true")
+    mode.add_argument("--fill-shared-cache", action="store_true")
     args = parser.parse_args()
-    prepare(
-        symbol=args.symbol, commit=args.source_commit,
-        dry_run=args.check,
-    )
+    if args.check_shared_cache or args.fill_shared_cache:
+        fill_shared_cache(
+            symbol=args.symbol, commit=args.source_commit,
+            dry_run=args.check_shared_cache,
+        )
+    else:
+        prepare(
+            symbol=args.symbol, commit=args.source_commit,
+            dry_run=args.check,
+        )
 
 
 if __name__ == "__main__":

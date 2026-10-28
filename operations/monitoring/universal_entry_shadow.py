@@ -292,6 +292,7 @@ def _fetch_history(
     intervals: tuple[str, ...] = ("5", "15", "60"),
     *,
     p90l90_full_prev7d: bool = False,
+    p90_gap_from: Mapping[str, datetime] | None = None,
 ) -> dict[str, tuple[Candle, ...]]:
     history: dict[str, tuple[Candle, ...]] = {}
     for interval in intervals:
@@ -299,6 +300,23 @@ def _fetch_history(
         # the current partial day. Bybit REST returns at most 1000 candles
         # per page. Other Strategies retain the old single-page contract.
         required = 2600 if interval == "5" and p90l90_full_prev7d else 1000
+        if p90_gap_from is not None and interval in p90_gap_from:
+            saved = p90_gap_from[interval]
+            minutes = int(interval)
+            if (
+                saved.utcoffset() != timedelta(0)
+                or saved > observed_at
+                or saved.second or saved.microsecond
+                or saved.minute % minutes
+            ):
+                raise RuntimeError("P90_SHARED_RECOVERY_CURSOR_UNVERIFIED")
+            missing = max(
+                0, (observed_at - saved).total_seconds() // (minutes * 60),
+            )
+            baseline = 2600 if interval == "5" else 1000
+            required = max(required, baseline + int(missing) + 1)
+            if required > 30000:
+                raise RuntimeError("P90_SHARED_RECOVERY_REQUIRES_BOUNDED_PAGING")
         merged: dict[datetime, Candle] = {}
         end_ms: int | None = None
         while len(merged) < required:
@@ -332,6 +350,12 @@ def _fetch_history(
         history[interval] = tuple(
             sorted(merged.values(), key=lambda item: item.opened_at)[-required:]
         )
+        if p90_gap_from is not None and interval in p90_gap_from:
+            if len(history[interval]) < required:
+                raise RuntimeError(
+                    f"P90_SHARED_RECOVERY_HISTORY_INCOMPLETE:{symbol}:{interval}:"
+                    f"{len(history[interval])}/{required}"
+                )
         if interval == "5" and p90l90_full_prev7d and len(history[interval]) < 2216:
             raise RuntimeError(
                 f"P90L90_7D_PLUS_ATR200_SEED_INCOMPLETE:{symbol}:{len(history[interval])}"
@@ -2052,6 +2076,7 @@ def _run_observer_epoch(
             source_commit=p90_lineage.origin_commit,
             producer_release_commit=LOADED_COMMIT,
             accepted_source_commits=p90_lineage.approved_producer_commits,
+            shared_candle_source=True,
             provenance=FrozenPolicy.from_mapping({
                 "source": "p90l90_atomic_paper_observer",
                 "source_commit": LOADED_COMMIT,
@@ -2191,13 +2216,35 @@ def _run_observer_epoch(
         ).get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
     }
     closed_boundaries: dict[tuple[str, str], datetime] = {}
+    p90_closed_recovery_targets: dict[str, tuple[datetime, datetime]] = {}
     for symbol in symbols:
         observed = datetime.now(UTC)
+        recovery_from = (
+            p90_consumer.recovery_watermarks(symbol)
+            if p90_consumer is not None and symbol in p90l90_symbols
+            else None
+        )
         history = _fetch_history(
             symbol, observed, intervals,
             p90l90_full_prev7d=symbol in p90l90_symbols,
+            p90_gap_from=recovery_from,
+        )
+        # One MarketSource OHLC repository, never per-Strategy/per-account
+        # copies. Every startup checks current REST history and exact source
+        # identity before a consumer receives any candle.
+        from bybit_workbench.market_data.candle_warmup import (
+            cache_approved_bybit_history,
+        )
+
+        history = cache_approved_bybit_history(
+            connection, symbol=symbol, history=history,
+            observed_at=observed, producer_release_commit=LOADED_COMMIT,
         )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
+        if p90_consumer is not None and symbol in p90l90_symbols:
+            p90_closed_recovery_targets[symbol] = (
+                history["5"][-1].closed_at, history["15"][-1].closed_at,
+            )
         for timeframe in intervals:
             rows = history.get(timeframe, ())
             if not rows:
@@ -2216,6 +2263,13 @@ def _run_observer_epoch(
         if symbol in ordinary_symbols:
             paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
+
+    if p90_consumer is not None:
+        # All historical source slices are already closed, validated, persisted
+        # in ONE MarketSource store and ready for atomic all-symbol restart.
+        # Only no-position/no-native-cursor inactive gaps can be replayed as
+        # candles; the actual publicTrade epoch is proven by WS afterwards.
+        p90_consumer.catch_up_closed_histories(p90_closed_recovery_targets)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
     last_trade_prices: dict[str, Decimal] = {}
@@ -2511,6 +2565,34 @@ def _run_observer_epoch(
             attrs = fact.attributes.to_dict()
             timeframe = str(attrs.get("timeframe") or "")
             boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            # The exact market-data source persists live closed bars once,
+            # inside the same Observer fact transaction; P90 reads/compares
+            # this shared fact and never writes a second Strategy candle copy.
+            if timeframe in {"5", "15", "60"}:
+                from bybit_workbench.market_data.candle_warmup import (
+                    cache_approved_bybit_history,
+                )
+
+                native_closed = Candle(
+                    symbol=fact.symbol, timeframe=timeframe,
+                    opened_at=datetime.fromisoformat(
+                        str(attrs["opened_at"])
+                    ).astimezone(UTC),
+                    closed_at=boundary,
+                    open=Decimal(str(attrs["open"])),
+                    high=Decimal(str(attrs["high"])),
+                    low=Decimal(str(attrs["low"])),
+                    close=Decimal(str(attrs["close"])),
+                    volume=Decimal(str(attrs["volume"])),
+                    is_closed=True,
+                )
+                cache_approved_bybit_history(
+                    connection, symbol=fact.symbol,
+                    history={timeframe: (native_closed,)},
+                    observed_at=datetime.now(UTC),
+                    producer_release_commit=LOADED_COMMIT,
+                    source_transport="BYBIT_WS_KLINE",
+                )
             prior = closed_boundaries.get((fact.symbol, timeframe))
             if prior is not None and boundary < prior:
                 raise ContinuityNotProvable(
