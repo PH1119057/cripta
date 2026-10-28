@@ -4505,7 +4505,20 @@ def private_loop(key: str, secret: str) -> None:
             )
             connection_event(connection, "private", "connected", reconnects=reconnects)
             confirmed_epoch = int(time.time())
-            atomic_status("private", {"state": "connected", "connected_at_epoch": confirmed_epoch, "subscriptions_confirmed_at_epoch": confirmed_epoch, "subscriptions_topics": list(confirmed_topics), "reconnects": reconnects, "last_message_epoch": None, "last_verified_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
+            atomic_status(
+                "private",
+                {
+                    "state": "connected",
+                    "connected_at_epoch": confirmed_epoch,
+                    "subscriptions_confirmed_at_epoch": confirmed_epoch,
+                    "subscriptions_topics": list(confirmed_topics),
+                    "reconnects": reconnects,
+                    "last_message_epoch": None,
+                    "last_verified_message_epoch": None,
+                    "hot_positions": hot_positions,
+                    "hot_orders": hot_orders,
+                },
+            )
             if recovering:
                 restored = False
                 if (
@@ -4544,7 +4557,26 @@ def private_loop(key: str, secret: str) -> None:
                         message.get("op") == "pong"
                         or message.get("topic") in PRIVATE_TOPICS
                     )
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"), "subscriptions_topics": previous.get("subscriptions_topics"), "reconnects": reconnects, "last_message_epoch": int(time.time()), "last_verified_message_epoch": (int(time.time()) if authenticated_frame else previous.get("last_verified_message_epoch")), "hot_positions": previous.get("hot_positions", 0), "hot_orders": previous.get("hot_orders", 0)})
+                    atomic_status(
+                        "private",
+                        {
+                            "state": "connected",
+                            "connected_at_epoch": previous.get("connected_at_epoch"),
+                            "subscriptions_confirmed_at_epoch": previous.get(
+                                "subscriptions_confirmed_at_epoch"
+                            ),
+                            "subscriptions_topics": previous.get("subscriptions_topics"),
+                            "reconnects": reconnects,
+                            "last_message_epoch": int(time.time()),
+                            "last_verified_message_epoch": (
+                                int(time.time())
+                                if authenticated_frame
+                                else previous.get("last_verified_message_epoch")
+                            ),
+                            "hot_positions": previous.get("hot_positions", 0),
+                            "hot_orders": previous.get("hot_orders", 0),
+                        },
+                    )
                 if time.monotonic() >= next_ping:
                     ws.send('{"op":"ping"}')
                     next_ping = time.monotonic() + 20
@@ -4568,11 +4600,15 @@ def private_loop(key: str, secret: str) -> None:
                             {
                                 "state": "connected",
                                 "connected_at_epoch": previous.get("connected_at_epoch"),
-                                "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"),
+                                "subscriptions_confirmed_at_epoch": previous.get(
+                                    "subscriptions_confirmed_at_epoch"
+                                ),
                                 "subscriptions_topics": previous.get("subscriptions_topics"),
                                 "reconnects": reconnects,
                                 "last_message_epoch": previous.get("last_message_epoch"),
-                                "last_verified_message_epoch": previous.get("last_verified_message_epoch"),
+                                "last_verified_message_epoch": previous.get(
+                                    "last_verified_message_epoch"
+                                ),
                                 "hot_positions": previous.get("hot_positions", 0),
                                 "hot_orders": previous.get("hot_orders", 0),
                                 "reconciliation_error": _private_worker_safe_error(exc),
@@ -4583,7 +4619,24 @@ def private_loop(key: str, secret: str) -> None:
                         next_reconcile = time.monotonic() + 1.0
                         continue
                     previous = status.get("private", {})
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "subscriptions_confirmed_at_epoch": previous.get("subscriptions_confirmed_at_epoch"), "subscriptions_topics": previous.get("subscriptions_topics"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "last_verified_message_epoch": previous.get("last_verified_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
+                    atomic_status(
+                        "private",
+                        {
+                            "state": "connected",
+                            "connected_at_epoch": previous.get("connected_at_epoch"),
+                            "subscriptions_confirmed_at_epoch": previous.get(
+                                "subscriptions_confirmed_at_epoch"
+                            ),
+                            "subscriptions_topics": previous.get("subscriptions_topics"),
+                            "reconnects": reconnects,
+                            "last_message_epoch": previous.get("last_message_epoch"),
+                            "last_verified_message_epoch": previous.get(
+                                "last_verified_message_epoch"
+                            ),
+                            "hot_positions": hot_positions,
+                            "hot_orders": hot_orders,
+                        },
+                    )
                     cadence = 1.0 if hot_positions else 5.0
                     next_reconcile = max(
                         reconcile_started_monotonic + cadence,
