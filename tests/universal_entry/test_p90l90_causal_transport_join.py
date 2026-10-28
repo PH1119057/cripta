@@ -112,3 +112,17 @@ def test_missing_five_minute_candle_is_a_hard_failure():
     gate = _gate()
     with pytest.raises(RuntimeError, match="missing/noncausal completed 5m"):
         gate.accept(_bar("5", 5))
+
+
+def test_15m_candle_first_must_wait_for_matching_5m_and_restart_safely():
+    gate = _gate()
+    assert gate.accept(_trade(15, 1)) == ()
+    assert gate.accept(_bar("15", 0)) == ()
+    queued = gate.snapshot()
+    assert len(queued["pending"]) == 2
+    restarted = P90L90CausalTransportJoin.restore(queued)
+    assert restarted.closed_15m_at == B0-timedelta(minutes=15)
+    assert restarted.accept(_bar("5", 0)) == (
+        _bar("5", 0), _bar("15", 0), _trade(15, 1),
+    )
+    assert restarted.pending == []
