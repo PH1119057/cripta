@@ -186,6 +186,9 @@ class P90RealSignedPositionReader:
             generation.trading_account_id != self._account
             or generation.account_ref != position.account_ref
             or generation.started_at > generation.completed_at
+            or generation.completed_at < position.fill_at
+            or generation.completed_at < position.initial_protection_confirmed_at
+            or generation.positions_count < 1
             or not 0 <= age <= self._age
         ):
             raise P90RealSignedPositionUnverified(
