@@ -104,6 +104,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                 entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
                 engine=self._entry,
                 store=self._store,
+                provenance=self._provenance,
             )
             self._processors[symbol] = P90L90DurablePaperProcessor(
                 connection,
