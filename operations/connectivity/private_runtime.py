@@ -50,6 +50,7 @@ from bybit_workbench.private_worker_status import (
     private_worker_status_path,
 )
 from bybit_workbench.market_identity import bybit_instrument_id
+from bybit_workbench.private_ws_subscriptions import confirm_private_subscriptions
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -4472,7 +4473,15 @@ def private_loop(key: str, secret: str) -> None:
             ws = websocket.create_connection(PRIVATE_URL, timeout=10, enable_multithread=False)
             ws.settimeout(1)
             auth(ws, key, secret)
-            ws.send(json.dumps({"op": "subscribe", "args": ["order.linear", "execution.linear", "position.linear", "wallet"]}, separators=(",", ":")))
+            confirmed_topics = confirm_private_subscriptions(
+                ws,
+                lambda message: handle_private(connection, message),
+                is_running=lambda: running,
+            )
+            connection_event(
+                connection, "private", "subscriptions_confirmed",
+                topics=list(confirmed_topics), reconnects=reconnects,
+            )
             connection_event(connection, "private", "connected", reconnects=reconnects)
             atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
             if recovering:
