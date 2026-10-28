@@ -292,6 +292,7 @@ def _fetch_history(
     intervals: tuple[str, ...] = ("5", "15", "60"),
     *,
     p90l90_full_prev7d: bool = False,
+    p90_gap_from: Mapping[str, datetime] | None = None,
 ) -> dict[str, tuple[Candle, ...]]:
     history: dict[str, tuple[Candle, ...]] = {}
     for interval in intervals:
@@ -299,6 +300,23 @@ def _fetch_history(
         # the current partial day. Bybit REST returns at most 1000 candles
         # per page. Other Strategies retain the old single-page contract.
         required = 2600 if interval == "5" and p90l90_full_prev7d else 1000
+        if p90_gap_from is not None and interval in p90_gap_from:
+            saved = p90_gap_from[interval]
+            minutes = int(interval)
+            if (
+                saved.utcoffset() != timedelta(0)
+                or saved > observed_at
+                or saved.second or saved.microsecond
+                or saved.minute % minutes
+            ):
+                raise RuntimeError("P90_SHARED_RECOVERY_CURSOR_UNVERIFIED")
+            missing = max(
+                0, (observed_at - saved).total_seconds() // (minutes * 60),
+            )
+            baseline = 2600 if interval == "5" else 1000
+            required = max(required, baseline + int(missing) + 1)
+            if required > 30000:
+                raise RuntimeError("P90_SHARED_RECOVERY_REQUIRES_BOUNDED_PAGING")
         merged: dict[datetime, Candle] = {}
         end_ms: int | None = None
         while len(merged) < required:
@@ -332,6 +350,12 @@ def _fetch_history(
         history[interval] = tuple(
             sorted(merged.values(), key=lambda item: item.opened_at)[-required:]
         )
+        if p90_gap_from is not None and interval in p90_gap_from:
+            if len(history[interval]) < required:
+                raise RuntimeError(
+                    f"P90_SHARED_RECOVERY_HISTORY_INCOMPLETE:{symbol}:{interval}:"
+                    f"{len(history[interval])}/{required}"
+                )
         if interval == "5" and p90l90_full_prev7d and len(history[interval]) < 2216:
             raise RuntimeError(
                 f"P90L90_7D_PLUS_ATR200_SEED_INCOMPLETE:{symbol}:{len(history[interval])}"
@@ -2194,9 +2218,15 @@ def _run_observer_epoch(
     closed_boundaries: dict[tuple[str, str], datetime] = {}
     for symbol in symbols:
         observed = datetime.now(UTC)
+        recovery_from = (
+            p90_consumer.recovery_watermarks(symbol)
+            if p90_consumer is not None and symbol in p90l90_symbols
+            else None
+        )
         history = _fetch_history(
             symbol, observed, intervals,
             p90l90_full_prev7d=symbol in p90l90_symbols,
+            p90_gap_from=recovery_from,
         )
         # One MarketSource OHLC repository, never per-Strategy/per-account
         # copies. Every startup checks current REST history and exact source
