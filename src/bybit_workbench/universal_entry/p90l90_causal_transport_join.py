@@ -168,6 +168,12 @@ class P90L90CausalTransportJoin:
         if len(self.pending) >= _MAX_PENDING:
             raise RuntimeError("P90L90 causal transport backlog capacity exceeded")
         if event.kind == "PUBLIC_TRADE":
+            # Narrow this independent transport branch explicitly. The earlier
+            # branch validates the cursor, but mypy cannot prove its predicate
+            # still holds here for a newly received envelope.
+            sequence = event.exchange_sequence
+            if not isinstance(sequence, int):
+                raise ValueError("P90L90 native trade sequence missing")
             if self.last_trade_event_at is not None and (
                 event.event_at < self.last_trade_event_at
             ):
