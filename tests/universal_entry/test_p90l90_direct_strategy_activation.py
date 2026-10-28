@@ -12,6 +12,7 @@ from decimal import Decimal
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy, MarketFactEnvelope, StrategyActivation,
 )
+from bybit_workbench.universal_entry.engine import UniversalEntryEngine
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_causal import (
     P90L90Crossing, P90L90EntryState,
@@ -23,7 +24,6 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
 )
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
-from bybit_workbench.universal_entry.engine import UniversalEntryEngine
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 AT = datetime(2026, 10, 28, 9, 30, tzinfo=UTC)
