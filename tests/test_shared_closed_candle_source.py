@@ -113,6 +113,17 @@ def test_two_consumers_share_one_immutable_row_without_duplicate_writes() -> Non
             if "FROM identity.market_sources" in sql:
                 return Result([("ACTIVE", "venue-bybit")])
             if "FROM analytics.closed_candles" in sql:
+                if "ORDER BY closed_at DESC LIMIT" in sql:
+                    through, required = params[3], params[4]
+                    values = sorted(
+                        ((close, fields) for close, fields in self.rows.items()
+                         if close <= through),
+                        reverse=True,
+                    )[:required]
+                    return Result([
+                        (fields[0], close, *fields[1:])
+                        for close, fields in values
+                    ])
                 start, end = params[3], params[4]
                 return Result([
                     (close, *values) for close, values in self.rows.items()
