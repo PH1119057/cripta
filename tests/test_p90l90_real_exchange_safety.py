@@ -173,12 +173,41 @@ def test_unapproved_universal_action_and_unproven_symbol_are_rejected() -> None:
         _guard(position=position)
 
 
-def test_p90_real_close_can_only_act_with_existing_signed_sl_and_tp() -> None:
+def test_emergency_reduce_only_close_remains_possible_without_exchange_stop() -> None:
     _guard(action=ExitActionKind.CLOSE, mutation={"order_type": "MARKET"})
     position = _position()
     position["stopLoss"] = "0"
+    position["takeProfit"] = "0"
+    _guard(
+        position=position, action=ExitActionKind.CLOSE,
+        mutation={"order_type": "MARKET"},
+    )
+    wrong = _payload()
+    wrong["trading_account_id"] = "ta-other"
     with pytest.raises(P90RealExchangeSafetyBlock):
         _guard(
-            position=position, action=ExitActionKind.CLOSE,
+            payload=wrong, position=position, action=ExitActionKind.CLOSE,
             mutation={"order_type": "MARKET"},
+        )
+
+
+def test_existing_profit_side_trailing_stop_can_be_tightened_without_widening() -> None:
+    long_position = _position()
+    long_position["stopLoss"] = "100.20"
+    _guard(position=long_position, mutation={"stop_price": "100.50"})
+    with pytest.raises(P90RealExchangeSafetyBlock):
+        _guard(position=long_position, mutation={"stop_price": "100.10"})
+
+    short_position = _position(side="Sell")
+    short_position["stopLoss"] = "99.75"
+    short_payload = _payload()
+    short_payload["direction"] = "SHORT"
+    _guard(
+        payload=short_payload, position=short_position,
+        mutation={"stop_price": "99.50"},
+    )
+    with pytest.raises(P90RealExchangeSafetyBlock):
+        _guard(
+            payload=short_payload, position=short_position,
+            mutation={"stop_price": "99.90"},
         )
