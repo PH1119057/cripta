@@ -10,6 +10,7 @@ import pytest
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
+    SharedClosedCandleStore,
     verify_closed_window,
 )
 
@@ -146,3 +147,19 @@ def test_two_consumers_share_one_immutable_row_without_duplicate_writes() -> Non
     assert second.ingest(data, **kwargs) == 0
     assert len(conn.rows) == 2
     assert second.history(through=data[-1].closed_at, required=2) == data
+
+
+def test_future_provider_flagged_closed_bar_fails_before_db_write() -> None:
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    store = SharedClosedCandleStore(db, KEY)
+    future = bar(2)
+    assert future.is_closed
+    with pytest.raises(RuntimeError, match="CANDLE_FUTURE_CLOSE_NOT_OBSERVED"):
+        store.ingest(
+            (future,), producer_release_commit="a" * 40,
+            transport="BYBIT_REST_KLINE",
+            observed_at=future.opened_at,
+        )
+    db.transaction.assert_not_called()
