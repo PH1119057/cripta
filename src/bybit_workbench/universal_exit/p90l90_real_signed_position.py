@@ -87,6 +87,17 @@ class P90RealSignedPositionReader:
         self._clock = clock
         self._age = max_age_seconds
 
+    def _signed_get(
+        self, endpoint: str, params: dict[str, str],
+    ) -> Mapping[str, object]:
+        try:
+            return self._get(endpoint, params)
+        except Exception as exc:
+            # No raw signed response, credentials or transport URL in errors.
+            raise P90RealSignedPositionUnverified(
+                "P90_REAL_SIGNED_EXCHANGE_TRANSPORT_UNAVAILABLE"
+            ) from exc
+
     @staticmethod
     def _verified_response(raw: Mapping[str, object], endpoint: str) -> Mapping[str, object]:
         if (
@@ -130,11 +141,18 @@ class P90RealSignedPositionReader:
             )
         # Runtime-only facts are independently owned. Unknown means BLOCK,
         # and no REST read or UID information is requested in that state.
-        if self._ws(position) is not True:
+        try:
+            ws_proven = self._ws(position)
+            commands_clear = self._no_pending(position)
+        except Exception as exc:
+            raise P90RealSignedPositionUnverified(
+                "P90_REAL_PRIVATE_RUNTIME_PROOF_UNAVAILABLE"
+            ) from exc
+        if ws_proven is not True:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_PRIVATE_WS_CONTINUITY_UNVERIFIED"
             )
-        if self._no_pending(position) is not True:
+        if commands_clear is not True:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_PENDING_EXIT_COMMAND_UNVERIFIED"
             )
@@ -172,7 +190,7 @@ class P90RealSignedPositionReader:
 
         def read_own_identity() -> Mapping[str, object]:
             nonlocal uid
-            raw = self._get("/v5/user/query-api", {})
+            raw = self._signed_get("/v5/user/query-api", {})
             snapshot = normalize_authenticated_api_key_info(
                 raw, observed_at=now, signed_get_proven=True,
             )
@@ -193,7 +211,7 @@ class P90RealSignedPositionReader:
         # Only one signed Bybit open position for this symbol is acceptable.
         # The response is never persisted here (may contain account metadata).
         signed = self._verified_response(
-            self._get("/v5/position/list", {
+            self._signed_get("/v5/position/list", {
                 "category": "linear", "symbol": position.symbol,
             }), "POSITION",
         )
@@ -217,18 +235,26 @@ class P90RealSignedPositionReader:
             )
         observed = active[0]
         side = "Buy" if position.direction is TradeDirection.LONG else "Sell"
+        try:
+            signed_size = Decimal(str(observed.get("size")))
+            signed_fill = Decimal(str(observed.get("avgPrice")))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise P90RealSignedPositionUnverified(
+                "P90_REAL_SIGNED_POSITION_FILL_OR_SIDE_MISMATCH"
+            ) from exc
         if (
             observed.get("symbol") != position.symbol
             or str(observed.get("positionIdx")) != "0"
             or observed.get("side") != side
-            or Decimal(str(observed.get("size"))) != position.actual_qty
-            or Decimal(str(observed.get("avgPrice"))) != position.actual_avg_fill
+            or not signed_size.is_finite() or not signed_fill.is_finite()
+            or signed_size != position.actual_qty
+            or signed_fill != position.actual_avg_fill
         ):
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_SIGNED_POSITION_FILL_OR_SIDE_MISMATCH"
             )
         instrument = self._verified_response(
-            self._get("/v5/market/instruments-info", {
+            self._signed_get("/v5/market/instruments-info", {
                 "category": "linear", "symbol": position.symbol,
             }), "INSTRUMENT",
         )
