@@ -78,6 +78,105 @@ def _non_off_features(value: object) -> tuple[Mapping[str, object], ...]:
     return tuple(rows)
 
 
+def _p90l90_exact_no_order_paper_model(card: StrategyCard) -> bool:
+    """Identify the reviewed immutable no-order v2; never infer REAL approval."""
+    if card.strategy_version != "1.1-p90l90-strategy-second48-20261028":
+        return False
+    universes = {
+        "p90l90_legacy_main_ltc_inj": ("INJUSDT", "LTCUSDT"),
+        "p90l90_legacy_sub_dot_arb_apt": ("APTUSDT", "ARBUSDT", "DOTUSDT"),
+    }
+    if card.strategy_id not in universes or card.symbols != universes[card.strategy_id]:
+        return False
+    if {side.value for side in card.direction_policy} != {"LONG", "SHORT"}:
+        return False
+    entry = card.entry_policy.to_dict()
+    watch = _mapping(entry.get("watch_policy"))
+    geometry = _mapping(watch.get("geometry"))
+    execution = _mapping(entry.get("execution_policy"))
+    exit_policy = card.exit_policy.to_dict()
+    local = _mapping(exit_policy.get("local_zone_exit"))
+    capital = card.capital_policy.to_dict()
+    simulation = _mapping(capital.get("paper_simulation"))
+    protection = _mapping(
+        card.protection_policy.to_dict().get("initial_protection")
+    )
+    lifecycle = card.lifecycle_policy.to_dict()
+    embargo = _mapping(lifecycle.get("second_hardstop_embargo"))
+    trailing = _mapping(exit_policy.get("trailing"))
+    width_filter = _mapping(geometry.get("width_filter"))
+    if (
+        watch.get("enabled") is not True
+        or geometry.get("lookback_bars") != {
+            "l53_5m": 36, "h9_5m": 108, "h9_15m": 36
+        }
+        or geometry.get("atr_period") != 200
+        or geometry.get("zone_half_width_atr") != "0.5"
+        or geometry.get("h9_equality") != "EXACT_RAW_SIDE"
+        or geometry.get("crossing") != "FIRST_ADJACENT_NATIVE_RAW_TRADE"
+        or geometry.get("depth_denominator") != "RAW_H9_UNION_SPAN"
+        or geometry.get("depth_min_pct") != "0"
+        or geometry.get("depth_max_pct") != "15"
+        or width_filter != {
+            "source": "PREV7D_COMPLETED_UTC",
+            "previous_days": 7,
+            "tolerance_pp": "0.5",
+        }
+        or trailing != {
+            "enabled": True,
+            "activation_profit_pct": "0.5",
+            "distance_pct": "0.35",
+            "reference": "BEST_FAVORABLE_PRICE_SINCE_ENTRY",
+            "update_effective_from": "NEXT_ORDERED_TRADE",
+            "never_loosen": True,
+        }
+        or local.get("target") != "OPPOSITE_RAW_BOUNDARY"
+        or local.get("minimum_favorable_pct") != "0.5"
+        or local.get("target_fact_path") != "fact.p90l90.opposite_raw_l53_target"
+        or local.get("priority") != [
+            "EXISTING_STOP", "EXISTING_RESTING_TP",
+            "NEW_MARKETABLE_TP", "TIGHTEN_STOP",
+        ]
+        or lifecycle.get("position_mode") != "ONE_WAY"
+        or lifecycle.get("max_open_positions_per_symbol") != 1
+        or geometry.get("operator") != "P90L90_RAW_H9_UNION_CROSSING"
+        or execution.get("order_type") != "NOT_APPROVED"
+        or execution.get("reference_value_path") != "fact.p90l90.candidate_price"
+        or local.get("enabled") is not True
+        or local.get("operator") != "P90L90_DYNAMIC_OPPOSITE_RAW_L53"
+        or not _positive_decimal(protection.get("stop_loss_pct"))
+        or str(protection.get("stop_loss_pct")) != "10"
+        or capital.get("amount_currency") != "USDT"
+        or capital.get("require_capacity") is not False
+        or str(capital.get("modeled_research_notional_usdt")) != "10"
+    ):
+        return False
+    if dict(simulation) != {
+        "enabled": True,
+        "mode": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+        "notional_usdt": "10",
+        "schema_leverage": 1,
+        "fees": "TAKER_ENTRY_RESEARCH_PROXY",
+        "exchange_fill_confirmed": False,
+    }:
+        return False
+    return (
+        set(embargo) == {
+            "enabled", "hardstop_count", "rolling_hours",
+            "new_entry_pause_hours", "close_existing_positions", "domain",
+        }
+        and type(embargo["enabled"]) is bool
+        and type(embargo["hardstop_count"]) is int
+        and embargo["hardstop_count"] > 0
+        and type(embargo["rolling_hours"]) is int
+        and embargo["rolling_hours"] > 0
+        and type(embargo["new_entry_pause_hours"]) is int
+        and embargo["new_entry_pause_hours"] > 0
+        and embargo["close_existing_positions"] is False
+        and embargo["domain"] == "STRATEGY_VERSION"
+    )
+
+
 def assess_strategy_runtime_readiness(
     card: StrategyCard,
     *,
@@ -107,19 +206,30 @@ def assess_strategy_runtime_readiness(
         )
 
     geometry = _mapping(watch.get("geometry"))
-    if str(geometry.get("operator") or "") == "P90L90_RAW_H9_UNION_CROSSING":
+    p90_operator = str(geometry.get("operator") or "") == (
+        "P90L90_RAW_H9_UNION_CROSSING"
+    )
+    p90_paper_exact = p90_operator and _p90l90_exact_no_order_paper_model(card)
+    if p90_operator and not p90_paper_exact:
+        legacy_v1 = card.strategy_version == "1.0-p90l90-legacy-passive-20261027"
         policy_reasons.append(
             RuntimeReadinessReason(
-                "P90L90_RAW_ENTRY_PRODUCER_NOT_WIRED",
+                (
+                    "P90L90_RAW_ENTRY_PRODUCER_NOT_WIRED" if legacy_v1
+                    else "P90L90_PAPER_MODEL_OR_PRODUCER_NOT_PROVEN"
+                ),
                 "ENTRY",
-                "RAW H9/PREV7D crossing is passive authoring; no verified live producer.",
+                "P90 RAW strategy needs the exact reviewed no-order v2 producer.",
             )
         )
         paper_reasons.append(
             RuntimeReadinessReason(
-                "P90L90_RAW_EXIT_CONSUMER_NOT_WIRED",
+                (
+                    "P90L90_RAW_EXIT_CONSUMER_NOT_WIRED" if legacy_v1
+                    else "P90L90_PAPER_EXIT_IDENTITY_NOT_PROVEN"
+                ),
                 "PAPER_EXIT",
-                "RAW opposite L5-3 TP and TRAIL035 need proven causal Exit consumer.",
+                "P90 paper Exit requires exact v2 native-trade checkpoint model.",
             )
         )
 
@@ -285,6 +395,41 @@ def assess_strategy_runtime_readiness(
                 "PAPER_INITIAL_TAKE_PROFIT_NOT_SET",
                 "PAPER",
                 "Включённый initial TP требует percent или causal fact reference.",
+            )
+        )
+
+    if p90_paper_exact:
+        # Until the independent native publicTrade / completed 5m/15m
+        # streams have a proven ordered, restart-durable causal join, even
+        # PAPER activation must remain fail-closed. Generic observer_ready
+        # is NOT a proof that the joint stream preserves a 5m boundary.
+        paper_reasons.append(
+            RuntimeReadinessReason(
+                "P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN",
+                "PAPER_EXIT",
+                "P90L90 SHADOW needs exact restart-durable publicTrade/bar ordering.",
+            )
+        )
+        # The exact v2 never creates an exchange/paper order. Its own native
+        # tick consumer creates a directly modeled paper_position with fixed
+        # 10 USDT research notional and schema-only leverage=1. Bypass ONLY
+        # generic paper-ORDER fields that do not apply to this separate rail.
+        exempt_paper_order_codes = {
+            "PAPER_AMOUNT_NOT_SET", "PAPER_LEVERAGE_NOT_SET",
+            "PAPER_ORDER_TYPE_NOT_SET", "PAPER_REQUEST_MAX_AGE_NOT_SET",
+        }
+        paper_reasons = [
+            item for item in paper_reasons
+            if item.code not in exempt_paper_order_codes
+        ]
+    if p90_operator:
+        # Critical: no-order v2 can be monitored in SHADOW, NEVER traded.
+        # Execution does not inherit PAPER-ready or observer_ready.
+        execution_reasons.append(
+            RuntimeReadinessReason(
+                "P90L90_EXCHANGE_ORDER_NOT_APPROVED",
+                "EXECUTION",
+                "P90L90 model-only publicTrade Entry has no Bybit order authorization.",
             )
         )
 

@@ -475,6 +475,9 @@ migration_files=(
   operations/sql/20261027_account_position_observer.sql
   # Scoped SECURITY DEFINER writer for two PASSIVE P90L90 bindings only.
   operations/sql/20261028_p90l90_legacy_passive_binding_writer.sql
+  # New independent P90 v2 passive binding and PAPER-only causal event buffer.
+  operations/sql/20261028_p90l90_strategy_v2_passive_binding_writer.sql
+  operations/sql/20261028_p90l90_causal_transport_checkpoints.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
