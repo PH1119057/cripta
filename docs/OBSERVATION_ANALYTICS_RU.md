@@ -821,6 +821,16 @@ the CRIPTA wallet used to transact is TradingAccount/private execution identity.
 
 
 
+## 7.4 Compact analytical history
+
+The compact analytical representation from ARCH §48 uses
+MarketSource + InstrumentIdentity + time as its market grain. Strategy/account
+labels are joined only when the research question requires actual
+decision/execution/economics lineage; they must not cause physical duplication
+of identical public market rows.
+
+This section grants no trading command or Strategy policy.
+
 ## 7.5 Единственный общий producer закрытых свечей (ARCH §48.4)
 
 Канонический MarketSource-адаптер наблюдательного контура загружает, проверяет и
@@ -836,14 +846,3 @@ InstrumentIdentity + timeframe + UTC close`. MAYAK/Dispatcher не создаю�
 Strategy/Entry/Exit отвечают только за свои вычисленные state/checkpoints.
 Не создавать новый live cursor из исторических OHLC: trade continuity
 проверяется отдельно по ARCH §48.4.
-
-
-## 7.4 Compact analytical history
-
-The compact analytical representation from ARCH §48 uses
-MarketSource + InstrumentIdentity + time as its market grain. Strategy/account
-labels are joined only when the research question requires actual
-decision/execution/economics lineage; they must not cause physical duplication
-of identical public market rows.
-
-This section grants no trading command or Strategy policy.
