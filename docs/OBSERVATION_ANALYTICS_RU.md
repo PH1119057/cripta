@@ -819,8 +819,6 @@ protocol/pool and block/event provenance instead of a centralized Exchange
 feed. The same separation remains: public pool/chain state is market evidence;
 the CRIPTA wallet used to transact is TradingAccount/private execution identity.
 
-
-
 ## 7.4 Compact analytical history
 
 The compact analytical representation from ARCH §48 uses
@@ -830,19 +828,3 @@ decision/execution/economics lineage; they must not cause physical duplication
 of identical public market rows.
 
 This section grants no trading command or Strategy policy.
-
-## 7.5 Единственный общий producer закрытых свечей (ARCH §48.4)
-
-Канонический MarketSource-адаптер наблюдательного контура загружает, проверяет и
-материализует точные подтверждённые OHLCV 5m/15m и иные разрешённые интервалы
-в единственном `analytics.closed_candles`, независимо от StrategyActivation.
-Для startup/restart он по требованию потребителя дозагружает недостающие
-исторические closed candles из exact approved MarketSource, без принудительного
-ожидания формирования полного live-окна. Ключ `MarketSource +
-InstrumentIdentity + timeframe + UTC close`. MAYAK/Dispatcher не создают
-отдельных физических копий тех же свечей; `analytics.market_minutes` остаётся
-самостоятельным **производным** compact-minute dataset и не выдаётся за OHLC.
-Наблюдательный контур отвечает за source/freshness/coverage/provenance.
-Strategy/Entry/Exit отвечают только за свои вычисленные state/checkpoints.
-Не создавать новый live cursor из исторических OHLC: trade continuity
-проверяется отдельно по ARCH §48.4.
