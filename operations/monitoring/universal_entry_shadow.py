@@ -2473,18 +2473,6 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
-            if fact.symbol in p90l90_symbols:
-                if cursor is None:
-                    raise ContinuityNotProvable(
-                        "P90L90 Paper Exit requires exact native TradeCursor"
-                    )
-                paper.route_p90l90_native_trade(
-                    symbol=fact.symbol,
-                    exec_id=cursor.exec_id,
-                    exchange_sequence=cursor.seq,
-                    event_at=cursor.traded_at,
-                    price=Decimal(str(attrs["price"])),
-                )
         admission_time = (
             datetime.now(UTC) if real_execution_selected_for else fact.observed_at
         )
@@ -2582,24 +2570,28 @@ def _run_observer_epoch(
                     if watch_geometry.get("operator") == (
                         "P90L90_RAW_H9_UNION_CROSSING"
                     ):
-                        if fact.event_kind != "PUBLIC_TRADE" or cursor is None:
-                            raise ContinuityNotProvable(
-                                "P90L90 PAPER entry requires same native PUBLIC_TRADE cursor"
-                            )
-                        paper.create_p90l90_native_paper_entry(
-                            evaluation, bundle,
-                            exec_id=cursor.exec_id,
-                            exchange_sequence=cursor.seq,
-                            event_at=cursor.traded_at,
-                            native_trade_price=Decimal(str(
-                                fact.attributes.to_dict()["price"]
-                            )),
-                            raw_trade_fact_id=fact.fact_id,
+                        raise RuntimeError(
+                            "P90L90_ENTRY_REACHED_ORDINARY_OBSERVER_OWNER"
                         )
-                    else:
-                        paper.create_order(evaluation, bundle, now=fact.observed_at)
+                    paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1
+        if (
+            p90_consumer is not None and fact.symbol in p90l90_symbols
+            and fact.event_kind in {"PUBLIC_TRADE", "CANDLE_CLOSED"}
+        ):
+            if fact.event_kind == "PUBLIC_TRADE" and cursor is None:
+                raise ContinuityNotProvable(
+                    "P90L90 causal consumer requires exact native TradeCursor"
+                )
+            if (
+                fact.event_kind == "PUBLIC_TRADE"
+                or str(fact.attributes.to_dict().get("timeframe") or "")
+                in {"5", "15"}
+            ):
+                p90_consumer.accept(
+                    encode_p90l90_fact(fact, cursor=cursor)
+                )
 
     try:
         trade_mirror_thread.start()
