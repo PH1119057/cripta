@@ -1415,26 +1415,3 @@ The owner approves retaining the five-symbol original P90L90 5m/15m candle archi
 
 P90L90 activation and the live Observer must prove a versioned compatibility attestation for the exact original causal dataset, all five symbols, their immutable StrategyCard/EntryPlan/ExitPlan fingerprints and independent MAIN/SUB SECOND48 state, plus exact loaded executable release. Only then can the existing 10-USDT-model, zero-order PAPER adapter be activated; historical records retain actual origin/source identity, and newly committed facts record their own producer release. No `source_commit=LOADED_COMMIT` equality shortcut, fabricated native `publicTrade` cursor, legacy R1 inheritance, forced PAPER position, REAL order, execution grant or LIVE-arm. A missing/inconsistent attestation blocks activation, not a reason to reset the durable seed.
 
-
-
-### 7.6.2 Общие closed candles и P90L90 restart — OWNER DECISION 2026-10-28
-
-Физический владелец и единое местоположение OHLC — `ARCH §48.4`,
-`analytics.closed_candles`; не добавлять новые per-Strategy/per-TradingAccount
-closed-candle writers. При startup/restart без ожидания живой проторговки
-запрашивать исторические закрытые 5m/15m по точному утверждённому источнику
-и полному `StrategyCard / EntryPlan / ExitPlan`. H9 требует 108 закрытых 5m
-и 36 закрытых 15m свечей (9h), L5-3 — 36 закрытых 5m (3h).
-Но неизменяемый P90L90 v2 дополнительно требует ATR200 и семи **полностью
-завершённых предыдущих UTC суток** для PREV7D. Только 9h для v2 недостаточно;
-короче менять можно лишь новой StrategyVersion после исследований, а не
-подменой source window.
-
-Исторические OHLC заполняют геометрию и gap в свечах, не создают пропущенных
-TradeCursor или Entry. Old P90 seed `source_commit=ecde511...` и
-пять checkpoint из §7.6.1 остаются неизменяемой доказательной историей.
-Только после независимого контроля отсутствующих позиций/pending и доказанного
-начала нового native publicTrade epoch можно разрешать PAPER-сигналы на
-**новых** сделках. Нельзя просто перезаписать старый generation=0 checkpoint
-или обходить модель source continuity. Сохранённая открытая позиция
-обязательно проходит собственный Exit/lifecycle reconciliation.
