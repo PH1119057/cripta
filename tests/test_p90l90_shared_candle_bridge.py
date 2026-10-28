@@ -14,6 +14,9 @@ from bybit_workbench.universal_entry.contracts import (
 from bybit_workbench.universal_entry.p90l90_causal_fact_codec import (
     encode_p90l90_fact,
 )
+from bybit_workbench.universal_entry.p90l90_causal_transport_join import (
+    P90TransportEvent,
+)
 from bybit_workbench.universal_entry.p90l90_shared_candle_bridge import (
     P90SharedCandleLedger,
 )
@@ -21,7 +24,7 @@ from bybit_workbench.universal_entry.p90l90_shared_candle_bridge import (
 T = datetime(2026, 10, 28, 12, 30, tzinfo=UTC)
 
 
-def _closed_event() -> object:
+def _closed_event() -> P90TransportEvent:
     fact = MarketFactEnvelope(
         fact_id="p90-test-closed",
         event_kind="CANDLE_CLOSED",
@@ -103,3 +106,78 @@ def test_missing_shared_new_history_is_not_silently_reset() -> None:
         adapter.history(
             symbol="LTCUSDT", timeframe="5", through=T, limit=2600,
         )
+
+
+def test_gap_plan_is_exact_and_5m_first_at_same_close() -> None:
+    adapter = object.__new__(P90SharedCandleLedger)
+    adapter._seed = {
+        ("LTCUSDT", "5"): T,
+        ("LTCUSDT", "15"): T,
+    }
+    def read(symbol: str, tf: str, *, through: datetime, count: int):
+        assert symbol == "LTCUSDT"
+        step = timedelta(minutes=int(tf))
+        return tuple(
+            Candle(
+                symbol, tf, through-step*(count-i),
+                through-step*(count-i-1),
+                Decimal("100"), Decimal("101"),
+                Decimal("99"), Decimal("100"),
+                Decimal("1"),
+            ) for i in range(count)
+        )
+
+    adapter._canonical = read
+    plan = adapter.closed_gap_plan(
+        symbol="LTCUSDT",
+        through_5m=T+timedelta(minutes=15),
+        through_15m=T+timedelta(minutes=15),
+    )
+    assert [(tf, bar.closed_at) for tf, bar in plan] == [
+        ("5", T+timedelta(minutes=5)),
+        ("5", T+timedelta(minutes=10)),
+        ("5", T+timedelta(minutes=15)),
+        ("15", T+timedelta(minutes=15)),
+    ]
+
+
+def test_gap_plan_refuses_any_missing_source_bar() -> None:
+    adapter = object.__new__(P90SharedCandleLedger)
+    adapter._seed = {
+        ("LTCUSDT", "5"): T,
+        ("LTCUSDT", "15"): T,
+    }
+    def missing(*_args, **_kwargs):
+        raise RuntimeError("CANDLE_HISTORY_GAP_OR_DUPLICATE")
+    adapter._canonical = missing
+    with pytest.raises(RuntimeError, match="GAP_OR_DUPLICATE"):
+        adapter.closed_gap_plan(
+            symbol="LTCUSDT",
+            through_5m=T+timedelta(minutes=10),
+            through_15m=T,
+        )
+
+
+def test_gap_plan_never_invents_public_trades() -> None:
+    adapter = object.__new__(P90SharedCandleLedger)
+    adapter._seed = {
+        ("LTCUSDT", "5"): T,
+        ("LTCUSDT", "15"): T,
+    }
+    adapter._canonical = lambda *_args, **_kwargs: (
+        Candle(
+            "LTCUSDT", "5", T,
+            T+timedelta(minutes=5),
+            Decimal("100"), Decimal("101"),
+            Decimal("99"), Decimal("100"), Decimal("1"),
+        ),
+    )
+    plan = adapter.closed_gap_plan(
+        symbol="LTCUSDT",
+        through_5m=T+timedelta(minutes=5),
+        through_15m=T,
+    )
+    assert len(plan) == 1
+    assert plan[0][0] == "5"
+    # A real native event has execId/seq; no such field is created here.
+    assert all(isinstance(event, Candle) for _, event in plan)
