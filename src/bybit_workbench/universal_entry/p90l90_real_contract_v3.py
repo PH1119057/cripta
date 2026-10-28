@@ -97,9 +97,13 @@ def real_v3_authoring_payload(
         "stop_loss_pct": "10",
         "stop_loss_price_basis": "ACTUAL_EXECUTED_AVERAGE_ENTRY",
         "exchange_resident_required": True,
+        # P90 opposite RAW L5-3 TP is *not* an opening-order TP.
+        # Its ExitPlan may arm it only after +0.5% favorable movement.
+        "take_profit_enabled": False,
         "trigger_by": "LastPrice",
         "tpsl_mode": "Full",
     })
+    initial.pop("take_profit_reference_path", None)
     # Entire exact P90 RAW Entry, dynamic trailing/TP and SECOND48 inherited
     # from the owner-approved P90 v2 (not from any retired policy).
     return raw
