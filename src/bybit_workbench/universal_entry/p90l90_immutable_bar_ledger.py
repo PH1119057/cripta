@@ -99,6 +99,21 @@ class P90L90ImmutableBarLedger:
                 )
             return inserted is not None
 
+    def latest_closed_at(self, *, symbol: str, timeframe: str) -> datetime:
+        """Latest committed immutable close; exact release-source required."""
+        if symbol not in _SYMBOLS or timeframe not in _INTERVALS:
+            raise ValueError("P90L90 latest bar outside exact symbol/timeframe")
+        row = self._db.execute(
+            """SELECT closed_at,source_commit
+                 FROM strategy_entry.p90l90_causal_closed_bars
+                WHERE symbol=%s AND timeframe=%s
+                ORDER BY closed_at DESC LIMIT 1""",
+            (symbol, timeframe),
+        ).fetchone()
+        if row is None or row[1] != self._sha:
+            raise RuntimeError("P90L90 latest immutable candle source not proven")
+        return row[0].astimezone(UTC)
+
     def history(
         self,
         *,
