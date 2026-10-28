@@ -9,7 +9,8 @@ import pytest
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.shared_closed_candles import (
-    MarketCandleKey, verify_closed_window,
+    MarketCandleKey,
+    verify_closed_window,
 )
 
 KEY = MarketCandleKey(
