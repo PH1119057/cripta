@@ -57,6 +57,7 @@ class P90RealMfeLedger:
             or not source_refs
             or any(not isinstance(ref, str) or not ref.strip() for ref in source_refs)
             or received_at.tzinfo is None
+            or cursor.traded_at.tzinfo is None
             or received_at.astimezone(UTC) < cursor.traded_at.astimezone(UTC)
             or cursor.symbol != position.symbol
         ):
@@ -73,7 +74,9 @@ class P90RealMfeLedger:
                  FROM strategy_exit.exit_observations
                 WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s
                   AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
-                ORDER BY event_at DESC, observation_id DESC LIMIT 1 FOR UPDATE""",
+                ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
+                         event_at DESC, observation_id DESC
+                LIMIT 1 FOR UPDATE""",
             (position.strategy_position_id, position.exit_plan_fingerprint),
         ).fetchone()
         if previous is None:
