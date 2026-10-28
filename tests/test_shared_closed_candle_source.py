@@ -59,3 +59,79 @@ def test_one_common_sql_owner_with_protective_grants() -> None:
     assert "REVOKE UPDATE, DELETE, TRUNCATE ON analytics.closed_candles FROM cripta;" in sql
     assert "strategy_id" not in sql
     assert "trading_account_id" not in sql
+
+
+def test_two_consumers_share_one_immutable_row_without_duplicate_writes() -> None:
+    from contextlib import nullcontext
+
+    from bybit_workbench.market_data.shared_closed_candles import (
+        SharedClosedCandleStore,
+    )
+
+    class Result:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def fetchone(self):
+            return self.rows[0] if self.rows else None
+
+        def fetchall(self):
+            return self.rows
+
+    class Cursor:
+        def __init__(self, db):
+            self.db = db
+            self.rowcount = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def executemany(self, query, rows):
+            self.rowcount = 0
+            for row in rows:
+                close = row[7]
+                if close not in self.db.rows:
+                    self.db.rows[close] = (
+                        row[6], row[8], row[9], row[10], row[11], row[12],
+                    )
+                    self.rowcount += 1
+
+    class Database:
+        def __init__(self):
+            self.rows = {}
+
+        def transaction(self):
+            return nullcontext()
+
+        def cursor(self):
+            return Cursor(self)
+
+        def execute(self, sql, params):
+            if "FROM identity.market_sources" in sql:
+                return Result([("ACTIVE", "venue-bybit")])
+            if "FROM analytics.closed_candles" in sql:
+                start, end = params[3], params[4]
+                return Result([
+                    (close, *values) for close, values in self.rows.items()
+                    if start <= close <= end
+                ])
+            raise AssertionError(sql)
+
+    conn = Database()
+    first, second = (
+        SharedClosedCandleStore(conn, KEY),
+        SharedClosedCandleStore(conn, KEY),
+    )
+    data = (bar(0), bar(1))
+    kwargs = dict(
+        producer_release_commit="a" * 40,
+        transport="BYBIT_REST_KLINE",
+        observed_at=data[-1].closed_at,
+    )
+    assert first.ingest(data, **kwargs) == 2
+    assert second.ingest(data, **kwargs) == 0
+    assert len(conn.rows) == 2
+    assert second.history(through=data[-1].closed_at, required=2) == data
