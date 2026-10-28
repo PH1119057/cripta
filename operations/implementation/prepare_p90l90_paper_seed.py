@@ -35,6 +35,10 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 SYMBOLS = ("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT")
 if not (ROOT / "src").is_dir():
     raise SystemExit("P90_SEED_RUNTIME_MISSING")
+# Executing this file by absolute path otherwise makes only
+# operations/implementation importable; Observer helpers live in the
+# sibling operations.monitoring namespace under the same verified release.
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from bybit_workbench.universal_entry.p90l90_causal import P90L90CausalEntry  # noqa: E402
