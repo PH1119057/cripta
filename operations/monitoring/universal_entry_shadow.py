@@ -83,8 +83,10 @@ from bybit_workbench.universal_entry.p90l90_mixed_epoch_atomicity import (
     dispatch_observer_fact_atomically,
 )
 from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
+    P90NativeBarRuntimeProof,
     partition_observer_strategies,
     require_p90_atomic_observer_connection,
+    require_p90_policy_before_registry,
 )
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
@@ -2032,7 +2034,7 @@ def _run_observer_epoch(
     # strategies keep the original path. The real dual-owner bridge is still
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
-    require_p90_atomic_observer_connection(observer_split)
+    require_p90_policy_before_registry(observer_split)
     p90_consumer = (
         P90L90ObserverPaperConsumer(
             connection,
@@ -2675,6 +2677,25 @@ def _run_observer_epoch(
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
+        # Source proof is issued ONLY in this epoch, after real Bybit
+        # WS subscription acknowledgements and the active publicTrade
+        # mirror, and after ALL source-commit-bound P90 DB checkpoints
+        # have been independently reconstructed. On a reconnect it is
+        # discarded, rechecked and NEVER reused as a generic readiness flag.
+        if p90_consumer is not None:
+            require_p90_atomic_observer_connection(
+                observer_split,
+                live_proof=P90NativeBarRuntimeProof(
+                    source_commit=LOADED_COMMIT,
+                    restored_symbols=p90_consumer.recovered_symbols,
+                    subscribed_symbols=frozenset(symbols),
+                    subscribed_intervals=frozenset(intervals),
+                    mirror_active=trade_mirror.snapshot()["state"] == "ACTIVE",
+                    subscribed_local_at=_ready_local,
+                    subscribed_server_at=_ready_server,
+                    epoch_started_at=epoch_started,
+                ),
+            )
         buffered_messages = list(buffered)
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,
