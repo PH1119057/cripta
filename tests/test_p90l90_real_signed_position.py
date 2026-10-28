@@ -40,8 +40,10 @@ class _DB:
     def execute(self, statement: str, parameters=()) -> _Cursor:
         if "SELECT generation_id,state,started_at" in statement:
             return _Cursor([(
-                "generation-proven", "COMPLETE", AT, AT + timedelta(milliseconds=5)
-                - self.age, "BYBIT:UNIFIED", "UNIFIED", D("30"), D("25"),
+                "generation-proven", "COMPLETE",
+                AT - self.age - timedelta(seconds=1),
+                AT + timedelta(milliseconds=5) - self.age,
+                "BYBIT:UNIFIED", "UNIFIED", D("30"), D("25"),
                 D("20"), 1, 0, {}, None, self.account, "PROVEN",
             )])
         if "SELECT account_connector_id FROM runtime.account_state_generations" in statement:
