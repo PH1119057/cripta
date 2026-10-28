@@ -23,7 +23,7 @@ def evaluate_protection(
     symbol: str,
     position_idx: int,
     side: str,
-    expected_tp: Decimal,
+    expected_tp: Decimal | None,
     expected_tp_kind: str,
     expected_stop: Decimal,
     tick: Decimal,
@@ -70,10 +70,27 @@ def evaluate_protection(
         return "NOT_VERIFIED", "Exchange position direction mismatch"
     position_size = _decimal(pos.get("size"))
     stop = _decimal(pos.get("stopLoss"))
-    if tick <= 0 or expected_stop <= 0 or expected_tp <= 0:
-        return "UNKNOWN", "approved protection price or tick is unavailable"
+    if tick <= 0 or expected_stop <= 0:
+        return "UNKNOWN", "approved stop price or tick is unavailable"
     if stop <= 0 or stop != expected_stop:
         return "NOT_VERIFIED", "Exchange Hard Stop differs from current approved stop"
+    if expected_tp_kind == "DISABLED":
+        if expected_tp is not None:
+            return "UNKNOWN", "disabled initial TP has an unexpected approved target"
+        if _decimal(pos.get("takeProfit")) > 0:
+            return "NOT_VERIFIED", "unapproved Exchange position TP before Exit gate"
+        prefix = "utp" + hashlib.sha256(position_id.encode()).hexdigest()[:12] + "-"
+        if any(
+            isinstance(o, Mapping)
+            and o.get("symbol") == symbol
+            and str(o.get("orderLinkId") or "").startswith(prefix)
+            and o.get("orderStatus") in {"New", "PartiallyFilled", "Untriggered"}
+            for o in orders
+        ):
+            return "NOT_VERIFIED", "unapproved resting TP before Exit gate"
+        return "VERIFIED", "independent Exchange initial Hard Stop confirmed"
+    if expected_tp is None or expected_tp <= 0:
+        return "UNKNOWN", "approved TP price unavailable"
     if expected_tp_kind == "POSITION":
         tp = _decimal(pos.get("takeProfit"))
         if tp <= 0 or tp != expected_tp:
