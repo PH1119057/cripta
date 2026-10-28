@@ -252,3 +252,50 @@ def validate_real_v3_exchange_entry(
     if str(data.get("unifiedMarginStatus") or "") not in {"3", "4", "5", "6"}:
         raise ValueError("P90_REAL_UNIFIED_ACCOUNT_MODE_UNKNOWN")
     return True
+
+
+def validate_real_v3_instrument_lot(
+    *, symbol: str, instrument: Mapping[str, object],
+    quantity: Decimal, signal_price: Decimal,
+) -> None:
+    """Prove current Bybit 10-USDT MARKET order is within exact lot filters.
+
+    This is a pre-mutation rejection, never a request to silently enlarge
+    owner capital to satisfy a higher exchange minimum.
+    """
+    if (
+        str(instrument.get("symbol") or "") != symbol
+        or symbol not in ALLOWED_SYMBOLS[MAIN_ID] | ALLOWED_SYMBOLS[SUB_ID]
+        or instrument.get("status") != "Trading"
+        or instrument.get("quoteCoin") != "USDT"
+        or instrument.get("settleCoin") != "USDT"
+        or instrument.get("unifiedMarginTrade") is not True
+    ):
+        raise ValueError("P90_REAL_INSTRUMENT_IDENTITY_OR_STATUS_UNVERIFIED")
+    raw = instrument.get("lotSizeFilter")
+    if not isinstance(raw, Mapping):
+        raise ValueError("P90_REAL_INSTRUMENT_LOT_FILTERS_MISSING")
+    try:
+        minimum_qty = Decimal(str(raw["minOrderQty"]))
+        maximum_qty = Decimal(str(raw["maxMktOrderQty"]))
+        minimum_notional = Decimal(str(raw["minNotionalValue"]))
+        step = Decimal(str(raw["qtyStep"]))
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise ValueError("P90_REAL_INSTRUMENT_LOT_FILTERS_INVALID") from None
+    if (
+        any(
+            not value.is_finite() or value <= 0
+            for value in (
+                minimum_qty, maximum_qty, minimum_notional, step,
+                quantity, signal_price,
+            )
+        )
+        or maximum_qty < minimum_qty
+    ):
+        raise ValueError("P90_REAL_INSTRUMENT_LOT_FILTERS_INVALID")
+    if (
+        quantity < minimum_qty or quantity > maximum_qty
+        or quantity % step != 0
+        or quantity * signal_price < minimum_notional
+    ):
+        raise ValueError("P90_REAL_10_USDT_BELOW_EXCHANGE_MINIMUM_OR_LOT")
