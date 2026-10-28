@@ -21,6 +21,7 @@ from pathlib import Path
 import psycopg
 
 ROOT = Path("/srv/cripta/runtime/current")
+sys.path.insert(0, str(ROOT / "src"))
 STATUS = Path("/var/lib/cripta/universal_entry_observer/status.json")
 SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 STRATEGIES = (
