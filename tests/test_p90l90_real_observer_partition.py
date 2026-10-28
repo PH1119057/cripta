@@ -1,6 +1,7 @@
 """P90L90 REAL v3 is a separate observer owner, never PAPER-v2 fallback."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -22,8 +23,6 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
-
-from datetime import UTC, datetime
 
 AT = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
 SECOND48 = StrategyHardStopEmbargoPolicy(
