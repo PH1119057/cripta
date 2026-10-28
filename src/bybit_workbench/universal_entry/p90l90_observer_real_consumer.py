@@ -157,9 +157,11 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         ).fetchone()
         if active != (0,) or pending != (0,):
             raise RuntimeError("P90_REAL_NATIVE_GAP_WITH_EXPOSURE_OR_PENDING_ORDER")
-        # Existing no-native-cursor closed-candle recovery is guarded by exact
-        # immutable source and checks the same transport checkpoint under lock.
-        return super().catch_up_closed_histories(targets)
+        # A REAL strategy cannot inherit PAPER's no-native-cursor OHLC-only
+        # gap recovery. Even with zero exposure, missing publicTrade history
+        # could contain skipped REAL signals/Exits. An independently proven
+        # fresh native epoch owner must be supplied before a new REAL Entry.
+        raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
 
     def _on_native_exit(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
         if fact.event_kind != "PUBLIC_TRADE" or cursor.symbol != fact.symbol:
