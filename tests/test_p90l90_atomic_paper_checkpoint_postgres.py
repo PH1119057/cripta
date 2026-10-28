@@ -101,7 +101,8 @@ def test_pg_atomic_entry_and_native_transport_rollback_same_generation():
                     (event.event_id,),
                 )
 
-        geometry = lambda _symbol, _saved: None
+        def geometry(_symbol, _saved):
+            return None
         trade, close15, close5 = fact("PUBLIC_TRADE"), fact("15"), fact("5")
         assert store.deliver(
             trade, recompute_geometry=geometry, apply_paper=apply
