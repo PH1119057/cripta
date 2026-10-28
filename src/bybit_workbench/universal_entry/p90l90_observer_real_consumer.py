@@ -48,8 +48,8 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         producer_release_commit: str | None = None,
         accepted_source_commits: frozenset[str] | None = None,
     ) -> None:
-        if not bundles or len(bundles) != 2:
-            raise ValueError("P90_REAL_EXACT_TWO_STRATEGY_BUNDLES_REQUIRED")
+        if not bundles or len(bundles) > 2:
+            raise ValueError("P90_REAL_INVALID_INDEPENDENT_STRATEGY_COUNT")
         self._by_symbol: dict[str, Any] = {}
         self._candidate_owners: dict[str, P90L90RealNativeCandidateOwner] = {}
         self._connection = connection
@@ -86,8 +86,6 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                 if symbol in self._by_symbol:
                     raise RuntimeError("P90_REAL_NATIVE_DUPLICATE_SYMBOL_OWNER")
                 self._by_symbol[symbol] = bundle
-        if ids != {MAIN_ID, SUB_ID}:
-            raise RuntimeError("P90_REAL_NATIVE_MISSING_INDEPENDENT_STRATEGY")
         self._entry = UniversalEntryEngine(registry)
         self._store = StrategyEntryStore(connection)
         self._archive = P90SharedCandleLedger(
