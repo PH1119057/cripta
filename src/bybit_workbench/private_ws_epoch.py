@@ -44,14 +44,15 @@ def verified_private_ws_epoch(
     if (
         not isinstance(topics, (list, tuple))
         or len(topics) != len(PRIVATE_TOPICS)
-        or len(set(map(str, topics))) != len(PRIVATE_TOPICS)
+        or any(not isinstance(topic, str) for topic in topics)
+        or len(set(topics)) != len(PRIVATE_TOPICS)
         or set(topics) != set(PRIVATE_TOPICS)
     ):
         return False
     keys = (
         "subscriptions_confirmed_at_epoch",
         "connected_at_epoch",
-        "last_message_epoch",
+        "last_verified_message_epoch",
         "reconnects",
     )
     if any(type(private.get(key)) is not int for key in keys):
