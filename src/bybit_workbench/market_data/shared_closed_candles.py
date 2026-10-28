@@ -87,7 +87,8 @@ class SharedClosedCandleStore:
         if observed_at.utcoffset() != timedelta(0):
             raise ValueError("CANDLE_OBSERVED_NOT_UTC")
         items = verify_closed_window(self.key, bars)
-        inserted = 0
+        # Batch source rows: per-bar readback makes multi-day P90 warmup
+        # unnecessarily slow on every Observer restart.
         with self._db.transaction():
             source = self._db.execute(
                 """SELECT s.status,i.venue_id FROM identity.market_sources s
@@ -101,37 +102,57 @@ class SharedClosedCandleStore:
             ).fetchone()
             if source != ("ACTIVE", self.key.venue_id):
                 raise RuntimeError("CANDLE_UNVERIFIED_MARKET_SOURCE")
+
+            lookup = (
+                self.key.market_source_id, self.key.instrument_id,
+                self.key.timeframe, items[0].closed_at, items[-1].closed_at,
+            )
+            query = """SELECT closed_at,opened_at,open,high,low,close,volume
+                         FROM analytics.closed_candles
+                        WHERE market_source_id=%s AND instrument_id=%s
+                          AND timeframe=%s AND closed_at BETWEEN %s AND %s"""
+            before = {
+                r[0]: r[1:] for r in self._db.execute(query, lookup).fetchall()
+            }
+            missing: list[tuple[Any, ...]] = []
             for c in items:
                 values = (
+                    c.opened_at, c.open, c.high, c.low, c.close, c.volume,
+                )
+                if c.closed_at in before:
+                    if before[c.closed_at] != values:
+                        raise RuntimeError("CANDLE_IMMUTABLE_SOURCE_CONFLICT")
+                    continue
+                missing.append((
                     self.key.market_source_id, self.key.venue_id,
                     self.key.instrument_id, self.key.external_symbol,
                     self.key.product_category, self.key.timeframe,
                     c.opened_at, c.closed_at, c.open, c.high, c.low,
                     c.close, c.volume, transport, producer_release_commit,
                     observed_at,
-                )
-                changed = self._db.execute(
-                    """INSERT INTO analytics.closed_candles
-                     (market_source_id,venue_id,instrument_id,external_symbol,
-                      product_category,timeframe,opened_at,closed_at,
-                      open,high,low,close,volume,source_transport,
-                      producer_release_commit,observed_at)
-                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                     ON CONFLICT (market_source_id,instrument_id,timeframe,closed_at)
-                     DO NOTHING RETURNING closed_at""",
-                    values,
-                ).fetchone()
-                if changed is not None:
-                    inserted += 1
-                exact = self._db.execute(
-                    """SELECT opened_at,open,high,low,close,volume
-                       FROM analytics.closed_candles
-                      WHERE market_source_id=%s AND instrument_id=%s
-                        AND timeframe=%s AND closed_at=%s""",
-                    (self.key.market_source_id, self.key.instrument_id,
-                     self.key.timeframe, c.closed_at),
-                ).fetchone()
-                if exact != (
+                ))
+            inserted = 0
+            if missing:
+                with self._db.cursor() as cursor:
+                    cursor.executemany(
+                        """INSERT INTO analytics.closed_candles
+                          (market_source_id,venue_id,instrument_id,external_symbol,
+                           product_category,timeframe,opened_at,closed_at,
+                           open,high,low,close,volume,source_transport,
+                           producer_release_commit,observed_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           ON CONFLICT (market_source_id,instrument_id,timeframe,closed_at)
+                           DO NOTHING""",
+                        missing,
+                    )
+                    inserted = cursor.rowcount
+            # Repeat exact comparison AFTER any concurrent conflict resolution.
+            # PostgreSQL ON CONFLICT never silently accepts differing OHLCV.
+            confirmed = {
+                r[0]: r[1:] for r in self._db.execute(query, lookup).fetchall()
+            }
+            for c in items:
+                if confirmed.get(c.closed_at) != (
                     c.opened_at, c.open, c.high, c.low, c.close, c.volume,
                 ):
                     raise RuntimeError("CANDLE_IMMUTABLE_SOURCE_CONFLICT")
