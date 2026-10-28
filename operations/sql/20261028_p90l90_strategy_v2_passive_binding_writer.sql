@@ -24,13 +24,46 @@ BEGIN
 END;
 $verify_prior$;
 
+-- Fail closed if a pre-existing SECURITY DEFINER body or owner was
+-- modified outside the approved initial migration. The current production
+-- body was independently read and matched to this exact GitHub SQL before
+-- preparing this repair. Do not DROP/RECREATE or silently take ownership.
+DO $existing_v2$
+DECLARE
+  v_function oid;
+  v_owner name;
+  v_security_definer boolean;
+  v_body_md5 text;
+  v_return_type oid;
+BEGIN
+  v_function := to_regprocedure(
+    'strategy_entry.register_p90l90_v2_inactive_binding(text,text,text)'
+  );
+  IF v_function IS NOT NULL THEN
+    SELECT pg_get_userbyid(p.proowner),p.prosecdef,md5(p.prosrc),p.prorettype
+      INTO v_owner,v_security_definer,v_body_md5,v_return_type
+      FROM pg_proc p WHERE p.oid=v_function;
+    IF v_owner IS DISTINCT FROM 'cripta_p90l90_passive_binding'
+       OR v_security_definer IS DISTINCT FROM true
+       OR v_body_md5 IS DISTINCT FROM
+          '0cc5b305c9dc372dcef0c288c09630f7'
+       OR v_return_type IS DISTINCT FROM 'text'::regtype::oid
+       OR NOT has_function_privilege(
+         'cripta',v_function,'EXECUTE')
+    THEN
+      RAISE EXCEPTION 'P90L90_V2_EXISTING_FUNCTION_DRIFT';
+    END IF;
+  END IF;
+END;
+$existing_v2$;
+
 -- Temporary only: the NOLOGIN owner needs CREATE to become owner of this
 -- one function. Revoked BEFORE COMMIT. No broad UPDATE/INSERT to cripta.
 GRANT SELECT ON control.account_live_arm_sessions
   TO cripta_p90l90_passive_binding;
 GRANT CREATE ON SCHEMA strategy_entry TO cripta_p90l90_passive_binding;
 
-CREATE FUNCTION strategy_entry.register_p90l90_v2_inactive_binding(
+CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_v2_inactive_binding(
     p_binding_id text,
     p_activation_id text,
     p_trading_account_id text
