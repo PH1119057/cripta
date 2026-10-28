@@ -55,6 +55,11 @@ def test_real_version_is_new_immutable_authoring_only(
     assert initial["stop_loss_pct"] == "10"
     assert initial["stop_loss_price_basis"] == "ACTUAL_EXECUTED_AVERAGE_ENTRY"
     assert initial["exchange_resident_required"] is True
+    assert initial["take_profit_enabled"] is False
+    assert "take_profit_reference_path" not in initial
+    assert "take_profit_price" not in initial
+    # The exact v2 has an opening TP reference; REAL must not inherit it.
+    assert original["protection_policy"]["initial_protection"]["take_profit_enabled"] is True
     # Old v2 is a separate immutable object, never rewritten.
     assert original["entry_policy"]["execution_policy"]["order_type"] == "NOT_APPROVED"
 
