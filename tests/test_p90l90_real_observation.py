@@ -3,13 +3,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from decimal import Decimal
 
 import pytest
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.strategy_position import StrategyPosition
-from bybit_workbench.universal_entry.contracts import StrategyActivation, TradeDirection
+from bybit_workbench.universal_entry.contracts import (
+    FrozenPolicy,
+    MarketFactEnvelope,
+    StrategyActivation,
+    TradeDirection,
+)
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
@@ -19,6 +25,7 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 from bybit_workbench.universal_exit.contracts import ExitActionKind, ExitEvaluationStatus
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
+from bybit_workbench.universal_exit.p90l90_real_exit_port import P90RealExitNativePort
 from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
 from bybit_workbench.universal_exit.p90l90_real_observation import (
     P90RealObservationUnverified,
@@ -168,3 +175,67 @@ def test_uncommitted_or_wrong_native_cursor_is_not_accepted_as_durable_mfe() -> 
     later = replace(cursor, seq=102, exec_id="uncommitted-102")
     with pytest.raises(P90RealObservationUnverified, match="NATIVE_MFE_OR_TIME"):
         _observation(position, state, later, private, price)
+
+
+@pytest.mark.parametrize(("short", "sub"), ((False, False), (True, True)))
+def test_native_exit_callback_persists_universal_decision_without_paper(
+    short: bool, sub: bool,
+) -> None:
+    position, plan, checkpoint, cursor, private, price = _scope(
+        short=short, sub=sub,
+    )
+    fact = MarketFactEnvelope(
+        fact_id="native-fact-101", event_kind="PUBLIC_TRADE",
+        symbol=position.symbol, event_at=cursor.traded_at,
+        observed_at=cursor.traded_at,
+        received_at=AT + timedelta(milliseconds=5),
+        source_refs=("bybit:publicTrade:exact:101",),
+        attributes=FrozenPolicy.from_mapping({"price": str(price)}),
+    )
+    recorded: list[object] = []
+
+    class _Store:
+        def record(self, evaluation, *, position, plan):
+            recorded.append((evaluation, position, plan))
+
+    callback = P90RealExitNativePort(
+        position_provider=lambda symbol: ((position, plan),),
+        independently_verified_source_coverage=lambda _position, _cursor: (
+            True, True,
+        ),
+        independently_signed_private_evidence=lambda _position, _cursor: private,
+        source_commit="a" * 40,
+        mfe_ledger=SimpleNamespace(on_trade=lambda **_kwargs: checkpoint),
+        exit_store=_Store(),  # type: ignore[arg-type]
+    )
+    result = callback(fact, cursor)
+    assert len(result) == 1
+    assert result[0].status is ExitEvaluationStatus.DECISION_CREATED
+    assert recorded == [(result[0], position, plan)]
+    assert result[0].decision is not None
+
+
+def test_native_exit_callback_rejects_duplicate_physical_owner_before_mfe() -> None:
+    position, plan, checkpoint, cursor, private, price = _scope()
+    fact = MarketFactEnvelope(
+        fact_id="native-fact-101", event_kind="PUBLIC_TRADE",
+        symbol=position.symbol, event_at=cursor.traded_at,
+        observed_at=cursor.traded_at,
+        received_at=AT + timedelta(milliseconds=5),
+        source_refs=("native:exact",),
+        attributes=FrozenPolicy.from_mapping({"price": str(price)}),
+    )
+    calls: list[str] = []
+    callback = P90RealExitNativePort(
+        position_provider=lambda _symbol: ((position, plan), (position, plan)),
+        independently_verified_source_coverage=lambda _position, _cursor: (
+            True, True,
+        ),
+        independently_signed_private_evidence=lambda _position, _cursor: private,
+        source_commit="a" * 40,
+        mfe_ledger=SimpleNamespace(on_trade=lambda **_kwargs: calls.append("MFE")),
+        exit_store=SimpleNamespace(record=lambda *_args, **_kw: calls.append("EXIT")),
+    )
+    with pytest.raises(ValueError, match="DUPLICATE_PHYSICAL_POSITION"):
+        callback(fact, cursor)
+    assert calls == []
