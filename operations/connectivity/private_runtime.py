@@ -2436,6 +2436,28 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
+        # P90 REAL requires proven isolated account mode, not merely a
+        # leverage=1 order. Bybit UTA's /v5/position/list tradeMode is
+        # deprecated (always 0), so read the SIGNED account-level marginMode.
+        # Never switch the whole account's margin mode on behalf of Strategy.
+        from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+            MAX_ACCOUNT_COMMITTED, VERSION as P90_REAL_VERSION,
+            validate_real_v3_exchange_entry,
+        )
+        if (
+            str(payload.get("strategy_id") or "") in MAX_ACCOUNT_COMMITTED
+            or str(payload.get("strategy_version") or "") == P90_REAL_VERSION
+        ):
+            signed_info, _ = api_get("/v5/account/info", {}, key, secret)
+            _require_entry_bybit_read_ok(signed_info, "/v5/account/info")
+            try:
+                validate_real_v3_exchange_entry(
+                    payload=payload, symbol=symbol,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    signed_account_info=signed_info,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
         fault_code = _critical_lifecycle_fault_code(connection)
         if fault_code is not None:
             # First Exchange mutation for this Entry is below. Avoid claiming
