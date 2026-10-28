@@ -177,6 +177,45 @@ def _p90l90_exact_no_order_paper_model(card: StrategyCard) -> bool:
     )
 
 
+def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
+    """Exact owner-specified REAL capital contract, not runtime proof."""
+    if card.strategy_version != "2.0-p90l90-real-main-sub-20261028":
+        return False
+    scopes = {
+        "p90l90_legacy_main_ltc_inj": (("INJUSDT", "LTCUSDT"), "20"),
+        "p90l90_legacy_sub_dot_arb_apt": (
+            ("APTUSDT", "ARBUSDT", "DOTUSDT"), "30",
+        ),
+    }
+    if card.strategy_id not in scopes:
+        return False
+    symbols, ceiling = scopes[card.strategy_id]
+    if card.symbols != symbols:
+        return False
+    execution = _mapping(card.entry_policy.to_dict().get("execution_policy"))
+    capital = card.capital_policy.to_dict()
+    initial = _mapping(card.protection_policy.to_dict().get("initial_protection"))
+    return (
+        execution.get("order_type") == "MARKET"
+        and execution.get("reference_value_path") == "fact.p90l90.candidate_price"
+        and capital.get("require_capacity") is True
+        and capital.get("amount_currency") == "USDT"
+        and capital.get("requested_amount") == "10"
+        and capital.get("leverage") == 1
+        and capital.get("margin_mode") == "ISOLATED"
+        and capital.get("max_simultaneous_committed_usdt") == ceiling
+        and capital.get("max_open_positions_per_symbol") == 1
+        and capital.get("count_pending_reservations") is True
+        and capital.get("exchange_min_notional_if_exceeds_requested") == "REJECT"
+        and initial.get("stop_loss_enabled") is True
+        and initial.get("stop_loss_pct") == "10"
+        and initial.get("exchange_resident_required") is True
+        and initial.get("stop_loss_price_basis") == "ACTUAL_EXECUTED_AVERAGE_ENTRY"
+        and initial.get("tpsl_mode") == "Full"
+        and initial.get("trigger_by") == "LastPrice"
+    )
+
+
 def assess_strategy_runtime_readiness(
     card: StrategyCard,
     *,
@@ -211,7 +250,10 @@ def assess_strategy_runtime_readiness(
         "P90L90_RAW_H9_UNION_CROSSING"
     )
     p90_paper_exact = p90_operator and _p90l90_exact_no_order_paper_model(card)
-    if p90_operator and not p90_paper_exact:
+    p90_real_v3_policy = (
+        p90_operator and _p90l90_approved_real_v3_policy(card)
+    )
+    if p90_operator and not p90_paper_exact and not p90_real_v3_policy:
         legacy_v1 = card.strategy_version == "1.0-p90l90-legacy-passive-20261027"
         policy_reasons.append(
             RuntimeReadinessReason(
@@ -426,13 +468,24 @@ def assess_strategy_runtime_readiness(
             if item.code not in exempt_paper_order_codes
         ]
     if p90_operator:
-        # Critical: no-order v2 can be monitored in SHADOW, NEVER traded.
-        # Execution does not inherit PAPER-ready or observer_ready.
+        # Owner has approved v3 REAL *policy*, but the new native causal
+        # Entry→atomic order→fill→Exchange SL→Exit adapter is not proven.
+        # This is an unconditional fail-closed operational gate until the
+        # exact released implementation is independently attested.
         execution_reasons.append(
             RuntimeReadinessReason(
-                "P90L90_EXCHANGE_ORDER_NOT_APPROVED",
+                (
+                    "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED"
+                    if p90_real_v3_policy
+                    else "P90L90_EXCHANGE_ORDER_NOT_APPROVED"
+                ),
                 "EXECUTION",
-                "P90L90 model-only publicTrade Entry has no Bybit order authorization.",
+                (
+                    "Owner-approved P90L90 v3 still needs causal/Exchange "
+                    "Entry+Exit and account safety equivalence proof."
+                    if p90_real_v3_policy
+                    else "P90L90 no-order model has no real order approval."
+                ),
             )
         )
 
