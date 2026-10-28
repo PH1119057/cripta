@@ -119,6 +119,7 @@ def test_gap_plan_is_exact_and_5m_first_at_same_close() -> None:
         ("LTCUSDT", "5"): T,
         ("LTCUSDT", "15"): T,
     }
+    adapter._emitted = dict(adapter._seed)
     def read(symbol: str, tf: str, *, through: datetime, count: int):
         assert symbol == "LTCUSDT"
         step = timedelta(minutes=int(tf))
@@ -152,6 +153,7 @@ def test_gap_plan_refuses_any_missing_source_bar() -> None:
         ("LTCUSDT", "5"): T,
         ("LTCUSDT", "15"): T,
     }
+    adapter._emitted = dict(adapter._seed)
     def missing(*_args, **_kwargs):
         raise RuntimeError("CANDLE_HISTORY_GAP_OR_DUPLICATE")
     adapter._canonical = missing
@@ -169,6 +171,7 @@ def test_gap_plan_never_invents_public_trades() -> None:
         ("LTCUSDT", "5"): T,
         ("LTCUSDT", "15"): T,
     }
+    adapter._emitted = dict(adapter._seed)
     adapter._canonical = lambda *_args, **_kwargs: (
         Candle(
             "LTCUSDT", "5", T,
@@ -194,6 +197,7 @@ def test_shared_market_source_future_cached_15m_is_not_causal_15m() -> None:
         ("LTCUSDT", "5"): T,
         ("LTCUSDT", "15"): T,
     }
+    adapter._emitted = dict(adapter._seed)
     adapter._emitted = {
         ("LTCUSDT", "5"): T,
         ("LTCUSDT", "15"): T,
