@@ -246,3 +246,26 @@ def test_exit_observation_rejects_signed_protection_older_than_15_seconds() -> N
             native_source_refs=("bybit:publicTrade:exact:101",),
             private=signed, received_at=AT + timedelta(seconds=20),
         )
+
+
+def test_signed_account_reader_supports_closed_five_minute_exit_owner() -> None:
+    position, cursor, _, api, _, reader = _setup()
+    closed_at = cursor.traded_at
+    private = reader().for_closed_boundary(position, closed_at)
+    assert private.symbol == position.symbol
+    assert private.trading_account_id == position.trading_account_id
+    assert api.calls == [
+        "/v5/user/query-api", "/v5/position/list",
+        "/v5/market/instruments-info",
+    ]
+
+
+def test_closed_bar_from_future_or_before_fill_cannot_request_signed_inventory() -> None:
+    position, cursor, _, api, _, reader = _setup()
+    for closed_at in (
+        AT - timedelta(milliseconds=1),
+        cursor.traded_at + timedelta(seconds=1),
+    ):
+        with pytest.raises(P90RealSignedPositionUnverified, match="LINEAGE"):
+            reader().for_closed_boundary(position, closed_at)
+    assert api.calls == []
