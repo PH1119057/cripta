@@ -35,9 +35,11 @@ def p90l90_crossing_fact(
     if edge is None or edge != crossing.boundary:
         raise ValueError("P90L90 crossing not supported by frozen raw Entry")
     source_price = source_fact.attributes.to_dict().get("price")
-    if str(source_price) != str(crossing.current_price):
-        if source_price is None or Decimal(str(source_price)) != crossing.current_price:
-            raise ValueError("P90L90 crossing native trade price mismatch")
+    if source_price is None or (
+        str(source_price) != str(crossing.current_price)
+        and Decimal(str(source_price)) != crossing.current_price
+    ):
+        raise ValueError("P90L90 crossing native trade price mismatch")
     return MarketFactEnvelope(
         fact_id="watch-p90l90-" + fingerprint({
             "entry_plan_fingerprint": entry_plan_fingerprint,
