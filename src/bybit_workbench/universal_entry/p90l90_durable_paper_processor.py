@@ -18,6 +18,7 @@ from .p90l90_atomic_paper_checkpoint import P90L90AtomicPaperCheckpointStore
 from .p90l90_causal import P90L90CausalEntry, P90L90Crossing, P90L90EntryState
 from .p90l90_causal_fact_codec import restore_p90l90_fact
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin, P90TransportEvent
+from .p90l90_crossing_fact import p90l90_crossing_fact
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
 from .transport_continuity import TradeCursor
 
@@ -26,6 +27,7 @@ PaperCrossingHandler = Callable[
     [MarketFactEnvelope, TradeCursor, tuple[P90L90Crossing, ...]], None
 ]
 CandleHandler = Callable[[MarketFactEnvelope], None]
+ProvenCandidateHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
 
 
 class P90L90DurablePaperProcessor:
@@ -44,7 +46,11 @@ class P90L90DurablePaperProcessor:
         on_native_exit: NativeExitHandler,
         on_crossing: PaperCrossingHandler,
         on_closed_candle: CandleHandler,
+        candidate_entry_plan_fingerprint: str | None = None,
+        on_proven_candidate: ProvenCandidateHandler | None = None,
     ) -> None:
+        if (candidate_entry_plan_fingerprint is None) != (on_proven_candidate is None):
+            raise ValueError("P90L90 candidate requires both exact plan and handler")
         self._atomic = P90L90AtomicPaperCheckpointStore(
             connection, source_commit=source_commit,
         )
@@ -54,6 +60,8 @@ class P90L90DurablePaperProcessor:
         self._on_exit = on_native_exit
         self._on_crossing = on_crossing
         self._on_candle = on_closed_candle
+        self._candidate_plan = candidate_entry_plan_fingerprint
+        self._on_proven_candidate = on_proven_candidate
         self._checked_geometry: dict[
             tuple[str, datetime], P90L90EntryState | None
         ] = {}
@@ -160,6 +168,21 @@ class P90L90DurablePaperProcessor:
                 price = Decimal(str(fact.attributes.to_dict()["price"]))
                 crossings = entry.on_trade(price=price, event_at=released.event_at)
                 if crossings:
+                    if (
+                        entry.state is None or self._candidate_plan is None
+                        or self._on_proven_candidate is None
+                    ):
+                        raise RuntimeError(
+                            "P90L90_ATOMIC_PAPER_CANDIDATE_OWNER_NOT_CONNECTED"
+                        )
+                    for crossing in crossings:
+                        candidate = p90l90_crossing_fact(
+                            entry_plan_fingerprint=self._candidate_plan,
+                            source_fact=fact,
+                            crossing=crossing,
+                            geometry=entry.state,
+                        )
+                        self._on_proven_candidate(candidate, cursor)
                     self._on_crossing(fact, cursor, crossings)
 
         try:
