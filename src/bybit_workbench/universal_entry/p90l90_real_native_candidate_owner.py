@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from .contracts import EntryEvaluation, MarketFactEnvelope
+from .contracts import EntryEvaluation, FrozenPolicy, MarketFactEnvelope
 from .engine import AccountAdmissionContext, UniversalEntryEngine
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from .storage import StrategyEntryStore
@@ -34,6 +34,7 @@ class P90L90RealNativeCandidateOwner:
         entry_plan_fingerprint: str,
         engine: UniversalEntryEngine,
         store: StrategyEntryStore,
+        provenance: FrozenPolicy,
     ) -> None:
         if (
             strategy_id not in ALLOWED_SYMBOLS
@@ -46,8 +47,18 @@ class P90L90RealNativeCandidateOwner:
         self._activation_id = strategy_activation_id
         self._config_fingerprint = strategy_config_fingerprint
         self._entry_fingerprint = entry_plan_fingerprint
+        source = provenance.to_dict()
+        source_commit = source.get("source_commit")
+        if (
+            not isinstance(source_commit, str)
+            or len(source_commit) != 40
+            or any(char not in "0123456789abcdef" for char in source_commit)
+            or not str(source.get("data_lineage_id") or "").strip()
+        ):
+            raise ValueError("P90_REAL_NATIVE_OWNER_LINEAGE_ATTESTATION_REQUIRED")
         self._engine = engine
         self._store = store
+        self._provenance = provenance
 
     def accept(
         self,
@@ -112,5 +123,7 @@ class P90L90RealNativeCandidateOwner:
                 or evaluation.account_outcomes[0].binding != binding
             ):
                 raise RuntimeError("P90_REAL_NATIVE_OWNER_CROSS_ACCOUNT_OR_PAPER_EFFECT")
-            self._store.record_evaluation(evaluation)
+            self._store.record_evaluation(
+                evaluation, provenance=self._provenance,
+            )
         return evaluations
