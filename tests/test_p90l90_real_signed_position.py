@@ -34,7 +34,7 @@ class _DB:
         self.connector = "connector-sub" if sub else "connector-main"
         self.kind = "SUB" if sub else "MAIN"
         self.uid = "12345679" if sub else "12345678"
-        self.age = timedelta(seconds=2)
+        self.age = timedelta(milliseconds=1)
         self.wrong_connector = False
 
     def execute(self, statement: str, parameters=()) -> _Cursor:
@@ -268,4 +268,13 @@ def test_closed_bar_from_future_or_before_fill_cannot_request_signed_inventory()
     ):
         with pytest.raises(P90RealSignedPositionUnverified, match="LINEAGE"):
             reader().for_closed_boundary(position, closed_at)
+    assert api.calls == []
+
+
+def test_recent_signed_generation_before_actual_fill_is_not_current_protection() -> None:
+    position, cursor, db, api, _, reader = _setup()
+    # Still less than 15 seconds old, but older than the actual fill.
+    db.age = timedelta(milliseconds=10)
+    with pytest.raises(P90RealSignedPositionUnverified, match="GENERATION_STALE"):
+        reader()(position, cursor)
     assert api.calls == []
