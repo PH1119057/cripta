@@ -117,6 +117,22 @@ class P90RealSignedPositionReader:
     def __call__(
         self, position: StrategyPosition, cursor: TradeCursor,
     ) -> ScopedPrivatePositionEvidence:
+        """Native tick adapter; cursor provenance is checked by its owner."""
+        if cursor.symbol != position.symbol:
+            raise P90RealSignedPositionUnverified(
+                "P90_REAL_SIGNED_POSITION_LINEAGE_INVALID"
+            )
+        return self._read_for_event(position, cursor.traded_at)
+
+    def for_closed_boundary(
+        self, position: StrategyPosition, closed_at: datetime,
+    ) -> ScopedPrivatePositionEvidence:
+        """Closed-5m port; its caller must prove exact causal candle history."""
+        return self._read_for_event(position, closed_at)
+
+    def _read_for_event(
+        self, position: StrategyPosition, event_at: datetime,
+    ) -> ScopedPrivatePositionEvidence:
         now = self._clock()
         if (
             now.tzinfo is None or now.utcoffset() is None
@@ -130,10 +146,9 @@ class P90RealSignedPositionReader:
             or position.exchange_position_key != exchange_position_key(
                 self._account, position.symbol, 0,
             )
-            or cursor.symbol != position.symbol
-            or cursor.traded_at.tzinfo is None
-            or cursor.traded_at > now
-            or position.fill_at > cursor.traded_at
+            or event_at.tzinfo is None
+            or event_at > now
+            or position.fill_at > event_at
             or position.initial_protection_confirmed_at is None
             or position.initial_protection_confirmed_at > now
         ):
