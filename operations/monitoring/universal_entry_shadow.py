@@ -1405,6 +1405,14 @@ def _multi_account_admissions(
     provider identity attestation. The private runtime repeats signed Bybit UID
     authentication for this worker immediately before exchange Entry mutation.
     """
+    from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
+        MAIN_ID as P90_MAIN_ID,
+        SUB_ID as P90_SUB_ID,
+    )
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+        VERSION as P90_REAL_VERSION,
+    )
+
     if not real_selected_for:
         return (
             _blocked_multi_account_admissions(
@@ -1430,7 +1438,7 @@ def _multi_account_admissions(
             capacity: TradingCapacitySnapshot | None = None
             admission_port: PostgresEntryAdmissionPort | None = None
             connector_rows = connection.execute(
-                """SELECT c.account_connector_id
+                """SELECT c.account_connector_id,a.account_kind
                      FROM identity.account_connectors c
                      JOIN identity.trading_accounts a
                        ON a.trading_account_id=c.trading_account_id
@@ -1447,8 +1455,24 @@ def _multi_account_admissions(
                       AND a.external_account_ref ~ '[1-9]'""",
                 (binding.trading_account_id,),
             ).fetchall()
+            expected_account_kind = (
+                "MAIN" if bundle is not None and (
+                    bundle.card.strategy_id == P90_MAIN_ID
+                    and bundle.card.strategy_version == P90_REAL_VERSION
+                )
+                else "SUB" if bundle is not None and (
+                    bundle.card.strategy_id == P90_SUB_ID
+                    and bundle.card.strategy_version == P90_REAL_VERSION
+                )
+                else None
+            )
             if len(connector_rows) != 1:
                 reason = "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+            elif (
+                expected_account_kind is not None
+                and str(connector_rows[0][1]) != expected_account_kind
+            ):
+                reason = "P90_REAL_ACCOUNT_KIND_MISMATCH"
             elif not gate_ready or activation_id not in real_selected_for:
                 reason = "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
             elif bundle is None or symbol not in bundle.card.symbols:
