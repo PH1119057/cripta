@@ -171,8 +171,8 @@ def test_actual_observer_has_one_p90_consumer_and_no_legacy_double_dispatch():
 
 
 def test_p90_positive_runtime_gate_requires_real_checkpoint_and_live_ws_proof():
-    from datetime import UTC, datetime, timedelta
     from dataclasses import replace
+    from datetime import UTC, datetime, timedelta
 
     from bybit_workbench.universal_entry.contracts import StrategyActivation
     from bybit_workbench.universal_entry.materializer import materialize_plans
