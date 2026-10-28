@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from bybit_workbench.universal_entry.contracts import FrozenPolicy, StrategyActivation
+from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
     P90L90ObserverPaperConsumer,
@@ -15,7 +16,6 @@ from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
 )
 from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
 from bybit_workbench.universal_entry.runtime_loader import ActiveStrategyBundle
-from bybit_workbench.universal_entry.materializer import materialize_plans
 
 B = datetime(2026, 10, 28, 5, 0, tzinfo=UTC)
 SHA = "3" * 40
