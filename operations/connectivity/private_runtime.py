@@ -81,6 +81,10 @@ from bybit_workbench.strategy_position_binding import (
 from bybit_workbench.universal_exit.contracts import ExitActionKind
 from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
 from bybit_workbench.universal_exit.execution_store import mark_ambiguous_exit_command
+from bybit_workbench.universal_exit.p90l90_exchange_safety import (
+    p90_real_exchange_position_key,
+    verify_p90_real_exchange_mutation,
+)
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -1780,7 +1784,16 @@ def _universal_exit_position(
         raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISMATCH")
     if expected_owner[1] != "BYBIT:UNIFIED":
         raise RuntimeError("STRATEGY_EXIT_ACCOUNT_UNSUPPORTED")
-    expected_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
+    p90_key = p90_real_exchange_position_key(
+        payload,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        symbol=symbol,
+        position_idx=expected_idx,
+    )
+    expected_key = (
+        p90_key if p90_key is not None
+        else f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
+    )
     if expected_owner[2] != expected_key:
         raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
 
@@ -1888,6 +1901,15 @@ def _execute_universal_exit_command(
     tick: Decimal,
     qty_step: Decimal,
 ) -> dict[str, object]:
+    # A P90 REAL exit uses the exact account-qualified physical slot.
+    # A missing/failed authenticated Bybit position read is NOT empty data.
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        _require_entry_bybit_read_ok(positions_payload, "/v5/position/list")
     position = _universal_exit_position(
         connection,
         payload=payload,
@@ -1902,6 +1924,15 @@ def _execute_universal_exit_command(
     if not isinstance(mutation_raw, dict):
         raise RuntimeError("STRATEGY_EXIT_MUTATION_INVALID")
     mutation = validate_exit_mutation(action_kind, mutation_raw)
+    verify_p90_real_exchange_mutation(
+        payload=payload,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        symbol=symbol,
+        position=position,
+        action_kind=action_kind,
+        mutation=mutation,
+        tick=tick,
+    )
     position_idx = int(position.get("positionIdx") or 0)
 
     if action_kind is ExitActionKind.SET_STOP:
