@@ -384,3 +384,52 @@ def test_one_private_account_safety_latch_blocks_only_its_own_entry() -> None:
     assert scopes["act-one"][0].entry_admission_port is not None
     assert scopes["act-one"][1].entry_admission_port is None
     assert scopes["act-one"][1].technical_readiness.reason == "ACCOUNT_ENTRY_SAFETY_BLOCKED"
+
+
+class _P90MainBundle(Bundle):
+    def __init__(self) -> None:
+        super().__init__("act-main-v3")
+        self.card = type("P90Card", (), {
+            "strategy_id": "p90l90_legacy_main_ltc_inj",
+            "strategy_version": "2.0-p90l90-real-main-sub-20261028",
+            "strategy_config_fingerprint": "config-p90-main",
+            "symbols": ("LTCUSDT", "INJUSDT"),
+        })()
+
+
+class _P90WrongAccountKindDB(_ScopedDB):
+    def execute(self, sql: str, params: tuple[object, ...] = ()) -> _ScopedRows:
+        if "FROM identity.account_connectors c" in sql:
+            return _ScopedRows([("connector-sub", "SUB")])
+        return super().execute(sql, params)
+
+
+def test_p90_real_main_must_not_bind_to_signed_sub_even_if_armed() -> None:
+    binding_main = StrategyExecutionBindingRef(
+        "binding-p90-main", "act-main-v3", "PRIMARY", "ta-sub",
+    )
+    db = _P90WrongAccountKindDB()
+    with (
+        patch("operations.monitoring.universal_entry_shadow.LOADED_COMMIT", "a" * 40),
+        patch(
+            "operations.monitoring.universal_entry_shadow.account_live_arm_ready"
+        ) as arm,
+        patch(
+            "operations.monitoring.universal_entry_shadow._real_entry_account_state"
+        ) as capacity,
+    ):
+        scoped, ready = _multi_account_admissions(
+            db, (_P90MainBundle(),),
+            {"act-main-v3": (binding_main,)},
+            symbol="LTCUSDT",
+            observed_at=NOW,
+            real_selected_for=frozenset({"act-main-v3"}),
+        )
+    assert ready == frozenset()
+    assert scoped["act-main-v3"][0].entry_admission_port is None
+    assert (
+        scoped["act-main-v3"][0].technical_readiness.reason
+        == "P90_REAL_ACCOUNT_KIND_MISMATCH"
+    )
+    arm.assert_not_called()
+    capacity.assert_not_called()
