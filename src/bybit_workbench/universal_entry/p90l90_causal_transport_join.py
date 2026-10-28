@@ -192,9 +192,12 @@ class P90L90CausalTransportJoin:
                 )
                 if event.event_id == known_id:
                     return ()
-                # Seed has no source ID; duplicate old bar cannot replace
-                # immutable seeded history and is not emitted twice.
-                return ()
+                # A REST seed has no matching WS source fact ID. Treat any
+                # later same-boundary close as unproved, not silently equal
+                # to the REST OHLCV payload (would permit retrospective edits).
+                raise RuntimeError(
+                    "P90L90 closed bar duplicate with unproven source identity"
+                )
         self.pending.append(event)
         return self._release()
 
