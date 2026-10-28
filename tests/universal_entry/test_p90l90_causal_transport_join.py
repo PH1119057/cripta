@@ -87,7 +87,7 @@ def test_no_cross_symbol_trade_and_no_stale_earlier_sequence():
     assert P90L90CausalTransportJoin.restore(
         gate.snapshot()
     ).accept(_trade(4, 1)) == ()
-    with pytest.raises(RuntimeError, match="sequence regressed"):
+    with pytest.raises(RuntimeError, match="regressed before committed sequence"):
         gate.accept(_trade(3, 2))
     with pytest.raises(RuntimeError, match="time regressed"):
         gate.accept(_trade(5, 0))
@@ -97,7 +97,7 @@ def test_unresolved_boundary_snapshot_is_not_silent_skip():
     gate = _gate()
     assert gate.accept(_trade(5, 1)) == ()
     assert len(gate.snapshot()["pending"]) == 1
-    with pytest.raises(ValueError, match="checkpoint schema unsupported"):
+    with pytest.raises(ValueError, match="snapshot schema unsupported"):
         P90L90CausalTransportJoin.restore({
             **gate.snapshot(), "schema": "UNKNOWN",
         })
