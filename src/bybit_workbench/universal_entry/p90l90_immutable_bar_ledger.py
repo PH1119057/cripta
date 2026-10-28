@@ -112,7 +112,10 @@ class P90L90ImmutableBarLedger:
         ).fetchone()
         if row is None or row[1] != self._sha:
             raise RuntimeError("P90L90 latest immutable candle source not proven")
-        return row[0].astimezone(UTC)
+        closed = row[0]
+        if not isinstance(closed, datetime):
+            raise RuntimeError("P90L90 durable close timestamp type invalid")
+        return closed.astimezone(UTC)
 
     def closed_at_or_before(
         self, *, symbol: str, timeframe: str, through: datetime
@@ -131,7 +134,10 @@ class P90L90ImmutableBarLedger:
         ).fetchone()
         if row is None or row[1] != self._sha:
             raise RuntimeError("P90L90 as-of candle missing/source not proven")
-        return row[0].astimezone(UTC)
+        closed = row[0]
+        if not isinstance(closed, datetime):
+            raise RuntimeError("P90L90 durable close timestamp type invalid")
+        return closed.astimezone(UTC)
 
     def history(
         self,
