@@ -215,7 +215,9 @@ def test_p90_real_never_uses_cross_or_unproven_account_margin(mode: str) -> None
     ({"strategy_version": "1.1-p90l90-strategy-second48-20261028"}, "WRONG_STRATEGY_VERSION"),
     ({"trading_account_id": "ta-sub"}, "TRADING_ACCOUNT_IDENTITY_UNPROVEN"),
 ))
-def test_real_entry_pre_mutation_rejects_unapproved_execution(patch: dict[str, object], error: str) -> None:
+def test_real_entry_pre_mutation_rejects_unapproved_execution(
+    patch: dict[str, object], error: str,
+) -> None:
     with pytest.raises(ValueError, match=error):
         validate_real_v3_exchange_entry(
             payload={**_real_order_payload(), **patch}, symbol="LTCUSDT",
