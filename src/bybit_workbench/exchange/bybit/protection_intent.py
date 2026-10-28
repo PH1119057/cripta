@@ -71,8 +71,8 @@ def expected_protection(
     tick: object,
     entry_payload: Mapping[str, object],
     completed_commands: list[Mapping[str, object]],
-) -> tuple[Decimal, Decimal, str]:
-    """Return current approved (SL,TP,TP-kind), or refuse to declare VERIFIED."""
+) -> tuple[Decimal, Decimal | None, str]:
+    """Return approved (SL, optional TP, TP-kind) or refuse VERIFIED."""
     step = _amount(tick)
     entry = _amount(entry_price)
     if side not in {"Buy", "Sell"}:
@@ -83,12 +83,26 @@ def expected_protection(
     stop_pct = _amount(initial.get("stop_loss_pct")) / Decimal("100")
     initial_stop = entry * (Decimal(1) - stop_pct if side == "Buy" else Decimal(1) + stop_pct)
     stop = _round(initial_stop, step, upward=side == "Buy")
-    raw_tp = initial.get("take_profit_price")
-    if raw_tp is None:
-        pct = _amount(initial.get("take_profit_pct")) / Decimal("100")
-        raw_tp = entry * (Decimal(1) + pct if side == "Buy" else Decimal(1) - pct)
-    target = _round(_amount(raw_tp), step, upward=side == "Buy")
-    tp_kind = "POSITION"
+    if initial.get("take_profit_enabled") is False:
+        if any(initial.get(key) not in (None, "") for key in (
+            "take_profit_price", "take_profit_pct", "take_profit_reference_path",
+        )):
+            raise ProtectionIntentUnavailable(
+                "disabled initial TP cannot carry an opening target"
+            )
+        # P90 REAL starts with only Exchange Hard Stop. Dynamic Exit may
+        # later install an approved TP; this is not missing protection.
+        target: Decimal | None = None
+        tp_kind = "DISABLED"
+    else:
+        raw_tp = initial.get("take_profit_price")
+        if raw_tp is None:
+            pct = _amount(initial.get("take_profit_pct")) / Decimal("100")
+            raw_tp = entry * (
+                Decimal(1) + pct if side == "Buy" else Decimal(1) - pct
+            )
+        target = _round(_amount(raw_tp), step, upward=side == "Buy")
+        tp_kind = "POSITION"
 
     for command in completed_commands:
         kind = str(command.get("command_type") or "")
