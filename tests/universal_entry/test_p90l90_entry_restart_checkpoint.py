@@ -8,7 +8,8 @@ from decimal import Decimal as D
 import pytest
 
 from bybit_workbench.universal_entry.p90l90_causal import (
-    P90L90CausalEntry, P90L90EntryState,
+    P90L90CausalEntry,
+    P90L90EntryState,
 )
 from bybit_workbench.universal_entry.p90l90_entry_restart_checkpoint import (
     entry_restart_snapshot,
