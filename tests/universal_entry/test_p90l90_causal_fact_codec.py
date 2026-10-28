@@ -121,5 +121,6 @@ def test_bad_source_and_future_or_missing_geometry_fail_closed():
         encode_p90l90_fact(replace(
             _bar("5"), event_at=B+timedelta(minutes=5),
             observed_at=B+timedelta(minutes=5),
+            received_at=B+timedelta(minutes=5, seconds=2),
         ))
     assert encode_p90l90_fact(_bar("15")).timeframe == "15"
