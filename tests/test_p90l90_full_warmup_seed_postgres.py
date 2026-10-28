@@ -190,7 +190,7 @@ def test_pg16_live_shape_native_join_to_real_two_symbol_main_paper_and_restart()
         FrozenPolicy, StrategyActivation,
     )
     from bybit_workbench.universal_entry.materializer import materialize_plans
-    from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
+    from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
     from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
         P90L90ObserverPaperConsumer,
     )
@@ -209,7 +209,7 @@ def test_pg16_live_shape_native_join_to_real_two_symbol_main_paper_and_restart()
     card = next(
         card for card in new_version_cards(
             approved_at=B-timedelta(minutes=1),
-            policy_by_strategy_id={MAIN_ID: policy},
+            policy_by_strategy_id={MAIN_ID: policy, SUB_ID: policy},
         ) if card.strategy_id == MAIN_ID
     )
     activation = StrategyActivation(
@@ -295,7 +295,7 @@ def test_pg16_live_shape_native_join_to_real_two_symbol_main_paper_and_restart()
         def native(seq: int, price: str):
             at = B+timedelta(seconds=seq-100)
             fact = MarketFactEnvelope(
-                fact_id=f"trade-full-{symbol}-{seq}",
+                fact_id=f"trade-full-{seq}",
                 event_kind="PUBLIC_TRADE", symbol=symbol,
                 observed_at=at,event_at=at,
                 received_at=at+timedelta(milliseconds=100),
@@ -332,10 +332,18 @@ def test_pg16_live_shape_native_join_to_real_two_symbol_main_paper_and_restart()
         restarted.recover_all()
         assert restarted.accept(native(102,"98")) == ()
         restarted.accept(native(103,"99"))
-        restarted.accept(native(104,"98.7"))
+        restarted.accept(native(104,"98.6"))
         assert conn.execute(
             "SELECT count(*) FROM strategy_entry.paper_orders"
         ).fetchone()[0] == before_orders
+        closed = conn.execute(
+            """SELECT state,payload FROM strategy_entry.paper_positions
+                WHERE paper_position_id=%s""", (position_id,),
+        ).fetchone()
+        assert closed[0] == "CLOSED"
+        assert Decimal(
+            closed[1]["p90l90_modeled_economics"]["net_usdt"]
+        ) > 0
         assert conn.execute(
             """SELECT count(*) FROM strategy_entry.paper_positions
                  WHERE strategy_id=%s""", (MAIN_ID,),
