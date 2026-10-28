@@ -10,12 +10,15 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from bybit_workbench.universal_entry.contracts import (
-    FrozenPolicy, MarketFactEnvelope, StrategyActivation,
+    FrozenPolicy,
+    MarketFactEnvelope,
+    StrategyActivation,
 )
 from bybit_workbench.universal_entry.engine import UniversalEntryEngine
 from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_causal import (
-    P90L90Crossing, P90L90EntryState,
+    P90L90Crossing,
+    P90L90EntryState,
 )
 from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing_fact
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
