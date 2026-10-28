@@ -149,3 +149,71 @@ class P90RealMfeLedger:
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_DURABLE_IDEMPOTENCY_MISMATCH")
         return checkpoint
+
+
+    def load_latest(
+        self,
+        *,
+        position: StrategyPosition,
+        source_commit: str,
+    ) -> tuple[P90RealMfeCheckpoint, str, tuple[str, ...]]:
+        """Read exact durable last native state for a later closed 5m event.
+
+        A caller must hold its outer source/Exit transaction. The per-position
+        lock serializes new native MFE ticks with bar-close Exit decisions.
+        """
+        self._db.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+            (position.strategy_position_id,),
+        )
+        row = self._db.execute(
+            """SELECT observation_id,attributes,source_refs
+                 FROM strategy_exit.exit_observations
+                WHERE strategy_position_id=%s AND exit_plan_fingerprint=%s
+                  AND event_kind='P90L90_REAL_NATIVE_MFE_CHECKPOINT'
+                ORDER BY (attributes->'checkpoint'->>'cursor_seq')::bigint DESC,
+                         event_at DESC, observation_id DESC
+                LIMIT 1 FOR UPDATE""",
+            (position.strategy_position_id, position.exit_plan_fingerprint),
+        ).fetchone()
+        if row is None:
+            raise P90RealMfeUnverified("P90_REAL_MFE_DURABLE_NATIVE_STATE_MISSING")
+        attrs = row.get("attributes")
+        refs = row.get("source_refs")
+        if (
+            not isinstance(attrs, Mapping)
+            or not isinstance(refs, list)
+            or not refs
+            or any(not isinstance(ref, str) or not ref for ref in refs)
+        ):
+            raise P90RealMfeUnverified("P90_REAL_MFE_DURABLE_SOURCE_REFS_INVALID")
+        checkpoint = P90RealMfeCheckpoint.restore(attrs.get("checkpoint"))
+        if checkpoint.source_commit != source_commit:
+            raise P90RealMfeUnverified("P90_REAL_MFE_SOURCE_RELEASE_DRIFT")
+        cursor = TradeCursor(
+            symbol=checkpoint.symbol,
+            seq=checkpoint.cursor_seq,
+            exec_id=checkpoint.cursor_exec_id,
+            traded_at=checkpoint.cursor_at,
+        )
+        checkpoint.advance(
+            position=position,
+            cursor=cursor,
+            price=checkpoint.last_native_price,
+            proven_contiguous_native_cursor=True,
+        )
+        fact_id = attrs.get("native_fact_id")
+        expected_id = "p90-real-mfe-" + fingerprint({
+            "position_id": position.strategy_position_id,
+            "source_commit": source_commit,
+            "native_exec_id": cursor.exec_id,
+            "native_seq": cursor.seq,
+            "native_at": cursor.traded_at.astimezone(UTC).isoformat(),
+        })[:32]
+        if (
+            not isinstance(fact_id, str)
+            or not fact_id
+            or row.get("observation_id") != expected_id
+        ):
+            raise P90RealMfeUnverified("P90_REAL_MFE_DURABLE_IDENTITY_TAMPERED")
+        return checkpoint, fact_id, tuple(refs)
