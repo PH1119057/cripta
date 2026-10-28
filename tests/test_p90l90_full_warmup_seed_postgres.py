@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -18,8 +19,10 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_entry.contracts import (
     FrozenPolicy,
     MarketFactEnvelope,
+    StrategyActivation,
 )
 from bybit_workbench.universal_entry.fingerprint import canonical_json
+from bybit_workbench.universal_entry.materializer import materialize_plans
 from bybit_workbench.universal_entry.p90l90_atomic_paper_checkpoint import (
     P90L90AtomicPaperCheckpointStore,
 )
@@ -33,9 +36,19 @@ from bybit_workbench.universal_entry.p90l90_durable_paper_processor import (
 from bybit_workbench.universal_entry.p90l90_immutable_bar_ledger import (
     P90L90ImmutableBarLedger,
 )
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
+    P90L90ObserverPaperConsumer,
+)
 from bybit_workbench.universal_entry.p90l90_offline_seed_plan import (
     plan_p90l90_offline_seed,
 )
+from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
+    StrategyHardStopEmbargoPolicy,
+)
+from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
+from bybit_workbench.universal_entry.runtime_loader import ActiveStrategyBundle
+from bybit_workbench.universal_entry.storage import StrategyEntryStore
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
@@ -184,23 +197,6 @@ def test_pg16_live_shape_native_join_to_real_two_symbol_main_paper_and_restart()
     The original v1/R1 never participates. Every SQL effect is rolled back
     on the disposable CI database, not production or Bybit.
     """
-    from uuid import uuid4
-
-    from bybit_workbench.universal_entry.contracts import (
-        FrozenPolicy, StrategyActivation,
-    )
-    from bybit_workbench.universal_entry.materializer import materialize_plans
-    from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
-    from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
-        P90L90ObserverPaperConsumer,
-    )
-    from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
-        StrategyHardStopEmbargoPolicy,
-    )
-    from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
-    from bybit_workbench.universal_entry.runtime_loader import ActiveStrategyBundle
-    from bybit_workbench.universal_entry.storage import StrategyEntryStore
-
     policy = StrategyHardStopEmbargoPolicy.parse({
         "enabled": True, "hardstop_count": 2, "rolling_hours": 48,
         "new_entry_pause_hours": 48, "close_existing_positions": False,
