@@ -20,8 +20,8 @@ from .p90l90_observer_paper_consumer import P90L90ObserverPaperConsumer
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from .p90l90_real_native_candidate_owner import P90L90RealNativeCandidateOwner
 from .p90l90_real_second48 import read_real_second48
-from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from .p90l90_shared_candle_bridge import P90SharedCandleLedger
+from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from .registry import ActivePlanRegistry
 from .storage import StrategyEntryStore
 from .transport_continuity import TradeCursor
