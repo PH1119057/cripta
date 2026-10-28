@@ -116,8 +116,17 @@ def test_working_observer_calls_guard_before_any_registry_activation():
     assert epoch.index("partition_observer_strategies(bundles)") < epoch.index(
         "registry = ActivePlanRegistry()"
     )
-    assert epoch.index("require_p90_atomic_observer_connection(observer_split)") < (
+    assert epoch.index("require_p90_policy_before_registry(observer_split)") < (
         epoch.index("registry = ActivePlanRegistry()")
+    )
+    assert epoch.index("p90_consumer.recover_all()") < (
+        epoch.index("registry = ActivePlanRegistry()")
+    )
+    assert epoch.index("sock, _ready_local, _ready_server, buffered = _connect_and_subscribe") < (
+        epoch.index("require_p90_atomic_observer_connection(")
+    )
+    assert epoch.index("require_p90_atomic_observer_connection(") < (
+        epoch.index("while not stopping():")
     )
 
 
@@ -159,3 +168,68 @@ def test_actual_observer_has_one_p90_consumer_and_no_legacy_double_dispatch():
         "            paper.on_public_trade("
     ) in epoch
     assert "self._paper.route_p90l90_native_trade(" not in epoch
+
+
+def test_p90_positive_runtime_gate_requires_real_checkpoint_and_live_ws_proof():
+    from datetime import UTC, datetime, timedelta
+    from dataclasses import replace
+
+    from bybit_workbench.universal_entry.contracts import StrategyActivation
+    from bybit_workbench.universal_entry.materializer import materialize_plans
+    from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+    from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
+        P90NativeBarRuntimeProof,
+    )
+    from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
+        StrategyHardStopEmbargoPolicy,
+    )
+    from bybit_workbench.universal_entry.p90l90_strategy_v2 import new_version_cards
+    from bybit_workbench.universal_entry.runtime_loader import ActiveStrategyBundle
+
+    now = datetime.now(UTC)
+    policy = StrategyHardStopEmbargoPolicy.parse({
+        "enabled": True, "hardstop_count": 2,
+        "rolling_hours": 48, "new_entry_pause_hours": 48,
+        "close_existing_positions": False, "domain": "STRATEGY_VERSION",
+    })
+    cards = new_version_cards(
+        approved_at=now-timedelta(seconds=1),
+        policy_by_strategy_id={MAIN_ID: policy, SUB_ID: policy},
+    )
+    bundles = []
+    for card in cards:
+        activation = StrategyActivation(
+            activation_id="source-proof-"+card.strategy_id,
+            strategy_id=card.strategy_id,
+            strategy_version=card.strategy_version,
+            strategy_config_fingerprint=card.strategy_config_fingerprint,
+            enabled=True, enabled_at=now-timedelta(seconds=1),
+        )
+        entry, exit_ = materialize_plans(card, activation)
+        bundles.append(ActiveStrategyBundle(card, activation, entry, exit_, now))
+    split = partition_observer_strategies(tuple(bundles))
+    require_p90_policy_before_registry(split)
+    # Merely asking for paper_ready or supplying generic observer_ready is blocked.
+    with pytest.raises(RuntimeError, match="NOT_PROVEN"):
+        require_p90_atomic_observer_connection(split)
+    symbols = frozenset(sym for bundle in bundles for sym in bundle.card.symbols)
+    proof = P90NativeBarRuntimeProof(
+        source_commit="a" * 40, restored_symbols=symbols,
+        subscribed_symbols=symbols,
+        subscribed_intervals=frozenset({"5", "15"}),
+        mirror_active=True, subscribed_local_at=now,
+        subscribed_server_at=now, epoch_started_at=now-timedelta(seconds=2),
+    )
+    assert proof.verified_for(symbols)
+    require_p90_atomic_observer_connection(split, live_proof=proof)
+    for weakened in (
+        replace(proof, mirror_active=False),
+        replace(proof, restored_symbols=frozenset({"LTCUSDT"})),
+        replace(proof, subscribed_symbols=frozenset({"LTCUSDT"})),
+        replace(proof, subscribed_intervals=frozenset({"5"})),
+        replace(proof, subscribed_server_at=now-timedelta(seconds=17)),
+        replace(proof, source_commit="not-an-installed-commit"),
+    ):
+        assert not weakened.verified_for(symbols)
+        with pytest.raises(RuntimeError, match="NOT_PROVEN"):
+            require_p90_atomic_observer_connection(split, live_proof=weakened)
