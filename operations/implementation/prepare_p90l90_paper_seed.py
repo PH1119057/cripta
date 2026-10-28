@@ -24,7 +24,7 @@ import pwd
 import re
 import sys
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import psycopg
@@ -94,6 +94,20 @@ def _check_db(connection: psycopg.Connection, symbol: str) -> None:
             c.execute("SELECT to_regclass(%s)::text", (name,)).fetchone()[0] == name,
             "MISSING_MIGRATION_" + name.rsplit(".", 1)[1],
         )
+    grants = c.execute(
+        """SELECT
+             has_table_privilege('cripta',
+               'strategy_entry.p90l90_causal_closed_bars','SELECT,INSERT'),
+             has_table_privilege('cripta',
+               'strategy_entry.p90l90_causal_closed_bars','UPDATE'),
+             has_table_privilege('cripta',
+               'strategy_entry.p90l90_causal_transport_checkpoints',
+               'SELECT,INSERT,UPDATE'),
+             has_table_privilege('cripta',
+               'strategy_entry.p90l90_causal_transport_checkpoints','DELETE')"""
+    ).fetchone()
+    _require(grants == (True, False, True, False),
+             "P90_TABLE_GRANTS_NOT_EXACT_ACTOR")
     _require(c.execute(
         "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'"
     ).fetchone() == (0,), "LIVE_ARM_PRESENT")
@@ -144,6 +158,13 @@ def prepare(*, symbol: str, commit: str, dry_run: bool) -> None:
                 p90l90_full_prev7d=True,
             )
             plan = plan_p90l90_offline_seed(symbol, history)
+            # REST warmup is valid only if it leads immediately into a
+            # real-source epoch, never into a stale disconnected seed.
+            age = observed - plan.closed_5m_at
+            _require(
+                timedelta(0) <= age < timedelta(minutes=5),
+                "REST_INITIAL_CLOSED_5M_NOT_FRESH",
+            )
             if dry_run:
                 print(
                     f"P90_SEED_CHECK=PASS SYMBOL={symbol} COMMIT={commit} "
@@ -180,6 +201,11 @@ def prepare(*, symbol: str, commit: str, dry_run: bool) -> None:
                 last_closed_15m=plan.closed_15m_at,
                 entry=P90L90CausalEntry(state=restored),
                 proven_geometry=plan.initial_geometry,
+            )
+            _require(
+                datetime.now(UTC) - plan.closed_5m_at
+                < timedelta(minutes=5),
+                "SEED_WINDOW_EXPIRED_BEFORE_COMMIT",
             )
             saved = store.inspect(
                 symbol=symbol, recomputed_geometry=restored,
