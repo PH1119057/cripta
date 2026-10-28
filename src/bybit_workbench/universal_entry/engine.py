@@ -54,6 +54,7 @@ from .market_watch import (
     ParameterizedCausalMarketWatch,
     WatchTracePoint,
 )
+from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION as REAL_VERSION
 from .references import resolve_causal_timestamp
 from .registry import ActivePlanRegistry
 from .transport_continuity import TradeCursor
@@ -492,8 +493,6 @@ class UniversalEntryEngine:
         if len(plans) != 1:
             raise RuntimeError("P90L90_PRECOMPUTED_EXACT_ONE_STRATEGY_REQUIRED")
         plan = plans[0]
-        from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION as REAL_VERSION
-
         selected_for_real = bool(real_admission_required_for)
         # Historical v2 must stay PAPER-only even if a caller supplies
         # independently selected REAL identifiers.
