@@ -84,6 +84,7 @@ def _scope(*, short: bool = False, sub: bool = False):
         "positionIdx": 0, "avgPrice": "100", "size": "0.1",
         "stopLoss": "110" if short else "90",
         "takeProfit": "90" if short else "110",
+        "markPrice": "99" if short else "101",
     }
     private = ScopedPrivatePositionEvidence(
         trading_account_id=account,
@@ -147,6 +148,7 @@ def test_private_account_or_stale_exchange_evidence_is_rejected(
     ("stopLoss", "0"), ("takeProfit", "0"),
     ("avgPrice", "99"), ("size", "0.05"),
     ("positionIdx", 1), ("symbol", "DOTUSDT"),
+    ("markPrice", "0"), ("markPrice", "89"),
 ))
 def test_missing_exchange_stop_tp_or_partial_fill_never_claims_real_exit(
     field: str, value: object,
