@@ -67,10 +67,15 @@ def verify(*, commit: str) -> dict[str, object]:
         and status.get("observer_ready") is True,
         "NOT_ACTUALLY_RUNNING_TWO_P90_STRATEGIES",
     )
+    from bybit_workbench.universal_entry.p90l90_data_lineage import (
+        inspect_p90_data_lineage,
+    )
+
     with psycopg.connect(
         "dbname=cripta user=cripta", connect_timeout=6,
         options="-c default_transaction_read_only=on",
     ) as conn:
+        lineage = inspect_p90_data_lineage(conn, loaded_commit=commit)
         require(conn.execute(
             "SELECT session_user,current_user"
         ).fetchone() == ("cripta", "cripta"), "WRONG_PG_ROLE")
@@ -95,15 +100,19 @@ def verify(*, commit: str) -> dict[str, object]:
                     "EXCHANGE_OR_PAPER_ORDER_PATH_ENABLED")
         rows = conn.execute(
             """SELECT symbol,source_commit,generation,
-                      checkpoint_json->>'last_emitted_trade_sequence'
+                      checkpoint_json->>'last_emitted_trade_sequence',
+                      last_writer_release_commit
                  FROM strategy_entry.p90l90_causal_transport_checkpoints
                 ORDER BY symbol"""
         ).fetchall()
         require(
             len(rows) == 5
             and {row[0] for row in rows} == SYMBOLS
-            and all(row[1] == commit and row[2] > 0
-                    and row[3] is not None for row in rows),
+            and all(
+                row[1] == lineage.origin_commit and row[2] > 0
+                and row[3] is not None and row[4] == commit
+                for row in rows
+            ),
             "FIVE_NATIVE_SOURCE_CHECKPOINTS_NOT_ADVANCING",
         )
         paper = conn.execute(
@@ -126,12 +135,14 @@ def verify(*, commit: str) -> dict[str, object]:
     return {
         "verification": "P90L90_RUNTIME_NATIVE_PAPER_BEHAVIOR_VERIFIED",
         "source_commit": commit,
+        "data_lineage_id": lineage.data_lineage_id,
+        "original_data_commit": lineage.origin_commit,
         "observer_epoch": status.get("observer_epoch_id"),
         "live_facts_processed": int(status["facts_received"]),
         "strategies": list(STRATEGIES),
         "symbols": sorted(SYMBOLS),
         "native_checkpoint_generations": {
-            sym: generation for sym, _, generation, _ in rows
+            sym: generation for sym, _, generation, _, _ in rows
         },
         "paper_position_counts": [
             {"strategy_id": name, "state": state, "count": count}
