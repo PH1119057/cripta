@@ -17,6 +17,7 @@ from bybit_workbench.universal_exit.p90l90_real_mfe import (
     P90RealMfeCheckpoint,
     P90RealMfeUnverified,
 )
+from bybit_workbench.universal_exit.p90l90_real_mfe_ledger import P90RealMfeLedger
 
 D = Decimal
 AT = datetime(2026, 10, 29, 2, 0, tzinfo=UTC)
@@ -160,3 +161,117 @@ def test_tampered_restored_checkpoint_and_wrong_account_fail_closed() -> None:
             cursor=_cursor(pos, seq=101, millis=5),
             price=D("101"), proven_contiguous_native_cursor=True,
         )
+
+
+class _Row:
+    def __init__(self, item: dict[str, object] | None = None) -> None:
+        self.item = item
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self.item
+
+
+class _MfeDB:
+    def __init__(self) -> None:
+        self.saved: dict[str, dict[str, object]] = {}
+        self.locked = False
+        self.audit: list[str] = []
+
+    def execute(
+        self, sql: str, params: tuple[object, ...] = (),
+    ) -> _Row:
+        if "pg_advisory_xact_lock" in sql:
+            self.locked = True
+            self.audit.append("lock")
+            return _Row()
+        assert self.locked, "the native MFE reader/writer must own the exact lock"
+        if "ORDER BY" in sql and "exit_observations" in sql:
+            self.audit.append("read")
+            matching = [
+                row for row in self.saved.values()
+                if row["strategy_position_id"] == params[0]
+                and row["exit_plan_fingerprint"] == params[1]
+            ]
+            if not matching:
+                return _Row()
+            latest = max(matching, key=lambda row: (
+                row["attributes"]["checkpoint"]["cursor_seq"],
+                row["event_at"],
+            ))
+            return _Row(latest)
+        if "INSERT INTO strategy_exit.exit_observations" in sql:
+            self.audit.append("write")
+            from bybit_workbench.universal_entry.contracts import FrozenPolicy
+
+            self.saved.setdefault(str(params[0]), {
+                "observation_id": params[0],
+                "strategy_position_id": params[1],
+                "exit_plan_fingerprint": params[2],
+                "symbol": params[3],
+                "event_at": params[5],
+                "attributes": FrozenPolicy(str(params[8])).to_dict(),
+                "source_refs": list(__import__("json").loads(str(params[9]))),
+            })
+            return _Row()
+        if "WHERE observation_id=%s" in sql:
+            self.audit.append("readback")
+            return _Row(self.saved.get(str(params[0])))
+        raise AssertionError(f"unexpected MFE DB command: {sql}")
+
+
+def test_atomic_native_ledger_restores_exact_mfe_after_restart() -> None:
+    pos = _position()
+    db = _MfeDB()
+    first = _cursor(pos, seq=100, exec_id="first", millis=3)
+    ledger = P90RealMfeLedger(db)
+    args = {
+        "position": pos, "source_commit": SHA, "fact_id": "fact-first",
+        "cursor": first, "price": D("100.4"),
+        "received_at": first.traded_at + timedelta(milliseconds=1),
+        "source_refs": ("bybit:publicTrade:LTCUSDT:first",),
+        "first_fill_forward_coverage_proven": True,
+        "native_continuity_proven": True,
+    }
+    state = ledger.on_trade(**args)
+    assert state.best_favorable_price == D("100.4")
+    assert len(db.saved) == 1
+    assert db.audit[:4] == ["lock", "read", "write", "readback"]
+    assert P90RealMfeLedger(db).on_trade(**args) == state
+    assert len(db.saved) == 1
+    later = _cursor(pos, seq=101, exec_id="next", millis=4)
+    state2 = P90RealMfeLedger(db).on_trade(
+        **{
+            **args, "fact_id": "fact-next", "cursor": later,
+            "price": D("101.2"),
+            "received_at": later.traded_at + timedelta(milliseconds=1),
+            "source_refs": ("bybit:publicTrade:LTCUSDT:next",),
+            "first_fill_forward_coverage_proven": False,
+        }
+    )
+    assert state2.best_favorable_price == D("101.2")
+    assert state2.cursor_seq == 101
+    assert len(db.saved) == 2
+    assert P90RealMfeCheckpoint.restore(state2.snapshot()) == state2
+    # Duplicate cursor with different original native fact IDs fails closed.
+    with pytest.raises(P90RealMfeUnverified, match="REPLAY_PROVENANCE_DRIFT"):
+        P90RealMfeLedger(db).on_trade(
+            **{**args, "fact_id": "tampered", "cursor": later,
+               "price": D("101.2"),
+               "received_at": later.traded_at + timedelta(milliseconds=1)}
+        )
+
+
+def test_real_mfe_ledger_fails_closed_before_unproven_fill_forward_seed() -> None:
+    pos = _position()
+    db = _MfeDB()
+    cursor = _cursor(pos)
+    with pytest.raises(P90RealMfeUnverified, match="FILL_TO_NATIVE_GAP"):
+        P90RealMfeLedger(db).on_trade(
+            position=pos, source_commit=SHA, fact_id="native",
+            cursor=cursor, price=D("100.5"),
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=("native:exact",),
+            first_fill_forward_coverage_proven=False,
+            native_continuity_proven=True,
+        )
+    assert db.saved == []
