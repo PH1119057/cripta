@@ -2070,6 +2070,23 @@ def _run_observer_epoch(
                 "source_commit": LOADED_COMMIT,
             },
         )
+    for raw_bundle in observer_split.p90_paper:
+        bundle = cast(Any, raw_bundle)
+        # P90 uses its own already-restored Entry consumer, but exact
+        # StrategyPlan consumption remains durably auditable.
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
@@ -2082,14 +2099,16 @@ def _run_observer_epoch(
         for symbol in cast(Any, item).entry_plan.symbols
     }
     real_execution_selected_for = _real_execution_selected_activation_ids(
-        connection, bundles
+        connection, observer_split.ordinary
     )
-    release_ready_for = _real_execution_activation_ids(connection, bundles)
+    release_ready_for = _real_execution_activation_ids(
+        connection, observer_split.ordinary
+    )
     multi_account_candidates = _unarmed_multi_account_candidate_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = _real_execution_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = {
         activation: binding
@@ -2167,7 +2186,9 @@ def _run_observer_epoch(
                 tuple(oi_history),
                 observed_at=observed,
             )
-            paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        # Historical PAPER positions retain their original Exit owner
+        # even when their StrategyActivation is now disabled/retired.
+        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
@@ -2530,7 +2551,7 @@ def _run_observer_epoch(
             scoped_admissions, scoped_ready_for = (
                 _multi_account_admissions(
                     connection,
-                    bundles,
+                    observer_split.ordinary,
                     multi_account_candidates,
                     symbol=fact.symbol,
                     observed_at=admission_time,
