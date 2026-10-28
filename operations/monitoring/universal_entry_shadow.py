@@ -79,6 +79,9 @@ from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
     P90L90ObserverPaperConsumer,
 )
+from bybit_workbench.universal_entry.p90l90_mixed_epoch_atomicity import (
+    dispatch_observer_fact_atomically,
+)
 from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
     partition_observer_strategies,
     require_p90_atomic_observer_connection,
@@ -2652,12 +2655,13 @@ def _run_observer_epoch(
         # records use this exact connection and roll back as ONE DB unit.
         # In-memory state MUST be discarded by ending the whole epoch on any
         # exception; the enclosing Observer restart handles that boundary.
-        if p90_consumer is not None and fact.symbol in p90l90_symbols:
-            with connection.transaction():
-                _process_fact_body(fact, cursor)
-            return
-        # No-P90 path is byte-for-byte the original transaction behavior.
-        _process_fact_body(fact, cursor)
+        dispatch_observer_fact_atomically(
+            connection,
+            symbol=fact.symbol,
+            p90_symbols=p90l90_symbols,
+            p90_enabled=p90_consumer is not None,
+            dispatch=lambda: _process_fact_body(fact, cursor),
+        )
 
     try:
         trade_mirror_thread.start()
