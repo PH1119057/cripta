@@ -1,6 +1,7 @@
 """Synthetic REAL native MFE checkpoint: exact signed-fill lineage and restart."""
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -210,7 +211,7 @@ class _MfeDB:
                 "symbol": params[3],
                 "event_at": params[5],
                 "attributes": FrozenPolicy(str(params[8])).to_dict(),
-                "source_refs": list(__import__("json").loads(str(params[9]))),
+                "source_refs": list(json.loads(str(params[9]))),
             })
             return _Row()
         if "WHERE observation_id=%s" in sql:
@@ -274,4 +275,4 @@ def test_real_mfe_ledger_fails_closed_before_unproven_fill_forward_seed() -> Non
             first_fill_forward_coverage_proven=False,
             native_continuity_proven=True,
         )
-    assert db.saved == []
+    assert db.saved == {}
