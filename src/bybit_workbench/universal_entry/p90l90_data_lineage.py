@@ -15,7 +15,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 ORIGIN_COMMIT = "ecde51102e4fe624e4b312eca85318540f200229"
 ORIGINAL_BAR_SHA256 = "940b9ee8894105ed37143b14dae2f6b517cc230e158c2022837e230abe16e011"
@@ -37,10 +37,17 @@ class P90L90DataLineage:
 
 
 def _digest_row(hasher: Any, values: object, *, default: bool = False) -> None:
-    hasher.update(json.dumps(
-        values, sort_keys=True, ensure_ascii=False,
-        separators=(",", ":"), **({"default": str} if default else {}),
-    ).encode("utf-8") + b"\n")
+    if default:
+        serialized = json.dumps(
+            values, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), default=str,
+        )
+    else:
+        serialized = json.dumps(
+            values, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    hasher.update(serialized.encode("utf-8") + b"\n")
 
 
 def verify_original_bar_archive(connection: Any) -> None:
@@ -89,6 +96,7 @@ def _checkpoint_rows(connection: Any) -> list[tuple[Any, ...]]:
              FROM strategy_entry.p90l90_causal_transport_checkpoints
             ORDER BY symbol"""
     ).fetchall()
+    rows = cast(list[tuple[Any, ...]], rows)
     if (
         len(rows) != 5
         or {r[0] for r in rows} != _SYMBOLS
