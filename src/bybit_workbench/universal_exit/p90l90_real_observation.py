@@ -138,28 +138,22 @@ def build_real_native_exit_observation(
         raise P90RealObservationUnverified("P90_REAL_EXIT_SIGNED_POSITION_MISMATCH")
     stop = _positive(raw.get("stopLoss"), "P90_REAL_STOP_NOT_PRESENT")
     tp = _positive(raw.get("takeProfit"), "P90_REAL_TP_NOT_PRESENT")
+    mark = _positive(raw.get("markPrice"), "P90_REAL_SIGNED_MARK_NOT_PRESENT")
     tick = _positive(private.tick_size, "P90_REAL_TICK_INVALID")
+    # Profitable trailing stops may be beyond Entry, but must remain on
+    # the protective side of the current signed mark. An already marketable
+    # resting TP cannot be asserted to be active Exchange protection.
+    long = position.direction is TradeDirection.LONG
     if (
         stop % tick != 0 or tp % tick != 0
         or not (
-            stop < position.actual_avg_fill < tp
-            if position.direction is TradeDirection.LONG
-            else tp < position.actual_avg_fill < stop
+            stop < mark < tp and tp > position.actual_avg_fill
+            if long else tp < mark < stop and tp < position.actual_avg_fill
         )
     ):
-        # Existing profitable tightened stop is allowed when already above
-        # the entry; only target and physical stop presence/alignment matter.
-        if not (
-            stop % tick == 0 and tp % tick == 0
-            and (
-                tp > position.actual_avg_fill
-                if position.direction is TradeDirection.LONG
-                else tp < position.actual_avg_fill
-            )
-        ):
-            raise P90RealObservationUnverified(
-                "P90_REAL_EXIT_EXCHANGE_PROTECTION_NOT_PROVEN"
-            )
+        raise P90RealObservationUnverified(
+            "P90_REAL_EXIT_EXCHANGE_PROTECTION_NOT_PROVEN"
+        )
     if (
         position.direction is TradeDirection.LONG
         and checkpoint.best_favorable_price < position.actual_avg_fill
