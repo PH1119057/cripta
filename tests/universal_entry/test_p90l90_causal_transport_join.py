@@ -98,7 +98,7 @@ def test_unresolved_boundary_snapshot_is_not_silent_skip():
         P90L90CausalTransportJoin.restore({
             **gate.snapshot(), "schema": "UNKNOWN",
         })
-    with pytest.raises(ValueError, match="requires UTC"):
+    with pytest.raises(ValueError, match="must be UTC"):
         P90L90CausalTransportJoin.restore({
             **gate.snapshot(),
             "last_trade_event_at": "2026-10-28T05:00:01",
