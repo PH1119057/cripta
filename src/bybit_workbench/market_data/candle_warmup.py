@@ -53,3 +53,43 @@ def ensure_closed_history(
         transport=source_transport, observed_at=observed_at,
     )
     return store.history(through=through, required=required)
+
+
+def cache_approved_bybit_history(
+    connection: Any, *, symbol: str, history: dict[str, tuple[Candle, ...]],
+    observed_at: datetime, producer_release_commit: str,
+) -> dict[str, tuple[Candle, ...]]:
+    """One PostgreSQL source across consumers; only the Bybit REST adapter.
+
+    The caller must have fetched the candles from its approved, authenticated
+    `BYBIT_PUBLIC_REST` endpoint. This function does NOT infer source identity
+    from Strategy ID, account balance, a coin name or a fabricated market source.
+    It resolves the one active registered Bybit MarketSource/Instrument pair.
+    """
+    matches = connection.execute(
+        """SELECT s.market_source_id,s.venue_id,i.instrument_id,
+                  i.external_symbol,i.product_category
+             FROM identity.market_sources s
+             JOIN identity.instruments i ON i.venue_id=s.venue_id
+            WHERE s.venue_id='venue-bybit'
+              AND s.source_kind='DIRECT_PUBLIC_COMPOSITE'
+              AND s.status='ACTIVE'
+              AND i.external_symbol=%s AND i.product_category='LINEAR'""",
+        (symbol,),
+    ).fetchall()
+    if len(matches) != 1:
+        raise RuntimeError("CANDLE_APPROVED_BYBIT_MARKET_SOURCE_AMBIGUOUS")
+    result: dict[str, tuple[Candle, ...]] = {}
+    for tf, rows in history.items():
+        key = MarketCandleKey(*matches[0], timeframe=tf)
+        # A provider gap is not silently forward-filled even if another
+        # strategy already has a cached subset of this source.
+        full = verify_closed_window(key, rows)
+        store = SharedClosedCandleStore(connection, key)
+        store.ingest(
+            full, producer_release_commit=producer_release_commit,
+            transport="BYBIT_REST_KLINE", observed_at=observed_at,
+        )
+        result[tf] = store.history(through=full[-1].closed_at,
+                                   required=len(full))
+    return result
