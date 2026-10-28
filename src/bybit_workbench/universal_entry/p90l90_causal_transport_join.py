@@ -48,11 +48,12 @@ class P90TransportEvent:
             raise ValueError("P90L90 requires complete native source identity/payload")
         _utc(self.event_at)
         if self.kind == "PUBLIC_TRADE":
+            sequence = self.exchange_sequence
+            if not isinstance(sequence, int) or isinstance(sequence, bool):
+                raise ValueError("P90L90 native trade sequence type invalid")
             if (
                 self.timeframe is not None
-                or self.exchange_sequence is None
-                or type(self.exchange_sequence) is not int
-                or self.exchange_sequence < 0
+                or sequence < 0
                 or not self.exec_id
             ):
                 raise ValueError("P90L90 native trade cursor incomplete")
