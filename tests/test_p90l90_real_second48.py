@@ -12,9 +12,7 @@ from bybit_workbench.universal_entry.p90l90_real_second48 import (
     P90RealSecond48Unverified,
     read_real_second48,
 )
-from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
-    StrategyHardStopEmbargoPolicy,
-)
+from bybit_workbench.universal_entry.p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 
 AT = datetime(2026, 10, 29, 2, 0, tzinfo=UTC)
 POLICY = StrategyHardStopEmbargoPolicy(
