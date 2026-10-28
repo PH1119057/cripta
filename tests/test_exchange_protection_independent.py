@@ -142,6 +142,8 @@ def test_p90_real_initial_sl_only_waits_for_owner_exit_tp_gate():
     assert (stop, target, kind) == (Decimal("90"), None, "DISABLED")
     assert _check(_evidence(tp="0"), kind=kind, tp=target) == "VERIFIED"
     assert _check(_evidence(tp="110"), kind=kind, tp=target) == "NOT_VERIFIED"
+    assert _check(_evidence(tp="not-a-number"), kind=kind, tp=target) == "UNKNOWN"
+    assert _check(_evidence(tp="NaN"), kind=kind, tp=target) == "UNKNOWN"
     assert _check(_evidence(stop="0", tp="0"), kind=kind, tp=target) == "NOT_VERIFIED"
     assert _check(None, kind=kind, tp=target) == "UNKNOWN"
 
