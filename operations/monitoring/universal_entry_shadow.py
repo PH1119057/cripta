@@ -2062,6 +2062,12 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_policy_before_registry(observer_split)
+    # A v3 REAL Strategy may not be merely excluded from the ordinary
+    # registry: omission would silently discard an approved real activation.
+    # Until its source-pinned atomic consumer and account-scoped Exit owner
+    # are connected end-to-end, refuse this epoch BEFORE any plan audit write.
+    if observer_split.p90_real:
+        raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
     # Executable release SHA and original market-data lineage are distinct.
     # Only an independently attested, immutable five-symbol source can be
     # recovered. This gate runs before any PAPER consumer is constructed.
