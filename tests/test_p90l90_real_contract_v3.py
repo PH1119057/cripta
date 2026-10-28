@@ -12,6 +12,7 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     check_source_scoped_capital,
     real_v3_authoring_payload,
     real_v3_cards,
+    validate_real_v3_exchange_entry,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
@@ -144,3 +145,130 @@ def test_owner_approval_must_have_both_profiles() -> None:
             approved_at=datetime.now(UTC),
             policy_by_strategy_id={MAIN_ID: POLICY},
         )
+
+
+def _real_order_payload(*, side: str = "Buy") -> dict[str, object]:
+    return {
+        "source": "universal_entry",
+        "strategy_id": MAIN_ID,
+        "strategy_version": VERSION,
+        "trading_account_id": "ta-main",
+        "capital_reservation_id": "cap-p90",
+        "exchange_position_slot_claim_id": "slot-p90",
+        "strategy_execution_binding_id": "binding-p90",
+        "entry_plan_fingerprint": "entry-p90",
+        "exit_plan_fingerprint": "exit-p90",
+        "stake_usdt": "10",
+        "leverage": 1,
+        "margin_mode": "ISOLATED",
+        "price": "100",
+        "entry_offset_pct": "0",
+        "side": side,
+        "initial_protection": {
+            "stop_loss_enabled": True, "stop_loss_pct": "10",
+            "take_profit_enabled": True,
+            "take_profit_reference_path": "fact.p90l90.opposite_raw_l53_target",
+            "take_profit_price": "110" if side == "Buy" else "90",
+            "trigger_by": "LastPrice", "tpsl_mode": "Full",
+        },
+    }
+
+
+def _signed_margin(mode: str = "ISOLATED_MARGIN") -> dict[str, object]:
+    return {
+        "retCode": 0, "result": {
+            "marginMode": mode, "unifiedMarginStatus": 5,
+        },
+    }
+
+
+@pytest.mark.parametrize("side", ("Buy", "Sell"))
+def test_real_entry_exchange_preflight_requires_signed_isolated_and_initial_tp(side: str) -> None:
+    assert validate_real_v3_exchange_entry(
+        payload=_real_order_payload(side=side),
+        symbol="LTCUSDT", trading_account_id="ta-main",
+        signed_account_info=_signed_margin(),
+    ) is True
+    assert validate_real_v3_exchange_entry(
+        payload={"strategy_id": "other", "strategy_version": "1"},
+        symbol="BTCUSDT", trading_account_id="some-account",
+        signed_account_info={},
+    ) is False
+
+
+@pytest.mark.parametrize("mode", ("REGULAR_MARGIN", "PORTFOLIO_MARGIN", "", "CROSS"))
+def test_p90_real_never_uses_cross_or_unproven_account_margin(mode: str) -> None:
+    with pytest.raises(ValueError, match="ACCOUNT_NOT_PROVEN_ISOLATED"):
+        validate_real_v3_exchange_entry(
+            payload=_real_order_payload(), symbol="LTCUSDT",
+            trading_account_id="ta-main", signed_account_info=_signed_margin(mode),
+        )
+
+
+@pytest.mark.parametrize("patch,error", (
+    ({"margin_mode": None}, "MARKET_ISOLATED_1X"),
+    ({"margin_mode": "CROSS"}, "MARKET_ISOLATED_1X"),
+    ({"leverage": 10}, "MARKET_ISOLATED_1X"),
+    ({"stake_usdt": "10.01"}, "MARKET_ISOLATED_1X"),
+    ({"entry_offset_pct": "0.25"}, "MARKET_ISOLATED_1X"),
+    ({"strategy_version": "1.1-p90l90-strategy-second48-20261028"}, "WRONG_STRATEGY_VERSION"),
+    ({"trading_account_id": "ta-sub"}, "TRADING_ACCOUNT_IDENTITY_UNPROVEN"),
+))
+def test_real_entry_pre_mutation_rejects_unapproved_execution(patch: dict[str, object], error: str) -> None:
+    with pytest.raises(ValueError, match=error):
+        validate_real_v3_exchange_entry(
+            payload={**_real_order_payload(), **patch}, symbol="LTCUSDT",
+            trading_account_id="ta-main", signed_account_info=_signed_margin(),
+        )
+
+
+@pytest.mark.parametrize("patch,error", (
+    ({"take_profit_enabled": False}, "SL_TP_CONTRACT_MISMATCH"),
+    ({"take_profit_price": None}, "NUMERIC_INVALID"),
+    ({"take_profit_price": "99"}, "SL_TP_CONTRACT_MISMATCH"),
+    ({"take_profit_price": "NaN"}, "SL_TP_CONTRACT_MISMATCH"),
+    ({"take_profit_reference_path": "fact.r1_opposite_inner_target"}, "SL_TP_CONTRACT_MISMATCH"),
+    ({"stop_loss_pct": "2"}, "SL_TP_CONTRACT_MISMATCH"),
+))
+def test_p90_real_never_omits_or_invents_initial_tp(
+    patch: dict[str, object], error: str,
+) -> None:
+    payload = _real_order_payload()
+    payload["initial_protection"] = {
+        **payload["initial_protection"], **patch,
+    }
+    with pytest.raises(ValueError, match=error):
+        validate_real_v3_exchange_entry(
+            payload=payload, symbol="LTCUSDT",
+            trading_account_id="ta-main", signed_account_info=_signed_margin(),
+        )
+
+
+def test_real_entry_exchange_source_requires_fresh_signed_account_identity() -> None:
+    for response in (
+        {}, {"retCode": 1}, {"retCode": 0},
+        {"retCode": 0, "result": {"marginMode": "ISOLATED_MARGIN"}},
+        {"retCode": 0, "result": {
+            "marginMode": "ISOLATED_MARGIN", "unifiedMarginStatus": 1,
+        }},
+    ):
+        with pytest.raises(ValueError):
+            validate_real_v3_exchange_entry(
+                payload=_real_order_payload(), symbol="LTCUSDT",
+                trading_account_id="ta-main", signed_account_info=response,
+            )
+
+
+def test_p90_isolated_margin_verified_before_first_execution_mutation() -> None:
+    from pathlib import Path
+    runtime = (
+        Path(__file__).resolve().parents[1] / "operations/connectivity/private_runtime.py"
+    ).read_text(encoding="utf-8")
+    body = runtime.split("def execute_command(", 1)[1].split(
+        "def _r1_signal_validity(", 1
+    )[0]
+    check = body.find('api_get("/v5/account/info", {}, key, secret)')
+    first_mutation = body.find('"/v5/position/set-leverage"')
+    assert check > 0 and first_mutation > check
+    assert 'validate_real_v3_exchange_entry(' in body
+    assert 'raise PreMutationSafetyBlock(str(exc))' in body
