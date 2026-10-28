@@ -152,7 +152,7 @@ def require_p90_atomic_observer_connection(
         return
     symbols = frozenset(
         symbol for raw in split.p90_paper
-        for symbol in getattr(raw.entry_plan, "symbols", ())
+        for symbol in getattr(getattr(raw, "entry_plan", None), "symbols", ())
     )
     proven = bool(live_proof and live_proof.verified_for(symbols))
     for raw in split.p90_paper:
