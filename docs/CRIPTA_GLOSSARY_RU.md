@@ -947,25 +947,3 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 
 **P90_LINEAGE_COMPATIBILITY=PASS / NOT_VERIFIED / BLOCKED** — evidence status for the exact data lineage plus loaded release. `PASS` requires the stored signed-off compatibility record, immutable data/geometry verification and approved source/actor/CI/runtime checks; no status automatically grants PAPER, REAL or LIVE.
 
-
-
-## 39. Shared Closed Candle Source — OWNER DECISION 2026-10-28
-
-**Canonical Closed Candle Store** — единственное рабочее физическое хранение
-точных verified fully-closed OHLCV market bars: `analytics.closed_candles`;
-ключ `market_source_id + instrument_id + timeframe + closed_at UTC`.
-Поставщик — MarketSource-adapter наблюдательного контура, потребители —
-MAYAK/Dispatcher/Strategy/Entry/Exit. Legacy 17,995 P90 свечей —
-неизменяемый historical audit exception, а не второй рабочий writer.
-
-**Candle Warmup Contract** — вычисленная для конкретного immutable
-StrategyCard/EntryPlan/ExitPlan полная потребность в исторических закрытых
-свечах, включая H9, L5-3, ATR, PREV7D и прочие утверждённые окна.
-History загружается on-demand из approved MarketSource, не ждёт накопления
-живых баров. Проверка полноты/порядка/provenance — обязательна.
-
-**Native Epoch Boundary** — явно доказанный переход после
-pause/restart/gap: historical bars позволяют восстановить geometry, но
-не заменяют пропущенные `publicTrade execId/seq`. Новые Entry
-допустимы лишь после фактического нового native cursor и независимых
-position/pending/reconciliation gates. Старый checkpoint сохраняется.
