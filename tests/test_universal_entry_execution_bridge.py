@@ -633,9 +633,15 @@ def test_p90_real_initial_tp_uses_opposite_l53_without_trailing_gate(
         },
     }
     data["signal_fact"] = fact
+    data["capital_policy"] = {
+        **data["capital_policy"], "margin_mode": "ISOLATED",
+    }
     request = replace(base, payload=FrozenPolicy.from_mapping(data))
     bundle = _bundle()
     card = dict(bundle.strategy_card)
+    card["capital_policy"] = {
+        **card["capital_policy"], "margin_mode": "ISOLATED",
+    }
     entry = dict(card["entry_policy"])
     execution = dict(entry["execution_policy"])
     execution["reference_value_path"] = "fact.p90l90.candidate_price"
@@ -661,6 +667,7 @@ def test_p90_real_initial_tp_uses_opposite_l53_without_trailing_gate(
     initial = prepared.payload["initial_protection"]
     assert prepared.payload["entry_offset_pct"] == "0"
     assert prepared.payload["price"] == "7.50"
+    assert prepared.payload["margin_mode"] == "ISOLATED"
     assert initial["stop_loss_pct"] == "10"
     assert initial["take_profit_enabled"] is True
     assert initial["take_profit_price"] == raw_target
