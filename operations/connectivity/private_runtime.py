@@ -56,6 +56,9 @@ from bybit_workbench.private_ws_subscriptions import (
 )
 from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
 from bybit_workbench.strategy_position import StrategyPosition
+from bybit_workbench.universal_exit.p90l90_real_pending import (
+    p90_real_exit_no_pending,
+)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -1046,6 +1049,18 @@ def record_entry_decision(
             json.dumps(details, ensure_ascii=False),
             policy, policy_version, settings_version, mayak_snapshot_id, mayak_snapshot_time,
         ),
+    )
+
+
+def current_p90_real_no_pending_exit(
+    connection: psycopg.Connection,
+    position: StrategyPosition,
+) -> bool:
+    """Account-local durable command preflight, never Exchange permission."""
+    if position.trading_account_id != TRADING_ACCOUNT_ID:
+        return False
+    return p90_real_exit_no_pending(
+        connection, position=position, trading_account_id=TRADING_ACCOUNT_ID
     )
 
 
