@@ -40,6 +40,8 @@ class P90L90DurablePaperProcessor:
         connection: Any,
         *,
         source_commit: str,
+        producer_release_commit: str | None = None,
+        accepted_source_commits: frozenset[str] | None = None,
         on_native_exit: NativeExitHandler,
         on_closed_candle: CandleHandler,
         candidate_entry_plan_fingerprint: str | None = None,
@@ -49,9 +51,12 @@ class P90L90DurablePaperProcessor:
             raise ValueError("P90L90 candidate requires both exact plan and handler")
         self._atomic = P90L90AtomicPaperCheckpointStore(
             connection, source_commit=source_commit,
+            writer_release_commit=producer_release_commit,
         )
         self._bars = P90L90ImmutableBarLedger(
             connection, source_commit=source_commit,
+            producer_release_commit=producer_release_commit,
+            accepted_source_commits=accepted_source_commits,
         )
         self._on_exit = on_native_exit
         self._on_candle = on_closed_candle

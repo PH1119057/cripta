@@ -58,11 +58,27 @@ def _as_candle(event: P90TransportEvent) -> Candle:
 
 
 class P90L90ImmutableBarLedger:
-    def __init__(self, connection: Any, *, source_commit: str) -> None:
+    def __init__(
+        self, connection: Any, *, source_commit: str,
+        producer_release_commit: str | None = None,
+        accepted_source_commits: frozenset[str] | None = None,
+    ) -> None:
         if not _SHA.fullmatch(source_commit):
             raise ValueError("P90L90 bar ledger requires exact source commit")
+        producer = producer_release_commit or source_commit
+        allowed = accepted_source_commits or frozenset({source_commit})
+        if (
+            not _SHA.fullmatch(producer)
+            or source_commit not in allowed
+            or producer not in allowed
+            or any(not _SHA.fullmatch(value) for value in allowed)
+        ):
+            raise ValueError("P90L90 bar producer not in approved lineage")
         self._db = connection
         self._sha = source_commit
+        self._producer = producer
+        self._allowed = allowed
+        self._record_producer = producer_release_commit is not None
 
     def append(self, event: P90TransportEvent) -> bool:
         """Append the original normalized bar; exact duplicates are idempotent.
@@ -76,16 +92,27 @@ class P90L90ImmutableBarLedger:
         _as_candle(event)
         payload = event.record()
         with self._db.transaction():
+            fields = (
+                "(symbol,timeframe,closed_at,event_json,source_commit,"
+                "producer_release_commit)"
+                if self._record_producer else
+                "(symbol,timeframe,closed_at,event_json,source_commit)"
+            )
+            values = (
+                "(%s,%s,%s,%s::jsonb,%s,%s)" if self._record_producer
+                else "(%s,%s,%s,%s::jsonb,%s)"
+            )
+            args: tuple[Any, ...] = (
+                event.symbol, event.timeframe, event.event_at,
+                canonical_json(payload), self._producer,
+            )
+            if self._record_producer:
+                args += (self._producer,)
             inserted = self._db.execute(
-                """INSERT INTO strategy_entry.p90l90_causal_closed_bars
-                       (symbol,timeframe,closed_at,event_json,source_commit)
-                   VALUES(%s,%s,%s,%s::jsonb,%s)
-                   ON CONFLICT (symbol,timeframe,closed_at) DO NOTHING
-                   RETURNING closed_at""",
-                (
-                    event.symbol, event.timeframe, event.event_at,
-                    canonical_json(payload), self._sha,
-                ),
+                "INSERT INTO strategy_entry.p90l90_causal_closed_bars "
+                + fields + " VALUES " + values
+                + " ON CONFLICT (symbol,timeframe,closed_at) DO NOTHING"
+                + " RETURNING closed_at", args,
             ).fetchone()
             row = self._db.execute(
                 """SELECT event_json,source_commit
@@ -93,7 +120,7 @@ class P90L90ImmutableBarLedger:
                     WHERE symbol=%s AND timeframe=%s AND closed_at=%s""",
                 (event.symbol, event.timeframe, event.event_at),
             ).fetchone()
-            if row is None or row[1] != self._sha or row[0] != payload:
+            if row is None or row[1] not in self._allowed or row[0] != payload:
                 raise RuntimeError(
                     "P90L90 conflicting immutable closed candle/source commit"
                 )
@@ -110,7 +137,7 @@ class P90L90ImmutableBarLedger:
                 ORDER BY closed_at DESC LIMIT 1""",
             (symbol, timeframe),
         ).fetchone()
-        if row is None or row[1] != self._sha:
+        if row is None or row[1] not in self._allowed:
             raise RuntimeError("P90L90 latest immutable candle source not proven")
         closed = row[0]
         if not isinstance(closed, datetime):
@@ -132,7 +159,7 @@ class P90L90ImmutableBarLedger:
                 ORDER BY closed_at DESC LIMIT 1""",
             (symbol, timeframe, through),
         ).fetchone()
-        if row is None or row[1] != self._sha:
+        if row is None or row[1] not in self._allowed:
             raise RuntimeError("P90L90 as-of candle missing/source not proven")
         closed = row[0]
         if not isinstance(closed, datetime):
@@ -169,7 +196,7 @@ class P90L90ImmutableBarLedger:
         ).fetchall()
         bars: list[Candle] = []
         for payload, source in reversed(rows):
-            if source != self._sha:
+            if source not in self._allowed:
                 raise RuntimeError("P90L90 historical source release mismatch")
             event = P90TransportEvent.restore(payload)
             candle = _as_candle(event)

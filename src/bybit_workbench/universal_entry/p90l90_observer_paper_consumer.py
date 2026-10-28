@@ -41,6 +41,8 @@ class P90L90ObserverPaperConsumer:
         bundles: tuple[object, ...],
         source_commit: str,
         provenance: FrozenPolicy,
+        producer_release_commit: str | None = None,
+        accepted_source_commits: frozenset[str] | None = None,
     ) -> None:
         if not bundles:
             raise ValueError("P90L90 consumer needs exact enabled Strategy bundle")
@@ -78,12 +80,16 @@ class P90L90ObserverPaperConsumer:
         self._paper = PaperTradeRuntime(connection, bundles=tuple(p90_bundles))
         self._archive = P90L90ImmutableBarLedger(
             connection, source_commit=source_commit,
+            producer_release_commit=producer_release_commit,
+            accepted_source_commits=accepted_source_commits,
         )
         self._processors: dict[str, P90L90DurablePaperProcessor] = {}
         for symbol, bundle in self._by_symbol.items():
             self._processors[symbol] = P90L90DurablePaperProcessor(
                 connection,
                 source_commit=source_commit,
+                producer_release_commit=producer_release_commit,
+                accepted_source_commits=accepted_source_commits,
                 on_native_exit=self._on_native_exit,
                 on_closed_candle=self._on_closed_candle,
                 candidate_entry_plan_fingerprint=(

@@ -37,11 +37,20 @@ _SYMBOLS = frozenset({"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"})
 class P90L90AtomicPaperCheckpointStore:
     """Fail closed without migrated, checked, durable Entry state."""
 
-    def __init__(self, connection: Any, *, source_commit: str) -> None:
+    def __init__(
+        self, connection: Any, *, source_commit: str,
+        writer_release_commit: str | None = None,
+    ) -> None:
         if not _SHA.fullmatch(source_commit):
             raise ValueError("P90L90 atomic state requires exact source commit")
+        if (
+            writer_release_commit is not None
+            and not _SHA.fullmatch(writer_release_commit)
+        ):
+            raise ValueError("P90L90 checkpoint writer release invalid")
         self._db = connection
-        self._sha = source_commit
+        self._sha = source_commit  # Immutable seed lineage, never relabelled.
+        self._writer_release = writer_release_commit
 
     @staticmethod
     def _symbol(symbol: str) -> None:
@@ -219,17 +228,25 @@ class P90L90AtomicPaperCheckpointStore:
                 entry.state.effective_at > join.closed_5m_at
             ):
                 raise RuntimeError("P90L90 PAPER advanced geometry beyond candle")
+            updates = (
+                "last_writer_release_commit=%s,"
+                if self._writer_release is not None else ""
+            )
+            parameters: tuple[Any, ...] = (
+                canonical_json(join.snapshot()),
+                canonical_json(entry_restart_snapshot(entry)),
+            )
+            if self._writer_release is not None:
+                parameters += (self._writer_release,)
+            parameters += (event.symbol, self._sha, row[3])
             updated = self._db.execute(
                 """UPDATE strategy_entry.p90l90_causal_transport_checkpoints
-                      SET checkpoint_json=%s::jsonb,entry_checkpoint_json=%s::jsonb,
-                          generation=generation+1,updated_at=clock_timestamp()
+                      SET checkpoint_json=%s::jsonb,entry_checkpoint_json=%s::jsonb,"""
+                + updates
+                + """generation=generation+1,updated_at=clock_timestamp()
                     WHERE symbol=%s AND source_commit=%s AND generation=%s
                     RETURNING generation""",
-                (
-                    canonical_json(join.snapshot()),
-                    canonical_json(entry_restart_snapshot(entry)),
-                    event.symbol, self._sha, row[3],
-                ),
+                parameters,
             ).fetchone()
             if updated is None:
                 raise RuntimeError("P90L90 atomic checkpoint concurrent mutation")
