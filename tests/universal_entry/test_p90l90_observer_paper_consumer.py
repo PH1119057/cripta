@@ -79,3 +79,23 @@ def test_p90_consumer_cannot_be_created_without_owner_or_exact_version():
     changed = replace(main, card=replace(main.card,strategy_version="historical-v1"))
     with pytest.raises(RuntimeError, match="UNVERIFIED_EXACT_STRATEGY"):
         _consumer((changed,))
+
+
+
+def test_p90_cannot_recover_unwarmed_entry_and_treat_pending_as_ready():
+    from types import SimpleNamespace
+
+    from bybit_workbench.universal_entry.p90l90_causal import P90L90CausalEntry
+
+    consumer = _consumer((_bundle(MAIN_ID),))
+    consumer._processors = {
+        "LTCUSDT": SimpleNamespace(
+            recover=lambda: (
+                SimpleNamespace(closed_5m_at=B),
+                P90L90CausalEntry(),
+            )
+        ),
+    }
+    with pytest.raises(RuntimeError, match="SEED_NOT_CAUSALLY_WARMED"):
+        consumer.recover_all()
+    assert consumer._recovered is False
