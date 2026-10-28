@@ -102,7 +102,7 @@ class P90L90ImmutableBarLedger:
                 "(%s,%s,%s,%s::jsonb,%s,%s)" if self._record_producer
                 else "(%s,%s,%s,%s::jsonb,%s)"
             )
-            args = (
+            args: tuple[Any, ...] = (
                 event.symbol, event.timeframe, event.event_at,
                 canonical_json(payload), self._producer,
             )
