@@ -33,6 +33,9 @@ from bybit_workbench.universal_entry.p90l90_causal import (
 from bybit_workbench.universal_entry.p90l90_crossing_fact import p90l90_crossing_fact
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import real_v3_cards
+from bybit_workbench.universal_entry.p90l90_real_native_candidate_owner import (
+    P90L90RealNativeCandidateOwner,
+)
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
 )
@@ -275,3 +278,71 @@ def test_native_real_v3_routes_approved_account_to_universal_execution_request(
     request_fact = outcome.execution_request.payload.to_dict()["signal_fact"]
     assert request_fact["attributes"]["p90l90"]["opposite_raw_l53_target"] == expected_tp
     assert request_fact["attributes"]["modeled_exchange_fill"] is False
+
+
+class _EvaluationRecorder:
+    def __init__(self) -> None:
+        self.recorded: list[object] = []
+
+    def record_evaluation(self, evaluation: object) -> None:
+        self.recorded.append(evaluation)
+
+
+@pytest.mark.parametrize("side", ("LONG", "SHORT"))
+def test_real_native_atomic_callback_keeps_exact_one_account_and_no_paper(
+    side: str,
+) -> None:
+    engine, activation, entry_fp = _engine(real=True)
+    plan = engine._registry.plans_for("LTCUSDT")[0]
+    fact, cursor = _native_fact(entry_fp, side=side)
+    recorder = _EvaluationRecorder()
+    owner = P90L90RealNativeCandidateOwner(
+        strategy_id=MAIN_ID,
+        strategy_activation_id=activation,
+        strategy_config_fingerprint=plan.strategy_config_fingerprint,
+        entry_plan_fingerprint=entry_fp,
+        engine=engine,
+        store=recorder,  # type: ignore[arg-type]
+    )
+    port = _MemoryAdmissionPort()
+    raw = _admissions(activation)[activation][0]
+    scoped = replace(
+        raw,
+        technical_readiness=TechnicalReadiness(True, AT, "exact private arm"),
+        capacity=TradingCapacitySnapshot(
+            capacity_snapshot_id="capacity-main",
+            observed_at=AT,
+            available_for_new_trading=P("100"),
+            quality=DataQuality.HIGH,
+            source_ref="runtime.account_state_generations:verified-main",
+        ),
+        entry_admission_port=port,  # type: ignore[arg-type]
+    )
+    for forbidden in (
+        {"account_admissions": (scoped,), "arm_and_source_verified": False},
+        {"account_admissions": (raw,), "arm_and_source_verified": True},
+        {"account_admissions": (), "arm_and_source_verified": True},
+    ):
+        with pytest.raises(RuntimeError, match="P90_REAL_NATIVE_OWNER_"):
+            owner.accept(
+                fact, cursor, admitted_at=AT + timedelta(seconds=2),
+                allow_new_signals=True, **forbidden,
+            )
+    assert not recorder.recorded
+    assert not port.requests
+    results = owner.accept(
+        fact, cursor, account_admissions=(scoped,),
+        arm_and_source_verified=True,
+        admitted_at=AT + timedelta(seconds=2),
+        allow_new_signals=True,
+    )
+    assert len(results) == 1
+    assert recorder.recorded == list(results)
+    assert len(results[0].account_outcomes) == 1
+    account_outcome = results[0].account_outcomes[0]
+    assert account_outcome.binding.trading_account_id == "ta-main"
+    assert account_outcome.execution_request is not None
+    assert account_outcome.execution_request.trading_account_id == "ta-main"
+    assert len(port.requests) == 1
+    assert results[0].decision is None
+    assert results[0].execution_request is None
