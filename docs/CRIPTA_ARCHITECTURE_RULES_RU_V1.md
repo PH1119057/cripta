@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.3
-**Дата:** 2026-10-25
+**Версия:** 3.4
+**Дата:** 2026-10-28
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -992,6 +992,22 @@ Before changing or purging current PostgreSQL history:
 
 No cleanup, PostgreSQL rewrite, service restart, LIVE arm or Exchange mutation is
 authorized by this documentation decision alone.
+
+
+### 48.2 P90L90 durable market-data lineage independent of loaded code — OWNER DECISION 2026-10-28 (Issue #243)
+
+This section owns the **storage identity and compatibility invariant** for the P90L90 PAPER causal 5m/15m candle archive and native/Entry restart checkpoints. It does not change Strategy Entry/Exit/SECOND48 economics, ownership or any REAL/LIVE right.
+
+**Separate identities (never alias):** `P90_DATA_LINEAGE_ID` identifies one immutable, content-audited five-symbol causal data lineage (venue/source, instruments, timeframes, original seed provenance, normalized event and geometry/transport schema, exact root digest); `PRODUCER_RELEASE_COMMIT` identifies the Git release that actually committed a new fact or checkpoint generation; `INSTALLED_COMMIT` / `LOADED_COMMIT` identify executable code. The historical SQL `source_commit` fields are **existing per-record release provenance**, not a license to re-label data with the latest `main` commit. Provenance and compatibility identities have distinct persistence and review responsibilities.
+
+**Existing immutable seed:** Preserve all previously committed original P90L90 5m/15m records and five causal/Entry checkpoint identities, timestamps, payloads and their exact original `source_commit` (`ecde51102e4fe624e4b312eca85318540f200229`). Preserve the last committed generation and pending/cursor state. No historical `UPDATE` of bar `source_commit`, candle payload, event timestamp, order, geometry or provenance; no `DELETE`, `TRUNCATE`, reset/reseed or counter rewrite to make a new release appear compatible.
+
+**Compatibility attestation:** A separately versioned, durable, auditable, **append-only** lineage/compatibility record must bind exact `P90_DATA_LINEAGE_ID`, origin release, immutable history digest/counts per symbol/timeframe, checkpoint origin/identity and exact `LOADED_COMMIT` plus schema/consumer compatibility version. Creating the record requires independent exact-history QC and approved actor/migration, reviewed code and targeted disposable-DB regression. It must reject unknown/mixed/partial origins, altered bytes, incompatible effective Entry/Exit/transport schema, cursor gaps and competing registrations; no automatic acceptance merely because the new commit is on GitHub `main` or is a descendant of the seed release. The previously stored version and any superseding attestation must remain traceable. Record the actual producer release of **new** bar events and checkpoint generations without rewriting historical source identities.
+
+**Runtime release transition:** Installed code may consume a prior lineage only after exact versioned compatibility is PASS; the native Observer and activation preflight must independently verify the same compatibility record, all five existing source-backed checkpoints and their reconstructed geometry. Read-only preflight may not lock rows with `FOR UPDATE`; writable event dispatch retains transaction/row-lock atomicity. Release installer must not silently mutate any data provenance as a deployment side effect. Mixed per-event producer versions remain explicitly identified and deterministically verified. Reconnect, partial migration or mismatch fails closed, without PAPER entry or Exchange orders.
+
+**Production gate:** `OWNER DECISION → CANON → reviewed implementation + migration + disposable tests/parity → GitHub main → exact installer/actor/backup/rollback → per-account native causal proof → PAPER activation → runtime behavior evidence`. Until implemented, `P90_LINEAGE_COMPATIBILITY=NOT_VERIFIED` and `PAPER_ACTIVATED=NO`; do not bypass via writable preflight, direct SQL updates, source relabeling, or a reset of historical candles.
+
 
 ## 49. Venue / MarketSource / TradingAccount identity — OWNER DECISION 2026-10-16
 

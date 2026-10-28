@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.1
-**Дата:** 2026-10-26
+**Версия:** 3.2
+**Дата:** 2026-10-28
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -1407,3 +1407,11 @@ Execution constraints: the source research assumed immediate 10-USDT-notional pu
 Allowed safe target: immutable cards and plan snapshots after exact materialization; disabled activations; audited INACTIVE/non-effective account assignment using an approved writer/actor and verified identity; zero new enabled execution permissions, mainnet off, zero live arms, no Exchange mutation. A pre-existing historical binding is not erased or silently reassigned. Signed MAIN provenance, account-specific writers, lifecycle/Exit proof and eventual separately authorized owner-armed MICRO_LIVE remain independent future gates.
 
 Status of this section: owner intention accepted; Canon publication requires ordinary GitHub review. This document alone is NOT implementation, DB-registration evidence, deployment or runtime verification.
+
+
+### 7.6.1 P90L90 PAPER lineage across code-only releases — OWNER DECISION 2026-10-28 (Issue #243)
+
+The owner approves retaining the five-symbol original P90L90 5m/15m candle archive and causal Entry/transport restart checkpoints across a verified code-only bugfix/release, **without copying, rewriting or reseeding historical facts**. Market-data lineage must not be equated to `INSTALLED_COMMIT` / `LOADED_COMMIT`. The storage/compatibility owner is ARCH §48.2 and glossary §38; this clause owns only the PAPER Strategy gate.
+
+P90L90 activation and the live Observer must prove a versioned compatibility attestation for the exact original causal dataset, all five symbols, their immutable StrategyCard/EntryPlan/ExitPlan fingerprints and independent MAIN/SUB SECOND48 state, plus exact loaded executable release. Only then can the existing 10-USDT-model, zero-order PAPER adapter be activated; historical records retain actual origin/source identity, and newly committed facts record their own producer release. No `source_commit=LOADED_COMMIT` equality shortcut, fabricated native `publicTrade` cursor, legacy R1 inheritance, forced PAPER position, REAL order, execution grant or LIVE-arm. A missing/inconsistent attestation blocks activation, not a reason to reset the durable seed.
+
