@@ -165,3 +165,90 @@ def check_source_scoped_capital(
     if commitment + request > cap:
         raise ValueError("P90_REAL_STRATEGY_CAP_EXCEEDED")
     return cap - commitment - request
+
+
+def validate_real_v3_exchange_entry(
+    *,
+    payload: Mapping[str, object],
+    trading_account_id: str,
+    signed_account_info: Mapping[str, object],
+) -> bool:
+    """Fail-closed P90 REAL pre-mutation gate; never changes account margin mode.
+
+    Account mode is ACCOUNT-scoped on Bybit UTA2. A leverage=1 request does
+    NOT prove isolated margin. Only a fresh signed /v5/account/info response
+    proving ISOLATED_MARGIN is acceptable for this owner-approved Strategy.
+    For unrelated Strategies this function returns False without intervention.
+    """
+    strategy_id = str(payload.get("strategy_id") or "")
+    version = str(payload.get("strategy_version") or "")
+    if strategy_id not in MAX_ACCOUNT_COMMITTED and version != VERSION:
+        return False
+    if strategy_id not in MAX_ACCOUNT_COMMITTED or version != VERSION:
+        raise ValueError("P90_REAL_WRONG_STRATEGY_VERSION")
+    if str(payload.get("trading_account_id") or "") != trading_account_id or not trading_account_id:
+        raise ValueError("P90_REAL_TRADING_ACCOUNT_IDENTITY_UNPROVEN")
+    if str(payload.get("source") or "") != "universal_entry":
+        raise ValueError("P90_REAL_ORDER_SOURCE_UNVERIFIED")
+    symbol = str(payload.get("symbol") or "")
+    # The transport command symbol is separate; the caller must additionally
+    # compare it with the outer runtime.trade_commands.symbol.
+    if symbol and symbol not in ALLOWED_SYMBOLS[strategy_id]:
+        raise ValueError("P90_REAL_SYMBOL_OUTSIDE_APPROVED_UNIVERSE")
+    for name in (
+        "capital_reservation_id",
+        "exchange_position_slot_claim_id",
+        "strategy_execution_binding_id",
+        "entry_plan_fingerprint",
+        "exit_plan_fingerprint",
+    ):
+        if not str(payload.get(name) or "").strip():
+            raise ValueError("P90_REAL_ENTRY_LINEAGE_MISSING")
+    try:
+        amount = Decimal(str(payload.get("stake_usdt")))
+        price = Decimal(str(payload.get("price")))
+        offset = Decimal(str(payload.get("entry_offset_pct")))
+        leverage = int(str(payload.get("leverage")))
+    except (ValueError, TypeError, InvalidOperation):
+        raise ValueError("P90_REAL_ENTRY_NUMERIC_INVALID") from None
+    if (
+        not amount.is_finite() or amount != REQUESTED_USDT
+        or not price.is_finite() or price <= 0
+        or not offset.is_finite() or offset != 0
+        or leverage != 1
+        or payload.get("margin_mode") != "ISOLATED"
+    ):
+        raise ValueError("P90_REAL_MARKET_ISOLATED_1X_CONTRACT_MISMATCH")
+    side = str(payload.get("side") or "")
+    if side not in {"Buy", "Sell"}:
+        raise ValueError("P90_REAL_DIRECTION_INVALID")
+    initial = payload.get("initial_protection")
+    if not isinstance(initial, Mapping):
+        raise ValueError("P90_REAL_INITIAL_PROTECTION_MISSING")
+    try:
+        stop = Decimal(str(initial.get("stop_loss_pct")))
+        target = Decimal(str(initial.get("take_profit_price")))
+    except (ValueError, TypeError, InvalidOperation):
+        raise ValueError("P90_REAL_INITIAL_PROTECTION_NUMERIC_INVALID") from None
+    if (
+        initial.get("stop_loss_enabled") is not True
+        or stop != Decimal("10")
+        or initial.get("take_profit_enabled") is not True
+        or initial.get("take_profit_reference_path")
+        != "fact.p90l90.opposite_raw_l53_target"
+        or initial.get("take_profit_pct") is not None
+        or not target.is_finite() or target <= 0
+        or not (target > price if side == "Buy" else target < price)
+        or initial.get("trigger_by") != "LastPrice"
+        or initial.get("tpsl_mode") != "Full"
+    ):
+        raise ValueError("P90_REAL_INITIAL_SL_TP_CONTRACT_MISMATCH")
+    if signed_account_info.get("retCode") != 0:
+        raise ValueError("P90_REAL_SIGNED_ACCOUNT_READ_NOT_OK")
+    data = signed_account_info.get("result")
+    if not isinstance(data, Mapping) or data.get("marginMode") != "ISOLATED_MARGIN":
+        raise ValueError("P90_REAL_ACCOUNT_NOT_PROVEN_ISOLATED")
+    # UTA 1.0/2.0 return 3/4/5/6 respectively, classic is disallowed.
+    if str(data.get("unifiedMarginStatus") or "") not in {"3", "4", "5", "6"}:
+        raise ValueError("P90_REAL_UNIFIED_ACCOUNT_MODE_UNKNOWN")
+    return True
