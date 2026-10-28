@@ -2052,6 +2052,7 @@ def _run_observer_epoch(
             source_commit=p90_lineage.origin_commit,
             producer_release_commit=LOADED_COMMIT,
             accepted_source_commits=p90_lineage.approved_producer_commits,
+            shared_candle_source=True,
             provenance=FrozenPolicy.from_mapping({
                 "source": "p90l90_atomic_paper_observer",
                 "source_commit": LOADED_COMMIT,
@@ -2522,6 +2523,33 @@ def _run_observer_epoch(
             attrs = fact.attributes.to_dict()
             timeframe = str(attrs.get("timeframe") or "")
             boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            # The exact market-data source persists live closed bars once,
+            # inside the same Observer fact transaction; P90 reads/compares
+            # this shared fact and never writes a second Strategy candle copy.
+            if timeframe in {"5", "15", "60"}:
+                from bybit_workbench.market_data.candle_warmup import (
+                    cache_approved_bybit_history,
+                )
+
+                native_closed = Candle(
+                    symbol=fact.symbol, timeframe=timeframe,
+                    opened_at=datetime.fromisoformat(
+                        str(attrs["opened_at"])
+                    ).astimezone(UTC),
+                    closed_at=boundary,
+                    open=Decimal(str(attrs["open"])),
+                    high=Decimal(str(attrs["high"])),
+                    low=Decimal(str(attrs["low"])),
+                    close=Decimal(str(attrs["close"])),
+                    volume=Decimal(str(attrs["volume"])),
+                    is_closed=True,
+                )
+                cache_approved_bybit_history(
+                    connection, symbol=fact.symbol,
+                    history={timeframe: (native_closed,)},
+                    observed_at=datetime.now(UTC),
+                    producer_release_commit=LOADED_COMMIT,
+                )
             prior = closed_boundaries.get((fact.symbol, timeframe))
             if prior is not None and boundary < prior:
                 raise ContinuityNotProvable(
