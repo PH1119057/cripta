@@ -108,6 +108,9 @@ def build_real_native_exit_observation(
         or cursor.traded_at.tzinfo is None
         or private.observed_at.astimezone(UTC) < cursor.traded_at.astimezone(UTC)
         or received_at.astimezone(UTC) < private.observed_at.astimezone(UTC)
+        or (
+            received_at.astimezone(UTC) - private.observed_at.astimezone(UTC)
+        ).total_seconds() > 15
         or checkpoint.position_id != position.strategy_position_id
         or checkpoint.account_id != position.trading_account_id
         or checkpoint.binding_id != position.strategy_execution_binding_id
