@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, FrozenPolicy, TradeDirection
@@ -116,7 +116,7 @@ def load_exit_binding(
         ),
         identity_status=_required_text(row, "identity_status"),
         initial_protection_confirmed_at=(
-            row.get("initial_protection_confirmed_at")
+            cast(datetime, row["initial_protection_confirmed_at"])
             if isinstance(row.get("initial_protection_confirmed_at"), datetime)
             else None
         ),
