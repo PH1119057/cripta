@@ -99,3 +99,67 @@ def test_p90_cannot_recover_unwarmed_entry_and_treat_pending_as_ready():
     with pytest.raises(RuntimeError, match="SEED_NOT_CAUSALLY_WARMED"):
         consumer.recover_all()
     assert consumer._recovered is False
+
+
+
+def test_p90_recovery_and_dispatch_do_not_require_ordinary_engine():
+    from datetime import timedelta
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from bybit_workbench.domain.models import Candle
+    from bybit_workbench.universal_entry.p90l90_causal import (
+        P90L90CausalEntry,
+        P90L90EntryState,
+    )
+
+    consumer = _consumer((_bundle(MAIN_ID),))
+    geometry = P90L90EntryState(
+        effective_at=B,
+        l53_low_raw=Decimal("100"), l53_high_raw=Decimal("110"),
+        h9_5m_low_raw=Decimal("98"), h9_5m_high_raw=Decimal("112"),
+        h9_15m_low_raw=Decimal("98"), h9_15m_high_raw=Decimal("112"),
+        raw_h9_union_span=Decimal("14"),
+        working_width_pct=Decimal("1"),
+        previous_seven_day_median=Decimal("1"),
+        long_depth_pct=Decimal("4"),
+        short_depth_pct=None,
+    )
+    bars = tuple(
+        Candle(
+            symbol="LTCUSDT", timeframe="5",
+            opened_at=B-timedelta(minutes=5*(36-i)),
+            closed_at=B-timedelta(minutes=5*(35-i)),
+            open=Decimal("100"), high=Decimal("101"),
+            low=Decimal("99"), close=Decimal("100"),
+            volume=Decimal("2"), is_closed=True,
+        )
+        for i in range(36)
+    )
+
+    class BarArchive:
+        def closed_at_or_before(self, **kwargs):
+            return B
+
+        def history(self, **kwargs):
+            return bars
+
+    class MockProcessor:
+        def recover(self):
+            return (
+                SimpleNamespace(closed_5m_at=B, closed_15m_at=B),
+                P90L90CausalEntry(state=geometry),
+            )
+
+        def accept(self, event):
+            return (event,)
+
+    consumer._archive = BarArchive()
+    consumer._processors = {"LTCUSDT": MockProcessor()}
+    consumer.recover_all()
+    assert consumer._recovered is True
+    assert consumer._paper._l53_candles["LTCUSDT"][-1] == bars[-1]
+    native = SimpleNamespace(symbol="LTCUSDT")
+    assert consumer.accept(native) == (native,)
+    with pytest.raises(RuntimeError, match="DOUBLE_RECOVERY"):
+        consumer.recover_all()
