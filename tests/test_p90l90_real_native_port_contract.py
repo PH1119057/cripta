@@ -110,3 +110,22 @@ def test_unproven_durable_exit_fails_before_entry_callback() -> None:
     ):
         consumer._on_candidate(fact, cursor)
     assert calls == []
+
+
+def test_real_closed_15m_is_geometry_only_and_5m_routes_to_exit() -> None:
+    calls: list[str] = []
+    consumer = object.__new__(P90L90ObserverRealConsumer)
+    consumer._verified_closed_candle_port = (
+        lambda fact: calls.append(fact.symbol)
+    )
+    for timeframe in ("15", "5"):
+        fact = MarketFactEnvelope(
+            fact_id=f"closed-{timeframe}",
+            event_kind="CANDLE_CLOSED",
+            symbol="LTCUSDT",
+            event_at=AT, observed_at=AT, received_at=AT,
+            source_refs=("test:exact-synthetic-closed",),
+            attributes=FrozenPolicy.from_mapping({"timeframe": timeframe}),
+        )
+        consumer._on_closed_candle(fact)
+    assert calls == ["LTCUSDT"]
