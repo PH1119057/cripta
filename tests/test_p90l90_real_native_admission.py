@@ -192,6 +192,8 @@ def test_native_real_rejects_false_favorable_target_and_wrong_source(side: str) 
 def test_real_card_cannot_ride_paper_native_path() -> None:
     engine, activation, plan = _engine(real=True)
     fact, cursor = _native_fact(plan)
+    with pytest.raises(RuntimeError, match="REAL_NATIVE_CURSOR_REQUIRED"):
+        engine.process(fact)
     with pytest.raises(RuntimeError, match="PRECOMPUTED_REAL_ADMISSION_FORBIDDEN"):
         engine.process(fact, proven_p90_native_cursor=cursor)
     with pytest.raises(RuntimeError, match="REAL_NATIVE_ADMISSION_NOT_VERIFIED"):
