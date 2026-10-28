@@ -254,6 +254,58 @@ def validate_real_v3_exchange_entry(
     return True
 
 
+
+def validate_real_v3_attached_protection_at_last_price(
+    *,
+    symbol: str,
+    side: str,
+    instrument_tick: Decimal,
+    stop_loss: Decimal,
+    take_profit: Decimal | None,
+    ticker_response: Mapping[str, object],
+) -> Decimal:
+    """Final *pre-mutation* Bybit LastPrice-side check for attached TP/SL.
+
+    Does not prove future fill, venue acceptance, private account identity or
+    price persistence. Never replace the Strategy RAW target by a new percent.
+    """
+    if (
+        symbol not in ALLOWED_SYMBOLS[MAIN_ID] | ALLOWED_SYMBOLS[SUB_ID]
+        or side not in {"Buy", "Sell"}
+        or take_profit is None
+        or not all(
+            v.is_finite() and v > 0
+            for v in (instrument_tick, stop_loss, take_profit)
+        )
+        or stop_loss % instrument_tick != 0
+        or take_profit % instrument_tick != 0
+        or type(ticker_response.get("retCode")) is not int
+        or ticker_response.get("retCode") != 0
+    ):
+        raise ValueError("P90_REAL_ATTACHED_PROTECTION_PREFLIGHT_INVALID")
+    result = ticker_response.get("result")
+    if not isinstance(result, Mapping):
+        raise ValueError("P90_REAL_ATTACHED_TICKER_INVALID")
+    items = result.get("list")
+    if not isinstance(items, list) or len(items) != 1:
+        raise ValueError("P90_REAL_ATTACHED_TICKER_NOT_EXACT")
+    ticker = items[0]
+    if not isinstance(ticker, Mapping) or ticker.get("symbol") != symbol:
+        raise ValueError("P90_REAL_ATTACHED_TICKER_SYMBOL_MISMATCH")
+    try:
+        last = Decimal(str(ticker["lastPrice"]))
+    except (ValueError, TypeError, KeyError, InvalidOperation):
+        raise ValueError("P90_REAL_ATTACHED_TICKER_PRICE_INVALID") from None
+    if not last.is_finite() or last <= 0:
+        raise ValueError("P90_REAL_ATTACHED_TICKER_PRICE_INVALID")
+    if not (
+        stop_loss < last < take_profit
+        if side == "Buy" else take_profit < last < stop_loss
+    ):
+        raise ValueError("P90_REAL_ATTACHED_TP_SL_ALREADY_CROSSED")
+    return last
+
+
 def validate_real_v3_instrument_lot(
     *, symbol: str, instrument: Mapping[str, object],
     quantity: Decimal, signal_price: Decimal,
