@@ -13,6 +13,7 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     real_v3_authoring_payload,
     real_v3_cards,
     validate_real_v3_exchange_entry,
+    validate_real_v3_instrument_lot,
 )
 from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
     StrategyHardStopEmbargoPolicy,
@@ -272,3 +273,55 @@ def test_p90_isolated_margin_verified_before_first_execution_mutation() -> None:
     assert check > 0 and first_mutation > check
     assert 'validate_real_v3_exchange_entry(' in body
     assert 'raise PreMutationSafetyBlock(str(exc))' in body
+
+
+def _live_instrument(
+    *, symbol: str = "LTCUSDT", status: str = "Trading",
+    minimum_notional: str = "5",
+) -> dict[str, object]:
+    return {
+        "symbol": symbol, "status": status, "quoteCoin": "USDT",
+        "settleCoin": "USDT", "unifiedMarginTrade": True,
+        "lotSizeFilter": {
+            "minOrderQty": "0.05", "maxMktOrderQty": "100",
+            "minNotionalValue": minimum_notional, "qtyStep": "0.01",
+        },
+    }
+
+
+def test_p90_real_exact_ten_dollar_market_lot_can_pass_without_upsizing() -> None:
+    validate_real_v3_instrument_lot(
+        symbol="LTCUSDT", instrument=_live_instrument(),
+        quantity=Decimal("0.10"), signal_price=Decimal("100"),
+    )
+
+
+@pytest.mark.parametrize("qty,px,minimum,error", (
+    ("0.04", "100", "5", "BELOW_EXCHANGE_MINIMUM"),
+    ("0.10", "100", "11", "BELOW_EXCHANGE_MINIMUM"),
+    ("0.105", "100", "5", "BELOW_EXCHANGE_MINIMUM"),
+    ("101", "100", "5", "BELOW_EXCHANGE_MINIMUM"),
+    ("NaN", "100", "5", "LOT_FILTERS_INVALID"),
+))
+def test_p90_real_below_bybit_minimum_never_silently_increases_stake(
+    qty: str, px: str, minimum: str, error: str,
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        validate_real_v3_instrument_lot(
+            symbol="LTCUSDT",
+            instrument=_live_instrument(minimum_notional=minimum),
+            quantity=Decimal(qty), signal_price=Decimal(px),
+        )
+
+
+def test_p90_real_requires_verified_bybit_tradable_instrument() -> None:
+    with pytest.raises(ValueError, match="IDENTITY_OR_STATUS_UNVERIFIED"):
+        validate_real_v3_instrument_lot(
+            symbol="LTCUSDT", instrument=_live_instrument(status="PreLaunch"),
+            quantity=Decimal("0.10"), signal_price=Decimal("100"),
+        )
+    with pytest.raises(ValueError, match="IDENTITY_OR_STATUS_UNVERIFIED"):
+        validate_real_v3_instrument_lot(
+            symbol="LTCUSDT", instrument=_live_instrument(symbol="INJUSDT"),
+            quantity=Decimal("0.10"), signal_price=Decimal("100"),
+        )
