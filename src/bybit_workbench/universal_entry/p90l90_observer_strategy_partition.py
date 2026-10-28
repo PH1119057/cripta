@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .readiness import assess_strategy_runtime_readiness
+
 _P90_OPERATOR = "P90L90_RAW_H9_UNION_CROSSING"
 _P90_V2 = "1.1-p90l90-strategy-second48-20261028"
 _MAIN = ("INJUSDT", "LTCUSDT")
@@ -62,10 +64,20 @@ def partition_observer_strategies(bundles: tuple[object, ...]) -> ObserverStrate
 
 
 def require_p90_atomic_observer_connection(split: ObserverStrategySplit) -> None:
-    """Do not silently use the old shared Watch/Exit route for any P90 plan."""
-    if split.p90_paper:
-        raise RuntimeError(
-            "P90L90_ATOMIC_OBSERVER_CONNECTION_NOT_PROVEN: "
-            "dedicated P90 Entry/Exit owner, original-source restart "
-            "and full source parity required; old shared route forbidden"
+    """Gate P90 consumer on current canonical PAPER readiness, not a flag.
+
+    A source/PG checkpoint being present never proves full original 90-day
+    code parity or approves StrategyActivation. The normal readiness policy
+    currently returns P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN; preserve
+    that hard stop until independently reviewed, canonicalized evidence.
+    """
+    for raw in split.p90_paper:
+        bundle: Any = raw
+        status = assess_strategy_runtime_readiness(
+            bundle.card, observer_ready=True,
         )
+        if not status.paper_ready or not status.active_ready:
+            raise RuntimeError(
+                "P90L90_ATOMIC_OBSERVER_CONNECTION_NOT_PROVEN: "
+                "Strategy paper/active readiness is blocked by canonical gate"
+            )
