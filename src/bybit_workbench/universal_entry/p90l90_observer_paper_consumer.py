@@ -142,6 +142,16 @@ class P90L90ObserverPaperConsumer:
             self._paper.bootstrap_p90_l53_history(symbol, bars)
         self._recovered = True
 
+    def recovery_watermarks(self, symbol: str) -> dict[str, datetime]:
+        """Source checkpoint boundaries for exact on-demand REST gap fetch."""
+        if not self._recovered:
+            raise RuntimeError("P90_SHARED_RECOVERY_BEFORE_CHECKPOINT_PROOF")
+        if symbol not in self._processors:
+            raise ValueError("P90_SHARED_UNRECOGNIZED_SYMBOL")
+        if not hasattr(self._archive, "restart_watermarks"):
+            raise RuntimeError("P90_SHARED_STORE_NOT_SELECTED")
+        return self._archive.restart_watermarks(symbol)
+
     @property
     def recovered_symbols(self) -> frozenset[str]:
         """Only full exact restart may make symbols eligible for live PAPER."""
