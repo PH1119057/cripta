@@ -2101,9 +2101,14 @@ def _run_observer_epoch(
     real_execution_selected_for = _real_execution_selected_activation_ids(
         connection, observer_split.ordinary
     )
-    release_ready_for = _real_execution_activation_ids(
-        connection, observer_split.ordinary
+    # Preserve the exact R6a release-arm lookup/audit contract, then
+    # explicitly exclude P90's zero-order PAPER plans from REAL admission.
+    release_ready_for = _real_execution_activation_ids(connection, bundles)
+    ordinary_activation_ids = frozenset(
+        cast(Any, item).activation.activation_id
+        for item in observer_split.ordinary
     )
+    release_ready_for = release_ready_for.intersection(ordinary_activation_ids)
     multi_account_candidates = _unarmed_multi_account_candidate_bindings(
         connection, observer_split.ordinary, observed_at=epoch_started
     )
