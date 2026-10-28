@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from test_p90l90_real_observation import _scope
+from test_p90l90_real_observation import _observation, _scope
 
 from bybit_workbench.universal_exit.p90l90_real_signed_position import (
     P90RealSignedPositionReader,
@@ -218,3 +218,31 @@ def test_signed_get_rejection_and_instrument_mismatch_fail_closed() -> None:
     }}
     with pytest.raises(P90RealSignedPositionUnverified, match="INSTRUMENT_IDENTITY"):
         reader()(position, cursor)
+
+
+def test_signed_adapter_compiles_into_existing_real_exit_observation() -> None:
+    position, _, checkpoint, cursor, _, price = _scope()
+    _, _, _, _, _, reader = _setup()
+    signed = reader()(position, cursor)
+    result = _observation(position, checkpoint, cursor, signed, price)
+    detail = result.attributes.to_dict()["p90l90_real"]
+    assert detail["protection_exchange_confirmed"] is True
+    assert detail["trading_account_id"] == "ta-main"
+    assert detail["exchange_stop_price"] == "90"
+
+
+def test_exit_observation_rejects_signed_protection_older_than_15_seconds() -> None:
+    position, _, checkpoint, cursor, _, price = _scope()
+    _, _, _, _, _, reader = _setup()
+    signed = reader()(position, cursor)
+    from bybit_workbench.universal_exit.p90l90_real_observation import (
+        P90RealObservationUnverified,
+        build_real_native_exit_observation,
+    )
+    with pytest.raises(P90RealObservationUnverified, match="NATIVE_MFE_OR_TIME"):
+        build_real_native_exit_observation(
+            position=position, checkpoint=checkpoint, cursor=cursor,
+            price=price, native_fact_id="native-fact-101",
+            native_source_refs=("bybit:publicTrade:exact:101",),
+            private=signed, received_at=AT + timedelta(seconds=20),
+        )
