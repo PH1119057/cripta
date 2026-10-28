@@ -196,7 +196,12 @@ def audit_symbol(
     selected = records[:max_days]
     for source in selected:
         path = root / "inputs" / symbol / "public_trades" / source["file"]
-        if path.is_symlink() or path.name != f"{symbol}{source['date']}.csv.gz":
+        if (
+            source["file"] != f"{symbol}{source['date']}.csv.gz"
+            or path.is_symlink()
+            or path.parent.resolve()
+            != (root / "inputs" / symbol / "public_trades").resolve()
+        ):
             raise RuntimeError("SOURCE_ARCHIVE_PATH_NOT_EXACT")
         if path.stat().st_size != int(source["size"]):
             raise RuntimeError("SOURCE_ARCHIVE_SIZE_MISMATCH")
