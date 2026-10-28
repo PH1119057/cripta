@@ -20,6 +20,7 @@ from bybit_workbench.market_data.shared_closed_candles import (
     MarketCandleKey,
     SharedClosedCandleStore,
 )
+
 from .p90l90_causal import P90L90EntryState, causal_entry_state
 from .p90l90_causal_fact_codec import restore_p90l90_fact
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin, P90TransportEvent
