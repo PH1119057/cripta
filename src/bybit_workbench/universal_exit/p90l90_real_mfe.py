@@ -12,7 +12,6 @@ import re
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.strategy_position import StrategyPosition
