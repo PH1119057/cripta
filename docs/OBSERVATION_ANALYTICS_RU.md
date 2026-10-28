@@ -819,6 +819,7 @@ protocol/pool and block/event provenance instead of a centralized Exchange
 feed. The same separation remains: public pool/chain state is market evidence;
 the CRIPTA wallet used to transact is TradingAccount/private execution identity.
 
+
 ## 7.4 Compact analytical history
 
 The compact analytical representation from ARCH §48 uses
