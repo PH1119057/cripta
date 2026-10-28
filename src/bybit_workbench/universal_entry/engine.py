@@ -120,8 +120,8 @@ class UniversalEntryEngine:
         # must never become an uncheckpointed REAL Entry producer.
         if proven_p90_native_cursor is None and any(
             plan.strategy_version == REAL_VERSION
-            and plan.watch_policy.to_dict().get("geometry", {}).get("operator")
-            == "P90L90_RAW_H9_UNION_CROSSING"
+            and plan.strategy_id in ALLOWED_SYMBOLS
+            and fact.symbol in ALLOWED_SYMBOLS[plan.strategy_id]
             for plan in self._registry.plans_for(fact.symbol)
         ):
             raise RuntimeError("P90L90_REAL_NATIVE_CURSOR_REQUIRED")
