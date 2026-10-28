@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS analytics.closed_candles (
             instrument_id, venue_id, product_category, external_symbol
         ),
     CHECK (opened_at < closed_at),
+    CHECK (closed_at <= observed_at),
     CHECK (closed_at = opened_at + timeframe::integer * interval '1 minute'),
     CHECK (high >= greatest(open, close, low)),
     CHECK (low <= least(open, close, high)),
