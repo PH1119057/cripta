@@ -142,6 +142,20 @@ def test_actual_observer_has_one_p90_consumer_and_no_legacy_double_dispatch():
     assert "paper.create_p90l90_native_paper_entry(" not in epoch
     assert "P90L90_ENTRY_REACHED_ORDINARY_OBSERVER_OWNER" in epoch
     assert "observer_split.ordinary" in epoch
-    # Existing position Exit remains owned by the generic PAPER runtime.
-    assert "paper.bootstrap_l53_history(symbol" in epoch
-    assert "paper.on_public_trade(" in epoch
+    # Retired legacy/R1 PAPER rows are NOT active Strategy consumers.
+    # P90-only market symbols must never reach the generic PAPER updater,
+    # which would otherwise mutate archived open PAPER rows on every tick.
+    assert (
+        "if symbol in ordinary_symbols:\n"
+        "            paper.bootstrap_l53_history(symbol"
+    ) in epoch
+    assert (
+        'if timeframe == "5" and fact.symbol in ordinary_symbols:\n'
+        "                paper.on_candle_closed("
+    ) in epoch
+    assert (
+        'if fact.event_kind == "PUBLIC_TRADE" and fact.symbol in ordinary_symbols:\n'
+        "            attrs = fact.attributes.to_dict()\n"
+        "            paper.on_public_trade("
+    ) in epoch
+    assert "self._paper.route_p90l90_native_trade(" not in epoch
