@@ -15,11 +15,11 @@ from typing import Any
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import UniversalEntryEngine
 from .fingerprint import canonical_json
+from .p90l90_causal_fact_codec import encode_p90l90_fact
 from .p90l90_causal_transport_join import (
     P90L90CausalTransportJoin,
     P90TransportEvent,
 )
-from .p90l90_causal_fact_codec import encode_p90l90_fact
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_immutable_bar_ledger import P90L90ImmutableBarLedger
 from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
