@@ -92,11 +92,11 @@ class P90RealSignedPositionReader:
     ) -> Mapping[str, object]:
         try:
             return self._get(endpoint, params)
-        except Exception as exc:
+        except Exception:
             # No raw signed response, credentials or transport URL in errors.
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_SIGNED_EXCHANGE_TRANSPORT_UNAVAILABLE"
-            ) from exc
+            ) from None
 
     @staticmethod
     def _verified_response(raw: Mapping[str, object], endpoint: str) -> Mapping[str, object]:
@@ -144,10 +144,10 @@ class P90RealSignedPositionReader:
         try:
             ws_proven = self._ws(position)
             commands_clear = self._no_pending(position)
-        except Exception as exc:
+        except Exception:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_PRIVATE_RUNTIME_PROOF_UNAVAILABLE"
-            ) from exc
+            ) from None
         if ws_proven is not True:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_PRIVATE_WS_CONTINUITY_UNVERIFIED"
