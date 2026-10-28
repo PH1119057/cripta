@@ -399,6 +399,17 @@ def assess_strategy_runtime_readiness(
         )
 
     if p90_paper_exact:
+        # Until the independent native publicTrade / completed 5m/15m
+        # streams have a proven ordered, restart-durable causal join, even
+        # PAPER activation must remain fail-closed. Generic observer_ready
+        # is NOT a proof that the joint stream preserves a 5m boundary.
+        paper_reasons.append(
+            RuntimeReadinessReason(
+                "P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN",
+                "PAPER_EXIT",
+                "P90L90 SHADOW needs exact restart-durable publicTrade/bar ordering.",
+            )
+        )
         # The exact v2 never creates an exchange/paper order. Its own native
         # tick consumer creates a directly modeled paper_position with fixed
         # 10 USDT research notional and schema-only leverage=1. Bypass ONLY
