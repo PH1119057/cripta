@@ -8,16 +8,19 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
 from bybit_workbench.universal_entry.contracts import (
+    DataQuality,
     EntryDecisionCode,
     FrozenPolicy,
     MarketFactEnvelope,
     StrategyActivation,
     StrategyExecutionBindingRef,
     TechnicalReadiness,
+    TradingCapacitySnapshot,
 )
 from bybit_workbench.universal_entry.engine import (
     AccountAdmissionContext,
@@ -215,3 +218,58 @@ def test_historical_paper_v2_never_upgrades_to_real_entry() -> None:
             real_admission_ready_for=frozenset({activation}),
             account_admissions=_admissions(activation),
         )
+
+
+class _MemoryAdmissionPort:
+    """In-memory receipt for decision math only; never an Exchange adapter."""
+
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def admit(self, request: object) -> object:
+        self.requests.append(request)
+        return SimpleNamespace(
+            capital_reservation=SimpleNamespace(reservation_id="cap-main-10"),
+            exchange_position_slot_claim_id="slot-main-ltc",
+            position_mode_state_ref="one-way-main",
+        )
+
+
+@pytest.mark.parametrize("side,expected_tp", (("LONG", "110"), ("SHORT", "90")))
+def test_native_real_v3_routes_approved_account_to_universal_execution_request(
+    side: str, expected_tp: str,
+) -> None:
+    engine, activation, plan = _engine(real=True)
+    fact, cursor = _native_fact(plan, side=side)
+    port = _MemoryAdmissionPort()
+    original = _admissions(activation)[activation][0]
+    ready = replace(
+        original,
+        technical_readiness=TechnicalReadiness(True, AT, "external exact arm proof"),
+        capacity=TradingCapacitySnapshot(
+            capacity_snapshot_id="capacity-main",
+            observed_at=AT,
+            available_for_new_trading=P("100"),
+            quality=DataQuality.HIGH,
+            source_ref="runtime.account_state_generations:verified-main",
+        ),
+        entry_admission_port=port,  # type: ignore[arg-type]
+    )
+    results = engine.process(
+        fact, proven_p90_native_cursor=cursor,
+        real_admission_required_for=frozenset({activation}),
+        real_admission_ready_for=frozenset({activation}),
+        account_admissions={activation: (ready,)},
+        admission_time=AT + timedelta(seconds=2),
+    )
+    assert len(results) == 1
+    assert len(results[0].account_outcomes) == 1
+    outcome = results[0].account_outcomes[0]
+    assert outcome.decision.code is EntryDecisionCode.ACCEPTED
+    assert outcome.execution_request is not None
+    assert outcome.execution_request.trading_account_id == "ta-main"
+    assert outcome.execution_request.capital_reservation_id == "cap-main-10"
+    assert len(port.requests) == 1
+    request_fact = outcome.execution_request.payload.to_dict()["signal_fact"]
+    assert request_fact["attributes"]["p90l90"]["opposite_raw_l53_target"] == expected_tp
+    assert request_fact["attributes"]["modeled_exchange_fill"] is False
