@@ -76,6 +76,9 @@ from bybit_workbench.universal_entry.oi30s_source import (
 )
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
 from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l90_fact
+from bybit_workbench.universal_entry.p90l90_data_lineage import (
+    inspect_p90_data_lineage,
+)
 from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
     P90L90ObserverPaperConsumer,
 )
@@ -2035,17 +2038,28 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_policy_before_registry(observer_split)
+    # Executable release SHA and original market-data lineage are distinct.
+    # Only an independently attested, immutable five-symbol source can be
+    # recovered. This gate runs before any PAPER consumer is constructed.
+    p90_lineage = (
+        inspect_p90_data_lineage(connection, loaded_commit=LOADED_COMMIT)
+        if observer_split.p90_paper else None
+    )
     p90_consumer = (
         P90L90ObserverPaperConsumer(
             connection,
             bundles=observer_split.p90_paper,
-            source_commit=LOADED_COMMIT,
+            source_commit=p90_lineage.origin_commit,
+            producer_release_commit=LOADED_COMMIT,
+            accepted_source_commits=p90_lineage.approved_producer_commits,
             provenance=FrozenPolicy.from_mapping({
                 "source": "p90l90_atomic_paper_observer",
                 "source_commit": LOADED_COMMIT,
+                "data_lineage_id": p90_lineage.data_lineage_id,
+                "data_origin_commit": p90_lineage.origin_commit,
             }),
         )
-        if observer_split.p90_paper else None
+        if p90_lineage is not None else None
     )
     # A missing/mismatched PostgreSQL checkpoint blocks active P90 before
     # the ordinary plan registry or any evaluation is mutated.
