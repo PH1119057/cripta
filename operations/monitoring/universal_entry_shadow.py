@@ -1322,6 +1322,18 @@ def _unarmed_multi_account_candidate_bindings(
         raise ValueError("account candidate snapshot requires aware timestamp")
     at = observed_at.astimezone(UTC)
     known = {cast(Any, bundle).activation.activation_id for bundle in bundles}
+    # Unlike older MAIN-primary Strategies, BOTH P90 REAL v3 profiles
+    # require an independent account-scoped owner arm and safety snapshot.
+    p90_real_ids = {
+        cast(Any, bundle).activation.activation_id
+        for bundle in bundles
+        if (
+            cast(Any, bundle).card.strategy_id
+            in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+            and cast(Any, bundle).card.strategy_version
+            == "2.0-p90l90-real-main-sub-20261028"
+        )
+    }
     rows = connection.execute(
         """SELECT strategy_execution_binding_id,strategy_activation_id,
                   execution_leg,trading_account_id
@@ -1349,6 +1361,7 @@ def _unarmed_multi_account_candidate_bindings(
         activation: tuple(legs)
         for activation, legs in by_activation.items()
         if len(legs) > 1
+        or activation in p90_real_ids
         or (
             len(legs) == 1
             and (
