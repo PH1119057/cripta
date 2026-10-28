@@ -14,7 +14,6 @@ from typing import Any
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import AccountAdmissionContext, UniversalEntryEngine
-from .p90l90_causal_transport_join import P90TransportEvent
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_observer_paper_consumer import P90L90ObserverPaperConsumer
