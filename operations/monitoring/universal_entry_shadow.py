@@ -2194,9 +2194,11 @@ def _run_observer_epoch(
                 tuple(oi_history),
                 observed_at=observed,
             )
-        # Historical PAPER positions retain their original Exit owner
-        # even when their StrategyActivation is now disabled/retired.
-        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        # Retired Strategy PAPER rows are historical artifacts, not live
+        # consumers. Bootstrap ordinary PAPER only if an ordinary Strategy
+        # is actively routed for this symbol; P90 owns its own Exit history.
+        if symbol in ordinary_symbols:
+            paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
@@ -2499,7 +2501,7 @@ def _run_observer_epoch(
                     f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
                 )
             closed_boundaries[(fact.symbol, timeframe)] = boundary
-            if timeframe == "5":
+            if timeframe == "5" and fact.symbol in ordinary_symbols:
                 paper.on_candle_closed(
                     Candle(
                         symbol=fact.symbol,
@@ -2521,7 +2523,7 @@ def _run_observer_epoch(
         coin = coin_contexts.get(fact.symbol)
         if coin is not None and coin.observed_at <= fact.observed_at:
             contexts["dispatcher.coin"] = coin
-        if fact.event_kind == "PUBLIC_TRADE":
+        if fact.event_kind == "PUBLIC_TRADE" and fact.symbol in ordinary_symbols:
             attrs = fact.attributes.to_dict()
             paper.on_public_trade(
                 symbol=fact.symbol,
