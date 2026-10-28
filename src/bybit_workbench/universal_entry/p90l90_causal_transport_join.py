@@ -217,11 +217,17 @@ class P90L90CausalTransportJoin:
                 ]
             else:
                 bars = [item for item in self.pending if item.kind == "CANDLE_CLOSED"]
+            # Never publish a 15m watermark ahead of the required closed
+            # 5m boundary. Bybit's kline channels are independent; a 15m
+            # close can arrive before its matching 5m close.
+            bars = [
+                item for item in bars
+                if item.timeframe != "15" or item.event_at <= self.closed_5m_at
+            ]
             if bars:
-                # 15m before 5m at the same timestamp: geometry cannot
-                # advance past its source until both close facts are ready.
+                # At the same effective boundary publish 5m first, then 15m.
                 bar = min(
-                    bars, key=lambda x: (x.event_at, 0 if x.timeframe == "15" else 1)
+                    bars, key=lambda x: (x.event_at, 0 if x.timeframe == "5" else 1)
                 )
                 self.pending.remove(bar)
                 if bar.timeframe == "5":
