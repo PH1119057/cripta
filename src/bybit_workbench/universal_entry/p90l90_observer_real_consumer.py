@@ -169,6 +169,13 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
     def _on_closed_candle(self, fact: MarketFactEnvelope) -> None:
         if fact.event_kind != "CANDLE_CLOSED":
             raise RuntimeError("P90_REAL_NATIVE_CLOSED_BAR_KIND_INVALID")
+        timeframe = fact.attributes.to_dict().get("timeframe")
+        if timeframe == "15":
+            # 15m is still committed to the native Entry geometry join.
+            # Only verified 5m boundaries own dynamic opposite RAW L5-3.
+            return
+        if timeframe != "5":
+            raise RuntimeError("P90_REAL_NATIVE_CLOSED_BAR_TIMEFRAME_INVALID")
         self._verified_closed_candle_port(fact)
 
     def _on_candidate(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
