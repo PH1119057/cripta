@@ -90,7 +90,7 @@ def test_p90_cannot_recover_unwarmed_entry_and_treat_pending_as_ready():
     consumer = _consumer((_bundle(MAIN_ID),))
     consumer._processors = {
         "LTCUSDT": SimpleNamespace(
-            recover=lambda: (
+            recover=lambda *, symbol: (
                 SimpleNamespace(closed_5m_at=B),
                 P90L90CausalEntry(),
             )
@@ -145,7 +145,7 @@ def test_p90_recovery_and_dispatch_do_not_require_ordinary_engine():
             return bars
 
     class MockProcessor:
-        def recover(self):
+        def recover(self, *, symbol):
             return (
                 SimpleNamespace(closed_5m_at=B, closed_15m_at=B),
                 P90L90CausalEntry(state=geometry),
