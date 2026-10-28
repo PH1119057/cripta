@@ -2441,7 +2441,8 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         # deprecated (always 0), so read the SIGNED account-level marginMode.
         # Never switch the whole account's margin mode on behalf of Strategy.
         from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-            MAX_ACCOUNT_COMMITTED, VERSION as P90_REAL_VERSION,
+            MAX_ACCOUNT_COMMITTED,
+            VERSION as P90_REAL_VERSION,
             validate_real_v3_exchange_entry,
             validate_real_v3_instrument_lot,
         )
