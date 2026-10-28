@@ -41,7 +41,7 @@ def test_ordinary_only_epoch_preserves_original_no_extra_transaction():
 
 def test_real_observer_dispatches_inside_exact_mixed_atomic_boundary():
     source = (
-        Path(__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[1]
         / "operations/monitoring/universal_entry_shadow.py"
     ).read_text(encoding="utf-8")
     epoch = source.split("def _run_observer_epoch(", 1)[1].split(
