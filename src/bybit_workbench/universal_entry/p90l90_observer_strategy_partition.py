@@ -73,9 +73,17 @@ def require_p90_atomic_observer_connection(split: ObserverStrategySplit) -> None
     """
     for raw in split.p90_paper:
         bundle: Any = raw
-        status = assess_strategy_runtime_readiness(
-            bundle.card, observer_ready=True,
-        )
+        try:
+            status = assess_strategy_runtime_readiness(
+                bundle.card, observer_ready=True,
+            )
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            # A malformed/unmaterializable StrategyCard must fail closed
+            # before any shared Observer registry or paper mutation.
+            raise RuntimeError(
+                "P90L90_ATOMIC_OBSERVER_CONNECTION_NOT_PROVEN: "
+                "invalid exact StrategyCard readiness evidence"
+            ) from exc
         if not status.paper_ready or not status.active_ready:
             raise RuntimeError(
                 "P90L90_ATOMIC_OBSERVER_CONNECTION_NOT_PROVEN: "
