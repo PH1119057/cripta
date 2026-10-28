@@ -56,6 +56,7 @@ from .market_watch import (
 )
 from .references import resolve_causal_timestamp
 from .registry import ActivePlanRegistry
+from .transport_continuity import TradeCursor
 
 _QUALITY_RANK = {
     DataQuality.UNKNOWN: 0,
@@ -110,7 +111,16 @@ class UniversalEntryEngine:
         exchange_position_keys: Mapping[str, str] | None = None,
         allow_new_signals: bool = True,
         admission_time: datetime | None = None,
+        proven_p90_native_cursor: TradeCursor | None = None,
     ) -> tuple[EntryEvaluation, ...]:
+        if proven_p90_native_cursor is not None:
+            # Only the atomic P90 transport owner may provide this cursor.
+            # Never invoke this path for generic/R1 or real Exchange admission.
+            self._verify_p90_precomputed_fact(
+                fact, proven_p90_native_cursor,
+                real_admission_required_for=real_admission_required_for,
+                entry_admission_port=entry_admission_port,
+            )
         # Distinct activations may use fan-out and the compatible legacy path
         # concurrently. An activation must NEVER use both admission inputs.
         if (
@@ -137,7 +147,12 @@ class UniversalEntryEngine:
             candidate_allowed = not self._cooldown_active(
                 plan, state, fact.observed_at, account_ref
             )
-            if watch_enabled:
+            if proven_p90_native_cursor is not None:
+                # The prior source-native tick and fully closed geometry were
+                # already consumed and checkpointed by the durable P90 owner.
+                # Re-running MarketWatch here would create a second Entry state.
+                evaluation_facts = (fact,) if candidate_allowed else ()
+            elif watch_enabled:
                 evaluation_facts = self._market_watch.process(
                     plan, fact, allow_candidate=candidate_allowed
                 )
@@ -451,6 +466,69 @@ class UniversalEntryEngine:
                     )
                 )
         return tuple(output)
+
+    def _verify_p90_precomputed_fact(
+        self,
+        fact: MarketFactEnvelope,
+        cursor: TradeCursor,
+        *,
+        real_admission_required_for: frozenset[str],
+        entry_admission_port: EntryAdmissionPort | None,
+    ) -> None:
+        """A native cursor is required; an already-approved REAL plan is forbidden.
+
+        An independent durable PostgreSQL join owns verification of source
+        ordering and as-of geometry. This admission checks that no outside
+        caller can feed a raw/R1 event or spoof another plan's P90 signal.
+        """
+        if real_admission_required_for or entry_admission_port is not None:
+            raise RuntimeError("P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN")
+        plans = self._registry.plans_for(fact.symbol)
+        if len(plans) != 1:
+            raise RuntimeError("P90L90_PRECOMPUTED_EXACT_ONE_STRATEGY_REQUIRED")
+        plan = plans[0]
+        policy = plan.watch_policy.to_dict()
+        geometry = policy.get("geometry")
+        if (
+            not policy.get("enabled")
+            or not isinstance(geometry, dict)
+            or geometry.get("operator") != "P90L90_RAW_H9_UNION_CROSSING"
+            or fact.event_kind != "P90L90_RAW_H9_PREV7D_CROSSING"
+            or fact.direction is None
+            or cursor.symbol != fact.symbol
+            or cursor.traded_at != fact.event_at
+            or cursor.seq < 0
+            or not cursor.exec_id
+        ):
+            raise RuntimeError("P90L90_PRECOMPUTED_SOURCE_OR_PLAN_INVALID")
+        attrs = fact.attributes.to_dict()
+        if (
+            attrs.get("modeled_exchange_fill") is not False
+            or attrs.get("trade_fact_id") != "trade-" + cursor.exec_id
+            or f"bybit:publicTrade:{fact.symbol}:{cursor.exec_id}" not in fact.source_refs
+        ):
+            raise RuntimeError("P90L90_PRECOMPUTED_NATIVE_PROVENANCE_INVALID")
+        at = attrs.get("state_effective_at")
+        if isinstance(at, datetime):
+            effective = at
+        elif isinstance(at, str):
+            effective = datetime.fromisoformat(at)
+        else:
+            raise RuntimeError("P90L90_PRECOMPUTED_STATE_TIME_MISSING")
+        if (
+            effective.tzinfo is None
+            or not effective <= fact.event_at < effective + timedelta(minutes=5)
+            or fact.observed_at != fact.event_at
+        ):
+            raise RuntimeError("P90L90_PRECOMPUTED_CAUSAL_TIME_INVALID")
+        expected = "watch-p90l90-" + fingerprint({
+            "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+            "source_fact": attrs["trade_fact_id"],
+            "direction": fact.direction.value,
+            "effective_at": effective,
+        })[:32]
+        if fact.fact_id != expected:
+            raise RuntimeError("P90L90_PRECOMPUTED_CANDIDATE_FINGERPRINT_INVALID")
 
     @staticmethod
     def _validate_account_admissions(
