@@ -3300,7 +3300,8 @@ def reconcile_position_ownership(
     rows = connection.execute(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id,
-                  entry_execution_request_id,exchange_position_key
+                  entry_execution_request_id,exchange_position_key,
+                  strategy_id,strategy_version
            FROM runtime.position_ownership
            WHERE (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
              AND (trading_account_id=%s AND identity_status='PROVEN')
@@ -3491,8 +3492,20 @@ def reconcile_position_ownership(
         trigger_slippage = trigger_to_fill_slippage_pct(
             side, trigger, close.actual_exit_avg_fill or Decimal(0)
         )
+        # Historical R1 has its own immutable 1% attribution. The new
+        # owner-approved P90 REAL-v3 catastrophic stop is -10% of actual
+        # average fill and must not be misreported as an R1 1% stop.
+        p90_v3 = (
+            len(row) >= 13
+            and str(row[11]) in {
+                "p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"
+            }
+            and str(row[12]) == "2.0-p90l90-real-main-sub-20261028"
+        )
         initial_stop = Decimal(str(row[4])) * (
-            Decimal("0.99") if side == "Buy" else Decimal("1.01")
+            (Decimal("0.90") if side == "Buy" else Decimal("1.10"))
+            if p90_v3
+            else (Decimal("0.99") if side == "Buy" else Decimal("1.01"))
         )
         latest_stop = next(
             (Decimal(str(value["stop_after"])) for value in reversed(protections) if value["stop_after"] is not None),
