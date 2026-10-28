@@ -714,6 +714,52 @@ class PaperTradeRuntime:
             )
             return close
 
+    def bootstrap_p90_l53_history(
+        self, symbol: str, candles: tuple[Candle, ...]
+    ) -> None:
+        """Restore ONLY P90 Exit RAW geometry memory; never mutate R1 orders.
+
+        The exact old R1 bootstrap also reconciles pending PAPER orders and
+        positions. A P90-only processor MUST NOT call it, especially where
+        an ordinary Strategy owns the same symbol or TradingAccount.
+        """
+        if symbol not in {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}:
+            raise ValueError("P90L90 Exit history outside approved symbols")
+        if len(candles) < 36:
+            raise RuntimeError("P90L90 Exit RAW L5-3 needs 36 closed 5m candles")
+        previous: datetime | None = None
+        for candle in candles:
+            if (
+                candle.symbol != symbol or candle.timeframe != "5"
+                or not candle.is_closed
+            ):
+                raise ValueError("P90L90 Exit history source mismatch")
+            if previous is not None and (
+                candle.closed_at - previous != timedelta(minutes=5)
+            ):
+                raise RuntimeError("P90L90 Exit closed 5m continuity missing")
+            previous = candle.closed_at
+        self._l53_candles[symbol].clear()
+        self._l53_candles[symbol].extend(candles[-260:])
+
+    def on_p90_closed_candle(self, candle: Candle) -> None:
+        """Advance P90 raw Exit bar memory without touching ordinary PAPER."""
+        if (
+            candle.symbol not in {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}
+            or candle.timeframe != "5" or not candle.is_closed
+        ):
+            raise ValueError("P90L90 Exit requires completed approved 5m candle")
+        rows = self._l53_candles[candle.symbol]
+        if len(rows) < 36:
+            raise RuntimeError("P90L90 Exit history not fully restored")
+        if candle.closed_at == rows[-1].closed_at:
+            if candle != rows[-1]:
+                raise RuntimeError("P90L90 Exit immutable 5m candle conflict")
+            return
+        if candle.closed_at - rows[-1].closed_at != timedelta(minutes=5):
+            raise RuntimeError("P90L90 Exit missing/late closed candle")
+        rows.append(candle)
+
     def bootstrap_l53_history(
         self, symbol: str, candles: tuple[Candle, ...]
     ) -> None:

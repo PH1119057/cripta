@@ -92,10 +92,20 @@ def install(*, dry_run: bool) -> None:
     for card in cards:
         _require(card.strategy_version == VERSION, "CARD_VERSION_DRIFT")
         readiness = assess_strategy_runtime_readiness(card, observer_ready=True)
+        # DISABLED/INACTIVE authoring is a prerequisite for proving the
+        # dedicated P90 runtime. It must NOT demand PAPER activation before
+        # the native/bar causal ordering and restart evidence exist.
+        # Never weaken the actual StrategyActivation/PAPER readiness gate.
         _require(
-            readiness.policy_ready and readiness.paper_ready
-            and not readiness.execution_ready,
-            "PAPER_ONLY_READY_REAL_MUST_REMAIN_BLOCKED",
+            readiness.policy_ready and not readiness.paper_ready
+            and not readiness.active_ready and not readiness.execution_ready
+            and "P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN" in {
+                reason.code for reason in readiness.reasons
+            }
+            and "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in {
+                reason.code for reason in readiness.reasons
+            },
+            "PASSIVE_V2_MUST_STAY_INACTIVE_AND_EXCHANGE_BLOCKED",
         )
     with psycopg.connect("dbname=cripta user=cripta") as connection:
         with connection.transaction():

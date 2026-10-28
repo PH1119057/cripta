@@ -75,6 +75,19 @@ from bybit_workbench.universal_entry.oi30s_source import (
     slot_at,
 )
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
+from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l90_fact
+from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
+    P90L90ObserverPaperConsumer,
+)
+from bybit_workbench.universal_entry.p90l90_mixed_epoch_atomicity import (
+    dispatch_observer_fact_atomically,
+)
+from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
+    P90NativeBarRuntimeProof,
+    partition_observer_strategies,
+    require_p90_atomic_observer_connection,
+    require_p90_policy_before_registry,
+)
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
 from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
@@ -2016,12 +2029,34 @@ def _run_observer_epoch(
     signature = _observer_light_signature(connection)
     if not signature:
         return "RELOAD"
+    # Phase 2 P90L90: reject legacy shared-Engine native trade routing BEFORE
+    # activating a plan or acknowledging any source event. Ordinary R1/other
+    # strategies keep the original path. The real dual-owner bridge is still
+    # gated on exact durable restart and 90-day code/ledger parity.
+    observer_split = partition_observer_strategies(bundles)
+    require_p90_policy_before_registry(observer_split)
+    p90_consumer = (
+        P90L90ObserverPaperConsumer(
+            connection,
+            bundles=observer_split.p90_paper,
+            source_commit=LOADED_COMMIT,
+            provenance=FrozenPolicy.from_mapping({
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+            }),
+        )
+        if observer_split.p90_paper else None
+    )
+    # A missing/mismatched PostgreSQL checkpoint blocks active P90 before
+    # the ordinary plan registry or any evaluation is mutated.
+    if p90_consumer is not None:
+        p90_consumer.recover_all()
     registry = ActivePlanRegistry()
     consumer_instance_id = (
         f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
         f"{service_started_at.isoformat()}"
     )
-    for raw_bundle in bundles:
+    for raw_bundle in observer_split.ordinary:
         bundle = cast(Any, raw_bundle)
         registry.register_card(bundle.card)
         materialized = registry.activate(bundle.activation)
@@ -2040,19 +2075,50 @@ def _run_observer_epoch(
                 "source_commit": LOADED_COMMIT,
             },
         )
+    for raw_bundle in observer_split.p90_paper:
+        bundle = cast(Any, raw_bundle)
+        # P90 uses its own already-restored Entry consumer, but exact
+        # StrategyPlan consumption remains durably auditable.
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
-    paper = PaperTradeRuntime(connection, bundles=tuple(cast(Any, bundles)))
-    real_execution_selected_for = _real_execution_selected_activation_ids(
-        connection, bundles
+    paper = PaperTradeRuntime(
+        connection, bundles=tuple(cast(Any, observer_split.ordinary))
     )
+    ordinary_symbols = {
+        symbol
+        for item in observer_split.ordinary
+        for symbol in cast(Any, item).entry_plan.symbols
+    }
+    real_execution_selected_for = _real_execution_selected_activation_ids(
+        connection, observer_split.ordinary
+    )
+    # Preserve the exact R6a release-arm lookup/audit contract, then
+    # explicitly exclude P90's zero-order PAPER plans from REAL admission.
     release_ready_for = _real_execution_activation_ids(connection, bundles)
+    ordinary_activation_ids = frozenset(
+        cast(Any, item).activation.activation_id
+        for item in observer_split.ordinary
+    )
+    release_ready_for = release_ready_for.intersection(ordinary_activation_ids)
     multi_account_candidates = _unarmed_multi_account_candidate_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = _real_execution_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = {
         activation: binding
@@ -2123,13 +2189,18 @@ def _run_observer_epoch(
             if not rows:
                 raise RuntimeError(f"observer causal history seed missing {symbol}:{timeframe}")
             closed_boundaries[(symbol, timeframe)] = max(item.closed_at for item in rows)
-        engine.load_watch_history(
-            symbol,
-            {key: tuple(value) for key, value in history.items()},
-            tuple(oi_history),
-            observed_at=observed,
-        )
-        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        if symbol in ordinary_symbols:
+            engine.load_watch_history(
+                symbol,
+                {key: tuple(value) for key, value in history.items()},
+                tuple(oi_history),
+                observed_at=observed,
+            )
+        # Retired Strategy PAPER rows are historical artifacts, not live
+        # consumers. Bootstrap ordinary PAPER only if an ordinary Strategy
+        # is actively routed for this symbol; P90 owns its own Exit history.
+        if symbol in ordinary_symbols:
+            paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
@@ -2211,7 +2282,7 @@ def _run_observer_epoch(
 
     def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
         rows: list[Mapping[str, object]] = []
-        for raw_bundle in bundles:
+        for raw_bundle in observer_split.ordinary:
             bundle = cast(Any, raw_bundle)
             plan = bundle.entry_plan
             for symbol in plan.symbols:
@@ -2354,6 +2425,33 @@ def _run_observer_epoch(
                             "updated_at": now.isoformat(),
                         }
                     )
+        for raw_bundle in observer_split.p90_paper:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                for direction in plan.directions:
+                    rows.append({
+                        "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                        "strategy_id": plan.strategy_id,
+                        "strategy_version": plan.strategy_version,
+                        "strategy_name": bundle.card.name,
+                        "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                        "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                        "activation_id": plan.strategy_activation_id,
+                        "symbol": symbol,
+                        "direction": direction.value,
+                        "state": "P90_PAPER_ATOMIC_RESTORED",
+                        "current_price": (
+                            None if symbol not in last_trade_prices
+                            else str(last_trade_prices[symbol])
+                        ),
+                        "entry_price": None,
+                        "distance_pct": None,
+                        "geometry": {},
+                        "source_commit": LOADED_COMMIT,
+                        "model": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+                        "updated_at": now.isoformat(),
+                    })
         return tuple(rows)
 
     def refresh_inputs(fact_at: datetime) -> None:
@@ -2366,7 +2464,7 @@ def _run_observer_epoch(
         )
         last_inputs_refresh = now_mono
 
-    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+    def _process_fact_body(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
         nonlocal facts_received, evaluations_count, signals_count
         if not deduper.accept(fact.fact_id):
             return
@@ -2405,7 +2503,7 @@ def _run_observer_epoch(
                     f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
                 )
             closed_boundaries[(fact.symbol, timeframe)] = boundary
-            if timeframe == "5":
+            if timeframe == "5" and fact.symbol in ordinary_symbols:
                 paper.on_candle_closed(
                     Candle(
                         symbol=fact.symbol,
@@ -2427,7 +2525,7 @@ def _run_observer_epoch(
         coin = coin_contexts.get(fact.symbol)
         if coin is not None and coin.observed_at <= fact.observed_at:
             contexts["dispatcher.coin"] = coin
-        if fact.event_kind == "PUBLIC_TRADE":
+        if fact.event_kind == "PUBLIC_TRADE" and fact.symbol in ordinary_symbols:
             attrs = fact.attributes.to_dict()
             paper.on_public_trade(
                 symbol=fact.symbol,
@@ -2435,18 +2533,6 @@ def _run_observer_epoch(
                 observed_at=fact.observed_at,
                 contexts=contexts,
             )
-            if fact.symbol in p90l90_symbols:
-                if cursor is None:
-                    raise ContinuityNotProvable(
-                        "P90L90 Paper Exit requires exact native TradeCursor"
-                    )
-                paper.route_p90l90_native_trade(
-                    symbol=fact.symbol,
-                    exec_id=cursor.exec_id,
-                    exchange_sequence=cursor.seq,
-                    event_at=cursor.traded_at,
-                    price=Decimal(str(attrs["price"])),
-                )
         admission_time = (
             datetime.now(UTC) if real_execution_selected_for else fact.observed_at
         )
@@ -2477,7 +2563,7 @@ def _run_observer_epoch(
             scoped_admissions, scoped_ready_for = (
                 _multi_account_admissions(
                     connection,
-                    bundles,
+                    observer_split.ordinary,
                     multi_account_candidates,
                     symbol=fact.symbol,
                     observed_at=admission_time,
@@ -2544,24 +2630,42 @@ def _run_observer_epoch(
                     if watch_geometry.get("operator") == (
                         "P90L90_RAW_H9_UNION_CROSSING"
                     ):
-                        if fact.event_kind != "PUBLIC_TRADE" or cursor is None:
-                            raise ContinuityNotProvable(
-                                "P90L90 PAPER entry requires same native PUBLIC_TRADE cursor"
-                            )
-                        paper.create_p90l90_native_paper_entry(
-                            evaluation, bundle,
-                            exec_id=cursor.exec_id,
-                            exchange_sequence=cursor.seq,
-                            event_at=cursor.traded_at,
-                            native_trade_price=Decimal(str(
-                                fact.attributes.to_dict()["price"]
-                            )),
-                            raw_trade_fact_id=fact.fact_id,
+                        raise RuntimeError(
+                            "P90L90_ENTRY_REACHED_ORDINARY_OBSERVER_OWNER"
                         )
-                    else:
-                        paper.create_order(evaluation, bundle, now=fact.observed_at)
+                    paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1
+        if (
+            p90_consumer is not None and fact.symbol in p90l90_symbols
+            and fact.event_kind in {"PUBLIC_TRADE", "CANDLE_CLOSED"}
+        ):
+            if fact.event_kind == "PUBLIC_TRADE" and cursor is None:
+                raise ContinuityNotProvable(
+                    "P90L90 causal consumer requires exact native TradeCursor"
+                )
+            if (
+                fact.event_kind == "PUBLIC_TRADE"
+                or str(fact.attributes.to_dict().get("timeframe") or "")
+                in {"5", "15"}
+            ):
+                p90_consumer.accept(
+                    encode_p90l90_fact(fact, cursor=cursor)
+                )
+
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        # One source event is an atomic mixed-Strategy PAPER epoch on shared
+        # symbols. The nested P90 join, Entry, positions and ordinary PAPER
+        # records use this exact connection and roll back as ONE DB unit.
+        # In-memory state MUST be discarded by ending the whole epoch on any
+        # exception; the enclosing Observer restart handles that boundary.
+        dispatch_observer_fact_atomically(
+            connection,
+            symbol=fact.symbol,
+            p90_symbols=p90l90_symbols,
+            p90_enabled=p90_consumer is not None,
+            dispatch=lambda: _process_fact_body(fact, cursor),
+        )
 
     try:
         trade_mirror_thread.start()
@@ -2573,6 +2677,25 @@ def _run_observer_epoch(
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
+        # Source proof is issued ONLY in this epoch, after real Bybit
+        # WS subscription acknowledgements and the active publicTrade
+        # mirror, and after ALL source-commit-bound P90 DB checkpoints
+        # have been independently reconstructed. On a reconnect it is
+        # discarded, rechecked and NEVER reused as a generic readiness flag.
+        if p90_consumer is not None:
+            require_p90_atomic_observer_connection(
+                observer_split,
+                live_proof=P90NativeBarRuntimeProof(
+                    source_commit=LOADED_COMMIT,
+                    restored_symbols=p90_consumer.recovered_symbols,
+                    subscribed_symbols=frozenset(symbols),
+                    subscribed_intervals=frozenset(intervals),
+                    mirror_active=trade_mirror.snapshot()["state"] == "ACTIVE",
+                    subscribed_local_at=_ready_local,
+                    subscribed_server_at=_ready_server,
+                    epoch_started_at=epoch_started,
+                ),
+            )
         buffered_messages = list(buffered)
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,

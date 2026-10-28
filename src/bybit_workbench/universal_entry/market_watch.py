@@ -12,6 +12,7 @@ from bybit_workbench.strategies.indicators import true_ranges, wilder_atr
 from .contracts import EntryPlan, FrozenPolicy, MarketFactEnvelope, TradeDirection
 from .fingerprint import fingerprint
 from .p90l90_causal import P90L90CausalEntry, causal_entry_state
+from .p90l90_crossing_fact import p90l90_crossing_fact
 
 
 @dataclass(frozen=True, slots=True)
@@ -912,42 +913,17 @@ class ParameterizedCausalMarketWatch:
         crossings = state.p90l90.on_trade(price=price, event_at=fact.event_at)
         if not allow_candidate:
             return ()
+        if not crossings:
+            return ()
+        geometry = state.p90l90.state
+        if geometry is None:
+            raise RuntimeError("P90L90 crossed without causal geometry")
         return tuple(
-            MarketFactEnvelope(
-                fact_id="watch-p90l90-" + fingerprint({
-                    "entry_plan_fingerprint": plan.entry_plan_fingerprint,
-                    "source_fact": fact.fact_id,
-                    "direction": item.side,
-                    "effective_at": item.effective_at,
-                })[:32],
-                event_kind="P90L90_RAW_H9_PREV7D_CROSSING",
-                symbol=fact.symbol,
-                observed_at=fact.observed_at,
-                event_at=item.event_at,
-                received_at=fact.received_at,
-                source_refs=fact.source_refs,
-                direction=TradeDirection(item.side),
-                attributes=FrozenPolicy.from_mapping({
-                    "entry_price": item.current_price,
-                    "price": item.current_price,
-                    "previous_tick_price": item.previous_price,
-                    "raw_entry_boundary": item.boundary,
-                    "depth_pct": item.depth_pct,
-                    "state_effective_at": item.effective_at,
-                    "p90l90": {
-                        "candidate_price": item.current_price,
-                        "opposite_raw_l53_target": (
-                            state.p90l90.state.opposite_tp(item.side)
-                            if state.p90l90 is not None
-                            and state.p90l90.state is not None
-                            else None
-                        ),
-                        "state_effective_at": item.effective_at,
-                        "depth_pct": item.depth_pct,
-                    },
-                    "modeled_exchange_fill": False,
-                    "trade_fact_id": fact.fact_id,
-                }),
+            p90l90_crossing_fact(
+                entry_plan_fingerprint=plan.entry_plan_fingerprint,
+                source_fact=fact,
+                crossing=item,
+                geometry=geometry,
             )
             for item in crossings
         )

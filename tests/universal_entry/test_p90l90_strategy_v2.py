@@ -1,6 +1,7 @@
 """Immutable P90L90 v2 test: each Strategy owns its own SECOND48."""
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -146,3 +147,20 @@ def test_p90l90_tampered_exit_distance_or_geometry_never_ready():
     assert not assess_strategy_runtime_readiness(
         changed_entry, observer_ready=True
     ).active_ready
+
+
+def test_disabled_p90_v2_installer_does_not_demand_paper_ready_before_proof():
+    # Previous installer required paper_ready=True before disabled registration,
+    # while canonical native/bar proof deliberately held paper_ready=False.
+    # That deadlocked both v2 Strategy authoring and actual proof work.
+    root = Path(__file__).resolve().parents[2]
+    installer = (
+        root / "operations/implementation/install_p90l90_strategy_v2_passive.py"
+    ).read_text(encoding="utf-8")
+    assert "readiness.policy_ready and not readiness.paper_ready" in installer
+    assert "and not readiness.active_ready and not readiness.execution_ready" in installer
+    assert '"P90L90_NATIVE_BAR_BOUNDARY_ORDER_NOT_PROVEN"' in installer
+    assert '"P90L90_EXCHANGE_ORDER_NOT_APPROVED"' in installer
+    assert "enabled=False" in installer
+    assert '"INACTIVE"' in installer
+    assert "readiness.policy_ready and readiness.paper_ready" not in installer

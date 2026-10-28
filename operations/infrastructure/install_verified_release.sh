@@ -478,6 +478,7 @@ migration_files=(
   # New independent P90 v2 passive binding and PAPER-only causal event buffer.
   operations/sql/20261028_p90l90_strategy_v2_passive_binding_writer.sql
   operations/sql/20261028_p90l90_causal_transport_checkpoints.sql
+  operations/sql/20261028_p90l90_atomic_entry_checkpoint.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
