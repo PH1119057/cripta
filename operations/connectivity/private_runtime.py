@@ -2443,11 +2443,19 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
             MAX_ACCOUNT_COMMITTED, VERSION as P90_REAL_VERSION,
             validate_real_v3_exchange_entry,
+            validate_real_v3_instrument_lot,
         )
         if (
             str(payload.get("strategy_id") or "") in MAX_ACCOUNT_COMMITTED
             or str(payload.get("strategy_version") or "") == P90_REAL_VERSION
         ):
+            try:
+                validate_real_v3_instrument_lot(
+                    symbol=symbol, instrument=instrument,
+                    quantity=qty, signal_price=price,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
             signed_info, _ = api_get("/v5/account/info", {}, key, secret)
             _require_entry_bybit_read_ok(signed_info, "/v5/account/info")
             try:
