@@ -11,9 +11,7 @@ from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEn
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_observer_real_consumer import P90L90ObserverRealConsumer
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
-from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
-    StrategyHardStopEmbargoPolicy,
-)
+from bybit_workbench.universal_entry.p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 AT = datetime(2026, 10, 29, 2, 0, tzinfo=UTC)
