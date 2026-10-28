@@ -218,8 +218,8 @@ class P90SharedCandleLedger:
         closed bars from the frozen checkpoint through both target boundaries.
         A fresh epoch/cursor is a separate safety gate after this OHLC proof.
         """
-        base5 = self._seed.get((symbol, "5"))
-        base15 = self._seed.get((symbol, "15"))
+        base5 = self._emitted.get((symbol, "5"))
+        base15 = self._emitted.get((symbol, "15"))
         if base5 is None or base15 is None:
             raise ValueError("P90_SHARED_UNRECOGNIZED_SYMBOL")
         changes: list[tuple[str, Candle]] = []
@@ -262,3 +262,7 @@ class P90SharedCandleLedger:
         return {
             tf: self._emitted[symbol, tf] for tf in ("5", "15")
         }
+
+    def source_id(self, symbol: str) -> str:
+        """Exact approved MarketSource ID, independent of TradingAccount."""
+        return self._key[symbol, "5"].market_source_id
