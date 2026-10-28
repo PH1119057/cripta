@@ -63,7 +63,10 @@ def test_new_real_strategy_is_routed_to_an_explicitly_separate_owner() -> None:
     assert split.ordinary == ()
     assert split.p90_paper == ()
     assert len(split.p90_real) == 2
-    assert all(item.card.strategy_version == p90l90_real_contract_v3.VERSION for item in split.p90_real)
+    assert all(
+        item.card.strategy_version == p90l90_real_contract_v3.VERSION
+        for item in split.p90_real
+    )
     require_p90_policy_before_registry(split)
     with pytest.raises(RuntimeError, match="REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED"):
         require_p90_atomic_observer_connection(split)
