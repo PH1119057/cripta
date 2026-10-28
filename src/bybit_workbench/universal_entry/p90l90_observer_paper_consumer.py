@@ -43,6 +43,7 @@ class P90L90ObserverPaperConsumer:
         provenance: FrozenPolicy,
         producer_release_commit: str | None = None,
         accepted_source_commits: frozenset[str] | None = None,
+        shared_candle_source: bool = False,
     ) -> None:
         if not bundles:
             raise ValueError("P90L90 consumer needs exact enabled Strategy bundle")
@@ -78,11 +79,20 @@ class P90L90ObserverPaperConsumer:
         self._entry = UniversalEntryEngine(registry)
         self._store = StrategyEntryStore(connection)
         self._paper = PaperTradeRuntime(connection, bundles=tuple(p90_bundles))
-        self._archive = P90L90ImmutableBarLedger(
-            connection, source_commit=source_commit,
-            producer_release_commit=producer_release_commit,
-            accepted_source_commits=accepted_source_commits,
-        )
+        if shared_candle_source:
+            from .p90l90_shared_candle_bridge import P90SharedCandleLedger
+
+            self._archive = P90SharedCandleLedger(
+                connection, source_commit=source_commit,
+                producer_release_commit=producer_release_commit,
+                accepted_source_commits=accepted_source_commits,
+            )
+        else:
+            self._archive = P90L90ImmutableBarLedger(
+                connection, source_commit=source_commit,
+                producer_release_commit=producer_release_commit,
+                accepted_source_commits=accepted_source_commits,
+            )
         self._processors: dict[str, P90L90DurablePaperProcessor] = {}
         for symbol, bundle in self._by_symbol.items():
             self._processors[symbol] = P90L90DurablePaperProcessor(
@@ -90,6 +100,7 @@ class P90L90ObserverPaperConsumer:
                 source_commit=source_commit,
                 producer_release_commit=producer_release_commit,
                 accepted_source_commits=accepted_source_commits,
+                bar_ledger=self._archive if shared_candle_source else None,
                 on_native_exit=self._on_native_exit,
                 on_closed_candle=self._on_closed_candle,
                 candidate_entry_plan_fingerprint=(
