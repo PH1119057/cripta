@@ -8,7 +8,7 @@ Until those owners are provided, this consumer cannot start a real epoch.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -136,7 +136,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._recovered = True
 
     def catch_up_closed_histories(
-        self, targets: dict[str, tuple[datetime, datetime]],
+        self, targets: Mapping[str, tuple[datetime, datetime]],
     ) -> int:
         """Cannot bridge a source gap while any REAL exposure/request exists."""
         active = self._connection.execute(
