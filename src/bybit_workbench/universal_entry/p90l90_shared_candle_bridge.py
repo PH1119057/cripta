@@ -254,3 +254,11 @@ class P90SharedCandleLedger:
                 0 if item[0] == "5" else 1,
             ))
         )
+
+    def restart_watermarks(self, symbol: str) -> dict[str, datetime]:
+        """Committed closed-bar boundaries, never provider cache latest."""
+        if symbol not in _SYMBOLS:
+            raise ValueError("P90_SHARED_UNRECOGNIZED_SYMBOL")
+        return {
+            tf: self._emitted[symbol, tf] for tf in ("5", "15")
+        }
