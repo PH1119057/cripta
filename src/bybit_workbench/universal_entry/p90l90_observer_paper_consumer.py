@@ -125,6 +125,11 @@ class P90L90ObserverPaperConsumer:
             self._paper.bootstrap_p90_l53_history(symbol, bars)
         self._recovered = True
 
+    @property
+    def recovered_symbols(self) -> frozenset[str]:
+        """Only full exact restart may make symbols eligible for live PAPER."""
+        return frozenset(self._processors) if self._recovered else frozenset()
+
     def accept(self, event: P90TransportEvent) -> tuple[P90TransportEvent, ...]:
         """One source fact; all dependent PAPER effects commit atomically."""
         if not self._recovered:
