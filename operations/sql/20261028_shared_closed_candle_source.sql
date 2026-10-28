@@ -5,6 +5,15 @@ BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '30s';
 
+CREATE SCHEMA IF NOT EXISTS analytics AUTHORIZATION postgres;
+GRANT USAGE ON SCHEMA analytics TO cripta;
+CREATE UNIQUE INDEX IF NOT EXISTS identity_market_sources_venue_pair
+    ON identity.market_sources(market_source_id, venue_id);
+CREATE UNIQUE INDEX IF NOT EXISTS identity_instruments_venue_product_symbol
+    ON identity.instruments(
+        instrument_id, venue_id, product_category, external_symbol
+    );
+
 CREATE TABLE IF NOT EXISTS analytics.closed_candles (
     market_source_id text NOT NULL,
     venue_id text NOT NULL,
