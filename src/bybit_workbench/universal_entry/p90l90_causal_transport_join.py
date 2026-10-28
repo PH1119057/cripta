@@ -206,13 +206,13 @@ class P90L90CausalTransportJoin:
                 )
                 self.pending.remove(bar)
                 if bar.timeframe == "5":
-                    if bar.event_at <= self.closed_5m_at:
-                        raise RuntimeError("P90L90 duplicate/reversed 5m bar")
+                    if bar.event_at != self.closed_5m_at + timedelta(minutes=5):
+                        raise RuntimeError("P90L90 missing/noncausal completed 5m bar")
                     self.closed_5m_at = bar.event_at
                     self.last_5m_event_id = bar.event_id
                 else:
-                    if bar.event_at <= self.closed_15m_at:
-                        raise RuntimeError("P90L90 duplicate/reversed 15m bar")
+                    if bar.event_at != self.closed_15m_at + timedelta(minutes=15):
+                        raise RuntimeError("P90L90 missing/noncausal completed 15m bar")
                     self.closed_15m_at = bar.event_at
                     self.last_15m_event_id = bar.event_id
                 emitted.append(bar)
