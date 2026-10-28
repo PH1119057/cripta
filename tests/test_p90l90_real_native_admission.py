@@ -284,7 +284,10 @@ class _EvaluationRecorder:
     def __init__(self) -> None:
         self.recorded: list[object] = []
 
-    def record_evaluation(self, evaluation: object) -> None:
+    def record_evaluation(
+        self, evaluation: object, *, provenance: FrozenPolicy,
+    ) -> None:
+        assert provenance.to_dict()["source_commit"] == "a" * 40
         self.recorded.append(evaluation)
 
 
@@ -303,6 +306,10 @@ def test_real_native_atomic_callback_keeps_exact_one_account_and_no_paper(
         entry_plan_fingerprint=entry_fp,
         engine=engine,
         store=recorder,  # type: ignore[arg-type]
+        provenance=FrozenPolicy.from_mapping({
+            "source_commit": "a" * 40,
+            "data_lineage_id": "p90-test-lineage",
+        }),
     )
     port = _MemoryAdmissionPort()
     raw = _admissions(activation)[activation][0]
