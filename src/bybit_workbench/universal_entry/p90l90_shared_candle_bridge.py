@@ -187,3 +187,51 @@ class P90SharedCandleLedger:
         return causal_entry_state(
             fives, fifteens, effective_at=effective_at,
         )
+
+
+    def closed_gap_plan(
+        self, *, symbol: str, through_5m: datetime,
+        through_15m: datetime,
+    ) -> tuple[tuple[str, Candle], ...]:
+        """Read-only exact gap proof. No missing native trade is synthesized.
+
+        The common candle store must ALREADY have source-verified consecutive
+        closed bars from the frozen checkpoint through both target boundaries.
+        A fresh epoch/cursor is a separate safety gate after this OHLC proof.
+        """
+        base5 = self._seed.get((symbol, "5"))
+        base15 = self._seed.get((symbol, "15"))
+        if base5 is None or base15 is None:
+            raise ValueError("P90_SHARED_UNRECOGNIZED_SYMBOL")
+        changes: list[tuple[str, Candle]] = []
+        for tf, start, end in (
+            ("5", base5, through_5m), ("15", base15, through_15m),
+        ):
+            interval = timedelta(minutes=int(tf))
+            if (
+                end.utcoffset() != timedelta(0)
+                or end < start
+                or (end - start) % interval
+            ):
+                raise RuntimeError("P90_SHARED_GAP_BOUNDARIES_NOT_ALIGNED")
+            missing = (end - start) // interval
+            if missing > 10000:
+                raise RuntimeError("P90_SHARED_GAP_REQUIRES_BOUNDED_PAGINATION")
+            if missing == 0:
+                continue
+            bars = self._canonical(
+                symbol, tf, through=end, count=int(missing),
+            )
+            if (
+                len(bars) != missing
+                or bars[0].closed_at != start + interval
+                or bars[-1].closed_at != end
+            ):
+                raise RuntimeError("P90_SHARED_GAP_COVERAGE_NOT_PROVEN")
+            changes.extend((tf, bar) for bar in bars)
+        return tuple(
+            sorted(changes, key=lambda item: (
+                item[1].closed_at,
+                0 if item[0] == "5" else 1,
+            ))
+        )
