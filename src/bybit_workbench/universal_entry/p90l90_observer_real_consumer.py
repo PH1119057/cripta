@@ -118,12 +118,16 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                 on_proven_candidate=self._on_candidate,
             )
         self._recovered = False
+        self._verified_closed_watermarks: dict[
+            str, tuple[datetime, datetime]
+        ] = {}
         self._gap_recovery_poisoned = False
 
     def recover_all(self) -> None:
         """Reconstruct ALL original durable native/closed-bar checkpoints."""
         if self._recovered:
             raise RuntimeError("P90_REAL_NATIVE_DOUBLE_RESTORE")
+        recovered: dict[str, tuple[datetime, datetime]] = {}
         for symbol in sorted(self._processors):
             join, entry = self._processors[symbol].recover(symbol=symbol)
             if entry.state is None or entry.state.effective_at > join.closed_5m_at:
@@ -133,6 +137,10 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
             )
             if actual != join.closed_15m_at:
                 raise RuntimeError("P90_REAL_NATIVE_UNVERIFIED_15M_WATERMARK")
+            recovered[symbol] = (join.closed_5m_at, join.closed_15m_at)
+        if not recovered or set(recovered) != set(self._processors):
+            raise RuntimeError("P90_REAL_NATIVE_INCOMPLETE_RECOVERED_SYMBOLS")
+        self._verified_closed_watermarks = recovered
         self._recovered = True
 
     def catch_up_closed_histories(
@@ -157,11 +165,29 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         ).fetchone()
         if active != (0,) or pending != (0,):
             raise RuntimeError("P90_REAL_NATIVE_GAP_WITH_EXPOSURE_OR_PENDING_ORDER")
-        # A REAL strategy cannot inherit PAPER's no-native-cursor OHLC-only
-        # gap recovery. Even with zero exposure, missing publicTrade history
-        # could contain skipped REAL signals/Exits. An independently proven
-        # fresh native epoch owner must be supplied before a new REAL Entry.
-        raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
+        if not self._recovered or self._gap_recovery_poisoned:
+            raise RuntimeError("P90_REAL_NATIVE_RECOVERY_NOT_VERIFIED")
+        if (
+            not targets
+            or set(targets) != set(self._processors)
+            or set(targets) != set(self._verified_closed_watermarks)
+        ):
+            raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
+        for symbol, boundary in targets.items():
+            if (
+                not isinstance(boundary, tuple)
+                or len(boundary) != 2
+                or any(value.tzinfo is None for value in boundary)
+                or boundary != self._verified_closed_watermarks[symbol]
+            ):
+                # No OHLC-only gap fill, no replay of a newer last candle:
+                # missing native trades may have contained valid Entry/Exit.
+                self._gap_recovery_poisoned = True
+                raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
+        # Only the pre-WS *closed-bar* watermarks match. A fresh exact native
+        # publicTrade epoch still requires independent subscription/mirror
+        # attestation before ANY new REAL signal or Exit is accepted.
+        return 0
 
     def _on_native_exit(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
         if fact.event_kind != "PUBLIC_TRADE" or cursor.symbol != fact.symbol:
