@@ -342,6 +342,7 @@ def build_real_postfill_exit_observation(
         or not (stop < mark < tp and tp > actual_fill
                 if long else tp < mark < stop and tp < actual_fill)
         or (best < actual_fill if long else best > actual_fill)
+        or (best < last if long else best > last)
     ):
         raise P90RealObservationUnverified("P90_REAL_POSTFILL_PROTECTION_UNVERIFIED")
     signed_ref = (
