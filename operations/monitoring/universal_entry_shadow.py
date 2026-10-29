@@ -3027,6 +3027,9 @@ def _run_observer_epoch(
                 def p90_admitted_account(
                     symbol: str, at: datetime,
                 ) -> tuple[tuple[AccountAdmissionContext, ...], bool]:
+                    # Candidate must still share the current original live
+                    # WS source epoch and atomic PostgreSQL checkpoint.
+                    source_ports._source_transaction()
                     activation = active_by_symbol.get(symbol)
                     selected = _real_execution_selected_activation_ids(
                         connection, observer_split.p90_real,
