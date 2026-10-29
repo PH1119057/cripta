@@ -14,8 +14,6 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from psycopg.pq import TransactionStatus
-
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
@@ -140,8 +138,9 @@ class P90RealExitExecutionPort:
         info = getattr(self._db, "info", None)
         if (
             info is None
-            or getattr(info, "transaction_status", None)
-            is not TransactionStatus.INTRANS
+            or getattr(
+                getattr(info, "transaction_status", None), "name", None
+            ) != "INTRANS"
         ):
             raise P90RealExitExecutionUnverified(
                 "P90_REAL_EXIT_SOURCE_TRANSACTION_NOT_OPEN"
