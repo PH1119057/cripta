@@ -34,6 +34,73 @@ class P90RealNativeRestartUnverified(RuntimeError):
     """No complete exact public-trade interval across process restart."""
 
 
+def resolve_durable_restart_anchor(
+    *,
+    symbol: str,
+    last_sequence: int | None,
+    last_event_at: datetime | None,
+    last_exec_ids: Sequence[str],
+    latest_rest_rows: Sequence[Mapping[str, object]],
+) -> TradeCursor:
+    """Recover one exact persisted cursor without forgetting same-seq peers.
+
+    The checkpoint stores every execId emitted at its last sequence.  One of
+    those IDs whose timestamp equals the persisted last-emitted timestamp is
+    sufficient as the physical anchor only when *all* persisted IDs are still
+    present in the same bounded recent-trade page.  The caller passes the full
+    ID set back to :func:`attest_bounded_native_restart` so none is replayed
+    a second time.
+    """
+    try:
+        at = _utc(last_event_at) if isinstance(last_event_at, datetime) else None
+        ids = tuple(last_exec_ids)
+        if (
+            symbol not in _SYMBOLS
+            or type(last_sequence) is not int or last_sequence < 0
+            or at is None
+            or not ids or len(ids) > 512
+            or any(not isinstance(item, str) or not item for item in ids)
+            or len(set(ids)) != len(ids)
+            or not isinstance(latest_rest_rows, (tuple, list))
+            or not 1 <= len(latest_rest_rows) <= 1000
+        ):
+            raise P90RealNativeRestartUnverified(
+                "P90_RESTART_DURABLE_CHECKPOINT_CURSOR_MISSING"
+            )
+        present: dict[str, datetime] = {}
+        for row in latest_rest_rows:
+            if not isinstance(row, Mapping) or row.get("symbol") != symbol:
+                continue
+            name = row.get("execId")
+            if not isinstance(name, str) or name not in ids:
+                continue
+            seq = int(str(row["seq"]))
+            when = datetime.fromtimestamp(int(str(row["time"])) / 1000, UTC)
+            if seq == last_sequence:
+                present[name] = when
+        if set(present) != set(ids):
+            raise P90RealNativeRestartUnverified(
+                "P90_RESTART_DURABLE_SAME_SEQUENCE_IDS_EVICTED"
+            )
+        candidates = sorted(name for name, when in present.items() if when == at)
+        if not candidates:
+            raise P90RealNativeRestartUnverified(
+                "P90_RESTART_DURABLE_LAST_TIMESTAMP_NOT_IN_REST"
+            )
+        return TradeCursor(
+            symbol=symbol,
+            seq=last_sequence,
+            exec_id=candidates[0],
+            traded_at=at,
+        )
+    except P90RealNativeRestartUnverified:
+        raise
+    except (TypeError, KeyError, ValueError, OverflowError):
+        raise P90RealNativeRestartUnverified(
+            "P90_RESTART_DURABLE_CHECKPOINT_CURSOR_UNVERIFIED"
+        ) from None
+
+
 @dataclass(frozen=True, slots=True)
 class P90RealBoundedNativeRecovery:
     """A bounded causal set; never self-certifies a safe REAL restart."""
@@ -63,6 +130,7 @@ def attest_bounded_native_restart(
     latest_rest_rows: Sequence[Mapping[str, object]],
     rest_server_at: datetime,
     checked_at: datetime,
+    durable_exec_ids: Sequence[str] | None = None,
 ) -> P90RealBoundedNativeRecovery:
     """Require exact persisted+new WS anchors in one bounded Bybit REST slice.
 
@@ -162,6 +230,22 @@ def attest_bounded_native_restart(
                 )
             parsed.append((name, seq, timestamp))
             prev_seq, prev_at = seq, timestamp
+        known_old_ids = (
+            (durable_anchor.exec_id,)
+            if durable_exec_ids is None
+            else tuple(durable_exec_ids)
+        )
+        if (
+            not known_old_ids
+            or len(known_old_ids) > 512
+            or durable_anchor.exec_id not in known_old_ids
+            or any(not isinstance(item, str) or not item for item in known_old_ids)
+            or len(set(known_old_ids)) != len(known_old_ids)
+            or not set(known_old_ids).issubset(seen)
+        ):
+            raise P90RealNativeRestartUnverified(
+                "P90_RESTART_DURABLE_SAME_SEQUENCE_IDS_EVICTED"
+            )
         old_match = (
             durable_anchor.exec_id, durable_anchor.seq, old_at,
         )
@@ -179,6 +263,7 @@ def attest_bounded_native_restart(
             latest_rest_rows,
             anchor=durable_anchor,
             cutoff_at=live_at,
+            known_exec_ids=set(known_old_ids),
         )
         if old_match == new_match:
             if replay:
