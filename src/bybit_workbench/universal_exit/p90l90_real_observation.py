@@ -142,7 +142,19 @@ def build_real_native_exit_observation(
     stop = _positive(raw.get("stopLoss"), "P90_REAL_STOP_NOT_PRESENT")
     tp = _positive(raw.get("takeProfit"), "P90_REAL_TP_NOT_PRESENT")
     mark = _positive(raw.get("markPrice"), "P90_REAL_SIGNED_MARK_NOT_PRESENT")
+    # A missing signed trailingStop cannot be silently treated as zero: it
+    # could mean an already active autonomous Bybit trailing guard.
+    try:
+        trailing = Decimal(str(raw.get("trailingStop")))
+    except (InvalidOperation, ValueError, TypeError):
+        raise P90RealObservationUnverified(
+            "P90_REAL_SIGNED_TRAILING_READBACK_MISSING"
+        ) from None
     tick = _positive(private.tick_size, "P90_REAL_TICK_INVALID")
+    if not trailing.is_finite() or trailing < 0 or trailing % tick != 0:
+        raise P90RealObservationUnverified(
+            "P90_REAL_SIGNED_TRAILING_READBACK_INVALID"
+        )
     # Profitable trailing stops may be beyond Entry, but must remain on
     # the protective side of the current signed mark. An already marketable
     # resting TP cannot be asserted to be active Exchange protection.
@@ -199,6 +211,8 @@ def build_real_native_exit_observation(
                     str(checkpoint.best_favorable_price),
                 "exchange_stop_price": str(stop),
                 "exchange_tp_price": str(tp),
+                "exchange_trailing_distance": str(trailing),
+                "exchange_mark_price": str(mark),
                 "tick_size": str(tick),
             },
         }),
