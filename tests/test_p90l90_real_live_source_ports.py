@@ -171,3 +171,69 @@ def test_canonical_5m_closed_history_and_watermark_are_source_transaction_scoped
     assert ports.closed_continuity("LTCUSDT", boundary) is True
     with pytest.raises(module.P90RealLiveSourceUnverified):
         ports.closed_continuity("LTCUSDT", boundary + timedelta(minutes=5))
+
+
+
+def test_first_postfill_native_trade_must_not_skip_earlier_original_tick(
+    monkeypatch,
+) -> None:
+    position, _plan, _state, cursor, _private, _price = _scope()
+    earlier = TradeCursor(
+        symbol=cursor.symbol, seq=cursor.seq - 1,
+        exec_id="real-after-fill-100",
+        traded_at=cursor.traded_at - timedelta(milliseconds=1),
+    )
+    mirror = _real_mirror()
+    _trade(mirror, earlier)
+    _trade(mirror, cursor)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    with pytest.raises(
+        module.P90RealLiveSourceUnverified,
+        match="FIRST_POSTFILL_TRADE_SKIPPED",
+    ):
+        _ports(StubDB(), mirror).native_coverage(position, cursor)
+
+
+def test_durable_mfe_must_advance_each_original_native_trade_in_order(
+    monkeypatch,
+) -> None:
+    position, _plan, state, anchor, _private, _price = _scope()
+    intermediate = TradeCursor(
+        symbol=anchor.symbol, seq=anchor.seq + 1,
+        exec_id="real-unprocessed-intermediate",
+        traded_at=anchor.traded_at + timedelta(milliseconds=1),
+    )
+    future = TradeCursor(
+        symbol=anchor.symbol, seq=anchor.seq + 2,
+        exec_id="real-mfe-would-skip-intermediate",
+        traded_at=anchor.traded_at + timedelta(milliseconds=2),
+    )
+    mirror = _real_mirror()
+    for item in (anchor, intermediate, future):
+        _trade(mirror, item)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    with pytest.raises(
+        module.P90RealLiveSourceUnverified,
+        match="INTERMEDIATE_NATIVE_TRADES_SKIPPED",
+    ):
+        _ports(
+            StubDB(latest={"attributes": {"checkpoint": state.snapshot()}}),
+            mirror,
+        ).native_coverage(position, future)
+
+
+def test_next_ordered_trade_after_durable_mfe_is_accepted(
+    monkeypatch,
+) -> None:
+    position, _plan, state, anchor, _private, _price = _scope()
+    following = TradeCursor(
+        symbol=anchor.symbol, seq=anchor.seq + 1,
+        exec_id="real-immediate-next-execution",
+        traded_at=anchor.traded_at + timedelta(milliseconds=1),
+    )
+    mirror = _real_mirror()
+    _trade(mirror, anchor)
+    _trade(mirror, following)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    db = StubDB(latest={"attributes": {"checkpoint": state.snapshot()}})
+    assert _ports(db, mirror).native_coverage(position, following) == (True, True)
