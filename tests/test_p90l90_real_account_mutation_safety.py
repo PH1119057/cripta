@@ -10,12 +10,12 @@ from test_p90l90_real_observation import AT, _scope
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_exit import p90l90_real_private_router
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
 from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
 from bybit_workbench.universal_exit.p90l90_real_observation import (
     build_real_native_exit_observation,
 )
-from bybit_workbench.universal_exit import p90l90_real_private_router
 from operations.monitoring import p90l90_real_account_mutation_safety
 from operations.monitoring import p90l90_real_live_source_ports
 
