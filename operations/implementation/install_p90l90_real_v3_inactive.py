@@ -38,14 +38,18 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from bybit_workbench.universal_entry.contracts import (  # noqa: E402
-    FrozenPolicy, StrategyActivation,
+    FrozenPolicy,
+    StrategyActivation,
 )
 from bybit_workbench.universal_entry.materializer import materialize_plans  # noqa: E402
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import (  # noqa: E402
-    MAIN_ID, SUB_ID,
+    MAIN_ID,
+    SUB_ID,
 )
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (  # noqa: E402
-    ALLOWED_SYMBOLS, VERSION, real_v3_cards,
+    ALLOWED_SYMBOLS,
+    VERSION,
+    real_v3_cards,
 )
 from bybit_workbench.universal_entry.storage import StrategyEntryStore  # noqa: E402
 from operations.implementation.install_p90l90_strategy_v2_passive import (  # noqa: E402
@@ -239,50 +243,52 @@ def preflight(connection: psycopg.Connection, at: datetime):
 def install(*, dry_run: bool) -> None:
     commit = installed_identity()
     now = datetime.now(UTC)
-    with psycopg.connect("dbname=cripta user=cripta") as connection:
-        with connection.transaction():
-            connection.execute(
-                "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, "
-                + ("READ ONLY" if dry_run else "READ WRITE")
+    with (
+        psycopg.connect("dbname=cripta user=cripta") as connection,
+        connection.transaction(),
+    ):
+        connection.execute(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, "
+            + ("READ ONLY" if dry_run else "READ WRITE")
+        )
+        prepared = preflight(connection, now)
+        if dry_run:
+            print(
+                "P90_REAL_V3_PREFLIGHT=PASS PAIRS=2 "
+                "MAIN_LTC_INJ=DISABLED SUB_DOT_ARB_APT=DISABLED "
+                "EXCHANGE=OFF DB_WRITES=0 INSTALLED_COMMIT=" + commit
             )
-            prepared = preflight(connection, now)
-            if dry_run:
-                print(
-                    "P90_REAL_V3_PREFLIGHT=PASS PAIRS=2 "
-                    "MAIN_LTC_INJ=DISABLED SUB_DOT_ARB_APT=DISABLED "
-                    "EXCHANGE=OFF DB_WRITES=0 INSTALLED_COMMIT=" + commit
-                )
-                return
-            connection.execute("SELECT pg_advisory_xact_lock(20901290,243)")
-            store = StrategyEntryStore(connection)
-            for card, activation, entry, exit_plan, binding_id, account in prepared:
-                store.insert_strategy_card(card)
-                store.insert_activation(
-                    activation, reason="V3_INACTIVE_FOR_SOURCE_LIVE_EQUIVALENCE",
-                )
-                store.insert_entry_plan(entry)
-                store.insert_exit_plan(exit_plan)
-                outcome = connection.execute(
-                    """SELECT strategy_entry.
-                              register_p90l90_real_v3_inactive_binding(%s,%s,%s)""",
-                    (binding_id, activation.activation_id, account),
-                ).fetchone()
-                require(outcome == (binding_id,), "V3_NARROW_BINDING_WRITE_FAILED")
-            rows = connection.execute(
-                """SELECT a.strategy_id,a.enabled,b.binding_state,b.trading_account_id
-                     FROM strategy_entry.strategy_activations a
-                     JOIN strategy_entry.strategy_execution_bindings b
-                       ON b.strategy_activation_id=a.activation_id
-                    WHERE a.strategy_version=%s ORDER BY a.strategy_id""",
-                (VERSION,),
-            ).fetchall()
-            require(
-                rows == [
-                    (MAIN_ID, False, "INACTIVE", REGISTRY[MAIN_ID][1]),
-                    (SUB_ID, False, "INACTIVE", REGISTRY[SUB_ID][1]),
-                ],
-                "V3_POSTWRITE_INACTIVE_MAIN_SUB_NOT_PROVEN",
+            return
+        connection.execute("SELECT pg_advisory_xact_lock(20901290,243)")
+        store = StrategyEntryStore(connection)
+        for card, activation, entry, exit_plan, binding_id, account in prepared:
+            store.insert_strategy_card(card)
+            store.insert_activation(
+                activation, reason="V3_INACTIVE_FOR_SOURCE_LIVE_EQUIVALENCE",
             )
+            store.insert_entry_plan(entry)
+            store.insert_exit_plan(exit_plan)
+            outcome = connection.execute(
+                """SELECT strategy_entry.
+                          register_p90l90_real_v3_inactive_binding(%s,%s,%s)""",
+                (binding_id, activation.activation_id, account),
+            ).fetchone()
+            require(outcome == (binding_id,), "V3_NARROW_BINDING_WRITE_FAILED")
+        rows = connection.execute(
+            """SELECT a.strategy_id,a.enabled,b.binding_state,b.trading_account_id
+                 FROM strategy_entry.strategy_activations a
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=a.activation_id
+                WHERE a.strategy_version=%s ORDER BY a.strategy_id""",
+            (VERSION,),
+        ).fetchall()
+        require(
+            rows == [
+                (MAIN_ID, False, "INACTIVE", REGISTRY[MAIN_ID][1]),
+                (SUB_ID, False, "INACTIVE", REGISTRY[SUB_ID][1]),
+            ],
+            "V3_POSTWRITE_INACTIVE_MAIN_SUB_NOT_PROVEN",
+        )
     print(
         "P90_REAL_V3_INSTALL=COMMITTED CARDS=2 ENTRY_PLANS=2 EXIT_PLANS=2 "
         "ACTIVATIONS_DISABLED=2 BINDINGS_INACTIVE=2 "
