@@ -2581,6 +2581,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     if tick <= 0 or qty_step <= 0:
         raise RuntimeError("Bybit did not return price/quantity steps")
     result: dict[str, object]
+    # No private fill can return from execute_command without an immediate
+    # signed Universal Exit handoff. Unrelated Strategy commands are unchanged.
+    p90_real_postfill: tuple[str, str, tuple[str, ...]] | None = None
     if kind == "strategy_exit":
         result = _execute_universal_exit_command(
             connection,
@@ -3177,6 +3180,10 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     if updated.rowcount != 1:
                         raise RuntimeError("P90_REAL_FIRST_FILL_OWNER_RACE")
                     connection.commit()
+                    p90_real_postfill = (
+                        position_id, exchange_order_id,
+                        tuple(real_fill_execution_ids),
+                    )
                 except Exception:
                     connection.rollback()
                     # Exchange order is already accepted and protected; its
@@ -3203,6 +3210,46 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         raise ExchangeMutationBarrier(
             f"post-mutation reconciliation failed: {exc}"
         ) from exc
+    if p90_real_postfill is not None:
+        # This is the FIRST protected, authenticated fill. A native Market
+        # stream/Exit failure must block this command terminalization rather
+        # than wait until a future 5m candle or silently leave trailing idle.
+        # The already-attached Bybit SL+TP remain resident. This does NOT
+        # resubmit Entry or attempt any emergency arbitrary market close.
+        from operations.connectivity.p90l90_real_postfill_handoff import (
+            handoff_real_first_protected_fill,
+        )
+
+        first_position_id, first_order_id, first_execution_ids = p90_real_postfill
+        try:
+            with connection.transaction():
+                handoff_real_first_protected_fill(
+                    connection,
+                    position_id=first_position_id,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    account_connector_id=ACCOUNT_CONNECTOR_ID,
+                    exchange_entry_order_id=first_order_id,
+                    signed_execution_ids=first_execution_ids,
+                    loaded_release_commit=os.environ.get(
+                        "CRIPTA_RELEASE_COMMIT", "",
+                    ).strip().lower(),
+                    signed_position_reader=(
+                        lambda db: own_p90_real_signed_position_reader(
+                            db, key, secret
+                        )
+                    ),
+                    current_private_ws=current_p90_real_private_ws_epoch,
+                    no_pending_exit_command=(
+                        lambda subject: current_p90_real_no_pending_exit(
+                            connection, subject,
+                        )
+                    ),
+                )
+        except Exception:
+            connection.rollback()
+            raise ExchangeMutationBarrier(
+                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
+            ) from None
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
