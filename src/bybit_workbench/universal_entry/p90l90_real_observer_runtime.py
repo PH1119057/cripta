@@ -8,7 +8,6 @@ owners before installing this composition in the running Observer epoch.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
