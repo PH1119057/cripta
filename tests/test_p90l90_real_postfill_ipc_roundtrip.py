@@ -116,3 +116,62 @@ def test_absent_market_source_broker_fails_closed_without_exchange_action() -> N
             source_commit=SHA,
             timeout_seconds=0.2,
         )
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux SO_PEERCRED abstract socket")
+def test_empty_native_interval_has_independent_rest_proof_over_actual_ipc() -> None:
+    from datetime import UTC, datetime
+
+    mirror, position, now = _market(trades=0)
+    account = "ta-" + "a" * 32
+    position = replace(
+        position, trading_account_id=account,
+        exchange_position_key=exchange_position_key(account, position.symbol, 0),
+    )
+    stopping = threading.Event()
+    ready = threading.Event()
+    faults: list[str] = []
+    rest_reads: list[str] = []
+    anchor = {
+        "symbol": position.symbol, "execId": "exact-before-fill-id",
+        "time": int((position.fill_at - timedelta(seconds=1)).timestamp() * 1000),
+        "seq": 100, "side": "Buy",
+    }
+
+    def fetch_recent(symbol: str):
+        rest_reads.append(symbol)
+        return [anchor], datetime.now(UTC) + timedelta(milliseconds=50)
+
+    def serve() -> None:
+        try:
+            serve_source_windows(
+                mirror=mirror, source_commit=SHA,
+                source_epoch_id=EPOCH,
+                read_position=lambda *_args: (position, EPOCH),
+                fetch_recent_trades=fetch_recent,
+                running=lambda: not stopping.is_set(),
+                ready=ready.set,
+            )
+        except Exception as exc:
+            faults.append(type(exc).__name__)
+
+    worker = threading.Thread(target=serve, daemon=True)
+    worker.start()
+    try:
+        assert ready.wait(3)
+        window = read_real_postfill_source_window(
+            position=position, source_epoch_id=EPOCH, source_commit=SHA,
+            timeout_seconds=3.0,
+        )
+        assert window.no_new_native_trade_rest_verified is True
+        assert window.best_favorable_price == position.actual_avg_fill
+        assert len(window.source_refs) == 1
+        assert window.source_refs[0].startswith(
+            "bybit:recentTrade:LTCUSDT:zero-after-fill:"
+        )
+        assert rest_reads == [position.symbol]
+    finally:
+        stopping.set()
+        worker.join(timeout=3)
+    assert not worker.is_alive()
+    assert faults == []
