@@ -279,7 +279,11 @@ class P90RealSignedRecoveryAccountReader:
             raise P90RealRecoveryAccountUnverified(
                 "P90_REAL_RECOVERY_GENERATION_POSITION_COUNT_MISMATCH"
             )
-        if self._ws() is not True:
+        try:
+            live_ws_after = self._ws()
+        except Exception:
+            live_ws_after = False
+        if live_ws_after is not True:
             raise P90RealRecoveryAccountUnverified(
                 "P90_REAL_RECOVERY_PRIVATE_WS_LOST_DURING_READ"
             )
