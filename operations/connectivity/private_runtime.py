@@ -2354,7 +2354,9 @@ def _execute_universal_exit_command(
                 or Decimal(str(verified.get("size"))) != Decimal(str(position.get("size")))
                 or Decimal(str(verified.get("avgPrice"))) != Decimal(str(position.get("avgPrice")))
                 or Decimal(str(verified.get("stopLoss"))) != Decimal(str(position.get("stopLoss")))
-                or Decimal(str(verified.get("takeProfit"))) != Decimal(str(position.get("takeProfit")))
+                or Decimal(str(verified.get("takeProfit"))) != Decimal(
+                    str(position.get("takeProfit"))
+                )
                 or Decimal(str(verified.get("trailingStop"))) != distance
             ):
                 raise ValueError("trailing readback or existing TP/SL drift")
