@@ -135,7 +135,7 @@ def test_empty_native_interval_has_independent_rest_proof_over_actual_ipc() -> N
     anchor = {
         "symbol": position.symbol, "execId": "exact-before-fill-id",
         "time": int((position.fill_at - timedelta(seconds=1)).timestamp() * 1000),
-        "seq": 100, "side": "Buy",
+        "seq": 100, "side": "Buy", "price": "100", "size": "0.01",
     }
 
     def fetch_recent(symbol: str):
