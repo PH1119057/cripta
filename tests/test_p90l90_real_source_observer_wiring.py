@@ -68,7 +68,7 @@ def test_real_live_path_is_connected_to_independent_source_and_private_exit() ->
     assert "elif not gate_enabled and not selected:" in body
     assert "elif gate_enabled and selected == expected:" in body
     assert "selected != expected" in body
-    assert "gate != (True,)" in body
+    assert "gate_enabled = bool(gate and gate[0])" in body
     assert "P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED" in body
     assert "if p90_real_source_only or p90_real_live:" in body
     assert body.index("_connect_and_subscribe(symbols, intervals)") < (
