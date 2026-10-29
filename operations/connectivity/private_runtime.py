@@ -2328,6 +2328,8 @@ def _execute_universal_exit_command(
         # Bybit ACK is NOT evidence that the autonomous trailing exists.
         # An ambiguous response must block retries and trigger reconciliation.
         accepted = api_post("/v5/position/trading-stop", params, key, secret)
+        if str(payload.get("strategy_version") or "") != "2.0-p90l90-real-main-sub-20261028":
+            return accepted  # Never alter unrelated Strategy execution semantics.
         try:
             after, _ = api_get(
                 "/v5/position/list",
