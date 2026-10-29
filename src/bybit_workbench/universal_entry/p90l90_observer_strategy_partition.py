@@ -134,7 +134,10 @@ def require_p90_policy_before_registry(split: ObserverStrategySplit) -> None:
         codes = {reason.code for reason in status.reasons}
         if (
             not status.policy_ready
-            or "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED" not in codes
+            or not status.execution_ready
+            or "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED" in codes
+            or "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in codes
+            or "LIVE_EXIT_TRAILING_NOT_WIRED" in codes
         ):
             raise RuntimeError("P90L90_REAL_OBSERVER_POLICY_NOT_EXACT")
     for raw in split.p90_paper:
@@ -171,7 +174,8 @@ def require_p90_atomic_observer_connection(
     No generic observer_ready or owner wish may substitute the independently
     verified Bybit WS subscription + active publicTrade mirror, and the exact
     source-bound Entry/Exit restart state for ALL enabled P90 instruments.
-    REAL execution is *always* disqualified by immutable NOT_APPROVED order.
+    This legacy helper authorizes only PAPER-v2; REAL-v3 has its own separately
+    composed source/account/Execution runtime and must never fall through here.
     """
     require_p90_policy_before_registry(split)
     # This connection proof authorizes ONLY the v2 PAPER consumer. It must
