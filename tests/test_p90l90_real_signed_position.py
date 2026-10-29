@@ -278,3 +278,28 @@ def test_recent_signed_generation_before_actual_fill_is_not_current_protection()
     with pytest.raises(P90RealSignedPositionUnverified, match="GENERATION_STALE"):
         reader()(position, cursor)
     assert api.calls == []
+
+
+def test_runtime_reader_uses_mounted_private_credential_and_live_ws() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    reader = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "own_p90_real_signed_position_reader"
+    )
+    text = ast.get_source_segment(source, reader)
+    assert text is not None
+    assert "MOUNTED_CREDENTIAL_REF" in text
+    assert "TRADING_ACCOUNT_ID" in text
+    assert "ACCOUNT_CONNECTOR_ID" in text
+    assert "api_get(endpoint, params, key, secret)" in text
+    assert "verified_private_ws_continuity=current_p90_real_private_ws_epoch" in text
+    assert "current_p90_real_no_pending_exit(" in text
+    assert "api_post(" not in text
+    assert "P90_REAL_ACCOUNT_MOUNTED_CREDENTIAL_NOT_READY" in text
