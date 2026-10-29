@@ -44,7 +44,7 @@ def test_real_source_diagnostic_never_wires_paper_or_execution_commands() -> Non
     )
     body = ast.get_source_segment(src, candidate)
     assert body is not None
-    assert "if getattr(self, "_no_order_source_diagnostic", False):" in body
-    assert body.index("if getattr(self, "_no_order_source_diagnostic", False):") < (
+    assert 'if getattr(self, "_no_order_source_diagnostic", False):' in body
+    assert body.index('if getattr(self, "_no_order_source_diagnostic", False):') < (
         body.index("owner = self._candidate_owners.get(fact.symbol)")
     )
