@@ -153,7 +153,8 @@ def attest_bounded_native_restart(
                 or not price.is_finite() or price <= 0
                 or not size.is_finite() or size <= 0
                 or (prev_seq is not None and (
-                    seq > prev_seq or (seq == prev_seq and timestamp > prev_at)
+                    prev_at is None or seq > prev_seq
+                    or (seq == prev_seq and timestamp > prev_at)
                 ))
             ):
                 raise P90RealNativeRestartUnverified(
