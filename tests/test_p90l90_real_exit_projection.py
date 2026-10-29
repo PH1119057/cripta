@@ -274,7 +274,7 @@ def test_shared_universal_exit_engine_creates_bybit_native_trailing_arm(
     assert result.decision.source_refs == fact.source_refs
     assert result.decision.requested_mutation.to_dict() == {
         "distance": "0.35",
-        "active_price": "100.5" if side == "LONG" else "99.5",
+        "active_price": "100.50" if side == "LONG" else "99.50",
         "tpsl_mode": "Full",
     }
     assert UniversalExitEngine().evaluate(position, plan, fact).decision == result.decision
