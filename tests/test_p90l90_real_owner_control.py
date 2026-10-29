@@ -38,10 +38,12 @@ def test_p90_owner_control_orders_account_arm_before_permissions_before_gate() -
 def test_p90_dashboard_blocks_generic_partial_controls() -> None:
     source = DASH.read_text()
     assert 'P90_REAL_V3_PREARM_PATH = "/api/p90l90/real-v3/prearm"' in source
+    assert 'P90_REAL_V3_PREARM_EVIDENCE_PATH = "/api/p90l90/real-v3/prearm-evidence"' in source
     assert 'P90_REAL_V3_ARM_PATH = "/api/p90l90/real-v3/arm"' in source
     assert "P90_REAL_V3_USE_DEDICATED_PREARM_CONTROL" in source
     assert "P90_REAL_V3_USE_DEDICATED_OWNER_ARM_CONTROL" in source
     assert "_u6_p90_real_v3_prearm" in source
+    assert "_u6_p90_real_v3_prearm_evidence" in source
     assert "_u6_p90_real_v3_arm" in source
 
 
@@ -64,12 +66,15 @@ def test_p90_sub_private_runtime_publishes_fresh_position_mode_evidence() -> Non
     assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
 
 
-def test_p90_owner_arm_requires_technical_evidence_before_arm_transaction() -> None:
+def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
     source = DASH.read_text()
-    handler = source.index("def _u6_p90_real_v3_arm(")
-    next_handler = source.index("def _u6_financial_account_catalog", handler)
-    block = source[handler:next_handler]
-    evidence = block.index("prepare_p90l90_real_v3_prearm_evidence(")
-    arm = block.index("arm_p90l90_real_v3(", evidence)
-    assert evidence < arm
-    assert "require_owner_approval=False" not in block
+    evidence_handler = source.index("def _u6_p90_real_v3_prearm_evidence(")
+    arm_handler = source.index("def _u6_p90_real_v3_arm(", evidence_handler)
+    catalog_handler = source.index("def _u6_financial_account_catalog", arm_handler)
+    evidence_block = source[evidence_handler:arm_handler]
+    arm_block = source[arm_handler:catalog_handler]
+    assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
+    assert "arm_p90l90_real_v3(" not in evidence_block
+    assert "prepare_p90l90_real_v3_prearm_evidence(" not in arm_block
+    assert "arm_p90l90_real_v3(" in arm_block
+    assert "OWNER ARM requires explicit confirmation" in arm_block
