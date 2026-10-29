@@ -5,6 +5,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -177,6 +178,9 @@ class _MfeDB:
         self.saved: dict[str, dict[str, object]] = {}
         self.locked = False
         self.audit: list[str] = []
+        self.info = SimpleNamespace(
+            transaction_status=SimpleNamespace(name="INTRANS"),
+        )
 
     def execute(
         self, sql: str, params: tuple[object, ...] = (),
@@ -218,6 +222,39 @@ class _MfeDB:
             self.audit.append("readback")
             return _Row(self.saved.get(str(params[0])))
         raise AssertionError(f"unexpected MFE DB command: {sql}")
+
+
+@pytest.mark.parametrize("status", ("IDLE", "UNKNOWN", None))
+def test_real_mfe_never_reads_or_writes_without_source_transaction(
+    status: str | None,
+) -> None:
+    pos = _position()
+    db = _MfeDB()
+    db.info.transaction_status.name = status
+    ledger = P90RealMfeLedger(db)
+    cursor = _cursor(pos)
+    with pytest.raises(P90RealMfeUnverified, match="SOURCE_TRANSACTION_NOT_OPEN"):
+        ledger.on_trade(
+            position=pos, source_commit=SHA, fact_id="native",
+            cursor=cursor, price=D("100.5"),
+            received_at=cursor.traded_at + timedelta(milliseconds=1),
+            source_refs=("bybit:publicTrade:LTCUSDT:source",),
+            first_fill_forward_coverage_proven=True,
+            native_continuity_proven=True,
+        )
+    with pytest.raises(P90RealMfeUnverified, match="SOURCE_TRANSACTION_NOT_OPEN"):
+        ledger.load_latest(position=pos, source_commit=SHA)
+    assert db.audit == []
+    assert db.saved == {}
+
+
+def test_missing_transaction_metadata_never_uses_advisory_lock_as_proof() -> None:
+    db = _MfeDB()
+    del db.info
+    pos = _position()
+    with pytest.raises(P90RealMfeUnverified, match="SOURCE_TRANSACTION_NOT_OPEN"):
+        P90RealMfeLedger(db).load_latest(position=pos, source_commit=SHA)
+    assert db.audit == []
 
 
 def test_atomic_native_ledger_restores_exact_mfe_after_restart() -> None:
