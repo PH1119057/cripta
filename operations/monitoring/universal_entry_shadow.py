@@ -2862,11 +2862,11 @@ def _run_observer_epoch(
         if p90_real_source_only:
             # This is a REAL source-epoch diagnostic, not PAPER simulation and
             # never a replacement for account-scoped Exit execution readiness.
-            from operations.monitoring.p90l90_real_source_bootstrap import (
-                start_current_p90_real_observer_epoch,
-            )
             from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
                 P90L90ObserverRealConsumer,
+            )
+            from operations.monitoring.p90l90_real_source_bootstrap import (
+                start_current_p90_real_observer_epoch,
             )
 
             source_epoch_id = start_current_p90_real_observer_epoch(

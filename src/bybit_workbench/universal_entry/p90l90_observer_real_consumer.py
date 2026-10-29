@@ -221,7 +221,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
     def _on_candidate(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
         # Explicitly no-order source diagnostics consume RAW geometry only;
         # never issue a real Entry signal, execution request or PAPER proxy.
-        if self._no_order_source_diagnostic:
+        if getattr(self, "_no_order_source_diagnostic", False):
             return
         owner = self._candidate_owners.get(fact.symbol)
         if owner is None:
