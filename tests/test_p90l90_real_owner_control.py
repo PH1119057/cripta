@@ -62,3 +62,14 @@ def test_p90_sub_private_runtime_publishes_fresh_position_mode_evidence() -> Non
     source = SUB_PRIVATE.read_text()
     assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
     assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
+
+
+def test_p90_owner_arm_requires_technical_evidence_before_arm_transaction() -> None:
+    source = DASH.read_text()
+    handler = source.index("def _u6_p90_real_v3_arm(")
+    next_handler = source.index("def _u6_financial_account_catalog", handler)
+    block = source[handler:next_handler]
+    evidence = block.index("prepare_p90l90_real_v3_prearm_evidence(")
+    arm = block.index("arm_p90l90_real_v3(", evidence)
+    assert evidence < arm
+    assert "require_owner_approval=False" not in block
