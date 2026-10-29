@@ -2104,8 +2104,28 @@ def _run_observer_epoch(
     p90_real_source_only = bool(observer_split.p90_real) and (
         os.environ.get("CRIPTA_P90_REAL_SOURCE_ONLY", "DISABLED") == "ENABLED"
     )
-    if observer_split.p90_real and not p90_real_source_only:
-        raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
+    p90_real_live = bool(observer_split.p90_real) and not p90_real_source_only
+    if p90_real_live:
+        # A real StrategyActivation alone is not authorization. Both
+        # independent owner-selected execution permissions, current mainnet
+        # gate, and each separately signed account arm are required.
+        selected = _real_execution_selected_activation_ids(
+            connection, observer_split.p90_real
+        )
+        expected = frozenset(
+            cast(Any, item).activation.activation_id
+            for item in observer_split.p90_real
+        )
+        gate = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        if (
+            len(observer_split.p90_real) != 2
+            or selected != expected
+            or gate != (True,)
+            or len(LOADED_COMMIT) != 40
+        ):
+            raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
     if p90_real_source_only:
         if len(observer_split.p90_real) != 2:
             raise RuntimeError("P90_REAL_SOURCE_ONLY_BOTH_ACCOUNTS_REQUIRED")
@@ -2861,9 +2881,12 @@ def _run_observer_epoch(
                     epoch_started_at=epoch_started,
                 ),
             )
-        if p90_real_source_only:
-            # This is a REAL source-epoch diagnostic, not PAPER simulation and
-            # never a replacement for account-scoped Exit execution readiness.
+        if p90_real_source_only or p90_real_live:
+            # Both paths start only from a genuinely live WS epoch and two
+            # independently signed FLAT MAIN/SUB inventories. A reconnect
+            # with exposure MUST fail closed; it cannot silently reseed
+            # missed native exits from OHLC or pretend that source continuity
+            # survived process restart.
             from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
                 P90L90ObserverRealConsumer,
             )
@@ -2909,27 +2932,148 @@ def _run_observer_epoch(
                         "P90_REAL_SOURCE_ONLY_EXECUTION_PERMISSION_DRIFT"
                     )
 
-            p90_consumer = P90L90ObserverRealConsumer(
-                connection,
-                bundles=observer_split.p90_real,
-                source_commit=LOADED_COMMIT,
-                source_epoch_id=source_epoch_id,
-                producer_release_commit=LOADED_COMMIT,
-                provenance=FrozenPolicy.from_mapping({
-                    "source": "p90_real_native_source_only_no_orders",
-                    "source_commit": LOADED_COMMIT,
-                    "data_lineage_id": source_epoch_id,
-                    "observer_epoch_id": epoch_id,
-                }),
-                admission_provider=lambda _symbol, _at: ((), False),
-                verified_exit_tick_port=lambda _fact, _cursor: (
-                    require_no_real_exposure()
-                ),
-                verified_closed_candle_port=lambda _fact: (
-                    require_no_real_exposure()
-                ),
-                no_order_source_diagnostic=True,
-            )
+            if p90_real_source_only:
+                p90_consumer = P90L90ObserverRealConsumer(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    source_epoch_id=source_epoch_id,
+                    producer_release_commit=LOADED_COMMIT,
+                    provenance=FrozenPolicy.from_mapping({
+                        "source": "p90_real_native_source_only_no_orders",
+                        "source_commit": LOADED_COMMIT,
+                        "data_lineage_id": source_epoch_id,
+                        "observer_epoch_id": epoch_id,
+                    }),
+                    admission_provider=lambda _symbol, _at: ((), False),
+                    verified_exit_tick_port=lambda _fact, _cursor: (
+                        require_no_real_exposure()
+                    ),
+                    verified_closed_candle_port=lambda _fact: (
+                        require_no_real_exposure()
+                    ),
+                    no_order_source_diagnostic=True,
+                )
+            else:
+                from bybit_workbench.universal_entry.p90l90_real_account_routes import (
+                    read_p90_real_account_routes,
+                )
+                from bybit_workbench.universal_entry.p90l90_real_observer_runtime import (
+                    assemble_p90_real_observer_runtime,
+                )
+                from bybit_workbench.universal_entry.p90l90_real_shared_candle_ledger import (
+                    P90RealSharedCandleLedger,
+                )
+                from bybit_workbench.universal_exit.p90l90_real_private_router import (
+                    P90RealPrivateEvidenceRouter,
+                )
+                from operations.monitoring.p90l90_real_live_source_ports import (
+                    P90RealLiveSourcePorts,
+                )
+                from operations.monitoring.p90l90_real_account_mutation_safety import (
+                    P90RealIndependentMutationSafety,
+                )
+
+                routes = read_p90_real_account_routes(
+                    connection, bundles=observer_split.p90_real,
+                    at=datetime.now(UTC),
+                )
+                source_snapshot = trade_mirror.snapshot()
+                source_ports = P90RealLiveSourcePorts(
+                    connection,
+                    mirror=trade_mirror,
+                    ledger=P90RealSharedCandleLedger(
+                        connection, epoch_id=source_epoch_id,
+                        source_commit=LOADED_COMMIT,
+                    ),
+                    source_epoch_id=source_epoch_id,
+                    source_commit=LOADED_COMMIT,
+                    mirror_serial=source_snapshot["epoch"],
+                    mirror_started_at=datetime.fromisoformat(
+                        str(source_snapshot["epoch_started_at"])
+                    ),
+                )
+                private_router = P90RealPrivateEvidenceRouter(
+                    account_by_strategy=routes.account_by_strategy,
+                    connector_by_strategy=routes.connector_by_strategy,
+                )
+                safety = P90RealIndependentMutationSafety(
+                    connection, source=source_ports,
+                    signed_private=private_router,
+                    account_by_strategy=routes.account_by_strategy,
+                    connector_by_strategy=routes.connector_by_strategy,
+                )
+                real_candidates = _unarmed_multi_account_candidate_bindings(
+                    connection, observer_split.p90_real,
+                    observed_at=datetime.now(UTC),
+                )
+                active_by_symbol = {
+                    symbol: cast(Any, bundle).activation.activation_id
+                    for bundle in observer_split.p90_real
+                    for symbol in cast(Any, bundle).entry_plan.symbols
+                }
+                expected_activation_ids = frozenset(
+                    active_by_symbol.values()
+                )
+                if (
+                    len(active_by_symbol) != 5
+                    or set(real_candidates) != expected_activation_ids
+                    or any(len(refs) != 1 for refs in real_candidates.values())
+                ):
+                    raise RuntimeError(
+                        "P90_REAL_LIVE_EXACT_TWO_ACCOUNT_ENTRY_OWNER_MISSING"
+                    )
+
+                def p90_admitted_account(
+                    symbol: str, at: datetime,
+                ) -> tuple[tuple[AccountAdmissionContext, ...], bool]:
+                    activation = active_by_symbol.get(symbol)
+                    selected = _real_execution_selected_activation_ids(
+                        connection, observer_split.p90_real,
+                    )
+                    if (
+                        activation is None
+                        or selected != expected_activation_ids
+                        or connection.execute(
+                            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+                        ).fetchone() != (True,)
+                    ):
+                        raise RuntimeError(
+                            "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
+                        )
+                    scoped, ready = _multi_account_admissions(
+                        connection,
+                        observer_split.p90_real,
+                        real_candidates,
+                        symbol=symbol,
+                        observed_at=at,
+                        real_selected_for=selected,
+                    )
+                    accounts = scoped.get(activation, ())
+                    return accounts, (
+                        len(accounts) == 1 and activation in ready
+                    )
+
+                runtime = assemble_p90_real_observer_runtime(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    source_epoch_id=source_epoch_id,
+                    producer_release_commit=LOADED_COMMIT,
+                    provenance=FrozenPolicy.from_mapping({
+                        "source": "p90_real_live_original_native_main_sub",
+                        "source_commit": LOADED_COMMIT,
+                        "data_lineage_id": source_epoch_id,
+                        "observer_epoch_id": epoch_id,
+                    }),
+                    observed_at=datetime.now(UTC),
+                    admitted_account=p90_admitted_account,
+                    verified_native_coverage=source_ports.native_coverage,
+                    verified_closed_history=source_ports.closed_history,
+                    verified_closed_continuity=source_ports.closed_continuity,
+                    verified_account_mutation_safety=safety,
+                )
+                p90_consumer = runtime.consumer
             p90_consumer.recover_all()
             # The current Observer is the *only* native MarketSource owner.
             # Private workers can request its bounded postfill window by
@@ -2985,7 +3129,11 @@ def _run_observer_epoch(
                     seen_at=datetime.now(UTC),
                     status="LOADED",
                     payload={
-                        "source": "p90_real_native_source_only_NO_ORDERS",
+                        "source": (
+                            "p90_real_native_source_only_NO_ORDERS"
+                            if p90_real_source_only
+                            else "p90_real_live_original_native_main_sub"
+                        ),
                         "source_commit": LOADED_COMMIT,
                         "source_epoch_id": source_epoch_id,
                     },
@@ -2993,7 +3141,9 @@ def _run_observer_epoch(
         # Subscribe-ACK buffered frames predate the freshly created REAL
         # source epoch. They are not retroactive native Entry/Exit facts.
         # Read only new source frames from the still-live primary socket.
-        buffered_messages = [] if p90_real_source_only else list(buffered)
+        buffered_messages = (
+            [] if p90_real_source_only or p90_real_live else list(buffered)
+        )
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,
             PONG_TIMEOUT_SECONDS,
