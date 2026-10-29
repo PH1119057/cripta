@@ -140,6 +140,74 @@ def _contexts_and_routes(
     return tuple(contexts), routes
 
 
+def prearm_p90l90_real_v3(
+    connection: Any,
+    *,
+    release_commit: str,
+    now: datetime,
+    operator: str,
+    request_id: str,
+    enabled: bool,
+) -> dict[str, object]:
+    """Atomically start/stop both v3 Strategy watchers with trading rights NONE."""
+    current = _owner_time(operator=operator, request_id=request_id, now=now)
+    if _SHA.fullmatch(release_commit) is None:
+        raise ValueError("P90_REAL_RELEASE_COMMIT_INVALID")
+    source = "dashboard:p90l90-real-v3-prearm"
+    with connection.transaction():
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        if enabled:
+            # Static card/readiness is checked against the exact two INACTIVE
+            # cards before the narrow SQL writer changes activation state.
+            rows = connection.execute(
+                """SELECT c.card_json,c.approved_at,c.approved_source
+                     FROM strategy_entry.strategy_cards c
+                    WHERE c.strategy_version=%s
+                      AND c.strategy_id IN (%s,%s)
+                    ORDER BY c.strategy_id""",
+                (VERSION, MAIN_ID, SUB_ID),
+            ).fetchall()
+            if len(rows) != 2:
+                raise ValueError("P90_REAL_PREARM_EXACT_TWO_CARDS_MISSING")
+            from .universal_entry.runtime_loader import strategy_card_from_storage
+
+            for raw, approved_at, approved_source in rows:
+                card = strategy_card_from_storage(
+                    raw, approved_at=approved_at, approved_source=approved_source,
+                )
+                readiness = assess_strategy_runtime_readiness(
+                    card, observer_ready=True,
+                )
+                if not readiness.policy_ready or not readiness.execution_ready:
+                    raise ValueError(
+                        "P90_REAL_PREARM_POLICY_NOT_EXECUTABLE:"
+                        + ",".join(item.code for item in readiness.reasons)
+                    )
+            result = connection.execute(
+                "SELECT strategy_entry.prearm_p90l90_real_v3(%s,%s,%s)",
+                (current, operator, source),
+            ).fetchone()
+            if result != (2,):
+                raise ValueError("P90_REAL_PREARM_WRITE_FAILED")
+            state = "PREARMED_SOURCE_ONLY"
+        else:
+            result = connection.execute(
+                "SELECT strategy_entry.unprearm_p90l90_real_v3(%s,%s,%s)",
+                (current, operator, source),
+            ).fetchone()
+            if result != (2,):
+                raise ValueError("P90_REAL_UNPREARM_WRITE_FAILED")
+            state = "DISABLED"
+    return {
+        "status": state,
+        "strategies": 2,
+        "accounts": 2,
+        "execution_permissions": 0,
+        "gate_enabled": False,
+        "exchange_mutation": False,
+    }
+
+
 def arm_p90l90_real_v3(
     connection: Any,
     *,
@@ -149,8 +217,6 @@ def arm_p90l90_real_v3(
     request_id: str,
     confirmed: bool,
     observer_ready: bool,
-    baseline_ready: bool,
-    baseline_reasons: tuple[str, ...] = (),
 ) -> dict[str, object]:
     """One explicit owner action arms exactly two accounts / five symbols."""
     current = _owner_time(operator=operator, request_id=request_id, now=now)
@@ -158,14 +224,9 @@ def arm_p90l90_real_v3(
         raise ValueError("P90_REAL_OWNER_ARM_NOT_EXPLICITLY_CONFIRMED")
     if not observer_ready:
         raise ValueError("P90_REAL_OBSERVER_NOT_READY")
-    if not baseline_ready:
-        raise ValueError(
-            "P90_REAL_OPERATIONAL_BASELINE_BLOCKED:"
-            + ",".join(baseline_reasons)
-        )
-
     source = "dashboard:p90l90-real-v3"
     with connection.transaction():
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         gate = connection.execute(
             "SELECT enabled FROM control.execution_gates "
             "WHERE mode='mainnet' FOR UPDATE"
@@ -370,6 +431,7 @@ def disarm_p90l90_real_v3(
     current = _owner_time(operator=operator, request_id=request_id, now=now)
     source = "dashboard:p90l90-real-v3"
     with connection.transaction():
+        connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
         gate = connection.execute(
             "SELECT enabled FROM control.execution_gates "
             "WHERE mode='mainnet' FOR UPDATE"
