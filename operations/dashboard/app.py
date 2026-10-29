@@ -48,6 +48,9 @@ from bybit_workbench.p90l90_real_arm_control import (
     disarm_p90l90_real_v3,
     prearm_p90l90_real_v3,
 )
+from bybit_workbench.p90l90_real_prearm_evidence import (
+    prepare_p90l90_real_v3_prearm_evidence,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_V3_VERSION
@@ -4481,10 +4484,16 @@ def _u6_p90_real_v3_arm(
         "dbname=cripta user=cripta host=/var/run/postgresql"
     ) as connection:
         if enabled:
+            now = datetime.now(UTC)
+            prepare_p90l90_real_v3_prearm_evidence(
+                connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=now,
+            )
             result = arm_p90l90_real_v3(
                 connection,
                 release_commit=LOADED_RELEASE_COMMIT,
-                now=datetime.now(UTC),
+                now=now,
                 operator=operator,
                 request_id=request_id,
                 confirmed=True,
