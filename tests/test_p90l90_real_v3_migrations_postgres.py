@@ -3,6 +3,7 @@
 The workflow applies the exact release SQL before this test. No Strategy is
 activated, no LIVE arm is created, and no Exchange operation is possible here.
 """
+
 from __future__ import annotations
 
 import os
