@@ -15,7 +15,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.live_arm_readiness import (
     evaluate_live_arm,
@@ -68,13 +68,15 @@ def _require(condition: bool, reason: str) -> None:
 
 
 def _aware(value: object, label: str) -> datetime:
-    _require(isinstance(value, datetime), label + " timestamp missing")
-    result = value
-    _require(
-        result.tzinfo is not None and result.utcoffset() is not None,
-        label + " timestamp naive",
-    )
-    return result.astimezone(UTC)
+    if not isinstance(value, datetime):
+        raise P90PrearmEvidenceBlocked(
+            "P90 REAL v3 PREARM: " + label + " timestamp missing"
+        )
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise P90PrearmEvidenceBlocked(
+            "P90 REAL v3 PREARM: " + label + " timestamp naive"
+        )
+    return value.astimezone(UTC)
 
 
 def _read_json(path: Path, label: str) -> dict[str, object]:
@@ -84,8 +86,11 @@ def _read_json(path: Path, label: str) -> dict[str, object]:
         raise P90PrearmEvidenceBlocked(
             f"P90 REAL v3 PREARM: {label} unreadable: {exc}"
         ) from exc
-    _require(isinstance(raw, dict), label + " is not an object")
-    return raw
+    if not isinstance(raw, dict):
+        raise P90PrearmEvidenceBlocked(
+            "P90 REAL v3 PREARM: " + label + " is not an object"
+        )
+    return cast(dict[str, object], raw)
 
 
 def _service_active(unit: str) -> None:
@@ -342,14 +347,18 @@ def prepare_p90l90_real_v3_prearm_evidence(
     )
     observer_at = datetime.fromisoformat(str(observer.get("updated_at") or ""))
     _require(observer_at.tzinfo is not None, "observer timestamp invalid")
+    observer_symbols = cast(list[object], observer.get("symbols") or [])
+    observer_entry_plans = cast(list[object], observer.get("active_entry_plans") or [])
+    observer_exit_plans = cast(list[object], observer.get("active_exit_plans") or [])
+    observer_active_strategies = int(str(observer.get("active_strategies") or 0))
     _require(
         observer.get("state") == "RUNNING"
         and observer.get("observer_ready") is True
         and observer.get("source_commit") == release_commit
-        and int(observer.get("active_strategies") or 0) == 2
-        and set(observer.get("symbols") or []) == set().union(*ALLOWED_SYMBOLS.values())
-        and len(observer.get("active_entry_plans") or []) == 2
-        and len(observer.get("active_exit_plans") or []) == 2
+        and observer_active_strategies == 2
+        and set(observer_symbols) == set().union(*ALLOWED_SYMBOLS.values())
+        and len(observer_entry_plans) == 2
+        and len(observer_exit_plans) == 2
         and 0 <= (current - observer_at.astimezone(UTC)).total_seconds() <= 15,
         "source-only observer not exact/fresh",
     )
@@ -366,16 +375,22 @@ def prepare_p90l90_real_v3_prearm_evidence(
         Path(f"/var/lib/cripta/account_position/account-{_SUB_ACCOUNT}/status.json"),
         "SUB account-position status",
     )
+    active_fault_codes = cast(
+        list[object], main_lifecycle.get("active_fault_codes") or []
+    )
     _require(
-        main_lifecycle.get("state") == "RUNNING"
-        and not list(main_lifecycle.get("active_fault_codes") or []),
+        main_lifecycle.get("state") == "RUNNING" and not active_fault_codes,
         "MAIN Lifecycle unhealthy",
     )
-    critical = main_lifecycle.get("critical_delivery")
-    _require(isinstance(critical, dict), "critical delivery status missing")
+    critical_raw = main_lifecycle.get("critical_delivery")
+    if not isinstance(critical_raw, dict):
+        raise P90PrearmEvidenceBlocked(
+            "P90 REAL v3 PREARM: critical delivery status missing"
+        )
+    critical = cast(dict[str, object], critical_raw)
     _require(
         critical.get("configured") is True
-        and int(critical.get("pending_or_unacknowledged") or 0) == 0,
+        and int(str(critical.get("pending_or_unacknowledged") or 0)) == 0,
         "CRITICAL fault delivery is not configured/clear",
     )
     _require(
@@ -463,9 +478,9 @@ def prepare_p90l90_real_v3_prearm_evidence(
     _require(set(bundles) == {MAIN_ID, SUB_ID}, "exact active v3 bundles missing")
     policy_evidence = {sid: _exact_policy(bundle) for sid, bundle in bundles.items()}
     _require(
-        set(observer.get("active_entry_plans") or [])
+        set(observer_entry_plans)
         == {bundle.entry_plan.entry_plan_fingerprint for bundle in bundles.values()}
-        and set(observer.get("active_exit_plans") or [])
+        and set(observer_exit_plans)
         == {bundle.exit_plan.exit_plan_fingerprint for bundle in bundles.values()},
         "observer loaded Plan fingerprints differ from active v3",
     )
@@ -703,13 +718,13 @@ def prepare_p90l90_real_v3_prearm_evidence(
             False,
         ),
     }
-    for code, (evidence, ttl) in global_checks.items():
-        put(code, "GLOBAL", "GLOBAL", evidence, ttl=ttl)
+    for code, (global_evidence, ttl) in global_checks.items():
+        put(code, "GLOBAL", "GLOBAL", global_evidence, ttl=ttl)
 
     for context in contexts:
         bundle = bundles[context.strategy_id]
         policy = policy_evidence[context.strategy_id]
-        for code, evidence in {
+        for code, context_evidence in {
             "EXACT_STRATEGY_ACTIVATION": {
                 "strategy_id": context.strategy_id,
                 "strategy_version": context.strategy_version,
@@ -744,7 +759,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
             },
         }.items():
             scope_type, scope_key = scope_for_check(code, context)
-            put(code, scope_type, scope_key, evidence, ttl=False)
+            put(code, scope_type, scope_key, context_evidence, ttl=False)
 
         pm = position_modes[(context.strategy_id, context.symbol)]
         account = account_evidence[context.strategy_id]
