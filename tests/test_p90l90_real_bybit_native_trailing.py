@@ -4,14 +4,24 @@ No real API, DB, credentials, server or mainnet mutations in these tests.
 """
 from __future__ import annotations
 
+import importlib
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION
-from operations.connectivity import private_runtime as runtime
+
+
+@pytest.fixture
+def runtime(monkeypatch: pytest.MonkeyPatch):
+    # Account-local daemon uses sibling absolute imports on its service PYTHONPATH.
+    # Provide that path only in this isolated, no-order test fixture.
+    service_root = Path(__file__).resolve().parents[1] / "operations/connectivity"
+    monkeypatch.syspath_prepend(str(service_root))
+    return importlib.import_module("operations.connectivity.private_runtime")
 
 
 ACCOUNT = "ta-" + "1" * 32
@@ -42,7 +52,7 @@ def _payload():
 
 @pytest.mark.parametrize("wrong", (None, "0", "0.36", "NaN"))
 def test_real_trailing_ack_alone_never_proves_exchange_protection(
-    monkeypatch: pytest.MonkeyPatch, wrong: str | None,
+    monkeypatch: pytest.MonkeyPatch, wrong: str | None, runtime,
 ) -> None:
     position = _position()
     called = []
@@ -83,7 +93,7 @@ def test_real_trailing_ack_alone_never_proves_exchange_protection(
 
 
 def test_real_trailing_requests_one_native_bybit_arm_and_preserves_tp_sl(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, runtime,
 ) -> None:
     position = _position()
     called = []
