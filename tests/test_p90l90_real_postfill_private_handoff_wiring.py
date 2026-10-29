@@ -78,7 +78,7 @@ def test_generic_reconcile_does_not_erase_signed_first_fill_order_execution_ids(
     module = ast.parse(src)
     reconcile_fn = next(
         node for node in module.body
-        if isinstance(node, ast.FunctionDef) and node.name == "reconcile"
+        if isinstance(node, ast.FunctionDef) and node.name == "reconcile_position_ownership"
     )
     body = ast.get_source_segment(src, reconcile_fn)
     assert body is not None
