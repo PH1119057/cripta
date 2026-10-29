@@ -2949,7 +2949,10 @@ def _run_observer_epoch(
                         "source_epoch_id": source_epoch_id,
                     },
                 )
-        buffered_messages = list(buffered)
+        # Subscribe-ACK buffered frames predate the freshly created REAL
+        # source epoch. They are not retroactive native Entry/Exit facts.
+        # Read only new source frames from the still-live primary socket.
+        buffered_messages = [] if p90_real_source_only else list(buffered)
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,
             PONG_TIMEOUT_SECONDS,
