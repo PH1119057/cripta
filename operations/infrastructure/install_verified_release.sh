@@ -486,6 +486,8 @@ migration_files=(
   # Owner-approved exact P90L90 REAL v3 INACTIVE two-account writer only.
   # Never creates enabled Strategy or bypasses per-account LIVE arm.
   operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
+  # Additive independent REAL-only source-epoch state; never resets old PAPER evidence.
+  operations/sql/20261029_p90l90_real_source_epochs.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
