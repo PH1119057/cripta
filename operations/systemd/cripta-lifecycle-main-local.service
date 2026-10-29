@@ -1,0 +1,44 @@
+# Proposed independent MAIN account-local signed GET-only safety coverage.
+# Existing cripta-lifecycle-supervisor remains the SOLE global alert/arm owner.
+# Do NOT install/start until exact actor/path/systemd/credential contract has
+# been reviewed and release-identity / rollback / pre-arm evidence are PASS.
+# No [Install] stanza: never auto-enable or infer LIVE permission.
+[Unit]
+Description=Cripta independent MAIN account-local Lifecycle/Safety reader
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_WORKER=ENABLED
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_KIND=MAIN
+Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
+Environment=CRIPTA_LIFECYCLE_CREDENTIAL_NAME=bybit-mainnet
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_STATUS_PATH=/var/lib/cripta/lifecycle_account/account-ta-2122c81ecff14f3b85b102db605212f7/status.json
+Environment=CRIPTA_LIFECYCLE_ACCOUNT_POLL_SECONDS=15
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+EnvironmentFile=/etc/cripta/lifecycle-main-local.env
+LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/account_lifecycle_worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/srv/cripta/runtime/current
+ReadWritePaths=/var/lib/cripta/lifecycle_account/account-ta-2122c81ecff14f3b85b102db605212f7
+
+# Intentionally NO [Install] / WantedBy or LIVE/re-arm controls.
