@@ -111,7 +111,7 @@ def read_real_postfill_source_window(
         or not 0 <= (datetime.now(UTC) - covered).total_seconds() <= 5
         or not price.is_finite() or price <= 0
         or not best.is_finite() or best <= 0
-        or not isinstance(refs, list) or not 1 <= len(refs) <= 32
+        or not isinstance(refs, list) or not 1 <= len(refs) <= 256
         or any(
             not isinstance(ref, str)
             or not ref.startswith(f"bybit:publicTrade:{position.symbol}:")

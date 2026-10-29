@@ -108,3 +108,50 @@ def test_source_ipc_request_rejects_fake_position_or_epoch() -> None:
     ):
         with pytest.raises(P90RealPostfillMarketSourceUnverified):
             checked_request({**data, **changed}, source_epoch_id=EPOCH)
+
+
+def test_busy_liquid_market_keeps_all_native_exec_ids_below_ipc_frame_limit() -> None:
+    """64 real source trades cannot be discarded by a 32-ref transport cap."""
+    mirror, pos, now = _market(trades=0)
+    for i in range(64):
+        market_at = now - timedelta(microseconds=160_000 - i * 1000)
+        mirror.record_message({
+            "topic": "publicTrade.LTCUSDT",
+            "data": [{
+                "s": "LTCUSDT", "i": f"burst-{i}",
+                "seq": 1000 + i, "T": int(market_at.timestamp() * 1000),
+                "S": "Buy", "p": "100.01", "v": "0.01",
+            }],
+        }, received_at=market_at)
+    result = build_source_window(
+        mirror=mirror, position=pos, source_commit=SHA,
+        source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=now,
+    )
+    assert len(result.source_refs) == 64
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import _frame
+    from operations.monitoring.p90l90_real_postfill_source_broker import (
+        window_to_wire,
+    )
+    assert len(_frame({"window": window_to_wire(result)})) < 32768
+
+
+def test_native_window_explicitly_bounds_high_density_burst() -> None:
+    mirror, pos, now = _market(trades=0)
+    for i in range(257):
+        market_at = now - timedelta(microseconds=200_000 - i * 500)
+        mirror.record_message({
+            "topic": "publicTrade.LTCUSDT",
+            "data": [{
+                "s": "LTCUSDT", "i": f"heavy-{i}",
+                "seq": 2000 + i, "T": int(market_at.timestamp() * 1000),
+                "S": "Buy", "p": "100.01", "v": "0.01",
+            }],
+        }, received_at=market_at)
+    with pytest.raises(
+        P90RealPostfillMarketSourceUnverified,
+        match="EPOCH_RACE_OR_UNBOUNDED",
+    ):
+        build_source_window(
+            mirror=mirror, position=pos, source_commit=SHA,
+            source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=now,
+        )
