@@ -3178,7 +3178,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         kind in {"entry", "initial_protection", "break_even", "current_stop", "trailing_stop"}
         or (
             kind == "strategy_exit"
-            and str(payload.get("action_kind") or "") in {"SET_TP", "SET_STOP", "SET_PROTECTION", "SET_TRAILING"}
+            and str(payload.get("action_kind") or "") in {
+                "SET_TP", "SET_STOP", "SET_PROTECTION", "SET_TRAILING",
+            }
         )
     )
     if protection_mutation:
