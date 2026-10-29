@@ -20,7 +20,7 @@ from bybit_workbench.market_data.shared_closed_candles import (
 from .p90l90_atomic_real_epoch_checkpoint import (
     P90L90AtomicRealEpochCheckpointStore,
 )
-from .p90l90_causal import P90L90CausalEntry, causal_entry_state
+from .p90l90_causal import P90L90CausalEntry, P90L90EntryState, causal_entry_state
 
 _SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 _ACCOUNTS = frozenset((
@@ -204,7 +204,7 @@ def start_p90_real_source_epoch(
         len(keys) == 5 and {k[3] for k in keys} == _SYMBOLS,
         "FIVE_CANONICAL_MARKET_INSTRUMENTS_MISSING",
     )
-    ready: dict[str, tuple[datetime, datetime, object]] = {}
+    ready: dict[str, tuple[datetime, datetime, P90L90EntryState | None]] = {}
     for source_id, venue, instrument, symbol, product in keys:
         key5 = MarketCandleKey(source_id, venue, instrument, symbol, product, "5")
         key15 = MarketCandleKey(source_id, venue, instrument, symbol, product, "15")
