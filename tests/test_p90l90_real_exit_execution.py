@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from test_p90l90_real_observation import _observation, _scope
@@ -227,10 +228,6 @@ def test_unmaterializable_non_decision_is_not_a_command(monkeypatch) -> None:
 
 
 def test_real_native_trade_requires_execution_sink_before_decision_persistence() -> None:
-    from datetime import timedelta
-    from decimal import Decimal
-    from types import SimpleNamespace
-
     from bybit_workbench.universal_entry.contracts import (
         FrozenPolicy, MarketFactEnvelope,
     )
@@ -265,7 +262,7 @@ def test_real_native_trade_requires_execution_sink_before_decision_persistence()
     with pytest.raises(
         P90RealMfeUnverified, match="EXECUTION_OWNER_MISSING"
     ):
-        port(trade)
+        port(trade, cursor)
     assert observed == []
     port = P90RealExitNativePort(
         **common,
@@ -273,7 +270,7 @@ def test_real_native_trade_requires_execution_sink_before_decision_persistence()
             "dispatch"
         ),
     )
-    result = port(trade)
+    result = port(trade, cursor)
     assert len(result) == 1
     assert result[0].status is ExitEvaluationStatus.DECISION_CREATED
     assert observed == ["record", "dispatch"]
