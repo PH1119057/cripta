@@ -7,7 +7,7 @@ missing stop/TP, select a Strategy, or authorize LIVE.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
@@ -92,7 +92,8 @@ def verify_p90_real_exchange_mutation(
         or str(payload.get("direction") or "")
         != ("LONG" if position.get("side") == "Buy" else "SHORT")
         or action_kind not in {
-            ExitActionKind.SET_STOP, ExitActionKind.SET_TP, ExitActionKind.CLOSE,
+            ExitActionKind.SET_STOP, ExitActionKind.SET_TP,
+            ExitActionKind.SET_TRAILING, ExitActionKind.CLOSE,
         }
     ):
         raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_ACCOUNT_POSITION_MISMATCH")
@@ -123,6 +124,44 @@ def verify_p90_real_exchange_mutation(
             or not (live_stop < requested < mark if long else mark < requested < live_stop)
         ):
             raise P90RealExchangeSafetyBlock("P90_REAL_EXIT_STOP_MUST_TIGHTEN")
+    elif action_kind is ExitActionKind.SET_TRAILING:
+        # The autonomous trailingStop is a PRICE DISTANCE on Bybit. The
+        # strategy's 0.35pp refers to actual average fill, not current mark.
+        # Require an exact signed zero -> single arm; never re-arm, downgrade
+        # to repeated SET_STOP or infer absent signed inventory as zero.
+        try:
+            old = Decimal(str(position.get("trailingStop")))
+        except (ValueError, TypeError, InvalidOperation):
+            raise P90RealExchangeSafetyBlock(
+                "P90_REAL_EXIT_TRAILING_INVENTORY_MISSING"
+            ) from None
+        if not old.is_finite() or old != 0:
+            raise P90RealExchangeSafetyBlock(
+                "P90_REAL_EXIT_TRAILING_ALREADY_INSTALLED_OR_DRIFTED"
+            )
+        distance = _positive(mutation.get("distance"), "TRAILING_DISTANCE")
+        active = _positive(mutation.get("active_price"), "TRAILING_ACTIVE_PRICE")
+        expected_distance = (
+            (actual_fill * Decimal("0.0035") / tick).to_integral_value(
+                rounding=ROUND_FLOOR
+            ) * tick
+        )
+        expected_active = (
+            (actual_fill * (Decimal("1.005") if long else Decimal("0.995")) / tick)
+            .to_integral_value(rounding=ROUND_CEILING if long else ROUND_FLOOR) * tick
+        )
+        if (
+            mutation.get("tpsl_mode") != "Full"
+            or distance <= 0
+            or distance != expected_distance
+            or active != expected_active
+            or (mark >= active if long else mark <= active)
+            or (live_stop >= active - distance if long
+                else live_stop <= active + distance)
+        ):
+            raise P90RealExchangeSafetyBlock(
+                "P90_REAL_EXIT_BYBIT_TRAILING_ARM_NOT_EXACT_OR_LATE"
+            )
     elif action_kind is ExitActionKind.SET_TP:
         requested = _positive(mutation.get("take_profit_price"), "NEW_TP")
         if (
