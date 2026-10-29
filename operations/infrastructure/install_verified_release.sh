@@ -483,6 +483,9 @@ migration_files=(
   operations/sql/20261028_p90l90_data_lineage_compatibility.sql
   # One strategy-agnostic cache owner for verified closed OHLCV, independent of TradingAccount.
   operations/sql/20261028_shared_closed_candle_source.sql
+  # Owner-approved exact P90L90 REAL v3 INACTIVE two-account writer only.
+  # Never creates enabled Strategy or bypasses per-account LIVE arm.
+  operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
