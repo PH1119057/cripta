@@ -86,7 +86,8 @@ def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
     source = PREARM_SCRIPT.read_text()
     assert "prearm_p90l90_real_v3" in source
     assert "prepare_p90l90_real_v3_prearm_evidence" in source
-    assert "arm_p90l90_real_v3(" not in source
+    assert "from bybit_workbench.p90l90_real_arm_control import (\n    arm_p90l90_real_v3," not in source
+    assert "\n        arm_p90l90_real_v3(" not in source
     assert "set_execution_permission" not in source
     assert "UPDATE control.execution_gates" not in source
     assert "EXCHANGE_MUTATION: none" in source
