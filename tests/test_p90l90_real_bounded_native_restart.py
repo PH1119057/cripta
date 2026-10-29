@@ -8,6 +8,7 @@ import pytest
 from bybit_workbench.universal_entry.p90l90_real_bounded_native_restart import (
     P90RealNativeRestartUnverified,
     attest_bounded_native_restart,
+    resolve_durable_restart_anchor,
 )
 from bybit_workbench.universal_entry.trade_mirror import PublicTradeMirrorBuffer
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
@@ -122,3 +123,44 @@ def test_same_durable_and_live_anchor_has_empty_but_verified_suffix():
     case["latest_rest_rows"] = [_row(NEW)]
     result = attest_bounded_native_restart(**case)
     assert result.trades == ()
+
+
+
+def test_durable_same_sequence_exec_ids_are_all_preserved_across_restart():
+    peer = TradeCursor(
+        symbol=OLD.symbol, exec_id="bybit-old-peer-101",
+        seq=OLD.seq, traded_at=OLD.traded_at - timedelta(milliseconds=1),
+    )
+    rows = [_row(NEW), _row(TradeCursor(
+        symbol=OLD.symbol, exec_id="gap-102", seq=102,
+        traded_at=AT + timedelta(seconds=1),
+    )), _row(OLD), _row(peer)]
+    anchor = resolve_durable_restart_anchor(
+        symbol=OLD.symbol,
+        last_sequence=OLD.seq,
+        last_event_at=OLD.traded_at,
+        last_exec_ids=(peer.exec_id, OLD.exec_id),
+        latest_rest_rows=rows,
+    )
+    assert anchor == OLD
+    case = _case()
+    case["durable_anchor"] = anchor
+    case["latest_rest_rows"] = rows
+    case["durable_exec_ids"] = (peer.exec_id, OLD.exec_id)
+    result = attest_bounded_native_restart(**case)
+    assert [item.exec_id for item in result.trades] == ["gap-102", NEW.exec_id]
+
+
+def test_evicted_durable_same_sequence_peer_blocks_restart():
+    rows = _case()["latest_rest_rows"]
+    with pytest.raises(
+        P90RealNativeRestartUnverified,
+        match="SAME_SEQUENCE_IDS_EVICTED",
+    ):
+        resolve_durable_restart_anchor(
+            symbol=OLD.symbol,
+            last_sequence=OLD.seq,
+            last_event_at=OLD.traded_at,
+            last_exec_ids=(OLD.exec_id, "missing-old-peer"),
+            latest_rest_rows=rows,
+        )
