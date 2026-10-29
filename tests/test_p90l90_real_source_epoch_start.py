@@ -63,7 +63,7 @@ class _DB:
 
 
 def _ready():
-    now = datetime.now(UTC).replace(second=2, microsecond=0)
+    now = datetime.now(UTC)
     started = now - timedelta(seconds=3)
     mirror = now - timedelta(seconds=2)
     subscribed = now - timedelta(seconds=1)
