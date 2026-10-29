@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from bybit_workbench.universal_entry import p90l90_real_source_epoch_start as module
+
 ALL = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 MAIN = "ta-2122c81ecff14f3b85b102db605212f7"
 SUB = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -84,6 +85,14 @@ def _ready():
     return proof, main, sub, mirror, now
 
 
+def _command_evidence(db, accounts, at):
+    return module.P90RealNoPendingRuntimeCommandEvidence(
+        account_ids=accounts, checked_at=at,
+        open_command_count=0,
+        source_ref="runtime:account-scoped-command-ledger:source-transaction",
+    )
+
+
 def _stub(monkeypatch):
     seeded = []
     def geometry(_fives, _fifteens, *, effective_at):
@@ -114,7 +123,9 @@ def test_fresh_five_symbol_epoch_uses_only_shared_candle_source_and_new_rows(
     db = _DB()
     epoch_id = module.start_p90_real_source_epoch(
         db, source_commit=SHA, source=source,
-        signed_accounts=(main, sub), mirror_ready_at=mirror,
+        signed_accounts=(main, sub),
+        independently_checked_runtime_commands=_command_evidence,
+        mirror_ready_at=mirror,
         new_epoch_requested_at=now,
     )
     assert epoch_id.startswith("p90-real-epoch-")
@@ -173,7 +184,9 @@ def test_source_epoch_denies_incomplete_market_or_account_evidence(
     with pytest.raises(module.P90RealEpochStartUnverified):
         module.start_p90_real_source_epoch(
             db, source_commit=SHA, source=source,
-            signed_accounts=accounts, mirror_ready_at=mirror,
+            signed_accounts=accounts,
+            independently_checked_runtime_commands=_command_evidence,
+            mirror_ready_at=mirror,
             new_epoch_requested_at=now,
         )
     assert seeded == []
