@@ -17,7 +17,12 @@ def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
     assert "control.disarm_p90l90_real_v3_account_scopes" in sql
     assert "OWNER TO cripta_p90l90_real_v3_control" in sql
     assert "GRANT EXECUTE ON FUNCTION" in sql
-    assert "has_table_privilege(\n       'cripta','control.account_live_arm_sessions','INSERT'\n     )" in sql
+    assert (
+        "has_table_privilege(\\n"
+        "       'cripta','control.account_live_arm_sessions','INSERT'\\n"
+        "     )"
+        in sql
+    )
     assert "UPDATE control.execution_gates" not in sql
     assert "INSERT INTO control.execution_gate_events" not in sql
 
