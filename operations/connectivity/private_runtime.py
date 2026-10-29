@@ -2325,7 +2325,42 @@ def _execute_universal_exit_command(
                 Decimal(str(mutation["active_price"])), tick, "trailing active_price"
             )
             params["activePrice"] = str(active)
-        return api_post("/v5/position/trading-stop", params, key, secret)
+        # Bybit ACK is NOT evidence that the autonomous trailing exists.
+        # An ambiguous response must block retries and trigger reconciliation.
+        accepted = api_post("/v5/position/trading-stop", params, key, secret)
+        try:
+            after, _ = api_get(
+                "/v5/position/list",
+                {"category": "linear", "symbol": symbol}, key, secret,
+            )
+            _require_entry_bybit_read_ok(after, "/v5/position/list")
+            items = (after.get("result") or {}).get("list")
+            if not isinstance(items, list):
+                raise ValueError("trailing signed inventory missing")
+            current = [
+                item for item in items
+                if isinstance(item, dict)
+                and item.get("symbol") == symbol
+                and str(item.get("positionIdx")) == str(position_idx)
+                and Decimal(str(item.get("size") or "0")) > 0
+            ]
+            if len(current) != 1:
+                raise ValueError("trailing live position missing or ambiguous")
+            verified = current[0]
+            if (
+                str(verified.get("side")) != str(position.get("side"))
+                or Decimal(str(verified.get("size"))) != Decimal(str(position.get("size")))
+                or Decimal(str(verified.get("avgPrice"))) != Decimal(str(position.get("avgPrice")))
+                or Decimal(str(verified.get("stopLoss"))) != Decimal(str(position.get("stopLoss")))
+                or Decimal(str(verified.get("takeProfit"))) != Decimal(str(position.get("takeProfit")))
+                or Decimal(str(verified.get("trailingStop"))) != distance
+            ):
+                raise ValueError("trailing readback or existing TP/SL drift")
+        except Exception as exc:
+            raise ExchangeMutationBarrier(
+                "P90 REAL Bybit trailing ACK requires signed Exchange reconciliation"
+            ) from exc
+        return accepted
 
     current_qty = Decimal(str(position.get("size") or 0))
     if action_kind is ExitActionKind.REDUCE:
@@ -3139,7 +3174,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         kind in {"entry", "initial_protection", "break_even", "current_stop", "trailing_stop"}
         or (
             kind == "strategy_exit"
-            and str(payload.get("action_kind") or "") in {"SET_TP", "SET_STOP", "SET_PROTECTION"}
+            and str(payload.get("action_kind") or "") in {"SET_TP", "SET_STOP", "SET_PROTECTION", "SET_TRAILING"}
         )
     )
     if protection_mutation:
