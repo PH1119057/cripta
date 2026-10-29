@@ -71,6 +71,9 @@ def test_both_real_exit_event_types_share_exact_one_postgres_account_owner() -> 
     )
     assert ports.on_native_trade._execution_port is ports.execution
     assert ports.on_closed_5m._execution_port is ports.execution
+    assert ports.on_postfill._execution_port is ports.execution
+    assert ports.on_postfill._positions is ports.position_provider
+    assert ports.on_postfill._exit_store is ports.on_native_trade._exit_store
     assert ports.execution._db is db
     assert ports.mfe_ledger._db is db
     assert ports.position_provider._connection is db
