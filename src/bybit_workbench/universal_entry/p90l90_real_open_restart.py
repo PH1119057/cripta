@@ -12,10 +12,11 @@ proof performed after this inventory certificate.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
-from typing import Any, Mapping
+from typing import Any
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, TradeDirection
