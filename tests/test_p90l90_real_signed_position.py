@@ -75,6 +75,7 @@ class _Bybit:
             "symbol": self.symbol, "side": "Buy", "positionIdx": 0,
             "avgPrice": "100", "size": "0.1",
             "stopLoss": "90", "takeProfit": "110", "markPrice": "101",
+            "trailingStop": "0",
         }
 
     def get(self, endpoint: str, params: dict[str, str]) -> dict[str, object]:
