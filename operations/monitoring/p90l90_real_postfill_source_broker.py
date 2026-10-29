@@ -112,7 +112,6 @@ def build_source_window(
         or before["epoch"] != after["epoch"]
         or before["epoch_started_at"] != after["epoch_started_at"]
         or before["gaps"] != 0 or after["gaps"] != 0
-        or not events
         or len(events) > 256
     ):
         raise P90RealPostfillMarketSourceUnverified(
