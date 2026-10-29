@@ -7,7 +7,6 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from psycopg.pq import TransactionStatus
 from test_p90l90_real_observation import _observation, _scope
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
@@ -33,10 +32,8 @@ class _DB:
     @property
     def info(self):
         return SimpleNamespace(
-            transaction_status=(
-                TransactionStatus.INTRANS
-                if self.outer_source_transaction_active
-                else TransactionStatus.IDLE
+            transaction_status=SimpleNamespace(
+                name="INTRANS" if self.outer_source_transaction_active else "IDLE"
             ),
         )
 
