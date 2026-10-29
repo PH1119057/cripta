@@ -151,8 +151,10 @@ def test_real_gap_cannot_borrow_paper_ohlc_only_replay_even_without_exposure() -
 
 
 class _CountDB:
-    def __init__(self, *, exposed: int = 0, pending: int = 0) -> None:
-        self._answers = [exposed, pending]
+    def __init__(
+        self, *, exposed: int = 0, pending: int = 0, pending_exit: int = 0,
+    ) -> None:
+        self._answers = [exposed, pending, pending_exit]
         self.reads = 0
 
     def execute(self, sql: str, params: object = ()) -> object:
@@ -186,7 +188,7 @@ def test_real_exact_two_symbol_zero_gap_needs_no_ohlc_paper_replay() -> None:
     consumer = _recovered_real(db=db)
     targets = dict(consumer._verified_closed_watermarks)
     assert consumer.catch_up_closed_histories(targets) == 0
-    assert db.reads == 2
+    assert db.reads == 3
     assert consumer._gap_recovery_poisoned is False
 
 
@@ -212,11 +214,16 @@ def test_real_candle_gap_does_not_look_like_proven_native_history(
         consumer.catch_up_closed_histories(targets)
 
 
-@pytest.mark.parametrize(("exposed", "pending"), ((1, 0), (0, 1)))
+@pytest.mark.parametrize(
+    ("exposed", "pending", "pending_exit"),
+    ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+)
 def test_real_restart_with_open_position_or_unowned_command_cannot_fast_forward(
-    exposed: int, pending: int,
+    exposed: int, pending: int, pending_exit: int,
 ) -> None:
-    consumer = _recovered_real(db=_CountDB(exposed=exposed, pending=pending))
+    consumer = _recovered_real(db=_CountDB(
+        exposed=exposed, pending=pending, pending_exit=pending_exit,
+    ))
     with pytest.raises(RuntimeError, match="GAP_WITH_EXPOSURE_OR_PENDING_ORDER"):
         consumer.catch_up_closed_histories(
             dict(consumer._verified_closed_watermarks)
