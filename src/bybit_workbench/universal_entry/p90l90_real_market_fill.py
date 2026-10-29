@@ -108,6 +108,7 @@ def exact_market_order_execution_ids(
             "P90_REAL_MARKET_FILL_ORDER_OR_INVENTORY_INVALID"
         )
     identifiers: set[str] = set()
+    ordered_ids: list[tuple[int, str]] = []
     quantity = Decimal("0")
     notional = Decimal("0")
     for execution in executions:
@@ -149,10 +150,11 @@ def exact_market_order_execution_ids(
             raise P90RealMarketPositionUnverified(
                 "P90_REAL_MARKET_FILL_DETAILS_INVALID"
             )
+        ordered_ids.append((at_ms, execution_id))
         quantity += filled
         notional += filled * price
     if quantity != position_size or abs(notional / quantity - position_avg) > tick_size:
         raise P90RealMarketPositionUnverified(
             "P90_REAL_MARKET_FILL_EXECUTION_POSITION_MISMATCH"
         )
-    return tuple(sorted(identifiers))
+    return tuple(exec_id for _, exec_id in sorted(ordered_ids))
