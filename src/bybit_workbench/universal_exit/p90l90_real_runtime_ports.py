@@ -39,6 +39,7 @@ from .p90l90_real_exit_port import (
 )
 from .p90l90_real_mfe_ledger import P90RealMfeLedger
 from .p90l90_real_position_provider import P90RealPositionProvider
+from .p90l90_real_postfill_port import P90RealPostfillExitPort
 from .p90l90_real_private_router import P90RealPrivateEvidenceRouter
 from .storage import PostgresExitShadowStore
 
@@ -57,6 +58,7 @@ class P90RealExitRuntimePorts:
     execution: P90RealExitExecutionPort
     on_native_trade: P90RealExitNativePort
     on_closed_5m: P90RealClosedExitPort
+    on_postfill: P90RealPostfillExitPort
 
     # Constructing this value does NOT authorize a live Observer epoch.
 
@@ -134,6 +136,12 @@ def assemble_p90_real_exit_runtime(
         exit_store=store,
         verified_execution_port=execution,
     )
+    postfill = P90RealPostfillExitPort(
+        connection,
+        position_provider=positions,
+        exit_store=store,
+        execution_port=execution,
+    )
     return P90RealExitRuntimePorts(
         position_provider=positions,
         private_evidence=private,
@@ -141,6 +149,7 @@ def assemble_p90_real_exit_runtime(
         execution=execution,
         on_native_trade=native,
         on_closed_5m=closed,
+        on_postfill=postfill,
     )
 
 
