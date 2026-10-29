@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 
 from operations.monitoring import p90l90_real_source_bootstrap as source
-
-AT = datetime.now(UTC)
-
 
 class FakeMirror:
     def __init__(self):
@@ -20,7 +16,7 @@ class FakeMirror:
         return {
             "state": self.state,
             "epoch": self.generation,
-            "epoch_started_at": (AT - timedelta(seconds=2)).isoformat(),
+            "epoch_started_at": (datetime.now(UTC) - timedelta(seconds=2)).isoformat(),
             "gaps": 0,
         }
 
@@ -52,6 +48,7 @@ def _invoke(monkeypatch, *, mirror=None, db=None, source_func=None):
 
     mirror = mirror or FakeMirror()
     db = db or FakeConnection()
+    now = datetime.now(UTC)
     requests = []
     monkeypatch.setattr(
         source, "read_p90_real_account_routes",
@@ -76,9 +73,9 @@ def _invoke(monkeypatch, *, mirror=None, db=None, source_func=None):
             "LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT",
         )),
         subscribed_intervals=frozenset(("5", "15", "60")),
-        subscribed_local_at=AT,
-        subscribed_server_at=AT,
-        epoch_started_at=AT - timedelta(seconds=3),
+        subscribed_local_at=now,
+        subscribed_server_at=now,
+        epoch_started_at=now - timedelta(seconds=3),
     )
     return result, db, requests
 
@@ -133,6 +130,7 @@ def test_missing_private_account_proof_uses_no_source_transaction(monkeypatch):
         raise RuntimeError("private SUB missing")
 
     monkeypatch.setattr(source, "read_p90_real_signed_flat_accounts", unavailable)
+    now = datetime.now(UTC)
     with pytest.raises(RuntimeError, match="private SUB missing"):
         source.start_current_p90_real_observer_epoch(
             db, bundles=(object(), object()), source_commit="b" * 40,
@@ -141,8 +139,8 @@ def test_missing_private_account_proof_uses_no_source_transaction(monkeypatch):
                 "LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT",
             )),
             subscribed_intervals=frozenset(("5", "15")),
-            subscribed_local_at=AT,
-            subscribed_server_at=AT,
-            epoch_started_at=AT - timedelta(seconds=3),
+            subscribed_local_at=now,
+            subscribed_server_at=now,
+            epoch_started_at=now - timedelta(seconds=3),
         )
     assert db.trace == []
