@@ -2357,6 +2357,8 @@ def _run_observer_epoch(
         name="universal-entry-observer-public-trade-mirror",
         daemon=True,
     )
+    real_source_broker_stop = threading.Event()
+    real_source_broker_thread: threading.Thread | None = None
     oi_thread = threading.Thread(
         target=_run_rest_oi30s_worker,
         args=(oi_config, oi_results, oi_stop),
@@ -2929,6 +2931,44 @@ def _run_observer_epoch(
                 no_order_source_diagnostic=True,
             )
             p90_consumer.recover_all()
+            # The current Observer is the *only* native MarketSource owner.
+            # Private workers can request its bounded postfill window by
+            # durable position ID; no Exchange key/POST reaches this process.
+            from operations.monitoring.p90l90_real_postfill_source_broker import (
+                read_exact_source_position,
+                serve_source_windows,
+            )
+
+            source_broker_ready = threading.Event()
+            real_source_broker_thread = threading.Thread(
+                target=serve_source_windows,
+                kwargs={
+                    "mirror": trade_mirror,
+                    "source_commit": LOADED_COMMIT,
+                    "source_epoch_id": source_epoch_id,
+                    "read_position": (
+                        lambda position_id, account, symbol:
+                        read_exact_source_position(
+                            database_dsn=DATABASE_DSN,
+                            source_epoch_id=source_epoch_id,
+                            source_commit=LOADED_COMMIT,
+                            position_id=position_id,
+                            trading_account_id=account,
+                            symbol=symbol,
+                        )
+                    ),
+                    "running": lambda: not real_source_broker_stop.is_set(),
+                    "ready": source_broker_ready.set,
+                },
+                name="p90-real-native-postfill-market-source",
+                daemon=True,
+            )
+            real_source_broker_thread.start()
+            if (
+                not source_broker_ready.wait(timeout=3.0)
+                or not real_source_broker_thread.is_alive()
+            ):
+                raise RuntimeError("P90_REAL_POSTFILL_SOURCE_BROKER_NOT_BOUND")
             for symbol in p90l90_symbols:
                 watermarks = p90_consumer._archive.restart_watermarks(symbol)
                 closed_boundaries[(symbol, "5")] = watermarks["5"]
@@ -3111,6 +3151,9 @@ def _run_observer_epoch(
                 next_status = now_mono + 2.0
         return "STOP"
     finally:
+        real_source_broker_stop.set()
+        if real_source_broker_thread is not None:
+            real_source_broker_thread.join(timeout=2.0)
         oi_stop.set()
         if oi_thread.ident is not None:
             oi_thread.join(timeout=2.0)
