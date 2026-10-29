@@ -16,6 +16,7 @@ def _args():
     return {
         "bundles": (object(), object()),
         "source_commit": "a" * 40,
+        "source_epoch_id": "p90-real-epoch-" + "e" * 40,
         "provenance": FrozenPolicy.from_mapping({"source": "real-test"}),
         "observed_at": AT,
         "admitted_account": lambda symbol, now: ((), False),
