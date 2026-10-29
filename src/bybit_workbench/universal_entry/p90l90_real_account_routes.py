@@ -193,3 +193,68 @@ def read_p90_real_account_routes(
             "P90_REAL_ACCOUNT_ROUTE_MAIN_SUB_IDENTITY_COLLISION"
         )
     return P90RealAccountRoutes(main=main, sub=sub)
+
+
+def read_p90_real_signed_flat_accounts(
+    routes: P90RealAccountRoutes, *, at: datetime,
+) -> tuple["P90RealSignedFlatAccount", "P90RealSignedFlatAccount"]:
+    """Use BOTH actual credential-local private workers, not DB roster alone.
+
+    A signed zero-position/zero-order response and current private WS epoch
+    are required independently for MAIN and SUB. The data remains only a
+    source-start input: it does not open a REAL epoch or grant trading rights.
+    """
+    from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+        P90RealSignedFlatAccount,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        P90PrivateProofClient,
+    )
+
+    if (
+        not isinstance(routes, P90RealAccountRoutes)
+        or at.tzinfo is None or at.utcoffset() is None
+        or routes.main.strategy_id != MAIN_ID
+        or routes.sub.strategy_id != SUB_ID
+        or routes.main.trading_account_id == routes.sub.trading_account_id
+        or routes.main.account_connector_id == routes.sub.account_connector_id
+    ):
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_MAIN_SUB_ROSTER_INVALID"
+        )
+    proofs: list[P90RealSignedFlatAccount] = []
+    for route in (routes.main, routes.sub):
+        try:
+            proof = P90PrivateProofClient(
+                account=route.trading_account_id,
+                connector=route.account_connector_id,
+                timeout_seconds=3.0,
+            ).read_flat_account()
+        except Exception:
+            raise P90RealAccountRoutesUnverified(
+                "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
+            ) from None
+        if (
+            not isinstance(proof, P90RealSignedFlatAccount)
+            or proof.trading_account_id != route.trading_account_id
+            or proof.signed_uid != route.registered_exchange_uid
+            or not proof.private_generation_id
+            or proof.source_ref != "bybit:signed-flat-linear-usdt:exact-account"
+            or (proof.open_positions, proof.open_orders, proof.pending_commands)
+            != (0, 0, 0)
+            or proof.observed_at.tzinfo is None
+            or proof.observed_at.utcoffset() is None
+            or not 0 <= (at.astimezone(UTC) - proof.observed_at).total_seconds() <= 15
+        ):
+            raise P90RealAccountRoutesUnverified(
+                "P90_REAL_FLAT_ACCOUNT_SIGNED_SCOPE_MISMATCH"
+            )
+        proofs.append(proof)
+    if (
+        proofs[0].signed_uid == proofs[1].signed_uid
+        or proofs[0].private_generation_id == proofs[1].private_generation_id
+    ):
+        raise P90RealAccountRoutesUnverified(
+            "P90_REAL_FLAT_MAIN_SUB_PROOF_COLLISION"
+        )
+    return proofs[0], proofs[1]

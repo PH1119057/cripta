@@ -11,6 +11,7 @@ from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     P90RealAccountRoutes,
     P90RealAccountRoutesUnverified,
     read_p90_real_account_routes,
+    read_p90_real_signed_flat_accounts,
 )
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
@@ -188,3 +189,93 @@ def test_invalid_or_naive_event_time_prevents_any_db_query() -> None:
             db, bundles=BUNDLES, at=AT.replace(tzinfo=None),
         )
     assert not db.calls
+
+
+def test_flat_roster_requests_two_credential_local_proofs(monkeypatch) -> None:
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+        P90RealSignedFlatAccount,
+    )
+    from bybit_workbench.universal_exit import p90l90_real_private_ipc as ipc
+
+    at = datetime.now(UTC)
+    routes = read_p90_real_account_routes(_DB(), bundles=BUNDLES, at=at)
+    calls = []
+
+    class FakeClient:
+        def __init__(self, *, account, connector, timeout_seconds):
+            calls.append((account, connector, timeout_seconds))
+            self.account = account
+
+        def read_flat_account(self):
+            is_main = self.account == MAIN
+            return P90RealSignedFlatAccount(
+                trading_account_id=self.account,
+                signed_uid="101" if is_main else "202",
+                private_generation_id="generation-main" if is_main else "generation-sub",
+                source_ref="bybit:signed-flat-linear-usdt:exact-account",
+                observed_at=at - timedelta(seconds=1),
+                open_positions=0, open_orders=0, pending_commands=0,
+            )
+
+    monkeypatch.setattr(ipc, "P90PrivateProofClient", FakeClient)
+    main, sub = read_p90_real_signed_flat_accounts(routes, at=at)
+    assert (main.trading_account_id, sub.trading_account_id) == (MAIN, SUB)
+    assert calls == [
+        (MAIN, "connector-main", 3.0), (SUB, "connector-sub", 3.0),
+    ]
+    monkeypatch.setattr(
+        FakeClient, "read_flat_account",
+        lambda self: replace(
+            main if self.account == MAIN else sub,
+            signed_uid="101",
+        ),
+    )
+    with pytest.raises(P90RealAccountRoutesUnverified):
+        read_p90_real_signed_flat_accounts(routes, at=at)
+
+
+def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
+    monkeypatch,
+) -> None:
+    from dataclasses import replace
+
+    from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+        P90RealSignedFlatAccount,
+    )
+    from bybit_workbench.universal_exit import p90l90_real_private_ipc as ipc
+
+    at = datetime.now(UTC)
+    routes = read_p90_real_account_routes(_DB(), bundles=BUNDLES, at=at)
+
+    class BrokenClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def read_flat_account(self):
+            raise RuntimeError("producer unreachable")
+
+    monkeypatch.setattr(ipc, "P90PrivateProofClient", BrokenClient)
+    with pytest.raises(P90RealAccountRoutesUnverified, match="PROOF_MISSING"):
+        read_p90_real_signed_flat_accounts(routes, at=at)
+
+    class WrongClient:
+        def __init__(self, *, account, **_kwargs):
+            self.account = account
+
+        def read_flat_account(self):
+            proof = P90RealSignedFlatAccount(
+                trading_account_id=self.account,
+                signed_uid="101" if self.account == MAIN else "202",
+                private_generation_id="generation-" + self.account,
+                source_ref="bybit:signed-flat-linear-usdt:exact-account",
+                observed_at=at, open_positions=0,
+                open_orders=0, pending_commands=0,
+            )
+            return replace(proof, open_orders=1)
+
+    monkeypatch.setattr(ipc, "P90PrivateProofClient", WrongClient)
+    with pytest.raises(P90RealAccountRoutesUnverified, match="SCOPE_MISMATCH"):
+        read_p90_real_signed_flat_accounts(routes, at=at)
