@@ -64,7 +64,9 @@ def test_real_live_path_is_connected_to_independent_source_and_private_exit() ->
     assert body is not None
     # A real activation alone cannot bypass both owner-selected execution
     # permissions or the explicitly enabled mainnet gate.
-    assert "p90_real_live = bool(observer_split.p90_real)" in body
+    assert "p90_real_live = False" in body
+    assert "elif not gate_enabled and not selected:" in body
+    assert "elif gate_enabled and selected == expected:" in body
     assert "selected != expected" in body
     assert "gate != (True,)" in body
     assert "P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED" in body
