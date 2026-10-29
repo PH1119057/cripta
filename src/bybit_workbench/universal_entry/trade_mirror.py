@@ -249,6 +249,63 @@ class PublicTradeMirrorBuffer:
                 recovered.append(event)
             return tuple(recovered)
 
+    def verified_fill_forward_events(
+        self, *, symbol: str, fill_at: datetime, at: datetime,
+    ) -> tuple[MirrorTrade, ...]:
+        """Original live native events since a signed fill, NOT an OHLC replay.
+
+        A positive proof requires the SAME unbroken mirror subscription
+        already running when the Exchange fill occurred. If retention,
+        restart, or a regressed/duplicated native cursor introduces doubt,
+        refuse the window before any account-local postfill mutation.
+        The requesting account must separately prove its Exchange fill.
+        """
+        if (
+            symbol not in self.required_symbols
+            or fill_at.tzinfo is None or fill_at.utcoffset() != timedelta()
+            or at.tzinfo is None or at.utcoffset() != timedelta()
+            or fill_at > at
+        ):
+            raise ContinuityNotProvable("P90_NATIVE_FILL_WINDOW_ARGUMENT_INVALID")
+        with self._lock:
+            if (
+                self._state != "ACTIVE"
+                or self._gaps != 0
+                or self._epoch_started_at is None
+                or self._epoch_started_at > fill_at
+                or (at - fill_at).total_seconds() > self.retention_seconds
+            ):
+                raise ContinuityNotProvable(
+                    "P90_NATIVE_FILL_WINDOW_EPOCH_OR_RETENTION_UNVERIFIED"
+                )
+            result = tuple(
+                event for event in self._events
+                if event.symbol == symbol
+                and fill_at <= event.traded_at <= at
+            )
+            if not result:
+                raise ContinuityNotProvable(
+                    "P90_NATIVE_FILL_WINDOW_NO_POSTFILL_PUBLIC_TRADE"
+                )
+            previous_seq: int | None = None
+            previous_at: datetime | None = None
+            seen: set[str] = set()
+            for event in result:
+                if (
+                    event.exec_id in seen
+                    or (previous_seq is not None and event.seq < previous_seq)
+                    or (previous_at is not None and event.traded_at < previous_at)
+                    or event.received_at < event.traded_at
+                    or event.received_at > at
+                ):
+                    raise ContinuityNotProvable(
+                        "P90_NATIVE_FILL_WINDOW_CURSOR_OR_CLOCK_GAP"
+                    )
+                seen.add(event.exec_id)
+                previous_seq = event.seq
+                previous_at = event.traded_at
+            return result
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             return {
