@@ -144,3 +144,76 @@ def test_real_gap_cannot_borrow_paper_ohlc_only_replay_even_without_exposure() -
     consumer._connection = _EmptyDB()
     with pytest.raises(RuntimeError, match="REQUIRES_EXACT_SOURCE_EPOCH"):
         consumer.catch_up_closed_histories({})
+
+
+class _CountDB:
+    def __init__(self, *, exposed: int = 0, pending: int = 0) -> None:
+        self._answers = [exposed, pending]
+        self.reads = 0
+
+    def execute(self, sql: str, params: object = ()) -> object:
+        assert "SELECT count(*)" in sql
+        assert params == (MAIN_ID, "p90l90_legacy_sub_dot_arb_apt", VERSION)
+        result = self._answers[self.reads]
+        self.reads += 1
+
+        class _Row:
+            def fetchone(self):
+                return (result,)
+
+        return _Row()
+
+
+def _recovered_real(*, db: _CountDB) -> P90L90ObserverRealConsumer:
+    consumer = object.__new__(P90L90ObserverRealConsumer)
+    consumer._connection = db
+    consumer._recovered = True
+    consumer._gap_recovery_poisoned = False
+    consumer._processors = {"LTCUSDT": object(), "DOTUSDT": object()}
+    consumer._verified_closed_watermarks = {
+        "LTCUSDT": (AT, AT),
+        "DOTUSDT": (AT, AT),
+    }
+    return consumer
+
+
+def test_real_exact_two_symbol_zero_gap_needs_no_ohlc_paper_replay() -> None:
+    db = _CountDB()
+    consumer = _recovered_real(db=db)
+    targets = dict(consumer._verified_closed_watermarks)
+    assert consumer.catch_up_closed_histories(targets) == 0
+    assert db.reads == 2
+    assert consumer._gap_recovery_poisoned is False
+
+
+@pytest.mark.parametrize("case", ("future", "past", "extra", "missing", "naive"))
+def test_real_candle_gap_does_not_look_like_proven_native_history(
+    case: str,
+) -> None:
+    from datetime import timedelta
+
+    consumer = _recovered_real(db=_CountDB())
+    targets = dict(consumer._verified_closed_watermarks)
+    if case == "future":
+        targets["LTCUSDT"] = (AT + timedelta(minutes=5), AT)
+    elif case == "past":
+        targets["LTCUSDT"] = (AT - timedelta(minutes=5), AT)
+    elif case == "extra":
+        targets["BTCUSDT"] = (AT, AT)
+    elif case == "missing":
+        del targets["DOTUSDT"]
+    else:
+        targets["LTCUSDT"] = (AT.replace(tzinfo=None), AT)
+    with pytest.raises(RuntimeError, match="GAP_REQUIRES_EXACT_SOURCE_EPOCH"):
+        consumer.catch_up_closed_histories(targets)
+
+
+@pytest.mark.parametrize(("exposed", "pending"), ((1, 0), (0, 1)))
+def test_real_restart_with_open_position_or_unowned_command_cannot_fast_forward(
+    exposed: int, pending: int,
+) -> None:
+    consumer = _recovered_real(db=_CountDB(exposed=exposed, pending=pending))
+    with pytest.raises(RuntimeError, match="GAP_WITH_EXPOSURE_OR_PENDING_ORDER"):
+        consumer.catch_up_closed_histories(
+            dict(consumer._verified_closed_watermarks)
+        )
