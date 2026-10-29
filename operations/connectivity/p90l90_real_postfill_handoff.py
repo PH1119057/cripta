@@ -217,7 +217,37 @@ def handoff_real_first_protected_fill(
                   AND source_commit=%s""",
             (epoch_id, loaded_release_commit),
         ).fetchone()
-        return gate == (epoch_id,)
+        if gate != (epoch_id,):
+            return False
+        # The prior signed GET establishes the observation, but cannot
+        # authorize a later mutation after another account-local command
+        # changed protection. Re-attest Exchange position UNDER the durable
+        # account lock, before persisting a fresh trailing request.
+        try:
+            current = reader.for_closed_boundary(
+                subject, coverage.covered_through,
+            )
+        except Exception:
+            return False
+        if (
+            current.trading_account_id != private.trading_account_id
+            or current.connector_id != private.connector_id
+            or current.signed_provider_uid != private.signed_provider_uid
+            or current.strategy_execution_binding_id
+               != private.strategy_execution_binding_id
+            or current.exchange_position_key != private.exchange_position_key
+            or current.pending_exit_mutation is not False
+            or current.observed_at < private.observed_at
+            or current.observed_at < coverage.covered_through
+        ):
+            return False
+        for field in (
+            "symbol", "side", "positionIdx", "avgPrice", "size",
+            "stopLoss", "takeProfit", "trailingStop",
+        ):
+            if current.position.get(field) != private.position.get(field):
+                return False
+        return True
 
     execution = P90RealExitExecutionPort(
         connection,
