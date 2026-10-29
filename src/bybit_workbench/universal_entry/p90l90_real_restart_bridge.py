@@ -7,17 +7,16 @@ replacing the original source epoch or replaying historical trading actions.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
 
-from .fingerprint import canonical_json
+from .fingerprint import canonical_json, fingerprint
 from .transport_continuity import TradeCursor
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -102,7 +101,6 @@ def write_p90_real_restart_bridge(
         or not account_generations
         or any(not key or not value for key, value in account_generations.items())
         or not started <= ready <= completed
-        or (completed - ready) > timedelta(seconds=30)
     ):
         raise P90RealRestartBridgeUnverified(
             "P90_REAL_RESTART_BRIDGE_ARGUMENTS_INVALID"
@@ -171,9 +169,7 @@ def write_p90_real_restart_bridge(
         "position_cursors": positions,
         "account_generations": dict(sorted(account_generations.items())),
     }
-    restart_id = "p90-real-restart-" + hashlib.sha1(
-        canonical_json(payload).encode("utf-8")
-    ).hexdigest()
+    restart_id = "p90-real-restart-" + fingerprint(payload)[:40]
     connection.execute(
         """INSERT INTO strategy_entry.p90l90_real_restart_bridges(
                restart_id,epoch_id,source_commit,mirror_serial,mirror_started_at,
