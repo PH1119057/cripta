@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
-from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -18,11 +17,11 @@ from bybit_workbench.universal_exit.p90l90_real_observation import (
 from bybit_workbench.universal_exit.p90l90_real_private_router import (
     P90RealPrivateEvidenceRouter,
 )
-from operations.monitoring.p90l90_real_live_source_ports import (
-    P90RealLiveSourcePorts,
-)
 from operations.monitoring.p90l90_real_account_mutation_safety import (
     P90RealIndependentMutationSafety,
+)
+from operations.monitoring.p90l90_real_live_source_ports import (
+    P90RealLiveSourcePorts,
 )
 from test_p90l90_real_observation import AT, _scope
 

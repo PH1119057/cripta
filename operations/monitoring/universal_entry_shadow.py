@@ -2967,11 +2967,11 @@ def _run_observer_epoch(
                 from bybit_workbench.universal_exit.p90l90_real_private_router import (
                     P90RealPrivateEvidenceRouter,
                 )
-                from operations.monitoring.p90l90_real_live_source_ports import (
-                    P90RealLiveSourcePorts,
-                )
                 from operations.monitoring.p90l90_real_account_mutation_safety import (
                     P90RealIndependentMutationSafety,
+                )
+                from operations.monitoring.p90l90_real_live_source_ports import (
+                    P90RealLiveSourcePorts,
                 )
 
                 routes = read_p90_real_account_routes(
