@@ -2651,6 +2651,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 if str(payload.get("strategy_version") or "") == p90v3.VERSION:
                     from bybit_workbench.universal_entry.p90l90_real_market_fill import (
                         P90RealMarketPositionUnverified,
+                        exact_market_order_execution_ids,
                         exact_open_market_position,
                     )
 
@@ -2685,6 +2686,35 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
+            real_fill_execution_ids: tuple[str, ...] = ()
+            if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+                # Signed, fully paginated GET by Exchange orderId; a matching
+                # same-symbol position is not itself proof of our fill.
+                try:
+                    actual_executions = _complete_exchange_inventory(
+                        "/v5/execution/list",
+                        {
+                            "category": "linear",
+                            "orderId": exchange_order_id,
+                            "limit": "100",
+                        },
+                        key,
+                        secret,
+                    )
+                    real_fill_execution_ids = exact_market_order_execution_ids(
+                        actual_executions,
+                        exchange_order_id=exchange_order_id,
+                        entry_order_link_id=command_id[:36],
+                        symbol=symbol,
+                        side=side,
+                        position_size=Decimal(str(filled_position.get("size"))),
+                        position_avg=actual_entry,
+                        tick_size=tick,
+                    )
+                except (ExchangeReadUnavailable, P90RealMarketPositionUnverified) as exc:
+                    raise ExchangeMutationBarrier(
+                        f"REAL_MARKET_SIGNED_EXECUTION_LINEAGE_UNVERIFIED:{type(exc).__name__}"
+                    ) from None
             actual_stop, actual_target = resolve_initial_protection_boundaries(
                 entry=actual_entry,
                 side=side,
@@ -2806,6 +2836,10 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 "exchange": protection.get("retMsg"),
                 "verifiedFromExchange": True,
             }
+            if real_fill_execution_ids:
+                result["actualProtection"]["entryExecutionIds"] = list(
+                    real_fill_execution_ids
+                )
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
     try:
