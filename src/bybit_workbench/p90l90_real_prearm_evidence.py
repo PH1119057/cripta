@@ -724,7 +724,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
     for context in contexts:
         bundle = bundles[context.strategy_id]
         policy = policy_evidence[context.strategy_id]
-        for code, context_evidence in {
+        strategy_checks: dict[str, dict[str, object]] = {
             "EXACT_STRATEGY_ACTIVATION": {
                 "strategy_id": context.strategy_id,
                 "strategy_version": context.strategy_version,
@@ -757,13 +757,14 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 "position_mode": "ONE_WAY",
                 "position_idx": 0,
             },
-        }.items():
+        }
+        for code, context_evidence in strategy_checks.items():
             scope_type, scope_key = scope_for_check(code, context)
             put(code, scope_type, scope_key, context_evidence, ttl=False)
 
         pm = position_modes[(context.strategy_id, context.symbol)]
         account = account_evidence[context.strategy_id]
-        for code, evidence in (
+        symbol_checks: tuple[tuple[str, dict[str, object]], ...] = (
             (
                 "POSITION_MODE_FRESH",
                 {
@@ -775,7 +776,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
             ),
             (
                 "POSITION_IDX_EXPECTED",
-                {"symbol": context.symbol, "position_idx": int(pm[4])},
+                {"symbol": context.symbol, "position_idx": int(str(pm[4]))},
             ),
             (
                 "MICRO_LIVE_LIMITS",
@@ -791,9 +792,10 @@ def prepare_p90l90_real_v3_prearm_evidence(
                     "next_entry_capacity_required_usdt": "10",
                 },
             ),
-        ):
+        )
+        for code, symbol_evidence in symbol_checks:
             scope_type, scope_key = scope_for_check(code, context)
-            put(code, scope_type, scope_key, evidence, ttl=True)
+            put(code, scope_type, scope_key, symbol_evidence, ttl=True)
 
     for context in contexts:
         decision = evaluate_live_arm(
