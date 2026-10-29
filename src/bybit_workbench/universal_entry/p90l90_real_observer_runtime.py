@@ -72,6 +72,7 @@ def assemble_p90_real_observer_runtime(
     """
     if (
         len(bundles) != 2
+        or not isinstance(shared_candle_ledger, P90RealSharedCandleLedger)
         or not source_epoch_id.startswith("p90-real-epoch-")
         or len(source_epoch_id) != len("p90-real-epoch-") + 40
         or any(not callable(value) for value in (

@@ -8,6 +8,9 @@ import pytest
 
 from bybit_workbench.universal_entry import p90l90_real_observer_runtime as module
 from bybit_workbench.universal_entry.contracts import FrozenPolicy
+from bybit_workbench.universal_entry.p90l90_real_shared_candle_ledger import (
+    P90RealSharedCandleLedger,
+)
 
 AT = datetime(2026, 10, 29, 9, 0, tzinfo=UTC)
 
@@ -24,6 +27,7 @@ def _args():
         "verified_closed_history": lambda symbol, at: (),
         "verified_closed_continuity": lambda symbol, at: False,
         "verified_account_mutation_safety": lambda position, ev, now: False,
+        "shared_candle_ledger": object.__new__(P90RealSharedCandleLedger),
     }
 
 
@@ -66,8 +70,7 @@ def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
     )
     monkeypatch.setattr(module, "P90L90ObserverRealConsumer", fake_consumer)
     args = _args()
-    shared_candle_ledger = object()
-    args["shared_candle_ledger"] = shared_candle_ledger
+    shared_candle_ledger = args["shared_candle_ledger"]
     composed = module.assemble_p90_real_observer_runtime(db, **args)
     assert composed.consumer.shared_candle_ledger is shared_candle_ledger
     assert composed.exit_ports is ports
@@ -93,6 +96,7 @@ def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
     "verified_closed_history",
     "verified_closed_continuity",
     "verified_account_mutation_safety",
+    "shared_candle_ledger",
 ))
 def test_real_observer_requires_every_independent_port_before_any_side_effect(
     monkeypatch, missing: str,
