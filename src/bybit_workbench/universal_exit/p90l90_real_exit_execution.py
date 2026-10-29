@@ -129,6 +129,8 @@ class P90RealExitExecutionPort:
             or (observation.event_kind == "P90L90_REAL_POSTFILL" and (
                 not isinstance(details.get("signed_fill_execution_ids"), list)
                 or not details["signed_fill_execution_ids"]
+                or decision.source_refs != observation.source_refs
+                or decision.action_kind.value != "SET_TRAILING"
                 or not any(ref.startswith("bybit:execution:list:exact-order:")
                            for ref in observation.source_refs)
             ))
