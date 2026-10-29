@@ -9,9 +9,8 @@ row_factory. Its write/lock operations remain on the same PostgreSQL backend.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from importlib import import_module
 from typing import Any
-
-from psycopg.rows import dict_row
 
 
 class P90RealMappedExitConnection:
@@ -36,8 +35,17 @@ class P90RealMappedExitConnection:
     def execute(
         self, statement: str, parameters: Sequence[object] = (),
     ) -> Any:
-        # Same underlying PostgreSQL transaction, lock domain and connection.
-        return self.source_connection.cursor(row_factory=dict_row).execute(
+        # No PostgreSQL driver import in the ordinary Observer import path:
+        # mypy/CLI/pure tests run without the production-only psycopg extra.
+        # Production Exit has an actual installed account-local PG driver.
+        try:
+            row_factory = getattr(import_module("psycopg.rows"), "dict_row")
+        except (ModuleNotFoundError, AttributeError):
+            raise RuntimeError(
+                "P90_REAL_EXIT_DICT_ROW_DRIVER_UNAVAILABLE"
+            ) from None
+        # One actual PostgreSQL transaction, lock domain and connection.
+        return self.source_connection.cursor(row_factory=row_factory).execute(
             statement, parameters,
         )
 
