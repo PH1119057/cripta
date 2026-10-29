@@ -17,6 +17,7 @@ from bybit_workbench.universal_exit.p90l90_real_observation import (
     P90RealPostfillSourceWindow,
 )
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+    P90PrivateIpcUnverified,
     _frame,
     _receive,
     peer_same_runtime_uid,
@@ -66,7 +67,7 @@ def read_real_postfill_source_window(
                 )
             stream.sendall(_frame(request))
             result = _receive(stream)
-    except OSError:
+    except (OSError, P90PrivateIpcUnverified):
         raise P90RealPostfillSourceClientUnverified(
             "P90_REAL_POSTFILL_SOURCE_TRANSPORT_UNAVAILABLE"
         ) from None
@@ -96,8 +97,15 @@ def read_real_postfill_source_window(
             "P90_REAL_POSTFILL_SOURCE_IDENTITY_MISMATCH"
         )
     try:
-        fill_at = datetime.fromisoformat(data["fill_at"]).astimezone(UTC)
-        covered = datetime.fromisoformat(data["covered_through"]).astimezone(UTC)
+        raw_fill = datetime.fromisoformat(data["fill_at"])
+        raw_covered = datetime.fromisoformat(data["covered_through"])
+        if (
+            raw_fill.tzinfo is None or raw_fill.utcoffset() is None
+            or raw_covered.tzinfo is None or raw_covered.utcoffset() is None
+        ):
+            raise ValueError("postfill timestamps lack original UTC offsets")
+        fill_at = raw_fill.astimezone(UTC)
+        covered = raw_covered.astimezone(UTC)
         price = Decimal(str(data["last_native_price"]))
         best = Decimal(str(data["best_favorable_price"]))
         refs = data["source_refs"]
