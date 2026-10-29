@@ -52,7 +52,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             raise ValueError("P90_REAL_EXACT_SOURCE_EPOCH_ID_REQUIRED")
         self._epoch_id = epoch_id
         self._db = connection
-        self._sha = source_commit  # Immutable seed lineage, never relabelled.
+        self._sha = source_commit  # Exact new REAL source producer; old PAPER untouched.
         self._writer_release = writer_release_commit
 
     def _require_active_epoch(self) -> None:
@@ -85,7 +85,6 @@ class P90L90AtomicRealEpochCheckpointStore:
         No self-approved production bootstrapping is implied.
         """
         self._symbol(symbol)
-        self._require_active_epoch()
         if entry.state != proven_geometry:
             raise RuntimeError("P90L90 initial historical Entry geometry not proven")
         if (
@@ -102,6 +101,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             raise RuntimeError("P90L90 initial Entry geometry ahead of closed bar")
         entry_json = entry_restart_snapshot(entry)
         with self._db.transaction():
+            self._require_active_epoch()
             self._db.execute(
                 """INSERT INTO strategy_entry.p90l90_real_causal_checkpoints
                        (epoch_id,symbol,checkpoint_json,entry_checkpoint_json,
@@ -117,7 +117,7 @@ class P90L90AtomicRealEpochCheckpointStore:
                 """SELECT checkpoint_json,entry_checkpoint_json,source_commit,generation
                      FROM strategy_entry.p90l90_real_causal_checkpoints
                     WHERE epoch_id=%s AND symbol=%s FOR UPDATE""",
-                (self._epoch_id,symbol),
+                (self._epoch_id, symbol),
             ).fetchone()
             if row is None or row[2] != self._sha:
                 raise RuntimeError("P90L90 atomic seed source identity mismatch")
@@ -140,7 +140,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             """SELECT checkpoint_json,entry_checkpoint_json,source_commit
                  FROM strategy_entry.p90l90_real_causal_checkpoints
                 WHERE epoch_id=%s AND symbol=%s""",
-            (self._epoch_id,symbol),
+            (self._epoch_id, symbol),
         ).fetchone()
         if row is None or row[2] != self._sha or row[1] is None:
             raise RuntimeError("P90L90 atomic restart missing matching durable state")
@@ -160,8 +160,8 @@ class P90L90AtomicRealEpochCheckpointStore:
     ) -> tuple[P90L90CausalTransportJoin, P90L90CausalEntry]:
         """Restart atomically against the saved source and as-of candle ledger."""
         self._symbol(symbol)
-        self._require_active_epoch()
         with self._db.transaction():
+            self._require_active_epoch()
             # Activation preflight is a SERIALIZABLE READ ONLY transaction:
             # PostgreSQL forbids SELECT FOR UPDATE there. Its MVCC snapshot
             # already supplies consistent source/Entry restart evidence.
@@ -174,7 +174,7 @@ class P90L90AtomicRealEpochCheckpointStore:
                 """SELECT checkpoint_json,entry_checkpoint_json,source_commit
                      FROM strategy_entry.p90l90_real_causal_checkpoints
                     WHERE epoch_id=%s AND symbol=%s""" + lock,
-                (self._epoch_id,symbol),
+                (self._epoch_id, symbol),
             ).fetchone()
             if row is None or row[2] != self._sha or row[1] is None:
                 raise RuntimeError("P90L90 verified restart durable state missing")
@@ -194,7 +194,7 @@ class P90L90AtomicRealEpochCheckpointStore:
         event: P90TransportEvent,
         *,
         recompute_geometry: Callable[[str, object], P90L90EntryState | None],
-        apply_real: Callable[
+        apply_paper: Callable[
             [P90L90CausalEntry, tuple[P90TransportEvent, ...]], None
         ],
     ) -> tuple[P90TransportEvent, ...]:
@@ -207,13 +207,13 @@ class P90L90AtomicRealEpochCheckpointStore:
         must not retain or mutate an outside in-memory watch.
         """
         self._symbol(event.symbol)
-        self._require_active_epoch()
         with self._db.transaction():
+            self._require_active_epoch()
             row = self._db.execute(
                 """SELECT checkpoint_json,entry_checkpoint_json,source_commit,generation
                      FROM strategy_entry.p90l90_real_causal_checkpoints
                     WHERE epoch_id=%s AND symbol=%s FOR UPDATE""",
-                (self._epoch_id,event.symbol),
+                (self._epoch_id, event.symbol),
             ).fetchone()
             if row is None or row[2] != self._sha or row[1] is None:
                 raise RuntimeError("P90L90 causal REAL state absent/untrusted")
@@ -229,7 +229,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             released = join.accept(event)
             # Dependent DB effects, including REAL position mutations, MUST
             # share this transaction, not a second connection.
-            apply_real(entry, released)
+            apply_paper(entry, released)
             native = [
                 item for item in released if item.kind == "PUBLIC_TRADE"
             ]
@@ -249,7 +249,7 @@ class P90L90AtomicRealEpochCheckpointStore:
             ):
                 raise RuntimeError("P90L90 REAL advanced geometry beyond candle")
             updates = (
-                "last_writer_release_commit=%s,"
+                "writer_release_commit=%s,"
                 if self._writer_release is not None else ""
             )
             parameters: tuple[Any, ...] = (
