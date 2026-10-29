@@ -70,7 +70,7 @@ def _require(condition: bool, reason: str) -> None:
 def _aware(value: object, label: str) -> datetime:
     _require(isinstance(value, datetime), label + " timestamp missing")
     result = value
-    _require(result.tzinfo is not None and result.utcoffset() is not None, label + " timestamp naive")
+    _require(\n        result.tzinfo is not None and result.utcoffset() is not None,\n        label + " timestamp naive",\n    )
     return result.astimezone(UTC)
 
 
