@@ -464,6 +464,7 @@ migration_files=(
   operations/sql/20261016_report_replay_provenance_r5.sql
   # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
   operations/sql/20261024_account_scoped_live_arm.sql
+  operations/sql/20261029_p90l90_real_account_arm_control.sql
   operations/sql/20261025_account_entry_safety_blocks.sql
   operations/sql/20261025_account_attempt_fanout.sql
   # Cut over all five physical current-state keys after additive account indexes
