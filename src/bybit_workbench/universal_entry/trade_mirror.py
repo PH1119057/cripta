@@ -251,6 +251,7 @@ class PublicTradeMirrorBuffer:
 
     def verified_fill_forward_events(
         self, *, symbol: str, fill_at: datetime, at: datetime,
+        allow_empty: bool = False,
     ) -> tuple[MirrorTrade, ...]:
         """Original live native events since a signed fill, NOT an OHLC replay.
 
@@ -283,7 +284,7 @@ class PublicTradeMirrorBuffer:
                 if event.symbol == symbol
                 and fill_at <= event.traded_at <= at
             )
-            if not result:
+            if not result and allow_empty is not True:
                 raise ContinuityNotProvable(
                     "P90_NATIVE_FILL_WINDOW_NO_POSTFILL_PUBLIC_TRADE"
                 )
