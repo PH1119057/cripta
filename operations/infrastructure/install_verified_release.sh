@@ -127,10 +127,14 @@ if [[ ! -d "$ui_release" ]]; then
   chown root:cripta "$ui_release/DASHBOARD_UI_COMMIT"
   chmod 0644 "$ui_release/DASHBOARD_UI_COMMIT"
 fi
-cmp -s "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html" ||
-  die "candidate Dashboard HTML differs from exact runtime release"
-cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py" ||
-  die "candidate Dashboard app differs from exact runtime release"
+# The runtime candidate is intentionally overlaid below with the independently
+# deployed Dashboard identity. A retry after a pre-cutover failure must therefore
+# validate the Dashboard release against immutable Git bytes, not against a
+# runtime candidate that a prior attempt may already have overlaid.
+cmp -s <(as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/index.html") "$ui_release/index.html" ||
+  die "candidate Dashboard HTML differs from exact Git release"
+cmp -s <(as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/app.py") "$ui_release/app.py" ||
+  die "candidate Dashboard app differs from exact Git release"
 [[ "$(cat "$ui_release/DASHBOARD_UI_COMMIT")" == "$RELEASE_COMMIT" ]] ||
   die "candidate Dashboard identity mismatch"
 
