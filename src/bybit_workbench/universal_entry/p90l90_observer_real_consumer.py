@@ -51,6 +51,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         admission_provider: AccountAdmissionProvider,
         verified_exit_tick_port: RealExitTickPort,
         verified_closed_candle_port: RealClosedCandlePort,
+        no_order_source_diagnostic: bool = False,
         producer_release_commit: str | None = None,
         accepted_source_commits: frozenset[str] | None = None,
     ) -> None:
@@ -64,6 +65,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._admission_provider = admission_provider
         self._verified_exit_tick_port = verified_exit_tick_port
         self._verified_closed_candle_port = verified_closed_candle_port
+        self._no_order_source_diagnostic = no_order_source_diagnostic is True
         registry = ActivePlanRegistry()
         ids: set[str] = set()
         for raw in bundles:
@@ -217,6 +219,10 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._verified_closed_candle_port(fact)
 
     def _on_candidate(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
+        # Explicitly no-order source diagnostics consume RAW geometry only;
+        # never issue a real Entry signal, execution request or PAPER proxy.
+        if self._no_order_source_diagnostic:
+            return
         owner = self._candidate_owners.get(fact.symbol)
         if owner is None:
             raise RuntimeError("P90_REAL_NATIVE_CANDIDATE_NO_EXACT_OWNER")

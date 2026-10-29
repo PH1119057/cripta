@@ -2096,12 +2096,29 @@ def _run_observer_epoch(
     # gated on exact durable restart and 90-day code/ledger parity.
     observer_split = partition_observer_strategies(bundles)
     require_p90_policy_before_registry(observer_split)
-    # A v3 REAL Strategy may not be merely excluded from the ordinary
-    # registry: omission would silently discard an approved real activation.
-    # Until its source-pinned atomic consumer and account-scoped Exit owner
-    # are connected end-to-end, refuse this epoch BEFORE any plan audit write.
-    if observer_split.p90_real:
+    # REAL v3 is NEVER allowed through the ordinary Strategy registry.
+    # The opt-in SOURCE_ONLY diagnostic below may construct a true native
+    # REAL consumer, but it is hard-disabled for every Exchange/order path.
+    # Actual REAL Entry+Exit remains blocked until postfill and account
+    # execution owners are fully connected and independently verified.
+    p90_real_source_only = bool(observer_split.p90_real) and (
+        os.environ.get("CRIPTA_P90_REAL_SOURCE_ONLY", "DISABLED") == "ENABLED"
+    )
+    if observer_split.p90_real and not p90_real_source_only:
         raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
+    if p90_real_source_only:
+        if len(observer_split.p90_real) != 2:
+            raise RuntimeError("P90_REAL_SOURCE_ONLY_BOTH_ACCOUNTS_REQUIRED")
+        gate = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        if gate is None or bool(gate[0]):
+            raise RuntimeError("P90_REAL_SOURCE_ONLY_MAINNET_MUST_BE_OFF")
+        selected = _real_execution_selected_activation_ids(
+            connection, observer_split.p90_real
+        )
+        if selected:
+            raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_PERMISSION_PRESENT")
     # Executable release SHA and original market-data lineage are distinct.
     # Only an independently attested, immutable five-symbol source can be
     # recovered. This gate runs before any PAPER consumer is constructed.
@@ -2574,6 +2591,16 @@ def _run_observer_epoch(
 
     def _process_fact_body(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
         nonlocal facts_received, evaluations_count, signals_count
+        # A LIVE gate / permission transition invalidates the SOURCE_ONLY
+        # epoch BEFORE any raw fact can turn into an Entry or Exit action.
+        if p90_real_source_only:
+            gate = connection.execute(
+                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+            ).fetchone()
+            if gate != (False,) or _real_execution_selected_activation_ids(
+                connection, observer_split.p90_real
+            ):
+                raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
         if not deduper.accept(fact.fact_id):
             return
         if fact.event_kind == "PUBLIC_TRADE":
@@ -2818,7 +2845,7 @@ def _run_observer_epoch(
         # mirror, and after ALL source-commit-bound P90 DB checkpoints
         # have been independently reconstructed. On a reconnect it is
         # discarded, rechecked and NEVER reused as a generic readiness flag.
-        if p90_consumer is not None:
+        if p90_consumer is not None and not p90_real_source_only:
             require_p90_atomic_observer_connection(
                 observer_split,
                 live_proof=P90NativeBarRuntimeProof(
@@ -2832,6 +2859,96 @@ def _run_observer_epoch(
                     epoch_started_at=epoch_started,
                 ),
             )
+        if p90_real_source_only:
+            # This is a REAL source-epoch diagnostic, not PAPER simulation and
+            # never a replacement for account-scoped Exit execution readiness.
+            from operations.monitoring.p90l90_real_source_bootstrap import (
+                start_current_p90_real_observer_epoch,
+            )
+            from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
+                P90L90ObserverRealConsumer,
+            )
+
+            source_epoch_id = start_current_p90_real_observer_epoch(
+                connection,
+                bundles=observer_split.p90_real,
+                source_commit=LOADED_COMMIT,
+                mirror=trade_mirror,
+                subscribed_symbols=frozenset(symbols),
+                subscribed_intervals=frozenset(intervals),
+                subscribed_local_at=_ready_local,
+                subscribed_server_at=_ready_server,
+                epoch_started_at=epoch_started,
+            )
+
+            def require_no_real_exposure() -> None:
+                # This diagnostic must stop, not pretend to protect a position.
+                existing = connection.execute(
+                    """SELECT count(*) FROM runtime.position_ownership
+                        WHERE strategy_version=%s AND state IN
+                        ('OPEN','RECONCILIATION_REQUIRED')""",
+                    (P90_REAL_VERSION,),
+                ).fetchone()
+                if existing != (0,):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_EXPOSURE_REQUIRES_REAL_EXIT_OWNER"
+                    )
+                if connection.execute(
+                    """SELECT enabled FROM control.execution_gates
+                        WHERE mode='mainnet'"""
+                ).fetchone() != (False,):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_MAINNET_GATE_DRIFT"
+                    )
+                if _real_execution_selected_activation_ids(
+                    connection, observer_split.p90_real
+                ):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_EXECUTION_PERMISSION_DRIFT"
+                    )
+
+            p90_consumer = P90L90ObserverRealConsumer(
+                connection,
+                bundles=observer_split.p90_real,
+                source_commit=LOADED_COMMIT,
+                source_epoch_id=source_epoch_id,
+                producer_release_commit=LOADED_COMMIT,
+                provenance=FrozenPolicy.from_mapping({
+                    "source": "p90_real_native_source_only_no_orders",
+                    "source_commit": LOADED_COMMIT,
+                    "data_lineage_id": source_epoch_id,
+                    "observer_epoch_id": epoch_id,
+                }),
+                admission_provider=lambda _symbol, _at: ((), False),
+                verified_exit_tick_port=lambda _fact, _cursor: (
+                    require_no_real_exposure()
+                ),
+                verified_closed_candle_port=lambda _fact: (
+                    require_no_real_exposure()
+                ),
+                no_order_source_diagnostic=True,
+            )
+            p90_consumer.recover_all()
+            for symbol in p90l90_symbols:
+                watermarks = p90_consumer._archive.restart_watermarks(symbol)
+                closed_boundaries[(symbol, "5")] = watermarks["5"]
+                closed_boundaries[(symbol, "15")] = watermarks["15"]
+            for raw in observer_split.p90_real:
+                bundle = cast(Any, raw)
+                record_plan_consumption(
+                    connection,
+                    plan_kind="ENTRY",
+                    plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+                    strategy_activation_id=bundle.activation.activation_id,
+                    consumer_instance_id=consumer_instance_id,
+                    seen_at=datetime.now(UTC),
+                    status="LOADED",
+                    payload={
+                        "source": "p90_real_native_source_only_NO_ORDERS",
+                        "source_commit": LOADED_COMMIT,
+                        "source_epoch_id": source_epoch_id,
+                    },
+                )
         buffered_messages = list(buffered)
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,
