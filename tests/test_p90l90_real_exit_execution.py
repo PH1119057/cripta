@@ -199,3 +199,56 @@ def test_unmaterializable_non_decision_is_not_a_command(monkeypatch) -> None:
     assert sink(quiet, position, plan) is None
     assert steps == []
     assert db.events == []
+
+
+def test_real_native_trade_requires_execution_sink_before_decision_persistence() -> None:
+    from datetime import timedelta
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from bybit_workbench.universal_entry.contracts import (
+        FrozenPolicy, MarketFactEnvelope,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_exit_port import (
+        P90RealExitNativePort,
+    )
+    from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
+
+    position, plan, checkpoint, cursor, private, price = _scope()
+    trade = MarketFactEnvelope(
+        fact_id="native-test-verified-101",
+        event_kind="PUBLIC_TRADE", symbol=cursor.symbol,
+        event_at=cursor.traded_at, observed_at=cursor.traded_at,
+        received_at=cursor.traded_at + timedelta(milliseconds=2),
+        attributes=FrozenPolicy.from_mapping({"price": str(price)}),
+        source_refs=("bybit:publicTrade:exact-native-101",),
+    )
+    observed: list[str] = []
+    common = dict(
+        position_provider=lambda _symbol: ((position, plan),),
+        independently_verified_source_coverage=lambda _position, _cursor: (
+            True, True,
+        ),
+        independently_signed_private_evidence=lambda _position, _cursor: private,
+        source_commit="a" * 40,
+        mfe_ledger=SimpleNamespace(on_trade=lambda **_kwargs: checkpoint),
+        exit_store=SimpleNamespace(
+            record=lambda *_a, **_k: observed.append("record"),
+        ),
+    )
+    port = P90RealExitNativePort(**common)
+    with pytest.raises(
+        P90RealMfeUnverified, match="EXECUTION_OWNER_MISSING"
+    ):
+        port(trade)
+    assert observed == []
+    port = P90RealExitNativePort(
+        **common,
+        verified_execution_port=lambda _ev, _pos, _plan: observed.append(
+            "dispatch"
+        ),
+    )
+    result = port(trade)
+    assert len(result) == 1
+    assert result[0].status is ExitEvaluationStatus.DECISION_CREATED
+    assert observed == ["record", "dispatch"]
