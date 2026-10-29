@@ -150,11 +150,18 @@ class P90RealLiveSourcePorts:
         ).fetchone()
         prior = None
         if raw is not None:
-            if not isinstance(raw, Mapping):
+            # The actual Observer runs psycopg tuple_row for its canonical
+            # Entry checkpoints. Exit SQL uses a cursor-local dict_row
+            # adapter, but this source-side query must accept a SINGLE
+            # strictly shaped tuple, without changing the shared connection.
+            if isinstance(raw, Mapping):
+                attrs = raw.get("attributes")
+            elif isinstance(raw, (tuple, list)) and len(raw) == 1:
+                attrs = raw[0]
+            else:
                 raise P90RealLiveSourceUnverified(
                     "P90_REAL_LIVE_SOURCE_MFE_ROW_NOT_PROVEN"
                 )
-            attrs = raw.get("attributes")
             if not isinstance(attrs, Mapping):
                 raise P90RealLiveSourceUnverified(
                     "P90_REAL_LIVE_SOURCE_MFE_ATTRIBUTES_INVALID"
