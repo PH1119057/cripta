@@ -170,6 +170,58 @@ def test_late_unarmed_native_trailing_cannot_masquerade_as_success() -> None:
         )
 
 
+@pytest.mark.parametrize("side", ("LONG", "SHORT"))
+def test_verified_postfill_can_arm_exchange_trailing_without_waiting_for_next_tick(
+    side: str,
+) -> None:
+    position, plan = _scope(side=side)
+    fact = _observation(
+        position, best="100.2" if side == "LONG" else "99.8",
+        price="100.2" if side == "LONG" else "99.8",
+        stop="90" if side == "LONG" else "110",
+        tp="110" if side == "LONG" else "90",
+        kind="P90L90_REAL_POSTFILL",
+    )
+    attrs = fact.attributes.to_dict()
+    attrs["p90l90_real"].update({
+        "durable_cursor_verified": False,
+        "fill_to_postfill_source_verified": True,
+        "signed_fill_execution_ids": ["verified-bybit-fill-exec-id"],
+    })
+    fact = replace(
+        fact, attributes=FrozenPolicy.from_mapping(attrs),
+        source_refs=(*fact.source_refs, "bybit:execution:list:exact-order:fill"),
+    )
+    evaluation = UniversalExitEngine().evaluate(position, plan, fact)
+    assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+    assert evaluation.decision is not None
+    assert evaluation.decision.action_kind is ExitActionKind.SET_TRAILING
+    assert evaluation.decision.requested_mutation.to_dict()["distance"] == "0.35"
+
+
+@pytest.mark.parametrize("which", ("no-coverage", "missing-fill", "fake-fill"))
+def test_postfill_trailing_requires_independent_source_and_real_fill_execution(
+    which: str,
+) -> None:
+    position, plan = _scope()
+    fact = _observation(
+        position, best="100.2", price="100.2", stop="90", tp="110",
+        kind="P90L90_REAL_POSTFILL",
+    )
+    attrs = fact.attributes.to_dict()
+    attrs["p90l90_real"].update({
+        "durable_cursor_verified": False,
+        "fill_to_postfill_source_verified": which != "no-coverage",
+        "signed_fill_execution_ids": (
+            [] if which == "missing-fill" else ["" if which == "fake-fill" else "exec"]
+        ),
+    })
+    fact = replace(fact, attributes=FrozenPolicy.from_mapping(attrs))
+    result = UniversalExitEngine().evaluate(position, plan, fact)
+    assert result.status is ExitEvaluationStatus.BLOCKED
+    assert result.decision is None
+
+
 @pytest.mark.parametrize(
     ("side", "best", "last", "stop", "tp", "target"),
     [
