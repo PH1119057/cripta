@@ -21,7 +21,10 @@ from bybit_workbench.domain.models import Candle
 from bybit_workbench.market_data.candle_warmup import (
     cache_approved_bybit_history,
 )
-from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
+from bybit_workbench.universal_exit.p90l90_real_mfe import (
+    P90RealMfeCheckpoint,
+    P90RealMfeUnverified,
+)
 from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
     P90RealExitRuntimePorts,
 )
@@ -41,6 +44,7 @@ from .p90l90_real_bounded_native_restart import (
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS
 from .p90l90_real_open_restart import (
     P90RealOpenRestartInventory,
+    P90RealRestartPosition,
     prove_p90_real_open_restart_inventory,
 )
 from .p90l90_real_restart_bridge import (
@@ -313,7 +317,7 @@ def recover_p90_real_open_source(
             )
 
         position_by_symbol = inventory.by_symbol
-        mfe_state: dict[str, object | None] = {}
+        mfe_state: dict[str, P90RealMfeCheckpoint | None] = {}
         for symbol, item in position_by_symbol.items():
             try:
                 latest, _fact, _refs = exit_ports.mfe_ledger.load_latest(
@@ -324,15 +328,20 @@ def recover_p90_real_open_source(
                 if str(exc) != "P90_REAL_MFE_DURABLE_NATIVE_STATE_MISSING":
                     raise
                 latest = None
+            join = joins[symbol]
+            last_emitted_at = join.last_emitted_trade_at
+            if last_emitted_at is None:
+                raise P90RealOpenSourceRecoveryUnverified(
+                    "P90_REAL_RESTART_SOURCE_DURABLE_NATIVE_CURSOR_INCOMPLETE"
+                )
             if latest is not None:
-                join = joins[symbol]
                 _require(
                     latest.cursor_seq == join.last_emitted_trade_sequence
-                    and latest.cursor_at == join.last_emitted_trade_at
+                    and latest.cursor_at == last_emitted_at
                     and latest.cursor_exec_id in join.last_emitted_exec_ids,
                     "DURABLE_MFE_NOT_AT_SOURCE_CURSOR",
                 )
-            elif joins[symbol].last_emitted_trade_at > item.position.fill_at:
+            elif last_emitted_at > item.position.fill_at:
                 raise P90RealOpenSourceRecoveryUnverified(
                     "P90_REAL_RESTART_SOURCE_MFE_MISSING_AFTER_POSTFILL_TICK"
                 )
@@ -372,9 +381,9 @@ def recover_p90_real_open_source(
                 fact: MarketFactEnvelope,
                 cursor: TradeCursor,
                 *,
-                current=open_item,
-                old_anchor=recovery.durable_anchor,
-                current_symbol=symbol,
+                current: P90RealRestartPosition | None = open_item,
+                old_anchor: TradeCursor = recovery.durable_anchor,
+                current_symbol: str = symbol,
             ) -> None:
                 if current is None or cursor.traded_at < current.position.fill_at:
                     return
