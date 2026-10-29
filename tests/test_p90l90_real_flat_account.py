@@ -1,7 +1,6 @@
 """No-order flat-account proof: signed source + IPC negative tests."""
 from __future__ import annotations
 
-import socket
 import sys
 import threading
 from dataclasses import replace
