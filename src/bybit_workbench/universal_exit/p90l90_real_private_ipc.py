@@ -22,6 +22,9 @@ from decimal import Decimal, InvalidOperation
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
+from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
+    P90RealSignedFlatAccount,
+)
 
 from .p90l90_real_observation import ScopedPrivatePositionEvidence
 
@@ -145,6 +148,77 @@ def checked_request(
     )
 
 
+
+def checked_flat_request(
+    raw: Mapping[str, object], *, expected_account: str, expected_connector: str,
+) -> str:
+    """Unlike TRADE/CLOSED, FLAT carries no position/cursor or caller facts."""
+    if (
+        set(raw) != {"version", "account", "connector", "nonce", "kind", "event_at"}
+        or raw.get("version") != _VERSION
+        or raw.get("kind") != "FLAT"
+        or raw.get("account") != expected_account
+        or raw.get("connector") != expected_connector
+        or not isinstance(raw.get("nonce"), str)
+        or _NONCE.fullmatch(str(raw["nonce"])) is None
+    ):
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_FLAT_REQUEST_INVALID")
+    at = _timestamp(raw["event_at"])
+    if not 0 <= (datetime.now(UTC) - at).total_seconds() <= 15:
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_FLAT_REQUEST_STALE")
+    return str(raw["nonce"])
+
+
+def flat_to_wire(evidence: P90RealSignedFlatAccount) -> dict[str, object]:
+    """Minimum signed-account facts; the Observer never receives credentials."""
+    return {
+        "account": evidence.trading_account_id,
+        "uid": evidence.signed_uid,
+        "generation": evidence.private_generation_id,
+        "source_ref": evidence.source_ref,
+        "observed_at": evidence.observed_at.isoformat(),
+        "open_positions": evidence.open_positions,
+        "open_orders": evidence.open_orders,
+        "pending_commands": evidence.pending_commands,
+    }
+
+
+def checked_flat_evidence(
+    raw: object, *, expected_account: str, received_at: datetime,
+) -> P90RealSignedFlatAccount:
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {
+            "account", "uid", "generation", "source_ref", "observed_at",
+            "open_positions", "open_orders", "pending_commands",
+        }
+        or raw.get("account") != expected_account
+        or not isinstance(raw.get("uid"), str)
+        or not raw["uid"].isascii() or not raw["uid"].isdigit()
+        or int(raw["uid"]) <= 0
+        or not isinstance(raw.get("generation"), str)
+        or not raw["generation"]
+        or raw.get("source_ref") != "bybit:signed-flat-linear-usdt:exact-account"
+        or any(
+            type(raw.get(k)) is not int or raw[k] != 0
+            for k in ("open_positions", "open_orders", "pending_commands")
+        )
+    ):
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_FLAT_EVIDENCE_INVALID")
+    observed = _timestamp(raw["observed_at"])
+    if not 0 <= (received_at - observed).total_seconds() <= 15:
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_FLAT_EVIDENCE_STALE")
+    return P90RealSignedFlatAccount(
+        trading_account_id=expected_account,
+        signed_uid=raw["uid"],
+        private_generation_id=raw["generation"],
+        source_ref=raw["source_ref"],
+        observed_at=observed,
+        open_positions=0,
+        open_orders=0,
+        pending_commands=0,
+    )
+
 def evidence_to_wire(evidence: ScopedPrivatePositionEvidence) -> dict[str, object]:
     """Only minimum required signed inventory; never keys or response headers."""
     return {
@@ -247,6 +321,39 @@ class P90PrivateProofClient:
             seq=None, exec_id=None,
         )
 
+
+    def read_flat_account(self) -> P90RealSignedFlatAccount:
+        """Read only this credential-bound worker's signed flat USDT inventory."""
+        nonce = secrets.token_hex(16)
+        request: dict[str, object] = {
+            "version": _VERSION, "account": self._account,
+            "connector": self._connector, "nonce": nonce, "kind": "FLAT",
+            "event_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            with socket.socket(_AF_UNIX, socket.SOCK_STREAM) as stream:
+                stream.settimeout(self._timeout)
+                stream.connect(self._address)
+                if not peer_same_runtime_uid(stream):
+                    raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_PEER_NOT_VERIFIED")
+                stream.sendall(_frame(request))
+                raw = _receive(stream)
+        except OSError:
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE") from None
+        if (
+            raw.get("version") != _VERSION
+            or raw.get("nonce") != nonce
+            or raw.get("account") != self._account
+            or raw.get("connector") != self._connector
+            or raw.get("status") != "VERIFIED"
+            or "evidence" in raw
+        ):
+            raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_FLAT_RESPONSE_UNVERIFIED")
+        return checked_flat_evidence(
+            raw.get("flat"), expected_account=self._account,
+            received_at=datetime.now(UTC),
+        )
+
     def _request(
         self, *, position: StrategyPosition, kind: str,
         at: datetime, seq: int | None, exec_id: str | None,
@@ -291,6 +398,7 @@ def serve_private_proof(
     handler: Callable[[Mapping[str, object]], ScopedPrivatePositionEvidence],
     running: Callable[[], bool],
     ready: Callable[[], None] | None = None,
+    flat_handler: Callable[[], P90RealSignedFlatAccount] | None = None,
 ) -> None:
     """Opt-in account-owned broker loop; only kernel-authenticated local UID.
 
@@ -318,24 +426,45 @@ def serve_private_proof(
                     continue
                 try:
                     raw = _receive(stream)
-                    checked_request(
-                        raw, expected_account=account,
-                        expected_connector=connector,
-                    )
-                    evidence = handler(raw)
-                    if (
-                        evidence.trading_account_id != account
-                        or evidence.connector_id != connector
-                    ):
-                        raise P90PrivateIpcUnverified(
-                            "P90_PRIVATE_IPC_PRODUCER_SCOPE_INVALID"
+                    if raw.get("kind") == "FLAT":
+                        checked_flat_request(
+                            raw, expected_account=account,
+                            expected_connector=connector,
                         )
-                    stream.sendall(_frame({
-                        "version": _VERSION, "nonce": raw["nonce"],
-                        "status": "VERIFIED", "account": account,
-                        "connector": connector,
-                        "evidence": evidence_to_wire(evidence),
-                    }))
+                        if flat_handler is None:
+                            raise P90PrivateIpcUnverified(
+                                "P90_PRIVATE_IPC_FLAT_PRODUCER_MISSING"
+                            )
+                        flat = flat_handler()
+                        if flat.trading_account_id != account:
+                            raise P90PrivateIpcUnverified(
+                                "P90_PRIVATE_IPC_FLAT_ACCOUNT_MISMATCH"
+                            )
+                        stream.sendall(_frame({
+                            "version": _VERSION, "nonce": raw["nonce"],
+                            "status": "VERIFIED", "account": account,
+                            "connector": connector,
+                            "flat": flat_to_wire(flat),
+                        }))
+                    else:
+                        checked_request(
+                            raw, expected_account=account,
+                            expected_connector=connector,
+                        )
+                        evidence = handler(raw)
+                        if (
+                            evidence.trading_account_id != account
+                            or evidence.connector_id != connector
+                        ):
+                            raise P90PrivateIpcUnverified(
+                                "P90_PRIVATE_IPC_PRODUCER_SCOPE_INVALID"
+                            )
+                        stream.sendall(_frame({
+                            "version": _VERSION, "nonce": raw["nonce"],
+                            "status": "VERIFIED", "account": account,
+                            "connector": connector,
+                            "evidence": evidence_to_wire(evidence),
+                        }))
                 except Exception:
                     # Fail closed without reflecting a malformed nonce or
                     # revealing credential/Bybit/DB exception data.
