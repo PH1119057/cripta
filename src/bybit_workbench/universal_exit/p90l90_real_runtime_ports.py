@@ -16,7 +16,6 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
