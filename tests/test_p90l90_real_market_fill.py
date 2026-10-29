@@ -164,3 +164,30 @@ def test_runtime_checks_signed_executions_before_correcting_initial_protection()
     correction = source.index('"/v5/position/trading-stop"', proof)
     assert ack < signed < proof < correction
     assert "REAL_MARKET_SIGNED_EXECUTION_LINEAGE_UNVERIFIED" in source
+
+
+def test_first_protected_p90_fill_is_durably_owned_before_terminal_entry() -> None:
+    """The signed-fill handoff cannot be delayed until command-loop polling."""
+    source = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    signed = source.index("real_fill_execution_ids = exact_market_order_execution_ids(")
+    verified = source.index("if not live_protection_confirmed:", signed)
+    owned = source.index("persist_universal_strategy_position(", verified)
+    guarded = source.index(
+        "SET initial_protection_confirmed_at=clock_timestamp()", owned
+    )
+    terminal = source.index("SET state='completed',finished_at_epoch_ms=", guarded)
+    assert signed < verified < owned < guarded < terminal
+    assert "P90_REAL_FIRST_FILL_OWNER_PERSISTENCE_UNVERIFIED" in source
+    assert "connection.commit()" in source[guarded:terminal]
+    assert "real_lineage.trading_account_id != TRADING_ACCOUNT_ID" in source
+    assert "real_fill_execution_ids[0]" in source[signed:owned]
+    assert "current_p90_real_no_pending_exit" in source
+
+
+def test_first_execution_identity_uses_exchange_time_not_string_order() -> None:
+    first = _fill(execution_id="z-first", qty="0.04", price="100")
+    second = _fill(execution_id="a-second", qty="0.06", price="100")
+    second["execTime"] = "1790000000010"
+    assert _verified_executions([second, first]) == ("z-first", "a-second")
