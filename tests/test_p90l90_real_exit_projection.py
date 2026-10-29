@@ -177,6 +177,31 @@ def test_late_unarmed_native_trailing_cannot_masquerade_as_success() -> None:
         ("SHORT", "99", "99.1", "110", "90", "91"),
     ],
 )
+def test_closed_5m_rejects_missing_exchange_trail_even_with_valid_tp(
+    side: str, best: str, last: str, stop: str, tp: str, target: str,
+) -> None:
+    position, plan = _scope(side=side)
+    fact = _observation(
+        position, best=best, price=last, stop=stop, tp=tp,
+        target=target, kind="P90L90_REAL_CLOSED_5M", trailing="0",
+    )
+    with pytest.raises(
+        P90RealExitUnverified, match="CLOSED_5M_BYBIT_TRAILING_NOT_ARMED",
+    ):
+        project_p90l90_real_exit(position, plan, fact)
+    blocked = UniversalExitEngine().evaluate(position, plan, fact)
+    assert blocked.status is ExitEvaluationStatus.BLOCKED
+    assert blocked.decision is None
+
+
+
+@pytest.mark.parametrize(
+    ("side", "best", "last", "stop", "tp", "target"),
+    [
+        ("LONG", "101", "100.8", "90", "110", "109"),
+        ("SHORT", "99", "99.1", "110", "90", "91"),
+    ],
+)
 def test_real_exit_updated_causal_l53_tp_uses_universal_exchange_action(
     side: str, best: str, last: str, stop: str, tp: str, target: str,
 ) -> None:
