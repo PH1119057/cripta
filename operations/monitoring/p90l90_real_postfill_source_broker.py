@@ -7,15 +7,12 @@ or approve an order, advance an epoch, or invent an OHLC/native event.
 """
 from __future__ import annotations
 
-import hashlib
-import os
 import re
 import socket
 import sys
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
@@ -163,6 +160,60 @@ def build_source_window(
         complete_native_window=True,
     )
 
+
+def read_exact_source_position(
+    *,
+    database_dsn: str,
+    source_epoch_id: str,
+    source_commit: str,
+    position_id: str,
+    trading_account_id: str,
+    symbol: str,
+) -> tuple[StrategyPosition, str]:
+    """Independent READ ONLY durable position + active source-epoch proof.
+
+    The private worker supplies ONLY identifiers. Never accept a position,
+    fill, source commitment or native price supplied by the requester.
+    """
+    import psycopg
+    from psycopg.rows import dict_row
+
+    from bybit_workbench.universal_exit.loader import load_exit_binding
+
+    with psycopg.connect(database_dsn, row_factory=dict_row) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+        position, plan = load_exit_binding(
+            connection, strategy_position_id=position_id
+        )
+        if (
+            position.strategy_position_id != position_id
+            or position.trading_account_id != trading_account_id
+            or position.symbol != symbol
+            or position.strategy_id not in ALLOWED_SYMBOLS
+            or position.strategy_version != VERSION
+            or position.identity_status != "PROVEN"
+            or position.initial_protection_confirmed_at is None
+            or plan.exit_plan_fingerprint != position.exit_plan_fingerprint
+        ):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_DURABLE_POSITION_UNVERIFIED"
+            )
+        row = connection.execute(
+            """SELECT epoch_id,source_commit,status
+                 FROM strategy_entry.p90l90_real_source_epochs
+                WHERE epoch_id=%s AND source_commit=%s AND status='ACTIVE'""",
+            (source_epoch_id, source_commit),
+        ).fetchone()
+        if (
+            not isinstance(row, Mapping)
+            or row.get("epoch_id") != source_epoch_id
+            or row.get("source_commit") != source_commit
+            or row.get("status") != "ACTIVE"
+        ):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_DURABLE_EPOCH_UNVERIFIED"
+            )
+        return position, source_epoch_id
 
 def window_to_wire(window: P90RealPostfillSourceWindow) -> dict[str, object]:
     return {
