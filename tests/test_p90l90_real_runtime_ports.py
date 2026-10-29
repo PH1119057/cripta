@@ -2,10 +2,17 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 import pytest
 
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_account_routes import (
+    P90RealAccountRoute,
+    P90RealAccountRoutes,
+    P90RealAccountRoutesUnverified,
+)
+from bybit_workbench.universal_exit import p90l90_real_runtime_ports as runtime_mod
 from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
     P90RealExitRuntimePorts,
     P90RealRuntimeCompositionUnverified,
@@ -131,3 +138,50 @@ def test_bare_object_does_not_masquerade_as_shared_source_transaction() -> None:
             independently_verified_closed_continuity=lambda s, at: False,
             independently_verified_mutation_safety=lambda p, e, at: False,
         )
+
+
+def test_factory_consumes_exact_pg_roster_without_user_supplied_account_ids(
+    monkeypatch,
+) -> None:
+    db = _DB()
+    at = datetime(2026, 10, 29, 9, 0, tzinfo=UTC)
+    def route(strategy, account, connector, kind, uid):
+        return P90RealAccountRoute(
+            strategy_id=strategy,
+            activation_id="active-" + kind,
+            strategy_config_fingerprint="exact-v3-" + kind,
+            strategy_execution_binding_id="binding-" + kind,
+            trading_account_id=account,
+            account_connector_id=connector,
+            account_kind=kind,
+            registered_exchange_uid=uid,
+        )
+    roster = P90RealAccountRoutes(
+        main=route(MAIN_ID, MAIN, "connector-main", "MAIN", "101"),
+        sub=route(SUB_ID, SUB, "connector-sub", "SUB", "202"),
+    )
+    looked_up = []
+    def resolver(connection, *, bundles, at):
+        looked_up.append((connection, tuple(bundles), at))
+        return roster
+    monkeypatch.setattr(runtime_mod, "read_p90_real_account_routes", resolver)
+    factory = runtime_mod.assemble_p90_real_exit_runtime_from_db_bundles
+    args = dict(
+        source_commit="a" * 40,
+        independently_verified_native_coverage=lambda pos, cursor: (False, False),
+        independently_verified_closed_history=lambda symbol, observed: (),
+        independently_verified_closed_continuity=lambda symbol, observed: False,
+        independently_verified_mutation_safety=lambda pos, ev, observed: False,
+    )
+    ports = factory(db, bundles=("MAIN", "SUB"), observed_at=at, **args)
+    assert looked_up == [(db, ("MAIN", "SUB"), at)]
+    assert ports.private_evidence._accounts == roster.account_by_strategy
+    assert ports.private_evidence._connectors == roster.connector_by_strategy
+    assert db.calls == 0
+
+    def reject(*_a, **_k):
+        raise P90RealAccountRoutesUnverified("NO_EXACT_ACTIVE_BINDINGS")
+    monkeypatch.setattr(runtime_mod, "read_p90_real_account_routes", reject)
+    with pytest.raises(P90RealAccountRoutesUnverified, match="NO_EXACT_ACTIVE_BINDINGS"):
+        factory(db, bundles=("MAIN", "SUB"), observed_at=at, **args)
+    assert db.calls == 0
