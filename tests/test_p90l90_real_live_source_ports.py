@@ -239,3 +239,36 @@ def test_next_ordered_trade_after_durable_mfe_is_accepted(
     attrs = {"attributes": {"checkpoint": state.snapshot()}}
     db = StubDB(latest=(attrs["attributes"],) if tuple_row else attrs)
     assert _ports(db, mirror).native_coverage(position, following) == (True, True)
+
+
+def test_closed_5m_port_observes_the_exact_shared_ledgers_advanced_watermark() -> None:
+    class AdvancingLedger(StubLedger):
+        def __init__(self) -> None:
+            self.watermark = AT
+
+        def restart_watermarks(self, _symbol: str):
+            return {"5": self.watermark}
+
+        def history(self, *, symbol: str, timeframe: str, through: datetime, limit: int):
+            if through > self.watermark:
+                raise RuntimeError("SOURCE_OWNER_HAS_NOT_EMITTED_THIS_BOUNDARY")
+            return super().history(
+                symbol=symbol, timeframe=timeframe, through=through, limit=limit,
+            )
+
+    ledger = AdvancingLedger()
+    mirror = _real_mirror()
+    ports = module.P90RealLiveSourcePorts(
+        StubDB(), mirror=mirror, ledger=ledger,
+        source_epoch_id=EPOCH, source_commit=SHA,
+        mirror_serial=1, mirror_started_at=STARTED,
+    )
+    next_boundary = AT + timedelta(minutes=5)
+    with pytest.raises(module.P90RealLiveSourceUnverified):
+        ports.closed_continuity("LTCUSDT", next_boundary)
+    # This is the SAME object whose watermark the real P90 consumer advances
+    # during _bars.append(), never a second prestart snapshot object.
+    ledger.watermark = next_boundary
+    assert ports._ledger is ledger
+    assert ports.closed_continuity("LTCUSDT", next_boundary) is True
+    assert ports.closed_history("LTCUSDT", next_boundary)[-1].closed_at == next_boundary
