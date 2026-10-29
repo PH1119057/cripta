@@ -307,7 +307,7 @@ def serve_private_proof(
         while running():
             try:
                 stream, _ = server.accept()
-            except socket.timeout:
+            except TimeoutError:
                 continue
             with stream:
                 stream.settimeout(10.0)
