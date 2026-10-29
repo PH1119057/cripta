@@ -2830,16 +2830,17 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise ExchangeMutationBarrier(
                     "market Entry initial protection not confirmed on Exchange"
                 )
-            result["actualProtection"] = {
+            actual_protection_result: dict[str, object] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": None if actual_target is None else str(actual_target),
                 "exchange": protection.get("retMsg"),
                 "verifiedFromExchange": True,
             }
             if real_fill_execution_ids:
-                result["actualProtection"]["entryExecutionIds"] = list(
+                actual_protection_result["entryExecutionIds"] = list(
                     real_fill_execution_ids
                 )
+            result["actualProtection"] = actual_protection_result
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
     try:
