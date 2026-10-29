@@ -147,7 +147,9 @@ def project_p90l90_real_exit(
         # Arm once, before the trigger: Exchange activePrice will activate the
         # autonomous trailing on +0.5%. No repeated SET_STOP proxy is allowed.
         mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
-        if mark >= activation if long else mark <= activation:
+        if favorable >= Decimal("0.5") or (mark >= activation if long else mark <= activation):
+            # A past high/low watermark cannot be reconstructed into an
+            # Exchange-native stop after price has already retraced.
             raise P90RealExitUnverified("P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED")
         return (
             ExitActionKind.SET_TRAILING,
