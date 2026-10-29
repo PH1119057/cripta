@@ -23,7 +23,7 @@ def test_actual_private_to_market_source_uds_proof_with_live_native_ids() -> Non
     # A busy native interval must stay complete, not lose all trades merely
     # because 32 events occurred during a real first-fill handoff window.
     for i in range(64):
-        event_at = now - timedelta(microseconds=160_000 - i * 1000)
+        event_at = now - timedelta(microseconds=100_000 - i * 1000)
         mirror.record_message({
             "topic": "publicTrade.LTCUSDT",
             "data": [{
