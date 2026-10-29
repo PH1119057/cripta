@@ -222,8 +222,9 @@ def test_durable_mfe_must_advance_each_original_native_trade_in_order(
         ).native_coverage(position, future)
 
 
+@pytest.mark.parametrize("tuple_row", (False, True))
 def test_next_ordered_trade_after_durable_mfe_is_accepted(
-    monkeypatch,
+    monkeypatch, tuple_row: bool,
 ) -> None:
     position, _plan, state, anchor, _private, _price = _scope()
     following = TradeCursor(
@@ -235,5 +236,6 @@ def test_next_ordered_trade_after_durable_mfe_is_accepted(
     _trade(mirror, anchor)
     _trade(mirror, following)
     monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
-    db = StubDB(latest={"attributes": {"checkpoint": state.snapshot()}})
+    attrs = {"attributes": {"checkpoint": state.snapshot()}}
+    db = StubDB(latest=(attrs["attributes"],) if tuple_row else attrs)
     assert _ports(db, mirror).native_coverage(position, following) == (True, True)
