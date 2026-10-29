@@ -43,7 +43,7 @@ BEGIN
          AND pg_get_userbyid(f.proowner)='cripta_p90l90_real_v3_binding'
          AND f.prosecdef IS TRUE
          AND f.prorettype='text'::regtype::oid
-         AND md5(f.prosrc)='efa9a3e3604b22133184f92b02bcb88f'
+         AND md5(f.prosrc)='17a99c163fdcfdcb1fabb6395b39ac45'
          AND has_function_privilege(
            'cripta',f.oid,'EXECUTE'
          )
@@ -150,7 +150,7 @@ BEGIN
      OR v_capital->>'margin_mode' IS DISTINCT FROM 'ISOLATED'
      OR v_capital->>'max_open_positions_per_symbol' IS DISTINCT FROM '1'
      OR v_capital->>'max_simultaneous_committed_usdt'
-          IS DISTINCT FROM CASE WHEN v_kind='MAIN' THEN '20' ELSE '30' END
+          IS DISTINCT FROM (CASE WHEN v_kind='MAIN' THEN '20' ELSE '30' END)
      OR v_entry->'execution_policy'->>'order_type' IS DISTINCT FROM 'MARKET'
      OR v_protection->'initial_protection'->>'stop_loss_pct' IS DISTINCT FROM '10'
      OR v_protection->'initial_protection'->>'take_profit_enabled' IS DISTINCT FROM 'true'
