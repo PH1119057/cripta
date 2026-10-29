@@ -155,3 +155,62 @@ def test_native_window_explicitly_bounds_high_density_burst() -> None:
             mirror=mirror, position=pos, source_commit=SHA,
             source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=now,
         )
+
+
+def test_zero_next_native_tick_requires_fresh_rest_anchor_and_no_synthetic_tick() -> None:
+    mirror, position, at = _market(trades=0)
+    row = {
+        "s": position.symbol, "i": "pre-fill-rest-anchor",
+        "T": int((at - timedelta(seconds=1)).timestamp() * 1000),
+        "seq": 100,
+    }
+    source = build_source_window(
+        mirror=mirror, position=position, source_commit=SHA,
+        source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=at,
+        fetch_recent_trades=lambda symbol: (
+            [row], at + timedelta(milliseconds=100),
+        ),
+    )
+    assert source.complete_native_window
+    assert source.no_new_native_trade_rest_verified
+    assert source.covered_through == at
+    assert source.last_native_price == position.actual_avg_fill
+    assert source.best_favorable_price == position.actual_avg_fill
+    assert source.source_refs[0].startswith(
+        f"bybit:recentTrade:{position.symbol}:zero-after-fill:"
+    )
+
+
+@pytest.mark.parametrize("failure", (
+    "no-provider", "unseen-trade", "stale-rest",
+    "foreign-market", "empty-response", "malformed-rest",
+))
+def test_zero_native_proof_fails_without_independent_complete_rest(
+    failure: str,
+) -> None:
+    mirror, position, at = _market(trades=0)
+    row = {
+        "s": position.symbol, "i": "real-rest-anchor",
+        "T": int((at - timedelta(seconds=1)).timestamp() * 1000),
+    }
+    if failure == "unseen-trade":
+        row["T"] = int((at - timedelta(milliseconds=100)).timestamp() * 1000)
+    elif failure == "foreign-market":
+        row["s"] = "DOTUSDT"
+    elif failure == "malformed-rest":
+        del row["T"]
+    rows = [] if failure == "empty-response" else [row]
+    fetch = (
+        None if failure == "no-provider" else
+        lambda symbol: (
+            rows,
+            at - timedelta(seconds=10) if failure == "stale-rest"
+            else at + timedelta(milliseconds=100),
+        )
+    )
+    with pytest.raises(P90RealPostfillMarketSourceUnverified):
+        build_source_window(
+            mirror=mirror, position=position, source_commit=SHA,
+            source_epoch_id=EPOCH, evidence_epoch_id=EPOCH, at=at,
+            fetch_recent_trades=fetch,
+        )
