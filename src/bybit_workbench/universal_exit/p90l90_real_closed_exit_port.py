@@ -178,11 +178,13 @@ class P90RealClosedExitPort:
                 raise P90RealClosedGeometryUnverified(
                     f"P90_REAL_CLOSED_5M_EXIT_POLICY_DENIED:{evaluation.reason}"
                 )
-            if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
-                if self._execution_port is None:
-                    raise P90RealClosedGeometryUnverified(
-                        "P90_REAL_CLOSED_5M_EXECUTION_OWNER_MISSING"
-                    )
+            if (
+                evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+                and self._execution_port is None
+            ):
+                raise P90RealClosedGeometryUnverified(
+                    "P90_REAL_CLOSED_5M_EXECUTION_OWNER_MISSING"
+                )
             self._exit_store.record(evaluation, position=position, plan=plan)
             if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
                 assert self._execution_port is not None
