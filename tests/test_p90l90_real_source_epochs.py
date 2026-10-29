@@ -93,6 +93,11 @@ def test_independent_real_epoch_is_additive_and_release_managed() -> None:
     assert "UNIQUE INDEX IF NOT EXISTS p90_real_at_most_one_active_epoch" in sql
     assert "status='RETIRED'" in sql
     assert "PRIMARY KEY (epoch_id,symbol)" in sql
+    assert "p90l90_real_restart_bridges" in sql
+    assert "p90-real-restart-[0-9a-f]{40}$" in sql
+    assert "GRANT SELECT,INSERT ON" in sql
+    assert "40}REVOKE" not in sql
+    assert sql.count("COMMIT;") == 1
     assert "ON CONFLICT (epoch_id,symbol) DO NOTHING" in writer
     assert "WHERE epoch_id=%s AND symbol=%s" in writer
     assert "P90_REAL_SOURCE_EPOCH_NOT_CURRENT" in writer
