@@ -48,8 +48,8 @@ def project_p90l90_real_exit(
 ) -> tuple[ExitActionKind, dict[str, object], str] | None:
     """Select only an existing approved REAL dynamic TP / trailing action.
 
-    The external REAL observer owns proof of actual Exchange stop/TP, durable
-    best-favorable cursor, original 5m geometry and non-duplicated source.
+    The external REAL observer owns proof of actual Exchange stop/TP/trailing,
+    durable source cursor, original 5m geometry and non-duplicated source.
     An unverified observation is rejected, never modeled as a paper fill.
     """
     if (
@@ -125,11 +125,40 @@ def project_p90l90_real_exit(
         raise P90RealExitUnverified("P90_REAL_EXIT_PRICE_STATE_UNVERIFIED")
     long = position.direction is TradeDirection.LONG
     favorable = ((best / entry - 1) if long else (1 - best / entry)) * 100
-    if favorable < Decimal("0.5"):
-        return None
-    # Only the immediately prior durable cursor's best may cause a stop
-    # update. The current tick cannot retroactively execute that stop.
-    if observation.event_kind == "P90L90_REAL_CLOSED_5M":
+    # Bybit, not the Observer's native ticks or a closed 5m candle, must
+    # maintain the subsequent monotone high/low-watermark trailing stop.
+    # The only REAL trailing mutation is the one-time Exchange TS arm.
+    expected_distance = _aligned(entry * Decimal("0.0035"), tick, up=False)
+    if expected_distance <= 0:
+        raise P90RealExitUnverified("P90_REAL_NATIVE_TRAILING_TICK_UNREPRESENTABLE")
+    try:
+        live_trailing = Decimal(str(real.get("exchange_trailing_distance")))
+    except (InvalidOperation, ValueError, TypeError):
+        raise P90RealExitUnverified("P90_REAL_EXCHANGE_TRAILING_READBACK_MISSING") from None
+    if not live_trailing.is_finite() or live_trailing < 0 or live_trailing % tick != 0:
+        raise P90RealExitUnverified("P90_REAL_EXCHANGE_TRAILING_READBACK_INVALID")
+    if live_trailing not in (Decimal("0"), expected_distance):
+        raise P90RealExitUnverified("P90_REAL_EXCHANGE_TRAILING_DISTANCE_DRIFT")
+    activation = _aligned(
+        entry * (Decimal("1.005") if long else Decimal("0.995")),
+        tick, up=long,
+    )
+    if live_trailing == 0 and observation.event_kind == "P90L90_REAL_NATIVE_TRADE":
+        # Arm once, before the trigger: Exchange activePrice will activate the
+        # autonomous trailing on +0.5%. No repeated SET_STOP proxy is allowed.
+        mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
+        if mark >= activation if long else mark <= activation:
+            raise P90RealExitUnverified("P90_REAL_NATIVE_TRAILING_LATE_ARM_UNVERIFIED")
+        return (
+            ExitActionKind.SET_TRAILING,
+            {
+                "distance": str(expected_distance),
+                "active_price": str(activation),
+                "tpsl_mode": "Full",
+            },
+            "P90L90_REAL_BYBIT_NATIVE_TRAIL035_ARM",
+        )
+    if observation.event_kind == "P90L90_REAL_CLOSED_5M" and favorable >= Decimal("0.5"):
         target = _positive(real.get("opposite_raw_l53_target"), "RAW_TARGET")
         fresh = real.get("closed_geometry_proven")
         if fresh is not True:
@@ -158,22 +187,5 @@ def project_p90l90_real_exit(
                     },
                     "P90L90_REAL_DYNAMIC_RAW_L53_TP",
                 )
-    proposed = entry * (
-        1 + (favorable - Decimal("0.35")) / 100 if long
-        else 1 - (favorable - Decimal("0.35")) / 100
-    )
-    proposed = _aligned(proposed, tick, up=not long)
-    tighter = proposed > live_stop if long else proposed < live_stop
-    safe_now = proposed < last if long else proposed > last
-    if tighter and safe_now:
-        return (
-            ExitActionKind.SET_STOP,
-            {
-                "stop_price": str(proposed),
-                "trigger_by": "LastPrice",
-                "tpsl_mode": "Full",
-                "order_type": "MARKET",
-            },
-            "P90L90_REAL_TRAIL035_TIGHTEN",
-        )
+    # All subsequent favorable price tracking belongs exclusively to Bybit.
     return None
