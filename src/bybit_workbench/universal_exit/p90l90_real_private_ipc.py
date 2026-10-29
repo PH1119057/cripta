@@ -27,6 +27,7 @@ from bybit_workbench.universal_entry.p90l90_real_source_epoch_start import (
 from bybit_workbench.universal_entry.transport_continuity import TradeCursor
 
 from .p90l90_real_observation import ScopedPrivatePositionEvidence
+from .p90l90_real_recovery_account import P90RealSignedRecoveryAccount
 
 _ACCOUNT = re.compile(r"ta-[a-f0-9]{32}\Z")
 _NONCE = re.compile(r"[a-f0-9]{32}\Z")
@@ -219,6 +220,89 @@ def checked_flat_evidence(
         pending_commands=0,
     )
 
+
+def checked_recovery_request(
+    raw: Mapping[str, object], *, expected_account: str, expected_connector: str,
+) -> str:
+    """Account-wide restart proof carries no caller-supplied position facts."""
+    if (
+        set(raw) != {"version", "account", "connector", "nonce", "kind", "event_at"}
+        or raw.get("version") != _VERSION
+        or raw.get("kind") != "RECOVERY"
+        or raw.get("account") != expected_account
+        or raw.get("connector") != expected_connector
+        or not isinstance(raw.get("nonce"), str)
+        or _NONCE.fullmatch(str(raw["nonce"])) is None
+    ):
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RECOVERY_REQUEST_INVALID")
+    at = _timestamp(raw["event_at"])
+    if not 0 <= (datetime.now(UTC) - at).total_seconds() <= 15:
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RECOVERY_REQUEST_STALE")
+    return str(raw["nonce"])
+
+
+def recovery_to_wire(evidence: P90RealSignedRecoveryAccount) -> dict[str, object]:
+    return {
+        "account": evidence.trading_account_id,
+        "uid": evidence.signed_uid,
+        "generation": evidence.private_generation_id,
+        "source_ref": evidence.source_ref,
+        "observed_at": evidence.observed_at.isoformat(),
+        "positions": [dict(row) for row in evidence.positions],
+        "open_orders": evidence.open_orders,
+        "pending_commands": evidence.pending_commands,
+    }
+
+
+def checked_recovery_evidence(
+    raw: object, *, expected_account: str, received_at: datetime,
+) -> P90RealSignedRecoveryAccount:
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != {
+            "account", "uid", "generation", "source_ref", "observed_at",
+            "positions", "open_orders", "pending_commands",
+        }
+        or raw.get("account") != expected_account
+        or not isinstance(raw.get("uid"), str)
+        or not raw["uid"].isascii() or not raw["uid"].isdigit()
+        or int(raw["uid"]) <= 0
+        or not isinstance(raw.get("generation"), str)
+        or not raw["generation"]
+        or raw.get("source_ref") != "bybit:signed-recovery-linear-usdt:exact-account"
+        or not isinstance(raw.get("positions"), list)
+        or len(raw["positions"]) > 5
+        or any(not isinstance(row, dict) for row in raw["positions"])
+        or type(raw.get("open_orders")) is not int
+        or raw["open_orders"] != 0
+        or type(raw.get("pending_commands")) is not int
+        or raw["pending_commands"] != 0
+    ):
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RECOVERY_EVIDENCE_INVALID")
+    positions = tuple(dict(row) for row in raw["positions"])
+    required = {
+        "symbol", "side", "positionIdx", "size", "avgPrice",
+        "stopLoss", "takeProfit", "trailingStop", "markPrice",
+    }
+    if (
+        any(set(row) != required for row in positions)
+        or len({str(row["symbol"]) for row in positions}) != len(positions)
+    ):
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RECOVERY_POSITION_INVALID")
+    observed = _timestamp(raw["observed_at"])
+    if not 0 <= (received_at - observed).total_seconds() <= 15:
+        raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_RECOVERY_EVIDENCE_STALE")
+    return P90RealSignedRecoveryAccount(
+        trading_account_id=expected_account,
+        signed_uid=str(raw["uid"]),
+        private_generation_id=str(raw["generation"]),
+        source_ref=str(raw["source_ref"]),
+        observed_at=observed,
+        positions=positions,
+        open_orders=0,
+        pending_commands=0,
+    )
+
 def evidence_to_wire(evidence: ScopedPrivatePositionEvidence) -> dict[str, object]:
     """Only minimum required signed inventory; never keys or response headers."""
     return {
@@ -354,6 +438,42 @@ class P90PrivateProofClient:
             received_at=datetime.now(UTC),
         )
 
+    def read_recovery_account(self) -> P90RealSignedRecoveryAccount:
+        """Read current complete signed account inventory for restart only."""
+        nonce = secrets.token_hex(16)
+        request: dict[str, object] = {
+            "version": _VERSION, "account": self._account,
+            "connector": self._connector, "nonce": nonce, "kind": "RECOVERY",
+            "event_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            with socket.socket(_AF_UNIX, socket.SOCK_STREAM) as stream:
+                stream.settimeout(self._timeout)
+                stream.connect(self._address)
+                if not peer_same_runtime_uid(stream):
+                    raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_PEER_NOT_VERIFIED")
+                stream.sendall(_frame(request))
+                raw = _receive(stream)
+        except OSError:
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE"
+            ) from None
+        if (
+            raw.get("version") != _VERSION
+            or raw.get("nonce") != nonce
+            or raw.get("account") != self._account
+            or raw.get("connector") != self._connector
+            or raw.get("status") != "VERIFIED"
+            or "evidence" in raw or "flat" in raw
+        ):
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_RECOVERY_RESPONSE_UNVERIFIED"
+            )
+        return checked_recovery_evidence(
+            raw.get("recovery"), expected_account=self._account,
+            received_at=datetime.now(UTC),
+        )
+
     def _request(
         self, *, position: StrategyPosition, kind: str,
         at: datetime, seq: int | None, exec_id: str | None,
@@ -399,6 +519,7 @@ def serve_private_proof(
     running: Callable[[], bool],
     ready: Callable[[], None] | None = None,
     flat_handler: Callable[[], P90RealSignedFlatAccount] | None = None,
+    recovery_handler: Callable[[], P90RealSignedRecoveryAccount] | None = None,
 ) -> None:
     """Opt-in account-owned broker loop; only kernel-authenticated local UID.
 
@@ -445,6 +566,26 @@ def serve_private_proof(
                             "status": "VERIFIED", "account": account,
                             "connector": connector,
                             "flat": flat_to_wire(flat),
+                        }))
+                    elif raw.get("kind") == "RECOVERY":
+                        checked_recovery_request(
+                            raw, expected_account=account,
+                            expected_connector=connector,
+                        )
+                        if recovery_handler is None:
+                            raise P90PrivateIpcUnverified(
+                                "P90_PRIVATE_IPC_RECOVERY_PRODUCER_MISSING"
+                            )
+                        recovery = recovery_handler()
+                        if recovery.trading_account_id != account:
+                            raise P90PrivateIpcUnverified(
+                                "P90_PRIVATE_IPC_RECOVERY_ACCOUNT_MISMATCH"
+                            )
+                        stream.sendall(_frame({
+                            "version": _VERSION, "nonce": raw["nonce"],
+                            "status": "VERIFIED", "account": account,
+                            "connector": connector,
+                            "recovery": recovery_to_wire(recovery),
                         }))
                     else:
                         checked_request(
