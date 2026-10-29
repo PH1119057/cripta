@@ -29,6 +29,7 @@ _ACCOUNT = re.compile(r"ta-[a-f0-9]{32}\Z")
 _NONCE = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_BYTES = 32_768
 _VERSION = 1
+_AF_UNIX = getattr(socket, "AF_UNIX", -1)
 
 
 class P90PrivateIpcUnverified(RuntimeError):
@@ -47,7 +48,7 @@ def peer_same_runtime_uid(connection: socket.socket) -> bool:
     if (
         sys.platform != "linux"
         or not hasattr(socket, "SO_PEERCRED")
-        or connection.family != socket.AF_UNIX
+        or connection.family != _AF_UNIX
     ):
         return False
     try:
@@ -110,15 +111,17 @@ def checked_request(
     expected_connector: str,
 ) -> tuple[str, str, str, datetime, int | None, str | None]:
     """Prove complete request shape; producer must reload DB position itself."""
+    nonce = raw.get("nonce")
+    position_id = raw.get("position_id")
     if (
         raw.get("version") != _VERSION
         or raw.get("account") != expected_account
         or raw.get("connector") != expected_connector
-        or not isinstance(raw.get("nonce"), str)
-        or _NONCE.fullmatch(raw["nonce"]) is None
-        or not isinstance(raw.get("position_id"), str)
-        or not raw["position_id"]
-        or len(raw["position_id"]) > 128
+        or not isinstance(nonce, str)
+        or _NONCE.fullmatch(nonce) is None
+        or not isinstance(position_id, str)
+        or not position_id
+        or len(position_id) > 128
         or raw.get("kind") not in ("TRADE", "CLOSED")
         or not isinstance(raw.get("symbol"), str)
         or not raw["symbol"]
@@ -258,7 +261,7 @@ class P90PrivateProofClient:
             "seq": seq, "exec_id": exec_id, "nonce": nonce,
         }
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+            with socket.socket(_AF_UNIX, socket.SOCK_STREAM) as stream:
                 stream.settimeout(self._timeout)
                 stream.connect(self._address)
                 if not peer_same_runtime_uid(stream):
@@ -298,7 +301,7 @@ def serve_private_proof(
     if sys.platform != "linux":
         raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_LINUX_REQUIRED")
     address = private_ipc_address(account)
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+    with socket.socket(_AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(address)
         server.listen(4)
         server.settimeout(1.0)
