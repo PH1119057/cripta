@@ -15,20 +15,16 @@ from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeCheckpoint
 from bybit_workbench.universal_exit.p90l90_real_observation import (
     build_real_native_exit_observation,
 )
-from bybit_workbench.universal_exit.p90l90_real_private_router import (
-    P90RealPrivateEvidenceRouter,
-)
-from operations.monitoring.p90l90_real_account_mutation_safety import (
-    P90RealIndependentMutationSafety,
-)
-from operations.monitoring.p90l90_real_live_source_ports import P90RealLiveSourcePorts
+from bybit_workbench.universal_exit import p90l90_real_private_router
+from operations.monitoring import p90l90_real_account_mutation_safety
+from operations.monitoring import p90l90_real_live_source_ports
 
 
 MAIN = "ta-" + "a" * 32
 SUB = "ta-" + "b" * 32
 
 
-class FakeSource(P90RealLiveSourcePorts):
+class FakeSource(p90l90_real_live_source_ports.P90RealLiveSourcePorts):
     def __init__(self) -> None:
         self.calls = 0
 
@@ -36,7 +32,7 @@ class FakeSource(P90RealLiveSourcePorts):
         self.calls += 1
 
 
-class FakeSignedPrivate(P90RealPrivateEvidenceRouter):
+class FakeSignedPrivate(p90l90_real_private_router.P90RealPrivateEvidenceRouter):
     def __init__(self, evidence):
         self.evidence = evidence
         self.reads = 0
@@ -97,7 +93,7 @@ def _case(*, sub: bool = False):
     db = FakeDB(position)
     source = FakeSource()
     signed = FakeSignedPrivate(private)
-    check = P90RealIndependentMutationSafety(
+    check = p90l90_real_account_mutation_safety.P90RealIndependentMutationSafety(
         db, source=source, signed_private=signed,
         account_by_strategy={MAIN_ID: MAIN, SUB_ID: SUB},
         connector_by_strategy={MAIN_ID: "connector-main", SUB_ID: "connector-sub"},
