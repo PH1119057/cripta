@@ -175,7 +175,17 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                   )""",
             (MAIN_ID, SUB_ID, VERSION),
         ).fetchone()
-        if active != (0,) or pending != (0,):
+        pending_exit = self._connection.execute(
+            """SELECT count(*)
+                 FROM strategy_exit.execution_requests r
+                WHERE r.strategy_id IN (%s,%s) AND r.strategy_version=%s
+                  AND NOT EXISTS (
+                     SELECT 1 FROM strategy_exit.execution_dispatches d
+                      WHERE d.execution_request_id=r.execution_request_id
+                  )""",
+            (MAIN_ID, SUB_ID, VERSION),
+        ).fetchone()
+        if active != (0,) or pending != (0,) or pending_exit != (0,):
             raise RuntimeError("P90_REAL_NATIVE_GAP_WITH_EXPOSURE_OR_PENDING_ORDER")
         if not self._recovered or self._gap_recovery_poisoned:
             raise RuntimeError("P90_REAL_NATIVE_RECOVERY_NOT_VERIFIED")
