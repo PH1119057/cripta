@@ -30,8 +30,10 @@ AccountAdmissionProvider = Callable[
     [str, datetime],
     tuple[tuple[AccountAdmissionContext, ...], bool],
 ]
-RealExitTickPort = Callable[[MarketFactEnvelope, TradeCursor], None]
-RealClosedCandlePort = Callable[[MarketFactEnvelope], None]
+# Native and closed-bar Exit ports return evaluations; the source consumer
+# deliberately ignores their values and relies on the shared committed xact.
+RealExitTickPort = Callable[[MarketFactEnvelope, TradeCursor], object]
+RealClosedCandlePort = Callable[[MarketFactEnvelope], object]
 
 
 class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
