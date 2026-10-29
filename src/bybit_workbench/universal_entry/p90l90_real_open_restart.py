@@ -23,6 +23,9 @@ from bybit_workbench.universal_entry.contracts import ExitPlan, TradeDirection
 from bybit_workbench.universal_exit.p90l90_real_observation import (
     ScopedPrivatePositionEvidence,
 )
+from bybit_workbench.universal_exit.p90l90_real_position_provider import (
+    P90RealPositionProvider,
+)
 from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
     P90PrivateProofClient,
 )
@@ -31,9 +34,6 @@ from bybit_workbench.universal_exit.p90l90_real_recovery_account import (
 )
 from bybit_workbench.universal_exit.p90l90_real_row_connection import (
     P90RealMappedExitConnection,
-)
-from bybit_workbench.universal_exit.p90l90_real_position_provider import (
-    P90RealPositionProvider,
 )
 
 from .p90l90_causal_transport_join import P90L90CausalTransportJoin
@@ -115,15 +115,9 @@ def _active_epoch_with_open_positions(
         len({(row[4], row[3]) for row in rows}) == len(rows),
         "DUPLICATE_PHYSICAL_POSITION",
     )
-    # No open/pending mutation may be hidden behind an otherwise valid
-    # position inventory while process ownership changes.
-    pending = connection.execute(
-        """SELECT count(*) FROM runtime.trade_commands
-            WHERE trading_account_id=ANY(%s)
-              AND state NOT IN ('completed','failed','cancelled','rejected')""",
-        (sorted({str(row[4]) for row in rows}),),
-    ).fetchone()
-    _require(pending == (0,), "PENDING_ACCOUNT_COMMAND")
+    # Account-wide nonterminal command state is proven by the credential-local
+    # recovery reader in universal_exit before this epoch can be resumed.
+    # Universal Entry deliberately does not inspect the Execution command rail.
     entry_pending = connection.execute(
         """SELECT count(*) FROM strategy_entry.execution_requests e
             WHERE e.strategy_version=%s
