@@ -44,6 +44,7 @@ def test_migration_grants_only_narrow_inactive_v3_writer() -> None:
     assert "v_symbols:='[\"APTUSDT\",\"ARBUSDT\",\"DOTUSDT\"]'::jsonb;" in text
     assert "v_exit->'trailing'->>'distance_pct' IS DISTINCT FROM '0.35'" in text
     assert "v_exit->'trailing'->>'activation_profit_pct' IS DISTINCT FROM '0.5'" in text
+    assert "IS DISTINCT FROM (CASE WHEN v_kind='MAIN' THEN '20' ELSE '30' END)" in text
     assert "'DEDICATED_STRATEGY','INACTIVE'" in text
     assert "'ACTIVE',transaction_timestamp()" not in text
     assert "GRANT INSERT ON strategy_entry.strategy_execution_bindings" in text
@@ -71,7 +72,7 @@ def test_replay_hash_is_exact_function_source_and_migration_is_listed() -> None:
         "\n$function$;", 1,
     )[0]
     approved = hashlib.md5(("\n" + body + "\n").encode("utf-8")).hexdigest()
-    assert approved == "efa9a3e3604b22133184f92b02bcb88f"
+    assert approved == "17a99c163fdcfdcb1fabb6395b39ac45"
     assert text.count(approved) == 1
     release = (
         ROOT / "operations/infrastructure/install_verified_release.sh"
