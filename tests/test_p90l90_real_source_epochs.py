@@ -111,3 +111,14 @@ def test_independent_real_epoch_is_additive_and_release_managed() -> None:
     assert release.index("20261028_shared_closed_candle_source.sql") < (
         release.index("20261029_p90l90_real_source_epochs.sql")
     )
+    consumer = (
+        ROOT / "src/bybit_workbench/universal_entry/"
+        "p90l90_observer_real_consumer.py"
+    ).read_text(encoding="utf-8")
+    assert "P90RealSharedCandleLedger(" in consumer
+    assert "P90L90AtomicRealEpochCheckpointStore(" in consumer
+    assert "source_epoch_id=source_epoch_id" not in consumer
+    assert "epoch_id=source_epoch_id" in consumer
+    assert "P90SharedCandleLedger(" not in consumer
+    assert "P90L90AtomicPaperCheckpointStore(" not in consumer
+
