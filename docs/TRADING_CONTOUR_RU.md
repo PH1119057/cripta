@@ -1467,3 +1467,27 @@ TradeCursor или Entry. Old P90 seed `source_commit=ecde511...` и
 - Capital ceilings are **per Strategy + exact dedicated TradingAccount**, not an aggregate across both accounts; slots account for queued, in-flight, reserved and confirmed physical exposure. On restart recover pending orders, exchange and local position state, current Exchange SL, and SECOND48 before any new Entry. Missing/reconnecting private WS => mainnet/account gate OFF; no speculative orders or fresh Entry after disconnection.
 
 **Release / live-arm distinction:** `OWNER_REAL_CAPITAL_CONTRACT=APPROVED`, `CANON_UPDATE_REQUIRED=YES` and `IMPLEMENTATION_AND_TEST_REQUIRED=YES`. The owner's request to proceed is not evidence of `READY_FOR_OWNER_ARM`. Exact approved release, loaded process identity, signed MAIN+SUB account safety snapshots, position/protection reconciliation, private WS continuity, deterministic order/exit tests and explicit target release/account scope arm checks remain separate mandatory gates under TC §4.7/§4.9, ARCH §7.2 and DEV §46. Until all pass `REAL_READY=NO`, `LIVE_ARM=OFF`; no startup/registration may automatically set `StrategyActivation.enabled`, permissions or Exchange gate. No real diagnostic smoke unless independently owner-triggered under TC §4.8.
+
+### 7.6.4 P90L90 REAL Exit request freshness — OWNER DECISION 2026-10-29 (Issue #243)
+
+For the TWO new P90L90 REAL MAIN/SUB StrategyVersions in §7.6.3, the owner
+explicitly approves `exit_policy.execution_policy.max_request_age_seconds=5`
+(integer seconds). This is an **ExitDecision-to-ExecutionRequest dispatch
+freshness bound**, measured from the exact UTC `ExitDecision.decided_at`;
+expired commands are rejected fail-closed as `REQUEST_EXPIRED`, never
+silently reissued using stale Exit geometry or an assumed position state.
+Recompute and re-attest current Exchange position/protection/source state
+before any new decision. The value is Strategy-owned per immutable REAL
+StrategyVersion/ExitPlan, not a runtime/global default and not an Entry age.
+
+This **does not delay or expire Exchange-resident TP, catastrophic SL or
+exchange-side trailing** already installed on Bybit; those remain effective
+until independently confirmed filled, cancelled or replaced. Exit Engine
+produces decisions to update dynamic opposite RAW L5-3 TP, tighten trailing /
+stop, or perform an explicitly allowed close action; Bybit itself triggers
+existing protective orders. The current 5-second value is a bounded
+operational freshness rule, not a minimum wait or a latency guarantee.
+A future adjustment requires a new approved immutable StrategyVersion and
+revalidation, not a hot runtime setting or retroactive rewrite of v1/v2.
+No mainnet permission, account arm, Strategy activation or deployment follows
+from this value; all §4.7/§7.6.3 gates remain mandatory.
