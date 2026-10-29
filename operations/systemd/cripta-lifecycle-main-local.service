@@ -19,12 +19,12 @@ WorkingDirectory=/srv/cripta/runtime/current
 Environment=PYTHONUNBUFFERED=1
 Environment=CRIPTA_LIFECYCLE_ACCOUNT_WORKER=ENABLED
 Environment=CRIPTA_LIFECYCLE_ACCOUNT_KIND=MAIN
+Environment=CRIPTA_ACCOUNT_CONNECTOR_ID=ac-ed73de20410548d6841aeafa5f196f70
 Environment=CRIPTA_TRADING_ACCOUNT_ID=ta-2122c81ecff14f3b85b102db605212f7
 Environment=CRIPTA_LIFECYCLE_CREDENTIAL_NAME=bybit-mainnet
 Environment=CRIPTA_LIFECYCLE_ACCOUNT_STATUS_PATH=/var/lib/cripta/lifecycle_account/account-ta-2122c81ecff14f3b85b102db605212f7/status.json
 Environment=CRIPTA_LIFECYCLE_ACCOUNT_POLL_SECONDS=15
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src
-EnvironmentFile=/etc/cripta/lifecycle-main-local.env
 LoadCredentialEncrypted=bybit-mainnet:/etc/cripta/credentials/bybit-mainnet.cred
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/account_lifecycle_worker.py
 Restart=on-failure
