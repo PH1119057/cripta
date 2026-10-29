@@ -115,3 +115,53 @@ def test_postfill_builder_denies_unproven_real_execution_or_native_window(
             exact_entry_order_id="signed-entry-order",
             received_at=received_at,
         )
+
+
+@pytest.mark.parametrize("short,sub", ((False, False), (True, True)))
+def test_rest_verified_zero_native_tick_arms_real_bybit_trailing_immediately(
+    short: bool, sub: bool,
+) -> None:
+    position, plan, private, source = _proof(short=short, sub=sub)
+    source = replace(
+        source, covered_through=AT + timedelta(milliseconds=2),
+        last_native_price=position.actual_avg_fill,
+        best_favorable_price=position.actual_avg_fill,
+        source_refs=(
+            f"bybit:recentTrade:{position.symbol}:zero-after-fill:independent",
+        ),
+        no_new_native_trade_rest_verified=True,
+    )
+    observed = build_real_postfill_exit_observation(
+        position=position, private=private, coverage=source,
+        signed_fill_execution_ids=("real-first-execution",),
+        exact_entry_order_id="exchange-order",
+        received_at=AT + timedelta(milliseconds=5),
+    )
+    attrs = observed.attributes.to_dict()["p90l90_real"]
+    assert attrs["postfill_no_native_trade_rest_verified"] is True
+    assert "native_trade_price" not in attrs
+    assert attrs["postfill_signed_mark_price"] == (
+        "99.8" if short else "100.2"
+    )
+    evaluated = UniversalExitEngine().evaluate(position, plan, observed)
+    assert evaluated.status is ExitEvaluationStatus.DECISION_CREATED
+    assert evaluated.decision is not None
+    assert evaluated.decision.action_kind is ExitActionKind.SET_TRAILING
+
+
+def test_fake_zero_native_rest_ref_cannot_authorize_trailing() -> None:
+    position, _plan, private, source = _proof()
+    bad = replace(
+        source,
+        last_native_price=position.actual_avg_fill,
+        best_favorable_price=position.actual_avg_fill,
+        source_refs=("bybit:publicTrade:LTCUSDT:fake",),
+        no_new_native_trade_rest_verified=True,
+    )
+    with pytest.raises(P90RealObservationUnverified):
+        build_real_postfill_exit_observation(
+            position=position, private=private, coverage=bad,
+            signed_fill_execution_ids=("real-fill",),
+            exact_entry_order_id="real-order",
+            received_at=AT + timedelta(milliseconds=5),
+        )
