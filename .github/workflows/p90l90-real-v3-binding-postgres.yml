@@ -1,0 +1,148 @@
+name: p90l90-real-v3-binding-postgres
+
+on:
+  pull_request:
+    paths:
+      - "operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql"
+      - "tests/test_p90l90_real_v3_registration_rail.py"
+      - ".github/workflows/p90l90-real-v3-binding-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: p90_real_v3_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d p90_real_v3_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: p90_real_v3_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare minimal disposable v3 binding baseline
+        shell: bash
+        run: |
+          psql -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE cripta LOGIN PASSWORD 'runtime_ci_only'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+          CREATE SCHEMA strategy_entry AUTHORIZATION postgres;
+          CREATE SCHEMA identity AUTHORIZATION postgres;
+          CREATE SCHEMA control AUTHORIZATION postgres;
+
+          CREATE TABLE strategy_entry.strategy_cards (
+            strategy_id text,
+            strategy_version text,
+            strategy_config_fingerprint text,
+            card_json jsonb
+          );
+          CREATE TABLE strategy_entry.strategy_activations (
+            activation_id text,
+            strategy_id text,
+            strategy_version text,
+            strategy_config_fingerprint text,
+            enabled boolean,
+            disabled_at timestamptz
+          );
+          CREATE TABLE strategy_entry.entry_plans (
+            strategy_id text,
+            strategy_version text,
+            entry_plan_fingerprint text
+          );
+          CREATE TABLE strategy_entry.exit_plans (
+            strategy_id text,
+            strategy_version text,
+            exit_plan_fingerprint text
+          );
+          CREATE TABLE strategy_entry.strategy_execution_bindings (
+            strategy_execution_binding_id text,
+            strategy_activation_id text,
+            execution_leg text,
+            execution_role text,
+            trading_account_id text,
+            allocation_mode text,
+            binding_state text,
+            effective_from timestamptz,
+            effective_to timestamptz,
+            operator text,
+            source text,
+            reason text
+          );
+          CREATE TABLE strategy_entry.execution_permissions (
+            enabled boolean
+          );
+
+          CREATE TABLE identity.trading_accounts (
+            trading_account_id text,
+            account_kind text,
+            account_type text,
+            environment text,
+            status text,
+            venue_id text,
+            external_account_ref text
+          );
+          CREATE TABLE identity.account_connectors (
+            account_connector_id text,
+            trading_account_id text,
+            status text,
+            retired_at timestamptz,
+            adapter_id text,
+            connector_kind text,
+            credential_ref text
+          );
+
+          CREATE TABLE control.execution_gates (
+            mode text,
+            enabled integer
+          );
+          CREATE TABLE control.live_arm_sessions (
+            state text
+          );
+          CREATE TABLE control.account_live_arm_sessions (
+            state text
+          );
+          SQL
+
+      - name: Apply exact P90L90 REAL v3 inactive binding migration
+        shell: bash
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -f operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
+
+      - name: Verify compiled function identity and least privilege
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(psql -X -Atqc "
+            SELECT
+              pg_get_userbyid(p.proowner),
+              p.prosecdef,
+              md5(p.prosrc),
+              has_function_privilege('cripta',p.oid,'EXECUTE'),
+              has_table_privilege(
+                'cripta','strategy_entry.strategy_execution_bindings','INSERT'
+              ),
+              pg_has_role(
+                'cripta','cripta_p90l90_real_v3_binding','MEMBER'
+              )
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid=p.pronamespace
+            WHERE n.nspname='strategy_entry'
+              AND p.proname='register_p90l90_real_v3_inactive_binding'
+          ")"
+          [[ "$result" == "cripta_p90l90_real_v3_binding|t|17a99c163fdcfdcb1fabb6395b39ac45|t|f|f" ]]
+          echo "P90L90_REAL_V3_BINDING_MIGRATION=PASS"
