@@ -52,6 +52,7 @@ def project_p90l90_real_exit(
     durable source cursor, original 5m geometry and non-duplicated source.
     An unverified observation is rejected, never modeled as a paper fill.
     """
+    postfill = observation.event_kind == "P90L90_REAL_POSTFILL"
     if (
         position.strategy_id not in ALLOWED_SYMBOLS
         or position.strategy_version != VERSION
@@ -67,9 +68,11 @@ def project_p90l90_real_exit(
         or not position.strategy_execution_binding_id
         or position.position_idx != 0
         or position.initial_protection_confirmed_at is None
-        or observation.event_at <= position.fill_at
+        or (observation.event_at < position.fill_at if postfill
+            else observation.event_at <= position.fill_at)
         or observation.event_kind not in {
             "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M",
+            "P90L90_REAL_POSTFILL",
         }
     ):
         raise P90RealExitUnverified("P90_REAL_EXIT_POSITION_OR_SOURCE_NOT_VERIFIED")
@@ -106,7 +109,14 @@ def project_p90l90_real_exit(
         or real.get("exchange_position_key") != position.exchange_position_key
         or real.get("actual_fill_confirmed") is not True
         or real.get("protection_exchange_confirmed") is not True
-        or real.get("durable_cursor_verified") is not True
+        or (real.get("fill_to_postfill_source_verified") is not True
+            if postfill else real.get("durable_cursor_verified") is not True)
+        or (postfill and (
+            not isinstance(real.get("signed_fill_execution_ids"), list)
+            or not real["signed_fill_execution_ids"]
+            or any(not isinstance(item, str) or not item.strip()
+                   for item in real["signed_fill_execution_ids"])
+        ))
         or real.get("pending_exit_mutation") is not False
     ):
         raise P90RealExitUnverified("P90_REAL_EXIT_ACCOUNT_OR_EXCHANGE_UNPROVEN")
@@ -143,7 +153,9 @@ def project_p90l90_real_exit(
         entry * (Decimal("1.005") if long else Decimal("0.995")),
         tick, up=long,
     )
-    if live_trailing == 0 and observation.event_kind == "P90L90_REAL_NATIVE_TRADE":
+    if live_trailing == 0 and observation.event_kind in {
+        "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_POSTFILL",
+    }:
         # Arm once, before the trigger: Exchange activePrice will activate the
         # autonomous trailing on +0.5%. No repeated SET_STOP proxy is allowed.
         mark = _positive(real.get("exchange_mark_price"), "SIGNED_MARK")
