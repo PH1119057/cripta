@@ -193,6 +193,7 @@ def test_native_exit_callback_persists_universal_decision_without_paper(
         attributes=FrozenPolicy.from_mapping({"price": str(price)}),
     )
     recorded: list[object] = []
+    requested: list[object] = []
 
     class _Store:
         def record(self, evaluation, *, position, plan):
@@ -207,11 +208,13 @@ def test_native_exit_callback_persists_universal_decision_without_paper(
         source_commit="a" * 40,
         mfe_ledger=SimpleNamespace(on_trade=lambda **_kwargs: checkpoint),
         exit_store=_Store(),  # type: ignore[arg-type]
+        verified_execution_port=lambda ev, pos, p: requested.append((ev, pos, p)),
     )
     result = callback(fact, cursor)
     assert len(result) == 1
     assert result[0].status is ExitEvaluationStatus.DECISION_CREATED
     assert recorded == [(result[0], position, plan)]
+    assert requested == [(result[0], position, plan)]
     assert result[0].decision is not None
 
 
