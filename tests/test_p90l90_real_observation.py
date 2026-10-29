@@ -77,7 +77,7 @@ def _scope(*, short: bool = False, sub: bool = False):
         execution_leg="PRIMARY", trading_account_id=account,
         identity_status="PROVEN",
     )
-    native_price = D("99") if short else D("101")
+    native_price = D("99.8") if short else D("100.2")
     cursor = TradeCursor(
         symbol=symbol, seq=101, exec_id="bybit-public-trade-101",
         traded_at=AT + timedelta(milliseconds=3),
@@ -91,7 +91,8 @@ def _scope(*, short: bool = False, sub: bool = False):
         "positionIdx": 0, "avgPrice": "100", "size": "0.1",
         "stopLoss": "110" if short else "90",
         "takeProfit": "90" if short else "110",
-        "markPrice": "99" if short else "101",
+        "markPrice": "99.8" if short else "100.2",
+        "trailingStop": "0",
     }
     private = ScopedPrivatePositionEvidence(
         trading_account_id=account,
@@ -118,19 +119,21 @@ def _observation(position, state, cursor, private, price):
     )
 
 
-@pytest.mark.parametrize(("short", "sub", "expected"), (
-    (False,False,"100.65"), (True,True,"99.35"),
+@pytest.mark.parametrize(("short", "sub", "activation"), (
+    (False,False,"100.5"), (True,True,"99.5"),
 ))
 def test_native_mfe_and_private_position_use_same_universal_exit_engine(
-    short: bool, sub: bool, expected: str,
+    short: bool, sub: bool, activation: str,
 ) -> None:
     position, plan, state, cursor, private, price = _scope(short=short, sub=sub)
     observation = _observation(position, state, cursor, private, price)
     result = UniversalExitEngine().evaluate(position, plan, observation)
     assert result.status is ExitEvaluationStatus.DECISION_CREATED
     assert result.decision is not None
-    assert result.decision.action_kind is ExitActionKind.SET_STOP
-    assert result.decision.requested_mutation.to_dict()["stop_price"] == expected
+    assert result.decision.action_kind is ExitActionKind.SET_TRAILING
+    assert result.decision.requested_mutation.to_dict() == {
+        "distance": "0.35", "active_price": activation, "tpsl_mode": "Full",
+    }
     assert result.observation.source_refs[0] == "bybit:publicTrade:exact:101"
     assert observation.attributes.to_dict()["p90l90_real"]["durable_cursor_verified"]
 
