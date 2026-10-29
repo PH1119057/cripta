@@ -32,6 +32,7 @@ from .p90l90_real_observation import (
 from .storage import PostgresExitShadowStore
 
 PositionProvider = Callable[[str], Sequence[tuple[StrategyPosition, ExitPlan]]]
+ExecutionPort = Callable[[ExitEvaluation, StrategyPosition, ExitPlan], object]
 SourceCoverageProvider = Callable[[StrategyPosition, TradeCursor], tuple[bool, bool]]
 SignedPrivateProvider = Callable[
     [StrategyPosition, TradeCursor], ScopedPrivatePositionEvidence,
@@ -50,6 +51,7 @@ class P90RealExitNativePort:
         source_commit: str,
         mfe_ledger: P90RealMfeLedger,
         exit_store: PostgresExitShadowStore,
+        verified_execution_port: ExecutionPort | None = None,
     ) -> None:
         self._positions = position_provider
         self._coverage = independently_verified_source_coverage
@@ -57,6 +59,7 @@ class P90RealExitNativePort:
         self._source_commit = source_commit
         self._mfe = mfe_ledger
         self._exit_store = exit_store
+        self._execution_port = verified_execution_port
         self._engine = UniversalExitEngine()
 
     def __call__(
@@ -118,6 +121,14 @@ class P90RealExitNativePort:
                 raise P90RealMfeUnverified(
                     f"P90_REAL_EXIT_POLICY_DENIED:{evaluation.reason}"
                 )
+            if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
+                if self._execution_port is None:
+                    raise P90RealMfeUnverified(
+                        "P90_REAL_EXIT_EXECUTION_OWNER_MISSING"
+                    )
             self._exit_store.record(evaluation, position=position, plan=plan)
+            if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
+                assert self._execution_port is not None
+                self._execution_port(evaluation, position, plan)
             results.append(evaluation)
         return tuple(results)
