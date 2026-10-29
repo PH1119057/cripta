@@ -128,7 +128,7 @@ def start_p90_real_source_epoch(
          "WHERE trading_account_id=ANY(%s)", (sorted(_ACCOUNTS),)),
         ("SELECT count(*) FROM runtime.trade_commands "
          "WHERE trading_account_id=ANY(%s) "
-         "AND state NOT IN ('SUCCEEDED','FAILED','CANCELLED','REJECTED')",
+         "AND state NOT IN ('completed','failed','cancelled','rejected')",
          (sorted(_ACCOUNTS),)),
         ("SELECT count(*) FROM strategy_entry.execution_requests e "
          "WHERE e.strategy_version='2.0-p90l90-real-main-sub-20261028' "
