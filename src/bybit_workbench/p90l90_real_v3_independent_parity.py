@@ -21,6 +21,7 @@ from bybit_workbench.universal_entry.contracts import (
     DataQuality,
     EntryDecisionCode,
     FrozenPolicy,
+    MarketFactEnvelope,
     StrategyActivation,
     StrategyExecutionBindingRef,
     TechnicalReadiness,
@@ -129,7 +130,7 @@ def _native_fact(
     previous = _D("91") if long else _D("109")
     boundary = _D("90") if long else _D("110")
     exec_id = f"p90-parity-{serial}"
-    source = SimpleNamespace(
+    source = MarketFactEnvelope(
         fact_id=f"trade-{exec_id}",
         event_kind="PUBLIC_TRADE",
         symbol=symbol,
@@ -382,7 +383,7 @@ def run_p90l90_real_v3_independent_decision_parity() -> dict[str, object]:
                     ),
                     account_ref="BYBIT:UNIFIED",
                     exchange_position_key=f"venue-bybit:{account}:{symbol}:0",
-                    entry_admission_port=admission,  # type: ignore[arg-type]
+                    entry_admission_port=admission,
                 )
                 engine = UniversalEntryEngine(registry)
                 rows = engine.process(
