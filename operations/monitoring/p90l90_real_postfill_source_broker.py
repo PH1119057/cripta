@@ -130,19 +130,31 @@ def build_source_window(
                 not isinstance(rows, list)
                 or not 1 <= len(rows) <= 1000
                 or server_at.tzinfo is None
+                or server_at.utcoffset() is None
                 or not timedelta() <= server_at.astimezone(UTC) - at
                 <= timedelta(seconds=5)
             ):
                 raise ValueError("REST coverage incomplete")
+            seen_exec_ids: set[str] = set()
             for row in rows:
                 if (
                     not isinstance(row, Mapping)
                     or row.get("symbol") != position.symbol
                     or not isinstance(row.get("execId"), str)
                     or not row["execId"]
+                    or row["execId"] in seen_exec_ids
                     or str(row.get("side") or "") not in {"Buy", "Sell"}
                 ):
                     raise ValueError("REST identity incomplete")
+                seen_exec_ids.add(row["execId"])
+                if (
+                    int(str(row["seq"])) < 0
+                    or not Decimal(str(row["price"])).is_finite()
+                    or Decimal(str(row["price"])) <= 0
+                    or not Decimal(str(row["size"])).is_finite()
+                    or Decimal(str(row["size"])) < 0
+                ):
+                    raise ValueError("REST market semantics invalid")
                 trade_at = datetime.fromtimestamp(int(str(row["time"])) / 1000, UTC)
                 if trade_at >= position.fill_at:
                     raise ValueError("new publicTrade cannot be silently omitted")
@@ -159,7 +171,7 @@ def build_source_window(
             ):
                 raise ValueError("native mirror restarted during signed fill")
         except (TypeError, ValueError, KeyError, OverflowError,
-                ContinuityNotProvable):
+                InvalidOperation, ContinuityNotProvable):
             raise P90RealPostfillMarketSourceUnverified(
                 "P90_REAL_MARKET_SOURCE_ZERO_NATIVE_REST_NOT_ATTESTED"
             ) from None
