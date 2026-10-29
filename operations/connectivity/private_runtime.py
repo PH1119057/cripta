@@ -3877,6 +3877,12 @@ def reconcile_position_ownership(
                            END,
                        initial_protection_evidence=
                            CASE
+                             -- Reconciliation must preserve the signed
+                             -- first-fill Bybit order and execution IDs.
+                             WHEN strategy_version=%s
+                               AND initial_protection_evidence->>'source'
+                                 ='SIGNED_BYBIT_MARKET_FILL_AND_POSITION'
+                             THEN initial_protection_evidence
                              WHEN %s
                              THEN %s::jsonb
                              ELSE initial_protection_evidence
@@ -3885,6 +3891,7 @@ def reconcile_position_ownership(
                 (
                     protection_confirmed,
                     now,
+                    "2.0-p90l90-real-main-sub-20261028",
                     protection_confirmed,
                     json.dumps(
                         {
