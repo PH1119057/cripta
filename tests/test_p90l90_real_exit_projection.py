@@ -85,6 +85,7 @@ def _observation(
     position: StrategyPosition, *,
     best: str, price: str, stop: str, tp: str,
     target: str | None = None, kind: str = "P90L90_REAL_NATIVE_TRADE",
+    trailing: str = "0",
 ) -> ExitObservation:
     fact = {
         "trading_account_id": position.trading_account_id,
@@ -98,6 +99,10 @@ def _observation(
         "durable_best_favorable_price": best,
         "exchange_stop_price": stop,
         "exchange_tp_price": tp,
+        "exchange_trailing_distance": trailing,
+        "exchange_mark_price": (
+            "100.20" if position.direction is TradeDirection.LONG else "99.80"
+        ),
         "tick_size": "0.01",
     }
     if target is not None:
@@ -117,39 +122,52 @@ def _observation(
 
 
 @pytest.mark.parametrize(
-    ("side", "best", "last", "stop", "tp", "expected_stop"),
+    ("side", "best", "last", "stop", "tp", "activation"),
     [
-        ("LONG", "101", "100.9", "90", "110", "100.65"),
-        ("SHORT", "99", "99.1", "110", "90", "99.35"),
+        ("LONG", "100.20", "100.20", "90", "110", "100.50"),
+        ("SHORT", "99.80", "99.80", "110", "90", "99.50"),
     ],
 )
-def test_real_exit_approved_trail035_tightens_stop_with_actual_fill(
-    side: str, best: str, last: str, stop: str, tp: str, expected_stop: str,
+def test_real_exit_arms_autonomous_bybit_trailing_before_activation(
+    side: str, best: str, last: str, stop: str, tp: str, activation: str,
 ) -> None:
     position, plan = _scope(side=side)
     event = _observation(position, best=best, price=last, stop=stop, tp=tp)
     result = project_p90l90_real_exit(position, plan, event)
     assert result is not None
     kind, mutation, label = result
-    assert kind is ExitActionKind.SET_STOP
-    assert mutation["stop_price"] == expected_stop
-    assert label == "P90L90_REAL_TRAIL035_TIGHTEN"
+    assert kind is ExitActionKind.SET_TRAILING
+    assert mutation == {
+        "distance": "0.35",
+        "active_price": activation,
+        "tpsl_mode": "Full",
+    }
+    assert label == "P90L90_REAL_BYBIT_NATIVE_TRAIL035_ARM"
     assert validate_exit_mutation(kind, mutation) == mutation
 
 
-@pytest.mark.parametrize(
-    ("side", "best", "last", "stop", "tp"),
-    [
-        ("LONG", "100.49", "100.3", "90", "110"),
-        ("SHORT", "99.51", "99.7", "110", "90"),
-    ],
-)
-def test_real_exit_no_trailing_before_exact_half_percent(
+@pytest.mark.parametrize("side,best,last,stop,tp", [
+    ("LONG", "100.49", "100.30", "90", "110"),
+    ("SHORT", "99.51", "99.70", "110", "90"),
+])
+def test_already_exchange_armed_trailing_never_generates_another_stop_or_trail(
     side: str, best: str, last: str, stop: str, tp: str,
 ) -> None:
     position, plan = _scope(side=side)
-    fact = _observation(position, best=best, price=last, stop=stop, tp=tp)
+    fact = _observation(position, best=best, price=last, stop=stop, tp=tp,
+                        trailing="0.35")
     assert project_p90l90_real_exit(position, plan, fact) is None
+
+
+def test_late_unarmed_native_trailing_cannot_masquerade_as_success() -> None:
+    position, plan = _scope()
+    fact = _observation(position, best="101", price="101", stop="90", tp="110")
+    detail = fact.attributes.to_dict()
+    detail["p90l90_real"]["exchange_mark_price"] = "101"
+    with pytest.raises(P90RealExitUnverified, match="LATE_ARM_UNVERIFIED"):
+        project_p90l90_real_exit(
+            position, plan, replace(fact, attributes=FrozenPolicy.from_mapping(detail)),
+        )
 
 
 @pytest.mark.parametrize(
@@ -165,7 +183,7 @@ def test_real_exit_updated_causal_l53_tp_uses_universal_exchange_action(
     position, plan = _scope(side=side)
     fact = _observation(
         position, best=best, price=last, stop=stop, tp=tp,
-        target=target, kind="P90L90_REAL_CLOSED_5M",
+        target=target, kind="P90L90_REAL_CLOSED_5M", trailing="0.35",
     )
     result = project_p90l90_real_exit(position, plan, fact)
     assert result is not None
@@ -188,7 +206,7 @@ def test_new_marketable_raw_target_uses_existing_reduce_only_close(
     position, plan = _scope(side=side)
     fact = _observation(
         position, best=best, price=last, stop=stop, tp=tp,
-        target=target, kind="P90L90_REAL_CLOSED_5M",
+        target=target, kind="P90L90_REAL_CLOSED_5M", trailing="0.35",
     )
     result = project_p90l90_real_exit(position, plan, fact)
     assert result is not None
@@ -235,7 +253,7 @@ def test_real_projection_preserves_v3_and_independent_account_lineage() -> None:
     assert position.strategy_version == VERSION
     fact = _observation(position, best="101", price="100.9", stop="90", tp="110")
     result = project_p90l90_real_exit(position, plan, fact)
-    assert result is not None and result[0] is ExitActionKind.SET_STOP
+    assert result is not None and result[0] is ExitActionKind.SET_TRAILING
 
 
 @pytest.mark.parametrize("side,best,last,stop,tp", [
@@ -250,14 +268,15 @@ def test_shared_universal_exit_engine_creates_real_p90_tighten_decision(
     result = UniversalExitEngine().evaluate(position, plan, fact)
     assert result.status is ExitEvaluationStatus.DECISION_CREATED
     assert result.decision is not None
-    assert result.decision.action_kind is ExitActionKind.SET_STOP
+    assert result.decision.action_kind is ExitActionKind.SET_TRAILING
     assert result.decision.strategy_position_id == position.strategy_position_id
     assert result.decision.exit_plan_fingerprint == plan.exit_plan_fingerprint
     assert result.decision.source_refs == fact.source_refs
-    assert (
-        result.decision.requested_mutation.to_dict()["stop_price"]
-        == ("100.65" if side == "LONG" else "99.35")
-    )
+    assert result.decision.requested_mutation.to_dict() == {
+        "distance": "0.35",
+        "active_price": "100.5" if side == "LONG" else "99.5",
+        "tpsl_mode": "Full",
+    }
     assert UniversalExitEngine().evaluate(position, plan, fact).decision == result.decision
 
 
