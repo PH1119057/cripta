@@ -21,7 +21,6 @@ from .p90l90_atomic_real_epoch_checkpoint import (
     P90L90AtomicRealEpochCheckpointStore,
 )
 from .p90l90_causal import P90L90CausalEntry, causal_entry_state
-from .p90l90_observer_strategy_partition import P90NativeBarRuntimeProof
 
 _SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 _ACCOUNTS = frozenset((
@@ -33,6 +32,43 @@ _SOURCE_ID = "ms-bybit-mainnet-public-v1"
 
 class P90RealEpochStartUnverified(RuntimeError):
     """No exact no-exposure fresh native source/entry epoch proof."""
+
+
+@dataclass(frozen=True, slots=True)
+class P90RealNewWsSourceProof:
+    """Fresh two-channel transport proof BEFORE new durable checkpoints.
+
+    Unlike P90NativeBarRuntimeProof, bootstrap must not falsely claim
+    the just-created five checkpoints have already been restored.
+    """
+
+    source_commit: str
+    subscribed_symbols: frozenset[str]
+    subscribed_intervals: frozenset[str]
+    mirror_active: bool
+    subscribed_local_at: datetime
+    subscribed_server_at: datetime
+    epoch_started_at: datetime
+
+    def verified_for(self, symbols: frozenset[str]) -> bool:
+        times = (
+            self.subscribed_local_at, self.subscribed_server_at,
+            self.epoch_started_at,
+        )
+        return bool(
+            len(self.source_commit) == 40
+            and all(c in "0123456789abcdef" for c in self.source_commit)
+            and symbols.issubset(self.subscribed_symbols)
+            and {"5", "15"}.issubset(self.subscribed_intervals)
+            and self.mirror_active is True
+            and all(t.tzinfo is not None
+                    and t.utcoffset() == timedelta() for t in times)
+            and self.epoch_started_at <= self.subscribed_local_at
+            <= datetime.now(UTC)
+            and abs((
+                self.subscribed_local_at - self.subscribed_server_at
+            ).total_seconds()) <= 15
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +93,7 @@ def _require(condition: bool, message: str) -> None:
 def start_p90_real_source_epoch(
     connection: Any, *,
     source_commit: str,
-    source: P90NativeBarRuntimeProof,
+    source: P90RealNewWsSourceProof,
     signed_accounts: tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount],
     mirror_ready_at: datetime,
     new_epoch_requested_at: datetime,
