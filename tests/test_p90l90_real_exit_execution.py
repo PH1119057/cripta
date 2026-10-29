@@ -7,6 +7,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+from psycopg.pq import TransactionStatus
 from test_p90l90_real_observation import _observation, _scope
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
@@ -27,6 +28,17 @@ class _DB:
     def __init__(self):
         self.events: list[object] = []
         self.open_transactions = 0
+        self.outer_source_transaction_active = True
+
+    @property
+    def info(self):
+        return SimpleNamespace(
+            transaction_status=(
+                TransactionStatus.INTRANS
+                if self.outer_source_transaction_active
+                else TransactionStatus.IDLE
+            ),
+        )
 
     @contextmanager
     def transaction(self):
@@ -144,6 +156,19 @@ def test_actual_unmodified_real_exit_policy_has_no_approved_request_ttl(
         sink(evaluation, position, plan)
     assert steps == ["load", "independent-safety"]
     assert db.open_transactions == 0
+
+
+def test_real_exit_command_cannot_leave_source_checkpoint_transaction(
+    monkeypatch,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
+    db.outer_source_transaction_active = False
+    with pytest.raises(
+        mod.P90RealExitExecutionUnverified, match="SOURCE_TRANSACTION_NOT_OPEN"
+    ):
+        sink(evaluation, position, plan)
+    assert steps == []
+    assert db.events == []
 
 
 def test_unknown_account_mutation_safety_never_materializes_command(
