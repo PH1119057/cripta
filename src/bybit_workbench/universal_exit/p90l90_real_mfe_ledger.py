@@ -39,6 +39,18 @@ class P90RealMfeLedger:
     def __init__(self, connection: _Connection) -> None:
         self._db = connection
 
+    def _require_source_transaction(self) -> None:
+        # An autocommit write to the durable MFE ledger would commit a new
+        # best-price cursor even if its originating publicTrade checkpoint
+        # later rolls back. Do not accept a mere connection or valid cursor
+        # as evidence that the outer market-source transaction exists.
+        info = getattr(self._db, "info", None)
+        transaction = getattr(info, "transaction_status", None)
+        if getattr(transaction, "name", None) != "INTRANS":
+            raise P90RealMfeUnverified(
+                "P90_REAL_MFE_SOURCE_TRANSACTION_NOT_OPEN"
+            )
+
     def on_trade(
         self,
         *,
@@ -62,6 +74,7 @@ class P90RealMfeLedger:
             or cursor.symbol != position.symbol
         ):
             raise P90RealMfeUnverified("P90_REAL_MFE_SOURCE_FACT_INVALID")
+        self._require_source_transaction()
         # Call must already run inside the native source checkpoint xact.
         # Serialize first-insert and read-modify-write for THIS position,
         # never acquire an unrelated account or cross-position MFE lock.
@@ -162,6 +175,7 @@ class P90RealMfeLedger:
         A caller must hold its outer source/Exit transaction. The per-position
         lock serializes new native MFE ticks with bar-close Exit decisions.
         """
+        self._require_source_transaction()
         self._db.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
             (position.strategy_position_id,),
