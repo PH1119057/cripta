@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pytest
 
+from bybit_workbench.universal_entry.dashboard_control import card_from_editable
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     VERSION,
@@ -96,6 +97,24 @@ def test_exact_two_versions_materialize_but_do_not_self_arm() -> None:
         assert "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED" not in codes
         assert "P90L90_EXCHANGE_ORDER_NOT_APPROVED" not in codes
         assert "LIVE_EXIT_TRAILING_NOT_WIRED" not in codes
+
+
+def test_nearby_but_changed_trail_policy_is_not_executable_v3() -> None:
+    raw = real_v3_authoring_payload(strategy_id=MAIN_ID, policy=POLICY)
+    exit_policy = raw["exit_policy"]
+    assert isinstance(exit_policy, dict)
+    trailing = exit_policy["trailing"]
+    assert isinstance(trailing, dict)
+    trailing["distance_pct"] = "0.36"
+    card = card_from_editable(
+        raw,
+        approved_at=datetime(2026, 10, 29, 18, 0, tzinfo=UTC),
+        approved_source="negative-test-mutated-policy",
+    )
+    result = assess_strategy_runtime_readiness(card, observer_ready=True)
+    assert result.execution_ready is False
+    codes = {item.code for item in result.reasons}
+    assert "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in codes
 
 
 def test_real_cap_enforces_pending_plus_open_and_exact_slot() -> None:
