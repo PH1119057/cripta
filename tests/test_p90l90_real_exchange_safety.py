@@ -45,6 +45,7 @@ def _position(*, side: str = "Buy") -> dict[str, object]:
         "stopLoss": "90" if long else "110",
         "takeProfit": "110" if long else "90",
         "markPrice": "101" if long else "99",
+        "trailingStop": "0",
     }
 
 
@@ -164,9 +165,9 @@ def test_raw_tp_must_remain_favorable_and_nonmarketable_on_live_exchange() -> No
         )
 
 
-def test_unapproved_universal_action_and_unproven_symbol_are_rejected() -> None:
+def test_unsupported_universal_action_and_unproven_symbol_are_rejected() -> None:
     with pytest.raises(P90RealExchangeSafetyBlock):
-        _guard(action=ExitActionKind.SET_TRAILING, mutation={"distance": "0.35"})
+        _guard(action=ExitActionKind.REDUCE, mutation={"quantity": "0.1"})
     position = _position()
     position["symbol"] = "BTCUSDT"
     with pytest.raises(P90RealExchangeSafetyBlock):
@@ -211,3 +212,46 @@ def test_existing_profit_side_trailing_stop_can_be_tightened_without_widening() 
             payload=short_payload, position=short_position,
             mutation={"stop_price": "99.90"},
         )
+
+
+@pytest.mark.parametrize("side,activation", (("Buy", "100.5"), ("Sell", "99.5")))
+def test_bybit_native_trailing_requires_exact_price_distance_and_activation(
+    side: str, activation: str,
+) -> None:
+    position = _position(side=side)
+    position["markPrice"] = "100.2" if side == "Buy" else "99.8"
+    payload = _payload()
+    payload["direction"] = "LONG" if side == "Buy" else "SHORT"
+    request = {
+        "distance": "0.35", "active_price": activation, "tpsl_mode": "Full",
+    }
+    _guard(payload=payload, position=position,
+           action=ExitActionKind.SET_TRAILING, mutation=request)
+    for field, value in (
+        ("distance", "0.36"), ("distance", "0.0035"),
+        ("active_price", "100.49" if side == "Buy" else "99.51"),
+        ("tpsl_mode", "Partial"),
+    ):
+        bad = dict(request)
+        bad[field] = value
+        with pytest.raises(P90RealExchangeSafetyBlock):
+            _guard(payload=payload, position=position,
+                   action=ExitActionKind.SET_TRAILING, mutation=bad)
+    position["trailingStop"] = "0.35"
+    with pytest.raises(P90RealExchangeSafetyBlock, match="ALREADY_INSTALLED"):
+        _guard(payload=payload, position=position,
+               action=ExitActionKind.SET_TRAILING, mutation=request)
+
+
+def test_late_native_trailing_or_missing_signed_state_is_not_accepted() -> None:
+    position = _position()
+    for field, value in (
+        ("markPrice", "100.5"), ("markPrice", "101"),
+        ("trailingStop", ""), ("trailingStop", "NaN"),
+    ):
+        bad = dict(position)
+        bad[field] = value
+        with pytest.raises(P90RealExchangeSafetyBlock):
+            _guard(position=bad, action=ExitActionKind.SET_TRAILING,
+                   mutation={"distance": "0.35",
+                             "active_price": "100.5", "tpsl_mode": "Full"})
