@@ -2862,6 +2862,13 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         "P90_REAL_FIRST_FILL_EXCHANGE_READBACK_DRIFT"
                     )
                 try:
+                    # Same exact TradingAccount transaction lock as capital,
+                    # slot admission and private Exchange reconciliation.
+                    # It remains held through persisted first-fill ownership.
+                    connection.execute(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                        (TRADING_ACCOUNT_ID,),
+                    )
                     real_lineage = load_universal_entry_lineage(
                         connection,
                         command_id=command_id,
