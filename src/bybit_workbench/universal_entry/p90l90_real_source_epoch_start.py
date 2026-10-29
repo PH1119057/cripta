@@ -9,18 +9,24 @@ has no native cursor: the first LIVE trade primes Entry, never retro-trades.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bybit_workbench.market_data.shared_closed_candles import (
-    MarketCandleKey, SharedClosedCandleStore,
+    MarketCandleKey,
+    SharedClosedCandleStore,
 )
 
 from .p90l90_atomic_real_epoch_checkpoint import (
     P90L90AtomicRealEpochCheckpointStore,
 )
-from .p90l90_causal import P90L90CausalEntry, P90L90EntryState, causal_entry_state
+from .p90l90_causal import (
+    P90L90CausalEntry,
+    P90L90EntryState,
+    causal_entry_state,
+)
 
 _SYMBOLS = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 _ACCOUNTS = frozenset((
@@ -86,6 +92,22 @@ class P90RealSignedFlatAccount:
     pending_commands: int
 
 
+@dataclass(frozen=True, slots=True)
+class P90RealNoPendingRuntimeCommandEvidence:
+    """Source-transaction read by the account-execution owner, not Entry SQL."""
+
+    account_ids: frozenset[str]
+    checked_at: datetime
+    open_command_count: int
+    source_ref: str
+
+
+PendingRuntimeCommandProvider = Callable[
+    [Any, frozenset[str], datetime],
+    P90RealNoPendingRuntimeCommandEvidence,
+]
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise P90RealEpochStartUnverified("P90_REAL_EPOCH_" + message)
@@ -96,6 +118,7 @@ def start_p90_real_source_epoch(
     source_commit: str,
     source: P90RealNewWsSourceProof,
     signed_accounts: tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount],
+    independently_checked_runtime_commands: PendingRuntimeCommandProvider,
     mirror_ready_at: datetime,
     new_epoch_requested_at: datetime,
     retire_previous: bool = False,
@@ -157,16 +180,28 @@ def start_p90_real_source_epoch(
         uids.add(account.signed_uid)
     # Durable local checks are independent of private readback. Hot Exchange
     # inventory, pending command and local v3 exposure must ALL be empty.
+    _require(
+        callable(independently_checked_runtime_commands),
+        "INDEPENDENT_ACCOUNT_COMMAND_PROVIDER_MISSING",
+    )
+    command_check = independently_checked_runtime_commands(
+        connection, _ACCOUNTS, new_epoch_requested_at,
+    )
+    _require(
+        isinstance(command_check, P90RealNoPendingRuntimeCommandEvidence)
+        and command_check.account_ids == _ACCOUNTS
+        and command_check.checked_at == new_epoch_requested_at
+        and command_check.open_command_count == 0
+        and command_check.source_ref
+        == "runtime:account-scoped-command-ledger:source-transaction",
+        "ACCOUNT_RUNTIME_COMMAND_LEDGER_NOT_VERIFIED",
+    )
     probes = (
         ("SELECT count(*) FROM runtime.position_ownership "
          "WHERE strategy_version='2.0-p90l90-real-main-sub-20261028' "
          "AND state IN ('OPEN','RECONCILIATION_REQUIRED')", ()),
         ("SELECT count(*) FROM runtime.hot_positions "
          "WHERE trading_account_id=ANY(%s)", (sorted(_ACCOUNTS),)),
-        ("SELECT count(*) FROM runtime.trade_commands "
-         "WHERE trading_account_id=ANY(%s) "
-         "AND state NOT IN ('completed','failed','cancelled','rejected')",
-         (sorted(_ACCOUNTS),)),
         ("SELECT count(*) FROM strategy_entry.execution_requests e "
          "WHERE e.strategy_version='2.0-p90l90-real-main-sub-20261028' "
          "AND NOT EXISTS (SELECT 1 FROM strategy_entry.execution_dispatches d "
