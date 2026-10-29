@@ -11,10 +11,6 @@ from types import SimpleNamespace
 import pytest
 
 from bybit_workbench.universal_entry import p90l90_real_source_epoch_start as module
-from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
-    P90NativeBarRuntimeProof,
-)
-
 ALL = frozenset(("LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"))
 MAIN = "ta-2122c81ecff14f3b85b102db605212f7"
 SUB = "ta-853ac5fcd58185697396d33cd57459fa"
@@ -71,8 +67,8 @@ def _ready():
     started = now - timedelta(seconds=3)
     mirror = now - timedelta(seconds=2)
     subscribed = now - timedelta(seconds=1)
-    proof = P90NativeBarRuntimeProof(
-        source_commit=SHA, restored_symbols=ALL,
+    proof = module.P90RealNewWsSourceProof(
+        source_commit=SHA,
         subscribed_symbols=ALL, subscribed_intervals=frozenset(("5", "15")),
         mirror_active=True, subscribed_local_at=subscribed,
         subscribed_server_at=subscribed, epoch_started_at=started,
@@ -165,9 +161,8 @@ def test_source_epoch_denies_incomplete_market_or_account_evidence(
         )
         accounts = (main, sub)
     elif failure == "no-mirror":
-        source = P90NativeBarRuntimeProof(
+        source = module.P90RealNewWsSourceProof(
             source_commit=source.source_commit,
-            restored_symbols=source.restored_symbols,
             subscribed_symbols=source.subscribed_symbols,
             subscribed_intervals=source.subscribed_intervals,
             mirror_active=False,
