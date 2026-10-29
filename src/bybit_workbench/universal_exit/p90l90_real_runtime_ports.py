@@ -159,6 +159,7 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
     bundles: Sequence[object],
     observed_at: datetime,
     source_commit: str,
+    exit_connection: Any | None = None,
     independently_verified_native_coverage: SourceCoverageProvider,
     independently_verified_closed_history: ClosedHistoryProvider,
     independently_verified_closed_continuity: ClosedCausalSourceProof,
@@ -174,8 +175,15 @@ def assemble_p90_real_exit_runtime_from_db_bundles(
     routes = read_p90_real_account_routes(
         connection, bundles=bundles, at=observed_at,
     )
+    if (
+        exit_connection is not None
+        and getattr(exit_connection, "source_connection", None) is not connection
+    ):
+        raise P90RealRuntimeCompositionUnverified(
+            "P90_REAL_EXIT_ROW_ADAPTER_NOT_SAME_PHYSICAL_TRANSACTION"
+        )
     return assemble_p90_real_exit_runtime(
-        connection,
+        exit_connection if exit_connection is not None else connection,
         source_commit=source_commit,
         account_by_strategy=routes.account_by_strategy,
         connector_by_strategy=routes.connector_by_strategy,

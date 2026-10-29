@@ -92,3 +92,25 @@ def test_generic_reconcile_does_not_erase_signed_first_fill_order_execution_ids(
     # A signed opening order is NOT the same as generic position-state
     # reconciliation; general account reads cannot rewrite its exact IDs.
     assert '"source": "BYBIT_POSITION_RECONCILIATION"' in body
+
+
+
+def test_postfill_and_live_exit_have_mapping_rows_on_same_pg_transaction():
+    """The private worker itself must remain tuple-row for Exchange inventory."""
+    src = Path(
+        "operations/connectivity/p90l90_real_postfill_handoff.py"
+    ).read_text(encoding="utf-8")
+    module = ast.parse(src)
+    handoff = next(
+        node for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "handoff_real_first_protected_fill"
+    )
+    body = ast.get_source_segment(src, handoff)
+    assert body is not None
+    assert "exit_db = P90RealMappedExitConnection(connection)" in body
+    assert "load_exit_binding(\n        exit_db," in body
+    assert "load_exit_binding(\n            exit_db," in body
+    assert "P90RealExitExecutionPort(\n        exit_db," in body
+    assert "PostgresExitShadowStore(exit_db)" in body
+    assert "signed_position_reader(connection)" in body

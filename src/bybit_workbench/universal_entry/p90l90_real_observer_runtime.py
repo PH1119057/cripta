@@ -20,6 +20,9 @@ from bybit_workbench.universal_exit.p90l90_real_exit_execution import SafetyPort
 from bybit_workbench.universal_exit.p90l90_real_exit_port import (
     SourceCoverageProvider,
 )
+from bybit_workbench.universal_exit.p90l90_real_row_connection import (
+    P90RealMappedExitConnection,
+)
 from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
     P90RealExitRuntimePorts,
     assemble_p90_real_exit_runtime_from_db_bundles,
@@ -79,8 +82,13 @@ def assemble_p90_real_observer_runtime(
         raise P90RealObserverWiringUnverified(
             "P90_REAL_OBSERVER_ALL_INDEPENDENT_PORTS_REQUIRED"
         )
+    # Ordinary Observer and causal-source checkpoint SQL need tuple rows.
+    # Universal ExitPlan/MFE/Execution SQL requires named mapping rows.
+    # A cursor-local row factory preserves ONE underlying PG transaction.
+    mapped_exit = P90RealMappedExitConnection(connection)
     ports = assemble_p90_real_exit_runtime_from_db_bundles(
         connection,
+        exit_connection=mapped_exit,
         bundles=bundles,
         observed_at=observed_at,
         source_commit=source_commit,

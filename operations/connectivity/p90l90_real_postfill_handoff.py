@@ -30,6 +30,9 @@ from bybit_workbench.universal_exit.p90l90_real_exit_execution import (
 from bybit_workbench.universal_exit.p90l90_real_postfill_port import (
     P90RealPostfillExitPort,
 )
+from bybit_workbench.universal_exit.p90l90_real_row_connection import (
+    P90RealMappedExitConnection,
+)
 from bybit_workbench.universal_exit.storage import PostgresExitShadowStore
 from operations.connectivity.p90l90_real_postfill_source_client import (
     read_real_postfill_source_window,
@@ -82,8 +85,12 @@ def handoff_real_first_protected_fill(
         raise P90RealImmediatePostfillUnverified(
             "P90_REAL_POSTFILL_ACCOUNT_TRANSACTION_OR_INPUT_UNVERIFIED"
         )
+    # Keep the account-local tuple-row DB connection for roster, signed
+    # inventory and transaction gates. Only mapping-based Exit SQL uses
+    # a cursor-local dict_row facade on the SAME transaction.
+    exit_db = P90RealMappedExitConnection(connection)
     position, plan = load_exit_binding(
-        connection, strategy_position_id=position_id
+        exit_db, strategy_position_id=position_id
     )
     if (
         position.strategy_id not in ALLOWED_SYMBOLS
@@ -193,7 +200,7 @@ def handoff_real_first_protected_fill(
         if symbol != position.symbol:
             return ()
         current, current_plan = load_exit_binding(
-            connection, strategy_position_id=position_id
+            exit_db, strategy_position_id=position_id
         )
         return ((current, current_plan),)
 
@@ -250,14 +257,14 @@ def handoff_real_first_protected_fill(
         return True
 
     execution = P90RealExitExecutionPort(
-        connection,
+        exit_db,
         independently_verified_execution_safety=mutation_safety,
         account_by_strategy=routes.account_by_strategy,
     )
     return P90RealPostfillExitPort(
-        connection,
+        exit_db,
         position_provider=read_durable_position,
-        exit_store=PostgresExitShadowStore(connection),
+        exit_store=PostgresExitShadowStore(exit_db),
         execution_port=execution,
     )(
         position=position, plan=plan,

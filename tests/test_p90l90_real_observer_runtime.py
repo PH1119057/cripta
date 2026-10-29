@@ -30,7 +30,20 @@ def _args():
 def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
     monkeypatch,
 ) -> None:
-    db = object()
+    class DB:
+        def __init__(self):
+            self.info = object()
+
+        def execute(self, *_args, **_kwargs):
+            raise AssertionError("wiring must not query DB")
+
+        def cursor(self, *_args, **_kwargs):
+            raise AssertionError("wiring must not fetch Exit rows")
+
+        def transaction(self):
+            raise AssertionError("wiring must not open transaction")
+
+    db = DB()
     seen = []
     def native(*_args):
         return None
@@ -60,6 +73,7 @@ def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
     assert composed.consumer.admission_provider is args["admitted_account"]
     assert seen[0][0] == "exit" and seen[1][0] == "consumer"
     assert seen[0][1] is db and seen[1][1] is db
+    assert seen[0][2]["exit_connection"].source_connection is db
     assert seen[0][2]["bundles"] is args["bundles"]
     assert seen[0][2]["source_commit"] == args["source_commit"]
     assert seen[0][2]["independently_verified_native_coverage"] is args[
