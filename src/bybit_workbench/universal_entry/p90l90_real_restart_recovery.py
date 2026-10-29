@@ -158,7 +158,9 @@ def _load_joins(
 
 
 def _closed_replay(
+    connection: Any,
     *,
+    source_commit: str,
     symbol: str,
     join: P90L90CausalTransportJoin,
     live_anchor: TradeCursor,
@@ -201,11 +203,11 @@ def _closed_replay(
                 # The caller's source transaction owns this exact write.
                 # REST is the same bounded recovery source used by ordinary
                 # Observer reconnect, not a substitute native trade stream.
-                _closed_replay.connection,  # type: ignore[attr-defined]
+                connection,
                 symbol=symbol,
                 history={timeframe: (candle,)},
                 observed_at=received_at,
-                producer_release_commit=_closed_replay.source_commit,  # type: ignore[attr-defined]
+                producer_release_commit=source_commit,
                 source_transport="BYBIT_REST_KLINE_REAL_RESTART",
             )
             events.append(encode_p90l90_fact(_candle_fact(candle, received_at)))
@@ -322,79 +324,68 @@ def recover_p90_real_open_source(
                 )
             mfe_state[symbol] = latest
 
-        # Bind helper-local metadata without making it public mutable state.
-        # This avoids coupling the universal source module to operations/.
-        _closed_replay.connection = connection  # type: ignore[attr-defined]
-        _closed_replay.source_commit = source_commit  # type: ignore[attr-defined]
-        try:
-            for symbol in sorted(_SYMBOLS):
-                recovery = recoveries[symbol]
-                replay: list[tuple[datetime, int, P90TransportEvent]] = []
-                for event in _closed_replay(
-                    symbol=symbol,
-                    join=joins[symbol],
-                    live_anchor=recovery.live_anchor,
-                    received_at=received_at,
-                    fetch_closed_candles=fetch_closed_candles,
-                ):
-                    # Completed 5m precedes 15m at one exact boundary.
-                    priority = 0 if event.timeframe == "5" else 1
-                    replay.append((event.event_at, priority, event))
-                for row in recovery.trades:
-                    replay.append((
-                        row.traded_at, 2,
-                        encode_p90l90_fact(_trade_fact(row, received_at), cursor=TradeCursor(
-                            row.symbol, row.exec_id, row.seq, row.traded_at,
-                        )),
-                    ))
-                replay.sort(key=lambda item: (
-                    item[0], item[1],
-                    -int(item[2].timeframe or "0"),
-                    item[2].exec_id or "",
+        for symbol in sorted(_SYMBOLS):
+            recovery = recoveries[symbol]
+            replay: list[tuple[datetime, int, P90TransportEvent]] = []
+            for event in _closed_replay(
+                symbol=symbol,
+                join=joins[symbol],
+                live_anchor=recovery.live_anchor,
+                received_at=received_at,
+                fetch_closed_candles=fetch_closed_candles,
+            ):
+                # Completed 5m precedes 15m at one exact boundary.
+                priority = 0 if event.timeframe == "5" else 1
+                replay.append((event.event_at, priority, event))
+            for row in recovery.trades:
+                replay.append((
+                    row.traded_at, 2,
+                    encode_p90l90_fact(_trade_fact(row, received_at), cursor=TradeCursor(
+                        row.symbol, row.exec_id, row.seq, row.traded_at,
+                    )),
                 ))
+            replay.sort(key=lambda item: (
+                item[0], item[1],
+                -int(item[2].timeframe or "0"),
+                item[2].exec_id or "",
+            ))
 
-                open_item = position_by_symbol.get(symbol)
+            open_item = position_by_symbol.get(symbol)
 
-                def observe_native(
-                    fact: MarketFactEnvelope,
-                    cursor: TradeCursor,
-                    *,
-                    current=open_item,
-                    old_anchor=recovery.durable_anchor,
-                ) -> None:
-                    if current is None or cursor.traded_at < current.position.fill_at:
-                        return
-                    previous = mfe_state[symbol]
-                    first = previous is None
-                    if first:
-                        _require(
-                            old_anchor.traded_at <= current.position.fill_at,
-                            "FIRST_MFE_FILL_FORWARD_INTERVAL_NOT_COVERED",
-                        )
-                    checkpoint = exit_ports.mfe_ledger.on_trade(
-                        position=current.position,
-                        source_commit=source_commit,
-                        fact_id=fact.fact_id,
-                        cursor=cursor,
-                        price=Decimal(str(fact.attributes.to_dict()["price"])),
-                        received_at=fact.received_at,
-                        source_refs=fact.source_refs,
-                        first_fill_forward_coverage_proven=first,
-                        native_continuity_proven=True,
+            def observe_native(
+                fact: MarketFactEnvelope,
+                cursor: TradeCursor,
+                *,
+                current=open_item,
+                old_anchor=recovery.durable_anchor,
+            ) -> None:
+                if current is None or cursor.traded_at < current.position.fill_at:
+                    return
+                previous = mfe_state[symbol]
+                first = previous is None
+                if first:
+                    _require(
+                        old_anchor.traded_at <= current.position.fill_at,
+                        "FIRST_MFE_FILL_FORWARD_INTERVAL_NOT_COVERED",
                     )
-                    mfe_state[symbol] = checkpoint
+                checkpoint = exit_ports.mfe_ledger.on_trade(
+                    position=current.position,
+                    source_commit=source_commit,
+                    fact_id=fact.fact_id,
+                    cursor=cursor,
+                    price=Decimal(str(fact.attributes.to_dict()["price"])),
+                    received_at=fact.received_at,
+                    source_refs=fact.source_refs,
+                    first_fill_forward_coverage_proven=first,
+                    native_continuity_proven=True,
+                )
+                mfe_state[symbol] = checkpoint
 
-                for _at, _priority, event in replay:
-                    consumer.accept_restart_recovery(
-                        event,
-                        on_recovered_native=observe_native,
-                    )
-        finally:
-            with __import__("contextlib").suppress(AttributeError):
-                delattr(_closed_replay, "connection")
-            with __import__("contextlib").suppress(AttributeError):
-                delattr(_closed_replay, "source_commit")
-
+            for _at, _priority, event in replay:
+                consumer.accept_restart_recovery(
+                    event,
+                    on_recovered_native=observe_native,
+                )
         # Durable source checkpoints must now terminate at the exact live
         # cursors chosen before replay; no historical event may remain pending.
         current_joins = _load_joins(
