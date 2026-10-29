@@ -121,11 +121,13 @@ class P90RealExitNativePort:
                 raise P90RealMfeUnverified(
                     f"P90_REAL_EXIT_POLICY_DENIED:{evaluation.reason}"
                 )
-            if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
-                if self._execution_port is None:
-                    raise P90RealMfeUnverified(
-                        "P90_REAL_EXIT_EXECUTION_OWNER_MISSING"
-                    )
+            if (
+                evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+                and self._execution_port is None
+            ):
+                raise P90RealMfeUnverified(
+                    "P90_REAL_EXIT_EXECUTION_OWNER_MISSING"
+                )
             self._exit_store.record(evaluation, position=position, plan=plan)
             if evaluation.status is ExitEvaluationStatus.DECISION_CREATED:
                 assert self._execution_port is not None
