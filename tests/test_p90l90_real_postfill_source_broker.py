@@ -160,9 +160,9 @@ def test_native_window_explicitly_bounds_high_density_burst() -> None:
 def test_zero_next_native_tick_requires_fresh_rest_anchor_and_no_synthetic_tick() -> None:
     mirror, position, at = _market(trades=0)
     row = {
-        "s": position.symbol, "i": "pre-fill-rest-anchor",
-        "T": int((at - timedelta(seconds=1)).timestamp() * 1000),
-        "seq": 100,
+        "symbol": position.symbol, "execId": "pre-fill-rest-anchor",
+        "time": int((at - timedelta(seconds=1)).timestamp() * 1000),
+        "seq": 100, "side": "Buy",
     }
     source = build_source_window(
         mirror=mirror, position=position, source_commit=SHA,
@@ -190,15 +190,16 @@ def test_zero_native_proof_fails_without_independent_complete_rest(
 ) -> None:
     mirror, position, at = _market(trades=0)
     row = {
-        "s": position.symbol, "i": "real-rest-anchor",
-        "T": int((at - timedelta(seconds=1)).timestamp() * 1000),
+        "symbol": position.symbol, "execId": "real-rest-anchor",
+        "time": int((at - timedelta(seconds=1)).timestamp() * 1000),
+        "side": "Buy",
     }
     if failure == "unseen-trade":
-        row["T"] = int((at - timedelta(milliseconds=100)).timestamp() * 1000)
+        row["time"] = int((at - timedelta(milliseconds=100)).timestamp() * 1000)
     elif failure == "foreign-market":
-        row["s"] = "DOTUSDT"
+        row["symbol"] = "DOTUSDT"
     elif failure == "malformed-rest":
-        del row["T"]
+        del row["time"]
     rows = [] if failure == "empty-response" else [row]
     fetch = (
         None if failure == "no-provider" else
