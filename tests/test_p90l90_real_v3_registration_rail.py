@@ -7,7 +7,17 @@ from __future__ import annotations
 
 import ast
 import hashlib
+from datetime import UTC, datetime
 from pathlib import Path
+
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    VERSION,
+    real_v3_cards,
+)
+from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
+    StrategyHardStopEmbargoPolicy,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SQL = ROOT / "operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql"
@@ -55,12 +65,12 @@ def test_migration_grants_only_narrow_inactive_v3_writer() -> None:
 
 def test_replay_hash_is_exact_function_source_and_migration_is_listed() -> None:
     text = SQL.read_text(encoding="utf-8")
-    assert text.count("AS $function$\\n") == 1
-    assert text.count("\\n$function$;") == 1
-    body = text.split("AS $function$\\n", 1)[1].split(
-        "\\n$function$;", 1,
+    assert text.count("AS $function$\n") == 1
+    assert text.count("\n$function$;") == 1
+    body = text.split("AS $function$\n", 1)[1].split(
+        "\n$function$;", 1,
     )[0]
-    approved = hashlib.md5(("\\n" + body + "\\n").encode("utf-8")).hexdigest()
+    approved = hashlib.md5(("\n" + body + "\n").encode("utf-8")).hexdigest()
     assert approved == "efa9a3e3604b22133184f92b02bcb88f"
     assert text.count(approved) == 1
     release = (
@@ -112,19 +122,6 @@ def test_installation_requires_exact_actor_and_no_default_mutation() -> None:
 
 
 def test_immutable_v3_authoring_is_distinct_from_paper_v2() -> None:
-    from datetime import UTC, datetime
-
-    from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
-        MAIN_ID,
-        SUB_ID,
-    )
-    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-        VERSION, real_v3_cards,
-    )
-    from bybit_workbench.universal_entry.p90l90_strategy_embargo import (
-        StrategyHardStopEmbargoPolicy,
-    )
-
     embargo = StrategyHardStopEmbargoPolicy.parse({
         "enabled": True, "hardstop_count": 2,
         "rolling_hours": 48, "new_entry_pause_hours": 48,
