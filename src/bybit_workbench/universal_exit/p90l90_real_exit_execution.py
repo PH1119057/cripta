@@ -14,6 +14,8 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from psycopg.pq import TransactionStatus
+
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
@@ -131,6 +133,18 @@ class P90RealExitExecutionPort:
         ):
             raise P90RealExitExecutionUnverified(
                 "P90_REAL_EXIT_NATIVE_SIGNED_LINEAGE_OR_PROTECTION_UNVERIFIED"
+            )
+        # This is an atomic extension of the native source checkpoint,
+        # NEVER an independent autocommitted command-sending transaction.
+        # A missing/IDLE connection state cannot prove same-event lineage.
+        info = getattr(self._db, "info", None)
+        if (
+            info is None
+            or getattr(info, "transaction_status", None)
+            is not TransactionStatus.INTRANS
+        ):
+            raise P90RealExitExecutionUnverified(
+                "P90_REAL_EXIT_SOURCE_TRANSACTION_NOT_OPEN"
             )
         # No request is queued merely because a valid strategy decision
         # exists. Independent, current Exchange-side mutation safety must PASS.
