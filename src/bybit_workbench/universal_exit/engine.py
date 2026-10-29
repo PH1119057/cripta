@@ -6,6 +6,7 @@ from datetime import UTC
 from enum import StrEnum
 from typing import Protocol
 
+from bybit_workbench.universal_entry import p90l90_real_contract_v3
 from bybit_workbench.universal_entry.contracts import (
     ExitPlan,
     FrozenPolicy,
@@ -28,6 +29,7 @@ from .contracts import (
     ExitObservation,
     ExitRepeatPolicy,
 )
+from .p90l90_real_v3 import P90RealExitUnverified, project_p90l90_real_exit
 
 
 class ExitConflictMode(StrEnum):
@@ -275,6 +277,61 @@ class UniversalExitEngine:
             position.exit_plan_fingerprint,
         ):
             return _blocked(position, plan, observation, "EXIT_PLAN_POSITION_LINEAGE_MISMATCH")
+
+        if (
+            position.strategy_id in p90l90_real_contract_v3.ALLOWED_SYMBOLS
+            and position.strategy_version == p90l90_real_contract_v3.VERSION
+        ):
+            # An immutable v3 P90 ExitPlan has explicit trailing/RAW geometry
+            # policy but no generic DSL rules. Project it through the shared
+            # ExitDecision contract only for an exact, Exchange-proven position.
+            from bybit_workbench.strategy_position import StrategyPosition
+
+            if not isinstance(position, StrategyPosition):
+                return _blocked(position, plan, observation, "P90_REAL_POSITION_NOT_PROVEN")
+            try:
+                projected = project_p90l90_real_exit(position, plan, observation)
+            except P90RealExitUnverified as exc:
+                return _blocked(position, plan, observation, str(exc))
+            if projected is None:
+                return ExitEvaluation(
+                    evaluation_id=evaluation_id,
+                    observation=observation,
+                    status=ExitEvaluationStatus.NO_MATCH,
+                    reason="approved P90L90 REAL ExitPlan: no new action",
+                )
+            action_kind, mutation, rule_id = projected
+            decision = ExitDecision(
+                exit_decision_id=(
+                    "exit-decision-"
+                    + fingerprint({
+                        "strategy_position_id": position.strategy_position_id,
+                        "exit_plan_fingerprint": plan.exit_plan_fingerprint,
+                        "rule_id": rule_id,
+                        "observation_id": observation.observation_id,
+                    })[:32]
+                ),
+                strategy_position_id=position.strategy_position_id,
+                strategy_id=position.strategy_id,
+                strategy_version=position.strategy_version,
+                strategy_config_fingerprint=position.strategy_config_fingerprint,
+                exit_plan_fingerprint=position.exit_plan_fingerprint,
+                rule_id=rule_id,
+                action_kind=action_kind,
+                requested_mutation=FrozenPolicy.from_mapping(mutation),
+                source_refs=observation.source_refs,
+                decided_at=observation.observed_at.astimezone(UTC),
+            )
+            return ExitEvaluation(
+                evaluation_id=evaluation_id,
+                observation=observation,
+                status=ExitEvaluationStatus.DECISION_CREATED,
+                reason=f"exact P90L90 REAL ExitPlan action: {rule_id}",
+                matched_rule_ids=(rule_id,),
+                decision=decision,
+                selected_priority=1,
+                repeat_policy=ExitRepeatPolicy.EACH_MATCH,
+            )
 
         policy = plan.exit_policy.to_dict()
         rules_raw = policy.get("rules")

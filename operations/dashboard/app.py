@@ -43,6 +43,14 @@ from bybit_workbench.r1_unified_arm_control import (
     arm_unified_r1,
     disarm_unified_r1,
 )
+from bybit_workbench.p90l90_real_arm_control import (
+    arm_p90l90_real_v3,
+    disarm_p90l90_real_v3,
+    prearm_p90l90_real_v3,
+)
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_V3_VERSION
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
@@ -3609,6 +3617,8 @@ R1_MICRO_LIVE_PATH = "/api/r1/micro-live"
 R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
 R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"
 R1_UNIFIED_MICRO_LIVE_PATH = "/api/r1/unified/micro-live"
+P90_REAL_V3_PREARM_PATH = "/api/p90l90/real-v3/prearm"
+P90_REAL_V3_ARM_PATH = "/api/p90l90/real-v3/arm"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
     U6_STRATEGY_VERSION_PATH,
@@ -3617,6 +3627,8 @@ U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_FINANCIAL_ACCOUNT_SET_PATH,
     R1_MICRO_LIVE_PATH,
     R1_UNIFIED_MICRO_LIVE_PATH,
+    P90_REAL_V3_PREARM_PATH,
+    P90_REAL_V3_ARM_PATH,
 }
 
 
@@ -3741,6 +3753,13 @@ def _u6_create_version(handler: object, request: dict[str, object]) -> None:
 
 
 def _u6_set_activation(handler: object, request: dict[str, object]) -> None:
+    strategy_id = str(request.get("strategy_id") or "")
+    strategy_version = str(request.get("strategy_version") or "")
+    if (
+        strategy_version == P90_REAL_V3_VERSION
+        and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
+    ):
+        raise ValueError("P90_REAL_V3_USE_DEDICATED_PREARM_CONTROL")
     enabled = request.get("enabled")
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be boolean")
@@ -3811,6 +3830,11 @@ def _u6_set_execution_permission(handler: object, request: dict[str, object]) ->
     strategy_config_fingerprint = str(request.get("strategy_config_fingerprint") or "")
     if not strategy_id or not strategy_version or not strategy_config_fingerprint:
         raise ValueError("exact Strategy identity is required")
+    if (
+        strategy_version == P90_REAL_V3_VERSION
+        and strategy_id in {P90_MAIN_ID, P90_SUB_ID}
+    ):
+        raise ValueError("P90_REAL_V3_USE_DEDICATED_OWNER_ARM_CONTROL")
     operator = handler.session_user() or "UNKNOWN"
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
@@ -4419,6 +4443,63 @@ def _u6_r1_unified_micro_live(
 
 
 
+def _u6_p90_real_v3_prearm(
+    handler: object, request: dict[str, object]
+) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("P90 REAL v3 PREARM enabled must be boolean")
+    if enabled and request.get("confirmed") is not True:
+        raise ValueError("P90 REAL v3 PREARM requires explicit confirmation")
+    operator = handler.session_user() or "UNKNOWN"
+    request_id = str(request.get("request_id") or secrets.token_hex(12))
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        result = prearm_p90l90_real_v3(
+            connection,
+            release_commit=LOADED_RELEASE_COMMIT,
+            now=datetime.now(UTC),
+            operator=operator,
+            request_id=request_id,
+            enabled=enabled,
+        )
+    _u6_json(handler, 200, result)
+
+
+def _u6_p90_real_v3_arm(
+    handler: object, request: dict[str, object]
+) -> None:
+    enabled = request.get("enabled")
+    if not isinstance(enabled, bool):
+        raise ValueError("P90 REAL v3 ARM enabled must be boolean")
+    if enabled and request.get("confirmed") is not True:
+        raise ValueError("P90 REAL v3 OWNER ARM requires explicit confirmation")
+    operator = handler.session_user() or "UNKNOWN"
+    request_id = str(request.get("request_id") or secrets.token_hex(12))
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        if enabled:
+            result = arm_p90l90_real_v3(
+                connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=datetime.now(UTC),
+                operator=operator,
+                request_id=request_id,
+                confirmed=True,
+                observer_ready=_u6_multi_strategy_observer_ready(),
+            )
+        else:
+            result = disarm_p90l90_real_v3(
+                connection,
+                now=datetime.now(UTC),
+                operator=operator,
+                request_id=request_id,
+            )
+    _u6_json(handler, 200, result)
+
+
 def _u6_financial_account_catalog(handler: object) -> None:
     """Read-only operator catalog. No credential ref, secret or provider UID exported."""
     accounts: list[dict[str, object]] = []
@@ -4573,6 +4654,10 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_r1_micro_live(handler, request)
         elif path == R1_UNIFIED_MICRO_LIVE_PATH:
             _u6_r1_unified_micro_live(handler, request)
+        elif path == P90_REAL_V3_PREARM_PATH:
+            _u6_p90_real_v3_prearm(handler, request)
+        elif path == P90_REAL_V3_ARM_PATH:
+            _u6_p90_real_v3_arm(handler, request)
         else:
             _u6_json(handler, 404, {"error": "unknown Strategy endpoint"})
     except StaleActivationState:

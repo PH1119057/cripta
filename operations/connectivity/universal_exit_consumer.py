@@ -11,6 +11,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 from bybit_workbench.universal_entry.contracts import FrozenPolicy
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
 from bybit_workbench.universal_exit.contracts import ExitActionKind, ExitDecision
 from bybit_workbench.universal_exit.execution_bridge import (
     ExitExecutionBridgeBlocked,
@@ -51,7 +53,10 @@ def _next_decision(connection: psycopg.Connection[Any]) -> Mapping[str, object] 
     return connection.execute(
         """SELECT d.*
              FROM strategy_exit.exit_decisions d
-            WHERE NOT EXISTS (
+            WHERE NOT (
+                d.strategy_version=%s AND d.strategy_id IN (%s,%s)
+            )
+              AND NOT EXISTS (
                 SELECT 1 FROM strategy_exit.execution_requests r
                  WHERE r.exit_decision_id=d.exit_decision_id
             )
@@ -60,7 +65,8 @@ def _next_decision(connection: psycopg.Connection[Any]) -> Mapping[str, object] 
                  WHERE b.exit_decision_id=d.exit_decision_id
             )
             ORDER BY d.decided_at,d.exit_decision_id
-            LIMIT 1"""
+            LIMIT 1""",
+        (P90_REAL_VERSION, MAIN_ID, SUB_ID),
     ).fetchone()
 
 
@@ -95,12 +101,16 @@ def _next_request(connection: psycopg.Connection[Any]) -> Mapping[str, object] |
              FROM strategy_exit.execution_requests r
             WHERE r.identity_status='PROVEN'
               AND r.trading_account_id IS NOT NULL
+              AND NOT (
+                  r.strategy_version=%s AND r.strategy_id IN (%s,%s)
+              )
               AND NOT EXISTS (
                 SELECT 1 FROM strategy_exit.execution_dispatches d
                  WHERE d.execution_request_id=r.execution_request_id
             )
             ORDER BY r.requested_at,r.execution_request_id
-            LIMIT 1"""
+            LIMIT 1""",
+        (P90_REAL_VERSION, MAIN_ID, SUB_ID),
     ).fetchone()
 
 

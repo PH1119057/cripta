@@ -1,0 +1,307 @@
+"""Dedicated REAL P90L90 native source consumer; never simulates PAPER orders.
+
+This adapter composes the existing source-pinned atomic 5m/15m / publicTrade
+transport and Universal Entry. It does NOT itself issue Exchange commands.
+The real Exit observation port MUST independently prove signed account state,
+real fill/protection, complete native tick continuity and monotonic MFE.
+Until those owners are provided, this consumer cannot start a real epoch.
+"""
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
+from typing import Any
+
+from .contracts import FrozenPolicy, MarketFactEnvelope
+from .engine import AccountAdmissionContext, UniversalEntryEngine
+from .p90l90_atomic_real_epoch_checkpoint import P90L90AtomicRealEpochCheckpointStore
+from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
+from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from .p90l90_observer_paper_consumer import P90L90ObserverPaperConsumer
+from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
+from .p90l90_real_native_candidate_owner import P90L90RealNativeCandidateOwner
+from .p90l90_real_second48 import read_real_second48
+from .p90l90_real_shared_candle_ledger import P90RealSharedCandleLedger
+from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
+from .registry import ActivePlanRegistry
+from .storage import StrategyEntryStore
+from .transport_continuity import TradeCursor
+
+AccountAdmissionProvider = Callable[
+    [str, datetime],
+    tuple[tuple[AccountAdmissionContext, ...], bool],
+]
+# Native and closed-bar Exit ports return evaluations; the source consumer
+# deliberately ignores their values and relies on the shared committed xact.
+RealExitTickPort = Callable[[MarketFactEnvelope, TradeCursor], object]
+RealClosedCandlePort = Callable[[MarketFactEnvelope], object]
+
+
+class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
+    """One real owner per native symbol; v2 PAPER state never used as a fill."""
+
+    def __init__(
+        self,
+        connection: Any,
+        *,
+        bundles: tuple[object, ...],
+        source_commit: str,
+        source_epoch_id: str,
+        provenance: FrozenPolicy,
+        admission_provider: AccountAdmissionProvider,
+        verified_exit_tick_port: RealExitTickPort,
+        verified_closed_candle_port: RealClosedCandlePort,
+        no_order_source_diagnostic: bool = False,
+        shared_candle_ledger: P90RealSharedCandleLedger | None = None,
+        producer_release_commit: str | None = None,
+        accepted_source_commits: frozenset[str] | None = None,
+    ) -> None:
+        if not bundles or len(bundles) > 2:
+            raise ValueError("P90_REAL_INVALID_INDEPENDENT_STRATEGY_COUNT")
+        self._by_symbol: dict[str, Any] = {}
+        self._candidate_owners: dict[str, P90L90RealNativeCandidateOwner] = {}
+        self._connection = connection
+        self._provenance = provenance
+        self._source_epoch_id = source_epoch_id
+        self._admission_provider = admission_provider
+        self._verified_exit_tick_port = verified_exit_tick_port
+        self._verified_closed_candle_port = verified_closed_candle_port
+        self._no_order_source_diagnostic = no_order_source_diagnostic is True
+        registry = ActivePlanRegistry()
+        ids: set[str] = set()
+        for raw in bundles:
+            bundle: Any = raw
+            card = bundle.card
+            activation = bundle.activation
+            plan = bundle.entry_plan
+            if (
+                card.strategy_id not in (MAIN_ID, SUB_ID)
+                or card.strategy_id in ids
+                or card.strategy_version != VERSION
+                or frozenset(card.symbols) != ALLOWED_SYMBOLS[card.strategy_id]
+                or frozenset(plan.symbols) != ALLOWED_SYMBOLS[card.strategy_id]
+                or not activation.enabled
+                or activation.strategy_id != card.strategy_id
+                or activation.strategy_version != VERSION
+                or activation.strategy_config_fingerprint
+                != card.strategy_config_fingerprint
+                or plan.strategy_activation_id != activation.activation_id
+            ):
+                raise RuntimeError("P90_REAL_NATIVE_EXACT_CARD_OR_ACTIVATION_INVALID")
+            ids.add(card.strategy_id)
+            registry.register_card(card)
+            if registry.activate(activation) != plan:
+                raise RuntimeError("P90_REAL_NATIVE_ENTRY_PLAN_REBUILD_MISMATCH")
+            for symbol in plan.symbols:
+                if symbol in self._by_symbol:
+                    raise RuntimeError("P90_REAL_NATIVE_DUPLICATE_SYMBOL_OWNER")
+                self._by_symbol[symbol] = bundle
+        self._entry = UniversalEntryEngine(registry)
+        self._store = StrategyEntryStore(connection)
+        # The P90 REAL source epoch is independent: historical PAPER seed
+        # and checkpoints remain immutable and are never a REAL write target.
+        if shared_candle_ledger is not None and (
+            not isinstance(shared_candle_ledger, P90RealSharedCandleLedger)
+            or shared_candle_ledger._epoch_id != source_epoch_id
+            or shared_candle_ledger._source_commit != source_commit
+            or shared_candle_ledger._db is not connection
+        ):
+            raise RuntimeError("P90_REAL_SHARED_CANDLE_OWNER_OR_EPOCH_MISMATCH")
+        self._archive = (
+            shared_candle_ledger if shared_candle_ledger is not None else
+            P90RealSharedCandleLedger(
+                connection, epoch_id=source_epoch_id, source_commit=source_commit,
+            )
+        )
+        self._processors: dict[str, P90L90DurablePaperProcessor] = {}
+        for symbol, bundle in self._by_symbol.items():
+            self._candidate_owners[symbol] = P90L90RealNativeCandidateOwner(
+                strategy_id=bundle.card.strategy_id,
+                strategy_activation_id=bundle.activation.activation_id,
+                strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+                entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+                engine=self._entry,
+                store=self._store,
+                provenance=self._provenance,
+            )
+            self._processors[symbol] = P90L90DurablePaperProcessor(
+                connection,
+                source_commit=source_commit,
+                producer_release_commit=producer_release_commit,
+                accepted_source_commits=accepted_source_commits,
+                bar_ledger=self._archive,
+                atomic_checkpoint_store=P90L90AtomicRealEpochCheckpointStore(
+                    connection, source_commit=source_commit,
+                    writer_release_commit=producer_release_commit,
+                    epoch_id=source_epoch_id,
+                ),
+                on_native_exit=self._on_native_exit,
+                on_closed_candle=self._on_closed_candle,
+                candidate_entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+                on_proven_candidate=self._on_candidate,
+            )
+        self._recovered = False
+        self._verified_closed_watermarks: dict[
+            str, tuple[datetime, datetime]
+        ] = {}
+        self._gap_recovery_poisoned = False
+
+    def recover_all(self) -> None:
+        """Reconstruct ALL original durable native/closed-bar checkpoints."""
+        if self._recovered:
+            raise RuntimeError("P90_REAL_NATIVE_DOUBLE_RESTORE")
+        recovered: dict[str, tuple[datetime, datetime]] = {}
+        for symbol in sorted(self._processors):
+            join, entry = self._processors[symbol].recover(symbol=symbol)
+            if entry.state is None or entry.state.effective_at > join.closed_5m_at:
+                raise RuntimeError("P90_REAL_NATIVE_UNPROVEN_RESTORED_GEOMETRY")
+            actual = self._archive.closed_at_or_before(
+                symbol=symbol, timeframe="15", through=join.closed_15m_at
+            )
+            if actual != join.closed_15m_at:
+                raise RuntimeError("P90_REAL_NATIVE_UNVERIFIED_15M_WATERMARK")
+            recovered[symbol] = (join.closed_5m_at, join.closed_15m_at)
+        if not recovered or set(recovered) != set(self._processors):
+            raise RuntimeError("P90_REAL_NATIVE_INCOMPLETE_RECOVERED_SYMBOLS")
+        self._verified_closed_watermarks = recovered
+        self._recovered = True
+
+    def accept_restart_recovery(
+        self,
+        event: object,
+        *,
+        on_recovered_native: Callable[
+            [MarketFactEnvelope, TradeCursor], None
+        ] | None = None,
+    ) -> tuple[object, ...]:
+        """Replay source-certified outage facts with all trading actions muted."""
+        from .p90l90_causal_transport_join import P90TransportEvent
+
+        if (
+            not self._recovered
+            or self._gap_recovery_poisoned
+            or not isinstance(event, P90TransportEvent)
+            or event.symbol not in self._processors
+        ):
+            raise RuntimeError("P90_REAL_RESTART_RECOVERY_NOT_READY")
+        released = self._processors[event.symbol].accept_recovery(
+            event, on_recovered_native=on_recovered_native,
+        )
+        # Keep the verified watermark cache synchronized with the durable join.
+        join, _entry = self._processors[event.symbol].recover(
+            symbol=event.symbol
+        )
+        self._verified_closed_watermarks[event.symbol] = (
+            join.closed_5m_at, join.closed_15m_at,
+        )
+        return tuple(released)
+
+    def catch_up_closed_histories(
+        self, targets: Mapping[str, tuple[datetime, datetime]],
+    ) -> int:
+        """Cannot bridge a source gap while any REAL exposure/request exists."""
+        active = self._connection.execute(
+            """SELECT count(*) FROM runtime.position_ownership
+                 WHERE strategy_id IN (%s,%s) AND strategy_version=%s
+                   AND state IN ('OPEN','RECONCILIATION_REQUIRED')""",
+            (MAIN_ID, SUB_ID, VERSION),
+        ).fetchone()
+        pending = self._connection.execute(
+            """SELECT count(*)
+                 FROM strategy_entry.execution_requests r
+                WHERE r.strategy_id IN (%s,%s) AND r.strategy_version=%s
+                  AND NOT EXISTS (
+                     SELECT 1 FROM strategy_entry.execution_dispatches d
+                      WHERE d.execution_request_id=r.execution_request_id
+                  )""",
+            (MAIN_ID, SUB_ID, VERSION),
+        ).fetchone()
+        pending_exit = self._connection.execute(
+            """SELECT count(*)
+                 FROM strategy_exit.execution_requests r
+                WHERE r.strategy_id IN (%s,%s) AND r.strategy_version=%s
+                  AND NOT EXISTS (
+                     SELECT 1 FROM strategy_exit.execution_dispatches d
+                      WHERE d.execution_request_id=r.execution_request_id
+                  )""",
+            (MAIN_ID, SUB_ID, VERSION),
+        ).fetchone()
+        if active != (0,) or pending != (0,) or pending_exit != (0,):
+            raise RuntimeError("P90_REAL_NATIVE_GAP_WITH_EXPOSURE_OR_PENDING_ORDER")
+        if not self._recovered or self._gap_recovery_poisoned:
+            raise RuntimeError("P90_REAL_NATIVE_RECOVERY_NOT_VERIFIED")
+        if (
+            not targets
+            or set(targets) != set(self._processors)
+            or set(targets) != set(self._verified_closed_watermarks)
+        ):
+            raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
+        for symbol, boundary in targets.items():
+            if (
+                not isinstance(boundary, tuple)
+                or len(boundary) != 2
+                or any(value.tzinfo is None for value in boundary)
+                or boundary != self._verified_closed_watermarks[symbol]
+            ):
+                # No OHLC-only gap fill, no replay of a newer last candle:
+                # missing native trades may have contained valid Entry/Exit.
+                self._gap_recovery_poisoned = True
+                raise RuntimeError("P90_REAL_NATIVE_GAP_REQUIRES_EXACT_SOURCE_EPOCH")
+        # Only the pre-WS *closed-bar* watermarks match. A fresh exact native
+        # publicTrade epoch still requires independent subscription/mirror
+        # attestation before ANY new REAL signal or Exit is accepted.
+        return 0
+
+    def _on_native_exit(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
+        if fact.event_kind != "PUBLIC_TRADE" or cursor.symbol != fact.symbol:
+            raise RuntimeError("P90_REAL_NATIVE_EXIT_CURSOR_MISMATCH")
+        self._verified_exit_tick_port(fact, cursor)
+
+    def _on_closed_candle(self, fact: MarketFactEnvelope) -> None:
+        if fact.event_kind != "CANDLE_CLOSED":
+            raise RuntimeError("P90_REAL_NATIVE_CLOSED_BAR_KIND_INVALID")
+        timeframe = fact.attributes.to_dict().get("timeframe")
+        if timeframe == "15":
+            # 15m is still committed to the native Entry geometry join.
+            # Only verified 5m boundaries own dynamic opposite RAW L5-3.
+            return
+        if timeframe != "5":
+            raise RuntimeError("P90_REAL_NATIVE_CLOSED_BAR_TIMEFRAME_INVALID")
+        self._verified_closed_candle_port(fact)
+
+    def _on_candidate(self, fact: MarketFactEnvelope, cursor: TradeCursor) -> None:
+        # Explicitly no-order source diagnostics consume RAW geometry only;
+        # never issue a real Entry signal, execution request or PAPER proxy.
+        if getattr(self, "_no_order_source_diagnostic", False):
+            return
+        owner = self._candidate_owners.get(fact.symbol)
+        if owner is None:
+            raise RuntimeError("P90_REAL_NATIVE_CANDIDATE_NO_EXACT_OWNER")
+        at = datetime.now(UTC)
+        admissions, proven = self._admission_provider(fact.symbol, at)
+        # The source checkpoint's transaction also reads all actual CLOSED
+        # exchange-attributed exits: callers cannot override a durable
+        # SECOND48 prohibition via an independently supplied boolean.
+        if len(admissions) != 1 or not proven:
+            raise RuntimeError("P90_REAL_NATIVE_ACCOUNT_ADMISSION_NOT_VERIFIED")
+        bundle = self._by_symbol[fact.symbol]
+        lifecycle = bundle.card.lifecycle_policy.to_dict()
+        policy = StrategyHardStopEmbargoPolicy.parse(
+            lifecycle["second_hardstop_embargo"]
+        )
+        allows_entry, _snapshot = read_real_second48(
+            self._connection,
+            strategy_id=bundle.card.strategy_id,
+            strategy_version=bundle.card.strategy_version,
+            strategy_config_fingerprint=bundle.card.strategy_config_fingerprint,
+            trading_account_id=admissions[0].binding.trading_account_id,
+            policy=policy,
+            evaluated_at=at,
+        )
+        owner.accept(
+            fact, cursor,
+            account_admissions=admissions,
+            arm_and_source_verified=proven,
+            admitted_at=at,
+            allow_new_signals=allows_entry,
+        )

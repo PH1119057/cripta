@@ -464,6 +464,7 @@ migration_files=(
   operations/sql/20261016_report_replay_provenance_r5.sql
   # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
   operations/sql/20261024_account_scoped_live_arm.sql
+  operations/sql/20261029_p90l90_real_account_arm_control.sql
   operations/sql/20261025_account_entry_safety_blocks.sql
   operations/sql/20261025_account_attempt_fanout.sql
   # Cut over all five physical current-state keys after additive account indexes
@@ -483,6 +484,11 @@ migration_files=(
   operations/sql/20261028_p90l90_data_lineage_compatibility.sql
   # One strategy-agnostic cache owner for verified closed OHLCV, independent of TradingAccount.
   operations/sql/20261028_shared_closed_candle_source.sql
+  # Owner-approved exact P90L90 REAL v3 INACTIVE two-account writer only.
+  # Never creates enabled Strategy or bypasses per-account LIVE arm.
+  operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
+  # Additive independent REAL-only source-epoch state; never resets old PAPER evidence.
+  operations/sql/20261029_p90l90_real_source_epochs.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"

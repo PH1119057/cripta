@@ -25,6 +25,7 @@ from .transport_continuity import TradeCursor
 NativeExitHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
 CandleHandler = Callable[[MarketFactEnvelope], None]
 ProvenCandidateHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
+RecoveryNativeHandler = Callable[[MarketFactEnvelope, TradeCursor], None]
 
 
 class P90L90DurablePaperProcessor:
@@ -45,14 +46,18 @@ class P90L90DurablePaperProcessor:
         on_native_exit: NativeExitHandler,
         on_closed_candle: CandleHandler,
         bar_ledger: Any | None = None,
+        atomic_checkpoint_store: Any | None = None,
         candidate_entry_plan_fingerprint: str | None = None,
         on_proven_candidate: ProvenCandidateHandler | None = None,
     ) -> None:
         if (candidate_entry_plan_fingerprint is None) != (on_proven_candidate is None):
             raise ValueError("P90L90 candidate requires both exact plan and handler")
-        self._atomic = P90L90AtomicPaperCheckpointStore(
-            connection, source_commit=source_commit,
-            writer_release_commit=producer_release_commit,
+        self._atomic = (
+            atomic_checkpoint_store if atomic_checkpoint_store is not None
+            else P90L90AtomicPaperCheckpointStore(
+                connection, source_commit=source_commit,
+                writer_release_commit=producer_release_commit,
+            )
         )
         self._bars = (
             bar_ledger if bar_ledger is not None else P90L90ImmutableBarLedger(
@@ -130,6 +135,80 @@ class P90L90DurablePaperProcessor:
         return self._atomic.inspect_verified(
             symbol=symbol, recompute_geometry=self._geometry_for_checkpoint,
         )
+
+    def accept_recovery(
+        self,
+        event: P90TransportEvent,
+        *,
+        on_recovered_native: RecoveryNativeHandler | None = None,
+    ) -> tuple[P90TransportEvent, ...]:
+        """Advance exact causal state after restart without retroactive actions.
+
+        Recovery replays only independently proven original market facts.  It
+        must reconstruct the same join/Entry state that would have existed
+        without the process outage, but it MUST NOT call normal candidate or
+        Exit callbacks: doing so could create a new Entry, TP change, close or
+        trailing mutation for a historical event.  A caller may provide one
+        observation-only native callback (for example the durable REAL MFE
+        ledger); that callback must not evaluate/dispatch Universal Exit.
+        """
+        if self._poisoned:
+            raise RuntimeError("P90L90 poisoned epoch requires process restart")
+        if on_recovered_native is not None and not callable(on_recovered_native):
+            raise ValueError("P90L90 recovery native observer must be callable")
+
+        def apply(
+            entry: P90L90CausalEntry,
+            batch: tuple[P90TransportEvent, ...],
+        ) -> None:
+            for released in batch:
+                fact, cursor = restore_p90l90_fact(released)
+                if released.kind == "CANDLE_CLOSED":
+                    self._bars.append(released)
+                    last5 = self._bars.closed_at_or_before(
+                        symbol=released.symbol, timeframe="5",
+                        through=released.event_at,
+                    )
+                    last15 = self._bars.closed_at_or_before(
+                        symbol=released.symbol, timeframe="15",
+                        through=released.event_at,
+                    )
+                    expected15 = last5.replace(
+                        minute=(last5.minute // 15) * 15,
+                    )
+                    if last15 == expected15:
+                        computed = self._bars.recompute_geometry(
+                            symbol=released.symbol, effective_at=last5,
+                        )
+                        if computed is not None and (
+                            entry.state is None
+                            or computed.effective_at > entry.state.effective_at
+                        ):
+                            entry.update_geometry(computed)
+                    # Intentionally NO normal closed-candle Exit callback.
+                    continue
+                if cursor is None:
+                    raise RuntimeError(
+                        "P90L90 recovery native tick lost exact cursor"
+                    )
+                if on_recovered_native is not None:
+                    on_recovered_native(fact, cursor)
+                price = Decimal(str(fact.attributes.to_dict()["price"]))
+                # Preserve the causal Entry automaton (previous price,
+                # de-dup/crossing memory) but discard historical crossings.
+                # A replayed crossing is evidence only, never a fresh signal.
+                entry.on_trade(price=price, event_at=released.event_at)
+
+        try:
+            return self._atomic.deliver(
+                event,
+                recompute_geometry=self._geometry_for_checkpoint,
+                apply_paper=apply,
+            )
+        except Exception:
+            self._poisoned = True
+            self._checked_geometry.clear()
+            raise
 
     def accept(self, event: P90TransportEvent) -> tuple[P90TransportEvent, ...]:
         """One atomic market fact -> native/Entry/PAPER committed or none."""

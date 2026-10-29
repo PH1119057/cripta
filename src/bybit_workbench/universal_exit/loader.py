@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, cast
 
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.contracts import ExitPlan, FrozenPolicy, TradeDirection
@@ -45,7 +45,8 @@ def load_exit_binding(
                   p.entry_plan_fingerprint,p.exit_plan_fingerprint,p.entry_command_id,
                   p.symbol,p.side,p.actual_avg_fill,p.actual_qty,p.fill_at,
                   p.strategy_execution_binding_id,p.execution_leg,p.trading_account_id,
-                  p.identity_status,ep.exit_plan_version,ep.plan_json
+                  p.identity_status,p.initial_protection_confirmed_at,
+                  ep.exit_plan_version,ep.plan_json
              FROM runtime.position_ownership p
              JOIN strategy_entry.exit_plans ep
                ON ep.exit_plan_fingerprint=p.exit_plan_fingerprint
@@ -114,6 +115,11 @@ def load_exit_binding(
             else str(row.get("trading_account_id"))
         ),
         identity_status=_required_text(row, "identity_status"),
+        initial_protection_confirmed_at=(
+            cast(datetime, row["initial_protection_confirmed_at"])
+            if isinstance(row.get("initial_protection_confirmed_at"), datetime)
+            else None
+        ),
     )
 
     raw_plan = _mapping(row.get("plan_json"), "ExitPlan.plan_json")

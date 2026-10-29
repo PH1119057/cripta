@@ -134,3 +134,92 @@ def test_proven_sub_passes_exact_isolated_scope_to_lifecycle(
     assert seen["trading_account_id"] == B
     assert seen["owns_global_faults"] is False
     assert seen["exchange_exposure"] == ()
+
+
+def test_main_local_credential_is_accepted_only_for_main_exact_unit() -> None:
+    main_name = "bybit-mainnet"
+    mount = "/run/credentials/cripta-lifecycle-main-local.service"
+    target = f"/var/lib/cripta/lifecycle_account/account-{A}/status.json"
+    cred, status, identity = imported.validated_scope(
+        A, C, main_name, mount, target, account_kind="MAIN",
+    )
+    assert cred.name == main_name
+    assert status.as_posix() == target
+    assert identity == "systemd:bybit-mainnet"
+
+    for kind, name, directory, output in [
+        ("SUB", main_name, mount, target),
+        ("MAIN", NAME, CREDS, target),
+        ("MAIN", main_name, CREDS, target),
+        ("MAIN", main_name, mount, STATUS),
+        ("UNKNOWN", main_name, mount, target),
+    ]:
+        with pytest.raises(RuntimeError):
+            imported.validated_scope(
+                A, C, name, directory, output, account_kind=kind,
+            )
+
+
+def test_main_worker_does_not_impersonate_sub_account() -> None:
+    db = _Connection(kind="SUB")
+    with pytest.raises(RuntimeError, match="MAIN_IDENTITY_NOT_READY"):
+        imported.inspect_account_once(
+            db, account_id=B, connector_id=C,
+            credential_ref="systemd:bybit-mainnet",
+            account_snapshot={}, now=NOW, account_kind="MAIN",
+        )
+    assert len(db.queries) == 1
+
+
+def test_main_local_lifecycle_is_proven_and_still_non_global(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _Connection(kind="MAIN")
+    observed: dict[str, object] = {}
+
+    def _audit(*_: Any, **params: Any) -> ExposureAuditResult:
+        assert params["trading_account_id"] == B
+        assert params["verified_credential_ref"] == "systemd:bybit-mainnet"
+        return ExposureAuditResult((), "VERIFIED", ())
+
+    def _protection(*_: Any, **params: Any) -> dict[str, dict[str, str]]:
+        assert params["trading_account_id"] == B
+        return {"pos-1": {"state": "VERIFIED", "reason": "fake-signed"}}
+
+    class _Supervisor:
+        def __init__(self, _: Any, **kwargs: Any) -> None:
+            observed.update(kwargs)
+
+        def scan(self, *, now: datetime) -> Any:
+            assert now == NOW
+            return type("Result", (), {"open_faults": 0, "resolved_faults": 0})()
+
+    monkeypatch.setattr(imported, "verified_account_exposure", _audit)
+    monkeypatch.setattr(imported, "account_protection_verdicts", _protection)
+    monkeypatch.setattr(imported, "LifecycleSupervisor", _Supervisor)
+    got = imported.inspect_account_once(
+        db, account_id=B, connector_id=C,
+        credential_ref="systemd:bybit-mainnet",
+        account_snapshot={"signed": True},
+        now=NOW, account_kind="MAIN",
+    )
+    assert got["state"] == "VERIFIED_ACCOUNT_SCAN"
+    assert observed["trading_account_id"] == B
+    assert observed["owns_global_faults"] is False
+
+
+def test_proposed_main_unit_has_exact_read_only_scope_and_no_auto_arm() -> None:
+    text = (
+        Path("operations/systemd/cripta-lifecycle-main-local.service")
+        .read_text(encoding="utf-8")
+    )
+    assert "Environment=CRIPTA_LIFECYCLE_ACCOUNT_KIND=MAIN" in text
+    assert "Environment=CRIPTA_LIFECYCLE_ACCOUNT_WORKER=ENABLED" in text
+    assert "LoadCredentialEncrypted=bybit-mainnet:" in text
+    assert "User=cripta" in text
+    assert "ProtectSystem=strict" in text
+    assert "ReadWritePaths=/var/lib/cripta/lifecycle_account/account-" in text
+    assert "ExecStart=" in text
+    assert "[Install]" not in text.splitlines()
+    assert "WantedBy=" not in text
+    assert "CRIPTA_LIFECYCLE_SUPERVISOR=ENABLED" not in text

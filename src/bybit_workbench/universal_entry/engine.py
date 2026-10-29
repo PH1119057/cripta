@@ -54,6 +54,8 @@ from .market_watch import (
     ParameterizedCausalMarketWatch,
     WatchTracePoint,
 )
+from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS
+from .p90l90_real_contract_v3 import VERSION as REAL_VERSION
 from .references import resolve_causal_timestamp
 from .registry import ActivePlanRegistry
 from .transport_continuity import TradeCursor
@@ -113,13 +115,26 @@ class UniversalEntryEngine:
         admission_time: datetime | None = None,
         proven_p90_native_cursor: TradeCursor | None = None,
     ) -> tuple[EntryEvaluation, ...]:
+        # REAL v3 may only consume the original, source-pinned native
+        # crossing delivered by the atomic P90 owner. Generic MarketWatch
+        # must never become an uncheckpointed REAL Entry producer.
+        if proven_p90_native_cursor is None and any(
+            plan.strategy_version == REAL_VERSION
+            and plan.strategy_id in ALLOWED_SYMBOLS
+            and fact.symbol in ALLOWED_SYMBOLS[plan.strategy_id]
+            for plan in self._registry.plans_for(fact.symbol)
+        ):
+            raise RuntimeError("P90L90_REAL_NATIVE_CURSOR_REQUIRED")
         if proven_p90_native_cursor is not None:
-            # Only the atomic P90 transport owner may provide this cursor.
-            # Never invoke this path for generic/R1 or real Exchange admission.
+            # Only the source-pinned atomic P90 transport owner may provide
+            # this cursor. REAL requires the independently released,
+            # account-scoped admission proof; a PAPER caller cannot upgrade.
             self._verify_p90_precomputed_fact(
                 fact, proven_p90_native_cursor,
                 real_admission_required_for=real_admission_required_for,
+                real_admission_ready_for=real_admission_ready_for,
                 entry_admission_port=entry_admission_port,
+                account_admissions=account_admissions,
             )
         # Distinct activations may use fan-out and the compatible legacy path
         # concurrently. An activation must NEVER use both admission inputs.
@@ -474,20 +489,54 @@ class UniversalEntryEngine:
         cursor: TradeCursor,
         *,
         real_admission_required_for: frozenset[str],
+        real_admission_ready_for: frozenset[str] | None,
         entry_admission_port: EntryAdmissionPort | None,
+        account_admissions: Mapping[str, tuple[AccountAdmissionContext, ...]] | None,
     ) -> None:
-        """A native cursor is required; an already-approved REAL plan is forbidden.
+        """Require original native identity before PAPER or real Entry.
 
-        An independent durable PostgreSQL join owns verification of source
-        ordering and as-of geometry. This admission checks that no outside
-        caller can feed a raw/R1 event or spoof another plan's P90 signal.
+        The durable PostgreSQL transport owner is responsible for proving
+        complete source ordering and as-of geometry before invoking Engine.
+        This validates the exact normalized native candidate and requires
+        independent release/account readiness for the v3 REAL branch.
         """
-        if real_admission_required_for or entry_admission_port is not None:
-            raise RuntimeError("P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN")
         plans = self._registry.plans_for(fact.symbol)
         if len(plans) != 1:
             raise RuntimeError("P90L90_PRECOMPUTED_EXACT_ONE_STRATEGY_REQUIRED")
         plan = plans[0]
+        selected_for_real = bool(real_admission_required_for)
+        # Historical v2 must stay PAPER-only even if a caller supplies
+        # independently selected REAL identifiers.
+        if selected_for_real and plan.strategy_version != REAL_VERSION:
+            raise RuntimeError("P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN")
+        if selected_for_real:
+            scopes = (
+                None if account_admissions is None
+                else account_admissions.get(plan.strategy_activation_id)
+            )
+            if (
+                plan.strategy_version != REAL_VERSION
+                or plan.strategy_id not in ALLOWED_SYMBOLS
+                or fact.symbol not in ALLOWED_SYMBOLS[plan.strategy_id]
+                or real_admission_required_for
+                != frozenset({plan.strategy_activation_id})
+                or real_admission_ready_for is None
+                or plan.strategy_activation_id not in real_admission_ready_for
+                or entry_admission_port is not None
+                or account_admissions is None
+                or set(account_admissions) != {plan.strategy_activation_id}
+                or scopes is None
+                or len(scopes) != 1
+                or scopes[0].binding.strategy_activation_id
+                != plan.strategy_activation_id
+            ):
+                raise RuntimeError("P90L90_REAL_NATIVE_ADMISSION_NOT_VERIFIED")
+        elif (
+            entry_admission_port is not None
+            or account_admissions is not None
+            or plan.strategy_version == REAL_VERSION
+        ):
+            raise RuntimeError("P90L90_PRECOMPUTED_REAL_ADMISSION_FORBIDDEN")
         policy = plan.watch_policy.to_dict()
         geometry = policy.get("geometry")
         if (
@@ -530,6 +579,33 @@ class UniversalEntryEngine:
         })[:32]
         if fact.fact_id != expected:
             raise RuntimeError("P90L90_PRECOMPUTED_CANDIDATE_FINGERPRINT_INVALID")
+        # A REAL initial TP must originate in the same frozen L5-3 geometry
+        # as its Entry crossing, never in another strategy or later candle.
+        if selected_for_real:
+            nested = attrs.get("p90l90")
+            if not isinstance(nested, dict):
+                raise RuntimeError("P90L90_REAL_NATIVE_TP_FACT_MISSING")
+            try:
+                candidate = Decimal(str(nested["candidate_price"]))
+                target = Decimal(str(nested["opposite_raw_l53_target"]))
+                boundary = Decimal(str(attrs["raw_entry_boundary"]))
+                raw_price = Decimal(str(attrs["price"]))
+            except (KeyError, InvalidOperation, ValueError, TypeError):
+                raise RuntimeError("P90L90_REAL_NATIVE_TP_FACT_INVALID") from None
+            if (
+                any(
+                    not item.is_finite() or item <= 0
+                    for item in (candidate, target, boundary, raw_price)
+                )
+                or candidate != raw_price
+                or nested.get("state_effective_at") != attrs.get("state_effective_at")
+                or not (
+                    target > boundary >= candidate
+                    if fact.direction is TradeDirection.LONG
+                    else target < boundary <= candidate
+                )
+            ):
+                raise RuntimeError("P90L90_REAL_NATIVE_TP_FACT_INVALID")
 
     @staticmethod
     def _validate_account_admissions(

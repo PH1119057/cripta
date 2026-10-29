@@ -17,6 +17,7 @@ from .readiness import assess_strategy_runtime_readiness
 
 _P90_OPERATOR = "P90L90_RAW_H9_UNION_CROSSING"
 _P90_V2 = "1.1-p90l90-strategy-second48-20261028"
+_P90_REAL_V3 = "2.0-p90l90-real-main-sub-20261028"
 _MAIN = ("INJUSDT", "LTCUSDT")
 _SUB = ("APTUSDT", "ARBUSDT", "DOTUSDT")
 _SCOPE: dict[str, tuple[str, ...]] = {
@@ -73,11 +74,14 @@ class P90NativeBarRuntimeProof:
 class ObserverStrategySplit:
     ordinary: tuple[object, ...]
     p90_paper: tuple[object, ...]
+    p90_real: tuple[object, ...] = ()
 
 
 def partition_observer_strategies(bundles: tuple[object, ...]) -> ObserverStrategySplit:
     ordinary: list[object] = []
     p90: list[object] = []
+    real: list[object] = []
+    seen_p90_symbols: set[str] = set()
     seen: set[str] = set()
     for bundle in bundles:
         item: Any = bundle
@@ -95,7 +99,7 @@ def partition_observer_strategies(bundles: tuple[object, ...]) -> ObserverStrate
         if is_p90:
             expected = _SCOPE[card.strategy_id]
             if (
-                card.strategy_version != _P90_V2
+                card.strategy_version not in {_P90_V2, _P90_REAL_V3}
                 or tuple(sorted(card.symbols)) != expected
                 or tuple(sorted(plan.symbols)) != expected
                 or plan.strategy_activation_id != activation.activation_id
@@ -103,16 +107,41 @@ def partition_observer_strategies(bundles: tuple[object, ...]) -> ObserverStrate
                 or activation.strategy_version != card.strategy_version
             ):
                 raise RuntimeError("OBSERVER_P90_STRATEGY_EXACT_IDENTITY_MISMATCH")
-            p90.append(bundle)
+            if seen_p90_symbols.intersection(expected):
+                raise RuntimeError("OBSERVER_P90_DUPLICATE_PAPER_REAL_SYMBOL_OWNER")
+            seen_p90_symbols.update(expected)
+            if card.strategy_version == _P90_V2:
+                p90.append(bundle)
+            else:
+                real.append(bundle)
         else:
             ordinary.append(bundle)
-    return ObserverStrategySplit(tuple(ordinary), tuple(p90))
+    return ObserverStrategySplit(tuple(ordinary), tuple(p90), tuple(real))
 
 
 def require_p90_policy_before_registry(split: ObserverStrategySplit) -> None:
     """Reject fake P90 v2/REAL policy BEFORE any registry or DB audit write."""
-    for raw in split.p90_paper:
+    for raw in split.p90_real:
         bundle: Any = raw
+        try:
+            status = assess_strategy_runtime_readiness(
+                bundle.card, observer_ready=True,
+            )
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                "P90L90_REAL_OBSERVER_POLICY_INVALID"
+            ) from exc
+        codes = {reason.code for reason in status.reasons}
+        if (
+            not status.policy_ready
+            or not status.execution_ready
+            or "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED" in codes
+            or "P90L90_EXCHANGE_ORDER_NOT_APPROVED" in codes
+            or "LIVE_EXIT_TRAILING_NOT_WIRED" in codes
+        ):
+            raise RuntimeError("P90L90_REAL_OBSERVER_POLICY_NOT_EXACT")
+    for raw in split.p90_paper:
+        bundle = raw
         try:
             status = assess_strategy_runtime_readiness(
                 bundle.card, observer_ready=True,
@@ -145,9 +174,14 @@ def require_p90_atomic_observer_connection(
     No generic observer_ready or owner wish may substitute the independently
     verified Bybit WS subscription + active publicTrade mirror, and the exact
     source-bound Entry/Exit restart state for ALL enabled P90 instruments.
-    REAL execution is *always* disqualified by immutable NOT_APPROVED order.
+    This legacy helper authorizes only PAPER-v2; REAL-v3 has its own separately
+    composed source/account/Execution runtime and must never fall through here.
     """
     require_p90_policy_before_registry(split)
+    # This connection proof authorizes ONLY the v2 PAPER consumer. It must
+    # never confer REAL authority on a v3 activation by source equivalence.
+    if split.p90_real:
+        raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
     if not split.p90_paper:
         return
     symbols = frozenset(

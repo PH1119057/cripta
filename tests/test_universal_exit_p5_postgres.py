@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import psycopg
@@ -431,3 +431,28 @@ def test_compatibility_plan_without_rules_persists_no_decision() -> None:
             "status": "NO_EXECUTABLE_EXIT_RULES",
             "exit_decision_id": None,
         }
+
+
+
+def test_loader_preserves_exchange_confirmed_initial_protection_timestamp() -> None:
+    """REAL Exit cannot activate if the durable fill protection proof is dropped."""
+    assert DSN is not None
+    prefix = "p5-protect-" + uuid4().hex[:10]
+    with psycopg.connect(DSN, row_factory=dict_row) as connection:
+        ids = _seed(connection, prefix, rules=[])
+        unprotected, _plan = load_exit_binding(
+            connection, strategy_position_id=ids["position_id"],
+        )
+        assert unprotected.initial_protection_confirmed_at is None
+        confirmed = NOW + timedelta(seconds=2)
+        connection.execute(
+            """UPDATE runtime.position_ownership
+                  SET initial_protection_confirmed_at=%s
+                WHERE position_id=%s""",
+            (confirmed, ids["position_id"]),
+        )
+        protected, _plan = load_exit_binding(
+            connection, strategy_position_id=ids["position_id"],
+        )
+        assert protected.initial_protection_confirmed_at == confirmed
+        connection.rollback()

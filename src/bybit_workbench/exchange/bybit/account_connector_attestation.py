@@ -26,6 +26,20 @@ class AuthenticatedConnectorAttestation:
     reasons: tuple[str, ...]
 
 
+def _attestation_row(
+    row: object, columns: tuple[str, ...],
+) -> dict[str, object]:
+    """Support explicit psycopg dict_row as well as existing tuple rows."""
+    if isinstance(row, Mapping):
+        try:
+            return {column: row[column] for column in columns}
+        except KeyError:
+            return {}
+    if isinstance(row, (tuple, list)) and len(row) == len(columns):
+        return dict(zip(columns, row, strict=True))
+    return {}
+
+
 def attest_bybit_account_connector(
     connection: Any,
     *,
@@ -62,15 +76,14 @@ def attest_bybit_account_connector(
             WHERE venue_id='venue-bybit' AND environment='MAINNET'""",
     )
     accounts = [
-        dict(zip(
+        _attestation_row(
+            row,
             (
                 "trading_account_id", "venue_id", "external_account_ref",
                 "parent_trading_account_id", "account_kind", "account_type",
                 "environment", "status",
             ),
-            row,
-            strict=True,
-        ))
+        )
         for row in accounts_cursor.fetchall()
     ]
     connectors_cursor = connection.execute(
@@ -81,14 +94,14 @@ def attest_bybit_account_connector(
         (account_connector_id,),
     )
     connectors = [
-        dict(zip(
-            (
-                "account_connector_id", "trading_account_id", "connector_kind",
-                "adapter_id", "credential_ref", "status", "retired_at",
-            ),
+        _attestation_row(
             row,
-            strict=True,
-        ))
+            (
+                "account_connector_id", "trading_account_id",
+                "connector_kind", "adapter_id", "credential_ref",
+                "status", "retired_at",
+            ),
+        )
         for row in connectors_cursor.fetchall()
     ]
     # Do not invoke signed transport if registry or credential provenance is
