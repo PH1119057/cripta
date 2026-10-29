@@ -17,6 +17,9 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
     VERSION,
 )
+from bybit_workbench.universal_entry.p90l90_real_restart_bridge import (
+    verify_restart_bridge_for_position,
+)
 from bybit_workbench.universal_entry.p90l90_real_shared_candle_ledger import (
     P90RealSharedCandleLedger,
 )
@@ -75,6 +78,7 @@ class P90RealLiveSourcePorts:
         self._commit = source_commit
         self._serial = mirror_serial
         self._started = mirror_started_at.astimezone(UTC)
+        self._restart_bridge_id: str | None = None
         self._snapshot()
 
     def _snapshot(self) -> dict[str, object]:
@@ -112,6 +116,18 @@ class P90RealLiveSourcePorts:
             )
         self._snapshot()
 
+    def bind_restart_bridge(self, restart_id: str) -> None:
+        """Enable old-position native continuation only from durable bridge."""
+        if self._restart_bridge_id is not None:
+            raise P90RealLiveSourceUnverified(
+                "P90_REAL_LIVE_SOURCE_RESTART_BRIDGE_ALREADY_BOUND"
+            )
+        if not isinstance(restart_id, str) or not restart_id:
+            raise P90RealLiveSourceUnverified(
+                "P90_REAL_LIVE_SOURCE_RESTART_BRIDGE_INVALID"
+            )
+        self._restart_bridge_id = restart_id
+
     def native_coverage(
         self, position: StrategyPosition, cursor: TradeCursor,
     ) -> tuple[bool, bool]:
@@ -132,7 +148,6 @@ class P90RealLiveSourcePorts:
             or position.fill_at.tzinfo is None
             or position.fill_at.utcoffset() != timedelta()
             or cursor.traded_at < position.fill_at
-            or self._started > position.fill_at
             or not position.trading_account_id
         ):
             raise P90RealLiveSourceUnverified(
@@ -177,6 +192,30 @@ class P90RealLiveSourcePorts:
                 raise P90RealLiveSourceUnverified(
                     "P90_REAL_LIVE_SOURCE_MFE_PREVIOUS_CURSOR_DRIFT"
                 )
+        # A process mirror started after the private fill cannot prove the
+        # original fill->MFE interval by itself.  It may continue only from an
+        # append-only restart bridge whose cursor equals the reconstructed MFE
+        # and belongs to this exact mirror session.
+        if self._started > position.fill_at:
+            if prior is None or self._restart_bridge_id is None:
+                raise P90RealLiveSourceUnverified(
+                    "P90_REAL_LIVE_SOURCE_OLD_POSITION_RESTART_BRIDGE_MISSING"
+                )
+            try:
+                verify_restart_bridge_for_position(
+                    self._db,
+                    restart_id=self._restart_bridge_id,
+                    source_epoch_id=self._epoch,
+                    source_commit=self._commit,
+                    mirror_serial=self._serial,
+                    mirror_started_at=self._started,
+                    position=position,
+                    prior_mfe=prior,
+                )
+            except Exception:
+                raise P90RealLiveSourceUnverified(
+                    "P90_REAL_LIVE_SOURCE_OLD_POSITION_RESTART_BRIDGE_UNVERIFIED"
+                ) from None
         at = datetime.now(UTC)
         if not timedelta() <= at - cursor.traded_at <= timedelta(seconds=15):
             raise P90RealLiveSourceUnverified(
