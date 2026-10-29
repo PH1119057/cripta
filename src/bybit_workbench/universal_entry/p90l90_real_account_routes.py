@@ -81,6 +81,10 @@ def read_p90_real_account_routes(
         card = getattr(raw, "card", None)
         activation = getattr(raw, "activation", None)
         plan = getattr(raw, "entry_plan", None)
+        if card is None or activation is None or plan is None:
+            raise P90RealAccountRoutesUnverified(
+                "P90_REAL_ACCOUNT_ROUTE_BUNDLE_INCOMPLETE"
+            )
         strategy_id = getattr(card, "strategy_id", None)
         if (
             strategy_id not in _KIND
