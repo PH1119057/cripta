@@ -272,3 +272,46 @@ def test_closed_5m_port_observes_the_exact_shared_ledgers_advanced_watermark() -
     assert ports._ledger is ledger
     assert ports.closed_continuity("LTCUSDT", next_boundary) is True
     assert ports.closed_history("LTCUSDT", next_boundary)[-1].closed_at == next_boundary
+
+
+
+def test_old_open_position_requires_durable_restart_bridge(monkeypatch) -> None:
+    position, _plan, state, anchor, _private, _price = _scope()
+    restarted_at = position.fill_at + timedelta(milliseconds=2)
+    following = TradeCursor(
+        symbol=anchor.symbol,
+        seq=anchor.seq + 1,
+        exec_id="real-after-restart-102",
+        traded_at=anchor.traded_at + timedelta(milliseconds=1),
+    )
+    mirror = PublicTradeMirrorBuffer((anchor.symbol,), retention_seconds=600)
+    mirror.start_epoch(restarted_at)
+    _trade(mirror, anchor)
+    _trade(mirror, following)
+    monkeypatch.setattr(module, "datetime", SimpleNamespace(now=lambda _tz: NOW))
+    attrs = {"attributes": {"checkpoint": state.snapshot()}}
+    ports = module.P90RealLiveSourcePorts(
+        StubDB(latest=attrs),
+        mirror=mirror,
+        ledger=StubLedger(),
+        source_epoch_id=EPOCH,
+        source_commit=SHA,
+        mirror_serial=1,
+        mirror_started_at=restarted_at,
+    )
+    with pytest.raises(
+        module.P90RealLiveSourceUnverified,
+        match="OLD_POSITION_RESTART_BRIDGE_MISSING",
+    ):
+        ports.native_coverage(position, following)
+
+    verified: list[str] = []
+    monkeypatch.setattr(
+        module,
+        "verify_restart_bridge_for_position",
+        lambda _db, **kwargs: verified.append(kwargs["restart_id"]) or True,
+    )
+    restart_id = "p90-real-restart-" + "c" * 40
+    ports.bind_restart_bridge(restart_id)
+    assert ports.native_coverage(position, following) == (True, True)
+    assert verified == [restart_id]
