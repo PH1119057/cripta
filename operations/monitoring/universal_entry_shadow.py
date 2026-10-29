@@ -2101,14 +2101,14 @@ def _run_observer_epoch(
     # REAL consumer, but it is hard-disabled for every Exchange/order path.
     # Actual REAL Entry+Exit remains blocked until postfill and account
     # execution owners are fully connected and independently verified.
-    p90_real_source_only = bool(observer_split.p90_real) and (
+    p90_real_force_source_only = bool(observer_split.p90_real) and (
         os.environ.get("CRIPTA_P90_REAL_SOURCE_ONLY", "DISABLED") == "ENABLED"
     )
-    p90_real_live = bool(observer_split.p90_real) and not p90_real_source_only
-    if p90_real_live:
-        # A real StrategyActivation alone is not authorization. Both
-        # independent owner-selected execution permissions, current mainnet
-        # gate, and each separately signed account arm are required.
+    p90_real_source_only = False
+    p90_real_live = False
+    if observer_split.p90_real:
+        if len(observer_split.p90_real) != 2 or len(LOADED_COMMIT) != 40:
+            raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
         selected = _real_execution_selected_activation_ids(
             connection, observer_split.p90_real
         )
@@ -2119,26 +2119,23 @@ def _run_observer_epoch(
         gate = connection.execute(
             "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
         ).fetchone()
-        if (
-            len(observer_split.p90_real) != 2
-            or selected != expected
-            or gate != (True,)
-            or len(LOADED_COMMIT) != 40
-        ):
+        gate_enabled = bool(gate and gate[0])
+        if p90_real_force_source_only:
+            if gate_enabled or selected:
+                raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
+            p90_real_source_only = True
+        elif not gate_enabled and not selected:
+            # Normal pre-arm state: build the exact REAL source/private
+            # topology with trading_effect=NONE. Owner arm later changes both
+            # permission rows + gate atomically; the light signature forces a
+            # new epoch which then selects the REAL execution branch.
+            p90_real_source_only = True
+        elif gate_enabled and selected == expected:
+            p90_real_live = True
+        else:
+            # Partial permission, one-account selection or gate/permission
+            # disagreement is never interpreted as source-only or REAL.
             raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
-    if p90_real_source_only:
-        if len(observer_split.p90_real) != 2:
-            raise RuntimeError("P90_REAL_SOURCE_ONLY_BOTH_ACCOUNTS_REQUIRED")
-        gate = connection.execute(
-            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
-        ).fetchone()
-        if gate is None or bool(gate[0]):
-            raise RuntimeError("P90_REAL_SOURCE_ONLY_MAINNET_MUST_BE_OFF")
-        selected = _real_execution_selected_activation_ids(
-            connection, observer_split.p90_real
-        )
-        if selected:
-            raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_PERMISSION_PRESENT")
     # Executable release SHA and original market-data lineage are distinct.
     # Only an independently attested, immutable five-symbol source can be
     # recovered. This gate runs before any PAPER consumer is constructed.
