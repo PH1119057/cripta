@@ -96,6 +96,13 @@ def _valid(*, sub: bool = False, postfill: bool = False):
             "bybit:signed-position-list:exact-account:account=" + account,
         ),
     )
+    if postfill:
+        # The signed first-fill source references must be present at decision
+        # time, never grafted onto an already authorized native decision.
+        evaluation = UniversalExitEngine().evaluate(position, plan, observation)
+        assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+        assert evaluation.decision is not None
+        return position, plan, evaluation
     return position, plan, replace(evaluation, observation=observation)
 
 
