@@ -52,9 +52,25 @@ class _DB:
         return None
 
 
-def _valid(*, sub: bool = False):
+def _valid(*, sub: bool = False, postfill: bool = False):
     position, plan, checkpoint, cursor, private, price = _scope(sub=sub)
     observation = _observation(position, checkpoint, cursor, private, price)
+    if postfill:
+        attrs = observation.attributes.to_dict()
+        attrs["p90l90_real"].update({
+            "durable_cursor_verified": False,
+            "fill_to_postfill_source_verified": True,
+            "signed_fill_execution_ids": ["signed-execution-id"],
+        })
+        observation = replace(
+            observation,
+            event_kind="P90L90_REAL_POSTFILL",
+            attributes=FrozenPolicy.from_mapping(attrs),
+            source_refs=(
+                *observation.source_refs,
+                "bybit:execution:list:exact-order:entry-order-id",
+            ),
+        )
     evaluation = UniversalExitEngine().evaluate(position, plan, observation)
     assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
     assert evaluation.decision is not None
@@ -84,9 +100,9 @@ def _valid(*, sub: bool = False):
 
 
 def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10,
-          sub: bool = False):
+          sub: bool = False, postfill: bool = False):
     db = _DB()
-    position, plan, evaluation = _valid(sub=sub)
+    position, plan, evaluation = _valid(sub=sub, postfill=postfill)
     account = ACCOUNT_SUB if sub else ACCOUNT_MAIN
     assert plan.exit_policy.to_dict()["execution_policy"] == {
         "max_request_age_seconds": 5
@@ -144,6 +160,22 @@ def test_real_native_decision_persists_request_then_single_account_command(
     assert steps == ["load", "independent-safety", "request", "queue"]
     assert db.events == [("account-lock", (ACCOUNT_SUB if sub else ACCOUNT_MAIN,))]
     assert db.open_transactions == 0
+
+
+@pytest.mark.parametrize("sub", (False, True))
+def test_signed_first_fill_dispatches_native_trailing_before_next_public_trade(
+    monkeypatch, sub: bool,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(
+        monkeypatch, sub=sub, postfill=True,
+    )
+    assert evaluation.observation.event_kind == "P90L90_REAL_POSTFILL"
+    assert evaluation.decision is not None
+    assert evaluation.decision.action_kind.value == "SET_TRAILING"
+    prepared = sink(evaluation, position, plan)
+    assert prepared is not None
+    assert steps == ["load", "independent-safety", "request", "queue"]
+    assert db.events == [("account-lock", (ACCOUNT_SUB if sub else ACCOUNT_MAIN,))]
 
 
 def test_missing_exit_ttl_still_fails_closed_without_dispatch(monkeypatch) -> None:
