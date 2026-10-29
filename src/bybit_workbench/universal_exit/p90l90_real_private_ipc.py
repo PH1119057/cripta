@@ -265,7 +265,7 @@ class P90PrivateProofClient:
                     raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_PEER_NOT_VERIFIED")
                 stream.sendall(_frame(message))
                 raw = _receive(stream)
-        except (OSError, TimeoutError):
+        except OSError:
             raise P90PrivateIpcUnverified("P90_PRIVATE_IPC_TRANSPORT_UNAVAILABLE") from None
         if (
             raw.get("version") != _VERSION
