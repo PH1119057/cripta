@@ -256,3 +256,37 @@ def test_synthetic_local_end_to_end_uses_exact_account_and_nonce() -> None:
         worker.join(timeout=3.0)
     assert not worker.is_alive()
     assert not failures
+
+
+def test_private_worker_starts_ipc_only_when_bound_and_thread_alive() -> None:
+    """Source guard keeps broker startup fail closed, without enabling REAL."""
+    import ast
+    from pathlib import Path
+
+    runtime = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(runtime)
+    broker = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "p90_private_ipc_loop"
+    )
+    main = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "main"
+    )
+    broker_source = ast.get_source_segment(runtime, broker)
+    main_source = ast.get_source_segment(runtime, main)
+    assert broker_source is not None
+    assert main_source is not None
+    assert "ready: threading.Event" in broker_source
+    assert "ready=ready.set" in broker_source
+    assert 'os.environ.get("CRIPTA_P90_REAL_PRIVATE_IPC", "DISABLED")' in main_source
+    assert "proof_thread.start()" in main_source
+    assert "proof_ready.wait(timeout=3.0)" in main_source
+    assert "not proof_thread.is_alive()" in main_source
+    assert "P90_REAL_PRIVATE_IPC_NOT_BOUND" in main_source
+    assert "thread = threading.Thread(target=trade_loop" in main_source
+    assert main_source.index("proof_ready.wait(timeout=3.0)") < (
+        main_source.index("thread = threading.Thread(target=trade_loop")
+    )
