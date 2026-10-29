@@ -64,7 +64,8 @@ class P90RealNewWsSourceProof:
             and all(t.tzinfo is not None
                     and t.utcoffset() == timedelta() for t in times)
             and self.epoch_started_at <= self.subscribed_local_at
-            <= datetime.now(UTC)
+            and timedelta() <= datetime.now(UTC) - self.subscribed_local_at
+            <= timedelta(seconds=15)
             and abs((
                 self.subscribed_local_at - self.subscribed_server_at
             ).total_seconds()) <= 15
