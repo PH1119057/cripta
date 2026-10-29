@@ -60,6 +60,7 @@ def test_verified_closed36_and_signed_private_create_dynamic_tp_through_engine(
     fact, candles = _source(position.symbol)
     private = replace(private, observed_at=AT + timedelta(milliseconds=1))
     seen: list[object] = []
+    executed: list[object] = []
 
     class _Store:
         def record(self, evaluation, *, position, plan):
@@ -75,6 +76,7 @@ def test_verified_closed36_and_signed_private_create_dynamic_tp_through_engine(
             checkpoint, "native-fact-101", ("bybit:publicTrade:exact:101",),
         )),
         exit_store=_Store(),  # type: ignore[arg-type]
+        verified_execution_port=lambda ev, pos, p: executed.append((ev, pos, p)),
     )
     evaluations = port(fact)
     assert len(evaluations) == 1
@@ -84,8 +86,35 @@ def test_verified_closed36_and_signed_private_create_dynamic_tp_through_engine(
     assert ev.decision.action_kind is ExitActionKind.SET_TP
     assert ev.decision.requested_mutation.to_dict()["take_profit_price"] == target
     assert seen == [(ev, position, plan)]
+    assert executed == [(ev, position, plan)]
     assert fact.source_refs[0] in ev.observation.source_refs
 
+
+
+
+def test_valid_real_exit_refuses_shadow_only_decision_without_execution_owner() -> None:
+    position, plan, checkpoint, _cursor, private, _price = _scope()
+    fact, candles = _source(position.symbol)
+    private = replace(private, observed_at=AT + timedelta(milliseconds=1))
+    seen: list[str] = []
+    port = P90RealClosedExitPort(
+        position_provider=lambda _symbol: ((position, plan),),
+        independently_verified_closed_history=lambda _symbol, _at: candles,
+        independent_causal_source_proof=lambda _symbol, _at: True,
+        independently_signed_private_evidence=lambda _position, _at: private,
+        source_commit="a" * 40,
+        mfe_ledger=SimpleNamespace(load_latest=lambda **_kw: (
+            checkpoint, "native-fact-101", ("bybit:publicTrade:exact:101",),
+        )),
+        exit_store=SimpleNamespace(
+            record=lambda *_a, **_k: seen.append("SHADOW_DECISION")
+        ),
+    )
+    with pytest.raises(
+        P90RealClosedGeometryUnverified, match="EXECUTION_OWNER_MISSING"
+    ):
+        port(fact)
+    assert seen == []
 
 def test_missing_continuity_denies_reading_prices_or_emitting_exit() -> None:
     position, plan, checkpoint, _cursor, private, _price = _scope()
