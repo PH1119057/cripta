@@ -6,6 +6,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+from test_p90l90_real_observation import AT, _scope
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
@@ -23,8 +24,6 @@ from operations.monitoring.p90l90_real_account_mutation_safety import (
 from operations.monitoring.p90l90_real_live_source_ports import (
     P90RealLiveSourcePorts,
 )
-from test_p90l90_real_observation import AT, _scope
-
 MAIN = "ta-" + "a" * 32
 SUB = "ta-" + "b" * 32
 
