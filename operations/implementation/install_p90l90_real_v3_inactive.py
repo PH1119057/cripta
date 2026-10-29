@@ -37,6 +37,9 @@ if not (ROOT / "src").is_dir():
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
+# isort: off
+# All installed-package imports must remain after the exact runtime path
+# preflight; lexicographic relocation above it would break the actor contract.
 from bybit_workbench.universal_entry.contracts import (  # noqa: E402
     FrozenPolicy,
     StrategyActivation,
@@ -56,6 +59,7 @@ from operations.implementation.install_p90l90_strategy_v2_passive import (  # no
     REGISTRY as V2_REGISTRY,
     _baseline_embargo,
 )
+# isort: on
 
 REGISTRY = {
     MAIN_ID: (
