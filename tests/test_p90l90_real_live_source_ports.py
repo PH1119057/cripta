@@ -5,7 +5,7 @@ must deny stale/restored/forked original market source and missing prior MFE.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
