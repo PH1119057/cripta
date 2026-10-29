@@ -31,8 +31,12 @@ def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
 ) -> None:
     db = object()
     seen = []
-    native = lambda *_args: None
-    closed = lambda *_args: None
+    def native(*_args):
+        return None
+
+    def closed(*_args):
+        return None
+
     ports = SimpleNamespace(on_native_trade=native, on_closed_5m=closed)
 
     def fake_exit(connection, **kw):
