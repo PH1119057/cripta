@@ -328,6 +328,8 @@ def recover_p90_real_open_source(
             recovery = recoveries[symbol]
             replay: list[tuple[datetime, int, P90TransportEvent]] = []
             for event in _closed_replay(
+                connection,
+                source_commit=source_commit,
                 symbol=symbol,
                 join=joins[symbol],
                 live_anchor=recovery.live_anchor,
@@ -358,10 +360,11 @@ def recover_p90_real_open_source(
                 *,
                 current=open_item,
                 old_anchor=recovery.durable_anchor,
+                current_symbol=symbol,
             ) -> None:
                 if current is None or cursor.traded_at < current.position.fill_at:
                     return
-                previous = mfe_state[symbol]
+                previous = mfe_state[current_symbol]
                 first = previous is None
                 if first:
                     _require(
@@ -379,7 +382,7 @@ def recover_p90_real_open_source(
                     first_fill_forward_coverage_proven=first,
                     native_continuity_proven=True,
                 )
-                mfe_state[symbol] = checkpoint
+                mfe_state[current_symbol] = checkpoint
 
             for _at, _priority, event in replay:
                 consumer.accept_restart_recovery(
