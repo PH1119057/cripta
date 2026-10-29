@@ -48,3 +48,46 @@ def test_real_source_diagnostic_never_wires_paper_or_execution_commands() -> Non
     assert body.index('if getattr(self, "_no_order_source_diagnostic", False):') < (
         body.index("owner = self._candidate_owners.get(fact.symbol)")
     )
+
+
+def test_real_live_path_is_connected_to_independent_source_and_private_exit() -> None:
+    src = Path("operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(src)
+    epoch = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_run_observer_epoch"
+    )
+    body = ast.get_source_segment(src, epoch)
+    assert body is not None
+    # A real activation alone cannot bypass both owner-selected execution
+    # permissions or the explicitly enabled mainnet gate.
+    assert "p90_real_live = bool(observer_split.p90_real)" in body
+    assert "selected != expected" in body
+    assert "gate != (True,)" in body
+    assert "P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED" in body
+    assert "if p90_real_source_only or p90_real_live:" in body
+    assert body.index("_connect_and_subscribe(symbols, intervals)") < (
+        body.index("start_current_p90_real_observer_epoch(")
+    )
+    # The production rail must never reuse a silent PAPER/native source flag,
+    # and must instantiate signed MAIN/SUB mutation safety and original cursor
+    # coverage before constructing its REAL consumer.
+    assert "read_p90_real_account_routes(" in body
+    assert "P90RealLiveSourcePorts(" in body
+    assert "P90RealPrivateEvidenceRouter(" in body
+    assert "P90RealIndependentMutationSafety(" in body
+    assert "verified_native_coverage=source_ports.native_coverage" in body
+    assert "verified_closed_history=source_ports.closed_history" in body
+    assert "verified_closed_continuity=source_ports.closed_continuity" in body
+    assert "verified_account_mutation_safety=safety" in body
+    assert "assemble_p90_real_observer_runtime(" in body
+    assert "source_ports._source_transaction()" in body
+    assert "p90_consumer = runtime.consumer" in body
+    assert "p90_consumer.recover_all()" in body
+    # The running source broker still owns original publicTrades, including
+    # the strict independent recentTrade audit when no after-fill tick exists.
+    assert 'fetch_recent_trades": _fetch_recent_trade_snapshot' in body
+    assert "buffered_messages = (" in body
