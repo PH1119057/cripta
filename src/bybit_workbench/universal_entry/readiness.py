@@ -199,13 +199,15 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
     capital = card.capital_policy.to_dict()
     initial = _mapping(card.protection_policy.to_dict().get("initial_protection"))
     exit_policy = card.exit_policy.to_dict()
+    exit_execution = _mapping(exit_policy.get("execution_policy"))
     trailing = _mapping(exit_policy.get("trailing"))
     local = _mapping(exit_policy.get("local_zone_exit"))
     lifecycle = card.lifecycle_policy.to_dict()
     emergency = _mapping(lifecycle.get("emergency_policy"))
     embargo = _mapping(lifecycle.get("second_hardstop_embargo"))
     return (
-        watch.get("enabled") is True
+        {side.value for side in card.direction_policy} == {"LONG", "SHORT"}
+        and watch.get("enabled") is True
         and geometry.get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
         and geometry.get("lookback_bars") == {
             "l53_5m": 36, "h9_5m": 108, "h9_15m": 36,
@@ -216,7 +218,10 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
         and geometry.get("crossing") == "FIRST_ADJACENT_NATIVE_RAW_TRADE"
         and execution.get("order_type") == "MARKET"
         and execution.get("reference_value_path") == "fact.p90l90.candidate_price"
+        and execution.get("max_request_age_seconds") == 5
         and capital.get("require_capacity") is True
+        and capital.get("capacity_max_age_seconds") == 15
+        and capital.get("capacity_min_quality") == "HIGH"
         and capital.get("amount_currency") == "USDT"
         and capital.get("requested_amount") == "10"
         and capital.get("leverage") == 1
@@ -233,6 +238,7 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
         and initial.get("take_profit_reference_path") == "fact.p90l90.opposite_raw_l53_target"
         and initial.get("tpsl_mode") == "Full"
         and initial.get("trigger_by") == "LastPrice"
+        and exit_execution == {"max_request_age_seconds": 5}
         and trailing == {
             "enabled": True,
             "activation_profit_pct": "0.5",
