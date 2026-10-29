@@ -12,6 +12,7 @@ TP/SL/TRAIL035 as the protection owner while runtime remains fail-closed.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -62,6 +63,18 @@ FetchClosedCandles = Callable[[str, str, datetime], Sequence[Candle]]
 
 class P90RealOpenSourceRecoveryUnverified(RuntimeError):
     """Exact old source -> new live source recovery could not be proven."""
+
+
+@dataclass(frozen=True, slots=True)
+class P90RealOpenSourceRecovery:
+    """Exact handoff state needed before the primary WS socket may resume."""
+
+    bridge: P90RealRestartBridge
+    inventory: P90RealOpenRestartInventory
+    trade_cursors: Mapping[str, TradeCursor]
+    current_sequence_exec_ids: Mapping[str, frozenset[str]]
+    closed_watermarks: Mapping[str, tuple[datetime, datetime]]
+    replayed_fact_ids: frozenset[str]
 
 
 def _require(condition: bool, reason: str) -> None:
@@ -228,7 +241,7 @@ def recover_p90_real_open_source(
     source_ws_ready_at: datetime,
     fetch_recent_trades: FetchRecentTrades,
     fetch_closed_candles: FetchClosedCandles,
-) -> tuple[P90RealRestartBridge, P90RealOpenRestartInventory]:
+) -> P90RealOpenSourceRecovery:
     """Recover old epoch through current live mirror with zero replay actions."""
     if (
         not isinstance(consumer, P90L90ObserverRealConsumer)
@@ -275,6 +288,7 @@ def recover_p90_real_open_source(
         )
 
         recoveries = {}
+        replayed_fact_ids: set[str] = set()
         received_at = datetime.now(UTC)
         for symbol in sorted(_SYMBOLS):
             rows, server_at = fetch_recent_trades(symbol)
@@ -389,6 +403,7 @@ def recover_p90_real_open_source(
                     event,
                     on_recovered_native=observe_native,
                 )
+                replayed_fact_ids.add(event.event_id)
         # Durable source checkpoints must now terminate at the exact live
         # cursors chosen before replay; no historical event may remain pending.
         current_joins = _load_joins(
@@ -478,4 +493,29 @@ def recover_p90_real_open_source(
                     final_inventory.sub.private_generation_id,
             },
         )
-    return bridge, final_inventory
+        # The primary WS socket was subscribed before recovery and can still
+        # contain frames already reconstructed above.  Export the exact
+        # committed transport boundary so the caller can seed its ordinary
+        # deduper/cursors before reading that socket.  This is not optional:
+        # otherwise a buffered pre-bridge publicTrade could regress the join.
+        for join in current_joins.values():
+            replayed_fact_ids.update(
+                "trade-" + exec_id
+                for exec_id in join.last_emitted_exec_ids
+            )
+        current_sequence_exec_ids = {
+            symbol: frozenset(join.last_emitted_exec_ids)
+            for symbol, join in current_joins.items()
+        }
+        closed_watermarks = {
+            symbol: (join.closed_5m_at, join.closed_15m_at)
+            for symbol, join in current_joins.items()
+        }
+    return P90RealOpenSourceRecovery(
+        bridge=bridge,
+        inventory=final_inventory,
+        trade_cursors=dict(live_cursors),
+        current_sequence_exec_ids=current_sequence_exec_ids,
+        closed_watermarks=closed_watermarks,
+        replayed_fact_ids=frozenset(replayed_fact_ids),
+    )
