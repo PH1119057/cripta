@@ -1,8 +1,7 @@
 """Exact MAIN/SUB P90 REAL account routing: database-only, never an arm."""
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -102,7 +101,7 @@ def test_both_independent_v3_routes_resolve_without_mutation() -> None:
 
 
 @pytest.mark.parametrize("bad_field,new_value", (
-    (1, "ta-" + "f" * 32),
+    (1, "ta-not-a-uuid"),
     (2, "SECONDARY"),
     (3, "SECONDARY"),
     (4, "SHARED"),
