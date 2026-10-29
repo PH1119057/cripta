@@ -1104,6 +1104,108 @@ def own_p90_real_signed_position_reader(
     )
 
 
+def _p90_private_ipc_evidence_handler(
+    raw: dict[str, object],
+    *,
+    key: str,
+    secret: str,
+):
+    """One exact account's sealed-key GET; never accept a client position.
+
+    A fresh isolated DB connection handles this thread. No Exchange mutation,
+    no credential/secret or raw REST headers leave the account-local process.
+    """
+    from psycopg.rows import dict_row
+
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+        ALLOWED_SYMBOLS,
+        VERSION,
+    )
+    from bybit_workbench.universal_entry.transport_continuity import TradeCursor
+    from bybit_workbench.universal_exit.loader import load_exit_binding
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        P90PrivateIpcUnverified,
+        checked_request,
+    )
+
+    position_id, symbol, kind, at, seq, exec_id = checked_request(
+        raw,
+        expected_account=TRADING_ACCOUNT_ID,
+        expected_connector=ACCOUNT_CONNECTOR_ID,
+    )
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-real-private-proof",
+        row_factory=dict_row,
+    ) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+        position, plan = load_exit_binding(
+            connection, strategy_position_id=position_id
+        )
+        if (
+            position.strategy_id not in ALLOWED_SYMBOLS
+            or position.strategy_version != VERSION
+            or position.symbol not in ALLOWED_SYMBOLS[position.strategy_id]
+            or position.symbol != symbol
+            or position.trading_account_id != TRADING_ACCOUNT_ID
+            or position.identity_status != "PROVEN"
+            or position.initial_protection_confirmed_at is None
+            or plan.exit_plan_fingerprint != position.exit_plan_fingerprint
+        ):
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_DURABLE_POSITION_SCOPE_INVALID"
+            )
+        record = connection.execute(
+            """SELECT state,trading_account_id,identity_status
+                 FROM runtime.position_ownership
+                WHERE position_id=%s AND trading_account_id=%s""",
+            (position_id, TRADING_ACCOUNT_ID),
+        ).fetchone()
+        if (
+            not isinstance(record, dict)
+            or record.get("state") != "OPEN"
+            or record.get("trading_account_id") != TRADING_ACCOUNT_ID
+            or record.get("identity_status") != "PROVEN"
+        ):
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_POSITION_NOT_CURRENTLY_OPEN"
+            )
+        signed_reader = own_p90_real_signed_position_reader(
+            connection, key, secret
+        )
+        if kind == "TRADE":
+            if seq is None or exec_id is None:
+                raise P90PrivateIpcUnverified(
+                    "P90_PRIVATE_IPC_TRADE_CURSOR_MISSING"
+                )
+            cursor = TradeCursor(
+                symbol=symbol, seq=seq, exec_id=exec_id, traded_at=at
+            )
+            evidence = signed_reader(position, cursor)
+        else:
+            evidence = signed_reader.for_closed_boundary(position, at)
+        # Re-check exact owner in the same READ ONLY repeatable transaction.
+        # A caller must independently reconcile any post-return mutation
+        # before materializing an actual Exchange Exit command.
+        return evidence
+
+
+def p90_private_ipc_loop(key: str, secret: str) -> None:
+    """Optional read-only producer owned by the credential-bound private worker."""
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        serve_private_proof,
+    )
+
+    serve_private_proof(
+        account=TRADING_ACCOUNT_ID,
+        connector=ACCOUNT_CONNECTOR_ID,
+        handler=lambda request: _p90_private_ipc_evidence_handler(
+            dict(request), key=key, secret=secret
+        ),
+        running=lambda: running,
+    )
+
+
 def current_p90_real_private_ws_epoch(position: StrategyPosition) -> bool:
     """Read only THIS live process's private WS session; never status.json."""
     if position.trading_account_id != TRADING_ACCOUNT_ID:
@@ -5056,6 +5158,17 @@ def main() -> None:
     bootstrap.close()
     signal.signal(signal.SIGTERM, lambda *_: globals().__setitem__("running", False))
     signal.signal(signal.SIGINT, lambda *_: globals().__setitem__("running", False))
+    ipc_setting = os.environ.get("CRIPTA_P90_REAL_PRIVATE_IPC", "DISABLED")
+    if ipc_setting not in {"DISABLED", "ENABLED"}:
+        raise RuntimeError("P90_REAL_PRIVATE_IPC_MODE_INVALID")
+    if ipc_setting == "ENABLED":
+        proof_thread = threading.Thread(
+            target=p90_private_ipc_loop,
+            args=(credentials["api_key"], credentials["api_secret"]),
+            daemon=True,
+            name="p90-private-signed-read-only-ipc",
+        )
+        proof_thread.start()
     thread = threading.Thread(target=trade_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)
     thread.start()
     commands = threading.Thread(target=command_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)
