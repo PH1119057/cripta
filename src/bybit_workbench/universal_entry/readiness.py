@@ -192,11 +192,29 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
     symbols, ceiling = scopes[card.strategy_id]
     if card.symbols != symbols:
         return False
-    execution = _mapping(card.entry_policy.to_dict().get("execution_policy"))
+    entry = card.entry_policy.to_dict()
+    watch = _mapping(entry.get("watch_policy"))
+    geometry = _mapping(watch.get("geometry"))
+    execution = _mapping(entry.get("execution_policy"))
     capital = card.capital_policy.to_dict()
     initial = _mapping(card.protection_policy.to_dict().get("initial_protection"))
+    exit_policy = card.exit_policy.to_dict()
+    trailing = _mapping(exit_policy.get("trailing"))
+    local = _mapping(exit_policy.get("local_zone_exit"))
+    lifecycle = card.lifecycle_policy.to_dict()
+    emergency = _mapping(lifecycle.get("emergency_policy"))
+    embargo = _mapping(lifecycle.get("second_hardstop_embargo"))
     return (
-        execution.get("order_type") == "MARKET"
+        watch.get("enabled") is True
+        and geometry.get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
+        and geometry.get("lookback_bars") == {
+            "l53_5m": 36, "h9_5m": 108, "h9_15m": 36,
+        }
+        and geometry.get("atr_period") == 200
+        and geometry.get("zone_half_width_atr") == "0.5"
+        and geometry.get("h9_equality") == "EXACT_RAW_SIDE"
+        and geometry.get("crossing") == "FIRST_ADJACENT_NATIVE_RAW_TRADE"
+        and execution.get("order_type") == "MARKET"
         and execution.get("reference_value_path") == "fact.p90l90.candidate_price"
         and capital.get("require_capacity") is True
         and capital.get("amount_currency") == "USDT"
@@ -215,6 +233,37 @@ def _p90l90_approved_real_v3_policy(card: StrategyCard) -> bool:
         and initial.get("take_profit_reference_path") == "fact.p90l90.opposite_raw_l53_target"
         and initial.get("tpsl_mode") == "Full"
         and initial.get("trigger_by") == "LastPrice"
+        and trailing == {
+            "enabled": True,
+            "activation_profit_pct": "0.5",
+            "distance_pct": "0.35",
+            "reference": "BEST_FAVORABLE_PRICE_SINCE_ENTRY",
+            "update_effective_from": "NEXT_ORDERED_TRADE",
+            "never_loosen": True,
+        }
+        and local.get("enabled") is True
+        and local.get("operator") == "P90L90_DYNAMIC_OPPOSITE_RAW_L53"
+        and local.get("target") == "OPPOSITE_RAW_BOUNDARY"
+        and local.get("target_fact_path") == "fact.p90l90.opposite_raw_l53_target"
+        and local.get("minimum_favorable_pct") == "0.5"
+        and lifecycle.get("position_mode") == "ONE_WAY"
+        and lifecycle.get("max_open_positions_per_symbol") == 1
+        and emergency == {
+            "enabled": True,
+            "terminal_loss_containment": "INITIAL_PROTECTION",
+            "initial_stop_loss_pct": "10",
+            "operator_kill": "MAINNET_GATE_OFF",
+        }
+        and set(embargo) == {
+            "enabled", "hardstop_count", "rolling_hours",
+            "new_entry_pause_hours", "close_existing_positions", "domain",
+        }
+        and embargo.get("enabled") is True
+        and embargo.get("hardstop_count") == 2
+        and embargo.get("rolling_hours") == 48
+        and embargo.get("new_entry_pause_hours") == 48
+        and embargo.get("close_existing_positions") is False
+        and embargo.get("domain") == "STRATEGY_VERSION"
     )
 
 
@@ -469,25 +518,16 @@ def assess_strategy_runtime_readiness(
             item for item in paper_reasons
             if item.code not in exempt_paper_order_codes
         ]
-    if p90_operator:
-        # Owner has approved v3 REAL *policy*, but the new native causal
-        # Entry→atomic order→fill→Exchange SL→Exit adapter is not proven.
-        # This is an unconditional fail-closed operational gate until the
-        # exact released implementation is independently attested.
+    if p90_operator and not p90_real_v3_policy:
+        # Historical/no-order P90 remains non-executable.  Exact REAL v3 is
+        # recognized only by the complete immutable policy contract above;
+        # current release identity, tests, LIVE equivalence and owner arm stay
+        # independent durable gates in TRADING_CONTOUR §4.7.
         execution_reasons.append(
             RuntimeReadinessReason(
-                (
-                    "P90L90_REAL_EXECUTION_ADAPTER_NOT_VERIFIED"
-                    if p90_real_v3_policy
-                    else "P90L90_EXCHANGE_ORDER_NOT_APPROVED"
-                ),
+                "P90L90_EXCHANGE_ORDER_NOT_APPROVED",
                 "EXECUTION",
-                (
-                    "Owner-approved P90L90 v3 still needs causal/Exchange "
-                    "Entry+Exit and account safety equivalence proof."
-                    if p90_real_v3_policy
-                    else "P90L90 no-order model has no real order approval."
-                ),
+                "P90L90 policy is not the exact executable REAL v3 contract.",
             )
         )
 
@@ -545,6 +585,13 @@ def assess_strategy_runtime_readiness(
         ("trailing", "LIVE_EXIT_TRAILING_NOT_WIRED", "trailing"),
         ("time_exit", "LIVE_EXIT_TIME_NOT_WIRED", "выход по времени"),
     ):
+        if (
+            field == "trailing"
+            and p90_real_v3_policy
+        ):
+            # Exact v3 TRAIL035 is implemented by the dedicated account-scoped
+            # Bybit-native trading-stop/readback path, not generic local Exit.
+            continue
         if _enabled(exit_policy.get(field)):
             execution_reasons.append(
                 RuntimeReadinessReason(
