@@ -102,7 +102,8 @@ class P90RealLiveSourcePorts:
             )
         row = self._db.execute(
             """SELECT epoch_id FROM strategy_entry.p90l90_real_source_epochs
-                WHERE epoch_id=%s AND source_commit=%s AND status='ACTIVE'""",
+                WHERE epoch_id=%s AND source_commit=%s AND status='ACTIVE'
+                FOR SHARE""",
             (self._epoch, self._commit),
         ).fetchone()
         if row != (self._epoch,):
