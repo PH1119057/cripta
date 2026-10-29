@@ -26,6 +26,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 import psycopg
 
@@ -50,6 +51,21 @@ from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (  # noqa: E
     VERSION,
 )
 # isort: on
+
+
+class StrategyState(TypedDict):
+    strategy_id: str
+    enabled: bool
+    binding_state: str
+    trading_account_id: str
+
+
+class PrearmState(TypedDict):
+    gate_enabled: bool
+    execution_permissions: int
+    live_arm_sessions: int
+    account_live_arm_sessions: int
+    strategies: list[StrategyState]
 
 
 def require(ok: bool, reason: str) -> None:
@@ -93,7 +109,7 @@ def installed_identity() -> str:
     return commit
 
 
-def state(connection: psycopg.Connection) -> dict[str, object]:
+def state(connection: psycopg.Connection) -> PrearmState:
     require(
         connection.execute("SELECT session_user,current_user").fetchone()
         == ("cripta", "cripta"),
