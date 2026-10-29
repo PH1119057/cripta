@@ -240,6 +240,7 @@ class P90RealPostfillSourceWindow:
     best_favorable_price: Decimal
     source_refs: tuple[str, ...]
     complete_native_window: bool
+    no_new_native_trade_rest_verified: bool = False
 
 
 def build_real_postfill_exit_observation(
@@ -281,8 +282,22 @@ def build_real_postfill_exit_observation(
         or coverage.source_commit is None
         or re.fullmatch(r"[0-9a-f]{40}", coverage.source_commit) is None
         or not coverage.source_refs
-        or any(not ref.startswith("bybit:publicTrade:")
-               for ref in coverage.source_refs)
+        or (
+            coverage.no_new_native_trade_rest_verified is True
+            and (
+                len(coverage.source_refs) != 1
+                or not coverage.source_refs[0].startswith(
+                    f"bybit:recentTrade:{position.symbol}:zero-after-fill:"
+                )
+                or coverage.best_favorable_price != position.actual_avg_fill
+                or coverage.last_native_price != position.actual_avg_fill
+            )
+        )
+        or (
+            coverage.no_new_native_trade_rest_verified is not True
+            and any(not ref.startswith("bybit:publicTrade:")
+                    for ref in coverage.source_refs)
+        )
         or private.pending_exit_mutation is not False
         or private.trading_account_id != position.trading_account_id
         or private.strategy_execution_binding_id
@@ -334,7 +349,12 @@ def build_real_postfill_exit_observation(
     except (ValueError, TypeError, InvalidOperation):
         raise P90RealObservationUnverified("P90_REAL_POSTFILL_SIGNED_TRAIL_ABSENT") from None
     best = _positive(coverage.best_favorable_price, "P90_REAL_POSTFILL_BEST")
-    last = _positive(coverage.last_native_price, "P90_REAL_POSTFILL_LAST")
+    # When no venue trade followed fill, only the authenticated signed
+    # Exchange mark is a contemporaneous price; never invent a native tick.
+    last = (
+        mark if coverage.no_new_native_trade_rest_verified
+        else _positive(coverage.last_native_price, "P90_REAL_POSTFILL_LAST")
+    )
     long = position.direction is TradeDirection.LONG
     if (
         not trail.is_finite() or trail < 0 or trail % tick != 0
@@ -342,7 +362,8 @@ def build_real_postfill_exit_observation(
         or not (stop < mark < tp and tp > actual_fill
                 if long else tp < mark < stop and tp < actual_fill)
         or (best < actual_fill if long else best > actual_fill)
-        or (best < last if long else best > last)
+        or (coverage.no_new_native_trade_rest_verified is not True
+            and (best < last if long else best > last))
     ):
         raise P90RealObservationUnverified("P90_REAL_POSTFILL_PROTECTION_UNVERIFIED")
     signed_ref = (
@@ -373,7 +394,14 @@ def build_real_postfill_exit_observation(
             "fill_to_postfill_source_verified": True,
             "signed_fill_execution_ids": list(signed_fill_execution_ids),
             "pending_exit_mutation": False,
-            "native_trade_price": str(last),
+            **(
+                {
+                    "postfill_signed_mark_price": str(last),
+                    "postfill_no_native_trade_rest_verified": True,
+                }
+                if coverage.no_new_native_trade_rest_verified
+                else {"native_trade_price": str(last)}
+            ),
             "durable_best_favorable_price": str(best),
             "exchange_stop_price": str(stop),
             "exchange_tp_price": str(tp),
