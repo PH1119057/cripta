@@ -1234,6 +1234,50 @@ def _p90_private_ipc_flat_handler(*, key: str, secret: str):
             verified_private_ws_continuity=current_ws,
         )()
 
+
+def _p90_private_ipc_recovery_handler(*, key: str, secret: str):
+    """Signed account-wide USDT inventory used only for open-position restart."""
+    from psycopg.rows import tuple_row
+
+    from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
+    from bybit_workbench.universal_exit.p90l90_real_recovery_account import (
+        P90RealSignedRecoveryAccountReader,
+    )
+
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-real-private-recovery-proof",
+        row_factory=tuple_row,
+    ) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+
+        def current_ws() -> bool:
+            with status_lock:
+                snapshot = {
+                    "identity": dict(status.get("identity", {})),
+                    "private": dict(status.get("private", {})),
+                }
+            return verified_private_ws_epoch(
+                snapshot,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                now_epoch=int(time.time()),
+            )
+
+        def signed_get(endpoint: str, params: dict[str, str]) -> dict[str, object]:
+            result, _ = api_get(endpoint, params, key, secret)
+            return result
+
+        return P90RealSignedRecoveryAccountReader(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+            signed_get=signed_get,
+            verified_private_ws_continuity=current_ws,
+        )()
+
+
 def p90_private_ipc_loop(
     key: str, secret: str, ready: threading.Event,
 ) -> None:
@@ -1251,6 +1295,9 @@ def p90_private_ipc_loop(
         running=lambda: running,
         ready=ready.set,
         flat_handler=lambda: _p90_private_ipc_flat_handler(
+            key=key, secret=secret,
+        ),
+        recovery_handler=lambda: _p90_private_ipc_recovery_handler(
             key=key, secret=secret,
         ),
     )
