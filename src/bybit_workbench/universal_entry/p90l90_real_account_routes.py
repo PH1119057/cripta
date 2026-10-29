@@ -8,7 +8,7 @@ Exchange mutation. No credentials leave the database through this adapter.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
