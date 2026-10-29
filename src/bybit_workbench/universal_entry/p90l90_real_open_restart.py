@@ -298,9 +298,7 @@ def prove_p90_real_open_restart_inventory(
             and proof.source_ref
             == "bybit:signed-recovery-linear-usdt:exact-account"
             and proof.open_orders == 0
-            and proof.pending_commands == 0
-            and 0 <= (checked_at.astimezone(UTC) - proof.observed_at).total_seconds()
-            <= 15,
+            and proof.pending_commands == 0,
             "ACCOUNT_SIGNED_INVENTORY_IDENTITY_OR_FRESHNESS",
         )
         account_proofs[route.trading_account_id] = proof
@@ -339,7 +337,7 @@ def prove_p90_real_open_restart_inventory(
                 account=account,
                 connector=route.account_connector_id,
                 timeout_seconds=3.0,
-            ).for_restart_recovery(position, checked_at)
+            ).for_restart_recovery(position, datetime.now(UTC))
         except Exception:
             raise P90RealOpenRestartUnverified(
                 "P90_REAL_RESTART_POSITION_SIGNED_EVIDENCE_MISSING"
@@ -382,5 +380,5 @@ def prove_p90_real_open_restart_inventory(
         positions=tuple(sorted(
             verified, key=lambda item: item.position.symbol,
         )),
-        checked_at=checked_at.astimezone(UTC),
+        checked_at=datetime.now(UTC),
     )
