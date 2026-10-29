@@ -14,13 +14,14 @@ from typing import Any
 
 from .contracts import FrozenPolicy, MarketFactEnvelope
 from .engine import AccountAdmissionContext, UniversalEntryEngine
+from .p90l90_atomic_real_epoch_checkpoint import P90L90AtomicRealEpochCheckpointStore
 from .p90l90_durable_paper_processor import P90L90DurablePaperProcessor
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_observer_paper_consumer import P90L90ObserverPaperConsumer
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
 from .p90l90_real_native_candidate_owner import P90L90RealNativeCandidateOwner
 from .p90l90_real_second48 import read_real_second48
-from .p90l90_shared_candle_bridge import P90SharedCandleLedger
+from .p90l90_real_shared_candle_ledger import P90RealSharedCandleLedger
 from .p90l90_strategy_embargo import StrategyHardStopEmbargoPolicy
 from .registry import ActivePlanRegistry
 from .storage import StrategyEntryStore
@@ -45,6 +46,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         *,
         bundles: tuple[object, ...],
         source_commit: str,
+        source_epoch_id: str,
         provenance: FrozenPolicy,
         admission_provider: AccountAdmissionProvider,
         verified_exit_tick_port: RealExitTickPort,
@@ -58,6 +60,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._candidate_owners: dict[str, P90L90RealNativeCandidateOwner] = {}
         self._connection = connection
         self._provenance = provenance
+        self._source_epoch_id = source_epoch_id
         self._admission_provider = admission_provider
         self._verified_exit_tick_port = verified_exit_tick_port
         self._verified_closed_candle_port = verified_closed_candle_port
@@ -92,10 +95,10 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                 self._by_symbol[symbol] = bundle
         self._entry = UniversalEntryEngine(registry)
         self._store = StrategyEntryStore(connection)
-        self._archive = P90SharedCandleLedger(
-            connection, source_commit=source_commit,
-            producer_release_commit=producer_release_commit,
-            accepted_source_commits=accepted_source_commits,
+        # The P90 REAL source epoch is independent: historical PAPER seed
+        # and checkpoints remain immutable and are never a REAL write target.
+        self._archive = P90RealSharedCandleLedger(
+            connection, epoch_id=source_epoch_id, source_commit=source_commit,
         )
         self._processors: dict[str, P90L90DurablePaperProcessor] = {}
         for symbol, bundle in self._by_symbol.items():
@@ -114,6 +117,11 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
                 producer_release_commit=producer_release_commit,
                 accepted_source_commits=accepted_source_commits,
                 bar_ledger=self._archive,
+                atomic_checkpoint_store=P90L90AtomicRealEpochCheckpointStore(
+                    connection, source_commit=source_commit,
+                    writer_release_commit=producer_release_commit,
+                    epoch_id=source_epoch_id,
+                ),
                 on_native_exit=self._on_native_exit,
                 on_closed_candle=self._on_closed_candle,
                 candidate_entry_plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
