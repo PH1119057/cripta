@@ -41,8 +41,9 @@ class P90RealLiveSourcePorts:
     Construction has no side effect. It must only be called by the already
     subscribed live Observer after the real source epoch was verified in
     PostgreSQL. A fresh source epoch on restart is NOT an existing open
-    position's original source epoch; restart with exposure needs separate
-    exact replay/reconciliation and is intentionally not implemented here.
+    position's original source epoch. Open-position continuation therefore
+    requires the separate exact replay/reconciliation path plus a durable
+    restart bridge bound to this exact mirror session.
     """
 
     def __init__(
