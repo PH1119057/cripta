@@ -6,6 +6,7 @@ Actual migration and installer still require separate actor/DB preflight.
 from __future__ import annotations
 
 import ast
+import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,13 +18,13 @@ def test_migration_grants_only_narrow_inactive_v3_writer() -> None:
     text = SQL.read_text(encoding="utf-8")
     assert text.startswith("-- Issue #243:")
     assert text.count(
-        "CREATE FUNCTION strategy_entry.register_p90l90_real_v3_inactive_binding("
+        "CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_real_v3_inactive_binding("
     ) == 1
     assert "SECURITY DEFINER" in text
     assert "SET search_path = pg_catalog, pg_temp" in text
     assert "session_user <> 'cripta'" in text
     assert "current_setting('transaction_isolation') <> 'serializable'" in text
-    assert "P90_REAL_V3_WRITER_ALREADY_EXISTS_RECONCILE_MANUALLY" in text
+    assert "P90_REAL_V3_EXISTING_WRITER_DRIFT" in text
     assert "v_activation:='activation-p90l90-real-main-20261029-v3'" in text
     assert "v_activation:='activation-p90l90-real-sub-20261029-v3'" in text
     assert "v_binding:='binding-p90l90-real-main-20261029-v3'" in text
@@ -41,7 +42,7 @@ def test_migration_grants_only_narrow_inactive_v3_writer() -> None:
     assert "GRANT EXECUTE ON FUNCTION" in text
     assert "TO cripta;" in text
     assert "P90_REAL_V3_WRITER_POST_MIGRATION_PRIVILEGE_DRIFT" in text
-    assert "CREATE OR REPLACE FUNCTION" not in text
+    assert "DROP FUNCTION" not in text
     for prohibited in (
         "DROP FUNCTION", "TRUNCATE strategy_entry",
         "UPDATE strategy_entry.strategy_activations",
@@ -50,6 +51,29 @@ def test_migration_grants_only_narrow_inactive_v3_writer() -> None:
         "UPDATE control.account_live_arm_sessions",
     ):
         assert prohibited not in text
+
+
+def test_replay_hash_is_exact_function_source_and_migration_is_listed() -> None:
+    text = SQL.read_text(encoding="utf-8")
+    assert text.count("AS $function$\\n") == 1
+    assert text.count("\\n$function$;") == 1
+    body = text.split("AS $function$\\n", 1)[1].split(
+        "\\n$function$;", 1,
+    )[0]
+    approved = hashlib.md5(("\\n" + body + "\\n").encode("utf-8")).hexdigest()
+    assert approved == "efa9a3e3604b22133184f92b02bcb88f"
+    assert text.count(approved) == 1
+    release = (
+        ROOT / "operations/infrastructure/install_verified_release.sh"
+    ).read_text(encoding="utf-8")
+    current_sql = "operations/sql/20261028_shared_closed_candle_source.sql"
+    new_sql = "operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql"
+    assert release.count(current_sql) == 1
+    assert release.count(new_sql) == 1
+    assert release.index(current_sql) < release.index(new_sql)
+    assert release.index(new_sql) < release.index(
+        'for migration in "${migration_files[@]}"; do'
+    )
 
 
 def test_installation_requires_exact_actor_and_no_default_mutation() -> None:
