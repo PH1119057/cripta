@@ -198,6 +198,8 @@ def main() -> None:
                 ),
                 "SOURCE_ONLY_PREARM_NOT_ACTIVE",
             )
+            # Evidence producer owns one exact serializable DB snapshot.
+            connection.commit()
             result = prepare_p90l90_real_v3_prearm_evidence(
                 connection,
                 release_commit=commit,
