@@ -81,7 +81,7 @@ def test_actual_postfill_handoff_arms_exchange_trail_without_next_native_tick(
 def test_postfill_builder_denies_unproven_real_execution_or_native_window(
     failure: str,
 ) -> None:
-    position, plan, private, source = _proof()
+    position, _plan, private, source = _proof()
     ids = ("first-fill-execution",)
     received_at = AT + timedelta(milliseconds=5)
     if failure == "gap":
