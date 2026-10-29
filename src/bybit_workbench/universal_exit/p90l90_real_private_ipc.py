@@ -126,7 +126,7 @@ def checked_request(
         or not isinstance(position_id, str)
         or not position_id
         or len(position_id) > 128
-        or raw.get("kind") not in ("TRADE", "CLOSED")
+        or raw.get("kind") not in ("TRADE", "CLOSED", "RECOVERY_POSITION")
         or not isinstance(raw.get("symbol"), str)
         or not raw["symbol"]
     ):
@@ -405,6 +405,18 @@ class P90PrivateProofClient:
             seq=None, exec_id=None,
         )
 
+
+    def for_restart_recovery(
+        self, position: StrategyPosition, at: datetime,
+    ) -> ScopedPrivatePositionEvidence:
+        if at.tzinfo is None or at.utcoffset() is None or at < position.fill_at:
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_RECOVERY_POSITION_TIME_INVALID"
+            )
+        return self._request(
+            position=position, kind="RECOVERY_POSITION", at=at,
+            seq=None, exec_id=None,
+        )
 
     def read_flat_account(self) -> P90RealSignedFlatAccount:
         """Read only this credential-bound worker's signed flat USDT inventory."""
