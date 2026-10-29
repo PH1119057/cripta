@@ -7,7 +7,7 @@ not permission to retry, fabricate PnL or issue a second reduce-only close.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 
 
