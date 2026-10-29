@@ -16,7 +16,8 @@ from typing import Any
 from bybit_workbench.strategy_position import StrategyPosition
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-    ALLOWED_SYMBOLS, VERSION,
+    ALLOWED_SYMBOLS,
+    VERSION,
 )
 from bybit_workbench.universal_exit.contracts import ExitActionKind, ExitEvaluation
 from bybit_workbench.universal_exit.p90l90_real_private_router import (
