@@ -11,7 +11,6 @@ import os
 import psycopg
 import pytest
 
-
 DSN = os.environ.get("CRIPTA_TRADE_LIFECYCLE_TEST_DSN")
 pytestmark = pytest.mark.skipif(
     not DSN, reason="requires explicitly disposable PG16 CI database"
