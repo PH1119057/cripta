@@ -287,6 +287,7 @@ def serve_private_proof(
     connector: str,
     handler: Callable[[Mapping[str, object]], ScopedPrivatePositionEvidence],
     running: Callable[[], bool],
+    ready: Callable[[], None] | None = None,
 ) -> None:
     """Opt-in account-owned broker loop; only kernel-authenticated local UID.
 
@@ -301,6 +302,8 @@ def serve_private_proof(
         server.bind(address)
         server.listen(4)
         server.settimeout(1.0)
+        if ready is not None:
+            ready()
         while running():
             try:
                 stream, _ = server.accept()
@@ -330,7 +333,7 @@ def serve_private_proof(
                         "connector": connector,
                         "evidence": evidence_to_wire(evidence),
                     }))
-                except (P90PrivateIpcUnverified, OSError, ValueError):
+                except Exception:
                     # Fail closed without reflecting a malformed nonce or
                     # revealing credential/Bybit/DB exception data.
                     continue
