@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import sys
 import threading
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 from test_p90l90_real_postfill_source_broker import EPOCH, SHA, _market
 
+from bybit_workbench.exchange_position_identity import exchange_position_key
 from operations.connectivity.p90l90_real_postfill_source_client import (
     P90RealPostfillSourceClientUnverified,
     read_real_postfill_source_window,
@@ -20,6 +22,16 @@ from operations.monitoring.p90l90_real_postfill_source_broker import (
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux SO_PEERCRED abstract socket")
 def test_actual_private_to_market_source_uds_proof_with_live_native_ids() -> None:
     mirror, position, now = _market()
+    # The real IPC contract requires an exact persistent ta-<32 hex> account,
+    # unlike the generic observation unit tests' deliberately synthetic IDs.
+    account = "ta-" + "a" * 32
+    position = replace(
+        position,
+        trading_account_id=account,
+        exchange_position_key=exchange_position_key(
+            account, position.symbol, 0,
+        ),
+    )
     # A busy native interval must stay complete, not lose all trades merely
     # because 32 events occurred during a real first-fill handoff window.
     for i in range(64):
@@ -88,6 +100,12 @@ def test_actual_private_to_market_source_uds_proof_with_live_native_ids() -> Non
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux SO_PEERCRED abstract socket")
 def test_absent_market_source_broker_fails_closed_without_exchange_action() -> None:
     _mirror, position, _now = _market()
+    account = "ta-" + "a" * 32
+    position = replace(
+        position,
+        trading_account_id=account,
+        exchange_position_key=exchange_position_key(account, position.symbol, 0),
+    )
     with pytest.raises(
         P90RealPostfillSourceClientUnverified,
         match="TRANSPORT_UNAVAILABLE",
