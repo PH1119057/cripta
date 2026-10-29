@@ -22,6 +22,8 @@ from .loader import load_exit_binding
 
 
 class _Cursor(Protocol):
+    def fetchone(self) -> Mapping[str, object] | None: ...
+
     def fetchall(self) -> Sequence[Mapping[str, object]]: ...
 
 
