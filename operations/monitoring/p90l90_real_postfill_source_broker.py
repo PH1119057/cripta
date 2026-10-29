@@ -137,12 +137,13 @@ def build_source_window(
             for row in rows:
                 if (
                     not isinstance(row, Mapping)
-                    or row.get("s") != position.symbol
-                    or not isinstance(row.get("i"), str)
-                    or not row["i"]
+                    or row.get("symbol") != position.symbol
+                    or not isinstance(row.get("execId"), str)
+                    or not row["execId"]
+                    or str(row.get("side") or "") not in {"Buy", "Sell"}
                 ):
                     raise ValueError("REST identity incomplete")
-                trade_at = datetime.fromtimestamp(int(str(row["T"])) / 1000, UTC)
+                trade_at = datetime.fromtimestamp(int(str(row["time"])) / 1000, UTC)
                 if trade_at >= position.fill_at:
                     raise ValueError("new publicTrade cannot be silently omitted")
             if mirror.verified_fill_forward_events(
