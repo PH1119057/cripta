@@ -2882,11 +2882,10 @@ def _run_observer_epoch(
                 ),
             )
         if p90_real_source_only or p90_real_live:
-            # Both paths start only from a genuinely live WS epoch and two
-            # independently signed FLAT MAIN/SUB inventories. A reconnect
-            # with exposure MUST fail closed; it cannot silently reseed
-            # missed native exits from OHLC or pretend that source continuity
-            # survived process restart.
+            # Fresh REAL starts require genuinely signed FLAT MAIN/SUB.
+            # A live-execution process restart with existing exposure is a
+            # different path: reuse the one original durable source epoch only
+            # after exact signed account/protection + bounded native replay.
             from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
                 P90L90ObserverRealConsumer,
             )
@@ -2894,17 +2893,29 @@ def _run_observer_epoch(
                 start_current_p90_real_observer_epoch,
             )
 
-            source_epoch_id = start_current_p90_real_observer_epoch(
-                connection,
-                bundles=observer_split.p90_real,
-                source_commit=LOADED_COMMIT,
-                mirror=trade_mirror,
-                subscribed_symbols=frozenset(symbols),
-                subscribed_intervals=frozenset(intervals),
-                subscribed_local_at=_ready_local,
-                subscribed_server_at=_ready_server,
-                epoch_started_at=epoch_started,
-            )
+            restart_epoch_id: str | None = None
+            if p90_real_live:
+                from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                    inspect_p90_real_open_restart_epoch,
+                )
+
+                restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                    connection, source_commit=LOADED_COMMIT,
+                )
+            if restart_epoch_id is None:
+                source_epoch_id = start_current_p90_real_observer_epoch(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    mirror=trade_mirror,
+                    subscribed_symbols=frozenset(symbols),
+                    subscribed_intervals=frozenset(intervals),
+                    subscribed_local_at=_ready_local,
+                    subscribed_server_at=_ready_server,
+                    epoch_started_at=epoch_started,
+                )
+            else:
+                source_epoch_id = restart_epoch_id
 
             def require_no_real_exposure() -> None:
                 # This diagnostic must stop, not pretend to protect a position.
@@ -2979,6 +2990,10 @@ def _run_observer_epoch(
                     at=datetime.now(UTC),
                 )
                 source_snapshot = trade_mirror.snapshot()
+                mirror_serial = source_snapshot["epoch"]
+                mirror_started_at = datetime.fromisoformat(
+                    str(source_snapshot["epoch_started_at"])
+                )
                 shared_p90_real_ledger = P90RealSharedCandleLedger(
                     connection, epoch_id=source_epoch_id,
                     source_commit=LOADED_COMMIT,
@@ -2989,10 +3004,8 @@ def _run_observer_epoch(
                     ledger=shared_p90_real_ledger,
                     source_epoch_id=source_epoch_id,
                     source_commit=LOADED_COMMIT,
-                    mirror_serial=source_snapshot["epoch"],
-                    mirror_started_at=datetime.fromisoformat(
-                        str(source_snapshot["epoch_started_at"])
-                    ),
+                    mirror_serial=mirror_serial,
+                    mirror_started_at=mirror_started_at,
                 )
                 private_router = P90RealPrivateEvidenceRouter(
                     account_by_strategy=routes.account_by_strategy,
@@ -3079,7 +3092,32 @@ def _run_observer_epoch(
                     shared_candle_ledger=shared_p90_real_ledger,
                 )
                 p90_consumer = runtime.consumer
-            p90_consumer.recover_all()
+                if restart_epoch_id is not None:
+                    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+                        recover_p90_real_open_source,
+                    )
+
+                    restart_bridge, _restart_inventory = (
+                        recover_p90_real_open_source(
+                            connection,
+                            bundles=observer_split.p90_real,
+                            source_commit=LOADED_COMMIT,
+                            source_epoch_id=source_epoch_id,
+                            consumer=p90_consumer,
+                            exit_ports=runtime.exit_ports,
+                            mirror=trade_mirror,
+                            mirror_serial=mirror_serial,
+                            mirror_started_at=mirror_started_at,
+                            source_ws_ready_at=_ready_local,
+                            fetch_recent_trades=_fetch_recent_trade_snapshot,
+                            fetch_closed_candles=_fetch_gap_candles,
+                        )
+                    )
+                    source_ports.bind_restart_bridge(
+                        restart_bridge.restart_id
+                    )
+            if not (p90_real_live and restart_epoch_id is not None):
+                p90_consumer.recover_all()
             # The current Observer is the *only* native MarketSource owner.
             # Private workers can request its bounded postfill window by
             # durable position ID; no Exchange key/POST reaches this process.
