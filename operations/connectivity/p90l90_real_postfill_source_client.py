@@ -88,10 +88,12 @@ def read_real_postfill_source_window(
         "position_id", "symbol", "fill_at", "covered_through",
         "source_commit", "last_native_price", "best_favorable_price",
         "source_refs", "complete_native_window",
+        "no_new_native_trade_rest_verified",
     } or data["position_id"] != position.strategy_position_id or (
         data["symbol"] != position.symbol
         or data["source_commit"] != source_commit
         or data["complete_native_window"] is not True
+        or type(data["no_new_native_trade_rest_verified"]) is not bool
     ):
         raise P90RealPostfillSourceClientUnverified(
             "P90_REAL_POSTFILL_SOURCE_IDENTITY_MISMATCH"
@@ -120,10 +122,25 @@ def read_real_postfill_source_window(
         or not price.is_finite() or price <= 0
         or not best.is_finite() or best <= 0
         or not isinstance(refs, list) or not 1 <= len(refs) <= 256
-        or any(
-            not isinstance(ref, str)
-            or not ref.startswith(f"bybit:publicTrade:{position.symbol}:")
-            for ref in refs
+        or (
+            data["no_new_native_trade_rest_verified"] is True
+            and (
+                len(refs) != 1
+                or not isinstance(refs[0], str)
+                or not refs[0].startswith(
+                    f"bybit:recentTrade:{position.symbol}:zero-after-fill:"
+                )
+                or price != position.actual_avg_fill
+                or best != position.actual_avg_fill
+            )
+        )
+        or (
+            data["no_new_native_trade_rest_verified"] is False
+            and any(
+                not isinstance(ref, str)
+                or not ref.startswith(f"bybit:publicTrade:{position.symbol}:")
+                for ref in refs
+            )
         )
     ):
         raise P90RealPostfillSourceClientUnverified(
@@ -139,4 +156,7 @@ def read_real_postfill_source_window(
         best_favorable_price=best,
         source_refs=tuple(refs),
         complete_native_window=True,
+        no_new_native_trade_rest_verified=(
+            data["no_new_native_trade_rest_verified"]
+        ),
     )
