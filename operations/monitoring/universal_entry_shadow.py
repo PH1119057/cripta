@@ -3097,25 +3097,45 @@ def _run_observer_epoch(
                         recover_p90_real_open_source,
                     )
 
-                    restart_bridge, _restart_inventory = (
-                        recover_p90_real_open_source(
-                            connection,
-                            bundles=observer_split.p90_real,
-                            source_commit=LOADED_COMMIT,
-                            source_epoch_id=source_epoch_id,
-                            consumer=p90_consumer,
-                            exit_ports=runtime.exit_ports,
-                            mirror=trade_mirror,
-                            mirror_serial=mirror_serial,
-                            mirror_started_at=mirror_started_at,
-                            source_ws_ready_at=_ready_local,
-                            fetch_recent_trades=_fetch_recent_trade_snapshot,
-                            fetch_closed_candles=_fetch_gap_candles,
-                        )
+                    restart_recovery = recover_p90_real_open_source(
+                        connection,
+                        bundles=observer_split.p90_real,
+                        source_commit=LOADED_COMMIT,
+                        source_epoch_id=source_epoch_id,
+                        consumer=p90_consumer,
+                        exit_ports=runtime.exit_ports,
+                        mirror=trade_mirror,
+                        mirror_serial=mirror_serial,
+                        mirror_started_at=mirror_started_at,
+                        source_ws_ready_at=_ready_local,
+                        fetch_recent_trades=_fetch_recent_trade_snapshot,
+                        fetch_closed_candles=_fetch_gap_candles,
                     )
                     source_ports.bind_restart_bridge(
-                        restart_bridge.restart_id
+                        restart_recovery.bridge.restart_id
                     )
+                    # The primary WS was already subscribed before bounded
+                    # recovery and may still contain frames reconstructed from
+                    # REST+mirror. Seed the ordinary transport state BEFORE
+                    # reading that socket so old frames are exact duplicates,
+                    # never a second Entry/Exit event or cursor regression.
+                    for recovered_fact_id in (
+                        restart_recovery.replayed_fact_ids
+                    ):
+                        deduper.accept(recovered_fact_id)
+                    for symbol, recovered_cursor in (
+                        restart_recovery.trade_cursors.items()
+                    ):
+                        trade_cursors[symbol] = recovered_cursor
+                        trade_current_seq_exec_ids[symbol] = set(
+                            restart_recovery.current_sequence_exec_ids[symbol]
+                        )
+                        trade_proof_monotonic[symbol] = time.monotonic()
+                    for symbol, watermarks in (
+                        restart_recovery.closed_watermarks.items()
+                    ):
+                        closed_boundaries[(symbol, "5")] = watermarks[0]
+                        closed_boundaries[(symbol, "15")] = watermarks[1]
             if not (p90_real_live and restart_epoch_id is not None):
                 p90_consumer.recover_all()
             # The current Observer is the *only* native MarketSource owner.
@@ -3181,9 +3201,10 @@ def _run_observer_epoch(
                         "source_epoch_id": source_epoch_id,
                     },
                 )
-        # Subscribe-ACK buffered frames predate the freshly created REAL
-        # source epoch. They are not retroactive native Entry/Exit facts.
-        # Read only new source frames from the still-live primary socket.
+        # Subscribe-ACK buffered frames are outside the accepted P90 handoff:
+        # fresh REAL starts have a new empty native cursor; open-position
+        # restart explicitly reconstructed and seeded every accepted fact ID.
+        # Read only frames arriving on the still-live primary socket after ACK.
         buffered_messages = (
             [] if p90_real_source_only or p90_real_live else list(buffered)
         )
