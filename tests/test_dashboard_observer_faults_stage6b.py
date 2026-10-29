@@ -259,10 +259,15 @@ def test_full_release_coordinates_exact_dashboard_bundle_and_runtime_cutover() -
     ).read_text(encoding="utf-8")
     assert 'ui_release="$DASHBOARD_UI_ROOT/releases/$RELEASE_COMMIT"' in installer
     assert (
-        'cmp -s "$runtime_release/operations/dashboard/index.html" '
-        '"$ui_release/index.html"' in installer
+        'git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/index.html"'
+        in installer
     )
-    assert 'cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py"' in installer
+    assert (
+        'git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/app.py"'
+        in installer
+    )
+    assert "candidate Dashboard HTML differs from exact Git release" in installer
+    assert "candidate Dashboard app differs from exact Git release" in installer
     assert installer.index('mv -Tf "$next_tooling" "$RESEARCH_TOOLING_ROOT/current"') < (
         installer.index('mv -Tf "$next_dashboard" "$DASHBOARD_UI_ROOT/current"')
     )
