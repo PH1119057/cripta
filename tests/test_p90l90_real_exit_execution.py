@@ -52,23 +52,24 @@ class _DB:
         return None
 
 
-def _valid():
-    position, plan, checkpoint, cursor, private, price = _scope()
+def _valid(*, sub: bool = False):
+    position, plan, checkpoint, cursor, private, price = _scope(sub=sub)
     observation = _observation(position, checkpoint, cursor, private, price)
     evaluation = UniversalExitEngine().evaluate(position, plan, observation)
     assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
     assert evaluation.decision is not None
 
+    account = ACCOUNT_SUB if sub else ACCOUNT_MAIN
     position = replace(
         position,
-        trading_account_id=ACCOUNT_MAIN,
+        trading_account_id=account,
         exchange_position_key=exchange_position_key(
-            ACCOUNT_MAIN, position.symbol, 0
+            account, position.symbol, 0
         ),
     )
     details = observation.attributes.to_dict()
     details["p90l90_real"].update({
-        "trading_account_id": ACCOUNT_MAIN,
+        "trading_account_id": account,
         "exchange_position_key": position.exchange_position_key,
     })
     observation = replace(
@@ -76,15 +77,17 @@ def _valid():
         attributes=FrozenPolicy.from_mapping(details),
         source_refs=(
             *observation.source_refs,
-            "bybit:signed-position-list:exact-account:account=" + ACCOUNT_MAIN,
+            "bybit:signed-position-list:exact-account:account=" + account,
         ),
     )
     return position, plan, replace(evaluation, observation=observation)
 
 
-def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10):
+def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10,
+          sub: bool = False):
     db = _DB()
-    position, plan, evaluation = _valid()
+    position, plan, evaluation = _valid(sub=sub)
+    account = ACCOUNT_SUB if sub else ACCOUNT_MAIN
     assert plan.exit_policy.to_dict()["execution_policy"] == {
         "max_request_age_seconds": 5
     }
@@ -103,12 +106,12 @@ def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10):
 
     def saved(_db, request):
         steps.append("request")
-        assert request.trading_account_id == ACCOUNT_MAIN
+        assert request.trading_account_id == account
         assert request.exit_decision_id == evaluation.decision.exit_decision_id
 
     def queued(_db, prepared, *, now):
         steps.append("queue")
-        assert prepared.payload["trading_account_id"] == ACCOUNT_MAIN
+        assert prepared.payload["trading_account_id"] == account
         assert prepared.payload["source"] == "universal_exit"
         assert prepared.command_id.startswith("ux-")
 
@@ -131,14 +134,15 @@ def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10):
     return sink, db, steps, position, plan, evaluation
 
 
+@pytest.mark.parametrize("sub", (False, True))
 def test_real_native_decision_persists_request_then_single_account_command(
-    monkeypatch,
+    monkeypatch, sub: bool,
 ) -> None:
-    sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
+    sink, db, steps, position, plan, evaluation = _sink(monkeypatch, sub=sub)
     prepared = sink(evaluation, position, plan)
     assert prepared is not None
     assert steps == ["load", "independent-safety", "request", "queue"]
-    assert db.events == [("account-lock", (ACCOUNT_MAIN,))]
+    assert db.events == [("account-lock", (ACCOUNT_SUB if sub else ACCOUNT_MAIN,))]
     assert db.open_transactions == 0
 
 
@@ -154,12 +158,13 @@ def test_missing_exit_ttl_still_fails_closed_without_dispatch(monkeypatch) -> No
     assert db.open_transactions == 0
 
 
+@pytest.mark.parametrize("sub", (False, True))
 @pytest.mark.parametrize(("age_ms", "expired"), ((4999, False), (5000, True), (5001, True)))
 def test_real_exit_request_expires_at_exact_five_second_boundary(
-    monkeypatch, age_ms: int, expired: bool,
+    monkeypatch, age_ms: int, expired: bool, sub: bool,
 ) -> None:
     sink, db, steps, position, plan, evaluation = _sink(
-        monkeypatch, age_ms=age_ms,
+        monkeypatch, age_ms=age_ms, sub=sub,
     )
     if expired:
         with pytest.raises(ExitExecutionBridgeBlocked, match="REQUEST_EXPIRED"):
