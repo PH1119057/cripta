@@ -162,7 +162,7 @@ def test_zero_next_native_tick_requires_fresh_rest_anchor_and_no_synthetic_tick(
     row = {
         "symbol": position.symbol, "execId": "pre-fill-rest-anchor",
         "time": int((at - timedelta(seconds=1)).timestamp() * 1000),
-        "seq": 100, "side": "Buy",
+        "seq": 100, "side": "Buy", "price": "100", "size": "0.01",
     }
     source = build_source_window(
         mirror=mirror, position=position, source_commit=SHA,
@@ -192,7 +192,7 @@ def test_zero_native_proof_fails_without_independent_complete_rest(
     row = {
         "symbol": position.symbol, "execId": "real-rest-anchor",
         "time": int((at - timedelta(seconds=1)).timestamp() * 1000),
-        "side": "Buy",
+        "side": "Buy", "seq": 100, "price": "100", "size": "0.01",
     }
     if failure == "unseen-trade":
         row["time"] = int((at - timedelta(milliseconds=100)).timestamp() * 1000)
