@@ -130,7 +130,7 @@ def _native_fact(
     boundary = _D("90") if long else _D("110")
     exec_id = f"p90-parity-{serial}"
     source = SimpleNamespace(
-        fact_id=f"native-{exec_id}",
+        fact_id=f"trade-{exec_id}",
         event_kind="PUBLIC_TRADE",
         symbol=symbol,
         observed_at=event_at,
