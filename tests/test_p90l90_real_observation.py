@@ -120,7 +120,7 @@ def _observation(position, state, cursor, private, price):
 
 
 @pytest.mark.parametrize(("short", "sub", "activation"), (
-    (False,False,"100.5"), (True,True,"99.5"),
+    (False,False,"100.50"), (True,True,"99.50"),
 ))
 def test_native_mfe_and_private_position_use_same_universal_exit_engine(
     short: bool, sub: bool, activation: str,
