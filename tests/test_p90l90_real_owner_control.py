@@ -105,3 +105,26 @@ def test_p90_technical_evidence_producer_has_no_owner_arm_capability() -> None:
     assert "arm_p90l90_real_v3(" not in source
     assert "set_execution_permission" not in source
     assert "UPDATE control.execution_gates" not in source
+
+
+def test_p90_prearm_atomically_retires_exact_historical_r1_binding() -> None:
+    source = SQL.read_text()
+    prearm = source.index(
+        "CREATE OR REPLACE FUNCTION strategy_entry.prearm_p90l90_real_v3"
+    )
+    unprearm = source.index(
+        "CREATE OR REPLACE FUNCTION strategy_entry.unprearm_p90l90_real_v3",
+        prearm,
+    )
+    block = source[prearm:unprearm]
+    assert "activation-be482d99252b4055b020a84fef8e2054" in block
+    assert "binding-r1-unified-2c51489dae0a38fc" in block
+    retire = block.index("R1 RETIRED; replaced by P90 REAL v3 SOURCE_ONLY PREARM")
+    activate = block.index("SET binding_state='ACTIVE'", retire)
+    assert retire < activate
+    assert "effective_to=p_at" in block
+    assert "P90_REAL_PREARM_UNEXPECTED_ACTIVE_ACCOUNT_OWNER" in block
+    assert "P90_REAL_PREARM_RETIRED_R1_BINDING_NOT_EXACT" in block
+
+    unprearm_block = source[unprearm:]
+    assert "binding-r1-unified-2c51489dae0a38fc" not in unprearm_block
