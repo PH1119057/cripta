@@ -112,7 +112,8 @@ class P90RealExitExecutionPort:
             or decision.strategy_position_id != position.strategy_position_id
             or observation.strategy_position_id != position.strategy_position_id
             or observation.event_kind not in (
-                "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M"
+                "P90L90_REAL_NATIVE_TRADE", "P90L90_REAL_CLOSED_5M",
+                "P90L90_REAL_POSTFILL",
             )
             or not isinstance(details, Mapping)
             or details.get("trading_account_id") != approved
@@ -122,7 +123,15 @@ class P90RealExitExecutionPort:
                != position.exchange_position_key
             or details.get("actual_fill_confirmed") is not True
             or details.get("protection_exchange_confirmed") is not True
-            or details.get("durable_cursor_verified") is not True
+            or (details.get("fill_to_postfill_source_verified") is not True
+                if observation.event_kind == "P90L90_REAL_POSTFILL"
+                else details.get("durable_cursor_verified") is not True)
+            or (observation.event_kind == "P90L90_REAL_POSTFILL" and (
+                not isinstance(details.get("signed_fill_execution_ids"), list)
+                or not details["signed_fill_execution_ids"]
+                or not any(ref.startswith("bybit:execution:list:exact-order:")
+                           for ref in observation.source_refs)
+            ))
             or details.get("pending_exit_mutation") is not False
             or not any(
                 ref.startswith("bybit:signed-position-list:exact-account:")
