@@ -67,3 +67,28 @@ def test_first_fill_source_helpers_contain_no_direct_bybit_mutation():
     assert "P90RealPostfillExitPort(" in helper
     assert "P90RealExitExecutionPort(" in helper
     assert "read_real_postfill_source_window(" in helper
+
+
+
+def test_generic_reconcile_does_not_erase_signed_first_fill_order_execution_ids():
+    """REAL postfill reads original signed IDs after generic account readback."""
+    src = Path("operations/connectivity/private_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    module = ast.parse(src)
+    reconcile_fn = next(
+        node for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name == "reconcile"
+    )
+    body = ast.get_source_segment(src, reconcile_fn)
+    assert body is not None
+    assert "initial_protection_evidence=" in body
+    preserve = body.index("WHEN strategy_version=%s")
+    signed = body.index("='SIGNED_BYBIT_MARKET_FILL_AND_POSITION'", preserve)
+    keep = body.index("THEN initial_protection_evidence", signed)
+    fallback = body.index("THEN %s::jsonb", keep)
+    assert preserve < signed < keep < fallback
+    assert '"2.0-p90l90-real-main-sub-20261028"' in body
+    # A signed opening order is NOT the same as generic position-state
+    # reconciliation; general account reads cannot rewrite its exact IDs.
+    assert '"source": "BYBIT_POSITION_RECONCILIATION"' in body
