@@ -14,12 +14,16 @@ evidence. The ordinary universal_exit_consumer intentionally excludes P90.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
     ALLOWED_SYMBOLS,
+)
+from bybit_workbench.universal_entry.p90l90_real_account_routes import (
+    read_p90_real_account_routes,
 )
 
 from .p90l90_real_closed_exit_port import (
@@ -139,4 +143,37 @@ def assemble_p90_real_exit_runtime(
         execution=execution,
         on_native_trade=native,
         on_closed_5m=closed,
+    )
+
+
+def assemble_p90_real_exit_runtime_from_db_bundles(
+    connection: Any,
+    *,
+    bundles: Sequence[object],
+    observed_at: datetime,
+    source_commit: str,
+    independently_verified_native_coverage: SourceCoverageProvider,
+    independently_verified_closed_history: ClosedHistoryProvider,
+    independently_verified_closed_continuity: ClosedCausalSourceProof,
+    independently_verified_mutation_safety: SafetyPort,
+) -> P90RealExitRuntimePorts:
+    """Read actual two-account roster, then construct typed Exit owners.
+
+    No caller-supplied TradingAccount IDs, connector IDs or credentials.
+    This performs *only* a bounded read of current PG binding/connector rows
+    before the pure port composition; it does not verify an Exchange UID,
+    grant LIVE authority or allow starting an Observer real epoch.
+    """
+    routes = read_p90_real_account_routes(
+        connection, bundles=bundles, at=observed_at,
+    )
+    return assemble_p90_real_exit_runtime(
+        connection,
+        source_commit=source_commit,
+        account_by_strategy=routes.account_by_strategy,
+        connector_by_strategy=routes.connector_by_strategy,
+        independently_verified_native_coverage=independently_verified_native_coverage,
+        independently_verified_closed_history=independently_verified_closed_history,
+        independently_verified_closed_continuity=independently_verified_closed_continuity,
+        independently_verified_mutation_safety=independently_verified_mutation_safety,
     )
