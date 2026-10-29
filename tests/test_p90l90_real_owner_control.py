@@ -5,6 +5,9 @@ SQL = ROOT / "operations/sql/20261029_p90l90_real_account_arm_control.sql"
 DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
+SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
+PREARM_SCRIPT = ROOT / "operations/implementation/control_p90l90_real_v3_prearm.py"
+PREARM_EVIDENCE = ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
 
 
 def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
@@ -37,10 +40,12 @@ def test_p90_owner_control_orders_account_arm_before_permissions_before_gate() -
 def test_p90_dashboard_blocks_generic_partial_controls() -> None:
     source = DASH.read_text()
     assert 'P90_REAL_V3_PREARM_PATH = "/api/p90l90/real-v3/prearm"' in source
+    assert 'P90_REAL_V3_PREARM_EVIDENCE_PATH = "/api/p90l90/real-v3/prearm-evidence"' in source
     assert 'P90_REAL_V3_ARM_PATH = "/api/p90l90/real-v3/arm"' in source
     assert "P90_REAL_V3_USE_DEDICATED_PREARM_CONTROL" in source
     assert "P90_REAL_V3_USE_DEDICATED_OWNER_ARM_CONTROL" in source
     assert "_u6_p90_real_v3_prearm" in source
+    assert "_u6_p90_real_v3_prearm_evidence" in source
     assert "_u6_p90_real_v3_arm" in source
 
 
@@ -55,3 +60,48 @@ def test_p90_observer_has_three_state_prearm_real_failclosed_switch() -> None:
     assert prearm < real < partial
     assert "p90_real_source_only = True" in source[prearm:real]
     assert "p90_real_live = True" in source[real:partial]
+
+
+def test_p90_sub_private_runtime_publishes_fresh_position_mode_evidence() -> None:
+    source = SUB_PRIVATE.read_text()
+    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
+    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
+
+
+def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
+    source = DASH.read_text()
+    evidence_handler = source.index("def _u6_p90_real_v3_prearm_evidence(")
+    arm_handler = source.index("def _u6_p90_real_v3_arm(", evidence_handler)
+    catalog_handler = source.index("def _u6_financial_account_catalog", arm_handler)
+    evidence_block = source[evidence_handler:arm_handler]
+    arm_block = source[arm_handler:catalog_handler]
+    assert "prepare_p90l90_real_v3_prearm_evidence(" in evidence_block
+    assert "arm_p90l90_real_v3(" not in evidence_block
+    assert "prepare_p90l90_real_v3_prearm_evidence(" not in arm_block
+    assert "arm_p90l90_real_v3(" in arm_block
+    assert "OWNER ARM requires explicit confirmation" in arm_block
+
+
+def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
+    source = PREARM_SCRIPT.read_text()
+    assert "prearm_p90l90_real_v3" in source
+    assert "prepare_p90l90_real_v3_prearm_evidence" in source
+    forbidden_import = (
+        "from bybit_workbench.p90l90_real_arm_control import (\\n"
+        "    arm_p90l90_real_v3,"
+    )
+    assert forbidden_import not in source
+    assert "\n        arm_p90l90_real_v3(" not in source
+    assert "set_execution_permission" not in source
+    assert "UPDATE control.execution_gates" not in source
+    assert "EXCHANGE_MUTATION: none" in source
+    assert "LIVE_ARM / execution permission / mainnet gate mutation: forbidden here." in source
+
+def test_p90_technical_evidence_producer_has_no_owner_arm_capability() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "INSERT INTO control.live_arm_evidence" in source
+    assert "require_owner_approval=False" in source
+    assert 'put("MAINNET_GATE_EXPLICIT_OWNER_APPROVAL"' not in source
+    assert "arm_p90l90_real_v3(" not in source
+    assert "set_execution_permission" not in source
+    assert "UPDATE control.execution_gates" not in source

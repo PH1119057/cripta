@@ -48,6 +48,9 @@ from bybit_workbench.p90l90_real_arm_control import (
     disarm_p90l90_real_v3,
     prearm_p90l90_real_v3,
 )
+from bybit_workbench.p90l90_real_prearm_evidence import (
+    prepare_p90l90_real_v3_prearm_evidence,
+)
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
 from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_V3_VERSION
@@ -3618,6 +3621,7 @@ R1_MICRO_LIVE_STATUS_PATH = "/api/r1/micro-live/status"
 R1_UNIFIED_PREARM_STATUS_PATH = "/api/r1/unified/prearm-status"
 R1_UNIFIED_MICRO_LIVE_PATH = "/api/r1/unified/micro-live"
 P90_REAL_V3_PREARM_PATH = "/api/p90l90/real-v3/prearm"
+P90_REAL_V3_PREARM_EVIDENCE_PATH = "/api/p90l90/real-v3/prearm-evidence"
 P90_REAL_V3_ARM_PATH = "/api/p90l90/real-v3/arm"
 U6_STRATEGY_POST_PATHS = {
     U6_STRATEGY_CREATE_PATH,
@@ -3628,6 +3632,7 @@ U6_STRATEGY_POST_PATHS = {
     R1_MICRO_LIVE_PATH,
     R1_UNIFIED_MICRO_LIVE_PATH,
     P90_REAL_V3_PREARM_PATH,
+    P90_REAL_V3_PREARM_EVIDENCE_PATH,
     P90_REAL_V3_ARM_PATH,
 }
 
@@ -4467,6 +4472,22 @@ def _u6_p90_real_v3_prearm(
     _u6_json(handler, 200, result)
 
 
+def _u6_p90_real_v3_prearm_evidence(
+    handler: object, request: dict[str, object]
+) -> None:
+    if request.get("confirmed") is not True:
+        raise ValueError("P90 REAL v3 PREARM evidence requires explicit confirmation")
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql"
+    ) as connection:
+        result = prepare_p90l90_real_v3_prearm_evidence(
+            connection,
+            release_commit=LOADED_RELEASE_COMMIT,
+            now=datetime.now(UTC),
+        )
+    _u6_json(handler, 200, result)
+
+
 def _u6_p90_real_v3_arm(
     handler: object, request: dict[str, object]
 ) -> None:
@@ -4656,6 +4677,8 @@ def _u6_handle_post(handler: object, path: str) -> None:
             _u6_r1_unified_micro_live(handler, request)
         elif path == P90_REAL_V3_PREARM_PATH:
             _u6_p90_real_v3_prearm(handler, request)
+        elif path == P90_REAL_V3_PREARM_EVIDENCE_PATH:
+            _u6_p90_real_v3_prearm_evidence(handler, request)
         elif path == P90_REAL_V3_ARM_PATH:
             _u6_p90_real_v3_arm(handler, request)
         else:
