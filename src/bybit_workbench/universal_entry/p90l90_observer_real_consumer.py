@@ -166,6 +166,36 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._verified_closed_watermarks = recovered
         self._recovered = True
 
+    def accept_restart_recovery(
+        self,
+        event: object,
+        *,
+        on_recovered_native: Callable[
+            [MarketFactEnvelope, TradeCursor], None
+        ] | None = None,
+    ) -> tuple[object, ...]:
+        """Replay source-certified outage facts with all trading actions muted."""
+        from .p90l90_causal_transport_join import P90TransportEvent
+
+        if (
+            not self._recovered
+            or self._gap_recovery_poisoned
+            or not isinstance(event, P90TransportEvent)
+            or event.symbol not in self._processors
+        ):
+            raise RuntimeError("P90_REAL_RESTART_RECOVERY_NOT_READY")
+        released = self._processors[event.symbol].accept_recovery(
+            event, on_recovered_native=on_recovered_native,
+        )
+        # Keep the verified watermark cache synchronized with the durable join.
+        join, _entry = self._processors[event.symbol].recover(
+            symbol=event.symbol
+        )
+        self._verified_closed_watermarks[event.symbol] = (
+            join.closed_5m_at, join.closed_15m_at,
+        )
+        return tuple(released)
+
     def catch_up_closed_histories(
         self, targets: Mapping[str, tuple[datetime, datetime]],
     ) -> int:
