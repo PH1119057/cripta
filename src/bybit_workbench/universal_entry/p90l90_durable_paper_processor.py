@@ -45,14 +45,18 @@ class P90L90DurablePaperProcessor:
         on_native_exit: NativeExitHandler,
         on_closed_candle: CandleHandler,
         bar_ledger: Any | None = None,
+        atomic_checkpoint_store: Any | None = None,
         candidate_entry_plan_fingerprint: str | None = None,
         on_proven_candidate: ProvenCandidateHandler | None = None,
     ) -> None:
         if (candidate_entry_plan_fingerprint is None) != (on_proven_candidate is None):
             raise ValueError("P90L90 candidate requires both exact plan and handler")
-        self._atomic = P90L90AtomicPaperCheckpointStore(
-            connection, source_commit=source_commit,
-            writer_release_commit=producer_release_commit,
+        self._atomic = (
+            atomic_checkpoint_store if atomic_checkpoint_store is not None
+            else P90L90AtomicPaperCheckpointStore(
+                connection, source_commit=source_commit,
+                writer_release_commit=producer_release_commit,
+            )
         )
         self._bars = (
             bar_ledger if bar_ledger is not None else P90L90ImmutableBarLedger(
