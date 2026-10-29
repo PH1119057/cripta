@@ -28,6 +28,8 @@ from bybit_workbench.universal_exit.p90l90_real_runtime_ports import (
     assemble_p90_real_exit_runtime_from_db_bundles,
 )
 
+from .p90l90_real_shared_candle_ledger import P90RealSharedCandleLedger
+
 from .contracts import FrozenPolicy
 from .p90l90_observer_real_consumer import (
     AccountAdmissionProvider,
@@ -58,6 +60,7 @@ def assemble_p90_real_observer_runtime(
     verified_closed_history: ClosedHistoryProvider,
     verified_closed_continuity: ClosedCausalSourceProof,
     verified_account_mutation_safety: SafetyPort,
+    shared_candle_ledger: P90RealSharedCandleLedger | None = None,
     producer_release_commit: str | None = None,
     accepted_source_commits: frozenset[str] | None = None,
 ) -> P90RealObserverRuntime:
@@ -104,6 +107,7 @@ def assemble_p90_real_observer_runtime(
         source_epoch_id=source_epoch_id,
         provenance=provenance,
         admission_provider=admitted_account,
+        shared_candle_ledger=shared_candle_ledger,
         verified_exit_tick_port=ports.on_native_trade,
         verified_closed_candle_port=ports.on_closed_5m,
         producer_release_commit=producer_release_commit,

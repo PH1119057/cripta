@@ -52,6 +52,7 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         verified_exit_tick_port: RealExitTickPort,
         verified_closed_candle_port: RealClosedCandlePort,
         no_order_source_diagnostic: bool = False,
+        shared_candle_ledger: P90RealSharedCandleLedger | None = None,
         producer_release_commit: str | None = None,
         accepted_source_commits: frozenset[str] | None = None,
     ) -> None:
@@ -99,8 +100,18 @@ class P90L90ObserverRealConsumer(P90L90ObserverPaperConsumer):
         self._store = StrategyEntryStore(connection)
         # The P90 REAL source epoch is independent: historical PAPER seed
         # and checkpoints remain immutable and are never a REAL write target.
-        self._archive = P90RealSharedCandleLedger(
-            connection, epoch_id=source_epoch_id, source_commit=source_commit,
+        if shared_candle_ledger is not None and (
+            not isinstance(shared_candle_ledger, P90RealSharedCandleLedger)
+            or shared_candle_ledger._epoch_id != source_epoch_id
+            or shared_candle_ledger._source_commit != source_commit
+            or shared_candle_ledger._db is not connection
+        ):
+            raise RuntimeError("P90_REAL_SHARED_CANDLE_OWNER_OR_EPOCH_MISMATCH")
+        self._archive = (
+            shared_candle_ledger if shared_candle_ledger is not None else
+            P90RealSharedCandleLedger(
+                connection, epoch_id=source_epoch_id, source_commit=source_commit,
+            )
         )
         self._processors: dict[str, P90L90DurablePaperProcessor] = {}
         for symbol, bundle in self._by_symbol.items():

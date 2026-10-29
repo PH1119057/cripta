@@ -2979,13 +2979,14 @@ def _run_observer_epoch(
                     at=datetime.now(UTC),
                 )
                 source_snapshot = trade_mirror.snapshot()
+                shared_p90_real_ledger = P90RealSharedCandleLedger(
+                    connection, epoch_id=source_epoch_id,
+                    source_commit=LOADED_COMMIT,
+                )
                 source_ports = P90RealLiveSourcePorts(
                     connection,
                     mirror=trade_mirror,
-                    ledger=P90RealSharedCandleLedger(
-                        connection, epoch_id=source_epoch_id,
-                        source_commit=LOADED_COMMIT,
-                    ),
+                    ledger=shared_p90_real_ledger,
                     source_epoch_id=source_epoch_id,
                     source_commit=LOADED_COMMIT,
                     mirror_serial=source_snapshot["epoch"],
@@ -3075,6 +3076,7 @@ def _run_observer_epoch(
                     verified_closed_history=source_ports.closed_history,
                     verified_closed_continuity=source_ports.closed_continuity,
                     verified_account_mutation_safety=safety,
+                    shared_candle_ledger=shared_p90_real_ledger,
                 )
                 p90_consumer = runtime.consumer
             p90_consumer.recover_all()
