@@ -120,7 +120,15 @@ def project_p90l90_real_exit(
         or real.get("pending_exit_mutation") is not False
     ):
         raise P90RealExitUnverified("P90_REAL_EXIT_ACCOUNT_OR_EXCHANGE_UNPROVEN")
-    last = _positive(real.get("native_trade_price"), "NATIVE_PRICE")
+    zero_native = (
+        postfill
+        and real.get("postfill_no_native_trade_rest_verified") is True
+    )
+    last = (
+        _positive(real.get("postfill_signed_mark_price"), "SIGNED_MARK")
+        if zero_native
+        else _positive(real.get("native_trade_price"), "NATIVE_PRICE")
+    )
     best = _positive(real.get("durable_best_favorable_price"), "MFE_PRICE")
     live_stop = _positive(real.get("exchange_stop_price"), "EXCHANGE_STOP")
     live_tp = _positive(real.get("exchange_tp_price"), "EXCHANGE_TP")
