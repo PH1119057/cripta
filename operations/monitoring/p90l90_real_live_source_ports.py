@@ -194,6 +194,14 @@ class P90RealLiveSourcePorts:
                 "P90_REAL_LIVE_SOURCE_CURRENT_EXACT_TRADE_MISSING"
             )
         current_index = matches[0]
+        # The native MFE ledger must receive each original market trade in
+        # exact received order. Merely finding the requested execId somewhere
+        # later in the mirror would skip adverse/favorable ticks and falsify
+        # exit provenance.
+        if prior is None and current_index != 0:
+            raise P90RealLiveSourceUnverified(
+                "P90_REAL_LIVE_SOURCE_FIRST_POSTFILL_TRADE_SKIPPED"
+            )
         if prior is not None:
             anchors = [
                 i for i, trade in enumerate(trades)
@@ -203,6 +211,10 @@ class P90RealLiveSourcePorts:
             if len(anchors) != 1 or anchors[0] > current_index:
                 raise P90RealLiveSourceUnverified(
                     "P90_REAL_LIVE_SOURCE_PREVIOUS_ANCHOR_EVICTED_OR_REORDERED"
+                )
+            if current_index not in {anchors[0], anchors[0] + 1}:
+                raise P90RealLiveSourceUnverified(
+                    "P90_REAL_LIVE_SOURCE_INTERMEDIATE_NATIVE_TRADES_SKIPPED"
                 )
             if (
                 prior.cursor_seq > cursor.seq
