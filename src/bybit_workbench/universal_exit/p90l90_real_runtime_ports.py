@@ -19,12 +19,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
-    ALLOWED_SYMBOLS,
-)
 from bybit_workbench.universal_entry.p90l90_real_account_routes import (
     read_p90_real_account_routes,
 )
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import ALLOWED_SYMBOLS
 
 from .p90l90_real_closed_exit_port import (
     ClosedCausalSourceProof,
