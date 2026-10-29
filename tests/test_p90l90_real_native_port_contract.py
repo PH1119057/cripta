@@ -142,6 +142,10 @@ def test_real_gap_cannot_borrow_paper_ohlc_only_replay_even_without_exposure() -
 
     consumer = object.__new__(P90L90ObserverRealConsumer)
     consumer._connection = _EmptyDB()
+    consumer._recovered = True
+    consumer._gap_recovery_poisoned = False
+    consumer._processors = {"LTCUSDT": object()}
+    consumer._verified_closed_watermarks = {"LTCUSDT": (AT, AT)}
     with pytest.raises(RuntimeError, match="REQUIRES_EXACT_SOURCE_EPOCH"):
         consumer.catch_up_closed_histories({})
 
