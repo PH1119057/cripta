@@ -7,16 +7,18 @@ import pytest
 
 from operations.monitoring import p90l90_real_source_bootstrap as source
 
+
 class FakeMirror:
     def __init__(self):
         self.generation = 1
         self.state = "ACTIVE"
+        self.ready_at = datetime.now(UTC) - timedelta(seconds=2)
 
     def snapshot(self):
         return {
             "state": self.state,
             "epoch": self.generation,
-            "epoch_started_at": (datetime.now(UTC) - timedelta(seconds=2)).isoformat(),
+            "epoch_started_at": self.ready_at.isoformat(),
             "gaps": 0,
         }
 
