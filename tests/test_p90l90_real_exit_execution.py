@@ -10,14 +10,14 @@ import pytest
 from test_p90l90_real_observation import _observation, _scope
 
 from bybit_workbench.exchange_position_identity import exchange_position_key
-from bybit_workbench.universal_entry.contracts import FrozenPolicy
+from bybit_workbench.universal_entry.contracts import FrozenPolicy, MarketFactEnvelope
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from bybit_workbench.universal_exit import p90l90_real_exit_execution as mod
-from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
+from bybit_workbench.universal_exit.contracts import ExitEvaluation, ExitEvaluationStatus
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
-from bybit_workbench.universal_exit.execution_bridge import (
-    ExitExecutionBridgeBlocked,
-)
+from bybit_workbench.universal_exit.execution_bridge import ExitExecutionBridgeBlocked
+from bybit_workbench.universal_exit.p90l90_real_exit_port import P90RealExitNativePort
+from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
 
 ACCOUNT_MAIN = "ta-" + "1" * 32
 ACCOUNT_SUB = "ta-" + "2" * 32
@@ -217,7 +217,6 @@ def test_missing_independent_execution_safety_is_constructor_hard_stop() -> None
 
 def test_unmaterializable_non_decision_is_not_a_command(monkeypatch) -> None:
     sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
-    from bybit_workbench.universal_exit.contracts import ExitEvaluation
     quiet = ExitEvaluation(
         evaluation_id="quiet-test", observation=evaluation.observation,
         status=ExitEvaluationStatus.NO_MATCH, reason="NO_MATCH",
@@ -228,14 +227,6 @@ def test_unmaterializable_non_decision_is_not_a_command(monkeypatch) -> None:
 
 
 def test_real_native_trade_requires_execution_sink_before_decision_persistence() -> None:
-    from bybit_workbench.universal_entry.contracts import (
-        FrozenPolicy, MarketFactEnvelope,
-    )
-    from bybit_workbench.universal_exit.p90l90_real_exit_port import (
-        P90RealExitNativePort,
-    )
-    from bybit_workbench.universal_exit.p90l90_real_mfe import P90RealMfeUnverified
-
     position, plan, checkpoint, cursor, private, price = _scope()
     trade = MarketFactEnvelope(
         fact_id="native-test-verified-101",
