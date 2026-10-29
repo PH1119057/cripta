@@ -39,8 +39,8 @@ class P90RealMappedExitConnection:
         # mypy/CLI/pure tests run without the production-only psycopg extra.
         # Production Exit has an actual installed account-local PG driver.
         try:
-            row_factory = getattr(import_module("psycopg.rows"), "dict_row")
-        except (ModuleNotFoundError, AttributeError):
+            row_factory = vars(import_module("psycopg.rows"))["dict_row"]
+        except (ModuleNotFoundError, KeyError):
             raise RuntimeError(
                 "P90_REAL_EXIT_DICT_ROW_DRIVER_UNAVAILABLE"
             ) from None
