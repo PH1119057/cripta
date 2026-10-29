@@ -51,7 +51,7 @@ def _owner_time(*, operator: str, request_id: str, now: datetime) -> datetime:
     return now.astimezone(UTC)
 
 
-def _contexts_and_routes(
+def p90l90_real_v3_contexts_and_routes(
     connection: Any,
     *,
     release_commit: str,
@@ -234,7 +234,7 @@ def arm_p90l90_real_v3(
         if gate is None or bool(gate[0]):
             raise ValueError("P90_REAL_MAINNET_GATE_NOT_CLOSED")
 
-        contexts, routes = _contexts_and_routes(
+        contexts, routes = p90l90_real_v3_contexts_and_routes(
             connection, release_commit=release_commit, now=current,
         )
         if connection.execute(
