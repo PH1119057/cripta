@@ -2788,6 +2788,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # If state is pending/uncertain, keep the acknowledged order for
             # reconciliation; NEVER retry /order/create or trading-stop here.
             live_protection_confirmed = False
+            verified_real_position: dict[str, object] | None = None
             for probe in range(3):
                 try:
                     proven_payload, _ = api_get(
@@ -2822,6 +2823,11 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         observed_stop == actual_stop
                         and (actual_target is None or observed_tp == actual_target)
                     )
+                    if (
+                        live_protection_confirmed
+                        and str(payload.get("strategy_version") or "") == p90v3.VERSION
+                    ):
+                        verified_real_position = matching[0]
                 if live_protection_confirmed:
                     break
                 if probe < 2:
@@ -2830,6 +2836,116 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise ExchangeMutationBarrier(
                     "market Entry initial protection not confirmed on Exchange"
                 )
+            if real_fill_execution_ids:
+                # First confirmed protected REAL fill is durably assigned to
+                # its exact StrategyPosition BEFORE the Entry command is
+                # marked terminal or a later observer/source tick is evaluated.
+                # The opening order already carried both Exchange-side guards.
+                # No Exit decision may run concurrently with the temporary
+                # SL correction above because ownership is not yet exposed.
+                if verified_real_position is None:
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_PROTECTION_UNVERIFIED"
+                    )
+                try:
+                    verified_qty = Decimal(str(verified_real_position["size"]))
+                    verified_avg = Decimal(str(verified_real_position["avgPrice"]))
+                except (KeyError, InvalidOperation, ValueError, TypeError):
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_QUANTITY_INVALID"
+                    ) from None
+                if (
+                    verified_qty != Decimal(str(filled_position.get("size")))
+                    or verified_avg != actual_entry
+                ):
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_EXCHANGE_READBACK_DRIFT"
+                    )
+                try:
+                    real_lineage = load_universal_entry_lineage(
+                        connection,
+                        command_id=command_id,
+                        command_payload=payload,
+                    )
+                    if (
+                        real_lineage is None
+                        or real_lineage.strategy_version != p90v3.VERSION
+                        or real_lineage.trading_account_id != TRADING_ACCOUNT_ID
+                        or real_lineage.strategy_id
+                        not in p90v3.ALLOWED_SYMBOLS
+                        or symbol not in p90v3.ALLOWED_SYMBOLS[
+                            real_lineage.strategy_id
+                        ]
+                    ):
+                        raise RuntimeError("P90_REAL_FIRST_FILL_LINEAGE_INVALID")
+                    first_execution = next(
+                        item for item in actual_executions
+                        if item.get("execId") == real_fill_execution_ids[0]
+                    )
+                    first_fill_ms = int(str(first_execution["execTime"]))
+                    if first_fill_ms <= 0:
+                        raise RuntimeError("P90_REAL_FIRST_FILL_TIME_INVALID")
+                    position_id, trade_id = stable_cycle_ids(
+                        entry_command_id=command_id,
+                        first_execution_id=real_fill_execution_ids[0],
+                        symbol=symbol,
+                        side=side,
+                        position_idx=0,
+                    )
+                    persist_universal_strategy_position(
+                        connection,
+                        lineage=real_lineage,
+                        position_id=position_id,
+                        trade_id=trade_id,
+                        entry_command_id=command_id,
+                        symbol=symbol,
+                        side=side,
+                        actual_avg_fill=actual_entry,
+                        actual_qty=verified_qty,
+                        fill_at=datetime.fromtimestamp(first_fill_ms / 1000, tz=UTC),
+                        exchange_order_ids=(exchange_order_id,),
+                        client_order_ids=(command_id[:36],),
+                        execution_ids=real_fill_execution_ids,
+                        position_idx=0,
+                    )
+                    initial_evidence = {
+                        "source": "SIGNED_BYBIT_MARKET_FILL_AND_POSITION",
+                        "entry_order_id": exchange_order_id,
+                        "entry_execution_ids": list(real_fill_execution_ids),
+                        "position_idx": 0,
+                        "symbol": symbol,
+                        "stopLoss": str(actual_stop),
+                        "takeProfit": str(actual_target),
+                        "actual_avg_fill": str(actual_entry),
+                        "actual_qty": str(verified_qty),
+                        "verified_at": datetime.now(UTC).isoformat(),
+                        "trading_account_id": TRADING_ACCOUNT_ID,
+                    }
+                    updated = connection.execute(
+                        """UPDATE runtime.position_ownership
+                              SET initial_protection_confirmed_at=clock_timestamp(),
+                                  initial_protection_evidence=%s::jsonb
+                            WHERE position_id=%s AND entry_command_id=%s
+                              AND state='OPEN'
+                              AND trading_account_id=%s
+                              AND identity_status='PROVEN'""",
+                        (
+                            json.dumps(initial_evidence, sort_keys=True),
+                            position_id,
+                            command_id,
+                            TRADING_ACCOUNT_ID,
+                        ),
+                    )
+                    if updated.rowcount != 1:
+                        raise RuntimeError("P90_REAL_FIRST_FILL_OWNER_RACE")
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    # Exchange order is already accepted and protected; its
+                    # reservation must be reconciled, never resubmitted.
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_OWNER_PERSISTENCE_UNVERIFIED"
+                    ) from None
             actual_protection_result: dict[str, object] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": None if actual_target is None else str(actual_target),
