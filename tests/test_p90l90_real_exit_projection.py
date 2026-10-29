@@ -251,16 +251,16 @@ def test_real_projection_preserves_v3_and_independent_account_lineage() -> None:
     position, plan = _scope(main=False)
     assert position.strategy_id == SUB_ID
     assert position.strategy_version == VERSION
-    fact = _observation(position, best="101", price="100.9", stop="90", tp="110")
+    fact = _observation(position, best="100.2", price="100.2", stop="90", tp="110")
     result = project_p90l90_real_exit(position, plan, fact)
     assert result is not None and result[0] is ExitActionKind.SET_TRAILING
 
 
 @pytest.mark.parametrize("side,best,last,stop,tp", [
-    ("LONG", "101", "100.9", "90", "110"),
-    ("SHORT", "99", "99.1", "110", "90"),
+    ("LONG", "100.2", "100.2", "90", "110"),
+    ("SHORT", "99.8", "99.8", "110", "90"),
 ])
-def test_shared_universal_exit_engine_creates_real_p90_tighten_decision(
+def test_shared_universal_exit_engine_creates_bybit_native_trailing_arm(
     side: str, best: str, last: str, stop: str, tp: str,
 ) -> None:
     position, plan = _scope(side=side)
