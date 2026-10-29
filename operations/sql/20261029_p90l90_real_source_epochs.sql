@@ -55,6 +55,77 @@ CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_real_causal_checkpoints (
 CREATE INDEX IF NOT EXISTS p90_real_epoch_checkpoints_lookup
   ON strategy_entry.p90l90_real_causal_checkpoints(symbol,epoch_id);
 
+-- Append-only evidence that an existing open position survived an Observer
+-- process restart without replacing its original source epoch.  The bridge is
+-- written only after exact bounded publicTrade replay, causal candle replay,
+-- MFE reconstruction and fresh signed MAIN/SUB protection readback all pass.
+CREATE TABLE IF NOT EXISTS strategy_entry.p90l90_real_restart_bridges (
+  restart_id text PRIMARY KEY
+    CHECK (restart_id ~ '^p90-real-restart-[0-9a-f]{40}REVOKE ALL ON strategy_entry.p90l90_real_causal_checkpoints FROM PUBLIC;
+GRANT SELECT,INSERT,UPDATE ON
+  strategy_entry.p90l90_real_source_epochs,
+  strategy_entry.p90l90_real_causal_checkpoints TO cripta;
+GRANT SELECT,INSERT ON
+  strategy_entry.p90l90_real_restart_bridges TO cripta;
+REVOKE UPDATE,DELETE,TRUNCATE ON
+  strategy_entry.p90l90_real_restart_bridges FROM cripta;
+REVOKE DELETE,TRUNCATE ON
+  strategy_entry.p90l90_real_source_epochs,
+  strategy_entry.p90l90_real_causal_checkpoints FROM cripta;
+DO $verify$
+BEGIN
+  IF has_table_privilege('cripta','strategy_entry.p90l90_real_source_epochs','DELETE')
+    OR has_table_privilege('cripta','strategy_entry.p90l90_real_causal_checkpoints','DELETE')
+    OR NOT has_table_privilege('cripta','strategy_entry.p90l90_real_causal_checkpoints','SELECT,INSERT,UPDATE')
+    OR NOT has_table_privilege('cripta','strategy_entry.p90l90_real_restart_bridges','SELECT,INSERT')
+    OR has_table_privilege('cripta','strategy_entry.p90l90_real_restart_bridges','UPDATE')
+    OR has_table_privilege('cripta','strategy_entry.p90l90_real_restart_bridges','DELETE')
+  THEN
+    RAISE EXCEPTION 'P90_REAL_EPOCH_LEAST_PRIVILEGE_INVARIANT';
+  END IF;
+END
+$verify$;
+COMMIT;
+),
+  epoch_id text NOT NULL
+    REFERENCES strategy_entry.p90l90_real_source_epochs(epoch_id),
+  source_commit text NOT NULL
+    CHECK (source_commit ~ '^[0-9a-f]{40}REVOKE ALL ON strategy_entry.p90l90_real_causal_checkpoints FROM PUBLIC;
+GRANT SELECT,INSERT,UPDATE ON
+  strategy_entry.p90l90_real_source_epochs,
+  strategy_entry.p90l90_real_causal_checkpoints TO cripta;
+REVOKE DELETE,TRUNCATE ON
+  strategy_entry.p90l90_real_source_epochs,
+  strategy_entry.p90l90_real_causal_checkpoints FROM cripta;
+DO $verify$
+BEGIN
+  IF has_table_privilege('cripta','strategy_entry.p90l90_real_source_epochs','DELETE')
+    OR has_table_privilege('cripta','strategy_entry.p90l90_real_causal_checkpoints','DELETE')
+    OR NOT has_table_privilege('cripta','strategy_entry.p90l90_real_causal_checkpoints','SELECT,INSERT,UPDATE')
+  THEN
+    RAISE EXCEPTION 'P90_REAL_EPOCH_LEAST_PRIVILEGE_INVARIANT';
+  END IF;
+END
+$verify$;
+COMMIT;
+),
+  mirror_serial bigint NOT NULL CHECK (mirror_serial > 0),
+  mirror_started_at timestamptz NOT NULL,
+  source_ws_ready_at timestamptz NOT NULL,
+  completed_at timestamptz NOT NULL,
+  symbol_cursors jsonb NOT NULL CHECK (jsonb_typeof(symbol_cursors)='object'),
+  position_cursors jsonb NOT NULL CHECK (jsonb_typeof(position_cursors)='object'),
+  account_generations jsonb NOT NULL
+    CHECK (jsonb_typeof(account_generations)='object'),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (source_ws_ready_at >= mirror_started_at),
+  CHECK (completed_at >= source_ws_ready_at)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS p90_real_restart_bridge_source_session
+  ON strategy_entry.p90l90_real_restart_bridges(
+    epoch_id,source_commit,mirror_started_at
+  );
+
 REVOKE ALL ON strategy_entry.p90l90_real_source_epochs FROM PUBLIC;
 REVOKE ALL ON strategy_entry.p90l90_real_causal_checkpoints FROM PUBLIC;
 GRANT SELECT,INSERT,UPDATE ON
