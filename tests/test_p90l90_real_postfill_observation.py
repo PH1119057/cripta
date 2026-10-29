@@ -76,7 +76,7 @@ def test_actual_postfill_handoff_arms_exchange_trail_without_next_native_tick(
 @pytest.mark.parametrize("failure", (
     "gap", "wrong-symbol", "wrong-position", "wrong-account",
     "signed-private-not-exact", "missing-fill-exec", "future-time",
-    "stale-source", "bad-signed-trailing",
+    "stale-source", "bad-signed-trailing", "missed-favorable-high",
 ))
 def test_postfill_builder_denies_unproven_real_execution_or_native_window(
     failure: str,
@@ -106,6 +106,8 @@ def test_postfill_builder_denies_unproven_real_execution_or_native_window(
         private = replace(
             private, position={**private.position, "trailingStop": "NaN"},
         )
+    elif failure == "missed-favorable-high":
+        source = replace(source, last_native_price=D("101"))
     with pytest.raises(P90RealObservationUnverified):
         build_real_postfill_exit_observation(
             position=position, private=private, coverage=source,
