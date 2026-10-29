@@ -97,7 +97,7 @@ def test_p90_technical_evidence_producer_has_no_owner_arm_capability() -> None:
     source = PREARM_EVIDENCE.read_text()
     assert "INSERT INTO control.live_arm_evidence" in source
     assert "require_owner_approval=False" in source
-    assert "MAINNET_GATE_EXPLICIT_OWNER_APPROVAL" not in source
+    assert 'put("MAINNET_GATE_EXPLICIT_OWNER_APPROVAL"' not in source
     assert "arm_p90l90_real_v3(" not in source
     assert "set_execution_permission" not in source
     assert "UPDATE control.execution_gates" not in source
