@@ -41,7 +41,12 @@ def test_real_version_is_new_immutable_authoring_only(
     assert original["strategy_version"] != VERSION
     assert fresh["symbols"] == list(coins)
     assert fresh["entry_policy"]["watch_policy"] == original["entry_policy"]["watch_policy"]
-    assert fresh["exit_policy"] == original["exit_policy"]
+    # The REAL-only Exit dispatch TTL is a new owner-approved v3 rule;
+    # PAPER-v2's immutable Exit policy must remain unmodified.
+    real_exit = dict(fresh["exit_policy"])
+    assert real_exit.pop("execution_policy") == {"max_request_age_seconds": 5}
+    assert real_exit == original["exit_policy"]
+    assert "execution_policy" not in original["exit_policy"]
     assert fresh["lifecycle_policy"] == original["lifecycle_policy"]
     assert fresh["entry_policy"]["execution_policy"]["order_type"] == "MARKET"
     assert fresh["entry_policy"]["execution_policy"]["max_request_age_seconds"] == 5
