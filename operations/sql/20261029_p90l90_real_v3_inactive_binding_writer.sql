@@ -36,7 +36,20 @@ BEGIN
   IF to_regprocedure(
      'strategy_entry.register_p90l90_real_v3_inactive_binding(text,text,text)'
   ) IS NOT NULL THEN
-    RAISE EXCEPTION 'P90_REAL_V3_WRITER_ALREADY_EXISTS_RECONCILE_MANUALLY';
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_proc f JOIN pg_namespace n ON n.oid=f.pronamespace
+       WHERE n.nspname='strategy_entry'
+         AND f.proname='register_p90l90_real_v3_inactive_binding'
+         AND pg_get_userbyid(f.proowner)='cripta_p90l90_real_v3_binding'
+         AND f.prosecdef IS TRUE
+         AND f.prorettype='text'::regtype::oid
+         AND md5(f.prosrc)='efa9a3e3604b22133184f92b02bcb88f'
+         AND has_function_privilege(
+           'cripta',f.oid,'EXECUTE'
+         )
+    ) THEN
+      RAISE EXCEPTION 'P90_REAL_V3_EXISTING_WRITER_DRIFT';
+    END IF;
   END IF;
 END
 $create_role$;
@@ -61,7 +74,7 @@ GRANT INSERT ON strategy_entry.strategy_execution_bindings
 -- Ownership transfer only within this atomic migration.
 GRANT CREATE ON SCHEMA strategy_entry TO cripta_p90l90_real_v3_binding;
 
-CREATE FUNCTION strategy_entry.register_p90l90_real_v3_inactive_binding(
+CREATE OR REPLACE FUNCTION strategy_entry.register_p90l90_real_v3_inactive_binding(
     p_binding_id text, p_activation_id text, p_account_id text
 )
 RETURNS text
