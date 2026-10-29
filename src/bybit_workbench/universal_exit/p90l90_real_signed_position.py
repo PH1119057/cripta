@@ -201,7 +201,12 @@ class P90RealSignedPositionReader:
                   AND state='COMPLETE'""",
             (generation.generation_id, self._account, self._connector),
         ).fetchone()
-        if connector != (self._connector,):
+        matched_connector = (
+            connector.get("account_connector_id") == self._connector
+            if isinstance(connector, Mapping)
+            else connector == (self._connector,)
+        )
+        if not matched_connector:
             raise P90RealSignedPositionUnverified(
                 "P90_REAL_SIGNED_GENERATION_CONNECTOR_MISMATCH"
             )
