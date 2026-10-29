@@ -421,7 +421,7 @@ def run_p90l90_real_v3_independent_decision_parity() -> dict[str, object]:
                     )
                 _require(
                     real_command.trading_account_id == account
-                    and real_command.strategy_execution_binding_id == binding.strategy_execution_binding_id,
+                    and real_command.strategy_execution_binding_id\n                    == binding.strategy_execution_binding_id,
                     f"{symbol}/{direction.value} account lineage mismatch",
                 )
 
