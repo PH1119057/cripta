@@ -105,6 +105,16 @@ def real_v3_authoring_payload(
         "trigger_by": "LastPrice",
         "tpsl_mode": "Full",
     })
+    # OWNER DECISION 2026-10-29 (TC §7.6.4): the age of a NEW ExitDecision
+    # dispatch command is bounded, not the lifetime of Exchange-side TP/SL.
+    # The approved 5s applies to both independent immutable REAL v3 plans.
+    # Preserve the historical no-order PAPER-v2 ExitPlan unchanged.
+    exit_policy = raw["exit_policy"]
+    if not isinstance(exit_policy, dict):
+        raise ValueError("P90_REAL_EXIT_POLICY_INVALID")
+    if "execution_policy" in exit_policy:
+        raise ValueError("P90_REAL_EXIT_REQUEST_AGE_AMBIGUOUS")
+    exit_policy["execution_policy"] = {"max_request_age_seconds": 5}
     # Entire exact P90 RAW Entry, dynamic trailing/TP and SECOND48 inherited
     # from the owner-approved P90 v2 (not from any retired policy).
     return raw
