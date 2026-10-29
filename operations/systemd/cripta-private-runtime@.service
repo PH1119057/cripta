@@ -21,6 +21,8 @@ Environment=CRIPTA_BOT_INSTANCE_ID=private-sub-%i
 Environment=CRIPTA_ENTRY_COMMAND_SOURCE=UNIVERSAL_ENTRY
 Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-sub-%i
 Environment=CRIPTA_PRIVATE_STATUS_DIR=/var/lib/cripta/private_runtime/sub-%i
+Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30
+Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90
 Environment=PYTHONPATH=/srv/cripta/runtime/current/src:/srv/cripta/runtime/current/operations/connectivity:/srv/cripta/runtime/current/research/server/connectivity
 EnvironmentFile=/etc/cripta/private-runtime-%i.env
 ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/private_runtime.py --sub-account=%i
