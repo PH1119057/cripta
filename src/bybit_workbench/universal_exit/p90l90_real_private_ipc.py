@@ -58,7 +58,7 @@ def peer_same_runtime_uid(connection: socket.socket) -> bool:
         pid, uid, _gid = struct.unpack("3i", raw)
     except (OSError, ValueError, struct.error):
         return False
-    return pid > 1 and uid == os.geteuid()
+    return int(pid) > 1 and int(uid) == os.geteuid()
 
 
 def _timestamp(value: object) -> datetime:
