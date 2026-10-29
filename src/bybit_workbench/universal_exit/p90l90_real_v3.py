@@ -161,6 +161,13 @@ def project_p90l90_real_exit(
             "P90L90_REAL_BYBIT_NATIVE_TRAIL035_ARM",
         )
     if observation.event_kind == "P90L90_REAL_CLOSED_5M" and favorable >= Decimal("0.5"):
+        # A previously missed Exchange-native trailing activation cannot be
+        # repaired by a 5m TP update. Fail closed instead of silently
+        # continuing an altered Strategy with TP but no autonomous TRAIL035.
+        if live_trailing != expected_distance:
+            raise P90RealExitUnverified(
+                "P90_REAL_CLOSED_5M_BYBIT_TRAILING_NOT_ARMED"
+            )
         target = _positive(real.get("opposite_raw_l53_target"), "RAW_TARGET")
         fresh = real.get("closed_geometry_proven")
         if fresh is not True:
