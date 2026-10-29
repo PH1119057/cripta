@@ -137,6 +137,86 @@ BEGIN
     RAISE EXCEPTION 'P90_REAL_PREARM_EXACT_PAIR_NOT_INACTIVE';
   END IF;
 
+  -- R1 was canonically RETIRED on 2026-10-26.  Its historical unified
+  -- MAIN binding can still be ACTIVE even though the exact StrategyActivation
+  -- is disabled.  DEDICATED_STRATEGY correctly forbids P90 MAIN from becoming
+  -- ACTIVE until that stale execution-placement ownership is retired.
+  --
+  -- This is an explicit one-way replacement:
+  -- BEFORE: retired disabled r1_five_symbols -> MAIN historical binding ACTIVE
+  -- AFTER:  retired R1 binding INACTIVE/effective_to set, then exact P90 MAIN
+  --         and SUB bindings become ACTIVE for SOURCE_ONLY PREARM.
+  -- It never re-enables R1, never restores R1 on unprearm, never opens mainnet
+  -- and is allowed only in the fully disarmed/flat state checked above.
+  PERFORM 1
+    FROM strategy_entry.strategy_activations a
+    JOIN strategy_entry.strategy_execution_bindings b
+      ON b.strategy_activation_id=a.activation_id
+   WHERE a.activation_id='activation-be482d99252b4055b020a84fef8e2054'
+     AND a.strategy_id='r1_five_symbols'
+     AND a.strategy_version='1.0-five-symbols-20261021'
+     AND a.enabled=false
+     AND a.disabled_at IS NOT NULL
+     AND b.strategy_execution_binding_id='binding-r1-unified-2c51489dae0a38fc'
+     AND b.trading_account_id='ta-2122c81ecff14f3b85b102db605212f7'
+     AND b.execution_leg='PRIMARY'
+     AND b.execution_role='PRIMARY'
+     AND b.allocation_mode='DEDICATED_STRATEGY'
+     AND (
+       (b.binding_state='ACTIVE' AND b.effective_to IS NULL)
+       OR
+       (b.binding_state='INACTIVE' AND b.effective_to IS NOT NULL)
+     )
+   FOR UPDATE OF a,b;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'P90_REAL_PREARM_RETIRED_R1_BINDING_NOT_EXACT';
+  END IF;
+
+  IF EXISTS (
+      SELECT 1
+        FROM strategy_entry.strategy_execution_bindings b
+       WHERE b.binding_state='ACTIVE'
+         AND b.allocation_mode='DEDICATED_STRATEGY'
+         AND b.trading_account_id IN (
+           'ta-2122c81ecff14f3b85b102db605212f7',
+           'ta-853ac5fcd58185697396d33cd57459fa'
+         )
+         AND b.strategy_execution_binding_id
+             <> 'binding-r1-unified-2c51489dae0a38fc'
+     )
+  THEN
+    RAISE EXCEPTION 'P90_REAL_PREARM_UNEXPECTED_ACTIVE_ACCOUNT_OWNER';
+  END IF;
+
+  UPDATE strategy_entry.strategy_execution_bindings
+     SET binding_state='INACTIVE',
+         effective_to=p_at,
+         operator=p_operator,
+         source=p_source,
+         reason='R1 RETIRED; replaced by P90 REAL v3 SOURCE_ONLY PREARM',
+         updated_at=clock_timestamp()
+   WHERE strategy_execution_binding_id='binding-r1-unified-2c51489dae0a38fc'
+     AND strategy_activation_id='activation-be482d99252b4055b020a84fef8e2054'
+     AND trading_account_id='ta-2122c81ecff14f3b85b102db605212f7'
+     AND binding_state='ACTIVE'
+     AND effective_to IS NULL;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count NOT IN (0,1) THEN
+    RAISE EXCEPTION 'P90_REAL_PREARM_RETIRED_R1_BINDING_COUNT:%',v_count;
+  END IF;
+  IF v_count=0 AND NOT EXISTS (
+      SELECT 1
+        FROM strategy_entry.strategy_execution_bindings
+       WHERE strategy_execution_binding_id='binding-r1-unified-2c51489dae0a38fc'
+         AND strategy_activation_id='activation-be482d99252b4055b020a84fef8e2054'
+         AND trading_account_id='ta-2122c81ecff14f3b85b102db605212f7'
+         AND binding_state='INACTIVE'
+         AND effective_to IS NOT NULL
+     )
+  THEN
+    RAISE EXCEPTION 'P90_REAL_PREARM_RETIRED_R1_BINDING_NOT_CLOSED';
+  END IF;
+
   UPDATE strategy_entry.strategy_activations
      SET enabled=true,enabled_at=p_at,disabled_at=NULL,
          operator=p_operator,source=p_source,
