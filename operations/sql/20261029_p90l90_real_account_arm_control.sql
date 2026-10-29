@@ -169,6 +169,79 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION strategy_entry.unprearm_p90l90_real_v3(
+    p_at timestamptz,
+    p_operator text,
+    p_source text
+) RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_count integer;
+BEGIN
+  IF session_user <> 'cripta'
+     OR current_setting('transaction_isolation') <> 'serializable'
+     OR p_at IS NULL
+     OR nullif(btrim(p_operator),'') IS NULL
+     OR nullif(btrim(p_source),'') IS NULL
+  THEN
+    RAISE EXCEPTION 'P90_REAL_UNPREARM_CALLER_OR_ARGUMENT_INVALID';
+  END IF;
+  IF EXISTS (
+      SELECT 1 FROM control.execution_gates
+       WHERE mode IN ('mainnet','testnet') AND enabled<>0
+     )
+     OR EXISTS (
+      SELECT 1 FROM strategy_entry.execution_permissions WHERE enabled=true
+     )
+     OR EXISTS (
+      SELECT 1 FROM control.live_arm_sessions WHERE state='ACTIVE'
+     )
+     OR EXISTS (
+      SELECT 1 FROM control.account_live_arm_sessions WHERE state='ACTIVE'
+     )
+     OR EXISTS (
+      SELECT 1 FROM runtime.position_ownership
+       WHERE state IN ('OPEN','RECONCILIATION_REQUIRED')
+     )
+  THEN
+    RAISE EXCEPTION 'P90_REAL_UNPREARM_REQUIRES_DISARMED_FLAT_STATE';
+  END IF;
+
+  UPDATE strategy_entry.strategy_execution_bindings
+     SET binding_state='INACTIVE',operator=p_operator,source=p_source,
+         reason='P90 REAL v3 PREARM stopped by owner',
+         updated_at=clock_timestamp()
+   WHERE strategy_activation_id IN (
+      'activation-p90l90-real-main-20261029-v3',
+      'activation-p90l90-real-sub-20261029-v3'
+   )
+     AND binding_state='ACTIVE';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count<>2 THEN
+    RAISE EXCEPTION 'P90_REAL_UNPREARM_BINDING_COUNT:%',v_count;
+  END IF;
+
+  UPDATE strategy_entry.strategy_activations
+     SET enabled=false,disabled_at=p_at,
+         operator=p_operator,source=p_source,
+         change_reason='P90 REAL v3 PREARM stopped by owner'
+   WHERE strategy_version='2.0-p90l90-real-main-sub-20261028'
+     AND strategy_id IN (
+       'p90l90_legacy_main_ltc_inj',
+       'p90l90_legacy_sub_dot_arb_apt'
+     )
+     AND enabled=true;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count<>2 THEN
+    RAISE EXCEPTION 'P90_REAL_UNPREARM_ACTIVATION_COUNT:%',v_count;
+  END IF;
+  RETURN 2;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION control.arm_p90l90_real_v3_account_scope(
     p_account_live_arm_session_id text,
     p_live_arm_session_id text,
@@ -337,6 +410,9 @@ $function$;
 ALTER FUNCTION strategy_entry.prearm_p90l90_real_v3(
   timestamptz,text,text
 ) OWNER TO cripta_p90l90_real_v3_control;
+ALTER FUNCTION strategy_entry.unprearm_p90l90_real_v3(
+  timestamptz,text,text
+) OWNER TO cripta_p90l90_real_v3_control;
 ALTER FUNCTION control.arm_p90l90_real_v3_account_scope(
   text,text,text,text,text,text,text,timestamptz,text
 ) OWNER TO cripta_p90l90_real_v3_control;
@@ -349,6 +425,9 @@ REVOKE CREATE ON SCHEMA strategy_entry,control
 REVOKE ALL ON FUNCTION strategy_entry.prearm_p90l90_real_v3(
   timestamptz,text,text
 ) FROM PUBLIC;
+REVOKE ALL ON FUNCTION strategy_entry.unprearm_p90l90_real_v3(
+  timestamptz,text,text
+) FROM PUBLIC;
 REVOKE ALL ON FUNCTION control.arm_p90l90_real_v3_account_scope(
   text,text,text,text,text,text,text,timestamptz,text
 ) FROM PUBLIC;
@@ -356,6 +435,9 @@ REVOKE ALL ON FUNCTION control.disarm_p90l90_real_v3_account_scopes(
   timestamptz
 ) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION strategy_entry.prearm_p90l90_real_v3(
+  timestamptz,text,text
+) TO cripta;
+GRANT EXECUTE ON FUNCTION strategy_entry.unprearm_p90l90_real_v3(
   timestamptz,text,text
 ) TO cripta;
 GRANT EXECUTE ON FUNCTION control.arm_p90l90_real_v3_account_scope(
@@ -386,6 +468,11 @@ BEGIN
      OR NOT has_function_privilege(
        'cripta',
        'strategy_entry.prearm_p90l90_real_v3(timestamptz,text,text)',
+       'EXECUTE'
+     )
+     OR NOT has_function_privilege(
+       'cripta',
+       'strategy_entry.unprearm_p90l90_real_v3(timestamptz,text,text)',
        'EXECUTE'
      )
      OR NOT has_function_privilege(
