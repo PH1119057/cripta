@@ -76,3 +76,83 @@ def exact_open_market_position(
             "P90_REAL_MARKET_POSITION_AMBIGUOUS"
         )
     return active[0] if active else None
+
+
+def exact_market_order_execution_ids(
+    executions: object,
+    *,
+    exchange_order_id: str,
+    entry_order_link_id: str,
+    symbol: str,
+    side: str,
+    position_size: Decimal,
+    position_avg: Decimal,
+    tick_size: Decimal,
+) -> tuple[str, ...]:
+    """Prove a signed Bybit MARKET fill belongs to the exact Entry order.
+
+    The signed REST inventory must be paginated to completion by the private
+    account worker. A lagging response is UNKNOWN, not permission to fabricate
+    a fill or retry an already acknowledged opening order.
+    """
+    if (
+        not isinstance(executions, list) or not executions
+        or not exchange_order_id or not entry_order_link_id
+        or not symbol or side not in {"Buy", "Sell"}
+        or any(
+            not value.is_finite() or value <= 0
+            for value in (position_size, position_avg, tick_size)
+        )
+    ):
+        raise P90RealMarketPositionUnverified(
+            "P90_REAL_MARKET_FILL_ORDER_OR_INVENTORY_INVALID"
+        )
+    identifiers: set[str] = set()
+    quantity = Decimal("0")
+    notional = Decimal("0")
+    for execution in executions:
+        if (
+            not isinstance(execution, Mapping)
+            or execution.get("orderId") != exchange_order_id
+            or execution.get("orderLinkId") != entry_order_link_id
+            or execution.get("symbol") != symbol
+            or execution.get("side") != side
+            or execution.get("orderType") != "Market"
+            or execution.get("execType") != "Trade"
+        ):
+            raise P90RealMarketPositionUnverified(
+                "P90_REAL_MARKET_FILL_WRONG_ORDER_OR_SIDE"
+            )
+        execution_id = execution.get("execId")
+        if (
+            not isinstance(execution_id, str) or not execution_id.strip()
+            or execution_id in identifiers
+        ):
+            raise P90RealMarketPositionUnverified(
+                "P90_REAL_MARKET_FILL_EXECUTION_ID_INVALID"
+            )
+        identifiers.add(execution_id)
+        try:
+            filled = Decimal(str(execution.get("execQty")))
+            price = Decimal(str(execution.get("execPrice")))
+            closed = Decimal(str(execution.get("closedSize") or "0"))
+            at_ms = int(str(execution.get("execTime") or "0"))
+        except (TypeError, ValueError, InvalidOperation):
+            raise P90RealMarketPositionUnverified(
+                "P90_REAL_MARKET_FILL_DETAILS_INVALID"
+            ) from None
+        if (
+            not filled.is_finite() or not price.is_finite()
+            or not closed.is_finite()
+            or filled <= 0 or price <= 0 or closed != 0 or at_ms <= 0
+        ):
+            raise P90RealMarketPositionUnverified(
+                "P90_REAL_MARKET_FILL_DETAILS_INVALID"
+            )
+        quantity += filled
+        notional += filled * price
+    if quantity != position_size or abs(notional / quantity - position_avg) > tick_size:
+        raise P90RealMarketPositionUnverified(
+            "P90_REAL_MARKET_FILL_EXECUTION_POSITION_MISMATCH"
+        )
+    return tuple(sorted(identifiers))
