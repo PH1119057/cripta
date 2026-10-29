@@ -30,6 +30,10 @@ def _proof(*, short: bool = False, sub: bool = False):
     private = replace(
         private,
         source_ref="bybit:signed-position-list:exact-account",
+        position={
+            **private.position,
+            "markPrice": "99.8" if short else "100.2",
+        },
     )
     source = P90RealPostfillSourceWindow(
         position_id=position.strategy_position_id,
