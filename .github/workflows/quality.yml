@@ -26,9 +26,6 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha || github.event.before }}
           path: .ruff-baseline
           persist-credentials: false
-      - name: TEMPORARY P90 exact Ruff import diagnostic (remove before final PR)
-        continue-on-error: true
-        run: .\.venv\Scripts\ruff.exe check --select I --diff tests/test_p90l90_real_account_mutation_safety.py
       - name: Ruff regression gate (NEW_DIAGNOSTICS=0)
         run: .\.venv\Scripts\python.exe operations/quality/ruff_regression_gate.py .ruff-baseline
       - name: mypy regression gate (NEW_ERRORS=0)

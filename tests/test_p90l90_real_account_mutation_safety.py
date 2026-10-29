@@ -18,7 +18,6 @@ from bybit_workbench.universal_exit.p90l90_real_observation import (
 )
 from operations.monitoring import p90l90_real_account_mutation_safety, p90l90_real_live_source_ports
 
-
 MAIN = "ta-" + "a" * 32
 SUB = "ta-" + "b" * 32
 
