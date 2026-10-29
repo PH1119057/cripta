@@ -138,7 +138,7 @@ def read_p90_real_account_routes(
             binding_id, account_id, leg, role, allocation,
             kind, account_type, environment, venue, account_status,
             uid, connector_id, connector_kind, adapter, connector_status,
-            credential_mounted,
+            credential_ref_present,
         ) = r
         uid = str(uid or "")
         if (
@@ -159,7 +159,7 @@ def read_p90_real_account_routes(
             or connector_kind != "CEX_PRIVATE_RUNTIME"
             or adapter != "BYBIT_V5_PRIVATE"
             or connector_status != "ACTIVE"
-            or credential_mounted is not True
+            or credential_ref_present is not True
         ):
             raise P90RealAccountRoutesUnverified(
                 "P90_REAL_ACCOUNT_ROUTE_REGISTERED_OWNER_OR_CREDENTIAL_INVALID"
