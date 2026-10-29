@@ -7,6 +7,7 @@ OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
 SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
 PREARM_SCRIPT = ROOT / "operations/implementation/control_p90l90_real_v3_prearm.py"
+PREARM_EVIDENCE = ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
 
 
 def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
@@ -90,3 +91,13 @@ def test_p90_prearm_operator_script_cannot_owner_arm_or_open_gate() -> None:
     assert "UPDATE control.execution_gates" not in source
     assert "EXCHANGE_MUTATION: none" in source
     assert "LIVE_ARM / execution permission / mainnet gate mutation: forbidden here." in source
+
+
+def test_p90_technical_evidence_producer_has_no_owner_arm_capability() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "INSERT INTO control.live_arm_evidence" in source
+    assert "require_owner_approval=False" in source
+    assert "MAINNET_GATE_EXPLICIT_OWNER_APPROVAL" not in source
+    assert "arm_p90l90_real_v3(" not in source
+    assert "set_execution_permission" not in source
+    assert "UPDATE control.execution_gates" not in source
