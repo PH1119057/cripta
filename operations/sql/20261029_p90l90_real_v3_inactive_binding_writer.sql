@@ -132,18 +132,18 @@ BEGIN
   v_entry := (v_card->'entry_policy'->>'payload_json')::jsonb;
   v_protection := (v_card->'protection_policy'->>'payload_json')::jsonb;
   v_exit := (v_card->'exit_policy'->>'payload_json')::jsonb;
-  IF v_capital->>'requested_amount' <> '10'
-     OR v_capital->>'leverage' <> '1'
-     OR v_capital->>'margin_mode' <> 'ISOLATED'
-     OR v_capital->>'max_open_positions_per_symbol' <> '1'
+  IF v_capital->>'requested_amount' IS DISTINCT FROM '10'
+     OR v_capital->>'leverage' IS DISTINCT FROM '1'
+     OR v_capital->>'margin_mode' IS DISTINCT FROM 'ISOLATED'
+     OR v_capital->>'max_open_positions_per_symbol' IS DISTINCT FROM '1'
      OR v_capital->>'max_simultaneous_committed_usdt'
-          <> CASE WHEN v_kind='MAIN' THEN '20' ELSE '30' END
-     OR v_entry->'execution_policy'->>'order_type' <> 'MARKET'
-     OR v_protection->'initial_protection'->>'stop_loss_pct' <> '10'
-     OR v_protection->'initial_protection'->>'take_profit_enabled' <> 'true'
-     OR v_exit->'execution_policy'->>'max_request_age_seconds' <> '5'
-     OR v_exit->'trailing'->>'activation_profit_pct' <> '0.5'
-     OR v_exit->'trailing'->>'distance_pct' <> '0.35'
+          IS DISTINCT FROM CASE WHEN v_kind='MAIN' THEN '20' ELSE '30' END
+     OR v_entry->'execution_policy'->>'order_type' IS DISTINCT FROM 'MARKET'
+     OR v_protection->'initial_protection'->>'stop_loss_pct' IS DISTINCT FROM '10'
+     OR v_protection->'initial_protection'->>'take_profit_enabled' IS DISTINCT FROM 'true'
+     OR v_exit->'execution_policy'->>'max_request_age_seconds' IS DISTINCT FROM '5'
+     OR v_exit->'trailing'->>'activation_profit_pct' IS DISTINCT FROM '0.5'
+     OR v_exit->'trailing'->>'distance_pct' IS DISTINCT FROM '0.35'
   THEN
     RAISE EXCEPTION 'P90_REAL_V3_OWNER_POLICY_NOT_EXACT';
   END IF;
