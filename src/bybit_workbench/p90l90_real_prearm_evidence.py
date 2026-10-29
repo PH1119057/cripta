@@ -48,6 +48,7 @@ _P90_PARITY_MODULES = (
 _MAIN_ACCOUNT = "ta-2122c81ecff14f3b85b102db605212f7"
 _SUB_ACCOUNT = "ta-853ac5fcd58185697396d33cd57459fa"
 _ACCOUNT_BY_STRATEGY = {MAIN_ID: _MAIN_ACCOUNT, SUB_ID: _SUB_ACCOUNT}
+_EVIDENCE_SOURCE = "p90l90-real-v3:technical-prearm-evidence"
 _SERVICE_UNITS = (
     "cripta-private-runtime.service",
     f"cripta-private-runtime@{_SUB_ACCOUNT}.service",
@@ -340,6 +341,10 @@ def prepare_p90l90_real_v3_prearm_evidence(
     )
     for unit in _SERVICE_UNITS:
         _service_active(unit)
+
+    # All DB-derived evidence below must come from one serializable snapshot.
+    # External release/service proofs above perform no PostgreSQL reads.
+    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
 
     observer = _read_json(
         Path("/var/lib/cripta/universal_entry_observer/status.json"),
@@ -635,7 +640,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                    evidence_id,check_code,scope_type,scope_key,status,
                    checked_at,valid_until,release_commit,source,evidence)
                VALUES(%s,%s,%s,%s,'PASS',%s,%s,%s,
-                      'dashboard:p90l90-real-v3-prearm-evidence',%s::jsonb)""",
+                      %s,%s::jsonb)""",
             (
                 evidence_id,
                 code,
@@ -644,6 +649,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 current,
                 valid_until if ttl else None,
                 release_commit,
+                _EVIDENCE_SOURCE,
                 json.dumps(evidence, sort_keys=True, default=str),
             ),
         )
