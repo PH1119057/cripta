@@ -75,6 +75,9 @@ def build_source_window(
     source_epoch_id: str,
     evidence_epoch_id: str,
     at: datetime,
+    fetch_recent_trades: Callable[
+        [str], tuple[list[Mapping[str, object]], datetime]
+    ] | None = None,
 ) -> P90RealPostfillSourceWindow:
     if (
         source_epoch_id != evidence_epoch_id
@@ -96,6 +99,7 @@ def build_source_window(
     try:
         events = mirror.verified_fill_forward_events(
             symbol=position.symbol, fill_at=position.fill_at, at=at,
+            allow_empty=fetch_recent_trades is not None,
         )
     except ContinuityNotProvable:
         raise P90RealPostfillMarketSourceUnverified(
@@ -113,6 +117,64 @@ def build_source_window(
     ):
         raise P90RealPostfillMarketSourceUnverified(
             "P90_REAL_MARKET_SOURCE_EPOCH_RACE_OR_UNBOUNDED"
+        )
+    if not events:
+        # Source continuity alone does not prove ABSENCE of a publicTrade.
+        # Require independent venue REST history as of this fill-forward
+        # boundary, including an older real execution as a coverage anchor.
+        try:
+            if fetch_recent_trades is None:
+                raise ValueError("source absent")
+            rows, server_at = fetch_recent_trades(position.symbol)
+            if (
+                not isinstance(rows, list)
+                or not 1 <= len(rows) <= 1000
+                or server_at.tzinfo is None
+                or not timedelta() <= server_at.astimezone(UTC) - at
+                <= timedelta(seconds=5)
+            ):
+                raise ValueError("REST coverage incomplete")
+            for row in rows:
+                if (
+                    not isinstance(row, Mapping)
+                    or row.get("s") != position.symbol
+                    or not isinstance(row.get("i"), str)
+                    or not row["i"]
+                ):
+                    raise ValueError("REST identity incomplete")
+                trade_at = datetime.fromtimestamp(int(str(row["T"])) / 1000, UTC)
+                if trade_at >= position.fill_at:
+                    raise ValueError("new publicTrade cannot be silently omitted")
+            if mirror.verified_fill_forward_events(
+                symbol=position.symbol, fill_at=position.fill_at, at=at,
+                allow_empty=True,
+            ):
+                raise ValueError("native mirror race")
+            later = mirror.snapshot()
+            if (
+                later["epoch"] != before["epoch"]
+                or later["epoch_started_at"] != before["epoch_started_at"]
+                or later["state"] != "ACTIVE" or later["gaps"] != 0
+            ):
+                raise ValueError("native mirror restarted during signed fill")
+        except (TypeError, ValueError, KeyError, OverflowError,
+                ContinuityNotProvable):
+            raise P90RealPostfillMarketSourceUnverified(
+                "P90_REAL_MARKET_SOURCE_ZERO_NATIVE_REST_NOT_ATTESTED"
+            ) from None
+        return P90RealPostfillSourceWindow(
+            position_id=position.strategy_position_id,
+            symbol=position.symbol, fill_at=position.fill_at,
+            covered_through=at, source_commit=source_commit,
+            # Explicitly a signed fill reference, NOT a fabricated native tick.
+            last_native_price=position.actual_avg_fill,
+            best_favorable_price=position.actual_avg_fill,
+            source_refs=(
+                f"bybit:recentTrade:{position.symbol}:zero-after-fill:"
+                f"{server_at.astimezone(UTC).isoformat()}",
+            ),
+            complete_native_window=True,
+            no_new_native_trade_rest_verified=True,
         )
     last = events[-1]
     if (
@@ -226,6 +288,7 @@ def window_to_wire(window: P90RealPostfillSourceWindow) -> dict[str, object]:
         "best_favorable_price": str(window.best_favorable_price),
         "source_refs": list(window.source_refs),
         "complete_native_window": window.complete_native_window,
+        "no_new_native_trade_rest_verified": window.no_new_native_trade_rest_verified,
     }
 
 
@@ -237,6 +300,9 @@ def serve_source_windows(
     read_position: Callable[[str, str, str], tuple[StrategyPosition, str]],
     running: Callable[[], bool],
     ready: Callable[[], None] | None = None,
+    fetch_recent_trades: Callable[
+        [str], tuple[list[Mapping[str, object]], datetime]
+    ] | None = None,
 ) -> None:
     """Socket binding belongs to the live Observer, not to Execution.
 
@@ -290,6 +356,7 @@ def serve_source_windows(
                         source_epoch_id=source_epoch_id,
                         evidence_epoch_id=actual_epoch,
                         at=datetime.now(UTC),
+                        fetch_recent_trades=fetch_recent_trades,
                     )
                     stream.sendall(_frame({
                         "version": 1, "nonce": nonce,
