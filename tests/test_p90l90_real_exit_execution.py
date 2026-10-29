@@ -1,0 +1,201 @@
+"""REAL Exit dispatch: synthetic typed bridge/DB checkpoint, NO Exchange orders."""
+from __future__ import annotations
+
+from contextlib import contextmanager
+from dataclasses import replace
+from datetime import timedelta
+
+import pytest
+from test_p90l90_real_observation import _observation, _scope
+
+from bybit_workbench.exchange_position_identity import exchange_position_key
+from bybit_workbench.universal_entry.contracts import FrozenPolicy
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
+from bybit_workbench.universal_exit.engine import UniversalExitEngine
+from bybit_workbench.universal_exit import p90l90_real_exit_execution as mod
+
+ACCOUNT_MAIN = "ta-" + "1" * 32
+ACCOUNT_SUB = "ta-" + "2" * 32
+
+
+class _DB:
+    def __init__(self):
+        self.events: list[object] = []
+        self.open_transactions = 0
+
+    @contextmanager
+    def transaction(self):
+        self.open_transactions += 1
+        try:
+            yield
+        finally:
+            self.open_transactions -= 1
+
+    def execute(self, sql, params=()):
+        assert self.open_transactions > 0
+        assert "pg_advisory_xact_lock" in sql
+        self.events.append(("account-lock", params))
+        return None
+
+
+def _valid():
+    position, plan, checkpoint, cursor, private, price = _scope()
+    observation = _observation(position, checkpoint, cursor, private, price)
+    evaluation = UniversalExitEngine().evaluate(position, plan, observation)
+    assert evaluation.status is ExitEvaluationStatus.DECISION_CREATED
+    assert evaluation.decision is not None
+
+    position = replace(
+        position,
+        trading_account_id=ACCOUNT_MAIN,
+        exchange_position_key=exchange_position_key(
+            ACCOUNT_MAIN, position.symbol, 0
+        ),
+    )
+    details = observation.attributes.to_dict()
+    details["p90l90_real"].update({
+        "trading_account_id": ACCOUNT_MAIN,
+        "exchange_position_key": position.exchange_position_key,
+    })
+    observation = replace(
+        observation,
+        attributes=FrozenPolicy.from_mapping(details),
+        source_refs=(
+            *observation.source_refs,
+            "bybit:signed-position-list:exact-account:account=" + ACCOUNT_MAIN,
+        ),
+    )
+    return position, plan, replace(evaluation, observation=observation)
+
+
+def _sink(monkeypatch, *, safety=True):
+    db = _DB()
+    position, plan, evaluation = _valid()
+    steps: list[str] = []
+
+    def lookup(_db, *, strategy_position_id):
+        steps.append("load")
+        assert strategy_position_id == position.strategy_position_id
+        return position, plan
+
+    def saved(_db, request):
+        steps.append("request")
+        assert request.trading_account_id == ACCOUNT_MAIN
+        assert request.exit_decision_id == evaluation.decision.exit_decision_id
+
+    def queued(_db, prepared, *, now):
+        steps.append("queue")
+        assert prepared.payload["trading_account_id"] == ACCOUNT_MAIN
+        assert prepared.payload["source"] == "universal_exit"
+        assert prepared.command_id.startswith("ux-")
+
+    def guard(pos, ev, now):
+        steps.append("independent-safety")
+        assert pos == position
+        assert ev == evaluation
+        return safety
+
+    monkeypatch.setattr(mod, "load_exit_binding", lookup)
+    monkeypatch.setattr(mod, "persist_exit_execution_request", saved)
+    monkeypatch.setattr(mod, "publish_runtime_exit_command", queued)
+    assert evaluation.decision is not None
+    sink = mod.P90RealExitExecutionPort(
+        db,
+        independently_verified_execution_safety=guard,
+        account_by_strategy={MAIN_ID: ACCOUNT_MAIN, SUB_ID: ACCOUNT_SUB},
+        clock=lambda: evaluation.decision.decided_at + timedelta(milliseconds=10),
+    )
+    return sink, db, steps, position, plan, evaluation
+
+
+def test_real_native_decision_persists_request_then_single_account_command(
+    monkeypatch,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
+    prepared = sink(evaluation, position, plan)
+    assert prepared is not None
+    assert steps == ["load", "independent-safety", "request", "queue"]
+    assert db.events == [("account-lock", (ACCOUNT_MAIN,))]
+    assert db.open_transactions == 0
+
+
+def test_unknown_account_mutation_safety_never_materializes_command(
+    monkeypatch,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(
+        monkeypatch, safety=False,
+    )
+    with pytest.raises(
+        mod.P90RealExitExecutionUnverified, match="MUTATION_SAFETY_UNVERIFIED"
+    ):
+        sink(evaluation, position, plan)
+    assert steps == ["load", "independent-safety"]
+    assert db.open_transactions == 0
+
+
+@pytest.mark.parametrize("field", (
+    "trading_account_id", "identity_status", "source_refs",
+    "event_kind", "signed_source", "protection",
+))
+def test_unsafe_exit_cannot_queue_even_when_independent_guard_true(
+    monkeypatch, field: str,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
+    observation = evaluation.observation
+    if field == "trading_account_id":
+        position = replace(
+            position, trading_account_id=ACCOUNT_SUB,
+            exchange_position_key=exchange_position_key(
+                ACCOUNT_SUB, position.symbol, 0,
+            ),
+        )
+    elif field == "identity_status":
+        position = replace(position, identity_status="LEGACY_UNKNOWN",
+                           trading_account_id=None,
+                           strategy_execution_binding_id=None,
+                           execution_leg=None)
+    elif field == "source_refs":
+        observation = replace(
+            observation, source_refs=("untrusted:paper",),
+        )
+    elif field == "event_kind":
+        observation = replace(observation, event_kind="PAPER_PROXY")
+    elif field == "signed_source":
+        observation = replace(
+            observation, source_refs=("bybit:claimed-signed-but-unverified",),
+        )
+    else:
+        details = observation.attributes.to_dict()
+        details["p90l90_real"]["protection_exchange_confirmed"] = False
+        observation = replace(
+            observation, attributes=FrozenPolicy.from_mapping(details),
+        )
+    evaluation = replace(evaluation, observation=observation)
+    with pytest.raises(mod.P90RealExitExecutionUnverified):
+        sink(evaluation, position, plan)
+    assert steps == []
+    assert db.events == []
+
+
+def test_missing_independent_execution_safety_is_constructor_hard_stop() -> None:
+    db = _DB()
+    with pytest.raises(
+        mod.P90RealExitExecutionUnverified, match="SAFETY_PROVIDER_MISSING"
+    ):
+        mod.P90RealExitExecutionPort(
+            db, independently_verified_execution_safety=None,
+            account_by_strategy={MAIN_ID: ACCOUNT_MAIN, SUB_ID: ACCOUNT_SUB},
+        )
+
+
+def test_unmaterializable_non_decision_is_not_a_command(monkeypatch) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(monkeypatch)
+    from bybit_workbench.universal_exit.contracts import ExitEvaluation
+    quiet = ExitEvaluation(
+        evaluation_id="quiet-test", observation=evaluation.observation,
+        status=ExitEvaluationStatus.NO_MATCH, reason="NO_MATCH",
+    )
+    assert sink(quiet, position, plan) is None
+    assert steps == []
+    assert db.events == []
