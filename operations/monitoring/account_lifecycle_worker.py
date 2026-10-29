@@ -44,35 +44,42 @@ _running = True
 
 def validated_scope(
     account_id: str, connector_id: str, credential_name: str,
-    credential_directory: str, status_path: str,
+    credential_directory: str, status_path: str, *,
+    account_kind: str = "SUB",
 ) -> tuple[Path, Path, str]:
-    """Validate exact isolation; no implicit MAIN account or credential fallback."""
+    """One credential and one writable status path per independent account."""
     if not _ACCOUNT_ID.fullmatch(account_id):
         raise RuntimeError("ACCOUNT_LOCAL_TRADING_ACCOUNT_INVALID")
     if not connector_id.startswith("ac-") or len(connector_id) < 5:
         raise RuntimeError("ACCOUNT_LOCAL_CONNECTOR_MISSING")
     if not _CREDENTIAL_NAME.fullmatch(credential_name):
         raise RuntimeError("ACCOUNT_LOCAL_CREDENTIAL_NAME_INVALID")
-    # Validate the target Linux systemd paths with POSIX semantics even when
-    # source tests execute on Windows CI. Native Path handles file I/O later.
+    if account_kind not in {"MAIN", "SUB"}:
+        raise RuntimeError("ACCOUNT_LOCAL_ACCOUNT_KIND_INVALID")
     directory = PurePosixPath(credential_directory)
-    if (
-        not directory.is_absolute()
-        or directory.parent != PurePosixPath("/run/credentials")
-        or not directory.name.startswith("cripta-lifecycle-account@")
+    if not directory.is_absolute() or directory.parent != PurePosixPath(
+        "/run/credentials"
     ):
         raise RuntimeError("ACCOUNT_LOCAL_CREDENTIAL_MOUNT_UNTRUSTED")
+    if account_kind == "MAIN":
+        if (
+            directory.name != "cripta-lifecycle-main-local.service"
+            or credential_name != "bybit-mainnet"
+        ):
+            raise RuntimeError("ACCOUNT_LOCAL_MAIN_CREDENTIAL_MOUNT_UNTRUSTED")
+    else:
+        if (
+            directory.name != f"cripta-lifecycle-account@{account_id}.service"
+            or credential_name != f"bybit-sub-{account_id}"
+        ):
+            raise RuntimeError("ACCOUNT_LOCAL_MAIN_CREDENTIAL_NOT_PERMITTED")
     credential = Path(str(directory / credential_name))
     output_contract = PurePosixPath(status_path)
     if not output_contract.is_absolute() or output_contract.name != "status.json":
         raise RuntimeError("ACCOUNT_LOCAL_STATUS_PATH_INVALID")
     if output_contract.parent.name != "account-" + account_id:
         raise RuntimeError("ACCOUNT_LOCAL_STATUS_NOT_ACCOUNT_SCOPED")
-    output = Path(str(output_contract))
-    if credential_name == "bybit-mainnet":
-        # This is the existing MAIN-only credential. No SUB impersonation.
-        raise RuntimeError("ACCOUNT_LOCAL_MAIN_CREDENTIAL_NOT_PERMITTED")
-    return credential, output, "systemd:" + credential_name
+    return credential, Path(str(output_contract)), "systemd:" + credential_name
 
 
 def account_positions(connection: Any, *, account_id: str) -> list[dict[str, Any]]:
@@ -87,7 +94,14 @@ def account_positions(connection: Any, *, account_id: str) -> list[dict[str, Any
     return [dict(x) for x in rows]
 
 
-def require_sub_account(connection: Any, *, account_id: str, connector_id: str) -> None:
+def require_account_kind(
+    connection: Any, *,
+    account_id: str, connector_id: str, expected_kind: str,
+) -> None:
+    """PROVEN MAIN and SUB must never borrow the other account's connector."""
+    if expected_kind not in {"MAIN", "SUB"}:
+        raise RuntimeError("ACCOUNT_LOCAL_ACCOUNT_KIND_INVALID")
+    failure = f"ACCOUNT_LOCAL_{expected_kind}_IDENTITY_NOT_READY"
     rows = connection.execute(
         """SELECT a.account_kind,a.status AS account_status,
                     c.status AS connector_status,c.trading_account_id
@@ -98,24 +112,38 @@ def require_sub_account(connection: Any, *, account_id: str, connector_id: str) 
         (account_id, connector_id),
     ).fetchall()
     if len(rows) != 1:
-        raise RuntimeError("ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY")
+        raise RuntimeError(failure)
     row = rows[0]
     if (
-        row["account_kind"] != "SUB"
+        row["account_kind"] != expected_kind
         or row["account_status"] != "ACTIVE"
         or row["connector_status"] != "ACTIVE"
         or row["trading_account_id"] != account_id
     ):
-        raise RuntimeError("ACCOUNT_LOCAL_SUB_IDENTITY_NOT_READY")
+        raise RuntimeError(failure)
+
+
+def require_sub_account(connection: Any, *, account_id: str, connector_id: str) -> None:
+    """Backwards-compatible SUB-only caller; never falls back to MAIN."""
+    require_account_kind(
+        connection,
+        account_id=account_id,
+        connector_id=connector_id,
+        expected_kind="SUB",
+    )
 
 
 def inspect_account_once(
     connection: Any, *, account_id: str, connector_id: str,
     credential_ref: str, account_snapshot: Mapping[str, object] | None,
     now: datetime, max_age_seconds: int = 15,
+    account_kind: str = "SUB",
 ) -> dict[str, object]:
     """DB audit and scoped faults only after separately authenticated read."""
-    require_sub_account(connection, account_id=account_id, connector_id=connector_id)
+    require_account_kind(
+        connection, account_id=account_id, connector_id=connector_id,
+        expected_kind=account_kind,
+    )
     positions = account_positions(connection, account_id=account_id)
     audit = verified_account_exposure(
         connection,
@@ -220,10 +248,12 @@ def main() -> int:
     account_id = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "")
     connector_id = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "")
     credential_name = os.environ.get("CRIPTA_LIFECYCLE_CREDENTIAL_NAME", "")
+    account_kind = os.environ.get("CRIPTA_LIFECYCLE_ACCOUNT_KIND", "SUB").strip().upper()
     credential, status, credential_ref = validated_scope(
         account_id, connector_id, credential_name,
         os.environ.get("CREDENTIALS_DIRECTORY", ""),
         os.environ.get("CRIPTA_LIFECYCLE_ACCOUNT_STATUS_PATH", ""),
+        account_kind=account_kind,
     )
     poll = int(os.environ.get("CRIPTA_LIFECYCLE_ACCOUNT_POLL_SECONDS", "15"))
     if poll < 10:
@@ -240,8 +270,9 @@ def main() -> int:
         while _running:
             try:
                 with connection.transaction():
-                    require_sub_account(
-                        connection, account_id=account_id, connector_id=connector_id
+                    require_account_kind(
+                        connection, account_id=account_id, connector_id=connector_id,
+                        expected_kind=account_kind,
                     )
                     positions = account_positions(connection, account_id=account_id)
                 symbols = tuple(sorted({str(x["symbol"]) for x in positions}))
@@ -263,6 +294,7 @@ def main() -> int:
                         connection, account_id=account_id, connector_id=connector_id,
                         credential_ref=credential_ref,
                         account_snapshot=snapshot, now=datetime.now(UTC),
+                        account_kind=account_kind,
                     )
                     if result.get("state") == "VERIFIED_ACCOUNT_SCAN":
                         record_proven_safety(
