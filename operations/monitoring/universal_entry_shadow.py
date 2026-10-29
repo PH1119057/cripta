@@ -2959,6 +2959,7 @@ def _run_observer_epoch(
                     ),
                     "running": lambda: not real_source_broker_stop.is_set(),
                     "ready": source_broker_ready.set,
+                    "fetch_recent_trades": _fetch_recent_trade_snapshot,
                 },
                 name="p90-real-native-postfill-market-source",
                 daemon=True,
