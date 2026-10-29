@@ -1190,7 +1190,9 @@ def _p90_private_ipc_evidence_handler(
         return evidence
 
 
-def p90_private_ipc_loop(key: str, secret: str) -> None:
+def p90_private_ipc_loop(
+    key: str, secret: str, ready: threading.Event,
+) -> None:
     """Optional read-only producer owned by the credential-bound private worker."""
     from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
         serve_private_proof,
@@ -1203,6 +1205,7 @@ def p90_private_ipc_loop(key: str, secret: str) -> None:
             dict(request), key=key, secret=secret
         ),
         running=lambda: running,
+        ready=ready.set,
     )
 
 
@@ -5162,13 +5165,16 @@ def main() -> None:
     if ipc_setting not in {"DISABLED", "ENABLED"}:
         raise RuntimeError("P90_REAL_PRIVATE_IPC_MODE_INVALID")
     if ipc_setting == "ENABLED":
+        proof_ready = threading.Event()
         proof_thread = threading.Thread(
             target=p90_private_ipc_loop,
-            args=(credentials["api_key"], credentials["api_secret"]),
+            args=(credentials["api_key"], credentials["api_secret"], proof_ready),
             daemon=True,
             name="p90-private-signed-read-only-ipc",
         )
         proof_thread.start()
+        if not proof_ready.wait(timeout=3.0) or not proof_thread.is_alive():
+            raise RuntimeError("P90_REAL_PRIVATE_IPC_NOT_BOUND")
     thread = threading.Thread(target=trade_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)
     thread.start()
     commands = threading.Thread(target=command_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)
