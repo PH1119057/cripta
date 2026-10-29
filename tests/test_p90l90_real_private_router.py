@@ -104,8 +104,6 @@ def test_foreign_signed_response_never_crosses_account_boundary(
 @pytest.mark.parametrize("changes", (
     {"trading_account_id": SUB},
     {"strategy_version": "old"},
-    {"identity_status": "LEGACY_UNKNOWN"},
-    {"strategy_execution_binding_id": None},
     {"symbol": "BTCUSDT"},
     {"strategy_id": "fake-strategy"},
 ))
@@ -118,6 +116,18 @@ def test_invalid_strategy_binding_rejected_before_private_call(
     changed = replace(position, **changes)
     with pytest.raises(P90PrivateIpcUnverified, match="POSITION_ACCOUNT_UNPROVEN"):
         router(changed, cursor)
+
+
+@pytest.mark.parametrize("changes", (
+    {"identity_status": "LEGACY_UNKNOWN"},
+    {"strategy_execution_binding_id": None},
+))
+def test_position_constructor_itself_blocks_inconsistent_proven_identity(
+    changes: dict[str, object],
+) -> None:
+    position, _cursor, _evidence = _position_and_evidence()
+    with pytest.raises(ValueError, match="StrategyPosition"):
+        replace(position, **changes)
 
 
 @pytest.mark.parametrize(("accounts", "connectors"), (
