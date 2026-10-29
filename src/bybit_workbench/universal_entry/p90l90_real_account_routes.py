@@ -11,10 +11,13 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .p90l90_legacy_strategy import MAIN_ID, SUB_ID
 from .p90l90_real_contract_v3 import ALLOWED_SYMBOLS, VERSION
+
+if TYPE_CHECKING:
+    from .p90l90_real_source_epoch_start import P90RealSignedFlatAccount
 
 _ACCOUNT = re.compile(r"ta-[0-9a-f]{32}\Z")
 _KIND = {MAIN_ID: "MAIN", SUB_ID: "SUB"}
@@ -197,7 +200,7 @@ def read_p90_real_account_routes(
 
 def read_p90_real_signed_flat_accounts(
     routes: P90RealAccountRoutes, *, at: datetime,
-) -> tuple["P90RealSignedFlatAccount", "P90RealSignedFlatAccount"]:
+) -> tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount]:
     """Use BOTH actual credential-local private workers, not DB roster alone.
 
     A signed zero-position/zero-order response and current private WS epoch
