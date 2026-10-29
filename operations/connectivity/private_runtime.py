@@ -1064,6 +1064,46 @@ def current_p90_real_no_pending_exit(
     )
 
 
+def own_p90_real_signed_position_reader(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+):
+    """Bind exact mounted-credential signed GET and live MAIN/SUB WS epoch.
+
+    This is an account-local read-only source adapter, not a public RPC, an
+    observer source, or authorization to dispatch an Exit Exchange command.
+    """
+    from bybit_workbench.universal_exit.p90l90_real_signed_position import (
+        P90RealSignedPositionReader,
+        P90RealSignedPositionUnverified,
+    )
+
+    if (
+        not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID
+        or not MOUNTED_CREDENTIAL_REF or not key or not secret
+    ):
+        raise P90RealSignedPositionUnverified(
+            "P90_REAL_ACCOUNT_MOUNTED_CREDENTIAL_NOT_READY"
+        )
+
+    def signed_get(endpoint: str, params: dict[str, str]) -> dict[str, object]:
+        result, _ = api_get(endpoint, params, key, secret)
+        return result
+
+    return P90RealSignedPositionReader(
+        connection,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+        signed_get=signed_get,
+        verified_private_ws_continuity=current_p90_real_private_ws_epoch,
+        no_pending_exit_command=lambda position: current_p90_real_no_pending_exit(
+            connection, position
+        ),
+    )
+
+
 def current_p90_real_private_ws_epoch(position: StrategyPosition) -> bool:
     """Read only THIS live process's private WS session; never status.json."""
     if position.trading_account_id != TRADING_ACCOUNT_ID:
