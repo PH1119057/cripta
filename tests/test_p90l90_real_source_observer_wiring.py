@@ -91,3 +91,29 @@ def test_real_live_path_is_connected_to_independent_source_and_private_exit() ->
     # the strict independent recentTrade audit when no after-fill tick exists.
     assert 'fetch_recent_trades": _fetch_recent_trade_snapshot' in body
     assert "buffered_messages = (" in body
+
+
+
+def test_real_closed_candle_history_reads_same_ledger_advanced_by_consumer() -> None:
+    """Two ledger instances silently strand 5m Exit on the bootstrap watermark."""
+    src = Path(
+        "src/bybit_workbench/universal_entry/p90l90_observer_real_consumer.py"
+    ).read_text(encoding="utf-8")
+    runtime = Path(
+        "src/bybit_workbench/universal_entry/p90l90_real_observer_runtime.py"
+    ).read_text(encoding="utf-8")
+    observer = Path("operations/monitoring/universal_entry_shadow.py").read_text(
+        encoding="utf-8"
+    )
+    source = Path(
+        "operations/monitoring/p90l90_real_live_source_ports.py"
+    ).read_text(encoding="utf-8")
+    assert "shared_candle_ledger: P90RealSharedCandleLedger | None" in src
+    assert "shared_candle_ledger._epoch_id != source_epoch_id" in src
+    assert "shared_candle_ledger._db is not connection" in src
+    assert "self._archive = (" in src
+    assert "shared_candle_ledger=shared_candle_ledger" in runtime
+    assert "ledger=shared_p90_real_ledger" in observer
+    assert "shared_candle_ledger=shared_p90_real_ledger" in observer
+    assert "self._ledger.history(" in source
+    assert "self._ledger.restart_watermarks(symbol)" in source

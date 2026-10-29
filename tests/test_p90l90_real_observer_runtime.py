@@ -66,7 +66,10 @@ def test_real_observer_routes_both_native_and_5m_to_exact_real_exit_ports(
     )
     monkeypatch.setattr(module, "P90L90ObserverRealConsumer", fake_consumer)
     args = _args()
+    shared_candle_ledger = object()
+    args["shared_candle_ledger"] = shared_candle_ledger
     composed = module.assemble_p90_real_observer_runtime(db, **args)
+    assert composed.consumer.shared_candle_ledger is shared_candle_ledger
     assert composed.exit_ports is ports
     assert composed.consumer.verified_exit_tick_port is native
     assert composed.consumer.verified_closed_candle_port is closed
