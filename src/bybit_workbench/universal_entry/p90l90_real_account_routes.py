@@ -199,7 +199,7 @@ def read_p90_real_account_routes(
 
 
 def read_p90_real_signed_flat_accounts(
-    routes: P90RealAccountRoutes, *, at: datetime,
+    routes: P90RealAccountRoutes,
 ) -> tuple[P90RealSignedFlatAccount, P90RealSignedFlatAccount]:
     """Use BOTH actual credential-local private workers, not DB roster alone.
 
@@ -216,7 +216,6 @@ def read_p90_real_signed_flat_accounts(
 
     if (
         not isinstance(routes, P90RealAccountRoutes)
-        or at.tzinfo is None or at.utcoffset() is None
         or routes.main.strategy_id != MAIN_ID
         or routes.sub.strategy_id != SUB_ID
         or routes.main.trading_account_id == routes.sub.trading_account_id
@@ -237,6 +236,7 @@ def read_p90_real_signed_flat_accounts(
             raise P90RealAccountRoutesUnverified(
                 "P90_REAL_FLAT_ACCOUNT_PRIVATE_PROOF_MISSING"
             ) from None
+        checked_at = datetime.now(UTC)
         if (
             not isinstance(proof, P90RealSignedFlatAccount)
             or proof.trading_account_id != route.trading_account_id
@@ -247,7 +247,7 @@ def read_p90_real_signed_flat_accounts(
             != (0, 0, 0)
             or proof.observed_at.tzinfo is None
             or proof.observed_at.utcoffset() is None
-            or not 0 <= (at.astimezone(UTC) - proof.observed_at).total_seconds() <= 15
+            or not 0 <= (checked_at - proof.observed_at).total_seconds() <= 15
         ):
             raise P90RealAccountRoutesUnverified(
                 "P90_REAL_FLAT_ACCOUNT_SIGNED_SCOPE_MISMATCH"

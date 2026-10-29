@@ -221,7 +221,7 @@ def test_flat_roster_requests_two_credential_local_proofs(monkeypatch) -> None:
             )
 
     monkeypatch.setattr(ipc, "P90PrivateProofClient", FakeClient)
-    main, sub = read_p90_real_signed_flat_accounts(routes, at=at)
+    main, sub = read_p90_real_signed_flat_accounts(routes)
     assert (main.trading_account_id, sub.trading_account_id) == (MAIN, SUB)
     assert calls == [
         (MAIN, "connector-main", 3.0), (SUB, "connector-sub", 3.0),
@@ -234,7 +234,7 @@ def test_flat_roster_requests_two_credential_local_proofs(monkeypatch) -> None:
         ),
     )
     with pytest.raises(P90RealAccountRoutesUnverified):
-        read_p90_real_signed_flat_accounts(routes, at=at)
+        read_p90_real_signed_flat_accounts(routes)
 
 
 def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
@@ -259,7 +259,7 @@ def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
 
     monkeypatch.setattr(ipc, "P90PrivateProofClient", BrokenClient)
     with pytest.raises(P90RealAccountRoutesUnverified, match="PROOF_MISSING"):
-        read_p90_real_signed_flat_accounts(routes, at=at)
+        read_p90_real_signed_flat_accounts(routes)
 
     class WrongClient:
         def __init__(self, *, account, **_kwargs):
@@ -278,4 +278,4 @@ def test_flat_roster_rejects_missing_producer_and_foreign_evidence(
 
     monkeypatch.setattr(ipc, "P90PrivateProofClient", WrongClient)
     with pytest.raises(P90RealAccountRoutesUnverified, match="SCOPE_MISMATCH"):
-        read_p90_real_signed_flat_accounts(routes, at=at)
+        read_p90_real_signed_flat_accounts(routes)
