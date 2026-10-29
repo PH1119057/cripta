@@ -5,6 +5,7 @@ SQL = ROOT / "operations/sql/20261029_p90l90_real_account_arm_control.sql"
 DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
+SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
 
 
 def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
@@ -55,3 +56,9 @@ def test_p90_observer_has_three_state_prearm_real_failclosed_switch() -> None:
     assert prearm < real < partial
     assert "p90_real_source_only = True" in source[prearm:real]
     assert "p90_real_live = True" in source[real:partial]
+
+
+def test_p90_sub_private_runtime_publishes_fresh_position_mode_evidence() -> None:
+    source = SUB_PRIVATE.read_text()
+    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
+    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
