@@ -82,17 +82,18 @@ def _valid():
     return position, plan, replace(evaluation, observation=observation)
 
 
-def _sink(monkeypatch, *, safety=True, synthetic_exit_ttl=True):
+def _sink(monkeypatch, *, safety=True, missing_exit_ttl=False, age_ms=10):
     db = _DB()
     position, plan, evaluation = _valid()
-    if synthetic_exit_ttl:
-        # Only a TEST fixture: actual P90 REAL v3 ExitPlan currently lacks
-        # this Strategy-owned field, and MUST fail closed until owner decision.
+    assert plan.exit_policy.to_dict()["execution_policy"] == {
+        "max_request_age_seconds": 5
+    }
+    if missing_exit_ttl:
+        # Negative-only fixture: a broken/unapproved ExitPlan must still
+        # fail closed, but the REAL Strategy contract is never modified.
         policy = plan.exit_policy.to_dict()
-        policy["execution_policy"] = {"max_request_age_seconds": 5}
-        plan = replace(
-            plan, exit_policy=FrozenPolicy.from_mapping(policy),
-        )
+        del policy["execution_policy"]
+        plan = replace(plan, exit_policy=FrozenPolicy.from_mapping(policy))
     steps: list[str] = []
 
     def lookup(_db, *, strategy_position_id):
@@ -125,7 +126,7 @@ def _sink(monkeypatch, *, safety=True, synthetic_exit_ttl=True):
         db,
         independently_verified_execution_safety=guard,
         account_by_strategy={MAIN_ID: ACCOUNT_MAIN, SUB_ID: ACCOUNT_SUB},
-        clock=lambda: evaluation.decision.decided_at + timedelta(milliseconds=10),
+        clock=lambda: evaluation.decision.decided_at + timedelta(milliseconds=age_ms),
     )
     return sink, db, steps, position, plan, evaluation
 
@@ -141,17 +142,32 @@ def test_real_native_decision_persists_request_then_single_account_command(
     assert db.open_transactions == 0
 
 
-def test_actual_unmodified_real_exit_policy_has_no_approved_request_ttl(
-    monkeypatch,
-) -> None:
+def test_missing_exit_ttl_still_fails_closed_without_dispatch(monkeypatch) -> None:
     sink, db, steps, position, plan, evaluation = _sink(
-        monkeypatch, synthetic_exit_ttl=False,
+        monkeypatch, missing_exit_ttl=True,
     )
     with pytest.raises(
         ExitExecutionBridgeBlocked, match="POLICY_INCOMPLETE"
     ):
         sink(evaluation, position, plan)
     assert steps == ["load", "independent-safety"]
+    assert db.open_transactions == 0
+
+
+@pytest.mark.parametrize(("age_ms", "expired"), ((4999, False), (5000, True), (5001, True)))
+def test_real_exit_request_expires_at_exact_five_second_boundary(
+    monkeypatch, age_ms: int, expired: bool,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(
+        monkeypatch, age_ms=age_ms,
+    )
+    if expired:
+        with pytest.raises(ExitExecutionBridgeBlocked, match="REQUEST_EXPIRED"):
+            sink(evaluation, position, plan)
+        assert steps == ["load", "independent-safety"]
+    else:
+        assert sink(evaluation, position, plan) is not None
+        assert steps == ["load", "independent-safety", "request", "queue"]
     assert db.open_transactions == 0
 
 
