@@ -1417,6 +1417,7 @@ P90L90 activation and the live Observer must prove a versioned compatibility att
 
 
 
+
 ### 7.6.2 Общие closed candles и P90L90 restart — OWNER DECISION 2026-10-28
 
 Физический владелец и единое местоположение OHLC — `ARCH §48.4`,
@@ -1438,3 +1439,55 @@ TradeCursor или Entry. Old P90 seed `source_commit=ecde511...` и
 **новых** сделках. Нельзя просто перезаписать старый generation=0 checkpoint
 или обходить модель source continuity. Сохранённая открытая позиция
 обязательно проходит собственный Exit/lifecycle reconciliation.
+
+
+### 7.6.3 Два P90L90 REAL MICRO_LIVE профиля — OWNER DECISION 2026-10-28 (Issue #243)
+
+**Owner exact instruction:** «Подтверждаю, запускай уже быстрее» в ответ на отдельное предложение следующих параметров для **двух современных P90L90**, MAIN LTC/INJ и SUB DOT/ARB/APT: **10 USDT на одну позицию, isolated 1×, MARKET вход, exchange-resident catastrophic SL −10%, не более одной позиции на монету, одновременный лимит 20 USDT MAIN / 30 USDT SUB**. Это approval immutable **REAL execution contract** для новой StrategyVersion, НЕ право ретроспективно переписать PAPER-v2, закрыть preexisting позиции, изменить Exchange gate или создать приказ без independent readiness+owner-arm. Новая версия materialized StrategyCard→EntryPlan/ExitPlan обязательна.
+
+**Entry/Exit/lifecycle scope:** обе новые реальные StrategyVersion сохраняют P90L90 H9/L5-3 exact RAW, ATR200, PREV7D, first ordered native trade crossing, continuous after-fill trailing at +0.5% with distance 0.35 pp, opposite RAW L5-3 target и SECOND48 per immutable StrategyVersion. Отдельное уточнение владельца ниже меняет **только момент первоначального TP для новых REAL версий**: прежнее условие §7.6 о +0.5% как условии **первичной** установки TP к ним не применяется; для исторической PAPER-v2 оно остаётся прежним. Никаких новых H3/OI/cooldown/Entry gap. В расчетах после комиссий фактические Exchange execution/fill/fee/funding, а не publicTrade research-proxy. Состояние позиций и эмбарго каждой версии отдельно, MAIN не изменяет SUB.
+
+**OWNER CORRECTION 2026-10-28 — INITIAL TP ON REAL ENTRY (Issue #243):** «Take profit ставится сразу при открытии сделки на противоположную сторону L5-3 от точки входа». Для обеих новых REAL StrategyVersion начальная биржевая защита после фактического MARKET-fill включает **и catastrophic SL −10%, и TP на противоположной RAW-границе L5-3** из точного causal snapshot закрытых 36×5m свечей: LONG `max(high36)`, SHORT `min(low36)`. TP нельзя откладывать до движения +0.5%: этот уровень является активацией trailing 0.35 pp, а не требованием для **первичного** TP. **OWNER CLARIFICATION 2026-10-29 — ENTRY-ATTACHED FIRST-SECOND PROTECTION (Issue #243):** владелец подтвердил, что первоначальные SL и TP передаются **в том же запросе Bybit V5 `POST /v5/order/create`**, что и `MARKET` Entry. Это уже существующая возможность Execution, а не новая торговая эвристика. Для USDT perpetual по утверждённому one-way contract используются `tpslMode=Full`, `takeProfit` и `stopLoss` как **цены триггеров**, `tpOrderType=Market` и `slOrderType=Market`. Первичная защита не ждёт отдельного запроса `/v5/position/trading-stop` после fill. `takeProfit` при отправке Entry — точная противоположная **RAW L5-3** граница из causal snapshot (LONG `max(high36)`, SHORT `min(low36)`), нормализованная по Bybit tick/trigger rules. Ширина рабочего диапазона допускается как способ вычислить эту же исходную цену, но не создаёт нового процентного TP от фактической fill-цены. API принимает trigger **price**, даже если пользовательский UI отображает проценты.
+
+**Первоначальный и точный SL:** средняя MARKET-fill заранее неизвестна, поэтому при `order/create` предварительный catastrophic SL −10% вычисляется от свежей проверенной Entry reference price в безопасном направлении и округляется по tick. Это только **временный opening-order protective envelope**, а не финальное доказательство точного уровня. После подтверждённого execution/fill средняя реальная цена `actual_avg_fill` задаёт точный SL (LONG ×0.90; SHORT ×1.10), который сравнивается с биржевым состоянием и при необходимости безопасно уточняется. Коррекция не вправе отменить действующий биржевой SL, расширить уже улучшенный Exit stop или поставить под риск открытую позицию без защиты; каждая mutation требует account-scoped сериализации и независимого signed Exchange readback.
+
+**Немедленный Exit handoff:** после первого подтверждённого реального fill/partial fill торговая позиция, её подтверждённый объём, StrategyPosition и ExitPlan **без промедления** переходят Universal Exit. Не ждать следующей 5m свечи, достижения +0.5% или окончания вспомогательной подстройки TP/SL для начала Exit ownership. Exit сразу получает causal native publicTrade/MFE и authenticated private evidence, а затем владеет динамической противоположной RAW L5-3 TP и trailing по уже утверждённому правилу (+0.5% / 0.35 pp). Opening TP/SL — биржевая страховка на первую секунду, **не замена Exit**; начальное уточнение и решения Exit координируются единым account-scoped command owner во избежание гонок и потери защиты.
+
+**Быстрый TP — штатное закрытие:** если цена достигает прикреплённого TP до первого действия Exit и биржа подтверждает реальный fill закрытия, фиксируется нормальный Exchange Exit с фактическим количеством, ценой, комиссиями и PnL. **Запрещено** автоматически отправлять новый произвольный `MARKET reduce-only`, повторять Entry или считать отсутствие уже закрывшейся позиции ошибкой само по себе. Partial fill/partial close и асинхронные order/execution/position события требуют количественной idempotent reconciliation по executionId и точному TradingAccount.
+
+**Exchange evidence и исключения:** ACK `order/create` не доказывает fill или установленную защиту. Нужны независимые signed Exchange readback, подписанная account identity, causal native continuity, корректный Exit owner и реальные protection outcomes. Если **до отправки** целевой RAW TP уже недопустим относительно актуальной цены/venue restrictions, отклонить Entry до mutation — не подставлять иной TP. Если **после fill** реальная позиция остаётся открытой, но SL или TP не подтверждены, это fail-closed `INITIAL_PROTECTION_UNVERIFIED`, запрет новых Entry и обязательный существующий fault/reconciliation safety workflow, без ложного PASS. Владелец **не утверждал** произвольное аварийное закрытие при быстром движении или уже сработавшем TP. Реакция на подтверждённую незащищённую *открытую* позицию за пределами существующего safety contract остаётся отдельным owner decision, а не новым торговым default. Исторические immutable v1/v2 карточки и старые research ledgers не переопределяются.
+
+**Real capital + order contract by exact StrategyVersion**:
+- MAIN: symbols LTCUSDT, INJUSDT; independent MAIN TradingAccount binding; maximum **2 concurrent per-symbol slots**, total reserved+pending+open requested capital **20 USDT**.
+- SUB: symbols DOTUSDT, ARBUSDT, APTUSDT; independent SUB TradingAccount binding; maximum **3 concurrent per-symbol slots**, total reserved+pending+open requested capital **30 USDT**.
+- Per new entry `requested_amount=10 USDT` **at 1× isolated**, interpreted as 10 USDT targeted position notional/initial-margin budget before fees (at 1× these are nominally equivalent). Account capacity must include actual fees, rounding and existing/pending reservations; cannot exceed approved ceilings, cannot borrow other-account capacity, and cannot silently increase position to meet an exchange minimum. If symbol's Bybit minimum lot/tick/notional prevents compliant 10 USDT, reject Entry fail-closed rather than upsize. Exact normalized quantity depends on current Bybit instrument filters; never derive from paper proxy.
+- `entry.order_type=MARKET` only for a **new** causally verified signal after current live publicTrade epoch, under exchange-one-way `positionIdx=0`, `marginMode=ISOLATED`, `leverage=1x`. No hedge, duplicate reservation, on-behalf account substitution or order sent from old PAPER path. Use actual Exchange orderAck/executionId/partial-fill and idempotent command ledger; every attempt and reservation belongs to exact StrategyVersion+TradingAccount/AccountConnector.
+- `initial_protection` = Exchange-resident SL at **10% gross adverse price from actual position average executed Entry price**; LONG `entry_fill_avg × 0.90`, SHORT `entry_fill_avg × 1.10`, rounded in safe direction by current exchange tick contract, with native conditional trigger method only after exact venue support validated. Ack of entry order ≠ filled position; ack of stop request ≠ confirmed active stop. All newly filled exposure must be protected or immediately subject to fail-closed emergency reconciliation; partial fill/protection race, reduce-only close, position quantity and after-fill TP/Exit updates require explicit tests. Do not use simulation trade price to calculate real SL.
+- Initial REAL protection must prove both Exchange-resident SL and the opposite RAW L5-3 TP immediately after actual fill; existing ExitPlan owns subsequent trailing/TP updates. Exchange stop stays protected without momentary unprotected exposure, no replacement that widens stop. First real trade only when native-mode, signed private order/fill state, fresh publicTrade cursor, account-scoped Position Supervisor/Lifecycle worker, protection status and emergency fault delivery are independently observed and attested. The installed service is not proof of behavior.
+- Capital ceilings are **per Strategy + exact dedicated TradingAccount**, not an aggregate across both accounts; slots account for queued, in-flight, reserved and confirmed physical exposure. On restart recover pending orders, exchange and local position state, current Exchange SL, and SECOND48 before any new Entry. Missing/reconnecting private WS => mainnet/account gate OFF; no speculative orders or fresh Entry after disconnection.
+
+**Release / live-arm distinction:** `OWNER_REAL_CAPITAL_CONTRACT=APPROVED`, `CANON_UPDATE_REQUIRED=YES` and `IMPLEMENTATION_AND_TEST_REQUIRED=YES`. The owner's request to proceed is not evidence of `READY_FOR_OWNER_ARM`. Exact approved release, loaded process identity, signed MAIN+SUB account safety snapshots, position/protection reconciliation, private WS continuity, deterministic order/exit tests and explicit target release/account scope arm checks remain separate mandatory gates under TC §4.7/§4.9, ARCH §7.2 and DEV §46. Until all pass `REAL_READY=NO`, `LIVE_ARM=OFF`; no startup/registration may automatically set `StrategyActivation.enabled`, permissions or Exchange gate. No real diagnostic smoke unless independently owner-triggered under TC §4.8.
+
+### 7.6.4 P90L90 REAL Exit request freshness — OWNER DECISION 2026-10-29 (Issue #243)
+
+For the TWO new P90L90 REAL MAIN/SUB StrategyVersions in §7.6.3, the owner
+explicitly approves `exit_policy.execution_policy.max_request_age_seconds=5`
+(integer seconds). This is an **ExitDecision-to-ExecutionRequest dispatch
+freshness bound**, measured from the exact UTC `ExitDecision.decided_at`;
+expired commands are rejected fail-closed as `REQUEST_EXPIRED`, never
+silently reissued using stale Exit geometry or an assumed position state.
+Recompute and re-attest current Exchange position/protection/source state
+before any new decision. The value is Strategy-owned per immutable REAL
+StrategyVersion/ExitPlan, not a runtime/global default and not an Entry age.
+
+This **does not delay or expire Exchange-resident TP, catastrophic SL or
+exchange-side trailing** already installed on Bybit; those remain effective
+until independently confirmed filled, cancelled or replaced. Exit Engine
+produces decisions to update dynamic opposite RAW L5-3 TP, tighten trailing /
+stop, or perform an explicitly allowed close action; Bybit itself triggers
+existing protective orders. The current 5-second value is a bounded
+operational freshness rule, not a minimum wait or a latency guarantee.
+A future adjustment requires a new approved immutable StrategyVersion and
+revalidation, not a hot runtime setting or retroactive rewrite of v1/v2.
+No mainnet permission, account arm, Strategy activation or deployment follows
+from this value; all §4.7/§7.6.3 gates remain mandatory.
