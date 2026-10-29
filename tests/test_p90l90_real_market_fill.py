@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -120,9 +121,9 @@ def _verified_executions(rows: object, *, average: str = "100"):
         entry_order_link_id="entry-link",
         symbol="LTCUSDT",
         side="Buy",
-        position_size=__import__("decimal").Decimal("0.1"),
-        position_avg=__import__("decimal").Decimal(average),
-        tick_size=__import__("decimal").Decimal("0.01"),
+        position_size=Decimal("0.1"),
+        position_avg=Decimal(average),
+        tick_size=Decimal("0.01"),
     )
 
 
