@@ -41,6 +41,25 @@ def test_full_runtime_installer_preserves_independent_ui_identity() -> None:
     assert "CRIPTA_DASHBOARD_UI_ROOT=$DASHBOARD_UI_ROOT" in INSTALLER
 
 
+def test_full_runtime_installer_dashboard_candidate_preflight_is_retry_safe() -> None:
+    assert (
+        'git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/index.html"'
+        in INSTALLER
+    )
+    assert (
+        'git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/app.py"'
+        in INSTALLER
+    )
+    assert "candidate Dashboard HTML differs from exact Git release" in INSTALLER
+    assert "candidate Dashboard app differs from exact Git release" in INSTALLER
+
+    preflight = INSTALLER.index("candidate Dashboard app differs from exact Git release")
+    overlay = INSTALLER.index(
+        'install -o cripta -g cripta -m 0644 "$DASHBOARD_UI_ROOT/current/app.py"'
+    )
+    assert preflight < overlay
+
+
 
 def test_ui_verifier_allows_only_stage6b_fault_resolution_extension() -> None:
     assert '"/api/observer-faults/resolve"' in UI_DEPLOY
