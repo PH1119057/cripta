@@ -47,6 +47,7 @@ def assemble_p90_real_observer_runtime(
     *,
     bundles: tuple[object, ...],
     source_commit: str,
+    source_epoch_id: str,
     provenance: FrozenPolicy,
     observed_at: datetime,
     admitted_account: AccountAdmissionProvider,
@@ -65,6 +66,8 @@ def assemble_p90_real_observer_runtime(
     """
     if (
         len(bundles) != 2
+        or not source_epoch_id.startswith("p90-real-epoch-")
+        or len(source_epoch_id) != len("p90-real-epoch-") + 40
         or any(not callable(value) for value in (
             admitted_account,
             verified_native_coverage,
@@ -90,6 +93,7 @@ def assemble_p90_real_observer_runtime(
         connection,
         bundles=bundles,
         source_commit=source_commit,
+        source_epoch_id=source_epoch_id,
         provenance=provenance,
         admission_provider=admitted_account,
         verified_exit_tick_port=ports.on_native_trade,
