@@ -11,9 +11,12 @@ from test_p90l90_real_observation import _observation, _scope
 from bybit_workbench.exchange_position_identity import exchange_position_key
 from bybit_workbench.universal_entry.contracts import FrozenPolicy
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID, SUB_ID
+from bybit_workbench.universal_exit import p90l90_real_exit_execution as mod
 from bybit_workbench.universal_exit.contracts import ExitEvaluationStatus
 from bybit_workbench.universal_exit.engine import UniversalExitEngine
-from bybit_workbench.universal_exit import p90l90_real_exit_execution as mod
+from bybit_workbench.universal_exit.execution_bridge import (
+    ExitExecutionBridgeBlocked,
+)
 
 ACCOUNT_MAIN = "ta-" + "1" * 32
 ACCOUNT_SUB = "ta-" + "2" * 32
@@ -69,9 +72,17 @@ def _valid():
     return position, plan, replace(evaluation, observation=observation)
 
 
-def _sink(monkeypatch, *, safety=True):
+def _sink(monkeypatch, *, safety=True, synthetic_exit_ttl=True):
     db = _DB()
     position, plan, evaluation = _valid()
+    if synthetic_exit_ttl:
+        # Only a TEST fixture: actual P90 REAL v3 ExitPlan currently lacks
+        # this Strategy-owned field, and MUST fail closed until owner decision.
+        policy = plan.exit_policy.to_dict()
+        policy["execution_policy"] = {"max_request_age_seconds": 5}
+        plan = replace(
+            plan, exit_policy=FrozenPolicy.from_mapping(policy),
+        )
     steps: list[str] = []
 
     def lookup(_db, *, strategy_position_id):
@@ -117,6 +128,20 @@ def test_real_native_decision_persists_request_then_single_account_command(
     assert prepared is not None
     assert steps == ["load", "independent-safety", "request", "queue"]
     assert db.events == [("account-lock", (ACCOUNT_MAIN,))]
+    assert db.open_transactions == 0
+
+
+def test_actual_unmodified_real_exit_policy_has_no_approved_request_ttl(
+    monkeypatch,
+) -> None:
+    sink, db, steps, position, plan, evaluation = _sink(
+        monkeypatch, synthetic_exit_ttl=False,
+    )
+    with pytest.raises(
+        ExitExecutionBridgeBlocked, match="POLICY_INCOMPLETE"
+    ):
+        sink(evaluation, position, plan)
+    assert steps == ["load", "independent-safety"]
     assert db.open_transactions == 0
 
 
