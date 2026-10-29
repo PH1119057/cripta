@@ -48,6 +48,15 @@ def _source(
     return fact, tuple(bars)
 
 
+def _after_exchange_trailing_armed(checkpoint, private, *, short: bool):
+    # Prior verified native trades reached the activation: Bybit now owns TS.
+    best = D("99") if short else D("101")
+    return (
+        replace(checkpoint, best_favorable_price=best, last_native_price=best),
+        replace(private, position={**private.position, "trailingStop": "0.35"}),
+    )
+
+
 @pytest.mark.parametrize(("short", "sub", "target"), (
     (False, False, "112"), (True, True, "88"),
 ))
@@ -56,6 +65,9 @@ def test_verified_closed36_and_signed_private_create_dynamic_tp_through_engine(
 ) -> None:
     position, plan, checkpoint, _cursor, private, _price = _scope(
         short=short, sub=sub,
+    )
+    checkpoint, private = _after_exchange_trailing_armed(
+        checkpoint, private, short=short,
     )
     fact, candles = _source(position.symbol)
     private = replace(private, observed_at=AT + timedelta(milliseconds=1))
@@ -94,6 +106,9 @@ def test_verified_closed36_and_signed_private_create_dynamic_tp_through_engine(
 
 def test_valid_real_exit_refuses_shadow_only_decision_without_execution_owner() -> None:
     position, plan, checkpoint, _cursor, private, _price = _scope()
+    checkpoint, private = _after_exchange_trailing_armed(
+        checkpoint, private, short=False,
+    )
     fact, candles = _source(position.symbol)
     private = replace(private, observed_at=AT + timedelta(milliseconds=1))
     seen: list[str] = []
