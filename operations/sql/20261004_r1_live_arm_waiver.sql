@@ -14,7 +14,10 @@ ALTER TABLE control.live_arm_evidence
         'UNKNOWN',
         'STALE',
         'NOT_CHECKED_HERE',
-        'OWNER_WAIVED_FOR_R1_MICRO_LIVE'
+        'OWNER_WAIVED_FOR_R1_MICRO_LIVE',
+        -- Replay-safe superset: this historical migration is re-executed by the
+        -- verified installer after P90 waiver rows may already exist.
+        'OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE'
     ));
 
 COMMIT;
