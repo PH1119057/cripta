@@ -121,8 +121,8 @@ def test_sequence_gap_censors_only_unresolved_horizons(tmp_path):
     records = [
         snapshot(midnight),
         delta(start, 101, 1001, bid=[["300", "8"]]),
-        delta(start + 20_000, 102, 1002, bid=[["299", "9"]]),
-        delta(start + 30_000, 104, 1003, bid=[["300", "10"]]),
+        delta(start + 20_000, 102, 1002, bid=[["299", "11"]]),
+        delta(start + 30_000, 104, 1003, bid=[["299", "12"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
     assert cell_for(rows, horizon=15)["not_recovered_n"] == 1

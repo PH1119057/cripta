@@ -169,7 +169,7 @@ def replay_day(
             ep["state"][h]["outcome"] is not None for h in HORIZONS
         )
 
-    def record(ep):
+    def aggregate_episode(ep):
         minute = (ep["start"] - day_start) // 60000
         if not 0 <= minute < 1440:
             raise ValueError("QC_EPISODE_START_OUTSIDE_DAY")
@@ -218,7 +218,7 @@ def replay_day(
     def flush_complete(side, price):
         ep = active[side].get(price)
         if ep is not None and complete(ep):
-            record(ep)
+            aggregate_episode(ep)
             del active[side][price]
 
     def censor(ep, reason, ts):
@@ -428,7 +428,7 @@ def replay_day(
                 )
                 if touches[(side, price)] > 1:
                     censor(ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts)
-                    record(ep)
+                    aggregate_episode(ep)
                 else:
                     register(ep)
 
