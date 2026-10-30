@@ -37,5 +37,6 @@ def test_installer_installs_controller_but_does_not_manage_or_start_it():
     managed = installer.split("managed_services=(", 1)[1].split(")", 1)[0]
     assert "cripta-release-controller.service" not in managed
     assert "enable --now cripta-release-controller" not in installer
+    assert "systemctl disable cripta-release-controller.service" in installer
     assert "/usr/local/libexec/cripta-release-controller" in installer
     assert "-o root -g root -m 0755" in installer
