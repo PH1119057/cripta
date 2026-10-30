@@ -59,8 +59,22 @@ def archive(tmp_path, records):
     return path
 
 
-def rows_for(result_rows, *, price="300"):
-    return [row for row in result_rows if row["side"] == "BID" and row["price"] == price]
+def cell_for(
+    result_rows,
+    *,
+    minute=0,
+    side="BID",
+    stratum="Top5",
+    horizon=15,
+):
+    return next(
+        row
+        for row in result_rows
+        if row["minute_utc"] == minute
+        and row["side"] == side
+        and row["stratum"] == stratum
+        and row["horizon_s"] == horizon
+    )
 
 
 def test_endpoint_is_inclusive_and_recovery_requires_later_timestamp(tmp_path):
@@ -72,10 +86,16 @@ def test_endpoint_is_inclusive_and_recovery_requires_later_timestamp(tmp_path):
         delta(start + 15_000, 102, 1002, bid=[["300", "10"]]),
     ]
     manifest, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows)
-    assert [row["horizon_s"] for row in target] == [15, 60, 300]
-    assert [row["outcome"] for row in target] == ["R", "R", "R"]
-    assert all(row["recovery_ms"] == 15_000 for row in target)
+    assert len(rows) == m.CUBE_ROWS_PER_DAY
+    for horizon in (15, 60, 300):
+        cell = cell_for(rows, horizon=horizon)
+        assert cell["episodes"] == 1
+        assert cell["recovered_r"] == 1
+        assert cell["not_recovered_n"] == 0
+        assert cell["censored_c"] == 0
+        assert cell["recovery_ms_sum"] == 15_000
+        assert cell["recovery_ms_min"] == 15_000
+        assert cell["recovery_ms_max"] == 15_000
     assert manifest["horizon_endpoint_inclusive"] is True
     assert manifest["recovery_requires_strictly_later_native_timestamp"] is True
 
@@ -90,12 +110,9 @@ def test_horizons_are_independent_n15_then_r60_r300(tmp_path):
         delta(start + 30_000, 103, 1003, bid=[["300", "10"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows)
-    assert [(row["horizon_s"], row["outcome"]) for row in target] == [
-        (15, "N"),
-        (60, "R"),
-        (300, "R"),
-    ]
+    assert cell_for(rows, horizon=15)["not_recovered_n"] == 1
+    assert cell_for(rows, horizon=60)["recovered_r"] == 1
+    assert cell_for(rows, horizon=300)["recovered_r"] == 1
 
 
 def test_sequence_gap_censors_only_unresolved_horizons(tmp_path):
@@ -108,14 +125,11 @@ def test_sequence_gap_censors_only_unresolved_horizons(tmp_path):
         delta(start + 30_000, 104, 1003, bid=[["300", "10"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows)
-    assert [(row["horizon_s"], row["outcome"]) for row in target] == [
-        (15, "N"),
-        (60, "C"),
-        (300, "C"),
-    ]
-    assert target[1]["outcome_reason"] == "SOURCE_SEQUENCE_GAP"
-    assert target[2]["outcome_reason"] == "SOURCE_SEQUENCE_GAP"
+    assert cell_for(rows, horizon=15)["not_recovered_n"] == 1
+    assert cell_for(rows, horizon=60)["censored_c"] == 1
+    assert cell_for(rows, horizon=300)["censored_c"] == 1
+    assert cell_for(rows, horizon=60)["c_source_sequence_gap"] == 1
+    assert cell_for(rows, horizon=300)["c_source_sequence_gap"] == 1
 
 
 def test_same_timestamp_multi_touch_is_fail_closed(tmp_path):
@@ -129,12 +143,10 @@ def test_same_timestamp_multi_touch_is_fail_closed(tmp_path):
         delta(tie, 103, 1003, bid=[["300", "7"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows)
-    assert all(row["outcome"] == "C" for row in target)
-    assert all(
-        row["outcome_reason"] == "SAME_TIMESTAMP_ORDER_AMBIGUOUS"
-        for row in target
-    )
+    for horizon in (15, 60, 300):
+        cell = cell_for(rows, horizon=horizon)
+        assert cell["censored_c"] == 1
+        assert cell["c_same_timestamp_order_ambiguous"] == 1
 
 
 def test_leaving_visible_ob200_edge_censors_unresolved(tmp_path):
@@ -149,12 +161,10 @@ def test_leaving_visible_ob200_edge_censors_unresolved(tmp_path):
         delta(start + 5_000, 102, 1002, bid=[["301", "1"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows, price=edge_price)
-    assert all(row["outcome"] == "C" for row in target)
-    assert all(
-        row["outcome_reason"] == "OB200_EDGE_VISIBILITY_LOST"
-        for row in target
-    )
+    for horizon in (15, 60, 300):
+        cell = cell_for(rows, stratum="6-200", horizon=horizon)
+        assert cell["censored_c"] == 1
+        assert cell["c_ob200_edge_visibility_lost"] == 1
 
 
 def test_unresolved_day_end_is_right_censored(tmp_path):
@@ -165,9 +175,10 @@ def test_unresolved_day_end_is_right_censored(tmp_path):
         delta(start, 101, 1001, bid=[["300", "8"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
-    target = rows_for(rows)
-    assert all(row["outcome"] == "C" for row in target)
-    assert all(row["outcome_reason"] == "DAY_END_RIGHT_CENSOR" for row in target)
+    for horizon in (15, 60, 300):
+        cell = cell_for(rows, minute=1439, horizon=horizon)
+        assert cell["censored_c"] == 1
+        assert cell["c_day_end_right_censor"] == 1
 
 
 def test_bounded_next_day_suffix_is_validated_and_counted(tmp_path):
@@ -188,9 +199,7 @@ def test_bounded_next_day_suffix_is_validated_and_counted(tmp_path):
         archive(tmp_path, records), SYMBOL, DAY
     )
     assert manifest["source_suffix_records"] == 1
-    target = rows_for(rows)
-    assert all(row["outcome"] == "C" for row in target)
-    assert all(
-        row["outcome_reason"] == "DAY_END_RIGHT_CENSOR"
-        for row in target
-    )
+    for horizon in (15, 60, 300):
+        cell = cell_for(rows, horizon=horizon)
+        assert cell["censored_c"] == 1
+        assert cell["c_day_end_right_censor"] == 1

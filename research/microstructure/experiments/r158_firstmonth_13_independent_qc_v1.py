@@ -24,6 +24,15 @@ START = date(2026, 5, 18)
 RAW_ROOT = Path("/data/cripta/datasets/raw/20260518_20260816")
 RUN_ROOT = Path("/data/cripta/research/runs/r158_firstmonth_13_20261031")
 FORMULA = "R158_DEPTH_RECOVERY_EXACT_PRICE_MULTI_HORIZON_V1"
+CUBE_VERSION = "R158_DEPTH_RECOVERY_START_MINUTE_SIDE_STRATUM_HORIZON_V1"
+CUBE_ROWS_PER_DAY = 1440 * 2 * 2 * 3
+CENSOR_REASONS = (
+    "SAME_TIMESTAMP_ORDER_AMBIGUOUS",
+    "SOURCE_SEQUENCE_GAP",
+    "SNAPSHOT_RESET",
+    "OB200_EDGE_VISIBILITY_LOST",
+    "DAY_END_RIGHT_CENSOR",
+)
 VERSION = "R158_FIRSTMONTH_13_INDEPENDENT_FULLROW_QC_V1"
 HORIZONS = (15_000, 60_000, 300_000)
 
@@ -151,18 +160,65 @@ def replay_day(
     active = {"b": {}, "a": {}}
     deadlines = {"b": [], "a": []}
     visibility = {"b": [], "a": []}
-    completed = []
+    aggregate = {}
     ordinal = 0
+    seen_snapshot = False
 
     def complete(ep):
         return all(
             ep["state"][h]["outcome"] is not None for h in HORIZONS
         )
 
+    def record(ep):
+        minute = (ep["start"] - day_start) // 60000
+        if not 0 <= minute < 1440:
+            raise ValueError("QC_EPISODE_START_OUTSIDE_DAY")
+        side_label = "BID" if ep["side"] == "b" else "ASK"
+        for horizon in HORIZONS:
+            item = ep["state"][horizon]
+            if item["outcome"] is None or item["reason"] is None:
+                raise ValueError("QC_UNRESOLVED_HORIZON")
+            key = (minute, side_label, ep["stratum"], horizon)
+            cell = aggregate.setdefault(
+                key,
+                {
+                    "episodes": 0,
+                    "R": 0,
+                    "N": 0,
+                    "C": 0,
+                    "recovery_ms_sum": 0,
+                    "recovery_ms_min": None,
+                    "recovery_ms_max": None,
+                    "censor_reasons": {
+                        reason: 0 for reason in CENSOR_REASONS
+                    },
+                },
+            )
+            cell["episodes"] += 1
+            cell[item["outcome"]] += 1
+            if item["outcome"] == "R":
+                duration = item["recovery_ms"]
+                if duration is None:
+                    raise ValueError("QC_RECOVERY_WITHOUT_DURATION")
+                cell["recovery_ms_sum"] += duration
+                low = cell["recovery_ms_min"]
+                high = cell["recovery_ms_max"]
+                cell["recovery_ms_min"] = (
+                    duration if low is None else min(low, duration)
+                )
+                cell["recovery_ms_max"] = (
+                    duration if high is None else max(high, duration)
+                )
+            elif item["outcome"] == "C":
+                reasons = cell["censor_reasons"]
+                if item["reason"] not in reasons:
+                    raise ValueError("QC_UNKNOWN_CENSOR_REASON")
+                reasons[item["reason"]] += 1
+
     def flush_complete(side, price):
         ep = active[side].get(price)
         if ep is not None and complete(ep):
-            completed.append(ep)
+            record(ep)
             del active[side][price]
 
     def censor(ep, reason, ts):
@@ -177,8 +233,7 @@ def replay_day(
         for side in ("b", "a"):
             for price, ep in list(active[side].items()):
                 censor(ep, reason, ts)
-                completed.append(ep)
-                del active[side][price]
+                flush_complete(side, price)
 
     def register(ep):
         side, price = ep["side"], ep["price"]
@@ -240,7 +295,7 @@ def replay_day(
         return int(record["ts"]), int(data["u"]), int(data["seq"])
 
     def process_group(ts, group):
-        nonlocal books, uid, seq, last_ts, ordinal
+        nonlocal books, uid, seq, last_ts, ordinal, seen_snapshot
         kinds = {record["type"] for record in group}
         if "snapshot" in kinds:
             if len(group) != 1 or kinds != {"snapshot"}:
@@ -264,6 +319,7 @@ def replay_day(
                 censor_all("SNAPSHOT_RESET", ts)
             books = replacement
             uid, seq, last_ts = ruid, rseq, rts
+            seen_snapshot = True
             return
         if kinds != {"delta"}:
             raise ValueError("QC_UNSUPPORTED_MESSAGE")
@@ -372,7 +428,7 @@ def replay_day(
                 )
                 if touches[(side, price)] > 1:
                     censor(ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts)
-                    completed.append(ep)
+                    record(ep)
                 else:
                     register(ep)
 
@@ -419,51 +475,92 @@ def replay_day(
         if group:
             process_group(group_ts, group)
 
-    if books is None and not completed:
+    if not seen_snapshot:
         raise ValueError("QC_NO_VALID_DAY_BOOK_STATE")
     censor_all("DAY_END_RIGHT_CENSOR", day_end)
 
     rows = []
-    for ep in completed:
-        for h in HORIZONS:
-            item = ep["state"][h]
-            if item["outcome"] is None:
-                raise ValueError("QC_UNRESOLVED_HORIZON")
-            rows.append(
-                {
-                    "episode_id": ep["episode_id"],
-                    "indicator_id": 13,
-                    "formula_version": FORMULA,
-                    "venue_id": "Bybit",
-                    "market_source_id": "BYBIT_OB200_ARCHIVE",
-                    "instrument_id": symbol,
-                    "date_utc": day.isoformat(),
-                    "side": "BID" if ep["side"] == "b" else "ASK",
-                    "price": str(ep["price"]),
-                    "target_base_qty": str(ep["target"]),
-                    "post_depletion_base_qty": str(ep["after"]),
-                    "start_rank": ep["rank"],
-                    "stratum": ep["stratum"],
-                    "start_ts_exchange_ms": ep["start"],
-                    "horizon_s": h // 1000,
-                    "outcome": item["outcome"],
-                    "outcome_reason": item["reason"],
-                    "outcome_ts_exchange_ms": item["outcome_ts"],
-                    "recovery_ms": item["recovery_ms"],
-                    "observed_at_utc": None,
-                    "verified_available_after_utc": None,
-                    "research_ready": False,
-                }
-            )
-    rows.sort(
-        key=lambda row: (
-            row["start_ts_exchange_ms"],
-            row["side"],
-            Decimal(row["price"]),
-            row["episode_id"],
-            row["horizon_s"],
-        )
-    )
+    for minute in range(1440):
+        minute_start = datetime.fromtimestamp(
+            (day_start + minute * 60000) / 1000, UTC
+        ).isoformat()
+        for side in ("BID", "ASK"):
+            for stratum in ("Top5", "6-200"):
+                for horizon in HORIZONS:
+                    cell = aggregate.get(
+                        (minute, side, stratum, horizon)
+                    )
+                    episodes = int(cell["episodes"]) if cell else 0
+                    recovered = int(cell["R"]) if cell else 0
+                    not_recovered = int(cell["N"]) if cell else 0
+                    censored = int(cell["C"]) if cell else 0
+                    reasons = (
+                        cell["censor_reasons"]
+                        if cell
+                        else {reason: 0 for reason in CENSOR_REASONS}
+                    )
+                    if episodes != recovered + not_recovered + censored:
+                        raise ValueError("QC_CUBE_OUTCOME_PARTITION")
+                    if censored != sum(int(v) for v in reasons.values()):
+                        raise ValueError("QC_CUBE_CENSOR_PARTITION")
+                    rows.append(
+                        {
+                            "indicator_id": 13,
+                            "formula_version": FORMULA,
+                            "cube_version": CUBE_VERSION,
+                            "venue_id": "Bybit",
+                            "market_source_id": "BYBIT_OB200_ARCHIVE",
+                            "instrument_id": symbol,
+                            "date_utc": day.isoformat(),
+                            "minute_utc": minute,
+                            "minute_start_utc": minute_start,
+                            "side": side,
+                            "stratum": stratum,
+                            "horizon_s": horizon // 1000,
+                            "episodes": episodes,
+                            "recovered_r": recovered,
+                            "not_recovered_n": not_recovered,
+                            "censored_c": censored,
+                            "recovery_ms_sum": (
+                                int(cell["recovery_ms_sum"])
+                                if cell
+                                else 0
+                            ),
+                            "recovery_ms_min": (
+                                cell["recovery_ms_min"] if cell else None
+                            ),
+                            "recovery_ms_max": (
+                                cell["recovery_ms_max"] if cell else None
+                            ),
+                            "c_same_timestamp_order_ambiguous": int(
+                                reasons["SAME_TIMESTAMP_ORDER_AMBIGUOUS"]
+                            ),
+                            "c_source_sequence_gap": int(
+                                reasons["SOURCE_SEQUENCE_GAP"]
+                            ),
+                            "c_snapshot_reset": int(
+                                reasons["SNAPSHOT_RESET"]
+                            ),
+                            "c_ob200_edge_visibility_lost": int(
+                                reasons["OB200_EDGE_VISIBILITY_LOST"]
+                            ),
+                            "c_day_end_right_censor": int(
+                                reasons["DAY_END_RIGHT_CENSOR"]
+                            ),
+                            "quality": (
+                                "NO_EPISODES"
+                                if episodes == 0
+                                else "OBSERVED_WITH_CENSORING"
+                                if censored
+                                else "OBSERVED"
+                            ),
+                            "observed_at_utc": None,
+                            "verified_available_after_utc": None,
+                            "research_ready": False,
+                        }
+                    )
+    if len(rows) != CUBE_ROWS_PER_DAY:
+        raise ValueError("QC_CUBE_DAILY_CARDINALITY")
     return rows, suffix_records
 
 def read_output(path: Path):
@@ -494,7 +591,7 @@ def check_symbol(
     target = run_root / symbol
     final_path = target / "run_final.json"
     provenance_path = target / "input_provenance.json"
-    output_path = target / "episode_horizons.jsonl.gz"
+    output_path = target / "depth_recovery_cube.jsonl.gz"
     report_path = target / "independent_qc_report.json"
     if report_path.exists():
         raise FileExistsError("IMMUTABLE_QC_REPORT_ALREADY_EXISTS")
@@ -508,6 +605,7 @@ def check_symbol(
         final["status"]
         != "DEPTH13_FIRSTMONTH_PHYSICAL_COMPLETE_PENDING_INDEPENDENT_QC"
         or final["formula_version"] != FORMULA
+        or final["cube_version"] != CUBE_VERSION
         or final["symbol"] != symbol
         or final["days"] != 30
     ):
@@ -575,6 +673,7 @@ def check_symbol(
         "symbol": symbol,
         "indicator_id": 13,
         "formula_version": FORMULA,
+        "cube_version": CUBE_VERSION,
         "checked_rows": checked,
         "checked_days": 30,
         "source_days": source_days,

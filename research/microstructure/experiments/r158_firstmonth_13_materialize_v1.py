@@ -25,6 +25,10 @@ DAYS = 30
 RAW_ROOT = Path("/data/cripta/datasets/raw/20260518_20260816")
 OUTPUT_ROOT = Path("/data/cripta/research/runs/r158_firstmonth_13_20261031")
 EXPECTED_READER_VERSION = "R158_DEPTH_RECOVERY_EXACT_PRICE_MULTI_HORIZON_V1"
+EXPECTED_CUBE_VERSION = (
+    "R158_DEPTH_RECOVERY_START_MINUTE_SIDE_STRATUM_HORIZON_V1"
+)
+CUBE_ROWS_PER_DAY = 1440 * 2 * 2 * 3
 VERSION = "R158_FIRSTMONTH_13_MATERIALIZER_V1"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -70,6 +74,8 @@ def load_reader(path: Path):
     spec.loader.exec_module(module)
     if module.VERSION != EXPECTED_READER_VERSION:
         raise ValueError("DEPTH13_READER_VERSION_DRIFT")
+    if module.CUBE_VERSION != EXPECTED_CUBE_VERSION:
+        raise ValueError("DEPTH13_CUBE_VERSION_DRIFT")
     return module
 
 
@@ -148,15 +154,15 @@ def materialize_symbol(
         },
     )
 
-    part = target / "episode_horizons.jsonl.gz.part"
-    final = target / "episode_horizons.jsonl.gz"
+    part = target / "depth_recovery_cube.jsonl.gz.part"
+    final = target / "depth_recovery_cube.jsonl.gz"
     provenance = []
     outcome_counts = {
         f"{outcome}_{h}s": 0
         for h in (15, 60, 300)
         for outcome in ("R", "N", "C")
     }
-    rows = episodes = raw_records = 0
+    rows = episodes = episode_horizon_observations = raw_records = 0
 
     with part.open("xb") as binary:
         with gzip.GzipFile(fileobj=binary, mode="wb", mtime=0) as zipped:
@@ -169,8 +175,15 @@ def materialize_symbol(
                     )
                     if manifest["rows"] != len(day_rows):
                         raise ValueError("DAY_MANIFEST_ROW_COUNT_MISMATCH")
-                    if len(day_rows) != manifest["episodes"] * 3:
-                        raise ValueError("DAY_EPISODE_HORIZON_CARDINALITY")
+                    if len(day_rows) != CUBE_ROWS_PER_DAY:
+                        raise ValueError("DAY_CUBE_CARDINALITY_MISMATCH")
+                    if (
+                        manifest["episode_horizon_observations"]
+                        != manifest["episodes"] * 3
+                    ):
+                        raise ValueError(
+                            "DAY_EPISODE_HORIZON_OBSERVATION_COUNT"
+                        )
                     for row in day_rows:
                         writer.write(
                             json.dumps(row, sort_keys=True) + "\n"
@@ -179,6 +192,9 @@ def materialize_symbol(
                         key = f"{row['outcome']}_{row['horizon_s']}s"
                         outcome_counts[key] += 1
                     episodes += manifest["episodes"]
+                    episode_horizon_observations += manifest[
+                        "episode_horizon_observations"
+                    ]
                     raw_records += manifest["raw_records_read"]
                     provenance.append(
                         {
@@ -191,6 +207,9 @@ def materialize_symbol(
                                 "source_suffix_records"
                             ],
                             "episodes": manifest["episodes"],
+                            "episode_horizon_observations": manifest[
+                                "episode_horizon_observations"
+                            ],
                             "rows": manifest["rows"],
                             "outcome_counts": manifest["outcome_counts"],
                             "reader_qc": manifest["reader_qc"],
@@ -202,8 +221,10 @@ def materialize_symbol(
 
     if len(provenance) != 30:
         raise ValueError("FIRSTMONTH_DAY_COUNT_MISMATCH")
-    if rows != episodes * 3:
-        raise ValueError("FULL_EPISODE_HORIZON_CARDINALITY_MISMATCH")
+    if rows != days * CUBE_ROWS_PER_DAY:
+        raise ValueError("FULL_CUBE_CARDINALITY_MISMATCH")
+    if episode_horizon_observations != episodes * 3:
+        raise ValueError("FULL_EPISODE_HORIZON_OBSERVATION_COUNT")
 
     write_json_new(target / "input_provenance.json", {"days": provenance})
     result = {
@@ -212,7 +233,10 @@ def materialize_symbol(
         "days": days,
         "indicator_id": 13,
         "formula_version": reader.VERSION,
+        "cube_version": reader.CUBE_VERSION,
+        "cube_grain": "UTC start-minute × side × start-rank stratum × horizon",
         "episodes": episodes,
+        "episode_horizon_observations": episode_horizon_observations,
         "rows": rows,
         "raw_records_read": raw_records,
         "outcome_counts": outcome_counts,

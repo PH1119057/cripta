@@ -20,6 +20,15 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 VERSION = "R158_DEPTH_RECOVERY_EXACT_PRICE_MULTI_HORIZON_V1"
+CUBE_VERSION = "R158_DEPTH_RECOVERY_START_MINUTE_SIDE_STRATUM_HORIZON_V1"
+CUBE_ROWS_PER_DAY = 1440 * 2 * 2 * 3
+CENSOR_REASONS = (
+    "SAME_TIMESTAMP_ORDER_AMBIGUOUS",
+    "SOURCE_SEQUENCE_GAP",
+    "SNAPSHOT_RESET",
+    "OB200_EDGE_VISIBILITY_LOST",
+    "DAY_END_RIGHT_CENSOR",
+)
 COHORT = ("APTUSDT", "INJUSDT", "DOTUSDT", "LTCUSDT", "ARBUSDT")
 START = date(2026, 5, 18)
 END_EXCLUSIVE = date(2026, 6, 17)
@@ -148,7 +157,15 @@ class DepthRecoveryReader:
         self.visibility_heaps: dict[
             str, list[tuple[Decimal, str, Decimal]]
         ] = {"b": [], "a": []}
-        self.finished: list[Episode] = []
+        self.aggregate: dict[
+            tuple[int, str, str, int], dict[str, object]
+        ] = {}
+        self.day_start_ms = int(
+            datetime(
+                day.year, day.month, day.day, tzinfo=UTC
+            ).timestamp()
+            * 1000
+        )
         self.episode_no = 0
         self.counts = {
             "snapshots": 0,
@@ -161,10 +178,58 @@ class DepthRecoveryReader:
             "episodes_opened": 0,
         }
 
+    def _record_episode(self, episode: Episode) -> None:
+        minute = (episode.start_ts_ms - self.day_start_ms) // 60000
+        if not 0 <= minute < 1440:
+            raise ValueError("EPISODE_START_OUTSIDE_UTC_DAY")
+        side_label = "BID" if episode.side == "b" else "ASK"
+        for horizon, state in episode.states.items():
+            if state.outcome is None or state.reason is None:
+                raise ValueError("UNRESOLVED_EPISODE_HORIZON")
+            key = (minute, side_label, episode.stratum, horizon)
+            cell = self.aggregate.setdefault(
+                key,
+                {
+                    "episodes": 0,
+                    "R": 0,
+                    "N": 0,
+                    "C": 0,
+                    "recovery_ms_sum": 0,
+                    "recovery_ms_min": None,
+                    "recovery_ms_max": None,
+                    "censor_reasons": {
+                        reason: 0 for reason in CENSOR_REASONS
+                    },
+                },
+            )
+            cell["episodes"] += 1
+            cell[state.outcome] += 1
+            if state.outcome == "R":
+                if state.recovery_ms is None:
+                    raise ValueError("RECOVERY_WITHOUT_DURATION")
+                cell["recovery_ms_sum"] += state.recovery_ms
+                current_min = cell["recovery_ms_min"]
+                current_max = cell["recovery_ms_max"]
+                cell["recovery_ms_min"] = (
+                    state.recovery_ms
+                    if current_min is None
+                    else min(current_min, state.recovery_ms)
+                )
+                cell["recovery_ms_max"] = (
+                    state.recovery_ms
+                    if current_max is None
+                    else max(current_max, state.recovery_ms)
+                )
+            elif state.outcome == "C":
+                reasons = cell["censor_reasons"]
+                if state.reason not in reasons:
+                    raise ValueError("UNKNOWN_CENSOR_REASON")
+                reasons[state.reason] += 1
+
     def _finish_if_complete(self, side: str, price: Decimal) -> None:
         episode = self.active[side].get(price)
         if episode is not None and episode.complete():
-            self.finished.append(episode)
+            self._record_episode(episode)
             del self.active[side][price]
 
     def _censor_episode(
@@ -188,8 +253,92 @@ class DepthRecoveryReader:
         for side in SIDES:
             for price, episode in list(self.active[side].items()):
                 self._censor_episode(episode, reason, ts_ms)
-                self.finished.append(episode)
-                del self.active[side][price]
+                self._finish_if_complete(side, price)
+
+    def aggregate_rows(self) -> list[dict]:
+        rows: list[dict] = []
+        for minute in range(1440):
+            minute_start = datetime.fromtimestamp(
+                (self.day_start_ms + minute * 60000) / 1000, UTC
+            ).isoformat()
+            for side in ("BID", "ASK"):
+                for stratum in ("Top5", "6-200"):
+                    for horizon in HORIZONS_MS:
+                        cell = self.aggregate.get(
+                            (minute, side, stratum, horizon)
+                        )
+                        episodes = int(cell["episodes"]) if cell else 0
+                        recovered = int(cell["R"]) if cell else 0
+                        not_recovered = int(cell["N"]) if cell else 0
+                        censored = int(cell["C"]) if cell else 0
+                        if episodes != recovered + not_recovered + censored:
+                            raise ValueError("CUBE_OUTCOME_PARTITION_MISMATCH")
+                        reasons = (
+                            cell["censor_reasons"]
+                            if cell
+                            else {reason: 0 for reason in CENSOR_REASONS}
+                        )
+                        if censored != sum(int(v) for v in reasons.values()):
+                            raise ValueError("CUBE_CENSOR_REASON_PARTITION_MISMATCH")
+                        rows.append(
+                            {
+                                "indicator_id": 13,
+                                "formula_version": VERSION,
+                                "cube_version": CUBE_VERSION,
+                                "venue_id": "Bybit",
+                                "market_source_id": "BYBIT_OB200_ARCHIVE",
+                                "instrument_id": self.symbol,
+                                "date_utc": self.day.isoformat(),
+                                "minute_utc": minute,
+                                "minute_start_utc": minute_start,
+                                "side": side,
+                                "stratum": stratum,
+                                "horizon_s": horizon // 1000,
+                                "episodes": episodes,
+                                "recovered_r": recovered,
+                                "not_recovered_n": not_recovered,
+                                "censored_c": censored,
+                                "recovery_ms_sum": (
+                                    int(cell["recovery_ms_sum"])
+                                    if cell
+                                    else 0
+                                ),
+                                "recovery_ms_min": (
+                                    cell["recovery_ms_min"] if cell else None
+                                ),
+                                "recovery_ms_max": (
+                                    cell["recovery_ms_max"] if cell else None
+                                ),
+                                "c_same_timestamp_order_ambiguous": int(
+                                    reasons["SAME_TIMESTAMP_ORDER_AMBIGUOUS"]
+                                ),
+                                "c_source_sequence_gap": int(
+                                    reasons["SOURCE_SEQUENCE_GAP"]
+                                ),
+                                "c_snapshot_reset": int(
+                                    reasons["SNAPSHOT_RESET"]
+                                ),
+                                "c_ob200_edge_visibility_lost": int(
+                                    reasons["OB200_EDGE_VISIBILITY_LOST"]
+                                ),
+                                "c_day_end_right_censor": int(
+                                    reasons["DAY_END_RIGHT_CENSOR"]
+                                ),
+                                "quality": (
+                                    "NO_EPISODES"
+                                    if episodes == 0
+                                    else "OBSERVED_WITH_CENSORING"
+                                    if censored
+                                    else "OBSERVED"
+                                ),
+                                "observed_at_utc": None,
+                                "verified_available_after_utc": None,
+                                "research_ready": False,
+                            }
+                        )
+        if len(rows) != CUBE_ROWS_PER_DAY:
+            raise ValueError("CUBE_DAILY_CARDINALITY_MISMATCH")
+        return rows
 
     def _validate_identity(self, record: dict) -> tuple[int, int, int]:
         data = record.get("data")
@@ -409,7 +558,7 @@ class DepthRecoveryReader:
                     self._censor_episode(
                         episode, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts
                     )
-                    self.finished.append(episode)
+                    self._record_episode(episode)
                 else:
                     self._register_episode(episode)
 
@@ -460,53 +609,6 @@ def hash_file(path: Path) -> str:
         for block in iter(lambda: stream.read(4 * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def render_rows(episodes: list[Episode]) -> list[dict]:
-    rows: list[dict] = []
-    for episode in episodes:
-        for horizon in sorted(episode.states):
-            state = episode.states[horizon]
-            if state.outcome is None:
-                raise ValueError("UNRESOLVED_EPISODE_HORIZON")
-            rows.append(
-                {
-                    "episode_id": episode.episode_id,
-                    "indicator_id": 13,
-                    "formula_version": VERSION,
-                    "venue_id": "Bybit",
-                    "market_source_id": "BYBIT_OB200_ARCHIVE",
-                    "instrument_id": episode.symbol,
-                    "date_utc": episode.day.isoformat(),
-                    "side": "BID" if episode.side == "b" else "ASK",
-                    "price": str(episode.price),
-                    "target_base_qty": str(episode.target_qty),
-                    "post_depletion_base_qty": str(
-                        episode.post_depletion_qty
-                    ),
-                    "start_rank": episode.start_rank,
-                    "stratum": episode.stratum,
-                    "start_ts_exchange_ms": episode.start_ts_ms,
-                    "horizon_s": horizon // 1000,
-                    "outcome": state.outcome,
-                    "outcome_reason": state.reason,
-                    "outcome_ts_exchange_ms": state.outcome_ts_ms,
-                    "recovery_ms": state.recovery_ms,
-                    "observed_at_utc": None,
-                    "verified_available_after_utc": None,
-                    "research_ready": False,
-                }
-            )
-    rows.sort(
-        key=lambda row: (
-            row["start_ts_exchange_ms"],
-            row["side"],
-            Decimal(row["price"]),
-            row["episode_id"],
-            row["horizon_s"],
-        )
-    )
-    return rows
 
 
 def calculate_archive(
@@ -573,20 +675,26 @@ def calculate_archive(
     if reader.counts["snapshots"] == 0:
         raise ValueError("NO_DAY_SNAPSHOT")
     reader.finish_day(end_ms)
-    episodes = sorted(
-        reader.finished,
-        key=lambda episode: (
-            episode.start_ts_ms,
-            episode.side,
-            episode.price,
-            episode.episode_id,
-        ),
+    rows = reader.aggregate_rows()
+    episodes = reader.counts["episodes_opened"]
+    episode_horizon_observations = sum(
+        int(row["episodes"]) for row in rows
     )
-    rows = render_rows(episodes)
+    if episode_horizon_observations != episodes * len(HORIZONS_MS):
+        raise ValueError("CUBE_EPISODE_HORIZON_COUNT_MISMATCH")
     outcome_counts = {
         f"{outcome}_{h // 1000}s": sum(
-            row["outcome"] == outcome and row["horizon_s"] == h // 1000
+            int(
+                row[
+                    {
+                        "R": "recovered_r",
+                        "N": "not_recovered_n",
+                        "C": "censored_c",
+                    }[outcome]
+                ]
+            )
             for row in rows
+            if row["horizon_s"] == h // 1000
         )
         for h in HORIZONS_MS
         for outcome in ("R", "N", "C")
@@ -600,8 +708,11 @@ def calculate_archive(
         "source_script_sha256": hash_file(Path(__file__).resolve()),
         "raw_records_read": records,
         "source_suffix_records": suffix_records,
-        "episodes": len(episodes),
+        "episodes": episodes,
+        "episode_horizon_observations": episode_horizon_observations,
         "rows": len(rows),
+        "cube_version": CUBE_VERSION,
+        "cube_grain": "UTC start-minute × side × start-rank stratum × horizon",
         "outcome_counts": outcome_counts,
         "reader_qc": reader.counts,
         "horizons_seconds": [h // 1000 for h in HORIZONS_MS],

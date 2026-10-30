@@ -121,7 +121,8 @@ def test_full_30d_materialization_then_independent_fullrow_qc(tmp_path):
     )
     assert final["days"] == 30
     assert final["episodes"] == 30
-    assert final["rows"] == 90
+    assert final["episode_horizon_observations"] == 90
+    assert final["rows"] == 30 * materializer.CUBE_ROWS_PER_DAY
     assert final["outcome_counts"]["R_15s"] == 30
     assert final["outcome_counts"]["R_60s"] == 30
     assert final["outcome_counts"]["R_300s"] == 30
@@ -137,7 +138,7 @@ def test_full_30d_materialization_then_independent_fullrow_qc(tmp_path):
         "DEPTH13_FIRSTMONTH_INDEPENDENT_FULLROW_QC_PASS_NOT_RESEARCH_READY"
     )
     assert report["checked_days"] == 30
-    assert report["checked_rows"] == 90
+    assert report["checked_rows"] == 30 * materializer.CUBE_ROWS_PER_DAY
     assert all(
         item["source_suffix_records"] == 1
         for item in report["source_days"]
@@ -195,7 +196,7 @@ def test_checker_rejects_materialized_output_hash_drift(tmp_path):
         output_root=output,
         require_actor=False,
     )
-    artifact = output / SYMBOL / "episode_horizons.jsonl.gz"
+    artifact = output / SYMBOL / "depth_recovery_cube.jsonl.gz"
     artifact.write_bytes(artifact.read_bytes() + b"x")
 
     with pytest.raises(ValueError, match="MATERIALIZED_OUTPUT_HASH_DRIFT"):
