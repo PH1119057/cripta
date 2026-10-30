@@ -56,7 +56,7 @@ def test_recovery_resumes_after_migrations_without_reapplying_them():
 
 def test_recovered_active_set_is_exact_and_sub_remains_inert():
     assert module.ACTIVE_SERVICES == EXPECTED_ACTIVE
-    assert module.ACTIVE_SERVICES <= set(module.MANAGED_SERVICES)
+    assert module.ACTIVE_SERVICES.issubset(module.MANAGED_SERVICES)
     assert all("@" not in unit for unit in module.ACTIVE_SERVICES)
     assert all(unit not in module.ACTIVE_SERVICES for unit in module.SUB_UNITS)
 
@@ -84,7 +84,8 @@ def test_privileged_payload_is_sourced_from_exact_git_objects():
 
 
 def test_source_delta_is_bounded_to_recovery_and_docs():
-    assert module.ALLOWED_SOURCE_DELTA == {
+    allowed_source_delta = module.ALLOWED_SOURCE_DELTA
+    assert allowed_source_delta == {
         "docs/DOCUMENTATION_INDEX_RU.md",
         "docs/RESEARCH_COMPUTE_RULES_RU.md",
         "operations/infrastructure/recover_5be6a7eb_post_migration.py",
