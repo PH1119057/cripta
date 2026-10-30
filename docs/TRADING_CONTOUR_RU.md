@@ -298,7 +298,6 @@ Research evidence checkpoint 2026-10-04:
 - hard stops at -1.0%, -1.5% and -2.0% worsened aggregate R1 economics and are not part of this implementation target;
 - confirmed-entry PostOnly offsets 0.05%, 0.10% and 0.20% were replayed with causal occupancy; 0.10% was the strongest aggregate candidate across both the current first-five cohort and all 15 screened symbols;
 - pre-confirmation fifth-state maker placement is rejected: it changed Entry semantics and produced premature invalid fills;
-
 - delayed maker conversion of hard exits is rejected by OWNER DECISION 2026-10-04 because future adverse movement is unbounded relative to the small fee saving; hard exits remain immediate taker.
 
 The current first-five R1 cohort remains: `APTUSDT / INJUSDT / DOTUSDT / LTCUSDT / ARBUSDT`.
@@ -398,6 +397,7 @@ generic zero-fill cancellation class plus the exact causal reason.
 OWNER DECISION 2026-10-19 (separation of geometry ownership): Entry/H9 uses ATR200-inclusive inner-zone geometry for admission, overlap and depth; Exit TP uses the opposite raw structural extreme of the same 36 fully closed 5m candles without ATR200. Changes in ATR alone never move an open TP and never increment the structural TP-move counter. For LONG this Exit target is max(high36), for SHORT min(low36). This decision supersedes older R1 descriptions linking Exit TP to ATR-shifted inner boundary, but does not modify Entry geometry, Entry price, H9 alignment, slot ownership, or hard-stop protections. The 20/30/40/50 structural-shift closures remain experimental replay scenarios, not LIVE policy.
 
 R1 ExitPlan:
+
 
 ```text
 normal target:
@@ -600,7 +600,6 @@ Entry не вводит winner/priority/arbitration между Strategy.
 Запрещены скрытые глобальные H9/H3/130 bars/30m/60m или иные исторические
 торговые значения по умолчанию.
 
-
 ## 2.5 Entry zone / Entry point
 
 `Entry zone` и `Entry point` — общие понятия, а не одна универсальная формула.
@@ -800,6 +799,7 @@ slot. Для Strategy, которой разрешена real Exchange mutation,
 loss-containment обязателен.
 
 `protection_policy.initial_protection` принадлежит Strategy и передаётся в
+
 Execution при открытии. Execution обязана подтвердить фактическое состояние
 защиты на Exchange (в составе opening contract либо сразу после fill — согласно
 возможностям адаптера). Missing/unsupported/unconfirmed protection блокирует
@@ -900,7 +900,6 @@ Execution отвечает за:
 - order preparation/submission;
 - idempotency;
 - client/exchange IDs;
-
 - fill truth;
 - fees/slippage, где они измеримы;
 - initial protection;
@@ -1502,7 +1501,6 @@ TradeCursor или Entry. Old P90 seed `source_commit=ecde511...` и
 
 **Real capital + order contract by exact StrategyVersion**:
 - MAIN: symbols LTCUSDT, INJUSDT; independent MAIN TradingAccount binding; maximum **2 concurrent per-symbol slots**, total reserved+pending+open requested capital **20 USDT**.
-
 - SUB: symbols DOTUSDT, ARBUSDT, APTUSDT; independent SUB TradingAccount binding; maximum **3 concurrent per-symbol slots**, total reserved+pending+open requested capital **30 USDT**.
 - Per new entry `requested_amount=10 USDT` **at 1× isolated**, interpreted as 10 USDT targeted position notional/initial-margin budget before fees (at 1× these are nominally equivalent). Account capacity must include actual fees, rounding and existing/pending reservations; cannot exceed approved ceilings, cannot borrow other-account capacity, and cannot silently increase position to meet an exchange minimum. If symbol's Bybit minimum lot/tick/notional prevents compliant 10 USDT, reject Entry fail-closed rather than upsize. Exact normalized quantity depends on current Bybit instrument filters; never derive from paper proxy.
 - `entry.order_type=MARKET` only for a **new** causally verified signal after current live publicTrade epoch, under exchange-one-way `positionIdx=0`, `marginMode=ISOLATED`, `leverage=1x`. No hedge, duplicate reservation, on-behalf account substitution or order sent from old PAPER path. Use actual Exchange orderAck/executionId/partial-fill and idempotent command ledger; every attempt and reservation belongs to exact StrategyVersion+TradingAccount/AccountConnector.
