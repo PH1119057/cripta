@@ -189,8 +189,16 @@ def materialize_symbol(
                             json.dumps(row, sort_keys=True) + "\n"
                         )
                         rows += 1
-                        key = f"{row['outcome']}_{row['horizon_s']}s"
-                        outcome_counts[key] += 1
+                        horizon = row["horizon_s"]
+                        outcome_counts[f"R_{horizon}s"] += int(
+                            row["recovered_r"]
+                        )
+                        outcome_counts[f"N_{horizon}s"] += int(
+                            row["not_recovered_n"]
+                        )
+                        outcome_counts[f"C_{horizon}s"] += int(
+                            row["censored_c"]
+                        )
                     episodes += manifest["episodes"]
                     episode_horizon_observations += manifest[
                         "episode_horizon_observations"

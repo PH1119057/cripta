@@ -106,7 +106,7 @@ def test_horizons_are_independent_n15_then_r60_r300(tmp_path):
     records = [
         snapshot(midnight),
         delta(start, 101, 1001, bid=[["300", "8"]]),
-        delta(start + 20_000, 102, 1002, bid=[["299", "9"]]),
+        delta(start + 20_000, 102, 1002, bid=[["299", "11"]]),
         delta(start + 30_000, 103, 1003, bid=[["300", "10"]]),
     ]
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
@@ -145,8 +145,9 @@ def test_same_timestamp_multi_touch_is_fail_closed(tmp_path):
     _, rows = m.calculate_archive(archive(tmp_path, records), SYMBOL, DAY)
     for horizon in (15, 60, 300):
         cell = cell_for(rows, horizon=horizon)
-        assert cell["censored_c"] == 1
-        assert cell["c_same_timestamp_order_ambiguous"] == 1
+        assert cell["episodes"] == 2
+        assert cell["censored_c"] == 2
+        assert cell["c_same_timestamp_order_ambiguous"] == 2
 
 
 def test_leaving_visible_ob200_edge_censors_unresolved(tmp_path):
