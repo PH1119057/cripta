@@ -16,7 +16,7 @@
 
 Полные найденные слоты: **1,2,3,4,5,6,7,8,9,11,12,14,15,17,18,19,20,21,22,27,28,29,30**.
 
-Открытый физический/source хвост: **10,13,16,23,24,25,26**.
+Фактически разрешено: **23 computed + №23 terminal NO_DATA**. Открытый физический/source хвост теперь: **10,13,16,24,25,26**.
 
 ## 2. Что считать завершённым физически, но не RESEARCH-READY
 
@@ -69,8 +69,9 @@
 - [x] Canon forbids substitution of 5m historical snapshots for original observed/published change stream.
 - [x] Найден historical Bybit V5 5m snapshot corpus с per-file SHA, но он начинается только `2026-05-25T06:00Z` и по физике является snapshot series, а не требуемым native per-change source.
 - [x] Найденный recent OI run за `2026-09-18..2026-10-01` сам классифицирован `RECENT_ONLY_EVIDENCE` и не относится к first month.
-- [ ] Выполнить последний bounded source-identity audit именно на native observed/published change stream.
-- [ ] Если такого source нет: закрыть пять first-month пар как `NO_DATA`, не synthetic delta и не failed algorithm.
+- [x] Bounded source-identity audit завершён: current code умеет наблюдать OI prospectively через `tickers.*`/current REST с receiver clocks, но immutable first-month capture с этими clocks не найден; future capture не реконструирует historical availability.
+- [x] Пять strict first-month пар закрыты как `NO_DATA_FOR_APPROVED_FIRSTMONTH_STRICT_CONTRACT` в `R158_FIRSTMONTH_OI23_STRICT_SOURCE_AUDIT_2026-10-30.json`.
+- [x] №23 больше не rerun-ить. Re-open только если физически появится first-month source, удовлетворяющий §21.8, либо владелец отдельно изменит measurement contract/new formula version.
 
 ### №24 Liquidation Spikes
 - [x] PR #223 reader preserves side and missing-hour `UNKNOWN_NOT_ZERO`.
@@ -88,8 +89,10 @@
 - [x] Найден reusable historical Bybit Spot original cache с native schema `id,timestamp,price,volume,side,rpi` и historical `SOURCE_MANIFEST.json`, где для каждого файла сохранены URL/bytes/SHA256/source_symbol.
 - [x] First-month physical mask: APT/INJ/DOT/ARB по 23/30, LTC 22/30 = **114/150 файлов физически присутствуют**. У всех пяти отсутствуют May18–May24; дополнительно у LTC отсутствует 2026-06-11. Итого **36 missing**.
 - [x] В PR #223 добавлен read-only verifier `r158_spot_legacy_original_audit_v1.py`: current bytes ↔ historical manifest size/SHA, full native CSV schema/timestamp/order/value QC; он не скачивает и не копирует данные.
+- [x] Физический объём 114 reusable originals: **27,958,018 bytes (~28 MB)**.
+- [x] В PR #223 добавлен bounded `r158_spot_firstmonth_source_materialize_v1.py`: legacy cache read-only; после current QC byte-for-byte копирует 114 originals в новый staging corpus, скачивает только missing, затем atomic whole-root rename; DELETE=NONE.
 - [ ] Запустить verifier на всех 114 существующих originals после доступности exact PR source; historical manifest сам по себе не заменяет текущую независимую проверку.
-- [ ] После PASS не скачивать 114 повторно; acquisition contract нужен только для 36 missing originals и нового immutable first-month source manifest.
+- [ ] После PASS собрать новый immutable first-month corpus; acquisition нужен только для 36 missing originals.
 - [ ] 5×30d synchronized Spot/Perp calculation + independent QC.
 
 ### №26 Cross-Venue
@@ -138,7 +141,7 @@ LIVE / DB / SERVICE MUTATION = NONE
 5. [ ] **RUN №10/16:** one bounded first-month job family, 5 instruments, immutable outputs, independent QC.
 6. [ ] **SOURCE №25 REUSE:** independently verify 114 cached originals, then acquire only 36 missing files under approved source-write contract.
 7. [ ] **SOURCE №24:** prepare isolated decoder tooling, then original Parquet parity before any new predictive inference.
-8. [ ] **SOURCE №23:** bounded native-change source audit; prove source or close five pairs as NO_DATA.
+8. [x] **SOURCE №23:** strict first-month source audit closed as five `NO_DATA` pairs; no snapshot substitution.
 9. [ ] **PASSPORT PROMOTION:** update per-pair gates from evidence; never promote by aggregate count.
 10. [ ] **OOS:** only after first-month physical/source set is frozen; freeze first-month thresholds before reading independent period.
 11. [ ] **ECONOMICS:** only after OOS, after commissions/slippage/funding assumptions; no automatic Strategy.
