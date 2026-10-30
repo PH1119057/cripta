@@ -23,7 +23,8 @@ def test_controller_service_is_inert_and_sandboxed():
     assert "NoNewPrivileges=yes" in unit
     assert "ProtectSystem=strict" in unit
     assert "ReadWritePaths=/var/lib/cripta/release-controller" in unit
-    assert "ExecStart=/srv/cripta/runtime/current/.venv/bin/python " in unit
+    assert "ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-release-controller/" in unit
+    assert "ReadWritePaths=/usr/local/libexec/cripta-release-controller" in unit
 
 
 def test_installer_installs_controller_but_does_not_manage_or_start_it():
@@ -36,3 +37,5 @@ def test_installer_installs_controller_but_does_not_manage_or_start_it():
     managed = installer.split("managed_services=(", 1)[1].split(")", 1)[0]
     assert "cripta-release-controller.service" not in managed
     assert "enable --now cripta-release-controller" not in installer
+    assert "/usr/local/libexec/cripta-release-controller" in installer
+    assert "-o root -g root -m 0755" in installer
