@@ -198,6 +198,9 @@ class DepthRecoveryReader:
     def _snapshot(self, record: dict) -> None:
         ts, uid, seq = self._validate_identity(record)
         data = record["data"]
+        for side in SIDES:
+            if not isinstance(data.get(side), list) or len(data[side]) != 200:
+                raise ValueError("SNAPSHOT_NOT_EXACTLY_200_LEVELS")
         replacement = {
             side: apply_side({}, data[side], side, snapshot=True)[0]
             for side in SIDES

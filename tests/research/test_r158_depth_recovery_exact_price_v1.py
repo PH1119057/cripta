@@ -1,6 +1,7 @@
 """Issue #158 strict #13 Depth Recovery physical-contract tests."""
 import importlib.util
 import json
+import sys
 import zipfile
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ SOURCE = (
 spec = importlib.util.spec_from_file_location("r158_depth13", SOURCE)
 assert spec and spec.loader
 m = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 
 SYMBOL = "APTUSDT"
