@@ -273,7 +273,6 @@ def approval_candidates(*, target: str, baseline: str) -> list[ApprovalEvidence]
     if issue.get("state") != "open" or (issue.get("user") or {}).get("login") != OWNER_LOGIN:
         raise GitHubEvidenceError("APPROVAL_LEDGER_INVALID")
     rows = _pages(f"/issues/{APPROVAL_ISSUE}/comments")
-    result: list[ApprovalEvidence] = []
     for row in reversed(rows):
         user = row.get("user") or {}
         body = row.get("body")
@@ -296,7 +295,7 @@ def approval_candidates(*, target: str, baseline: str) -> list[ApprovalEvidence]
             raise GitHubEvidenceError("OWNER_APPROVAL_METADATA_INVALID")
         created = _parse_time(row.get("created_at"))
         updated = _parse_time(row.get("updated_at"))
-        result.append(
+        return [
             ApprovalEvidence(
                 request=request,
                 actor=OWNER_LOGIN,
@@ -305,5 +304,5 @@ def approval_candidates(*, target: str, baseline: str) -> list[ApprovalEvidence]
                 comment_id=comment_id,
                 html_url=html_url,
             )
-        )
-    return result
+        ]
+    return []
