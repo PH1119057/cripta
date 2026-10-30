@@ -391,7 +391,7 @@ def service_property(unit: str, prop: str) -> str:
 def parse_systemd_time(value: str) -> datetime | None:
     if not value:
         return None
-    return datetime.strptime(value, "%a %Y-%m-%d %H:%M:%S %Z").replace(tzinfo=UTC)
+    return datetime.strptime(value, "%a %Y-%m-%d %H:%M:%S UTC").replace(tzinfo=UTC)
 
 
 def require_recovered_active_set() -> None:
