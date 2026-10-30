@@ -36,7 +36,8 @@ def valid():
         "approval_unedited": True,
         "now": NOW,
         "remote_main": TARGET,
-        "source_head": BASELINE,
+        "source_head": "e" * 40,
+        "source_fast_forward_ok": True,
         "installed_runtime": BASELINE,
         "installed_tooling": BASELINE,
         "required_checks": {"scope": "success", "quality": "success"},
@@ -58,7 +59,8 @@ def test_gate_accepts_exact_owner_approved_release():
         ({"approval_actor": "someone-else"}, "OWNER_APPROVAL_INVALID"),
         ({"approval_unedited": False}, "OWNER_APPROVAL_INVALID"),
         ({"remote_main": "c" * 40}, "REMOTE_MAIN_MISMATCH"),
-        ({"source_head": "c" * 40}, "SOURCE_HEAD_UNEXPECTED"),
+        ({"source_head": "not-a-sha"}, "SOURCE_HEAD_INVALID"),
+        ({"source_fast_forward_ok": False}, "SOURCE_NOT_FAST_FORWARD"),
         ({"installed_runtime": "c" * 40}, "BASELINE_MISMATCH"),
         ({"installed_tooling": "c" * 40}, "BASELINE_MISMATCH"),
         ({"required_checks": {"scope": "failure", "quality": "success"}}, "SCOPE_NOT_PASS"),
@@ -99,6 +101,13 @@ def test_gate_rejects_disallowed_request_fields(field, value, expected):
 def test_gate_accepts_source_already_synced_to_target():
     params = valid()
     params["source_head"] = TARGET
+    assert gate.verify_request(**params) == (TARGET, BASELINE, NONCE)
+
+
+def test_gate_accepts_clean_intermediate_source_with_ancestry_proof():
+    params = valid()
+    params["source_head"] = "e" * 40
+    params["source_fast_forward_ok"] = True
     assert gate.verify_request(**params) == (TARGET, BASELINE, NONCE)
 
 
