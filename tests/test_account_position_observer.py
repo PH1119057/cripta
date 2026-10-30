@@ -41,6 +41,10 @@ class _Db:
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> _Cur:
         if "FROM runtime.account_state_generations" in sql:
             assert params == (self.account,)
+            assert "identity_status='PROVEN'" in sql
+            assert "state='COMPLETE'" in sql
+            assert "completed_at IS NOT NULL" in sql
+            assert "ORDER BY completed_at DESC LIMIT 1" in sql
             return _Cur([{
                 "state": "COMPLETE",
                 "completed_at": NOW - timedelta(seconds=120 if self.stale else 1),
