@@ -272,7 +272,7 @@ release_controller_files=(
   operations/infrastructure/release_controller_github.py
   operations/systemd/cripta-release-controller.service
 )
-controller_stage="$(mktemp -d /run/cripta-release-controller-stage.XXXXXX)"
+controller_stage="$(mktemp -d /run/lock/cripta-release-controller-stage.XXXXXX)"
 chmod 0700 "$controller_stage"
 for relative in "${release_controller_files[@]}"; do
   candidate="$runtime_release/$relative"
