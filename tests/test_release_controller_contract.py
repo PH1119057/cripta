@@ -14,11 +14,13 @@ def test_controller_source_is_valid_python_and_has_no_cli_parser():
     assert "argparse" not in source
     assert "len(sys.argv) != 1" in source
     assert "OWNER_ARM=UNCHANGED" in source
-    assert '"/usr/bin/setpriv"' in source
-    assert '"--reuid={user}"' in source
-    assert '"--regid={user}"' in source
-    assert '"--init-groups"' in source
+    assert '"/usr/bin/systemd-run"' in source
+    assert '"--property=User={user}"' in source
+    assert '"--property=Group={user}"' in source
+    assert '"--property=NoNewPrivileges=yes"' in source
+    assert "/usr/bin/setpriv" not in source
     assert "/usr/sbin/runuser" not in source
+    assert '"/usr/bin/systemctl", "start", "cripta-source-sync.service"' in source
     assert '"/usr/bin/systemd-run"' in source
     assert '"--wait"' in source
     assert '"--pipe"' in source
