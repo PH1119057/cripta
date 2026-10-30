@@ -78,9 +78,11 @@
 - [x] 1,157/3,600 vendor object-hour receipts; normalized observed rows существуют.
 - [x] Current physical vendor root подтверждён: `/data/cripta/datasets/external/cryptohftdata/bybit_liquidations_v1/{OBJECTS.jsonl,SUMMARY.json,raw/}`.
 - [x] Current system Python 3.12 не имеет `pyarrow/zstandard/polars/duckdb/pandas`; это decoder/tooling blocker, НЕ отсутствие исходных объектов.
-- [ ] Подготовить отдельный bounded decoder environment/package contract без изменения trading runtime.
-- [ ] Original provider Parquet row/unit parity.
-- [ ] Object revision/correction semantics.
+- [x] Current `OBJECTS.jsonl`: 29,692/29,692 object keys unique; first-month cohort 1,157/1,157 keys unique. Для текущего локального snapshot duplicate/revision key не обнаружен.
+- [x] В PR #223 подготовлен isolated decoder materializer `r158_pyarrow26_site_prepare_v1.py`: exact PyArrow 26.0.0 CPython3.12 manylinux x86_64 wheel, size 53,931,932, SHA256 `6a628922ba20705fa964ca73e4ef959c2fb2f14b9bbec5589a6a1e68e6257c85`; writes only new research cache, no system/runtime install.
+- [x] В PR #223 подготовлен independent `r158_liquidation_parquet_parity_v1.py`: receipt size/SHA + PyArrow streaming Zstd decode + native Bybit invariant checks + exact multiset Parquet↔normalized row parity. Checker не импортирует primary #24 reader и не запускает shell decoder.
+- [ ] После server rail PREPARED=YES materialize isolated decoder site и выполнить original provider Parquet row/unit parity.
+- [x] Object revision/correction semantics для текущего локального `OBJECTS.jsonl`: duplicate key = 0; при будущем изменении snapshot проверка выполняется заново.
 - [ ] Price-drop-matched control after original-row parity; old 47/60 vs 15/60 is DESCRIPTIVE_ONLY.
 
 ### №25 Spot/Perp Divergence
@@ -140,7 +142,7 @@ LIVE / DB / SERVICE MUTATION = NONE
 4. [ ] **SERVER PREP №10/16:** prepare exact PR worktree/writer rail; no broad privilege changes.
 5. [ ] **RUN №10/16:** one bounded first-month job family, 5 instruments, immutable outputs, independent QC.
 6. [ ] **SOURCE №25 REUSE:** independently verify 114 cached originals, then acquire only 36 missing files under approved source-write contract.
-7. [ ] **SOURCE №24:** prepare isolated decoder tooling, then original Parquet parity before any new predictive inference.
+7. [ ] **SOURCE №24:** isolated decoder + parity checker уже IMPLEMENTED в PR; после server rail выполнить exact package materialization и original Parquet parity before any new predictive inference.
 8. [x] **SOURCE №23:** strict first-month source audit closed as five `NO_DATA` pairs; no snapshot substitution.
 9. [ ] **PASSPORT PROMOTION:** update per-pair gates from evidence; never promote by aggregate count.
 10. [ ] **OOS:** only after first-month physical/source set is frozen; freeze first-month thresholds before reading independent period.
