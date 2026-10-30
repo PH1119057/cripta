@@ -981,3 +981,7 @@ pause/restart/gap: historical bars позволяют восстановить g
 не заменяют пропущенные `publicTrade execId/seq`. Новые Entry
 допустимы лишь после фактического нового native cursor и независимых
 position/pending/reconciliation gates. Старый checkpoint сохраняется.
+
+## Release Controller — OWNER DECISION 2026-10-30
+
+`Release Controller` — постоянный узкий management-plane entrypoint для проверенного exact GitHub-main deploy; один разрешённый SentinelX command не означает произвольный sudo, выбор SHA или OWNER ARM. `RELEASE_REQUEST_APPROVED` — отдельно аутентифицированная однократная заявка для exact SHA, baseline и nonce; это не разрешение MICRO_LIVE. `RELEASE_CONTROLLER_VERIFIED` — только после реализации, тестов, deploy и runtime evidence. Owner: DEVELOPMENT_RELEASE §50.5; tracking: Issue #288.

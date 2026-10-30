@@ -1888,3 +1888,17 @@ Discovery в порядке:
 Только после `TASK_DISCOVERY=PASS` и `EXISTING_TASK_MATCH=NONE` (либо explicit owner decision о новой независимой работе после сохранения старого evidence) разрешено создать новую scoped branch по §50.1. Прежде чем начинать длительную работу или прерывать чат, оставить discoverable durable task checkpoint в связанном GitHub Issue либо существующем PR, с task ID, целью, контуром, branch, точным worktree path, base/HEAD SHA, staged/unstaged/untracked summary, writer/actor, job ID/status, evidence/backup location, проверенными результатами, blockers и **одним следующим действием**. Не класть secrets/raw большие datasets в GitHub. GitHub Issue/PR — указатель продолжения, **не** отдельный source authority и **не** резервная копия dirty files. При завершении закрыть task tracker и снять active status после независимого remote verification; cleanup отдельных worktrees/branches по §50.3.
 
 Новый чат начинает ответ по незавершённой задаче с `RESUME_FOUND / NEW_TASK_CONFIRMED / BLOCKED` и exact evidence, а не с молчаливого `git checkout -b`. Это инструкция исполнителю, **не утверждение**, что CI проверяет все server worktrees или что действует автоматическая межчатовая блокировка: такие дополнительные tools/locks потребуют отдельной implementation/release проверки.
+
+## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 (Issue #288)
+
+Цель: заменить per-release SentinelX allowlist entries с фиксированными SHA постоянной узкой командой. Это целевой канон, а не утверждение о развёрнутом контроллере.
+
+- Единственный стабильный exact entrypoint без произвольных аргументов shell, путей, команд или environment. Права SentinelX меняются один раз при введении контроллера, не на каждый release.
+- Каждая заявка отдельно одобряется аутентифицированным владельцем, имеет одноразовый nonce, exact GitHub repository, target SHA, expected baseline, время и срок действия. Строка `--operator owner` не является подтверждением полномочий.
+- Контроллер независимо сверяет trusted GitHub main и обязательные проверки PR, включая `scope`, source tree, clean checkout, permissions и фактический baseline. Неизвестное состояние — fail-closed.
+- До записи выполняются §19.1–19.4 (actual actor/path/ACL/systemd), §50.4 (forensic), release lock, backup/rollback preflight. Source sync — под `cripta`, установка — только существующим verified installer; никаких arbitrary refs или команд.
+- Все стадии и отказы записываются долговечно. Таймаут/потеря связи означает UNKNOWN; повторная mutation только после сверки durable state, не вслепую.
+- После установки независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior.
+- Release Controller не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
+- Негативные тесты обязательны: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree, сдвиг main, непрошедший CI, грязный checkout, чужой actor/path, инъекция argv/env, конкурентный release, сбой rollback, попытка LIVE arm.
+- Ввод в эксплуатацию строго: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE. Пока нет проверки deployment нового rail, действует прежний fail-closed контракт. 
