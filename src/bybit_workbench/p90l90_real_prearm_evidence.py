@@ -637,6 +637,8 @@ def prepare_p90l90_real_v3_prearm_evidence(
         ) from exc
     _require(bool(rollback_ref), "rollback reference missing")
 
+    written_scopes: dict[tuple[str, str, str], str] = {}
+
     def put(
         code: str,
         scope_type: str,
@@ -646,6 +648,17 @@ def prepare_p90l90_real_v3_prearm_evidence(
         ttl: bool,
         status: str = "PASS",
     ) -> None:
+        # A STRATEGY check is shared by all symbols of that Strategy.
+        # Verify repeated evidence is identical rather than silently dropping drift.
+        scope = (code, scope_type, scope_key)
+        payload = json.dumps(
+            {"status": status, "evidence": evidence}, sort_keys=True, default=str
+        )
+        previous = written_scopes.get(scope)
+        if previous is not None:
+            _require(previous == payload, "conflicting evidence for shared scope")
+            return
+        written_scopes[scope] = payload
         identity_key = "|".join(
             (release_commit, code, scope_type, scope_key, current.isoformat())
         )
