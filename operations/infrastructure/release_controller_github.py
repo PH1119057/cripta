@@ -125,9 +125,7 @@ def current_main() -> tuple[str, str]:
 
 
 def _required_status_checks() -> tuple[dict[str, int | None], tuple[int, ...]]:
-    summaries = _get_json("/rulesets")
-    if not isinstance(summaries, list):
-        raise GitHubEvidenceError("RULESET_LIST_INVALID")
+    summaries = _pages("/rulesets")
     required: dict[str, int | None] = {}
     ids: list[int] = []
     for summary in summaries:
