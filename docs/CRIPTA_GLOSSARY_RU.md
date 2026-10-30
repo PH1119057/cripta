@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.11
-**Дата:** 2026-10-28
+**Версия:** 3.12
+**Дата:** 2026-10-30
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -513,52 +513,9 @@ dynamic Exit. Exact stop/граница не является global default.
 **Emergency policy** — заранее утверждённая часть `lifecycle_policy`/
 protection-failure contract, задающая, какое техническое действие разрешено при
 конкретном operational fault. Наличие execution command `EMERGENCY_CLOSE` само
-по себе policy не создаёт.
-
-`owner kill` — явный owner control, запрещающий/останавливающий mutation в
-заданном contract. Сам по себе не означает автоматический close уже открытой
-позиции.
-
-UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR — operational fault: Universal Entry
-observer поймал runtime exception, из-за которого текущий observer epoch /
-Strategy evaluation не может считаться успешно завершённым. Fault сохраняется
-durable независимо от перезаписываемого status.json; следующий успешный epoch
-не имеет права молча удалить/resolve эту запись. Повтор того же fault может
-агрегироваться через occurrence_count/last_seen_at. Закрытие требует явного
-operator/owner resolution; сам fault не создаёт Entry/Exit/Exchange mutation.
-
-**Critical fault delivery** — durable механизм доставки critical operational/
-lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
-escalation state. Наличие записи только в UI/read-model не считается доставкой.
-
-**DASHBOARD_INBOX** — отдельный от `OWNER_WEBHOOK` durable delivery channel для
-`UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` severity `ERROR`: запись в БД имеет
-`PENDING` до подтверждения браузером фактического показа в центральной панели
-«События системы». Успешная выдача API без показа не считается доставкой.
-Подтверждение показа без отдельного клика оператора переводит delivery в
-`ACKNOWLEDGED` (receipt уровня отображения, **не** operator resolution);
-отсутствие такого receipt к deadline -> `ESCALATION_REQUIRED`; запись исходного
-fault остаётся `OPEN` до отдельного явного решения оператора. Этот channel
-не отправляется через `OWNER_WEBHOOK` и не назначает торговых прав.
-
-`mainnet gate` — технический execution gate, разрешающий или запрещающий
-реальную Exchange mutation. Не является Entry/Exit policy и не заменяет
-StrategyActivation/execution permission.
-
-`fail-closed` — обязательное поведение при missing/unknown/stale/unsupported
-required state: не придумывать default и не продолжать опасную activation/
-decision/dispatch/mutation; блокировать действие, сохранить evidence и требовать
-reconciliation/исправление.
-
-**reconciliation** — восстановление exact фактической истины между durable
-lifecycle state и Exchange после unknown/ambiguous/stale результата. До
-reconciliation нельзя освобождать ownership/capital или повторять mutation по
-догадке.
-
-**fee-aware break-even / безубыток** — уровень защиты около Entry, цель
-которого — не зафиксировать текущую накопленную прибыль, а не допустить обычный
-выход позиции в минус после учёта явно заданных комиссий и утверждённого
-технического резерва. Strategy-owned автоматическое правило по-прежнему требует
+по себе
+…[sentinelx: truncated 4830 bytes]…
+ва. Strategy-owned автоматическое правило по-прежнему требует
 явного ExitPlan и не имеет глобального numeric default. Отдельная явная
 owner/operator-команда Dashboard `break_even` является control-plane action, а
 не Strategy rule; её current R1 MICRO_LIVE contract определён TRADING_CONTOUR
@@ -898,74 +855,4 @@ explicit and rechecks freshness at action time.
 
 **InstrumentResearchRecord / запись исследования инструмента** — долговечный compact, отдельно versioned evidence-result для одного exact InstrumentIdentity и одного exact research run/scenario/period. Содержит методику/параметры, размеры выборок, комиссии/номинал, положительные и отрицательные закрытия и чистый P&L, hard stops, QC, provenance и ограничения, **даже если raw research inputs позже удалены**. Это не торговое правило, не прогноз прибыльности и не StrategyCard.
 
-**InstrumentResearchLedger / история исследований монеты** — логический неизменяемый/версионированный справочный ряд InstrumentResearchRecord, включая отрицательные и частично завершённые эксперименты. Привязка по exact instrument/venue, а не только ticker string. Не равен live trade ledger и аналитическому кубу market indicators.
-
-**InstrumentResearchCardView / раздел исследований карточки монеты** — read-only UI/read-model проекция summary + chronological records из InstrumentResearchLedger; отражает результаты, а не исполняет Entry/Exit. Источник истины по цифрам остаётся в Research evidence registry. Физическое DB/API/UI размещение до отдельного implementation decision не считается существующим.
-
-**REPRODUCIBILITY_LIMITED** — запись сохраняет проверенные конкретные цифры и методику, но независимое переисполнение невозможно/непроверено из-за отсутствующих исходных данных либо исходного кода. Не означает QC PASS на новом периоде.
-
-Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/projection boundaries: ARCH §48, §51.
-
-**Git-versioned InstrumentResearchLedger primary store** — единственный долговечный исходный JSON в текущем GitHub main, точный путь `operations/dashboard/instrument_research_catalog.json`; Dashboard snapshot является только read-only consumer. Решение — ARCH §51 / INDEX §48, published registration — RESEARCH_COMPUTE §23. Наличие файла в ветке или runtime не означает регистрацию без публикации в main.
-
-## 36. P90L90 independent RAW H9 research terminology — OWNER DECISION 2026-10-24
-
-**P90L90** — исследовательский 90-дневный контур для пяти exact Bybit instruments за `[2026-05-18T00:00:00Z, 2026-08-16T00:00:00Z)`; не StrategyCard, не LIVE-arm и не версия прежнего 29-дневного research.
-
-**RAW H9 Union Span** — знаменатель нормализованной глубины L5-3, охватывающий объединённые RAW high/low экстремумы двух независимо завершённых компонент H9-5m/H9-15m. Формула и условия применимости принадлежат исключительно `RESEARCH_COMPUTE §22.1`; это НЕ прежний H9 working-range denominator из §22.
-
-**FIXED90** — hindsight/in-sample фильтр по фиксированной медиане ширины L5-3 за весь объявленный P90L90 window, `LOOKAHEAD=YES`.
-
-**PREV7D** — причинный фильтр ширины L5-3 по медиане семи полностью завершённых предыдущих UTC calendar days.
-
-**SECOND48 / Strategy-scoped Hard-Stop Embargo** — настраиваемое правило `Strategy.lifecycle_policy`, при котором два (или заданное число) фактически зафиксированных катастрофических `HARD_STOP` в указанном скользящем UTC-окне запрещают только **новые** Entry на заданную продолжительность. Область счётчика и deadline — точная Strategy ID+Version+Fingerprint, общая для её символов и LONG/SHORT, независимая от другой Strategy и её TradingAccount. Открытые позиции не закрываются. Старый единый пяти-монетный исследовательский SECOND48 и две самостоятельные Strategy — разные модели. Настройки и владелец семантики — исключительно `TRADING_CONTOUR §7.6` (OWNER DECISION 2026-10-28); изменение параметров требует новой immutable StrategyVersion и исследования, не перезаписи карточки.
-
-**RAW Boundary Crossing Candidate** — исследовательское событие первого пересечения RAW-границы L5-3 соседними записями public trades; само по себе не доказывает ни отправку ордера, ни подтверждённое исполнение.
-
-Детальная методика, TP/SL/Exit, комиссии, QC и разделение старой/новой research версии: `RESEARCH_COMPUTE §22/§22.1`. Глоссарий не является вторым владельцем их параметров.
-
-## 37. P90L90 full 90-day warmup and 10-day analytics — OWNER DECISION 2026-10-24
-
-**P90L90_90D_WARMUP_V2** — отдельная исследовательская версия §22.2, для которой все 90 календарных суток `[2026-05-18T00:00:00Z, 2026-08-16T00:00:00Z)` обязаны быть причинно готовы с первого дня. Это НЕ переименование сохранённых `P90L90_EXIT_V1_2` / `COMMON82` / частичного `EXTENDED_FIXED90`.
-
-**ATR200 warmup** — торговые public-trade архивы *до начала исследуемого окна*, служащие только причинному посеву Wilder ATR200 и закрытых L5/H9-5m/H9-15m состояний. Минимум проверяемого входного диапазона — May 8–17 UTC, с более ранним стартом при обнаружении недостающей полноты; точная готовность определяется §22.2, а не календарным предположением.
-
-**PREV7D/90D** — предыдущие семь **полностью завершённых** UTC дней ширины L5-3 для каждого дня оценки; для 18 мая требуется полнота 11–17 мая. **FIXED90/90D** — медиана всего оценочного 90-дневного окна, `LOOKAHEAD=YES`.
-
-**10D disjoint bin / rolling 10D** — соответственно девять непересекающихся UTC окон по 10 суток от 18 мая и ежедневное скользящее 10-дневное окно. Realized model net относится к UTC времени **закрытия**, а не открытия; censored исключены из реализованного PnL. Первое — аддитивная разбивка, второе — перекрывающаяся диагностика, которую нельзя складывать как независимые интервалы.
-
-Версия, ATR seed, исходные файлы и итоговые журналы принадлежат `RESEARCH_COMPUTE §22.2`; торговые Strategy/LIVE контракты не меняются.
-
-
-## 38. P90L90 lineage versus executable release — OWNER DECISION 2026-10-28
-
-**P90_DATA_LINEAGE_ID** — stable, immutable, audited identity of one exact five-symbol P90L90 causal 5m/15m market fact lineage and its restart-boundary seed evidence. Not an alias of GitHub `main`, `source_commit`, `INSTALLED_COMMIT` or `LOADED_COMMIT`.
-
-**PRODUCER_RELEASE_COMMIT** — exact Git release of the code that actually wrote an individual newly committed P90 market fact or checkpoint generation. Historical rows retain their original persisted `source_commit` as origin evidence, without rewriting to another SHA.
-
-**P90_LINEAGE_COMPATIBILITY_ATTESTATION** — durable, versioned and append-only checked mapping from one `P90_DATA_LINEAGE_ID` and its verified original source digest/schema to one exact verified loaded release and compatible causal consumer contract. Neither a successful source sync nor a newer code SHA alone is proof of compatibility.
-
-**P90_LINEAGE_COMPATIBILITY=PASS / NOT_VERIFIED / BLOCKED** — evidence status for the exact data lineage plus loaded release. `PASS` requires the stored signed-off compatibility record, immutable data/geometry verification and approved source/actor/CI/runtime checks; no status automatically grants PAPER, REAL or LIVE.
-
-
-
-## 39. Shared Closed Candle Source — OWNER DECISION 2026-10-28
-
-**Canonical Closed Candle Store** — единственное рабочее физическое хранение
-точных verified fully-closed OHLCV market bars: `analytics.closed_candles`;
-ключ `market_source_id + instrument_id + timeframe + closed_at UTC`.
-Поставщик — MarketSource-adapter наблюдательного контура, потребители —
-MAYAK/Dispatcher/Strategy/Entry/Exit. Legacy 17,995 P90 свечей —
-неизменяемый historical audit exception, а не второй рабочий writer.
-
-**Candle Warmup Contract** — вычисленная для конкретного immutable
-StrategyCard/EntryPlan/ExitPlan полная потребность в исторических закрытых
-свечах, включая H9, L5-3, ATR, PREV7D и прочие утверждённые окна.
-History загружается on-demand из approved MarketSource, не ждёт накопления
-живых баров. Проверка полноты/порядка/provenance — обязательна.
-
-**Native Epoch Boundary** — явно доказанный переход после
-pause/restart/gap: historical bars позволяют восстановить geometry, но
-не заменяют пропущенные `publicTrade execId/seq`. Новые Entry
-допустимы лишь после фактического нового native cursor и независимых
-position/pending/reconciliation gates. Старый checkpoint сохраняется.
+**InstrumentResearchLedger / история исследований монеты** — логический неизменяемый/версионированный справочный ряд InstrumentResearchRecord, включая отрицательные и частично завершённые эксперименты. Привязка по 
