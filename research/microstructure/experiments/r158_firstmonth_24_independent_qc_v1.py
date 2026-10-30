@@ -72,6 +72,10 @@ def decimal(value: object) -> Decimal:
 
 
 def actor_uid(require_actor: bool) -> int:
+    if not hasattr(os, "geteuid"):
+        if require_actor:
+            raise OSError("UNIX_EFFECTIVE_UID_REQUIRED")
+        return -1
     uid = os.geteuid()
     if require_actor:
         import pwd
