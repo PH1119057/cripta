@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -329,18 +330,63 @@ def _sync_source(target: str) -> None:
         raise ControllerError("SOURCE_SYNC_POSTCONDITION_FAILED")
 
 
+def _exact_installer_bytes(target: str) -> bytes:
+    args = [
+        "/usr/sbin/runuser",
+        "-u",
+        "cripta",
+        "--",
+        "/usr/bin/env",
+        "GIT_OPTIONAL_LOCKS=0",
+        "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+        "/usr/bin/git",
+        "-C",
+        str(SOURCE),
+        "show",
+        f"{target}:operations/infrastructure/install_verified_release.sh",
+    ]
+    result = subprocess.run(
+        args,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=SAFE_ENV,
+    )
+    if result.returncode != 0 or not result.stdout.startswith(b"#!/usr/bin/env bash\n"):
+        raise ControllerError("EXACT_INSTALLER_READ_FAILED")
+    return result.stdout
+
+
 def _deploy(*, target: str, baseline: str) -> None:
-    installer = SOURCE / "operations" / "infrastructure" / "install_verified_release.sh"
-    if not installer.is_file():
-        raise ControllerError("INSTALLER_MISSING")
-    env = {
-        **SAFE_ENV,
-        "CRIPTA_RELEASE_COMMIT": target,
-        "CRIPTA_EXPECTED_BASELINE_COMMIT": baseline,
-        "CRIPTA_RELEASE_CONTROL_CHECKPOINT": "0",
-        "CRIPTA_STAGED_OFFLINE_CUTOVER": "0",
-    }
-    _run(["/usr/bin/bash", str(installer)], env=env)
+    installer_bytes = _exact_installer_bytes(target)
+    fd, staged_name = tempfile.mkstemp(
+        prefix="cripta-install-verified-release.",
+        dir="/run/lock",
+    )
+    staged = Path(staged_name)
+    try:
+        os.fchmod(fd, 0o700)
+        with os.fdopen(fd, "wb", closefd=False) as stream:
+            stream.write(installer_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.close(fd)
+        fd = -1
+        env = {
+            **SAFE_ENV,
+            "CRIPTA_RELEASE_COMMIT": target,
+            "CRIPTA_EXPECTED_BASELINE_COMMIT": baseline,
+            "CRIPTA_RELEASE_CONTROL_CHECKPOINT": "0",
+            "CRIPTA_STAGED_OFFLINE_CUTOVER": "0",
+        }
+        _run(["/usr/bin/bash", str(staged)], env=env)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            staged.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _postcheck(target: str) -> tuple[str, str, str, str]:
