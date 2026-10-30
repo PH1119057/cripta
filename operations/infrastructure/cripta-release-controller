@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -275,10 +276,8 @@ def _installer_lock_free() -> bool:
         except BlockingIOError:
             return False
         finally:
-            try:
+            with suppress(OSError):
                 fcntl.flock(fd, fcntl.LOCK_UN)
-            except OSError:
-                pass
     finally:
         os.close(fd)
     return True
@@ -383,10 +382,8 @@ def _deploy(*, target: str, baseline: str) -> None:
     finally:
         if fd >= 0:
             os.close(fd)
-        try:
+        with suppress(FileNotFoundError):
             staged.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def _postcheck(target: str) -> tuple[str, str, str, str]:
