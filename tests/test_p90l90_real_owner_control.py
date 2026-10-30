@@ -202,3 +202,22 @@ def test_p90_prearm_uses_latest_completed_proven_account_generation() -> None:
     assert "AND completed_at IS NOT NULL" in source
     assert "ORDER BY completed_at DESC LIMIT 1" in source
     assert "ORDER BY started_at DESC LIMIT 1" not in source
+
+
+def test_p90_prearm_evidence_deduplicates_shared_strategy_scope() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "written_scopes: dict[tuple[str, str, str], str] = {}" in source
+    assert "scope = (code, scope_type, scope_key)" in source
+    assert "previous = written_scopes.get(scope)" in source
+    assert '_require(previous == payload, "conflicting evidence for shared scope")' in source
+    assert "written_scopes[scope] = payload" in source
+    assert source.index("if previous is not None:") < source.index("evidence_id =")
+    # The five P90 symbols share two distinct strategy scopes.
+    main = ("LTCUSDT", "INJUSDT")
+    sub = ("DOTUSDT", "ARBUSDT", "APTUSDT")
+    scopes = [("MAIN", symbol) for symbol in main] + [
+        ("SUB", symbol) for symbol in sub
+    ]
+    assert len(scopes) == 5
+    assert len({strategy for strategy, _ in scopes}) == 2
+    assert len(set(scopes)) == 5
