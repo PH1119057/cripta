@@ -55,8 +55,8 @@ def test_recovery_restores_exact_sub_supervision_set_only():
 
 def test_recovery_keeps_trading_fail_closed_and_flat():
     source = SCRIPT.read_text(encoding="utf-8")
-    assert 'if (gate, permissions, sessions) != ("0", "0", "0")' in source
-    assert 'if (positions, orders, claims) != ("0", "0", "0")' in source
+    assert source.find('if (gate, permissions, sessions) != ("0", "0", "0")') >= 0
+    assert source.find('if (positions, orders, claims) != ("0", "0", "0")') >= 0
     assert source.find("OWNER_ARM=UNCHANGED") >= 0
     assert source.find("TRADING_EXPOSURE_NOT_FLAT") >= 0
 
