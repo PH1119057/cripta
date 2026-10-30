@@ -119,3 +119,25 @@ def test_real_closed_candle_history_reads_same_ledger_advanced_by_consumer() -> 
     assert "shared_candle_ledger=shared_p90_real_ledger" in observer
     assert "self._ledger.history(" in source
     assert "self._ledger.restart_watermarks(symbol)" in source
+
+
+def test_real_observer_unit_can_import_runtime_operations_namespace() -> None:
+    unit = Path(
+        "operations/systemd/cripta-universal-entry-observer.service"
+    ).read_text(encoding="utf-8")
+    line = next(
+        row for row in unit.splitlines()
+        if row.startswith("Environment=PYTHONPATH=")
+    )
+    paths = line.split("=", 2)[2].split(":")
+    assert "/srv/cripta/runtime/current/src" in paths
+    assert "/srv/cripta/runtime/current/.venv/lib/python3.12/site-packages" in paths
+    assert "/srv/cripta/runtime/current" in paths
+
+    observer = Path(
+        "operations/monitoring/universal_entry_shadow.py"
+    ).read_text(encoding="utf-8")
+    assert "from operations.monitoring.p90l90_real_source_bootstrap import" in observer
+    assert "from operations.monitoring.p90l90_real_account_mutation_safety import" in observer
+    assert "from operations.monitoring.p90l90_real_live_source_ports import" in observer
+    assert "from operations.monitoring.p90l90_real_postfill_source_broker import" in observer
