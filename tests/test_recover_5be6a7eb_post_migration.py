@@ -64,7 +64,7 @@ def test_recovered_active_set_is_exact_and_sub_remains_inert():
 def test_stop_window_matches_failed_installer_event():
     value = module.parse_systemd_time("Fri 2026-10-30 20:03:31 UTC")
     assert value == datetime(2026, 10, 30, 20, 3, 31, tzinfo=UTC)
-    assert module.STOP_WINDOW_START <= value <= module.STOP_WINDOW_END
+    assert value >= module.STOP_WINDOW_START\n    assert value <= module.STOP_WINDOW_END
 
 
 def test_recovery_keeps_trading_controls_fail_closed():
