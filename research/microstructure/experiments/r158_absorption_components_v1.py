@@ -61,8 +61,11 @@ def trim(book: dict, side: str) -> dict:
 
 def cell() -> dict:
     return {
-        "book_deltas": 0, "book_unknown": 0,
-        "b_add": Decimal(0), "b_remove": Decimal(0),
+        "book_deltas": 0,
+        "book_partial": 0,
+        "book_unknown": 0,
+        "b_add": Decimal(0),
+        "b_remove": Decimal(0),
         "a_add": Decimal(0), "a_remove": Decimal(0),
         "fills": 0, "buy_quote": Decimal(0), "sell_quote": Decimal(0),
         "first_price": None, "last_price": None,
@@ -189,12 +192,12 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                     continue
                 uid, seq, ts0 = int(data["u"]), int(data["seq"]), ts
                 if uncertain:
-                    current["book_unknown"] += 1
+                    current["book_partial"] += 1
                 else:
                     current["book_deltas"] += 1
-                    for side in SIDE:
-                        current[side + "_add"] += changes[side][0]
-                        current[side + "_remove"] += changes[side][1]
+                for side in SIDE:
+                    current[side + "_add"] += changes[side][0]
+                    current[side + "_remove"] += changes[side][1]
     return {
         "state": "SOURCE_PRESENT",
         "sha256": hashed(path),
@@ -254,9 +257,18 @@ def calculate(symbol: str, day: date, source_root: Path):
         if b is None:
             b = cell()
         book_status = (
-            "NO_DATA" if book_meta["state"] == "SOURCE_MISSING"
-            or not (b["book_deltas"] or b["book_unknown"])
-            else "UNKNOWN" if b["book_unknown"] else "OBSERVED"
+            "NO_DATA"
+            if book_meta["state"] == "SOURCE_MISSING"
+            or not (
+                b["book_deltas"]
+                or b["book_partial"]
+                or b["book_unknown"]
+            )
+            else "UNKNOWN"
+            if b["book_unknown"]
+            else "PARTIAL"
+            if b["book_partial"]
+            else "OBSERVED"
         )
         trade_status = (
             "NO_DATA" if trade_meta["state"] == "SOURCE_MISSING" or not b["fills"]
@@ -271,14 +283,27 @@ def calculate(symbol: str, day: date, source_root: Path):
             "minute_utc": minute,
             "book_status": book_status, "trade_status": trade_status,
             "book_deltas_valid": b["book_deltas"],
+            "book_deltas_partial": b["book_partial"],
             "book_deltas_unknown": b["book_unknown"],
-            "bid_added_quote_usdt": str(b["b_add"]) if book_status == "OBSERVED" else None,
-            "bid_removed_quote_usdt": (
-                str(b["b_remove"]) if book_status == "OBSERVED" else None
+            "bid_added_quote_usdt": (
+                str(b["b_add"])
+                if book_status in ("OBSERVED", "PARTIAL")
+                else None
             ),
-            "ask_added_quote_usdt": str(b["a_add"]) if book_status == "OBSERVED" else None,
+            "bid_removed_quote_usdt": (
+                str(b["b_remove"])
+                if book_status in ("OBSERVED", "PARTIAL")
+                else None
+            ),
+            "ask_added_quote_usdt": (
+                str(b["a_add"])
+                if book_status in ("OBSERVED", "PARTIAL")
+                else None
+            ),
             "ask_removed_quote_usdt": (
-                str(b["a_remove"]) if book_status == "OBSERVED" else None
+                str(b["a_remove"])
+                if book_status in ("OBSERVED", "PARTIAL")
+                else None
             ),
             "aggressive_buy_quote_usdt": (
                 str(b["buy_quote"]) if trade_status == "OBSERVED" else None
@@ -304,6 +329,11 @@ def calculate(symbol: str, day: date, source_root: Path):
         "script_sha256": hashed(Path(__file__)),
         "receiver_clock": None, "available_after": None,
         "proxy_classification": "ABSORPTION_EVIDENCE_PROXY_COMPONENTS_ONLY",
+        "book_partial_semantics": (
+            "Known exact-price visible changes retained; touched levels with "
+            "unproved old/new visibility are counted separately and never "
+            "defaulted to zero."
+        ),
         "same_minute_co_reporting": "EX_POST_DESCRIPTIVE_NOT_CAUSAL_ASOF",
         "readiness": "DESCRIPTIVE_ONLY_NOT_RESEARCH_READY",
     }

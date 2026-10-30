@@ -182,7 +182,12 @@ def materialize_symbol(
     abs_final = target / "indicator_16_absorption_components_1m.jsonl.gz"
     provenance = []
     ofi_status = {"OBSERVED": 0, "UNKNOWN": 0, "NO_DATA": 0}
-    abs_book_status = {"OBSERVED": 0, "UNKNOWN": 0, "NO_DATA": 0}
+    abs_book_status = {
+        "OBSERVED": 0,
+        "PARTIAL": 0,
+        "UNKNOWN": 0,
+        "NO_DATA": 0,
+    }
     abs_trade_status = {"OBSERVED": 0, "UNKNOWN": 0, "NO_DATA": 0}
     ofi_rows_total = abs_rows_total = 0
 

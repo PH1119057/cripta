@@ -96,6 +96,7 @@ def empty_book_cell():
         "ofi_bid": Decimal(0),
         "ofi_ask": Decimal(0),
         "abs_valid": 0,
+        "abs_partial": 0,
         "abs_unknown": 0,
         "b_add": Decimal(0),
         "b_remove": Decimal(0),
@@ -266,13 +267,13 @@ def independent_book_day(path: Path, symbol: str, day: date):
                             removals -= delta
                     changes[side] = (additions, removals)
                 if not abs_known:
-                    cell["abs_unknown"] += 1
+                    cell["abs_partial"] += 1
                 else:
                     cell["abs_valid"] += 1
-                    cell["b_add"] += changes["b"][0]
-                    cell["b_remove"] += changes["b"][1]
-                    cell["a_add"] += changes["a"][0]
-                    cell["a_remove"] += changes["a"][1]
+                cell["b_add"] += changes["b"][0]
+                cell["b_remove"] += changes["b"][1]
+                cell["a_add"] += changes["a"][0]
+                cell["a_remove"] += changes["a"][1]
 
                 state = after
                 prior_u = int(data["u"])
@@ -378,9 +379,13 @@ def expected_rows(symbol: str, day: date, book_cells: dict, trade_cells: dict):
 
         book_status = (
             "NO_DATA"
-            if not (b["abs_valid"] or b["abs_unknown"])
+            if not (
+                b["abs_valid"] or b["abs_partial"] or b["abs_unknown"]
+            )
             else "UNKNOWN"
             if b["abs_unknown"]
+            else "PARTIAL"
+            if b["abs_partial"]
             else "OBSERVED"
         )
         trade_status = "OBSERVED" if t["fills"] else "NO_DATA"
@@ -404,18 +409,27 @@ def expected_rows(symbol: str, day: date, book_cells: dict, trade_cells: dict):
                 "book_status": book_status,
                 "trade_status": trade_status,
                 "book_deltas_valid": b["abs_valid"],
+                "book_deltas_partial": b["abs_partial"],
                 "book_deltas_unknown": b["abs_unknown"],
                 "bid_added_quote_usdt": (
-                    str(b["b_add"]) if book_status == "OBSERVED" else None
+                    str(b["b_add"])
+                    if book_status in ("OBSERVED", "PARTIAL")
+                    else None
                 ),
                 "bid_removed_quote_usdt": (
-                    str(b["b_remove"]) if book_status == "OBSERVED" else None
+                    str(b["b_remove"])
+                    if book_status in ("OBSERVED", "PARTIAL")
+                    else None
                 ),
                 "ask_added_quote_usdt": (
-                    str(b["a_add"]) if book_status == "OBSERVED" else None
+                    str(b["a_add"])
+                    if book_status in ("OBSERVED", "PARTIAL")
+                    else None
                 ),
                 "ask_removed_quote_usdt": (
-                    str(b["a_remove"]) if book_status == "OBSERVED" else None
+                    str(b["a_remove"])
+                    if book_status in ("OBSERVED", "PARTIAL")
+                    else None
                 ),
                 "aggressive_buy_quote_usdt": (
                     str(t["buy"]) if trade_status == "OBSERVED" else None

@@ -94,9 +94,10 @@ def test_independent_native_book_trade_and_price_components(tmp_path):
 def test_ob200_out_of_view_price_is_unknown_not_zero(tmp_path):
     root = stage(tmp_path, [snapshot(), delta(b=[["1", "99"]])], [])
     _, rows = m.calculate(SYM, DAY, root)
-    assert rows[0]["book_status"] == "UNKNOWN"
-    assert rows[0]["book_deltas_unknown"] == 1
-    assert rows[0]["bid_added_quote_usdt"] is None
+    assert rows[0]["book_status"] == "PARTIAL"
+    assert rows[0]["book_deltas_partial"] == 1
+    assert rows[0]["book_deltas_unknown"] == 0
+    assert rows[0]["bid_added_quote_usdt"] == "0"
 
 
 def test_source_gap_poison_until_fresh_snapshot(tmp_path):
@@ -104,6 +105,7 @@ def test_source_gap_poison_until_fresh_snapshot(tmp_path):
     manifest, rows = m.calculate(SYM, DAY, root)
     assert manifest["orderbook"]["gaps"] == 1
     assert rows[0]["book_status"] == "UNKNOWN"
+    assert rows[0]["book_deltas_partial"] == 0
 
 
 def test_missing_files_have_independent_source_states(tmp_path):
@@ -158,6 +160,7 @@ def test_native_resnapshot_marks_continuity_unknown_not_zero(tmp_path):
     meta, rows = m.calculate(SYM, DAY, root)
     assert meta["orderbook"]["snapshots"] == 2
     assert rows[0]["book_deltas_valid"] == 2
+    assert rows[0]["book_deltas_partial"] == 0
     assert rows[0]["book_deltas_unknown"] == 1
     assert rows[0]["book_status"] == "UNKNOWN"
     assert rows[0]["bid_added_quote_usdt"] is None
@@ -174,3 +177,25 @@ def test_bounded_next_day_book_suffix_is_accepted_and_counted(tmp_path):
     assert manifest["orderbook"]["records"] == 2
     assert manifest["orderbook"]["source_suffix_records"] == 1
     assert rows[0]["book_status"] == "OBSERVED"
+
+
+def test_partial_visibility_preserves_known_visible_components(tmp_path):
+    root = stage(
+        tmp_path,
+        [
+            snapshot(),
+            delta(
+                b=[["300", "12"], ["1", "99"]],
+                a=[["310", "9"]],
+            ),
+        ],
+        [],
+    )
+    _, rows = m.calculate(SYM, DAY, root)
+    row = rows[0]
+    assert row["book_status"] == "PARTIAL"
+    assert row["book_deltas_valid"] == 0
+    assert row["book_deltas_partial"] == 1
+    assert row["book_deltas_unknown"] == 0
+    assert row["bid_added_quote_usdt"] == "600"
+    assert row["ask_removed_quote_usdt"] == "310"
