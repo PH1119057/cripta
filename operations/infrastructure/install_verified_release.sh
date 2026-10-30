@@ -10,6 +10,7 @@ DASHBOARD_UI_ROOT="${CRIPTA_DASHBOARD_UI_ROOT:-/srv/cripta/dashboard-ui}"
 RESEARCH_TOOLING_ROOT="${CRIPTA_RESEARCH_TOOLING_ROOT:-/data/cripta/research/tooling}"
 BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_backups}"
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
+RELEASE_CONTROLLER_STATE_ROOT="${CRIPTA_RELEASE_CONTROLLER_STATE_ROOT:-/var/lib/cripta/release-controller}"
 CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
 STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
@@ -103,6 +104,8 @@ install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLI
 install -d -o cripta -g cripta -m 0750 /data/cripta/datasets/raw/bybit_public_trades_daily_v1
 install -d -o root -g root -m 0700 "$BACKUP_ROOT"
 install -d -o root -g cripta -m 0750 "$STATE_ROOT"
+install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT"
+install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT/used"
 
 runtime_release="$RUNTIME_ROOT/releases/$RELEASE_COMMIT"
 tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
@@ -225,6 +228,8 @@ unit_specs=(
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
   # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
+  # Inert owner-triggered Release Controller; never auto-enabled or managed.
+  "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
   # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
   "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
