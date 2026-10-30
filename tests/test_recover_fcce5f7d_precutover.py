@@ -41,8 +41,9 @@ def test_recovery_proves_ui_only_release_delta():
 
 def test_recovery_does_not_repeat_failed_migration_sequence():
     source = SCRIPT.read_text(encoding="utf-8")
-    assert source.find("operations/sql/") == -1
+    assert source.find("migration_files=(") == -1
     assert source.find('runtime_schema.py"),\n            "migrate"') == -1
+    assert source.find('"/usr/bin/pg_dump"') == -1
     assert source.find('"validate"') >= 0
     assert source.find("SCHEMA_APPLIED_BEFORE") >= 0
 
