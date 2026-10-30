@@ -10,10 +10,19 @@ DASHBOARD_UI_ROOT="${CRIPTA_DASHBOARD_UI_ROOT:-/srv/cripta/dashboard-ui}"
 RESEARCH_TOOLING_ROOT="${CRIPTA_RESEARCH_TOOLING_ROOT:-/data/cripta/research/tooling}"
 BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_backups}"
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
+RELEASE_CONTROLLER_STATE_ROOT="${CRIPTA_RELEASE_CONTROLLER_STATE_ROOT:-/var/lib/cripta/release-controller}"
 CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
 STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 CONTROL_MAX_AGE_SECONDS=604800
+controller_stage=""
+
+cleanup_controller_stage() {
+  if [[ -n "$controller_stage" && -d "$controller_stage" ]]; then
+    rm -rf -- "$controller_stage"
+  fi
+}
+trap cleanup_controller_stage EXIT
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
@@ -103,6 +112,8 @@ install -d -o cripta -g cripta -m 2770 "$RESEARCH_TOOLING_ROOT" "$RESEARCH_TOOLI
 install -d -o cripta -g cripta -m 0750 /data/cripta/datasets/raw/bybit_public_trades_daily_v1
 install -d -o root -g root -m 0700 "$BACKUP_ROOT"
 install -d -o root -g cripta -m 0750 "$STATE_ROOT"
+install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT"
+install -d -o root -g root -m 0700 "$RELEASE_CONTROLLER_STATE_ROOT/used"
 
 runtime_release="$RUNTIME_ROOT/releases/$RELEASE_COMMIT"
 tooling_release="$RESEARCH_TOOLING_ROOT/releases/$RELEASE_COMMIT"
@@ -225,6 +236,8 @@ unit_specs=(
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
   # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
   "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
+  # Inert owner-triggered Release Controller; never auto-enabled or managed.
+  "operations/systemd/cripta-release-controller.service|cripta-release-controller.service|runtime"
   # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
   "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
   "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
@@ -252,6 +265,24 @@ for spec in "${unit_specs[@]}"; do
   [[ -f "$source_unit" ]] || die "unit source missing before mutation: $source_unit"
 done
 echo "UNIT_SOURCE_PREFLIGHT=PASS"
+
+release_controller_files=(
+  operations/infrastructure/cripta-release-controller
+  operations/infrastructure/release_controller_gate.py
+  operations/infrastructure/release_controller_github.py
+  operations/systemd/cripta-release-controller.service
+)
+controller_stage="$(mktemp -d /run/lock/cripta-release-controller-stage.XXXXXX)"
+chmod 0700 "$controller_stage"
+for relative in "${release_controller_files[@]}"; do
+  candidate="$runtime_release/$relative"
+  [[ -f "$candidate" ]] || die "release controller source missing: $relative"
+  staged="$controller_stage/$(basename "$relative")"
+  as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:$relative" > "$staged"
+  chmod 0600 "$staged"
+  cmp -s "$staged" "$candidate" || die "release controller candidate differs from exact Git: $relative"
+done
+echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
 
 stamp="$(date -u +%Y%m%d_%H%M%S)"
 backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
@@ -296,7 +327,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -396,6 +427,7 @@ restore_pre_cutover_services() {
 
 release_exit_handler() {
   local rc=$?
+  cleanup_controller_stage
   if [[ "$deploy_succeeded" == "1" || "$services_stopped" == "0" ]]; then
     return
   fi
@@ -532,12 +564,25 @@ for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
   if [[ "$scope" == "tooling" ]]; then source_unit="$tooling_release/$src_rel"; else source_unit="$runtime_release/$src_rel"; fi
   [[ -f "$source_unit" ]] || die "unit source missing: $source_unit"
+  if [[ "$unit" == "cripta-release-controller.service" ]]; then
+    source_unit="$controller_stage/cripta-release-controller.service"
+  fi
   install -o root -g root -m 0644 "$source_unit" "/etc/systemd/system/$unit"
 done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/deploy_dashboard_ui.sh" /usr/local/sbin/cripta-deploy-dashboard-ui
+install -d -o root -g root -m 0755 /usr/local/libexec/cripta-release-controller
+install -o root -g root -m 0755 \
+  "$controller_stage/cripta-release-controller" \
+  /usr/local/libexec/cripta-release-controller/cripta-release-controller
+install -o root -g root -m 0644 \
+  "$controller_stage/release_controller_gate.py" \
+  /usr/local/libexec/cripta-release-controller/release_controller_gate.py
+install -o root -g root -m 0644 \
+  "$controller_stage/release_controller_github.py" \
+  /usr/local/libexec/cripta-release-controller/release_controller_github.py
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF
@@ -555,6 +600,10 @@ for unit in "${retired_units[@]}"; do
 done
 
 systemctl daemon-reload
+systemctl disable cripta-release-controller.service >/dev/null
+controller_enabled_state="$(systemctl is-enabled cripta-release-controller.service 2>/dev/null || true)"
+[[ "$controller_enabled_state" == "disabled" ]] ||
+  die "release controller must remain disabled/manual-only"
 for service in "${managed_services[@]}"; do
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
@@ -617,6 +666,7 @@ else
 fi
 
 deploy_succeeded=1
+cleanup_controller_stage
 trap - EXIT
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"

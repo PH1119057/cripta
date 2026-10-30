@@ -1,0 +1,510 @@
+#!/usr/bin/env python3
+"""Permanent bounded no-argument Release Controller (Issue #288).
+
+The controller is intentionally narrow:
+GitHub owner approval -> read-only preflight -> nonce claim -> bounded source
+fast-forward -> exact existing verified installer. It never arms trading.
+"""
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import json
+import os
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+from contextlib import suppress
+from datetime import UTC, datetime
+from pathlib import Path
+
+from release_controller_gate import ReleaseDenied, verify_request
+from release_controller_github import (
+    GitHubEvidenceError,
+    approval_candidates,
+    current_main,
+    release_evidence,
+    source_can_fast_forward,
+)
+
+SOURCE = Path("/srv/cripta/source_checkout")
+RUNTIME_ROOT = Path("/srv/cripta/runtime")
+TOOLING_ROOT = Path("/data/cripta/research/tooling")
+BACKUP_ROOT = Path("/data/cripta/script_archive/release_backups")
+RELEASE_STATE = Path("/var/lib/cripta/release")
+CONTROLLER_STATE = Path("/var/lib/cripta/release-controller")
+USED_ROOT = CONTROLLER_STATE / "used"
+AUDIT_PATH = CONTROLLER_STATE / "audit.jsonl"
+INSTALLER_LOCK = Path("/run/lock/cripta-install-verified-release.lock")
+SERVICE = "cripta-release-controller.service"
+
+SHA = re.compile(r"[0-9a-f]{40}\Z")
+BACKUP_NAME = re.compile(r"^20\d{6}_\d{6}_[0-9a-f]{40}_to_[0-9a-f]{40}$")
+SAFE_ENV = {
+    "PATH": "/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+}
+EXPECTED_RW_PATHS = {
+    "/srv/cripta/source_checkout",
+    "/srv/cripta/runtime",
+    "/srv/cripta/dashboard-ui",
+    "/data/cripta/research/tooling",
+    "/data/cripta/script_archive/release_backups",
+    "/data/cripta/datasets/raw/bybit_public_trades_daily_v1",
+    "/var/lib/cripta/release",
+    "/var/lib/cripta/release-controller",
+    "/etc/cripta",
+    "/etc/systemd/system",
+    "/usr/local/sbin",
+    "/usr/local/libexec/cripta-release-controller",
+    "/run/lock",
+}
+
+
+class ControllerError(RuntimeError):
+    pass
+
+
+def _run(args: list[str], *, env: dict[str, str] | None = None) -> str:
+    result = subprocess.run(
+        args,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env or SAFE_ENV,
+    )
+    if result.returncode != 0:
+        tail = result.stdout[-2000:].replace("\n", " | ")
+        raise ControllerError(f"COMMAND_FAILED:{Path(args[0]).name}:{result.returncode}:{tail}")
+    return result.stdout.strip()
+
+
+def _git(*args: str) -> str:
+    return _run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "cripta",
+            "--",
+            "/usr/bin/env",
+            "GIT_OPTIONAL_LOCKS=0",
+            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+            "/usr/bin/git",
+            "-C",
+            str(SOURCE),
+            *args,
+        ]
+    )
+
+
+def _commit_from_current(root: Path) -> tuple[str, Path]:
+    current = (root / "current").resolve(strict=True)
+    expected_parent = (root / "releases").resolve(strict=True)
+    if current.parent != expected_parent:
+        raise ControllerError(f"CURRENT_RELEASE_PATH_INVALID:{root}")
+    commit = (current / "INSTALLED_COMMIT").read_text(encoding="utf-8").strip()
+    if not SHA.fullmatch(commit) or current.name != commit:
+        raise ControllerError(f"INSTALLED_COMMIT_INVALID:{root}")
+    return commit, current
+
+
+def _source_state() -> tuple[str, bool]:
+    branch = _git("symbolic-ref", "--quiet", "--short", "HEAD")
+    if branch != "main":
+        raise ControllerError("SOURCE_BRANCH_NOT_MAIN")
+    head = _git("rev-parse", "HEAD")
+    if not SHA.fullmatch(head):
+        raise ControllerError("SOURCE_HEAD_INVALID")
+    dirty = _git("status", "--porcelain=v1", "--untracked-files=all")
+    return head, not bool(dirty)
+
+
+def _git_remote_main() -> str:
+    line = _git("ls-remote", "origin", "refs/heads/main")
+    remote = line.split()[0] if line else ""
+    if not SHA.fullmatch(remote):
+        raise ControllerError("GIT_REMOTE_MAIN_INVALID")
+    return remote
+
+
+def _state_root_ok() -> bool:
+    for path in (CONTROLLER_STATE, USED_ROOT):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return False
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != 0:
+            return False
+        if stat.S_IMODE(info.st_mode) != 0o700:
+            return False
+    if AUDIT_PATH.exists():
+        info = AUDIT_PATH.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0:
+            return False
+        if stat.S_IMODE(info.st_mode) & 0o137:
+            return False
+    return True
+
+
+def _audit(status: str, **fields: object) -> None:
+    if not _state_root_ok():
+        return
+    payload = {
+        "time": datetime.now(UTC).isoformat(),
+        "status": status,
+        **fields,
+    }
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+    fd = os.open(AUDIT_PATH, flags, 0o600)
+    try:
+        with os.fdopen(fd, "a", encoding="utf-8", closefd=False) as stream:
+            stream.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(fd)
+
+
+def _sandbox_ok() -> bool:
+    output = _run(
+        [
+            "/usr/bin/systemctl",
+            "show",
+            SERVICE,
+            "--property=User",
+            "--property=Group",
+            "--property=ProtectSystem",
+            "--property=NoNewPrivileges",
+            "--property=ReadWritePaths",
+        ]
+    )
+    props = {}
+    for line in output.splitlines():
+        key, sep, value = line.partition("=")
+        if sep:
+            props[key] = value
+    if props.get("User") != "root" or props.get("Group") != "root":
+        return False
+    if props.get("ProtectSystem") != "strict" or props.get("NoNewPrivileges") != "yes":
+        return False
+    actual = {item.lstrip("-+") for item in props.get("ReadWritePaths", "").split()}
+    return EXPECTED_RW_PATHS <= actual
+
+
+def _cripta_test(flag: str, path: Path) -> bool:
+    result = subprocess.run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "cripta",
+            "--",
+            "/usr/bin/test",
+            flag,
+            str(path),
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=SAFE_ENV,
+    )
+    return result.returncode == 0
+
+
+def _actor_paths_ok() -> bool:
+    sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
+    checks = [
+        ("-r", sync),
+        ("-x", sync),
+        ("-w", SOURCE),
+        ("-x", SOURCE),
+        ("-w", SOURCE / ".git"),
+        ("-x", SOURCE / ".git"),
+        ("-w", RUNTIME_ROOT / "releases"),
+        ("-x", RUNTIME_ROOT / "releases"),
+        ("-w", TOOLING_ROOT / "releases"),
+        ("-x", TOOLING_ROOT / "releases"),
+    ]
+    index = SOURCE / ".git" / "index"
+    if index.exists():
+        checks.append(("-w", index))
+    return all(_cripta_test(flag, item) for flag, item in checks) and _sandbox_ok()
+
+
+def _rollback_ready(baseline: str, runtime: Path, tooling: Path) -> bool:
+    try:
+        info = BACKUP_ROOT.lstat()
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0:
+        return False
+    if stat.S_IMODE(info.st_mode) != 0o700:
+        return False
+    if runtime.name != baseline or tooling.name != baseline:
+        return False
+
+    candidates = sorted(
+        (
+            item
+            for item in BACKUP_ROOT.iterdir()
+            if item.is_dir() and BACKUP_NAME.fullmatch(item.name)
+        ),
+        key=lambda item: item.name,
+        reverse=True,
+    )
+    if not candidates:
+        return False
+    latest = candidates[0]
+    dump = latest / "cripta_before.dump"
+    identity = latest / "release_identity.txt"
+    if not dump.is_file() or dump.stat().st_size <= 0 or not identity.is_file():
+        return False
+    disk = os.statvfs(BACKUP_ROOT)
+    free_bytes = int(disk.f_bavail * disk.f_frsize)
+    return free_bytes > dump.stat().st_size
+
+
+def _installer_lock_free() -> bool:
+    if not INSTALLER_LOCK.exists():
+        return True
+    fd = os.open(INSTALLER_LOCK, os.O_RDWR | os.O_NOFOLLOW)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        finally:
+            with suppress(OSError):
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+    return True
+
+
+def _used_path(nonce: str) -> Path:
+    return USED_ROOT / hashlib.sha256(nonce.encode("ascii")).hexdigest()
+
+
+def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> None:
+    path = _used_path(nonce)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags, 0o600)
+    except FileExistsError as exc:
+        raise ControllerError("REQUEST_REPLAY") from exc
+    payload = {
+        "nonce_sha256": path.name,
+        "comment_id": comment_id,
+        "target_commit": target,
+        "expected_baseline": baseline,
+        "claimed_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as stream:
+            json.dump(payload, stream, sort_keys=True, separators=(",", ":"))
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        os.close(fd)
+
+
+def _sync_source(target: str) -> None:
+    sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
+    _run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "cripta",
+            "--",
+            "/usr/bin/env",
+            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+            str(sync),
+        ]
+    )
+    head, clean = _source_state()
+    if head != target or not clean:
+        raise ControllerError("SOURCE_SYNC_POSTCONDITION_FAILED")
+
+
+def _exact_installer_bytes(target: str) -> bytes:
+    args = [
+        "/usr/sbin/runuser",
+        "-u",
+        "cripta",
+        "--",
+        "/usr/bin/env",
+        "GIT_OPTIONAL_LOCKS=0",
+        "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+        "/usr/bin/git",
+        "-C",
+        str(SOURCE),
+        "show",
+        f"{target}:operations/infrastructure/install_verified_release.sh",
+    ]
+    result = subprocess.run(
+        args,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=SAFE_ENV,
+    )
+    if result.returncode != 0 or not result.stdout.startswith(b"#!/usr/bin/env bash\n"):
+        raise ControllerError("EXACT_INSTALLER_READ_FAILED")
+    return result.stdout
+
+
+def _deploy(*, target: str, baseline: str) -> None:
+    installer_bytes = _exact_installer_bytes(target)
+    fd, staged_name = tempfile.mkstemp(
+        prefix="cripta-install-verified-release.",
+        dir="/run/lock",
+    )
+    staged = Path(staged_name)
+    try:
+        os.fchmod(fd, 0o700)
+        with os.fdopen(fd, "wb", closefd=False) as stream:
+            stream.write(installer_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.close(fd)
+        fd = -1
+        env = {
+            **SAFE_ENV,
+            "CRIPTA_RELEASE_COMMIT": target,
+            "CRIPTA_EXPECTED_BASELINE_COMMIT": baseline,
+            "CRIPTA_RELEASE_CONTROL_CHECKPOINT": "0",
+            "CRIPTA_STAGED_OFFLINE_CUTOVER": "0",
+        }
+        _run(["/usr/bin/bash", str(staged)], env=env)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        with suppress(FileNotFoundError):
+            staged.unlink()
+
+
+def _postcheck(target: str) -> tuple[str, str, str, str]:
+    runtime, _runtime_path = _commit_from_current(RUNTIME_ROOT)
+    tooling, _tooling_path = _commit_from_current(TOOLING_ROOT)
+    source, clean = _source_state()
+    state_commit = (RELEASE_STATE / "INSTALLED_COMMIT").read_text(encoding="utf-8").strip()
+    if not clean or any(value != target for value in (runtime, tooling, source, state_commit)):
+        raise ControllerError("POST_DEPLOY_IDENTITY_MISMATCH")
+    remote, _tree = current_main()
+    return remote, source, runtime, state_commit
+
+
+def main() -> int:
+    if len(sys.argv) != 1:
+        print("RELEASE_CONTROLLER=BLOCKED reason=NO_ARGUMENTS_ALLOWED", file=sys.stderr)
+        return 20
+    if os.geteuid() != 0:
+        print("RELEASE_CONTROLLER=BLOCKED reason=ROOT_REQUIRED", file=sys.stderr)
+        return 20
+    if not _state_root_ok():
+        print("RELEASE_CONTROLLER=BLOCKED reason=STATE_ROOT_INVALID", file=sys.stderr)
+        return 20
+
+    try:
+        runtime_baseline, runtime_path = _commit_from_current(RUNTIME_ROOT)
+        tooling_baseline, tooling_path = _commit_from_current(TOOLING_ROOT)
+        if runtime_baseline != tooling_baseline:
+            raise ControllerError("BASELINE_SPLIT")
+        baseline = runtime_baseline
+        source_head, source_clean = _source_state()
+
+        remote_main, remote_tree = current_main()
+        if _git_remote_main() != remote_main:
+            raise ControllerError("REMOTE_TRANSPORT_IDENTITY_MISMATCH")
+        evidence = release_evidence(remote_main)
+        if evidence.target_tree != remote_tree:
+            raise ControllerError("REMOTE_TREE_EVIDENCE_MISMATCH")
+        source_fast_forward_ok = source_can_fast_forward(source_head, remote_main)
+
+        actor_paths_ok = _actor_paths_ok()
+        rollback_ready = _rollback_ready(baseline, runtime_path, tooling_path)
+        release_lock_available = _installer_lock_free()
+
+        approvals = approval_candidates(target=remote_main, baseline=baseline)
+        if not approvals:
+            raise ControllerError("OWNER_APPROVAL_MISSING")
+        approval = approvals[0]
+        nonce = approval.request.get("nonce")
+        nonce_unused = isinstance(nonce, str) and not _used_path(nonce).exists()
+
+        target, expected_baseline, nonce = verify_request(
+            request=approval.request,
+            approval_actor=approval.actor,
+            approval_created_at=approval.created_at,
+            approval_unedited=approval.unedited,
+            now=datetime.now(UTC),
+            remote_main=evidence.remote_main,
+            source_head=source_head,
+            source_fast_forward_ok=source_fast_forward_ok,
+            installed_runtime=runtime_baseline,
+            installed_tooling=tooling_baseline,
+            required_checks=evidence.required_checks,
+            source_clean=source_clean,
+            actor_paths_ok=actor_paths_ok,
+            rollback_ready=rollback_ready,
+            release_lock_available=release_lock_available,
+            nonce_unused=nonce_unused,
+        )
+
+        _claim_nonce(
+            nonce=nonce,
+            comment_id=approval.comment_id,
+            target=target,
+            baseline=expected_baseline,
+        )
+        _audit(
+            "CLAIMED",
+            target=target,
+            baseline=expected_baseline,
+            approval_comment_id=approval.comment_id,
+            merged_pr=evidence.merged_pr_number,
+            rulesets=list(evidence.ruleset_ids),
+        )
+
+        _sync_source(target)
+        local_tree = _git("rev-parse", f"{target}^{{tree}}")
+        if local_tree != evidence.target_tree:
+            raise ControllerError("SOURCE_TREE_MISMATCH")
+
+        latest_main, _latest_tree = current_main()
+        if latest_main != target or _git_remote_main() != target:
+            raise ControllerError("REMOTE_MAIN_MOVED_BEFORE_DEPLOY")
+
+        _deploy(target=target, baseline=expected_baseline)
+        post_remote, post_source, post_runtime, post_state = _postcheck(target)
+        final_status = "DEPLOYED" if post_remote == target else "DEPLOYED_REMOTE_MOVED"
+        _audit(
+            final_status,
+            target=target,
+            source_head=post_source,
+            installed_commit=post_runtime,
+            release_state_commit=post_state,
+            remote_head=post_remote,
+            approval_comment_id=approval.comment_id,
+        )
+        print(f"RELEASE_CONTROLLER={final_status}")
+        print(f"REMOTE_HEAD={post_remote}")
+        print(f"SOURCE_HEAD={post_source}")
+        print(f"INSTALLED_COMMIT={post_runtime}")
+        print(f"RELEASE_STATE_COMMIT={post_state}")
+        print("RUNTIME_LIVENESS_VERIFIED=NO")
+        print("RUNTIME_BEHAVIOR_VERIFIED=NO")
+        print("OWNER_ARM=UNCHANGED")
+        return 0
+    except (ControllerError, ReleaseDenied, GitHubEvidenceError, OSError, ValueError) as exc:
+        _audit("BLOCKED_OR_FAILED", reason=str(exc)[:1000])
+        print(f"RELEASE_CONTROLLER=BLOCKED reason={str(exc)[:1000]}", file=sys.stderr)
+        return 20
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
