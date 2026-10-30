@@ -2,7 +2,7 @@
 Description=Cripta permanent bounded Release Controller
 After=network-online.target postgresql.service
 Wants=network-online.target
-ConditionPathExists=/srv/cripta/runtime/current/operations/infrastructure/cripta-release-controller
+ConditionPathExists=/usr/local/libexec/cripta-release-controller/cripta-release-controller
 ConditionPathExists=/var/lib/cripta/release-controller
 
 [Service]
@@ -10,7 +10,10 @@ Type=oneshot
 User=root
 Group=root
 UMask=0077
-ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/infrastructure/cripta-release-controller
+Environment=PYTHONPATH=
+Environment=PYTHONNOUSERSITE=1
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/python3 /usr/local/libexec/cripta-release-controller/cripta-release-controller
 TimeoutStartSec=1800
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -34,6 +37,7 @@ ReadWritePaths=/var/lib/cripta/release-controller
 ReadWritePaths=/etc/cripta
 ReadWritePaths=/etc/systemd/system
 ReadWritePaths=/usr/local/sbin
+ReadWritePaths=/usr/local/libexec/cripta-release-controller
 ReadWritePaths=/run/lock
 
 [Install]
