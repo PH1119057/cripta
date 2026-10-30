@@ -15,7 +15,7 @@ def test_dashboard_has_dedicated_p90_owner_arm_control():
 
 def test_p90_owner_arm_is_not_routed_through_legacy_generic_gate():
     start = INDEX.index("async function changeP90RealV3Arm")
-    end = INDEX.index("tradeGateButton.addEventListener", start)
+    end = INDEX.index("async function changeTradeGate", start)
     body = INDEX[start:end]
     assert "/api/p90l90/real-v3/arm" in body
     assert "/api/live/gate" not in body
