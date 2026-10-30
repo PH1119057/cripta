@@ -1,7 +1,7 @@
 # Issue #158 — фактический чек-лист завершения исследования 30 индикаторов
 
 **Дата аудита:** 2026-10-30  
-**Authority checked:** `PH1119057/cripta:main@db50682d372c382ed77da9635a21d5e3a39da549`  
+**Authority re-checked:** `PH1119057/cripta:main@07cb6756caf03b33bcc3d3a302cca71119f683bb`  
 **Task continuity:** Issue #158 / Draft PR #223 / branch `research/r158-executed-vwap-reader-20261026`.  
 **Статус:** RESEARCH EVIDENCE / NOT CANON / NOT LIVE. Canon gate: `docs/RESEARCH_COMPUTE_RULES_RU.md §21.6, §21.8`.
 
@@ -50,11 +50,17 @@
 - [ ] Formal RESEARCH-READY остаётся false без causal availability.
 
 ### №13 Depth Recovery
-- [x] Canon требует all visible OB200, Top5 и 6–200 strata, horizons 15/60/300 sec, outcomes R/N/C.
-- [x] Day-end unresolved → C; later observation required; snapshot-gap pilot evidence существует.
-- [ ] **HARD_STOP для финального reader:** exact equality на horizon boundary, tied-event ordering, доказательство N при source gap/snapshot reset и visibility outside OB200 остаются OPEN в §21.8.
-- [ ] OWNER_DECISION_REQUIRED до финальной формулы и 30d materialization.
-- [ ] Не наследовать semantics из старого `exact_price_recovery_v2.py`.
+- [x] Owner decision 2026-10-31 закрывает прежние OPEN semantics; canonical owner: `RESEARCH_COMPUTE §21.8`, INDEX §60.
+- [x] Horizon endpoint inclusive: exact `t0+15/60/300s` recovery = `R`; recovery только на строго более позднем native timestamp.
+- [x] Same-native-timestamp order ambiguity → `C/SAME_TIMESTAMP_ORDER_AMBIGUOUS`; file order не используется как физический order.
+- [x] `N@H` только при доказанной непрерывности через horizon и trusted observation `>=t0+H`; wall-clock expiry без observation не создаёт `N`.
+- [x] Source gap/sequence discontinuity/snapshot reset и уход exact price за provable OB200 edge цензурируют только unresolved horizons; уже закрытые `R/N` сохраняются.
+- [x] 15/60/300s независимы: допустимо `N@15s` и затем `R@60s/R@300s`; day-end unresolved → `C`.
+- [x] Новый reader реализован в PR #223: `R158_DEPTH_RECOVERY_EXACT_PRICE_MULTI_HORIZON_V1`; старые `exact_price_recovery_v1/v2` остаются historical evidence.
+- [x] Добавлены full first-month materializer `r158_firstmonth_13_materialize_v1.py` и независимый full-row replay `r158_firstmonth_13_independent_qc_v1.py`; synthetic contract tests в CI прошли на pre-sync HEAD `91edc93e...`.
+- [ ] Full `5 × 30d` materialization на сервере.
+- [ ] Independent source/full-row QC по пяти инструментам.
+- [ ] 5 evidence passports / `DESCRIPTIVE_ONLY`; formal RESEARCH-READY false без historical local available_after.
 
 ### №16 Absorption
 - [x] Canon: только observed executed aggressor flow + independently visible book changes + observed price movement.
@@ -101,14 +107,14 @@
 - [x] OWNER_DEFERRED_LAST.
 - [ ] Не запускать до закрытия Bybit block и отдельного owner decision по Venue/source/timing.
 
-## 4. Server mutation gate для №10/16
+## 4. Server mutation gate для №10/13/16/24/25
 
-**Сейчас PREPARED=NO.** Причина не в Unix data root: task continuity PASS, jobs none, source mirror clean. Текущий SentinelX allowlist не содержит exact fetch/worktree-add rail для PR #223 branch; security policy самостоятельно не расширяется.
+**Сейчас PREPARED=NO.** Task continuity PASS; relevant output/worktree roots отсутствуют. После reconnect найден orphaned SentinelX job `job_1b095470f8ee` с потерянным результатом; повторный writer не допускается, пока host-state не сверено. Current allowlist содержит branch fetch и старую exact worktree-add command, pinned к `d08c9268...`; verified PR HEAD уже ушёл вперёд, поэтому старый SHA запускать нельзя. Требуется заменить/добавить одну exact worktree-add entry под финальный CI-PASS HEAD, без broad privilege expansion.
 
 Планируемый contract до любого writer:
 
 ```text
-TASK = Issue #158 first-month #10/#16
+TASK = Issue #158 first-month remaining Bybit block #10/#13/#16/#24/#25
 EFFECTIVE_ACTOR = cripta
 SOURCE_BRANCH = research/r158-executed-vwap-reader-20261026
 SOURCE_HEAD = exact remote PR head at run preparation
@@ -116,8 +122,12 @@ WORKTREE = /data/cripta/research/worktrees/r158_firstmonth_20261030
 READ_PATHS =
   /data/cripta/datasets/raw/20260518_20260816
   exact isolated worktree
-WRITE_ROOT =
+WRITE_ROOTS =
   /data/cripta/research/runs/r158_firstmonth_10_16_20261030
+  /data/cripta/research/runs/r158_firstmonth_13_20261031
+  /data/cripta/research/cache/r158_pyarrow26_site_20261030
+  /data/cripta/research/runs/r158_liquidation_parquet_parity_20261030
+  /data/cripta/research/cache/r158_spot_firstmonth_20261030
 CREATE_CHILD_PARENTS =
   /data/cripta/research/worktrees
   /data/cripta/research/runs
@@ -138,9 +148,9 @@ LIVE / DB / SERVICE MUTATION = NONE
 
 1. [x] **AUDIT / REUSE:** 115 existing pairs inventoried; no recalculation.
 2. [x] **PR READERS:** №10/16 implementation inspected; semantics agree with current §21.8.
-3. [ ] **№13 OWNER DECISION:** resolve four remaining physical semantics; then only one final reader version.
-4. [ ] **SERVER PREP №10/16:** prepare exact PR worktree/writer rail; no broad privilege changes.
-5. [ ] **RUN №10/16:** one bounded first-month job family, 5 instruments, immutable outputs, independent QC.
+3. [x] **№13 OWNER DECISION + IMPLEMENTATION:** semantics resolved in canon; one new final reader version + materializer + independent QC implemented; server run pending.
+4. [ ] **SERVER PREP remaining Bybit block:** replace stale d08c-pinned worktree rail with one exact final CI-PASS HEAD; actual-actor/path/permission preflight; no broad privilege changes.
+5. [ ] **RUN №10/13/16:** bounded first-month jobs, 5 instruments each, immutable outputs, independent QC; do not mix result status with formal RESEARCH-READY.
 6. [ ] **SOURCE №25 REUSE:** independently verify 114 cached originals, then acquire only 36 missing files under approved source-write contract.
 7. [ ] **SOURCE №24:** isolated decoder + parity checker уже IMPLEMENTED в PR; после server rail выполнить exact package materialization и original Parquet parity before any new predictive inference.
 8. [x] **SOURCE №23:** strict first-month source audit closed as five `NO_DATA` pairs; no snapshot substitution.
