@@ -247,6 +247,24 @@ def _status_checks(
     return result
 
 
+def source_can_fast_forward(source_head: str, target: str) -> bool:
+    if not all(isinstance(value, str) and SHA.fullmatch(value) for value in (source_head, target)):
+        raise GitHubEvidenceError("SOURCE_COMPARE_SHA_INVALID")
+    if source_head == target:
+        return True
+    payload = _get_json(f"/compare/{source_head}...{target}")
+    status = payload.get("status")
+    merge_base = (payload.get("merge_base_commit") or {}).get("sha")
+    base_commit = (payload.get("base_commit") or {}).get("sha")
+    behind_by = payload.get("behind_by")
+    return (
+        status == "ahead"
+        and merge_base == source_head
+        and base_commit == source_head
+        and behind_by == 0
+    )
+
+
 def release_evidence(target: str) -> ReleaseEvidence:
     if not isinstance(target, str) or not SHA.fullmatch(target):
         raise GitHubEvidenceError("TARGET_SHA_INVALID")
