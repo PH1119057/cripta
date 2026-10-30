@@ -103,3 +103,9 @@ def test_source_delta_is_bounded_to_recovery_and_docs():
         "operations/infrastructure/recover_5be6a7eb_post_migration.py",
         "tests/test_recover_5be6a7eb_post_migration.py",
     }
+
+
+def test_candidate_archive_verification_is_streaming():
+    assert 'tarfile.open(fileobj=process.stdout, mode="r|")' in SOURCE
+    assert 'prefix="cripta-recovery-archive."' not in SOURCE
+    assert "_stream_file_matches" in SOURCE
