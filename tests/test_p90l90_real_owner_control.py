@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SQL = ROOT / "operations/sql/20261029_p90l90_real_account_arm_control.sql"
 DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
+PRIVATE_RUNTIME = ROOT / "operations/connectivity/private_runtime.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
 SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
 MAIN_PRIVATE_DROPIN = (
@@ -74,6 +75,20 @@ def test_p90_private_runtimes_publish_fresh_mode_and_signed_ipc() -> None:
     assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in main_source
     assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in sub_source
     assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in sub_source
+
+
+def test_p90_private_flat_failure_publishes_only_stable_local_reason() -> None:
+    source = PRIVATE_RUNTIME.read_text()
+    start = source.index("def _p90_private_ipc_flat_handler(")
+    end = source.index("def _p90_private_ipc_recovery_handler(", start)
+    block = source[start:end]
+    assert "except P90RealFlatAccountUnverified as exc:" in block
+    assert '"p90_private_ipc"' in block
+    assert '"state": "BLOCKED"' in block
+    assert '"flat_reason": str(exc)' in block
+    assert '"flat_reason": "UNEXPECTED_" + type(exc).__name__' in block
+    assert '"state": "VERIFIED"' in block
+    assert "return result" in block
 
 
 def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
