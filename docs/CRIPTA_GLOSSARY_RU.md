@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.11
-**Дата:** 2026-10-28
+**Версия:** 3.12
+**Дата:** 2026-10-30
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -530,6 +530,18 @@ operator/owner resolution; сам fault не создаёт Entry/Exit/Exchange 
 **Critical fault delivery** — durable механизм доставки critical operational/
 lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
 escalation state. Наличие записи только в UI/read-model не считается доставкой.
+
+**OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE** — отдельный durable LIVE-arm
+evidence status, **не** `PASS`: OWNER DECISION 2026-10-30 разрешает только
+exact P90 REAL v3 MICRO_LIVE scope из `TRADING_CONTOUR §4.7` временно arm при
+`critical_delivery.configured=false`, пока владелец работает через
+аутентифицированный Dashboard portal и внешний `OWNER_WEBHOOK` отложен.
+Token валиден только для exact двух P90 Strategy IDs/version и их пяти символов,
+при active `cripta-dashboard.service`, отсутствии active lifecycle faults и
+`pending_or_unacknowledged=0`; stake/leverage/caps продолжают проверяться
+отдельным `MICRO_LIVE_LIMITS`. Token не означает доставку, не отключает durable
+fault/delivery/retry/ack/escalation и не переносится на другой Strategy/version,
+symbol cohort, увеличенный риск или расширенный LIVE scope.
 
 **DASHBOARD_INBOX** — отдельный от `OWNER_WEBHOOK` durable delivery channel для
 `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` severity `ERROR`: запись в БД имеет

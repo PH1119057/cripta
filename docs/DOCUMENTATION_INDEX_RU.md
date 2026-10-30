@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.43
-**Дата:** 2026-10-28
+**Версия:** 3.44
+**Дата:** 2026-10-30
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -356,6 +356,23 @@ Project Source size or Project Instructions bootstrap.
 - Execution checkpoint and explicit BEFORE/AFTER matrix: GitHub Issue #235.
 - No changes to the current 11-file Project Source set, bootstrap/pre-read
   routing, document paths or Project Instructions.
+
+## 17.1.4 P90 portal-only MICRO_LIVE waiver — OWNER DECISION 2026-10-30
+
+- Canonical owner: `TRADING_CONTOUR §4.7`.
+- Exact evidence token and meaning: `CRIPTA_GLOSSARY`
+  `OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE`.
+- Current implementation/readiness mirror: `CURRENT_PROJECT_MAP`.
+- Scope is only exact current P90 REAL v3 two-Strategy/five-symbol MICRO_LIVE
+  at 10 USDT Entry, isolated 1x, MAIN cap 20 / SUB cap 30.
+- External `OWNER_WEBHOOK` is deferred by explicit owner decision while the
+  owner operates through authenticated Dashboard; the waiver is valid only
+  with Dashboard active, no active lifecycle faults and no pending/unacknowledged
+  critical deliveries.
+- The status is not `PASS`, does not disable durable faults/delivery records,
+  and does not transfer to another Strategy/version/cohort or wider risk scope.
+- This change does not modify the active 11-file Project Source set, paths,
+  mandatory pre-read, routing, README/AGENTS entrypoints or Project Instructions.
 
 ## 17.2 Нумерация и ссылки
 

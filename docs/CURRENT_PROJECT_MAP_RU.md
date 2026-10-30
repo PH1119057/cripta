@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.32
-**Дата:** 2026-10-26
+**Версия:** 12.33
+**Дата:** 2026-10-30
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -1113,6 +1113,29 @@ OWNER DECISION 2026-10-04: для exact текущего R1 MICRO_LIVE
 `OWNER_WAIVED_FOR_R1_MICRO_LIVE`, а не как `PASS`. Durable
 fault/delivery/retry/ack/escalation contract остаётся включённым. Для других
 Strategy, иного cohort/лимитов или полного LIVE waiver не действует.
+
+OWNER DECISION 2026-10-30: для exact текущего P90 REAL v3 MICRO_LIVE владелец
+выбрал работу и наблюдение через authenticated Dashboard portal, а внешний
+`OWNER_WEBHOOK` отложил до момента, когда real trading contour заработает.
+Exact scope принадлежит `TRADING_CONTOUR §4.7`:
+
+```text
+version = 2.0-p90l90-real-main-sub-20261028
+MAIN    = p90l90_legacy_main_ltc_inj / LTCUSDT,INJUSDT
+SUB     = p90l90_legacy_sub_dot_arb_apt / DOTUSDT,ARBUSDT,APTUSDT
+Entry   = 10 USDT, isolated 1x
+caps    = MAIN 20 USDT / SUB 30 USDT
+```
+
+Для этого scope допустим отдельный evidence status
+`OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE` вместо ложного
+`CRITICAL_FAULT_DELIVERY=PASS`, только если Dashboard active, active lifecycle
+faults отсутствуют и `pending_or_unacknowledged=0`. Dashboard уже читает
+открытые `runtime.lifecycle_faults` severity `CRITICAL`; это operator
+visibility, а не доказательство внешней доставки. Durable delivery contract
+остаётся включённым. Любое расширение scope/risk либо inactive Dashboard/
+active-or-pending critical state отменяет waiver и возвращает обычный blocking
+`CRITICAL_FAULT_DELIVERY=PASS`.
 
 # 18. LIVE / MICRO_LIVE readiness — CHECKED HERE 2026-09-28
 

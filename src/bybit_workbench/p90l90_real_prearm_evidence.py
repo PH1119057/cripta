@@ -56,6 +56,7 @@ _SERVICE_UNITS = (
     f"cripta-lifecycle-account@{_SUB_ACCOUNT}.service",
     "cripta-position-supervisor.service",
     f"cripta-account-position@{_SUB_ACCOUNT}.service",
+    "cripta-dashboard.service",
 )
 
 
@@ -395,10 +396,15 @@ def prepare_p90l90_real_v3_prearm_evidence(
             "P90 REAL v3 PREARM: critical delivery status missing"
         )
     critical = cast(dict[str, object], critical_raw)
+    critical_pending = int(str(critical.get("pending_or_unacknowledged") or 0))
     _require(
-        critical.get("configured") is True
-        and int(str(critical.get("pending_or_unacknowledged") or 0)) == 0,
-        "CRITICAL fault delivery is not configured/clear",
+        critical_pending == 0,
+        "CRITICAL fault delivery has pending/unacknowledged items",
+    )
+    critical_delivery_status = (
+        "PASS"
+        if critical.get("configured") is True
+        else "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE"
     )
     _require(
         sub_lifecycle.get("state") == "VERIFIED_ACCOUNT_SCAN"
@@ -635,6 +641,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
         evidence: dict[str, object],
         *,
         ttl: bool,
+        status: str = "PASS",
     ) -> None:
         identity_key = "|".join(
             (release_commit, code, scope_type, scope_key, current.isoformat())
@@ -646,13 +653,14 @@ def prepare_p90l90_real_v3_prearm_evidence(
             """INSERT INTO control.live_arm_evidence(
                    evidence_id,check_code,scope_type,scope_key,status,
                    checked_at,valid_until,release_commit,source,evidence)
-               VALUES(%s,%s,%s,%s,'PASS',%s,%s,%s,
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,
                       %s,%s::jsonb)""",
             (
                 evidence_id,
                 code,
                 scope_type,
                 scope_key,
+                status,
                 current,
                 valid_until if ttl else None,
                 release_commit,
@@ -722,7 +730,20 @@ def prepare_p90l90_real_v3_prearm_evidence(
             True,
         ),
         "CRITICAL_FAULT_DELIVERY": (
-            {"critical_delivery": critical, "r1_waiver_reused": False},
+            {
+                "critical_delivery": critical,
+                "r1_waiver_reused": False,
+                "p90_portal_micro_live_waiver": (
+                    critical_delivery_status
+                    == "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE"
+                ),
+                "owner_decision": "2026-10-30",
+                "portal_service_required_active": True,
+                "owner_webhook_deferred": (
+                    critical_delivery_status
+                    == "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE"
+                ),
+            },
             True,
         ),
         "RECONCILIATION_PATH": ({"accounts": account_evidence}, True),
@@ -732,7 +753,18 @@ def prepare_p90l90_real_v3_prearm_evidence(
         ),
     }
     for code, (global_evidence, ttl) in global_checks.items():
-        put(code, "GLOBAL", "GLOBAL", global_evidence, ttl=ttl)
+        put(
+            code,
+            "GLOBAL",
+            "GLOBAL",
+            global_evidence,
+            ttl=ttl,
+            status=(
+                critical_delivery_status
+                if code == "CRITICAL_FAULT_DELIVERY"
+                else "PASS"
+            ),
+        )
 
     for context in contexts:
         bundle = bundles[context.strategy_id]

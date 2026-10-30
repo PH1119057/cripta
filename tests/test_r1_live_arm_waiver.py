@@ -32,15 +32,14 @@ class _Connection:
         return _Cursor(self._rows)
 
 
-def _rows(context: LiveArmContext):
+def _rows(
+    context: LiveArmContext,
+    critical_status: str = "OWNER_WAIVED_FOR_R1_MICRO_LIVE",
+):
     result = []
     for code in REQUIRED_LIVE_ARM_CHECKS:
         scope_type, scope_key = scope_for_check(code, context)
-        status = (
-            "OWNER_WAIVED_FOR_R1_MICRO_LIVE"
-            if code == "CRITICAL_FAULT_DELIVERY"
-            else "PASS"
-        )
+        status = critical_status if code == "CRITICAL_FAULT_DELIVERY" else "PASS"
         result.append(
             {
                 "check_code": code,
@@ -86,3 +85,51 @@ def test_webhook_waiver_does_not_unlock_non_r1_strategy() -> None:
     decision = evaluate_live_arm(_Connection(_rows(context)), context=context, now=NOW)
     assert not decision.ready
     assert "CRITICAL_FAULT_DELIVERY" in decision.failed_codes
+
+
+def test_p90_portal_micro_live_accepts_exact_scoped_webhook_waiver() -> None:
+    context = LiveArmContext(
+        strategy_id="p90l90_legacy_main_ltc_inj",
+        strategy_version="2.0-p90l90-real-main-sub-20261028",
+        strategy_config_fingerprint="fp",
+        strategy_activation_id="activation",
+        symbol="LTCUSDT",
+        release_commit=RELEASE,
+    )
+    decision = evaluate_live_arm(
+        _Connection(_rows(context, "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE")),
+        context=context,
+        now=NOW,
+    )
+    assert decision.ready
+    waived = next(c for c in decision.checks if c.code == "CRITICAL_FAULT_DELIVERY")
+    assert waived.status == "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE"
+    assert waived.waived
+    assert waived.passed
+
+
+def test_p90_portal_waiver_does_not_unlock_wrong_symbol_or_version() -> None:
+    wrong_symbol = LiveArmContext(
+        strategy_id="p90l90_legacy_main_ltc_inj",
+        strategy_version="2.0-p90l90-real-main-sub-20261028",
+        strategy_config_fingerprint="fp",
+        strategy_activation_id="activation",
+        symbol="BTCUSDT",
+        release_commit=RELEASE,
+    )
+    wrong_version = LiveArmContext(
+        strategy_id="p90l90_legacy_main_ltc_inj",
+        strategy_version="2.0-other",
+        strategy_config_fingerprint="fp",
+        strategy_activation_id="activation",
+        symbol="LTCUSDT",
+        release_commit=RELEASE,
+    )
+    for context in (wrong_symbol, wrong_version):
+        decision = evaluate_live_arm(
+            _Connection(_rows(context, "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE")),
+            context=context,
+            now=NOW,
+        )
+        assert not decision.ready
+        assert "CRITICAL_FAULT_DELIVERY" in decision.failed_codes

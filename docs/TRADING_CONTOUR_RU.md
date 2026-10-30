@@ -1,7 +1,7 @@
 # CRIPTA — торговый контур: STRATEGY / ENTRY / EXIT / EXECUTION
 
-**Версия:** 3.2
-**Дата:** 2026-10-28
+**Версия:** 3.3
+**Дата:** 2026-10-30
 **Статус:** активный канонический контракт торгового контура
 
 Этот документ объединяет правила четырёх связанных частей торгового контура:
@@ -992,6 +992,45 @@ MICRO_LIVE `CRITICAL_FAULT_DELIVERY` не является blocking pre-arm chec
 Durable fault/delivery/retry/ack/escalation contract остаётся обязательным и
 не отключается. Исключение не распространяется на другую Strategy, иной cohort,
 увеличение лимитов или полный LIVE; для них применяется обычный checklist выше.
+
+OWNER DECISION 2026-10-30 — scoped exception только для exact текущего
+P90 REAL v3 MICRO_LIVE, которым владелец управляет и который наблюдает через
+аутентифицированный Dashboard portal:
+
+```text
+strategy_version = 2.0-p90l90-real-main-sub-20261028
+MAIN strategy     = p90l90_legacy_main_ltc_inj
+MAIN symbols      = LTCUSDT, INJUSDT
+SUB strategy      = p90l90_legacy_sub_dot_arb_apt
+SUB symbols       = DOTUSDT, ARBUSDT, APTUSDT
+requested_amount  = 10 USDT per Entry
+leverage          = 1x isolated
+MAIN cap          = 20 USDT committed
+SUB cap           = 30 USDT committed
+```
+
+Владелец явно откладывает внешний `OWNER_WEBHOOK` до момента, когда текущий
+real trading contour заработает. Для **только этого exact MICRO_LIVE scope**
+`critical_delivery.configured=false` не блокирует arm, если одновременно:
+
+- `cripta-dashboard.service` active;
+- у MAIN Lifecycle Supervisor нет active fault codes;
+- `critical_delivery.pending_or_unacknowledged=0`;
+- все остальные gates §4.7 проходят без waiver.
+
+В таком случае `CRITICAL_FAULT_DELIVERY` фиксируется отдельным durable status
+`OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE`, **не** как `PASS`.
+Durable fault/delivery/retry/ack/escalation records не отключаются и не
+переписываются; открытые CRITICAL lifecycle faults остаются видимыми в Dashboard.
+Исключение немедленно недействительно при inactive Dashboard, active/pending
+critical fault, другой Strategy/version/symbol cohort, увеличении stake/leverage/
+caps или любом расширении за пределы exact scope выше. Тогда снова требуется
+обычный `CRITICAL_FAULT_DELIVERY=PASS` либо новое explicit OWNER DECISION.
+
+Это решение разрешает canonical implementation и подготовку exact MICRO_LIVE
+arm, но не подменяет технические evidence gates и не открывает mainnet gate
+молча: фактический arm остаётся отдельным authenticated Dashboard owner action
+после PASS/waiver всех остальных §4.7 checks.
 
 ## 4.8 Owner-controlled real execution smoke-test
 
