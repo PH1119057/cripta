@@ -35,6 +35,7 @@ def verify_request(
     now,
     remote_main,
     source_head,
+    source_fast_forward_ok,
     installed_runtime,
     installed_tooling,
     required_checks,
@@ -78,8 +79,10 @@ def verify_request(
 
     if remote_main != target:
         raise ReleaseDenied("REMOTE_MAIN_MISMATCH")
-    if source_head not in {baseline, target}:
-        raise ReleaseDenied("SOURCE_HEAD_UNEXPECTED")
+    if not isinstance(source_head, str) or not SHA.fullmatch(source_head):
+        raise ReleaseDenied("SOURCE_HEAD_INVALID")
+    if source_fast_forward_ok is not True:
+        raise ReleaseDenied("SOURCE_NOT_FAST_FORWARD")
     if installed_runtime != baseline or installed_tooling != baseline:
         raise ReleaseDenied("BASELINE_MISMATCH")
 
