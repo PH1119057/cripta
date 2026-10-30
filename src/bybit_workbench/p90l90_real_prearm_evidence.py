@@ -870,3 +870,6 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "source_epoch_id": str(epoch_id),
         "owner_arm_approval_recorded": False,
         "mainnet_gate_enabled": False,
+        "execution_permissions": 0,
+        "exchange_mutation": False,
+    }
