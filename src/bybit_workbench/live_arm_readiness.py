@@ -50,6 +50,7 @@ _LIVE_ARM_STATUSES = {
     "STALE",
     "NOT_CHECKED_HERE",
     "OWNER_WAIVED_FOR_R1_MICRO_LIVE",
+    "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE",
 }
 
 _R1_MICRO_LIVE_STRATEGY_IDS = {
@@ -60,6 +61,12 @@ _R1_MICRO_LIVE_STRATEGY_IDS = {
     "r1_arbusdt",
 }
 _R1_MICRO_LIVE_VERSION = "1.1-micro-live"
+
+_P90_PORTAL_MICRO_LIVE_SYMBOLS = {
+    "p90l90_legacy_main_ltc_inj": frozenset(("LTCUSDT", "INJUSDT")),
+    "p90l90_legacy_sub_dot_arb_apt": frozenset(("DOTUSDT", "ARBUSDT", "APTUSDT")),
+}
+_P90_PORTAL_MICRO_LIVE_VERSION = "2.0-p90l90-real-main-sub-20261028"
 
 
 class CursorLike(Protocol):
@@ -284,14 +291,27 @@ def evaluate_live_arm(
                 f"{release_commit!r}"
             )
 
-        waived = (
+        r1_webhook_waived = (
             code == "CRITICAL_FAULT_DELIVERY"
             and status == "OWNER_WAIVED_FOR_R1_MICRO_LIVE"
             and context.strategy_id in _R1_MICRO_LIVE_STRATEGY_IDS
             and context.strategy_version == _R1_MICRO_LIVE_VERSION
         )
-        if waived:
+        p90_portal_symbols = _P90_PORTAL_MICRO_LIVE_SYMBOLS.get(
+            context.strategy_id
+        )
+        p90_portal_webhook_waived = (
+            code == "CRITICAL_FAULT_DELIVERY"
+            and status == "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE"
+            and context.strategy_version == _P90_PORTAL_MICRO_LIVE_VERSION
+            and p90_portal_symbols is not None
+            and context.symbol.upper() in p90_portal_symbols
+        )
+        waived = r1_webhook_waived or p90_portal_webhook_waived
+        if r1_webhook_waived:
             detail = "owner-scoped R1 MICRO_LIVE webhook waiver"
+        elif p90_portal_webhook_waived:
+            detail = "owner-scoped P90 portal-only MICRO_LIVE webhook waiver"
 
         checks.append(
             LiveArmCheck(
