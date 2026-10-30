@@ -12,6 +12,10 @@ MAIN_PRIVATE_DROPIN = (
 )
 PREARM_SCRIPT = ROOT / "operations/implementation/control_p90l90_real_v3_prearm.py"
 PREARM_EVIDENCE = ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
+INSTALLER = ROOT / "operations/infrastructure/install_verified_release.sh"
+P90_PORTAL_WAIVER_SQL = (
+    ROOT / "operations/sql/20261030_p90_portal_micro_live_waiver.sql"
+)
 
 
 def test_p90_control_db_rail_is_narrow_and_never_opens_mainnet() -> None:
@@ -168,3 +172,24 @@ def test_p90_prearm_live_freshness_uses_post_read_clock() -> None:
     assert "(current - completed).total_seconds()" not in source
     assert "now_ms - int(reconciliation[1])" not in source
     assert 'position mode") >= current' not in source
+
+
+def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
+    evidence = PREARM_EVIDENCE.read_text()
+    dashboard = DASH.read_text()
+    migration = P90_PORTAL_WAIVER_SQL.read_text()
+    installer = INSTALLER.read_text()
+
+    assert '"cripta-dashboard.service"' in evidence
+    assert "critical_pending == 0" in evidence
+    assert "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE" in evidence
+    assert '"p90_portal_micro_live_waiver"' in evidence
+    assert '"owner_webhook_deferred"' in evidence
+    assert "FROM runtime.lifecycle_faults" in dashboard
+    assert "state='OPEN' AND severity='CRITICAL'" in dashboard
+
+    assert "OWNER_WAIVED_FOR_R1_MICRO_LIVE" in migration
+    assert "OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE" in migration
+    assert "UPDATE control.execution_gates" not in migration
+    assert "execution_permissions" not in migration
+    assert "20261030_p90_portal_micro_live_waiver.sql" in installer
