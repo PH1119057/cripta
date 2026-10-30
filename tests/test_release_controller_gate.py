@@ -3,19 +3,20 @@ import hashlib
 import hmac
 import importlib.util
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-MODULE = Path(__file__).resolve().parents[1] / "operations/infrastructure/release_controller_gate.py"
+MODULE = (Path(__file__).resolve().parents[1]
+          / "operations/infrastructure/release_controller_gate.py")
 spec = importlib.util.spec_from_file_location("release_controller_gate", MODULE)
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 SHA = "a" * 40
 BASELINE = "b" * 40
 KEY = b"k" * 32
-NOW = datetime(2026, 10, 31, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 31, 0, 0, tzinfo=UTC)
 NOW_TS = int(NOW.timestamp())
 
 
