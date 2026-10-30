@@ -41,6 +41,8 @@ EXPECTED_SCHEMA_VERSION = "runtime-schema-2026-10-17-compact-analytics-r8c"
 
 ALLOWED_SOURCE_DELTA = {
     "operations/infrastructure/recover_fcce5f7d_precutover.py",
+    "operations/sql/20261004_r1_live_arm_waiver.sql",
+    "tests/test_live_arm_evidence_migration_replay.py",
     "tests/test_recover_fcce5f7d_precutover.py",
 }
 RELEASE_DELTA = {
