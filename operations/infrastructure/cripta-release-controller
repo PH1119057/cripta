@@ -83,21 +83,31 @@ def _run(args: list[str], *, env: dict[str, str] | None = None) -> str:
     return result.stdout.strip()
 
 
+def _as_user(user: str, args: list[str]) -> list[str]:
+    return [
+        "/usr/bin/setpriv",
+        f"--reuid={user}",
+        f"--regid={user}",
+        "--init-groups",
+        "--",
+        *args,
+    ]
+
+
 def _git(*args: str) -> str:
     return _run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/env",
-            "GIT_OPTIONAL_LOCKS=0",
-            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-            "/usr/bin/git",
-            "-C",
-            str(SOURCE),
-            *args,
-        ]
+            [
+                "/usr/bin/env",
+                "GIT_OPTIONAL_LOCKS=0",
+                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+                "/usr/bin/git",
+                "-C",
+                str(SOURCE),
+                *args,
+            ],
+        )
     )
 
 
@@ -197,15 +207,10 @@ def _sandbox_ok() -> bool:
 
 def _cripta_test(flag: str, path: Path) -> bool:
     result = subprocess.run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/test",
-            flag,
-            str(path),
-        ],
+            ["/usr/bin/test", flag, str(path)],
+        ),
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -315,15 +320,14 @@ def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> 
 def _sync_source(target: str) -> None:
     sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
     _run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/env",
-            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-            str(sync),
-        ]
+            [
+                "/usr/bin/env",
+                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+                str(sync),
+            ],
+        )
     )
     head, clean = _source_state()
     if head != target or not clean:
@@ -331,20 +335,19 @@ def _sync_source(target: str) -> None:
 
 
 def _exact_installer_bytes(target: str) -> bytes:
-    args = [
-        "/usr/sbin/runuser",
-        "-u",
+    args = _as_user(
         "cripta",
-        "--",
-        "/usr/bin/env",
-        "GIT_OPTIONAL_LOCKS=0",
-        "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-        "/usr/bin/git",
-        "-C",
-        str(SOURCE),
-        "show",
-        f"{target}:operations/infrastructure/install_verified_release.sh",
-    ]
+        [
+            "/usr/bin/env",
+            "GIT_OPTIONAL_LOCKS=0",
+            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+            "/usr/bin/git",
+            "-C",
+            str(SOURCE),
+            "show",
+            f"{target}:operations/infrastructure/install_verified_release.sh",
+        ],
+    )
     result = subprocess.run(
         args,
         check=False,
@@ -357,7 +360,7 @@ def _exact_installer_bytes(target: str) -> bytes:
     return result.stdout
 
 
-def _deploy(*, target: str, baseline: str) -> None:
+def _deploy(*, target: str, baseline: str, nonce: str) -> None:
     installer_bytes = _exact_installer_bytes(target)
     fd, staged_name = tempfile.mkstemp(
         prefix="cripta-install-verified-release.",
@@ -372,14 +375,25 @@ def _deploy(*, target: str, baseline: str) -> None:
             os.fsync(stream.fileno())
         os.close(fd)
         fd = -1
-        env = {
-            **SAFE_ENV,
-            "CRIPTA_RELEASE_COMMIT": target,
-            "CRIPTA_EXPECTED_BASELINE_COMMIT": baseline,
-            "CRIPTA_RELEASE_CONTROL_CHECKPOINT": "0",
-            "CRIPTA_STAGED_OFFLINE_CUTOVER": "0",
-        }
-        _run(["/usr/bin/bash", str(staged)], env=env)
+        unit_suffix = hashlib.sha256(nonce.encode("ascii")).hexdigest()[:12]
+        _run(
+            [
+                "/usr/bin/systemd-run",
+                "--wait",
+                "--pipe",
+                "--collect",
+                f"--unit=cripta-controller-release-{unit_suffix}",
+                "--property=Type=oneshot",
+                "--property=TimeoutStartSec=1800",
+                "/usr/bin/env",
+                f"CRIPTA_RELEASE_COMMIT={target}",
+                f"CRIPTA_EXPECTED_BASELINE_COMMIT={baseline}",
+                "CRIPTA_RELEASE_CONTROL_CHECKPOINT=0",
+                "CRIPTA_STAGED_OFFLINE_CUTOVER=0",
+                "/usr/bin/bash",
+                str(staged),
+            ]
+        )
     finally:
         if fd >= 0:
             os.close(fd)
@@ -479,7 +493,7 @@ def main() -> int:
         if latest_main != target or _git_remote_main() != target:
             raise ControllerError("REMOTE_MAIN_MOVED_BEFORE_DEPLOY")
 
-        _deploy(target=target, baseline=expected_baseline)
+        _deploy(target=target, baseline=expected_baseline, nonce=nonce)
         post_remote, post_source, post_runtime, post_state = _postcheck(target)
         final_status = "DEPLOYED" if post_remote == target else "DEPLOYED_REMOTE_MOVED"
         _audit(
