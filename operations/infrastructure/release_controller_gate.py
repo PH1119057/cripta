@@ -1,60 +1,104 @@
-"""Pure fail-closed request verifier for Release Controller, Issue #288.
+"""Pure fail-closed Release Controller request verifier (Issue #288).
 
-Not an executable release rail. External evidence, authenticated approval issuer,
-nonce claim, permission preflight and installer binding remain separate gates.
+Authentication evidence is supplied from GitHub's immutable comment metadata.
+This module performs no network or filesystem mutation.
 """
-import hashlib
-import hmac
-import json
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+OWNER_LOGIN = "PH1119057"
+REPOSITORY = "PH1119057/cripta"
+PURPOSE = "EXACT_VERIFIED_SOURCE_RELEASE"
+FIELDS = {
+    "repository",
+    "purpose",
+    "target_commit",
+    "expected_baseline",
+    "nonce",
+    "expires_at",
+}
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 NONCE = re.compile(r"[A-Za-z0-9_-]{24,128}\Z")
-FIELDS = {"repository", "purpose", "target_commit", "expected_baseline", "nonce", "issued_at", "expires_at"}
+MAX_APPROVAL_TTL_SECONDS = 15 * 60
 
 
 class ReleaseDenied(ValueError):
-    pass
+    """Explicit fail-closed release rejection."""
 
 
-def verify_request(*, request, signature, key, now, remote_main,
-                   installed_runtime, installed_tooling, required_checks,
-                   source_clean, actor_paths_ok, rollback_ready,
-                   release_lock_available, nonce_unused):
-    """Validate externally obtained facts without performing any side effects."""
+def verify_request(
+    *,
+    request,
+    approval_actor,
+    approval_created_at,
+    approval_unedited,
+    now,
+    remote_main,
+    source_head,
+    installed_runtime,
+    installed_tooling,
+    required_checks,
+    source_clean,
+    actor_paths_ok,
+    rollback_ready,
+    release_lock_available,
+    nonce_unused,
+):
+    """Validate independently collected facts and return exact release identity."""
     if not isinstance(request, dict) or set(request) != FIELDS:
         raise ReleaseDenied("REQUEST_FIELDS_INVALID")
-    if request["repository"] != "PH1119057/cripta" or request["purpose"] != "EXACT_VERIFIED_SOURCE_RELEASE":
+    if approval_actor != OWNER_LOGIN or approval_unedited is not True:
+        raise ReleaseDenied("OWNER_APPROVAL_INVALID")
+    if not isinstance(approval_created_at, datetime) or approval_created_at.tzinfo is None:
+        raise ReleaseDenied("APPROVAL_TIME_INVALID")
+    if not isinstance(now, datetime) or now.tzinfo is None:
+        raise ReleaseDenied("NOW_INVALID")
+
+    if request["repository"] != REPOSITORY or request["purpose"] != PURPOSE:
         raise ReleaseDenied("REQUEST_SCOPE_INVALID")
-    target, baseline, nonce = (request[k] for k in ("target_commit", "expected_baseline", "nonce"))
-    if any(not isinstance(v, str) or not SHA.fullmatch(v) for v in (target, baseline)):
+    target = request["target_commit"]
+    baseline = request["expected_baseline"]
+    nonce = request["nonce"]
+    expires = request["expires_at"]
+    if any(not isinstance(value, str) or not SHA.fullmatch(value) for value in (target, baseline)):
         raise ReleaseDenied("RELEASE_SHA_INVALID")
     if not isinstance(nonce, str) or not NONCE.fullmatch(nonce):
         raise ReleaseDenied("NONCE_INVALID")
-    issued, expires = request["issued_at"], request["expires_at"]
-    if any(type(v) is not int for v in (issued, expires)):
+    if type(expires) is not int:
         raise ReleaseDenied("REQUEST_TIME_INVALID")
-    ts = int(now.astimezone(timezone.utc).timestamp())
-    if issued > ts or expires <= ts or expires <= issued or expires - issued > 900:
+
+    created_ts = int(approval_created_at.astimezone(UTC).timestamp())
+    now_ts = int(now.astimezone(UTC).timestamp())
+    if created_ts > now_ts + 30:
+        raise ReleaseDenied("APPROVAL_FROM_FUTURE")
+    if expires <= now_ts or expires <= created_ts:
         raise ReleaseDenied("REQUEST_NOT_CURRENT")
-    if not isinstance(key, bytes) or len(key) < 32:
-        raise ReleaseDenied("APPROVAL_KEY_INVALID")
-    if not isinstance(signature, str) or not re.fullmatch(r"[0-9a-f]{64}", signature):
-        raise ReleaseDenied("APPROVAL_SIGNATURE_INVALID")
-    message = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
-    expected = hmac.new(key, message, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, signature):
-        raise ReleaseDenied("APPROVAL_SIGNATURE_MISMATCH")
-    if target != remote_main:
+    if expires - created_ts > MAX_APPROVAL_TTL_SECONDS:
+        raise ReleaseDenied("REQUEST_TTL_TOO_LONG")
+
+    if remote_main != target:
         raise ReleaseDenied("REMOTE_MAIN_MISMATCH")
-    if baseline != installed_runtime or baseline != installed_tooling:
+    if source_head not in {baseline, target}:
+        raise ReleaseDenied("SOURCE_HEAD_UNEXPECTED")
+    if installed_runtime != baseline or installed_tooling != baseline:
         raise ReleaseDenied("BASELINE_MISMATCH")
-    if not required_checks or required_checks.get("scope") != "success" or any(v != "success" for v in required_checks.values()):
-        raise ReleaseDenied("CI_NOT_PASS")
-    for passed, label in ((source_clean, "SOURCE_DIRTY"), (actor_paths_ok, "ACTOR_PATH_DENIED"),
-                          (rollback_ready, "ROLLBACK_NOT_READY"), (release_lock_available, "RELEASE_LOCKED"),
-                          (nonce_unused, "REQUEST_REPLAY")):
+
+    if not isinstance(required_checks, dict):
+        raise ReleaseDenied("CI_EVIDENCE_INVALID")
+    if required_checks.get("scope") != "success":
+        raise ReleaseDenied("SCOPE_NOT_PASS")
+    if required_checks.get("quality") != "success":
+        raise ReleaseDenied("QUALITY_NOT_PASS")
+    if any(status != "success" for status in required_checks.values()):
+        raise ReleaseDenied("REQUIRED_CI_NOT_PASS")
+
+    for passed, label in (
+        (source_clean, "SOURCE_DIRTY"),
+        (actor_paths_ok, "ACTOR_PATH_DENIED"),
+        (rollback_ready, "ROLLBACK_NOT_READY"),
+        (release_lock_available, "RELEASE_LOCKED"),
+        (nonce_unused, "REQUEST_REPLAY"),
+    ):
         if passed is not True:
             raise ReleaseDenied(label)
-    return (target, baseline, nonce)
+    return target, baseline, nonce
