@@ -40,6 +40,21 @@ EXPECTED_HEADER = ["id", "timestamp", "price", "volume", "side", "rpi"]
 VERSION = "R158_SPOT_LEGACY_ORIGINAL_AUDIT_V1"
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -157,11 +172,7 @@ def audit(
     days: int = DAYS,
     require_actor: bool = True,
 ) -> dict:
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    _effective_actor_uid(require_actor)
     if days <= 0:
         raise ValueError("INVALID_DAY_COUNT")
     manifest = load_manifest(source_manifest)

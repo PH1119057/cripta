@@ -60,6 +60,21 @@ REQUIRED_PARQUET_COLUMNS = {
 }
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -311,11 +326,7 @@ def audit(
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
     if not cohort or any(symbol not in COHORT for symbol in cohort):
         raise ValueError("COHORT_OUTSIDE_OWNER_SCOPE")
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    _effective_actor_uid(require_actor)
     if output_root.exists():
         raise FileExistsError("IMMUTABLE_PARITY_REPORT_ROOT_EXISTS")
     if not output_root.parent.is_dir():

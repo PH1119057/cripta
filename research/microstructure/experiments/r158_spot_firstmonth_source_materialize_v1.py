@@ -51,6 +51,21 @@ VERSION = "R158_SPOT_FIRSTMONTH_SOURCE_MATERIALIZE_V1"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def load_auditor():
     path = Path(__file__).resolve().with_name(
         "r158_spot_legacy_original_audit_v1.py"
@@ -119,11 +134,7 @@ def materialize(
 ) -> dict:
     if not SHA_RE.fullmatch(source_commit):
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    actor_uid = _effective_actor_uid(require_actor)
     if days <= 0:
         raise ValueError("INVALID_DAY_COUNT")
     if not output_root.parent.is_dir():
@@ -193,7 +204,7 @@ def materialize(
         "version": VERSION,
         "status": "STARTED_NOT_COMPLETION_PROOF",
         "source_commit": source_commit,
-        "actor_uid": os.geteuid(),
+        "actor_uid": actor_uid,
         "period_start_utc": start.isoformat(),
         "period_end_exclusive_utc": (
             start + timedelta(days=days)

@@ -38,6 +38,21 @@ OUTPUT_ROOT = Path("/data/cripta/research/cache/r158_pyarrow26_site_20261030")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -119,11 +134,7 @@ def prepare(
 ) -> dict:
     if not SHA_RE.fullmatch(source_commit):
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    _effective_actor_uid(require_actor)
     if enforce_platform:
         if sys.version_info[:2] != (3, 12):
             raise RuntimeError("PYTHON_ABI_NOT_CP312")

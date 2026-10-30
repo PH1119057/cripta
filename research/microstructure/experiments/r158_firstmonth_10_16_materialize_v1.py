@@ -40,6 +40,21 @@ MATERIALIZER_VERSION = "R158_FIRSTMONTH_10_16_MATERIALIZER_V1"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -93,11 +108,7 @@ def materialize_symbol(
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
     if not 1 <= days <= 30:
         raise ValueError("DAYS_OUTSIDE_FIRST_MONTH")
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    actor_uid = _effective_actor_uid(require_actor)
     if not output_root.parent.is_dir():
         raise FileNotFoundError("OUTPUT_PARENT_MISSING")
     if not os.access(output_root.parent, os.W_OK | os.X_OK):
@@ -152,7 +163,7 @@ def materialize_symbol(
         target / "run_start.json",
         {
             "status": "STARTED_NOT_COMPLETION_PROOF",
-            "actor_uid": os.geteuid(),
+            "actor_uid": actor_uid,
             "symbol": symbol,
             "period_start_utc": START.isoformat(),
             "period_end_exclusive_utc": (START + timedelta(days=days)).isoformat(),

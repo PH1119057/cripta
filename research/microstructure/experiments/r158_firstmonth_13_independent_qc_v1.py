@@ -27,6 +27,21 @@ VERSION = "R158_FIRSTMONTH_13_INDEPENDENT_FULLROW_QC_V1"
 HORIZONS = (15_000, 60_000, 300_000)
 
 
+def _effective_actor_uid(require_actor: bool) -> int | None:
+    getter = getattr(os, "geteuid", None)
+    if getter is None:
+        if require_actor:
+            raise RuntimeError("EFFECTIVE_UID_UNAVAILABLE")
+        return None
+    uid = int(getter())
+    if require_actor:
+        import pwd
+
+        if uid != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    return uid
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -425,11 +440,7 @@ def check_symbol(
 ) -> dict:
     if symbol not in COHORT:
         raise ValueError("SYMBOL_OUTSIDE_OWNER_COHORT")
-    if require_actor:
-        import pwd
-
-        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    _effective_actor_uid(require_actor)
 
     target = run_root / symbol
     final_path = target / "run_final.json"
