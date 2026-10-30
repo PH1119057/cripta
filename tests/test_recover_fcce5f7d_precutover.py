@@ -72,5 +72,7 @@ def test_recovery_requires_exact_failed_backup_and_controller_failure():
 def test_recovery_source_delta_after_target_is_only_recovery_files():
     assert module.ALLOWED_SOURCE_DELTA == {
         "operations/infrastructure/recover_fcce5f7d_precutover.py",
+        "operations/sql/20261004_r1_live_arm_waiver.sql",
+        "tests/test_live_arm_evidence_migration_replay.py",
         "tests/test_recover_fcce5f7d_precutover.py",
     }
