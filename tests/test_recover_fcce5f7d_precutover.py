@@ -30,7 +30,8 @@ def test_recovery_script_is_exact_and_no_argument():
 
 
 def test_recovery_proves_ui_only_release_delta():
-    assert module.RELEASE_DELTA == {
+    release_delta = module.RELEASE_DELTA
+    assert release_delta == {
         "operations/dashboard/index.html",
         "tests/test_dashboard_p90_owner_arm_control.py",
     }
@@ -70,7 +71,8 @@ def test_recovery_requires_exact_failed_backup_and_controller_failure():
 
 
 def test_recovery_source_delta_after_target_is_only_recovery_files():
-    assert module.ALLOWED_SOURCE_DELTA == {
+    allowed_source_delta = module.ALLOWED_SOURCE_DELTA
+    assert allowed_source_delta == {
         "operations/infrastructure/recover_fcce5f7d_precutover.py",
         "operations/sql/20261004_r1_live_arm_waiver.sql",
         "tests/test_live_arm_evidence_migration_replay.py",
