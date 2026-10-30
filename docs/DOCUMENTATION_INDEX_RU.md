@@ -1513,3 +1513,6 @@ Owner explicitly approved **separating immutable P90 market-data lineage from th
 
 No change to Project Source set (11 documents), base pre-read, routed document paths, ownership topology, or root bootstrap references; INDEX §17 topology-maintenance propagation therefore does not apply.
 
+## 17.1.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30
+
+Canonical release controller approval/actor/path/recovery contract: DEVELOPMENT_RELEASE §50.5; architecture boundary: CRIPTA_ARCHITECTURE_RULES §50; vocabulary: CRIPTA_GLOSSARY. Tracking: GitHub Issue #288. No change to current 11-file Project Source set, mandatory pre-read, routing, paths or bootstrap. This documentation change neither installs a controller nor modifies SentinelX permissions, runtime or LIVE status.
