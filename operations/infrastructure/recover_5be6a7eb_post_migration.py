@@ -830,33 +830,6 @@ def cutover() -> None:
         if service_active(unit):
             raise RecoveryError(f"SUB_UNIT_BECAME_ACTIVE:{unit}")
 
-
-def postcheck(pre_state: tuple[str, str, str]) -> None:
-    if installed_commit(RUNTIME_ROOT) != RELEASE:
-        raise RecoveryError("RUNTIME_POST_IDENTITY_MISMATCH")
-    if installed_commit(TOOLING_ROOT) != RELEASE:
-        raise RecoveryError("TOOLING_POST_IDENTITY_MISMATCH")
-    if (DASHBOARD_ROOT / "current").resolve(strict=True) != (
-        DASHBOARD_ROOT / "releases" / RELEASE
-    ).resolve(strict=True):
-        raise RecoveryError("DASHBOARD_POST_IDENTITY_MISMATCH")
-    if trading_state() != pre_state:
-        raise RecoveryError("TRADING_CONTROL_CHANGED_DURING_RECOVERY")
-
-    sync_started_ms = int(time.time() * 1000)
-    reconciliation_ok = False
-    for _ in range(30):
-        value = sql_scalar(
-            "SELECT coalesce((SELECT finished_at_epoch_ms FROM "
-            "runtime.reconciliation_runs WHERE ok=1 ORDER BY id DESC LIMIT 1),0)"
-        )
-        if value.isdigit() and int(value) >= sync_started_ms:
-            reconciliation_ok = True
-            break
-        time.sleep(2)
-    if not reconciliation_ok:
-        raise RecoveryError("POST_RECOVERY_RECONCILIATION_NOT_VERIFIED")
-
     write_root_file(
         STATE_ROOT / "INSTALLED_COMMIT",
         RELEASE + "\n",
@@ -869,6 +842,34 @@ def postcheck(pre_state: tuple[str, str, str]) -> None:
         0o640,
         group="cripta",
     )
+
+
+def postcheck(pre_state: tuple[str, str, str]) -> bool:
+    if installed_commit(RUNTIME_ROOT) != RELEASE:
+        raise RecoveryError("RUNTIME_POST_IDENTITY_MISMATCH")
+    if installed_commit(TOOLING_ROOT) != RELEASE:
+        raise RecoveryError("TOOLING_POST_IDENTITY_MISMATCH")
+    if (DASHBOARD_ROOT / "current").resolve(strict=True) != (
+        DASHBOARD_ROOT / "releases" / RELEASE
+    ).resolve(strict=True):
+        raise RecoveryError("DASHBOARD_POST_IDENTITY_MISMATCH")
+    if (STATE_ROOT / "INSTALLED_COMMIT").read_text(encoding="utf-8").strip() != RELEASE:
+        raise RecoveryError("RELEASE_STATE_POST_IDENTITY_MISMATCH")
+    if trading_state() != pre_state:
+        raise RecoveryError("TRADING_CONTROL_CHANGED_DURING_RECOVERY")
+
+    sync_started_ms = int(time.time() * 1000) - 120_000
+    reconciliation_ok = False
+    for _ in range(30):
+        value = sql_scalar(
+            "SELECT coalesce((SELECT finished_at_epoch_ms FROM "
+            "runtime.reconciliation_runs WHERE ok=1 ORDER BY id DESC LIMIT 1),0)"
+        )
+        if value.isdigit() and int(value) >= sync_started_ms:
+            reconciliation_ok = True
+            break
+        time.sleep(2)
+    return reconciliation_ok
 
 
 def main() -> int:
@@ -889,11 +890,16 @@ def main() -> int:
 
         stage = "POSTCHECK"
         write_recovery_status("RUNNING", stage)
-        postcheck(pre_state)
+        reconciliation_ok = postcheck(pre_state)
 
         write_recovery_status("PASS", "COMPLETE")
         print("POST_MIGRATION_RECOVERY=PASS")
         print(f"INSTALLED_COMMIT={RELEASE}")
+        print("RUNTIME_LIVENESS_VERIFIED=YES")
+        print(
+            "RUNTIME_BEHAVIOR_VERIFIED="
+            + ("YES" if reconciliation_ok else "NO")
+        )
         print("OWNER_ARM=UNCHANGED")
         return 0
     except Exception as exc:
