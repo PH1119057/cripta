@@ -221,3 +221,9 @@ def test_p90_prearm_evidence_deduplicates_shared_strategy_scope() -> None:
     assert len(scopes) == 5
     assert len({strategy for strategy, _ in scopes}) == 2
     assert len(set(scopes)) == 5
+    # Same Strategy check across symbols must map to a single scope,
+    # while symbol-specific checks remain independent for all five symbols.
+    strategy_scope_keys = [(strategy, "ENTRY_PLAN_EXECUTABLE") for strategy, _ in scopes]
+    symbol_scope_keys = [(strategy, symbol, "POSITION_MODE_FRESH") for strategy, symbol in scopes]
+    assert len(set(strategy_scope_keys)) == 2
+    assert len(set(symbol_scope_keys)) == 5
