@@ -43,6 +43,7 @@
 - [x] Canon: exact-price `oldTop5 ∪ newTop5`, bid/ask отдельно, UNKNOWN при недоказанной видимости.
 - [x] Reader реализован в PR #223: `R158_OFI_EXACT_PRICE_TOP5_UNION_V1`.
 - [x] Synthetic tests покрывают exact price union, source-gap reset, snapshot reset, invisible level → UNKNOWN.
+- [x] В PR #223 добавлены bounded materializer `r158_firstmonth_10_16_materialize_v1.py` и отдельный independent full-row checker `r158_firstmonth_10_16_independent_qc_v1.py`; server run ещё НЕ запускался.
 - [ ] Full `5 × 30d` materialization.
 - [ ] Independent source/event QC по полному периоду.
 - [ ] 5 evidence passports / DESCRIPTIVE_ONLY classification.
@@ -59,18 +60,24 @@
 - [x] Canon: только observed executed aggressor flow + independently visible book changes + observed price movement.
 - [x] Reader реализован в PR #223: `R158_ABSORPTION_COMPONENTS_NATIVE_V1`.
 - [x] Output explicitly `ABSORPTION_EVIDENCE_PROXY_COMPONENTS_ONLY`; maker/passive identity не заявляется.
+- [x] №16 входит в тот же bounded materializer; independent checker пересчитывает book/trade components заново и не импортирует primary readers.
 - [ ] Full `5 × 30d` materialization.
 - [ ] Independent source/event QC.
 - [ ] Common-clock/available-after остаётся UNKNOWN; без него causal as-of join не утверждать.
 
 ### №23 OI Change
 - [x] Canon forbids substitution of 5m historical snapshots for original observed/published change stream.
-- [ ] Locate/prove original first-month change stream.
-- [ ] Если такого source нет: per-pair `NO_DATA`, не synthetic delta и не failed algorithm.
+- [x] Найден historical Bybit V5 5m snapshot corpus с per-file SHA, но он начинается только `2026-05-25T06:00Z` и по физике является snapshot series, а не требуемым native per-change source.
+- [x] Найденный recent OI run за `2026-09-18..2026-10-01` сам классифицирован `RECENT_ONLY_EVIDENCE` и не относится к first month.
+- [ ] Выполнить последний bounded source-identity audit именно на native observed/published change stream.
+- [ ] Если такого source нет: закрыть пять first-month пар как `NO_DATA`, не synthetic delta и не failed algorithm.
 
 ### №24 Liquidation Spikes
 - [x] PR #223 reader preserves side and missing-hour `UNKNOWN_NOT_ZERO`.
 - [x] 1,157/3,600 vendor object-hour receipts; normalized observed rows существуют.
+- [x] Current physical vendor root подтверждён: `/data/cripta/datasets/external/cryptohftdata/bybit_liquidations_v1/{OBJECTS.jsonl,SUMMARY.json,raw/}`.
+- [x] Current system Python 3.12 не имеет `pyarrow/zstandard/polars/duckdb/pandas`; это decoder/tooling blocker, НЕ отсутствие исходных объектов.
+- [ ] Подготовить отдельный bounded decoder environment/package contract без изменения trading runtime.
 - [ ] Original provider Parquet row/unit parity.
 - [ ] Object revision/correction semantics.
 - [ ] Price-drop-matched control after original-row parity; old 47/60 vs 15/60 is DESCRIPTIVE_ONLY.
@@ -78,7 +85,11 @@
 ### №25 Spot/Perp Divergence
 - [x] PR #223 uses executed base-quantity VWAP and corrected bounded native float-representation QC.
 - [x] Perp original first-month archive family exists.
-- [ ] Immutable original Spot 5×30d corpus + hashes/manifest under approved acquisition contract.
+- [x] Найден reusable historical Bybit Spot original cache с native schema `id,timestamp,price,volume,side,rpi` и historical `SOURCE_MANIFEST.json`, где для каждого файла сохранены URL/bytes/SHA256/source_symbol.
+- [x] First-month physical mask: APT/INJ/DOT/ARB по 23/30, LTC 22/30 = **114/150 файлов физически присутствуют**. У всех пяти отсутствуют May18–May24; дополнительно у LTC отсутствует 2026-06-11. Итого **36 missing**.
+- [x] В PR #223 добавлен read-only verifier `r158_spot_legacy_original_audit_v1.py`: current bytes ↔ historical manifest size/SHA, full native CSV schema/timestamp/order/value QC; он не скачивает и не копирует данные.
+- [ ] Запустить verifier на всех 114 существующих originals после доступности exact PR source; historical manifest сам по себе не заменяет текущую независимую проверку.
+- [ ] После PASS не скачивать 114 повторно; acquisition contract нужен только для 36 missing originals и нового immutable first-month source manifest.
 - [ ] 5×30d synchronized Spot/Perp calculation + independent QC.
 
 ### №26 Cross-Venue
@@ -125,9 +136,9 @@ LIVE / DB / SERVICE MUTATION = NONE
 3. [ ] **№13 OWNER DECISION:** resolve four remaining physical semantics; then only one final reader version.
 4. [ ] **SERVER PREP №10/16:** prepare exact PR worktree/writer rail; no broad privilege changes.
 5. [ ] **RUN №10/16:** one bounded first-month job family, 5 instruments, immutable outputs, independent QC.
-6. [ ] **SOURCE №24:** original Parquet parity before any new predictive inference.
-7. [ ] **SOURCE №25:** immutable Spot corpus before divergence run.
-8. [ ] **SOURCE №23:** prove source or close as NO_DATA.
+6. [ ] **SOURCE №25 REUSE:** independently verify 114 cached originals, then acquire only 36 missing files under approved source-write contract.
+7. [ ] **SOURCE №24:** prepare isolated decoder tooling, then original Parquet parity before any new predictive inference.
+8. [ ] **SOURCE №23:** bounded native-change source audit; prove source or close five pairs as NO_DATA.
 9. [ ] **PASSPORT PROMOTION:** update per-pair gates from evidence; never promote by aggregate count.
 10. [ ] **OOS:** only after first-month physical/source set is frozen; freeze first-month thresholds before reading independent period.
 11. [ ] **ECONOMICS:** only after OOS, after commissions/slippage/funding assumptions; no automatic Strategy.
