@@ -221,7 +221,7 @@ def _status_checks(
             matches.append(run)
         if not matches:
             raise GitHubEvidenceError(f"REQUIRED_CHECK_MISSING:{context}")
-        if any(run.get("status") != "completed" or run.get("conclusion") != "success" for run in matches):
+        if any(\n            run.get("status") != "completed" or run.get("conclusion") != "success"\n            for run in matches\n        ):
             raise GitHubEvidenceError(f"REQUIRED_CHECK_NOT_PASS:{context}")
         result[context] = "success"
 
@@ -242,7 +242,7 @@ def _status_checks(
     ]
     if not quality:
         raise GitHubEvidenceError("QUALITY_WORKFLOW_MISSING")
-    if any(run.get("status") != "completed" or run.get("conclusion") != "success" for run in quality):
+    if any(\n        run.get("status") != "completed" or run.get("conclusion") != "success"\n        for run in quality\n    ):
         raise GitHubEvidenceError("QUALITY_WORKFLOW_NOT_PASS")
     result["quality"] = "success"
     return result
