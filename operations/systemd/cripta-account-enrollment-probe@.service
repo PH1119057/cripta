@@ -1,0 +1,37 @@
+# R10 identity attestation. Inert template, never auto-start or enable.
+# %i = mainnet or sub-<exact-trading-account-id>. The matching operator-
+# provisioned EnvironmentFile carries only exact nonsecret identifiers/UID.
+# Do not install/start this unit before actor, path, provenance, security tool
+# policy and explicit operator authorization have been independently checked.
+[Unit]
+Description=Cripta read-only signed Bybit UID identity check (%i)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=1
+
+[Service]
+Type=oneshot
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+Environment=CRIPTA_ACCOUNT_ENROLLMENT_READ_ONLY=1
+Environment=CRIPTA_BYBIT_CREDENTIAL_NAME=bybit-%i
+EnvironmentFile=/etc/cripta/account-enrollment-%i.env
+LoadCredentialEncrypted=bybit-%i:/etc/cripta/credentials/bybit-%i.cred
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/connectivity/account_enrollment_probe.py
+TimeoutStartSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# No ReadWritePaths and no Install section. Never auto-arm LIVE.

@@ -1,7 +1,7 @@
 # CRIPTA — активный комплект документации
 
-**Версия:** 3.42
-**Дата:** 2026-10-26
+**Версия:** 3.44
+**Дата:** 2026-10-30
 **Статус:** канонический индекс документации
 
 # 1. Цель
@@ -332,6 +332,47 @@ Strategy/Entry/Exit policy и не разрешает real execution.
 Owner for refusal classification, correct actor/tool path and retry policy: `docs/DEVELOPMENT_RELEASE_RULES_RU.md §19.5–19.6`. Research execution/checkpoint discipline: `docs/RESEARCH_COMPUTE_RULES_RU.md`. Owner-facing communication: `docs/CHATGPT_INTERACTION_RULES_RU.md §11.1`. Current dated server actor snapshot: `docs/CURRENT_PROJECT_MAP_RU.md §1.4`. This documentation cycle adds no files to the 11-member Project Source set and changes no role, allowlist, permissions, LIVE or architecture ownership.
 
 **Уточнение OWNER DECISION 2026-10-24:** `DEVELOPMENT_RELEASE §19.5–19.6.1` владеет точной проверкой SentinelX command-prefix allowlist и отдельной однократной попыткой после явного распоряжения владельца при сохранении platform/tool gates. Датированное evidence агента — `CURRENT_PROJECT_MAP §1.4`; owner-facing формулировки — `CHATGPT_INTERACTION_RULES §11.1`. `git` и `sudo -u cripta git` — разные разрешения; success GitHub connector не устраняет локальный Git actor gate. Правка в действующем `docs/owner-directed-tool-retry-20261024` / PR #186 не изменяет source paths, active Source set, mandatory pre-read или trade/runtime/LIVE. README, AGENTS и derived Project Instructions синхронизируются в том же documentation changeset; фактическая ChatGPT UI-копия должна быть отдельно обновлена владельцем.
+
+## 17.1.2 Controlled offline R10 transition — OWNER DECISION 2026-10-27
+
+Release owner remains `DEVELOPMENT_RELEASE §48.2–48.2.1`; account
+ownership/provenance remains `CRIPTA_ARCHITECTURE_RULES §49.2–49.7`.
+The one-time staged cutover retires legacy one-account physical constraints
+while preserving old R1 history and keeping REAL disarmed. It is not a
+historical data rekey, permission to discard private records, automatic
+Strategy fan-out completion or release without backup/restore. The eight
+ordinary §48.2 gates remain required before REAL on the exact loaded release.
+This decision changes no active document set, paths, pre-read routing,
+Project Source size or Project Instructions bootstrap.
+
+## 17.1.3 Reversible R1 service disable and multi-account supervision gaps — 2026-10-27
+
+- Source of R1 legacy runtime disable/retention decision: `TRADING_CONTOUR §1.10`.
+- Canonical capability/ownership requirements and missing per-account
+  Lifecycle, Safety and Position Supervisor implementation:
+  `CRIPTA_ARCHITECTURE_RULES §9.1.1–§9.2.1`; legacy observer must not be
+  disabled until equivalent consumer/restart/audit parity is proven.
+- Execution/deploy/tool-actor gates: `DEVELOPMENT_RELEASE §8, §19, §50`.
+- Execution checkpoint and explicit BEFORE/AFTER matrix: GitHub Issue #235.
+- No changes to the current 11-file Project Source set, bootstrap/pre-read
+  routing, document paths or Project Instructions.
+
+## 17.1.4 P90 portal-only MICRO_LIVE waiver — OWNER DECISION 2026-10-30
+
+- Canonical owner: `TRADING_CONTOUR §4.7`.
+- Exact evidence token and meaning: `CRIPTA_GLOSSARY`
+  `OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE`.
+- Current implementation/readiness mirror: `CURRENT_PROJECT_MAP`.
+- Scope is only exact current P90 REAL v3 two-Strategy/five-symbol MICRO_LIVE
+  at 10 USDT Entry, isolated 1x, MAIN cap 20 / SUB cap 30.
+- External `OWNER_WEBHOOK` is deferred by explicit owner decision while the
+  owner operates through authenticated Dashboard; the waiver is valid only
+  with Dashboard active, no active lifecycle faults and no pending/unacknowledged
+  critical deliveries.
+- The status is not `PASS`, does not disable durable faults/delivery records,
+  and does not transfer to another Strategy/version/cohort or wider risk scope.
+- This change does not modify the active 11-file Project Source set, paths,
+  mandatory pre-read, routing, README/AGENTS entrypoints or Project Instructions.
 
 ## 17.2 Нумерация и ссылки
 
@@ -1451,3 +1492,27 @@ Project Source set still 11; current doc paths, base/routed pre-read, README/AGE
 **Scope:** APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT за 30 UTC суток с 18 мая по 16 июня 2026, один источник Bybit (+ Spot для №25), описательные research версии, №26 остаётся последним. Утверждены №10 exact-price Top5 union signed USDT; №13 все 200 уровней с отдельными Top5/6–200, H15/H60/H300 и `C` на UTC cutoff только для незавершённых; №16 отдельные наблюдаемые trade/book/price-компоненты; №23 только оригинальные изменения OI; №24 provider-published liquidation + file-hour coverage/UNKNOWN; №25 real Spot/Perp 1m executed base-volume VWAP divergence. Оригинальные данные могут быть исследованы описательно без доказанного local receiver clock, но не получают причинный READY; публичные оригиналы — только через обычный actor/path/Git security gate, платные — отдельное разрешение.
 
 **Status:** OWNER DECISION → CANON (только после публикации этого docs PR в GitHub main); IMPLEMENTED/DEPLOYED/RUNTIME VERIFIED — NO/NOT CHECKED HERE. Исторические 23/30 physical QC и 0/30 formal READY не изменены. Неподтверждённые точные timestamp ties, continuity/gap, provider origin, availability, полнота первичных OI/Spot/LIQ и independent full-period QC остаются OPEN. Existing PR #166 — отдельно исследовательский код, не владелец канона. Никаких Strategy/LIVE/deploy прав.
+
+
+# 58. Two independent passive LEGACY StrategyCards — OWNER DECISION 2026-10-27
+
+**Authority:** the two new P90L90 LEGACY immutable Strategy identities and exact RAW H9 / PREV7D / TRAIL035 / dynamic opposite RAW L5-3 TP / SECOND48 trading policy are owned exclusively by TRADING_CONTOUR §7.6; historic research provenance and model limitations remain RESEARCH_COMPUTE §§22.1–22.2. Multiaaccount account-binding identities and independent strategy ownership remain ARCH §49 and GLOSSARY §33, implementation and PostgreSQL actor/writer authorization DEVELOPMENT_RELEASE §§19,48,50.
+
+**Intent:** two separately saved, passive, immutable StrategyCards and own plans/disabled activations, with MAIN LTCUSDT+INJUSDT and SUB DOTUSDT+ARBUSDT+APTUSDT linked only via their own correct financial-account bindings. Strategy authoring and DB persistence are not LIVE trading or owner arm. Old recorded Strategy artifacts must not be rewritten or reused.
+
+**Gates:** exact new policy consumer/authoring support and independent tests, lawful DB producer/actor and INACTIVE binding behavior, signed account identity and non-overlapping effective binding, explicit new real capital/order/SECOND48 cross-account semantics before REAL. Missing gates fail closed; do not mislabel historical research logic as deployed Entry/Exit. User has not authorized LIVE. This docs-only change creates no DB records and does not alter Source file set, routing, Project Source count, bootstrap or active release.
+
+
+# 59. P90L90 causal provenance versus executable release — OWNER DECISION 2026-10-28 (Issue #243)
+
+Owner explicitly approved **separating immutable P90 market-data lineage from the installed/loaded code release** while retaining all existing original 5m/15m candles and five transport/Entry checkpoints without rewriting or deleting their original source identities.
+
+**Canonical owners:** ARCH §48.2 — lineage identity, append-only attestations, compatibility, immutable storage/producer provenance and release-transition gates; GLOSSARY §38 — exact terms; TRADING_CONTOUR §7.6.1 — PAPER activation/Strategy constraint. DEVELOPMENT_RELEASE §§8,19,44,50 still exclusively own Git/actor/installer/rollback. Research lineage and historical evidence stay RESEARCH_COMPUTE §§22.1–22.2. MAP is dated implementation evidence, not a second authority.
+
+**Before implementation:** verify the original existing five-symbol corpus and checkpoint digest/counts, exact current installed/loaded SHA, cross-release consumer equivalence, writer/DDL permissions and actor, no LIVE/REAL, no active writer conflict. Preserve all historical `source_commit` fields; new producer releases must remain individually identifiable. This docs publication does not create the compatibility record, authorize destructive PostgreSQL mutation, deploy, or activate PAPER. Status until separately tested and installed: `OWNER DECISION=YES`, `CANON=published only after this docs merge`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `P90_LINEAGE_COMPATIBILITY=NOT_VERIFIED`.
+
+No change to Project Source set (11 documents), base pre-read, routed document paths, ownership topology, or root bootstrap references; INDEX §17 topology-maintenance propagation therefore does not apply.
+
+## 17.1.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30
+
+Canonical release controller approval/actor/path/recovery contract: DEVELOPMENT_RELEASE §50.5; architecture boundary: CRIPTA_ARCHITECTURE_RULES §50; vocabulary: CRIPTA_GLOSSARY. Tracking: GitHub Issue #288. No change to current 11-file Project Source set, mandatory pre-read, routing, paths or bootstrap. This documentation change neither installs a controller nor modifies SentinelX permissions, runtime or LIVE status.

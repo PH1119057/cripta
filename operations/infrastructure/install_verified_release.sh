@@ -12,6 +12,7 @@ BACKUP_ROOT="${CRIPTA_RELEASE_BACKUP_ROOT:-/data/cripta/script_archive/release_b
 STATE_ROOT="${CRIPTA_RELEASE_STATE_ROOT:-/var/lib/cripta/release}"
 CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
+STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 CONTROL_MAX_AGE_SECONDS=604800
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -57,6 +58,10 @@ flock -n 9 || die "another release installer is already running"
 [[ "$EXPECTED_BASELINE" =~ ^[0-9a-f]{40}$ ]] || die "CRIPTA_EXPECTED_BASELINE_COMMIT is invalid"
 [[ -d "$SOURCE/.git" ]] || die "source checkout missing"
 [[ "$CONTROL_CHECKPOINT" == "0" || "$CONTROL_CHECKPOINT" == "1" ]] || die "CRIPTA_RELEASE_CONTROL_CHECKPOINT must be 0 or 1"
+[[ "$STAGED_OFFLINE" == "0" || "$STAGED_OFFLINE" == "1" ]] || die "CRIPTA_STAGED_OFFLINE_CUTOVER must be 0 or 1"
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  [[ "$CONTROL_CHECKPOINT" == "1" ]] || die "STAGED_OFFLINE_REQUIRES_CONTROL_CHECKPOINT"
+fi
 if [[ "$CONTROL_CHECKPOINT" == "1" ]]; then
   [[ -n "$CONTROL_REASON" ]] || die "CRIPTA_RELEASE_CONTROL_REASON is required for a control checkpoint"
 fi
@@ -73,6 +78,15 @@ pre_gate="$(sql_scalar "SELECT enabled::int FROM control.execution_gates WHERE m
 pre_permissions="$(sql_scalar "SELECT count(*) FROM strategy_entry.execution_permissions WHERE enabled=true")"
 pre_sessions="$(sql_scalar "SELECT count(*) FROM control.live_arm_sessions WHERE state='ACTIVE'")"
 echo "TRADING_STATE_INFORMATIONAL=gate:$pre_gate permissions:$pre_permissions sessions:$pre_sessions"
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  # Local facts are necessary, NOT sufficient: approved preflight must also
+  # independently verify Exchange positions/orders and restore/rollback.
+  [[ "$pre_gate" == "0" && "$pre_permissions" == "0" && "$pre_sessions" == "0" ]] || die "STAGED_OFFLINE_TRADING_NOT_DISARMED"
+  pre_hot_positions="$(sql_scalar "SELECT count(*) FROM runtime.hot_positions")"
+  pre_hot_orders="$(sql_scalar "SELECT count(*) FROM runtime.hot_orders")"
+  [[ "$pre_hot_positions" == "0" && "$pre_hot_orders" == "0" ]] || die "STAGED_OFFLINE_LOCAL_HOT_INVENTORY_NOT_EMPTY"
+  echo "STAGED_OFFLINE_LOCAL_PREFLIGHT=PASS EXCHANGE_EVIDENCE=EXTERNAL_REQUIRED"
+fi
 
 current_runtime="$(readlink -f "$RUNTIME_ROOT/current" 2>/dev/null || true)"
 current_tooling="$(readlink -f "$RESEARCH_TOOLING_ROOT/current" 2>/dev/null || true)"
@@ -113,10 +127,14 @@ if [[ ! -d "$ui_release" ]]; then
   chown root:cripta "$ui_release/DASHBOARD_UI_COMMIT"
   chmod 0644 "$ui_release/DASHBOARD_UI_COMMIT"
 fi
-cmp -s "$runtime_release/operations/dashboard/index.html" "$ui_release/index.html" ||
-  die "candidate Dashboard HTML differs from exact runtime release"
-cmp -s "$runtime_release/operations/dashboard/app.py" "$ui_release/app.py" ||
-  die "candidate Dashboard app differs from exact runtime release"
+# The runtime candidate is intentionally overlaid below with the independently
+# deployed Dashboard identity. A retry after a pre-cutover failure must therefore
+# validate the Dashboard release against immutable Git bytes, not against a
+# runtime candidate that a prior attempt may already have overlaid.
+cmp -s <(as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/index.html") "$ui_release/index.html" ||
+  die "candidate Dashboard HTML differs from exact Git release"
+cmp -s <(as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:operations/dashboard/app.py") "$ui_release/app.py" ||
+  die "candidate Dashboard app differs from exact Git release"
 [[ "$(cat "$ui_release/DASHBOARD_UI_COMMIT")" == "$RELEASE_COMMIT" ]] ||
   die "candidate Dashboard identity mismatch"
 
@@ -205,6 +223,11 @@ unit_specs=(
   "research/server/connectivity/cripta-private-runtime.service|cripta-private-runtime.service|runtime"
   # Source-only templates are installed but never enabled or added to managed_services.
   "operations/systemd/cripta-private-runtime@.service|cripta-private-runtime@.service|runtime"
+  # Inert, owner-triggered GET-only identity check. Never auto-start/enable.
+  "operations/systemd/cripta-account-enrollment-probe@.service|cripta-account-enrollment-probe@.service|runtime"
+  # Inert SUB-only Lifecycle worker; no auto-enable or implicit started service.
+  "operations/systemd/cripta-lifecycle-account@.service|cripta-lifecycle-account@.service|runtime"
+  "operations/systemd/cripta-account-position@.service|cripta-account-position@.service|runtime"
   "operations/systemd/cripta-universal-entry-consumer@.service|cripta-universal-entry-consumer@.service|runtime"
   "research/server/connectivity/cripta-safety-observer.service|cripta-safety-observer.service|runtime"
   "research/server/control/cripta-shadow-command-worker.service|cripta-shadow-command-worker.service|runtime"
@@ -235,6 +258,7 @@ backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
 {
   echo "release_commit=$RELEASE_COMMIT"
+  echo "staged_offline=$STAGED_OFFLINE"
   echo "release_tree_sha=$tree"
   echo "expected_baseline_commit=$EXPECTED_BASELINE"
   echo "remote_main=$remote"
@@ -325,14 +349,16 @@ managed_services=(
 discovered_sub_text="$(
   systemctl list-units --all --type=service --plain --no-legend \
     'cripta-private-runtime@*.service' \
-    'cripta-universal-entry-consumer@*.service' | awk '{print $1}' | sort -u
+    'cripta-universal-entry-consumer@*.service' \
+    'cripta-lifecycle-account@*.service' \
+    'cripta-account-position@*.service' | awk '{print $1}' | sort -u
 )" || die "SUB unit enumeration failed; release identity cannot be verified"
 discovered_sub_units=()
 if [[ -n "$discovered_sub_text" ]]; then
   mapfile -t discovered_sub_units <<< "$discovered_sub_text"
 fi
 for unit in "${discovered_sub_units[@]}"; do
-  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer)@[A-Za-z0-9_.-]+\.service$ ]] ||
+  [[ "$unit" =~ ^cripta-(private-runtime|universal-entry-consumer|lifecycle-account|account-position)@[A-Za-z0-9_.-]+\.service$ ]] ||
     die "unexpected SUB unit identity while preparing release: $unit"
   managed_services+=("$unit")
 done
@@ -419,6 +445,7 @@ migration_files=(
   operations/sql/20261003_market_observation_alert_v1.sql
   operations/sql/20261004_r1_reverse_transitions.sql
   operations/sql/20261004_r1_live_arm_waiver.sql
+  operations/sql/20261030_p90_portal_micro_live_waiver.sql
   operations/sql/20261007_live_arm_parity_gate.sql
   operations/sql/20261008_r1_entry_cancel_intents.sql
   operations/sql/20261008_exchange_closed_entry_recovery.sql
@@ -442,8 +469,31 @@ migration_files=(
   operations/sql/20261016_report_replay_provenance_r5.sql
   # Additive account-scoped schema. No arm sessions, accounts or safety-block clears.
   operations/sql/20261024_account_scoped_live_arm.sql
+  operations/sql/20261029_p90l90_real_account_arm_control.sql
   operations/sql/20261025_account_entry_safety_blocks.sql
   operations/sql/20261025_account_attempt_fanout.sql
+  # Cut over all five physical current-state keys after additive account indexes
+  # and complete writer/reader parity gates; no pre-existing rows are rewritten.
+  operations/sql/20261026_account_scoped_physical_key_cutover.sql
+  # Independent account-scoped Lifecycle/Safety and partial Position observations.
+  # Additive only; no past MAIN safety or M3 observer rows are rewritten.
+  operations/sql/20261027_account_safety_observation.sql
+  operations/sql/20261027_account_position_observer.sql
+  # Scoped SECURITY DEFINER writer for two PASSIVE P90L90 bindings only.
+  operations/sql/20261028_p90l90_legacy_passive_binding_writer.sql
+  # New independent P90 v2 passive binding and PAPER-only causal event buffer.
+  operations/sql/20261028_p90l90_strategy_v2_passive_binding_writer.sql
+  operations/sql/20261028_p90l90_causal_transport_checkpoints.sql
+  operations/sql/20261028_p90l90_atomic_entry_checkpoint.sql
+  # Additive provenance split: no historical bar/checkpoint UPDATE.
+  operations/sql/20261028_p90l90_data_lineage_compatibility.sql
+  # One strategy-agnostic cache owner for verified closed OHLCV, independent of TradingAccount.
+  operations/sql/20261028_shared_closed_candle_source.sql
+  # Owner-approved exact P90L90 REAL v3 INACTIVE two-account writer only.
+  # Never creates enabled Strategy or bypasses per-account LIVE arm.
+  operations/sql/20261029_p90l90_real_v3_inactive_binding_writer.sql
+  # Additive independent REAL-only source-epoch state; never resets old PAPER evidence.
+  operations/sql/20261029_p90l90_real_source_epochs.sql
 )
 for migration in "${migration_files[@]}"; do
   runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d cripta < "$runtime_release/$migration"
@@ -558,7 +608,13 @@ printf '%s\n' "$backup" > "$STATE_ROOT/LAST_BACKUP"
 chown root:cripta "$STATE_ROOT/LAST_BACKUP"
 chmod 0640 "$STATE_ROOT/LAST_BACKUP"
 
-prune_release_backups
+if [[ "$STAGED_OFFLINE" == "1" ]]; then
+  # Protect all historic archives and release backups during breaking R10.
+  # Pruning may resume only under a separately reviewed retention decision.
+  echo "STAGED_OFFLINE_BACKUP_RETENTION=KEEP_ALL"
+else
+  prune_release_backups
+fi
 
 deploy_succeeded=1
 trap - EXIT

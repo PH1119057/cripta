@@ -205,6 +205,9 @@ class PostgresCapitalReservationPort:
                 return self._reservation_from_row(existing)
 
             self._guard_unified_r1_envelope(request)
+            # Exact owner-approved new P90 REAL cap; same account xact lock
+            # covers other pending, dispatched and consumed commitments.
+            self._guard_p90_real_envelope(request)
 
             row = self._connection.execute(
                 """SELECT coalesce(sum(requested_amount),0)
@@ -284,6 +287,55 @@ class PostgresCapitalReservationPort:
                 execution_leg=request.execution_leg,
                 trading_account_id=request.trading_account_id,
             )
+
+    def _guard_p90_real_envelope(
+        self, request: CapitalReservationRequest,
+    ) -> None:
+        """TC §7.6.3: 10 USDT/position, 20 MAIN or 30 SUB across all states.
+
+        This check runs inside the same account-scoped advisory-locked
+        reservation transaction. Never infer cap from available wallet
+        balance alone; outstanding Exchange commitments also count.
+        """
+        from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+            MAX_ACCOUNT_COMMITTED,
+            REQUESTED_USDT,
+            VERSION,
+        )
+
+        if request.strategy_id not in MAX_ACCOUNT_COMMITTED:
+            return
+        if (
+            request.strategy_version != VERSION
+            or request.amount_currency.upper() != "USDT"
+            or request.requested_amount != REQUESTED_USDT
+            or request.execution_leg != "PRIMARY"
+            or not request.trading_account_id
+            or not request.strategy_execution_binding_id
+        ):
+            raise ValueError("P90_REAL_CAPITAL_POLICY_MISMATCH")
+        row = self._connection.execute(
+            """SELECT coalesce(sum(requested_amount),0),
+                      count(*) FILTER (
+                          WHERE identity_status IS DISTINCT FROM 'PROVEN'
+                             OR trading_account_id IS DISTINCT FROM %s
+                             OR amount_currency IS DISTINCT FROM 'USDT'
+                      )
+                 FROM runtime.capital_reservations
+                WHERE strategy_id=%s AND state<>'RELEASED'""",
+            (request.trading_account_id, request.strategy_id),
+        ).fetchone()
+        if row is None or len(row) != 2:
+            raise ValueError("P90_REAL_CAPITAL_LEDGER_UNAVAILABLE")
+        if int(str(row[1])) != 0:
+            raise ValueError("P90_REAL_CAPITAL_LEDGER_IDENTITY_NOT_PROVEN")
+        current = Decimal(str(row[0]))
+        if not current.is_finite() or current < 0:
+            raise ValueError("P90_REAL_CAPITAL_LEDGER_INVALID")
+        cap = MAX_ACCOUNT_COMMITTED[request.strategy_id]
+        remaining = max(Decimal("0"), cap - current)
+        if remaining < REQUESTED_USDT:
+            raise InsufficientCapital(REQUESTED_USDT, remaining)
 
     def _guard_unified_r1_envelope(
         self, request: CapitalReservationRequest

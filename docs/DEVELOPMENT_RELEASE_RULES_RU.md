@@ -1729,7 +1729,8 @@ Lifecycle Supervisor and release/pre-arm checks.
 Order/exec identifiers are scoped according to exact adapter/provider semantics.
 Do not globally widen/narrow uniqueness by guess.
 
-Before old identity retirement:
+Before an ordinary in-service old-identity retirement, and before any REAL
+authorization following a staged cutover, all eight gates are mandatory:
 
 ~~~text
 NEW_WRITER_PATH                 = PASS
@@ -1741,6 +1742,87 @@ REPORT_REPLAY_RESEARCH          = PASS
 LEGACY_REQUIRED_READERS         = 0
 BACKUP_ROLLBACK                 = PASS
 ~~~
+
+A narrowly scoped offline migration exception follows. It does not turn the
+eight requirements into optional criteria for trading.
+
+### 48.2.1 Staged offline single-account-to-multi-account cutover — OWNER DECISION 2026-10-27
+
+The owner has authorized a **breaking infrastructure release** to replace
+historical single-account global primary keys with account-scoped unique
+identities, with REAL disabled. Production implementation is allowed to be
+verified **after** an atomic offline schema/software cutover rather than
+pretending that the old single-account system already meets all target
+two-account runtime gates. This is a temporary transition protocol, **not**
+the regular LIVE release procedure or permission to ship an untested migration.
+
+Bounded release intent:
+- Legacy R1 MAIN data remain historical, with their true existing
+  account/provenance; old strategies do not gain new binding/activation.
+  `LEGACY_UNKNOWN` remains explicitly unknown. Do not relabel, discard,
+  truncate, reconstruct arbitrary foreign keys or infer historic owners.
+- The new architecture is TradingAccount-isolated private state and
+  StrategyActivation -> ExecutionLeg -> TradingAccount binding. Reporting
+  aggregates net account-scoped executions into the exact Strategy result.
+  One Strategy using several SUB accounts is target capability, not a claim
+  that the current PRIMARY-only implementation already supports fan-out.
+- Registration of an operator-supplied provider UID with
+  `OWNER_ASSERTED_PENDING` is a provisional identity record. It is not
+  signed connector verification or REAL admission; do not silently promote
+  it to `SIGNED_VERIFIED`.
+
+Required **BEFORE** any staged production schema/service mutation:
+1. Fresh exact GitHub main/release composition, installed/loaded identities,
+   no uncertain concurrent publisher, dirty worktree, maintenance job or lock.
+   Source changes must be tested and published via the standard §8 Git-first
+   route; the installer must accept one exact verified approved release.
+2. Owner-authorized `STAGED_OFFLINE` plan and controlled maintenance window.
+   Independently check Exchange open positions/orders for every affected
+   account, plus local hot inventory, protective-order ownership and active
+   jobs. No unexplained open Exchange exposure may be left without a safe
+   ongoing Exit/reconciliation owner when the installer stops services.
+3. Global mainnet gate OFF; no enabled REAL execution permissions, active
+   LIVE-arm or real attempts. Keep new REAL/Entry disabled through migration
+   and all post-cutover checks; no automatic arm or trade smoke.
+4. Independently restore a consistent recent full production backup, with
+   owner/roles/WAL/dependent material needed for an actual rollback. Prove
+   exact backup/read/write actor, path, disk headroom and rollback steps from
+   that restore. Keep the archive immutable. An untested `pg_dump` command
+   or an old clone rehearsal alone is insufficient.
+5. Verify all five new account-scoped indexes, preserved PK/FK dependencies,
+   all existing row counts/provenance, old-writer quiescence and minimum
+   offline tested two-account writer/reader/schema/restart smoke. Verify the
+   installed candidate and its migration on an isolated copy. Do not run
+   a schema mutation against still-running old-code writers.
+6. Enumerate all currently active and restart-managed readers/writers; either
+   prove they tolerate the target schema or explicitly keep them stopped
+   until fixed and checked. Do not restart an unverified legacy writer.
+   Record the exact rollout/rollback decision point and owner.
+
+**DURING** the staged release:
+- Under the exact authorized PostgreSQL migration actor apply only the
+  versioned, fail-closed, transactional physical-key migration; keep
+  all original private rows, fees, trades, audit and legacy lineage intact.
+  Change no Strategy policy, Exchange order, secret, API account or LIVE arm.
+- Install source and schema as one exact composition; separate
+  `SOURCE_HEAD`, `INSTALLED_COMMIT`, `LOADED_COMMIT` and
+  `OPERATIONAL_DELTA_COMMIT(S)`. Do not mark cutover PASS merely because
+  systemd reports active.
+- Check row parity, ownership, source lineage, read compatibility and
+  restart/reconciliation separately for MAIN and SUB, with account-local
+  failure isolation. Verify the rollback point **before** enabling
+  dependent writers.
+- A failed mandatory post-check is not permission to guess ownership or
+  accumulate unbounded new data. Keep trading OFF; stop affected writers,
+  either repair within the explicitly protected reversible offline window
+  using a new exact reviewed changeset, or restore the verified baseline.
+  Do not claim deployed/runtime verified until behavior passes.
+
+**AFTER** staged installation, before ANY REAL/MICRO_LIVE:
+all eight §48.2 gates must be explicitly PASS for the exact loaded version;
+one Strategy-many-account fan-out needs separate consumer/e2e proof before
+claiming that feature. Owner arm and Exchange smoke remain separately gated
+by TRADING_CONTOUR, and are never implied by this cutover.
 
 ### 48.3 Destructive retention/reclaim gate
 
@@ -1806,3 +1888,17 @@ Discovery в порядке:
 Только после `TASK_DISCOVERY=PASS` и `EXISTING_TASK_MATCH=NONE` (либо explicit owner decision о новой независимой работе после сохранения старого evidence) разрешено создать новую scoped branch по §50.1. Прежде чем начинать длительную работу или прерывать чат, оставить discoverable durable task checkpoint в связанном GitHub Issue либо существующем PR, с task ID, целью, контуром, branch, точным worktree path, base/HEAD SHA, staged/unstaged/untracked summary, writer/actor, job ID/status, evidence/backup location, проверенными результатами, blockers и **одним следующим действием**. Не класть secrets/raw большие datasets в GitHub. GitHub Issue/PR — указатель продолжения, **не** отдельный source authority и **не** резервная копия dirty files. При завершении закрыть task tracker и снять active status после независимого remote verification; cleanup отдельных worktrees/branches по §50.3.
 
 Новый чат начинает ответ по незавершённой задаче с `RESUME_FOUND / NEW_TASK_CONFIRMED / BLOCKED` и exact evidence, а не с молчаливого `git checkout -b`. Это инструкция исполнителю, **не утверждение**, что CI проверяет все server worktrees или что действует автоматическая межчатовая блокировка: такие дополнительные tools/locks потребуют отдельной implementation/release проверки.
+
+## 50.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30 (Issue #288)
+
+Цель: заменить per-release SentinelX allowlist entries с фиксированными SHA постоянной узкой командой. Это целевой канон, а не утверждение о развёрнутом контроллере.
+
+- Единственный стабильный exact entrypoint без произвольных аргументов shell, путей, команд или environment. Права SentinelX меняются один раз при введении контроллера, не на каждый release.
+- Каждая заявка отдельно одобряется аутентифицированным владельцем, имеет одноразовый nonce, exact GitHub repository, target SHA, expected baseline, время и срок действия. Строка `--operator owner` не является подтверждением полномочий.
+- Контроллер независимо сверяет trusted GitHub main и обязательные проверки PR, включая `scope`, source tree, clean checkout, permissions и фактический baseline. Неизвестное состояние — fail-closed.
+- До записи выполняются §19.1–19.4 (actual actor/path/ACL/systemd), §50.4 (forensic), release lock, backup/rollback preflight. Source sync — под `cripta`, установка — только существующим verified installer; никаких arbitrary refs или команд.
+- Все стадии и отказы записываются долговечно. Таймаут/потеря связи означает UNKNOWN; повторная mutation только после сверки durable state, не вслепую.
+- После установки независимо проверяются REMOTE_HEAD, SOURCE_HEAD, INSTALLED_COMMIT, LOADED_COMMIT, runtime liveness и runtime behavior.
+- Release Controller не включает mainnet gate, StrategyActivation, execution permissions, OWNER ARM или MICRO_LIVE.
+- Негативные тесты обязательны: отсутствие/истечение approval, replay nonce, неподходящий SHA/baseline/tree, сдвиг main, непрошедший CI, грязный checkout, чужой actor/path, инъекция argv/env, конкурентный release, сбой rollback, попытка LIVE arm.
+- Ввод в эксплуатацию строго: OWNER DECISION → CANON UPDATE → IMPLEMENTATION → TEST → GITHUB → DEPLOY → RUNTIME EVIDENCE. Пока нет проверки deployment нового rail, действует прежний fail-closed контракт. 

@@ -1,7 +1,7 @@
 # CRIPTA — канонический словарь
 
-**Версия:** 3.10
-**Дата:** 2026-10-26
+**Версия:** 3.12
+**Дата:** 2026-10-30
 **Статус:** обязательный канонический терминологический контракт
 
 Если термин владельца отсутствует здесь или допускает несколько трактовок,
@@ -531,6 +531,18 @@ operator/owner resolution; сам fault не создаёт Entry/Exit/Exchange 
 lifecycle fault владельцу: alert/event с retry, acknowledgement либо explicit
 escalation state. Наличие записи только в UI/read-model не считается доставкой.
 
+**OWNER_WAIVED_FOR_P90_PORTAL_MICRO_LIVE** — отдельный durable LIVE-arm
+evidence status, **не** `PASS`: OWNER DECISION 2026-10-30 разрешает только
+exact P90 REAL v3 MICRO_LIVE scope из `TRADING_CONTOUR §4.7` временно arm при
+`critical_delivery.configured=false`, пока владелец работает через
+аутентифицированный Dashboard portal и внешний `OWNER_WEBHOOK` отложен.
+Token валиден только для exact двух P90 Strategy IDs/version и их пяти символов,
+при active `cripta-dashboard.service`, отсутствии active lifecycle faults и
+`pending_or_unacknowledged=0`; stake/leverage/caps продолжают проверяться
+отдельным `MICRO_LIVE_LIMITS`. Token не означает доставку, не отключает durable
+fault/delivery/retry/ack/escalation и не переносится на другой Strategy/version,
+symbol cohort, увеличенный риск или расширенный LIVE scope.
+
 **DASHBOARD_INBOX** — отдельный от `OWNER_WEBHOOK` durable delivery channel для
 `UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` severity `ERROR`: запись в БД имеет
 `PENDING` до подтверждения браузером фактического показа в центральной панели
@@ -918,6 +930,8 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 
 **PREV7D** — причинный фильтр ширины L5-3 по медиане семи полностью завершённых предыдущих UTC calendar days.
 
+**SECOND48 / Strategy-scoped Hard-Stop Embargo** — настраиваемое правило `Strategy.lifecycle_policy`, при котором два (или заданное число) фактически зафиксированных катастрофических `HARD_STOP` в указанном скользящем UTC-окне запрещают только **новые** Entry на заданную продолжительность. Область счётчика и deadline — точная Strategy ID+Version+Fingerprint, общая для её символов и LONG/SHORT, независимая от другой Strategy и её TradingAccount. Открытые позиции не закрываются. Старый единый пяти-монетный исследовательский SECOND48 и две самостоятельные Strategy — разные модели. Настройки и владелец семантики — исключительно `TRADING_CONTOUR §7.6` (OWNER DECISION 2026-10-28); изменение параметров требует новой immutable StrategyVersion и исследования, не перезаписи карточки.
+
 **RAW Boundary Crossing Candidate** — исследовательское событие первого пересечения RAW-границы L5-3 соседними записями public trades; само по себе не доказывает ни отправку ордера, ни подтверждённое исполнение.
 
 Детальная методика, TP/SL/Exit, комиссии, QC и разделение старой/новой research версии: `RESEARCH_COMPUTE §22/§22.1`. Глоссарий не является вторым владельцем их параметров.
@@ -933,3 +947,41 @@ Content/retention и mandatory registration: RESEARCH_COMPUTE §23; storage/proj
 **10D disjoint bin / rolling 10D** — соответственно девять непересекающихся UTC окон по 10 суток от 18 мая и ежедневное скользящее 10-дневное окно. Realized model net относится к UTC времени **закрытия**, а не открытия; censored исключены из реализованного PnL. Первое — аддитивная разбивка, второе — перекрывающаяся диагностика, которую нельзя складывать как независимые интервалы.
 
 Версия, ATR seed, исходные файлы и итоговые журналы принадлежат `RESEARCH_COMPUTE §22.2`; торговые Strategy/LIVE контракты не меняются.
+
+
+## 38. P90L90 lineage versus executable release — OWNER DECISION 2026-10-28
+
+**P90_DATA_LINEAGE_ID** — stable, immutable, audited identity of one exact five-symbol P90L90 causal 5m/15m market fact lineage and its restart-boundary seed evidence. Not an alias of GitHub `main`, `source_commit`, `INSTALLED_COMMIT` or `LOADED_COMMIT`.
+
+**PRODUCER_RELEASE_COMMIT** — exact Git release of the code that actually wrote an individual newly committed P90 market fact or checkpoint generation. Historical rows retain their original persisted `source_commit` as origin evidence, without rewriting to another SHA.
+
+**P90_LINEAGE_COMPATIBILITY_ATTESTATION** — durable, versioned and append-only checked mapping from one `P90_DATA_LINEAGE_ID` and its verified original source digest/schema to one exact verified loaded release and compatible causal consumer contract. Neither a successful source sync nor a newer code SHA alone is proof of compatibility.
+
+**P90_LINEAGE_COMPATIBILITY=PASS / NOT_VERIFIED / BLOCKED** — evidence status for the exact data lineage plus loaded release. `PASS` requires the stored signed-off compatibility record, immutable data/geometry verification and approved source/actor/CI/runtime checks; no status automatically grants PAPER, REAL or LIVE.
+
+
+
+## 39. Shared Closed Candle Source — OWNER DECISION 2026-10-28
+
+**Canonical Closed Candle Store** — единственное рабочее физическое хранение
+точных verified fully-closed OHLCV market bars: `analytics.closed_candles`;
+ключ `market_source_id + instrument_id + timeframe + closed_at UTC`.
+Поставщик — MarketSource-adapter наблюдательного контура, потребители —
+MAYAK/Dispatcher/Strategy/Entry/Exit. Legacy 17,995 P90 свечей —
+неизменяемый historical audit exception, а не второй рабочий writer.
+
+**Candle Warmup Contract** — вычисленная для конкретного immutable
+StrategyCard/EntryPlan/ExitPlan полная потребность в исторических закрытых
+свечах, включая H9, L5-3, ATR, PREV7D и прочие утверждённые окна.
+History загружается on-demand из approved MarketSource, не ждёт накопления
+живых баров. Проверка полноты/порядка/provenance — обязательна.
+
+**Native Epoch Boundary** — явно доказанный переход после
+pause/restart/gap: historical bars позволяют восстановить geometry, но
+не заменяют пропущенные `publicTrade execId/seq`. Новые Entry
+допустимы лишь после фактического нового native cursor и независимых
+position/pending/reconciliation gates. Старый checkpoint сохраняется.
+
+## Release Controller — OWNER DECISION 2026-10-30
+
+`Release Controller` — постоянный узкий management-plane entrypoint для проверенного exact GitHub-main deploy; один разрешённый SentinelX command не означает произвольный sudo, выбор SHA или OWNER ARM. `RELEASE_REQUEST_APPROVED` — отдельно аутентифицированная однократная заявка для exact SHA, baseline и nonce; это не разрешение MICRO_LIVE. `RELEASE_CONTROLLER_VERIFIED` — только после реализации, тестов, deploy и runtime evidence. Owner: DEVELOPMENT_RELEASE §50.5; tracking: Issue #288.

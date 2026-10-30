@@ -75,6 +75,27 @@ from bybit_workbench.universal_entry.oi30s_source import (
     slot_at,
 )
 from bybit_workbench.universal_entry.paper_runtime import PaperTradeRuntime
+from bybit_workbench.universal_entry.p90l90_causal_fact_codec import encode_p90l90_fact
+from bybit_workbench.universal_entry.p90l90_data_lineage import (
+    inspect_p90_data_lineage,
+)
+from bybit_workbench.universal_entry.p90l90_legacy_strategy import (
+    MAIN_ID as P90_MAIN_ID,
+    SUB_ID as P90_SUB_ID,
+)
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_VERSION
+from bybit_workbench.universal_entry.p90l90_observer_paper_consumer import (
+    P90L90ObserverPaperConsumer,
+)
+from bybit_workbench.universal_entry.p90l90_mixed_epoch_atomicity import (
+    dispatch_observer_fact_atomically,
+)
+from bybit_workbench.universal_entry.p90l90_observer_strategy_partition import (
+    P90NativeBarRuntimeProof,
+    partition_observer_strategies,
+    require_p90_atomic_observer_connection,
+    require_p90_policy_before_registry,
+)
 from bybit_workbench.universal_entry.parity import V1DeterministicParityRunner
 from bybit_workbench.universal_entry.registry import ActivePlanRegistry
 from bybit_workbench.universal_entry.reverse_intent import build_reverse_transition_intent
@@ -274,20 +295,76 @@ def _fetch_history(
     symbol: str,
     observed_at: datetime,
     intervals: tuple[str, ...] = ("5", "15", "60"),
+    *,
+    p90l90_full_prev7d: bool = False,
+    p90_gap_from: Mapping[str, datetime] | None = None,
 ) -> dict[str, tuple[Candle, ...]]:
     history: dict[str, tuple[Candle, ...]] = {}
     for interval in intervals:
-        payload = _get_json(
-            "/v5/market/kline",
-            {"category": "linear", "symbol": symbol, "interval": interval, "limit": 1000},
+        # P90L90 needs seven whole PREVIOUS UTC days plus ATR200 warmup and
+        # the current partial day. Bybit REST returns at most 1000 candles
+        # per page. Other Strategies retain the old single-page contract.
+        required = 2600 if interval == "5" and p90l90_full_prev7d else 1000
+        if p90_gap_from is not None and interval in p90_gap_from:
+            saved = p90_gap_from[interval]
+            minutes = int(interval)
+            if (
+                saved.utcoffset() != timedelta(0)
+                or saved > observed_at
+                or saved.second or saved.microsecond
+                or saved.minute % minutes
+            ):
+                raise RuntimeError("P90_SHARED_RECOVERY_CURSOR_UNVERIFIED")
+            missing = max(
+                0, (observed_at - saved).total_seconds() // (minutes * 60),
+            )
+            baseline = 2600 if interval == "5" else 1000
+            required = max(required, baseline + int(missing) + 1)
+            if required > 30000:
+                raise RuntimeError("P90_SHARED_RECOVERY_REQUIRES_BOUNDED_PAGING")
+        merged: dict[datetime, Candle] = {}
+        end_ms: int | None = None
+        while len(merged) < required:
+            params: dict[str, object] = {
+                "category": "linear", "symbol": symbol,
+                "interval": interval, "limit": 1000,
+            }
+            if end_ms is not None:
+                params["end"] = end_ms
+            payload = _get_json("/v5/market/kline", params)
+            raw_rows = cast(list[list[Any]], _result_list(payload))
+            candles = map_rest_klines(
+                raw_rows, symbol=symbol, interval=interval,
+                observed_at=observed_at,
+            )
+            if not candles:
+                break
+            for candle in candles:
+                if candle.is_closed:
+                    current = merged.get(candle.opened_at)
+                    if current is not None and current != candle:
+                        raise ValueError("Bybit P90L90 REST duplicate candle conflict")
+                    merged[candle.opened_at] = candle
+            oldest = min(candle.opened_at for candle in candles)
+            next_end_ms = int(oldest.timestamp() * 1000) - 1
+            if end_ms is not None and next_end_ms >= end_ms:
+                raise ValueError("Bybit P90L90 REST cursor did not advance")
+            end_ms = next_end_ms
+            if required <= 1000 or len(raw_rows) < 1000:
+                break
+        history[interval] = tuple(
+            sorted(merged.values(), key=lambda item: item.opened_at)[-required:]
         )
-        candles = map_rest_klines(
-            cast(list[list[Any]], _result_list(payload)),
-            symbol=symbol,
-            interval=interval,
-            observed_at=observed_at,
-        )
-        history[interval] = tuple(item for item in candles if item.is_closed)
+        if p90_gap_from is not None and interval in p90_gap_from:
+            if len(history[interval]) < required:
+                raise RuntimeError(
+                    f"P90_SHARED_RECOVERY_HISTORY_INCOMPLETE:{symbol}:{interval}:"
+                    f"{len(history[interval])}/{required}"
+                )
+        if interval == "5" and p90l90_full_prev7d and len(history[interval]) < 2216:
+            raise RuntimeError(
+                f"P90L90_7D_PLUS_ATR200_SEED_INCOMPLETE:{symbol}:{len(history[interval])}"
+            )
     return history
 
 
@@ -1250,6 +1327,18 @@ def _unarmed_multi_account_candidate_bindings(
         raise ValueError("account candidate snapshot requires aware timestamp")
     at = observed_at.astimezone(UTC)
     known = {cast(Any, bundle).activation.activation_id for bundle in bundles}
+    # Unlike older MAIN-primary Strategies, BOTH P90 REAL v3 profiles
+    # require an independent account-scoped owner arm and safety snapshot.
+    p90_real_ids = {
+        cast(Any, bundle).activation.activation_id
+        for bundle in bundles
+        if (
+            getattr(getattr(bundle, "card", None), "strategy_id", None)
+            in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+            and getattr(getattr(bundle, "card", None), "strategy_version", None)
+            == "2.0-p90l90-real-main-sub-20261028"
+        )
+    }
     rows = connection.execute(
         """SELECT strategy_execution_binding_id,strategy_activation_id,
                   execution_leg,trading_account_id
@@ -1277,6 +1366,7 @@ def _unarmed_multi_account_candidate_bindings(
         activation: tuple(legs)
         for activation, legs in by_activation.items()
         if len(legs) > 1
+        or activation in p90_real_ids
         or (
             len(legs) == 1
             and (
@@ -1358,7 +1448,7 @@ def _multi_account_admissions(
             capacity: TradingCapacitySnapshot | None = None
             admission_port: PostgresEntryAdmissionPort | None = None
             connector_rows = connection.execute(
-                """SELECT c.account_connector_id
+                """SELECT c.account_connector_id,a.account_kind
                      FROM identity.account_connectors c
                      JOIN identity.trading_accounts a
                        ON a.trading_account_id=c.trading_account_id
@@ -1375,8 +1465,24 @@ def _multi_account_admissions(
                       AND a.external_account_ref ~ '[1-9]'""",
                 (binding.trading_account_id,),
             ).fetchall()
+            expected_account_kind = (
+                "MAIN" if bundle is not None and (
+                    bundle.card.strategy_id == P90_MAIN_ID
+                    and bundle.card.strategy_version == P90_REAL_VERSION
+                )
+                else "SUB" if bundle is not None and (
+                    bundle.card.strategy_id == P90_SUB_ID
+                    and bundle.card.strategy_version == P90_REAL_VERSION
+                )
+                else None
+            )
             if len(connector_rows) != 1:
                 reason = "ACCOUNT_CONNECTOR_ROUTE_NOT_READY"
+            elif (
+                expected_account_kind is not None
+                and str(connector_rows[0][1]) != expected_account_kind
+            ):
+                reason = "P90_REAL_ACCOUNT_KIND_MISMATCH"
             elif not gate_ready or activation_id not in real_selected_for:
                 reason = "REAL_EXECUTION_SELECTED_BUT_NOT_ARM_READY"
             elif bundle is None or symbol not in bundle.card.symbols:
@@ -1984,12 +2090,86 @@ def _run_observer_epoch(
     signature = _observer_light_signature(connection)
     if not signature:
         return "RELOAD"
+    # Phase 2 P90L90: reject legacy shared-Engine native trade routing BEFORE
+    # activating a plan or acknowledging any source event. Ordinary R1/other
+    # strategies keep the original path. The real dual-owner bridge is still
+    # gated on exact durable restart and 90-day code/ledger parity.
+    observer_split = partition_observer_strategies(bundles)
+    require_p90_policy_before_registry(observer_split)
+    # REAL v3 is NEVER allowed through the ordinary Strategy registry.
+    # The opt-in SOURCE_ONLY diagnostic below may construct a true native
+    # REAL consumer, but it is hard-disabled for every Exchange/order path.
+    # Actual REAL Entry+Exit remains blocked until postfill and account
+    # execution owners are fully connected and independently verified.
+    p90_real_force_source_only = bool(observer_split.p90_real) and (
+        os.environ.get("CRIPTA_P90_REAL_SOURCE_ONLY", "DISABLED") == "ENABLED"
+    )
+    p90_real_source_only = False
+    p90_real_live = False
+    if observer_split.p90_real:
+        if len(observer_split.p90_real) != 2 or len(LOADED_COMMIT) != 40:
+            raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
+        selected = _real_execution_selected_activation_ids(
+            connection, observer_split.p90_real
+        )
+        expected = frozenset(
+            cast(Any, item).activation.activation_id
+            for item in observer_split.p90_real
+        )
+        gate = connection.execute(
+            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+        ).fetchone()
+        gate_enabled = bool(gate and gate[0])
+        if p90_real_force_source_only:
+            if gate_enabled or selected:
+                raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
+            p90_real_source_only = True
+        elif not gate_enabled and not selected:
+            # Normal pre-arm state: build the exact REAL source/private
+            # topology with trading_effect=NONE. Owner arm later changes both
+            # permission rows + gate atomically; the light signature forces a
+            # new epoch which then selects the REAL execution branch.
+            p90_real_source_only = True
+        elif gate_enabled and selected == expected:
+            p90_real_live = True
+        else:
+            # Partial permission, one-account selection or gate/permission
+            # disagreement is never interpreted as source-only or REAL.
+            raise RuntimeError("P90L90_REAL_NATIVE_EXECUTION_OWNER_NOT_CONNECTED")
+    # Executable release SHA and original market-data lineage are distinct.
+    # Only an independently attested, immutable five-symbol source can be
+    # recovered. This gate runs before any PAPER consumer is constructed.
+    p90_lineage = (
+        inspect_p90_data_lineage(connection, loaded_commit=LOADED_COMMIT)
+        if observer_split.p90_paper else None
+    )
+    p90_consumer = (
+        P90L90ObserverPaperConsumer(
+            connection,
+            bundles=observer_split.p90_paper,
+            source_commit=p90_lineage.origin_commit,
+            producer_release_commit=LOADED_COMMIT,
+            accepted_source_commits=p90_lineage.approved_producer_commits,
+            shared_candle_source=True,
+            provenance=FrozenPolicy.from_mapping({
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+                "data_lineage_id": p90_lineage.data_lineage_id,
+                "data_origin_commit": p90_lineage.origin_commit,
+            }),
+        )
+        if p90_lineage is not None else None
+    )
+    # A missing/mismatched PostgreSQL checkpoint blocks active P90 before
+    # the ordinary plan registry or any evaluation is mutated.
+    if p90_consumer is not None:
+        p90_consumer.recover_all()
     registry = ActivePlanRegistry()
     consumer_instance_id = (
         f"universal-entry-observer:{socket.gethostname()}:{os.getpid()}:"
         f"{service_started_at.isoformat()}"
     )
-    for raw_bundle in bundles:
+    for raw_bundle in observer_split.ordinary:
         bundle = cast(Any, raw_bundle)
         registry.register_card(bundle.card)
         materialized = registry.activate(bundle.activation)
@@ -2008,19 +2188,50 @@ def _run_observer_epoch(
                 "source_commit": LOADED_COMMIT,
             },
         )
+    for raw_bundle in observer_split.p90_paper:
+        bundle = cast(Any, raw_bundle)
+        # P90 uses its own already-restored Entry consumer, but exact
+        # StrategyPlan consumption remains durably auditable.
+        record_plan_consumption(
+            connection,
+            plan_kind="ENTRY",
+            plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+            strategy_activation_id=bundle.activation.activation_id,
+            consumer_instance_id=consumer_instance_id,
+            seen_at=epoch_started,
+            status="LOADED",
+            payload={
+                "source": "p90l90_atomic_paper_observer",
+                "source_commit": LOADED_COMMIT,
+            },
+        )
     engine = UniversalEntryEngine(registry)
     store = StrategyEntryStore(connection)
     counterfactual_store = AnalystCounterfactualStore(connection)
-    paper = PaperTradeRuntime(connection, bundles=tuple(cast(Any, bundles)))
-    real_execution_selected_for = _real_execution_selected_activation_ids(
-        connection, bundles
+    paper = PaperTradeRuntime(
+        connection, bundles=tuple(cast(Any, observer_split.ordinary))
     )
+    ordinary_symbols = {
+        symbol
+        for item in observer_split.ordinary
+        for symbol in cast(Any, item).entry_plan.symbols
+    }
+    real_execution_selected_for = _real_execution_selected_activation_ids(
+        connection, observer_split.ordinary
+    )
+    # Preserve the exact R6a release-arm lookup/audit contract, then
+    # explicitly exclude P90's zero-order PAPER plans from REAL admission.
     release_ready_for = _real_execution_activation_ids(connection, bundles)
+    ordinary_activation_ids = frozenset(
+        cast(Any, item).activation.activation_id
+        for item in observer_split.ordinary
+    )
+    release_ready_for = release_ready_for.intersection(ordinary_activation_ids)
     multi_account_candidates = _unarmed_multi_account_candidate_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = _real_execution_bindings(
-        connection, bundles, observed_at=epoch_started
+        connection, observer_split.ordinary, observed_at=epoch_started
     )
     execution_bindings = {
         activation: binding
@@ -2070,24 +2281,69 @@ def _run_observer_epoch(
         for symbol in bundle.entry_plan.symbols
     }
 
+    p90l90_symbols = {
+        symbol
+        for raw_bundle in bundles
+        for symbol in cast(Any, raw_bundle).entry_plan.symbols
+        if cast(Any, raw_bundle).entry_plan.watch_policy.to_dict().get(
+            "geometry", {}
+        ).get("operator") == "P90L90_RAW_H9_UNION_CROSSING"
+    }
     closed_boundaries: dict[tuple[str, str], datetime] = {}
+    p90_closed_recovery_targets: dict[str, tuple[datetime, datetime]] = {}
     for symbol in symbols:
         observed = datetime.now(UTC)
-        history = _fetch_history(symbol, observed, intervals)
+        recovery_from = (
+            p90_consumer.recovery_watermarks(symbol)
+            if p90_consumer is not None and symbol in p90l90_symbols
+            else None
+        )
+        history = _fetch_history(
+            symbol, observed, intervals,
+            p90l90_full_prev7d=symbol in p90l90_symbols,
+            p90_gap_from=recovery_from,
+        )
+        # One MarketSource OHLC repository, never per-Strategy/per-account
+        # copies. Every startup checks current REST history and exact source
+        # identity before a consumer receives any candle.
+        from bybit_workbench.market_data.candle_warmup import (
+            cache_approved_bybit_history,
+        )
+
+        history = cache_approved_bybit_history(
+            connection, symbol=symbol, history=history,
+            observed_at=observed, producer_release_commit=LOADED_COMMIT,
+        )
         oi_history = _fetch_oi_history(symbol) if required_oi_symbols else ()
+        if p90_consumer is not None and symbol in p90l90_symbols:
+            p90_closed_recovery_targets[symbol] = (
+                history["5"][-1].closed_at, history["15"][-1].closed_at,
+            )
         for timeframe in intervals:
             rows = history.get(timeframe, ())
             if not rows:
                 raise RuntimeError(f"observer causal history seed missing {symbol}:{timeframe}")
             closed_boundaries[(symbol, timeframe)] = max(item.closed_at for item in rows)
-        engine.load_watch_history(
-            symbol,
-            {key: tuple(value) for key, value in history.items()},
-            tuple(oi_history),
-            observed_at=observed,
-        )
-        paper.bootstrap_l53_history(symbol, tuple(history["5"]))
+        if symbol in ordinary_symbols:
+            engine.load_watch_history(
+                symbol,
+                {key: tuple(value) for key, value in history.items()},
+                tuple(oi_history),
+                observed_at=observed,
+            )
+        # Retired Strategy PAPER rows are historical artifacts, not live
+        # consumers. Bootstrap ordinary PAPER only if an ordinary Strategy
+        # is actively routed for this symbol; P90 owns its own Exit history.
+        if symbol in ordinary_symbols:
+            paper.bootstrap_l53_history(symbol, tuple(history["5"]))
         time.sleep(0.05)
+
+    if p90_consumer is not None:
+        # All historical source slices are already closed, validated, persisted
+        # in ONE MarketSource store and ready for atomic all-symbol restart.
+        # Only no-position/no-native-cursor inactive gaps can be replayed as
+        # candles; the actual publicTrade epoch is proven by WS afterwards.
+        p90_consumer.catch_up_closed_histories(p90_closed_recovery_targets)
 
     flow_minutes: dict[str, set[datetime]] = {symbol: set() for symbol in symbols}
     last_trade_prices: dict[str, Decimal] = {}
@@ -2118,6 +2374,8 @@ def _run_observer_epoch(
         name="universal-entry-observer-public-trade-mirror",
         daemon=True,
     )
+    real_source_broker_stop = threading.Event()
+    real_source_broker_thread: threading.Thread | None = None
     oi_thread = threading.Thread(
         target=_run_rest_oi30s_worker,
         args=(oi_config, oi_results, oi_stop),
@@ -2168,7 +2426,7 @@ def _run_observer_epoch(
 
     def strategy_monitor_rows(now: datetime) -> tuple[Mapping[str, object], ...]:
         rows: list[Mapping[str, object]] = []
-        for raw_bundle in bundles:
+        for raw_bundle in observer_split.ordinary:
             bundle = cast(Any, raw_bundle)
             plan = bundle.entry_plan
             for symbol in plan.symbols:
@@ -2311,6 +2569,33 @@ def _run_observer_epoch(
                             "updated_at": now.isoformat(),
                         }
                     )
+        for raw_bundle in observer_split.p90_paper:
+            bundle = cast(Any, raw_bundle)
+            plan = bundle.entry_plan
+            for symbol in plan.symbols:
+                for direction in plan.directions:
+                    rows.append({
+                        "strategy_key": f"{plan.strategy_id}::{plan.strategy_version}",
+                        "strategy_id": plan.strategy_id,
+                        "strategy_version": plan.strategy_version,
+                        "strategy_name": bundle.card.name,
+                        "strategy_config_fingerprint": plan.strategy_config_fingerprint,
+                        "entry_plan_fingerprint": plan.entry_plan_fingerprint,
+                        "activation_id": plan.strategy_activation_id,
+                        "symbol": symbol,
+                        "direction": direction.value,
+                        "state": "P90_PAPER_ATOMIC_RESTORED",
+                        "current_price": (
+                            None if symbol not in last_trade_prices
+                            else str(last_trade_prices[symbol])
+                        ),
+                        "entry_price": None,
+                        "distance_pct": None,
+                        "geometry": {},
+                        "source_commit": LOADED_COMMIT,
+                        "model": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+                        "updated_at": now.isoformat(),
+                    })
         return tuple(rows)
 
     def refresh_inputs(fact_at: datetime) -> None:
@@ -2323,8 +2608,18 @@ def _run_observer_epoch(
         )
         last_inputs_refresh = now_mono
 
-    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+    def _process_fact_body(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
         nonlocal facts_received, evaluations_count, signals_count
+        # A LIVE gate / permission transition invalidates the SOURCE_ONLY
+        # epoch BEFORE any raw fact can turn into an Entry or Exit action.
+        if p90_real_source_only:
+            gate = connection.execute(
+                "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+            ).fetchone()
+            if gate != (False,) or _real_execution_selected_activation_ids(
+                connection, observer_split.p90_real
+            ):
+                raise RuntimeError("P90_REAL_SOURCE_ONLY_EXECUTION_GATE_DRIFT")
         if not deduper.accept(fact.fact_id):
             return
         if fact.event_kind == "PUBLIC_TRADE":
@@ -2356,13 +2651,41 @@ def _run_observer_epoch(
             attrs = fact.attributes.to_dict()
             timeframe = str(attrs.get("timeframe") or "")
             boundary = datetime.fromisoformat(str(attrs["closed_at"])).astimezone(UTC)
+            # The exact market-data source persists live closed bars once,
+            # inside the same Observer fact transaction; P90 reads/compares
+            # this shared fact and never writes a second Strategy candle copy.
+            if timeframe in {"5", "15", "60"}:
+                from bybit_workbench.market_data.candle_warmup import (
+                    cache_approved_bybit_history,
+                )
+
+                native_closed = Candle(
+                    symbol=fact.symbol, timeframe=timeframe,
+                    opened_at=datetime.fromisoformat(
+                        str(attrs["opened_at"])
+                    ).astimezone(UTC),
+                    closed_at=boundary,
+                    open=Decimal(str(attrs["open"])),
+                    high=Decimal(str(attrs["high"])),
+                    low=Decimal(str(attrs["low"])),
+                    close=Decimal(str(attrs["close"])),
+                    volume=Decimal(str(attrs["volume"])),
+                    is_closed=True,
+                )
+                cache_approved_bybit_history(
+                    connection, symbol=fact.symbol,
+                    history={timeframe: (native_closed,)},
+                    observed_at=datetime.now(UTC),
+                    producer_release_commit=LOADED_COMMIT,
+                    source_transport="BYBIT_WS_KLINE",
+                )
             prior = closed_boundaries.get((fact.symbol, timeframe))
             if prior is not None and boundary < prior:
                 raise ContinuityNotProvable(
                     f"observer CANDLE_CLOSED regressed for {fact.symbol}:{timeframe}"
                 )
             closed_boundaries[(fact.symbol, timeframe)] = boundary
-            if timeframe == "5":
+            if timeframe == "5" and fact.symbol in ordinary_symbols:
                 paper.on_candle_closed(
                     Candle(
                         symbol=fact.symbol,
@@ -2384,7 +2707,7 @@ def _run_observer_epoch(
         coin = coin_contexts.get(fact.symbol)
         if coin is not None and coin.observed_at <= fact.observed_at:
             contexts["dispatcher.coin"] = coin
-        if fact.event_kind == "PUBLIC_TRADE":
+        if fact.event_kind == "PUBLIC_TRADE" and fact.symbol in ordinary_symbols:
             attrs = fact.attributes.to_dict()
             paper.on_public_trade(
                 symbol=fact.symbol,
@@ -2422,7 +2745,7 @@ def _run_observer_epoch(
             scoped_admissions, scoped_ready_for = (
                 _multi_account_admissions(
                     connection,
-                    bundles,
+                    observer_split.ordinary,
                     multi_account_candidates,
                     symbol=fact.symbol,
                     observed_at=admission_time,
@@ -2483,9 +2806,48 @@ def _run_observer_epoch(
                     evaluation.signal.strategy_activation_id
                     not in real_execution_selected_for
                 ):
+                    watch_geometry = bundle.entry_plan.watch_policy.to_dict().get(
+                        "geometry", {}
+                    )
+                    if watch_geometry.get("operator") == (
+                        "P90L90_RAW_H9_UNION_CROSSING"
+                    ):
+                        raise RuntimeError(
+                            "P90L90_ENTRY_REACHED_ORDINARY_OBSERVER_OWNER"
+                        )
                     paper.create_order(evaluation, bundle, now=fact.observed_at)
                 evaluations_count += 1
                 signals_count += 1
+        if (
+            p90_consumer is not None and fact.symbol in p90l90_symbols
+            and fact.event_kind in {"PUBLIC_TRADE", "CANDLE_CLOSED"}
+        ):
+            if fact.event_kind == "PUBLIC_TRADE" and cursor is None:
+                raise ContinuityNotProvable(
+                    "P90L90 causal consumer requires exact native TradeCursor"
+                )
+            if (
+                fact.event_kind == "PUBLIC_TRADE"
+                or str(fact.attributes.to_dict().get("timeframe") or "")
+                in {"5", "15"}
+            ):
+                p90_consumer.accept(
+                    encode_p90l90_fact(fact, cursor=cursor)
+                )
+
+    def process_fact(fact: MarketFactEnvelope, cursor: TradeCursor | None = None) -> None:
+        # One source event is an atomic mixed-Strategy PAPER epoch on shared
+        # symbols. The nested P90 join, Entry, positions and ordinary PAPER
+        # records use this exact connection and roll back as ONE DB unit.
+        # In-memory state MUST be discarded by ending the whole epoch on any
+        # exception; the enclosing Observer restart handles that boundary.
+        dispatch_observer_fact_atomically(
+            connection,
+            symbol=fact.symbol,
+            p90_symbols=p90l90_symbols,
+            p90_enabled=p90_consumer is not None,
+            dispatch=lambda: _process_fact_body(fact, cursor),
+        )
 
     try:
         trade_mirror_thread.start()
@@ -2497,7 +2859,352 @@ def _run_observer_epoch(
             raise ContinuityNotProvable("observer publicTrade mirror continuity is not active")
         oi_thread.start()
         sock, _ready_local, _ready_server, buffered = _connect_and_subscribe(symbols, intervals)
-        buffered_messages = list(buffered)
+        # Source proof is issued ONLY in this epoch, after real Bybit
+        # WS subscription acknowledgements and the active publicTrade
+        # mirror, and after ALL source-commit-bound P90 DB checkpoints
+        # have been independently reconstructed. On a reconnect it is
+        # discarded, rechecked and NEVER reused as a generic readiness flag.
+        if p90_consumer is not None and not p90_real_source_only:
+            require_p90_atomic_observer_connection(
+                observer_split,
+                live_proof=P90NativeBarRuntimeProof(
+                    source_commit=LOADED_COMMIT,
+                    restored_symbols=p90_consumer.recovered_symbols,
+                    subscribed_symbols=frozenset(symbols),
+                    subscribed_intervals=frozenset(intervals),
+                    mirror_active=trade_mirror.snapshot()["state"] == "ACTIVE",
+                    subscribed_local_at=_ready_local,
+                    subscribed_server_at=_ready_server,
+                    epoch_started_at=epoch_started,
+                ),
+            )
+        if p90_real_source_only or p90_real_live:
+            # Fresh REAL starts require genuinely signed FLAT MAIN/SUB.
+            # A live-execution process restart with existing exposure is a
+            # different path: reuse the one original durable source epoch only
+            # after exact signed account/protection + bounded native replay.
+            from bybit_workbench.universal_entry.p90l90_observer_real_consumer import (
+                P90L90ObserverRealConsumer,
+            )
+            from operations.monitoring.p90l90_real_source_bootstrap import (
+                start_current_p90_real_observer_epoch,
+            )
+
+            restart_epoch_id: str | None = None
+            if p90_real_live:
+                from bybit_workbench.universal_entry.p90l90_real_open_restart import (
+                    inspect_p90_real_open_restart_epoch,
+                )
+
+                restart_epoch_id = inspect_p90_real_open_restart_epoch(
+                    connection, source_commit=LOADED_COMMIT,
+                )
+            if restart_epoch_id is None:
+                source_epoch_id = start_current_p90_real_observer_epoch(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    mirror=trade_mirror,
+                    subscribed_symbols=frozenset(symbols),
+                    subscribed_intervals=frozenset(intervals),
+                    subscribed_local_at=_ready_local,
+                    subscribed_server_at=_ready_server,
+                    epoch_started_at=epoch_started,
+                )
+            else:
+                source_epoch_id = restart_epoch_id
+
+            def require_no_real_exposure() -> None:
+                # This diagnostic must stop, not pretend to protect a position.
+                existing = connection.execute(
+                    """SELECT count(*) FROM runtime.position_ownership
+                        WHERE strategy_version=%s AND state IN
+                        ('OPEN','RECONCILIATION_REQUIRED')""",
+                    (P90_REAL_VERSION,),
+                ).fetchone()
+                if existing != (0,):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_EXPOSURE_REQUIRES_REAL_EXIT_OWNER"
+                    )
+                if connection.execute(
+                    """SELECT enabled FROM control.execution_gates
+                        WHERE mode='mainnet'"""
+                ).fetchone() != (False,):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_MAINNET_GATE_DRIFT"
+                    )
+                if _real_execution_selected_activation_ids(
+                    connection, observer_split.p90_real
+                ):
+                    raise RuntimeError(
+                        "P90_REAL_SOURCE_ONLY_EXECUTION_PERMISSION_DRIFT"
+                    )
+
+            if p90_real_source_only:
+                p90_consumer = P90L90ObserverRealConsumer(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    source_epoch_id=source_epoch_id,
+                    producer_release_commit=LOADED_COMMIT,
+                    provenance=FrozenPolicy.from_mapping({
+                        "source": "p90_real_native_source_only_no_orders",
+                        "source_commit": LOADED_COMMIT,
+                        "data_lineage_id": source_epoch_id,
+                        "observer_epoch_id": epoch_id,
+                    }),
+                    admission_provider=lambda _symbol, _at: ((), False),
+                    verified_exit_tick_port=lambda _fact, _cursor: (
+                        require_no_real_exposure()
+                    ),
+                    verified_closed_candle_port=lambda _fact: (
+                        require_no_real_exposure()
+                    ),
+                    no_order_source_diagnostic=True,
+                )
+            else:
+                from bybit_workbench.universal_entry.p90l90_real_account_routes import (
+                    read_p90_real_account_routes,
+                )
+                from bybit_workbench.universal_entry.p90l90_real_observer_runtime import (
+                    assemble_p90_real_observer_runtime,
+                )
+                from bybit_workbench.universal_entry.p90l90_real_shared_candle_ledger import (
+                    P90RealSharedCandleLedger,
+                )
+                from bybit_workbench.universal_exit.p90l90_real_private_router import (
+                    P90RealPrivateEvidenceRouter,
+                )
+                from operations.monitoring.p90l90_real_account_mutation_safety import (
+                    P90RealIndependentMutationSafety,
+                )
+                from operations.monitoring.p90l90_real_live_source_ports import (
+                    P90RealLiveSourcePorts,
+                )
+
+                routes = read_p90_real_account_routes(
+                    connection, bundles=observer_split.p90_real,
+                    at=datetime.now(UTC),
+                )
+                source_snapshot = trade_mirror.snapshot()
+                mirror_serial = source_snapshot["epoch"]
+                mirror_started_at = datetime.fromisoformat(
+                    str(source_snapshot["epoch_started_at"])
+                )
+                shared_p90_real_ledger = P90RealSharedCandleLedger(
+                    connection, epoch_id=source_epoch_id,
+                    source_commit=LOADED_COMMIT,
+                )
+                source_ports = P90RealLiveSourcePorts(
+                    connection,
+                    mirror=trade_mirror,
+                    ledger=shared_p90_real_ledger,
+                    source_epoch_id=source_epoch_id,
+                    source_commit=LOADED_COMMIT,
+                    mirror_serial=mirror_serial,
+                    mirror_started_at=mirror_started_at,
+                )
+                private_router = P90RealPrivateEvidenceRouter(
+                    account_by_strategy=routes.account_by_strategy,
+                    connector_by_strategy=routes.connector_by_strategy,
+                )
+                safety = P90RealIndependentMutationSafety(
+                    connection, source=source_ports,
+                    signed_private=private_router,
+                    account_by_strategy=routes.account_by_strategy,
+                    connector_by_strategy=routes.connector_by_strategy,
+                )
+                real_candidates = _unarmed_multi_account_candidate_bindings(
+                    connection, observer_split.p90_real,
+                    observed_at=datetime.now(UTC),
+                )
+                active_by_symbol = {
+                    symbol: cast(Any, bundle).activation.activation_id
+                    for bundle in observer_split.p90_real
+                    for symbol in cast(Any, bundle).entry_plan.symbols
+                }
+                expected_activation_ids = frozenset(
+                    active_by_symbol.values()
+                )
+                if (
+                    len(active_by_symbol) != 5
+                    or set(real_candidates) != expected_activation_ids
+                    or any(len(refs) != 1 for refs in real_candidates.values())
+                ):
+                    raise RuntimeError(
+                        "P90_REAL_LIVE_EXACT_TWO_ACCOUNT_ENTRY_OWNER_MISSING"
+                    )
+
+                def p90_admitted_account(
+                    symbol: str, at: datetime,
+                ) -> tuple[tuple[AccountAdmissionContext, ...], bool]:
+                    # Candidate must still share the current original live
+                    # WS source epoch and atomic PostgreSQL checkpoint.
+                    source_ports._source_transaction()
+                    activation = active_by_symbol.get(symbol)
+                    selected = _real_execution_selected_activation_ids(
+                        connection, observer_split.p90_real,
+                    )
+                    if (
+                        activation is None
+                        or selected != expected_activation_ids
+                        or connection.execute(
+                            "SELECT enabled FROM control.execution_gates WHERE mode='mainnet'"
+                        ).fetchone() != (True,)
+                    ):
+                        raise RuntimeError(
+                            "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
+                        )
+                    scoped, ready = _multi_account_admissions(
+                        connection,
+                        observer_split.p90_real,
+                        real_candidates,
+                        symbol=symbol,
+                        observed_at=at,
+                        real_selected_for=selected,
+                    )
+                    accounts = scoped.get(activation, ())
+                    return accounts, (
+                        len(accounts) == 1 and activation in ready
+                    )
+
+                runtime = assemble_p90_real_observer_runtime(
+                    connection,
+                    bundles=observer_split.p90_real,
+                    source_commit=LOADED_COMMIT,
+                    source_epoch_id=source_epoch_id,
+                    producer_release_commit=LOADED_COMMIT,
+                    provenance=FrozenPolicy.from_mapping({
+                        "source": "p90_real_live_original_native_main_sub",
+                        "source_commit": LOADED_COMMIT,
+                        "data_lineage_id": source_epoch_id,
+                        "observer_epoch_id": epoch_id,
+                    }),
+                    observed_at=datetime.now(UTC),
+                    admitted_account=p90_admitted_account,
+                    verified_native_coverage=source_ports.native_coverage,
+                    verified_closed_history=source_ports.closed_history,
+                    verified_closed_continuity=source_ports.closed_continuity,
+                    verified_account_mutation_safety=safety,
+                    shared_candle_ledger=shared_p90_real_ledger,
+                )
+                p90_consumer = runtime.consumer
+                if restart_epoch_id is not None:
+                    from bybit_workbench.universal_entry.p90l90_real_restart_recovery import (
+                        recover_p90_real_open_source,
+                    )
+
+                    restart_recovery = recover_p90_real_open_source(
+                        connection,
+                        bundles=observer_split.p90_real,
+                        source_commit=LOADED_COMMIT,
+                        source_epoch_id=source_epoch_id,
+                        consumer=p90_consumer,
+                        exit_ports=runtime.exit_ports,
+                        mirror=trade_mirror,
+                        mirror_serial=mirror_serial,
+                        mirror_started_at=mirror_started_at,
+                        source_ws_ready_at=_ready_local,
+                        fetch_recent_trades=_fetch_recent_trade_snapshot,
+                        fetch_closed_candles=_fetch_gap_candles,
+                    )
+                    source_ports.bind_restart_bridge(
+                        restart_recovery.bridge.restart_id
+                    )
+                    # The primary WS was already subscribed before bounded
+                    # recovery and may still contain frames reconstructed from
+                    # REST+mirror. Seed the ordinary transport state BEFORE
+                    # reading that socket so old frames are exact duplicates,
+                    # never a second Entry/Exit event or cursor regression.
+                    for recovered_fact_id in (
+                        restart_recovery.replayed_fact_ids
+                    ):
+                        deduper.accept(recovered_fact_id)
+                    for symbol, recovered_cursor in (
+                        restart_recovery.trade_cursors.items()
+                    ):
+                        trade_cursors[symbol] = recovered_cursor
+                        trade_current_seq_exec_ids[symbol] = set(
+                            restart_recovery.current_sequence_exec_ids[symbol]
+                        )
+                        trade_proof_monotonic[symbol] = time.monotonic()
+                    for symbol, watermarks in (
+                        restart_recovery.closed_watermarks.items()
+                    ):
+                        closed_boundaries[(symbol, "5")] = watermarks[0]
+                        closed_boundaries[(symbol, "15")] = watermarks[1]
+            if not (p90_real_live and restart_epoch_id is not None):
+                p90_consumer.recover_all()
+            # The current Observer is the *only* native MarketSource owner.
+            # Private workers can request its bounded postfill window by
+            # durable position ID; no Exchange key/POST reaches this process.
+            from operations.monitoring.p90l90_real_postfill_source_broker import (
+                read_exact_source_position,
+                serve_source_windows,
+            )
+
+            source_broker_ready = threading.Event()
+            real_source_broker_thread = threading.Thread(
+                target=serve_source_windows,
+                kwargs={
+                    "mirror": trade_mirror,
+                    "source_commit": LOADED_COMMIT,
+                    "source_epoch_id": source_epoch_id,
+                    "read_position": (
+                        lambda position_id, account, symbol:
+                        read_exact_source_position(
+                            database_dsn=DATABASE_DSN,
+                            source_epoch_id=source_epoch_id,
+                            source_commit=LOADED_COMMIT,
+                            position_id=position_id,
+                            trading_account_id=account,
+                            symbol=symbol,
+                        )
+                    ),
+                    "running": lambda: not real_source_broker_stop.is_set(),
+                    "ready": source_broker_ready.set,
+                    "fetch_recent_trades": _fetch_recent_trade_snapshot,
+                },
+                name="p90-real-native-postfill-market-source",
+                daemon=True,
+            )
+            real_source_broker_thread.start()
+            if (
+                not source_broker_ready.wait(timeout=3.0)
+                or not real_source_broker_thread.is_alive()
+            ):
+                raise RuntimeError("P90_REAL_POSTFILL_SOURCE_BROKER_NOT_BOUND")
+            for symbol in p90l90_symbols:
+                watermarks = p90_consumer._archive.restart_watermarks(symbol)
+                closed_boundaries[(symbol, "5")] = watermarks["5"]
+                closed_boundaries[(symbol, "15")] = watermarks["15"]
+            for raw in observer_split.p90_real:
+                bundle = cast(Any, raw)
+                record_plan_consumption(
+                    connection,
+                    plan_kind="ENTRY",
+                    plan_fingerprint=bundle.entry_plan.entry_plan_fingerprint,
+                    strategy_activation_id=bundle.activation.activation_id,
+                    consumer_instance_id=consumer_instance_id,
+                    seen_at=datetime.now(UTC),
+                    status="LOADED",
+                    payload={
+                        "source": (
+                            "p90_real_native_source_only_NO_ORDERS"
+                            if p90_real_source_only
+                            else "p90_real_live_original_native_main_sub"
+                        ),
+                        "source_commit": LOADED_COMMIT,
+                        "source_epoch_id": source_epoch_id,
+                    },
+                )
+        # Subscribe-ACK buffered frames are outside the accepted P90 handoff:
+        # fresh REAL starts have a new empty native cursor; open-position
+        # restart explicitly reconstructed and seeded every accepted fact ID.
+        # Read only frames arriving on the still-live primary socket after ACK.
+        buffered_messages = (
+            [] if p90_real_source_only or p90_real_live else list(buffered)
+        )
         heartbeat = PublicWsHeartbeat(
             PING_INTERVAL_SECONDS,
             PONG_TIMEOUT_SECONDS,
@@ -2656,6 +3363,9 @@ def _run_observer_epoch(
                 next_status = now_mono + 2.0
         return "STOP"
     finally:
+        real_source_broker_stop.set()
+        if real_source_broker_thread is not None:
+            real_source_broker_thread.join(timeout=2.0)
         oi_stop.set()
         if oi_thread.ident is not None:
             oi_thread.join(timeout=2.0)

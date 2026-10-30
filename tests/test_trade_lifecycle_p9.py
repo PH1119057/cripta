@@ -57,6 +57,7 @@ def test_p9_units_are_shadow_only_and_explicitly_configured() -> None:
 
     assert "CRIPTA_LIFECYCLE_SUPERVISOR=ENABLED" in LIFECYCLE_UNIT
     assert "CRIPTA_LIFECYCLE_EXIT_OWNER_MAX_AGE_SECONDS=10" in LIFECYCLE_UNIT
+    assert "EnvironmentFile=-/etc/cripta/lifecycle-supervisor.env" in LIFECYCLE_UNIT
     assert "CRIPTA_LIFECYCLE_EXCHANGE_STATE_MAX_AGE_SECONDS" not in LIFECYCLE_UNIT
 
     for unit in (EXIT_UNIT, LIFECYCLE_UNIT):

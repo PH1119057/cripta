@@ -37,3 +37,15 @@ def test_correlator_covers_signal_decision_fill_command_and_position_transition(
         "DISPATCHER_HOLD",
     ):
         assert f"'{event_type}'" in source
+
+
+def test_fill_identity_and_command_attribution_are_account_scoped() -> None:
+    source = CORRELATOR.read_text(encoding="utf-8")
+    assert "e.trading_account_id=trade_commands.trading_account_id" in source
+    assert "trade_commands.identity_status='PROVEN'" in source
+    assert "e.identity_status='PROVEN'" in source
+    assert "jsonb_build_array(" in source
+    assert "ELSE 'LEGACY_UNKNOWN' END" in source
+    assert "'trading_account_id',CASE WHEN identity_status='PROVEN'" in source
+    # Do not retain the old globally ambiguous physical execution identity.
+    assert "SELECT 'FILL', exec_id," not in source

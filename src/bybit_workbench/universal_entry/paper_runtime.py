@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 from bybit_workbench.domain.models import Candle
 from bybit_workbench.universal_exit.contracts import (
@@ -26,6 +26,11 @@ from .market_watch import (
     compute_r1_l53_stability_diagnostic,
     compute_r1_l53_stable_zone,
 )
+from .p90l90_causal import P90L90CausalExit, P90L90PaperClose, Side, modeled_pnl_after_fees
+from .p90l90_legacy_strategy import MAIN_ID, MAIN_SYMBOLS, SUB_ID, SUB_SYMBOLS
+from .p90l90_paper_checkpoint import P90L90PaperExitCheckpoint
+from .p90l90_strategy_embargo import StrategyHardStopEmbargo, StrategyHardStopEmbargoPolicy
+from .p90l90_strategy_v2 import VERSION as P90L90_PAPER_VERSION
 from .reverse_intent import build_reverse_transition_intent
 from .runtime_loader import ActiveStrategyBundle, load_strategy_bundle_exact_identity
 
@@ -193,6 +198,568 @@ class PaperTradeRuntime:
             bundle.exact_identity: bundle for bundle in bundles
         }
 
+    def create_p90l90_native_paper_entry(
+        self,
+        evaluation: EntryEvaluation,
+        bundle: ActiveStrategyBundle,
+        *,
+        exec_id: str,
+        exchange_sequence: int,
+        event_at: datetime,
+        native_trade_price: Decimal,
+        raw_trade_fact_id: str,
+    ) -> str | None:
+        """Atomically create ONE purely modeled position, never an order.
+
+        The source is an already evaluated native public-trade RAW crossing.
+        All capital, fee and fill assumptions are explicit PAPER-only research
+        proxies on a NEW immutable version. Real Entry remains NOT_APPROVED.
+        """
+        if (
+            evaluation.decision is not None
+            and evaluation.decision.code.value != "ACCEPTED"
+        ):
+            return None
+        card, activation = bundle.card, bundle.activation
+        signal, intent = evaluation.signal, evaluation.execution_intent
+        if not activation.enabled or signal.strategy_activation_id != activation.activation_id:
+            raise RuntimeError("P90L90_PAPER_ENTRY_REQUIRES_ENABLED_SHADOW_ACTIVATION")
+        if (
+            card.strategy_id != signal.strategy_id
+            or card.strategy_version != signal.strategy_version
+            or card.strategy_config_fingerprint != signal.strategy_config_fingerprint
+            or card.strategy_version != P90L90_PAPER_VERSION
+            or bundle.entry_plan.entry_plan_fingerprint != signal.entry_plan_fingerprint
+            or bundle.exit_plan.exit_plan_fingerprint != intent.exit_plan_fingerprint
+            or intent.signal_id != signal.signal_id
+        ):
+            raise ValueError("P90L90_PAPER_ENTRY_EXACT_STRATEGY_IDENTITY_REQUIRED")
+        expected_symbols = (
+            MAIN_SYMBOLS if signal.strategy_id == MAIN_ID
+            else SUB_SYMBOLS if signal.strategy_id == SUB_ID else ()
+        )
+        if signal.symbol not in expected_symbols:
+            raise ValueError("P90L90_PAPER_ENTRY_STRATEGY_UNIVERSE_MISMATCH")
+        entry_policy = card.entry_policy.to_dict()
+        geometry = _mapping(
+            _mapping(entry_policy.get("watch_policy"), "P90 watch").get("geometry"),
+            "P90 geometry",
+        )
+        execution = _mapping(
+            entry_policy.get("execution_policy"), "P90 execution"
+        )
+        zone = _mapping(
+            card.exit_policy.to_dict().get("local_zone_exit"), "P90 exit zone"
+        )
+        if (
+            geometry.get("operator") != "P90L90_RAW_H9_UNION_CROSSING"
+            or execution.get("order_type") != "NOT_APPROVED"
+            or zone.get("operator") != "P90L90_DYNAMIC_OPPOSITE_RAW_L53"
+        ):
+            raise RuntimeError("P90L90_PAPER_ENTRY_INVALID_NO_ORDER_POLICY")
+        config = _mapping(
+            card.capital_policy.to_dict().get("paper_simulation"),
+            "P90 paper simulation",
+        )
+        if set(config) != {
+            "enabled", "mode", "notional_usdt", "schema_leverage",
+            "fees", "exchange_fill_confirmed",
+        } or (
+            config["enabled"] is not True
+            or config["mode"] != "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY"
+            or config["schema_leverage"] != 1
+            or config["fees"] != "TAKER_ENTRY_RESEARCH_PROXY"
+            or config["exchange_fill_confirmed"] is not False
+        ):
+            raise RuntimeError("P90L90_PAPER_ENTRY_EXPLICIT_MODEL_REQUIRED")
+        notional = _decimal(config["notional_usdt"], "P90 paper nominal", positive=True)
+        if notional != Decimal("10"):
+            raise RuntimeError("P90L90_PAPER_ENTRY_HISTORICAL_PARITY_NOMINAL_CHANGED")
+        hardstop_policy = StrategyHardStopEmbargoPolicy.parse(
+            _mapping(
+                card.lifecycle_policy.to_dict().get("second_hardstop_embargo"),
+                "P90 SECOND48",
+            )
+        )
+        raw_signal = _mapping(
+            intent.payload.to_dict().get("signal_fact"), "P90 signal_fact",
+        )
+        attributes = _mapping(raw_signal.get("attributes"), "P90 RAW attributes")
+        nested = _mapping(attributes.get("p90l90"), "P90 nested attributes")
+        when = event_at.astimezone(UTC)
+        if (
+            raw_signal.get("event_kind") != "P90L90_RAW_H9_PREV7D_CROSSING"
+            or not exec_id or exchange_sequence < 0
+            or event_at.tzinfo is None
+            or not native_trade_price.is_finite() or native_trade_price <= 0
+            or attributes.get("modeled_exchange_fill") is not False
+            or not raw_trade_fact_id
+            or attributes.get("trade_fact_id") != raw_trade_fact_id
+            or _decimal(nested.get("candidate_price"), "P90 native proxy") != native_trade_price
+        ):
+            raise RuntimeError("P90L90_PAPER_ENTRY_NOT_PROVEN_NATIVE_CROSSING")
+        bucket_raw = nested.get("state_effective_at")
+        if not isinstance(bucket_raw, str):
+            raise ValueError("P90L90_PAPER_ENTRY_STATE_TIME_MISSING")
+        effective = datetime.fromisoformat(bucket_raw)
+        if effective.tzinfo is None:
+            raise ValueError("P90L90_PAPER_ENTRY_STATE_TIME_UNAWARE")
+        effective = effective.astimezone(UTC)
+        if not effective <= when < effective + timedelta(minutes=5):
+            raise ValueError("P90L90_PAPER_ENTRY_NONCAUSAL_STATE")
+        if signal.direction.value not in {"LONG", "SHORT"}:
+            raise ValueError("P90L90_PAPER_ENTRY_SIDE_INVALID")
+        if signal.detected_at < when:
+            raise ValueError("P90L90_PAPER_ENTRY_FUTURE_SIGNAL")
+        position_id = "paper-p90-" + fingerprint({
+            "strategy_version": signal.strategy_version,
+            "strategy_id": signal.strategy_id,
+            "strategy_config_fingerprint": signal.strategy_config_fingerprint,
+            "signal_id": signal.signal_id,
+            "native_exec_id": exec_id,
+        })[:32]
+        # One dedicated Strategy+symbol lease: protects one-way capacity across
+        # simultaneous LONG/SHORT signals and process restarts.
+        with self._connection.transaction():
+            self._connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (f"P90_SHADOW:{signal.strategy_id}:{signal.symbol}",),
+            )
+            bindings = self._connection.execute(
+                """SELECT b.trading_account_id
+                   FROM strategy_entry.strategy_execution_bindings b
+                   JOIN strategy_entry.strategy_activations a
+                     ON a.activation_id=b.strategy_activation_id
+                  WHERE a.activation_id=%s AND a.enabled=true
+                    AND a.strategy_id=%s AND a.strategy_version=%s
+                    AND a.strategy_config_fingerprint=%s
+                    AND b.execution_leg='PRIMARY' AND b.execution_role='PRIMARY'
+                    AND b.binding_state IN ('INACTIVE','ACTIVE')
+                  ORDER BY b.trading_account_id""",
+                (
+                    signal.strategy_activation_id, signal.strategy_id,
+                    signal.strategy_version, signal.strategy_config_fingerprint,
+                ),
+            ).fetchall()
+            if len(bindings) != 1 or not str(bindings[0][0]).strip():
+                raise RuntimeError("P90L90_PAPER_ENTRY_EXACT_ACCOUNT_BINDING_REQUIRED")
+            # The persisted closed PAPER rows are the only authoritative
+            # Strategy-specific HARD_STOP history. Rebuild independently
+            # under the same Strategy+symbol advisory lock on restart.
+            # One Strategy counter covers its LONG/SHORT and every symbol.
+            hardstop_rows = self._connection.execute(
+                """SELECT paper_position_id,closed_at
+                     FROM strategy_entry.paper_positions
+                    WHERE strategy_id=%s AND strategy_version=%s
+                      AND strategy_config_fingerprint=%s
+                      AND leg_type='PRIMARY' AND state='CLOSED'
+                      AND exit_reason='HARD_STOP' AND closed_at IS NOT NULL
+                    ORDER BY closed_at,paper_position_id""",
+                (
+                    signal.strategy_id, signal.strategy_version,
+                    signal.strategy_config_fingerprint,
+                ),
+            ).fetchall()
+            embargo = StrategyHardStopEmbargo(
+                strategy_id=signal.strategy_id,
+                strategy_version=signal.strategy_version,
+                strategy_config_fingerprint=signal.strategy_config_fingerprint,
+                policy=hardstop_policy,
+            )
+            for previous_position, previous_close_at in hardstop_rows:
+                if previous_close_at > when:
+                    raise RuntimeError("P90L90_PAPER_ENTRY_FUTURE_HARDSTOP_HISTORY")
+                embargo.record_exit(
+                    exit_event_id=str(previous_position),
+                    exit_reason="HARD_STOP",
+                    at=previous_close_at,
+                )
+            if not embargo.allows_new_entry(when):
+                return None
+            other = self._connection.execute(
+                """SELECT paper_position_id,payload FROM strategy_entry.paper_positions
+                  WHERE strategy_id=%s AND strategy_version=%s
+                    AND strategy_config_fingerprint=%s AND symbol=%s
+                    AND leg_type='PRIMARY'""",
+                (
+                    signal.strategy_id, signal.strategy_version,
+                    signal.strategy_config_fingerprint, signal.symbol,
+                ),
+            ).fetchall()
+            for existing_id, existing_payload in other:
+                previous = _mapping(existing_payload, "P90 existing paper payload")
+                if str(existing_id) == position_id:
+                    return None
+                if previous.get("p90l90_state_effective_at") == effective.isoformat() and (
+                    previous.get("p90l90_entry_side") == signal.direction.value
+                ):
+                    return None
+            occupied = self._connection.execute(
+                """SELECT paper_position_id FROM strategy_entry.paper_positions
+                  WHERE strategy_id=%s AND symbol=%s
+                    AND leg_type='PRIMARY' AND state='OPEN'
+                  LIMIT 1""",
+                (signal.strategy_id, signal.symbol),
+            ).fetchone()
+            if occupied is not None:
+                return None
+            account_id = str(bindings[0][0])
+            state = P90L90CausalExit(
+                side=signal.direction.value,
+                entry_price=native_trade_price,
+                entry_sequence=0,
+                state_bucket=int(effective.timestamp() // 300),
+            )
+            checkpoint = P90L90PaperExitCheckpoint(
+                trading_account_id=account_id,
+                strategy_id=signal.strategy_id,
+                paper_position_id=position_id,
+                symbol=signal.symbol,
+                exit_state=state,
+                last_exchange_sequence=exchange_sequence,
+                last_trade_at=when,
+                seen_exec_ids={exec_id},
+            )
+            payload = {
+                "model": "NO_ORDER_NATIVE_PUBLIC_TRADE_PROXY",
+                "p90l90_exit_checkpoint": checkpoint.snapshot(),
+                "p90l90_state_effective_at": effective.isoformat(),
+                "p90l90_entry_side": signal.direction.value,
+                "p90l90_native_exec_id": exec_id,
+                "p90l90_source_signal_id": signal.signal_id,
+                "modeled_exchange_fill": False,
+                "notional_usdt": str(notional),
+                "entry_fee_proxy_rate": "0.00055",
+                "exit_policy": card.exit_policy.to_dict(),
+                "second_hardstop_embargo": card.lifecycle_policy.to_dict()[
+                    "second_hardstop_embargo"
+                ],
+            }
+            inserted = self._connection.execute(
+                """INSERT INTO strategy_entry.paper_positions(
+                       paper_position_id,paper_order_id,parent_position_id,leg_type,
+                       strategy_activation_id,strategy_id,strategy_version,
+                       strategy_config_fingerprint,entry_plan_fingerprint,
+                       exit_plan_fingerprint,signal_id,symbol,direction,state,
+                       opened_at,entry_price,stake_usdt,leverage,notional_usdt,
+                       quantity,best_price,active_stop_price,payload
+                   ) VALUES(
+                       %s,NULL,NULL,'PRIMARY',%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                       'OPEN',%s,%s,%s,1,%s,%s,%s,%s,%s::jsonb
+                   ) ON CONFLICT(paper_position_id) DO NOTHING
+                     RETURNING paper_position_id""",
+                (
+                    position_id, signal.strategy_activation_id, signal.strategy_id,
+                    signal.strategy_version, signal.strategy_config_fingerprint,
+                    signal.entry_plan_fingerprint,
+                    bundle.exit_plan.exit_plan_fingerprint,
+                    signal.signal_id, signal.symbol, signal.direction.value,
+                    when, native_trade_price, notional, notional,
+                    notional / native_trade_price, native_trade_price,
+                    state.stop, canonical_json(payload),
+                ),
+            ).fetchone()
+            if inserted is None:
+                return None
+            self._event(
+                position_id, when, "OPENED", native_trade_price,
+                None, Decimal("0"),
+                {
+                    "mode": "P90L90_SHADOW_RESEARCH_PROXY_NO_ORDER",
+                    "trading_account_id": account_id,
+                    "native_exec_id": exec_id,
+                    "modeled_exchange_fill": False,
+                },
+            )
+            return position_id
+
+    def route_p90l90_native_trade(
+        self,
+        *,
+        symbol: str,
+        exec_id: str,
+        exchange_sequence: int,
+        event_at: datetime,
+        price: Decimal,
+    ) -> int:
+        """Route a verified publicTrade cursor to existing account-owned PAPER positions.
+
+        Only the explicit binding and exact persisted checkpoint supply the
+        TradingAccount. No default MAIN/SUB, no generated position and NO order.
+        Missing/ambiguous lineage, stale closed-5m RAW geometry and sequence
+        gaps fail closed; the existing position is never handed to R1 Exit.
+        """
+        if event_at.tzinfo is None or price <= 0 or not price.is_finite():
+            raise ValueError("P90L90 native source event invalid")
+        rows = self._connection.execute(
+            """SELECT p.paper_position_id,p.strategy_id,
+                      b.trading_account_id
+                 FROM strategy_entry.paper_positions p
+                 JOIN strategy_entry.strategy_execution_bindings b
+                   ON b.strategy_activation_id=p.strategy_activation_id
+                  AND b.execution_leg='PRIMARY'
+                  AND b.execution_role='PRIMARY'
+                  AND b.binding_state IN ('INACTIVE','ACTIVE')
+                WHERE p.state='OPEN' AND p.leg_type='PRIMARY'
+                  AND p.symbol=%s
+                  AND p.payload ? 'p90l90_exit_checkpoint'
+                ORDER BY p.paper_position_id,b.trading_account_id""",
+            (symbol,),
+        ).fetchall()
+        seen: set[str] = set()
+        for position_id, strategy_id, account_id in rows:
+            key = str(position_id)
+            if key in seen:
+                # Prevalidate the whole batch BEFORE any position state changes.
+                raise RuntimeError("P90L90_PAPER_AMBIGUOUS_ACCOUNT_BINDING")
+            seen.add(key)
+            if strategy_id not in {
+                "p90l90_legacy_main_ltc_inj",
+                "p90l90_legacy_sub_dot_arb_apt",
+            } or not account_id:
+                raise RuntimeError("P90L90_PAPER_UNEXPECTED_STRATEGY_OR_ACCOUNT")
+        for position_id, strategy_id, account_id in rows:
+            key = str(position_id)
+            at = event_at.astimezone(UTC)
+            boundary = datetime.fromtimestamp(
+                int(at.timestamp() // 300) * 300, UTC
+            )
+            history = tuple(self._l53_candles[symbol])
+            geometry_at = None
+            target = None
+            if len(history) >= 36 and history[-1].closed_at == boundary:
+                geometry_at = boundary
+                # The opposing RAW L5-3 extreme depends on the position
+                # side, and is recomputed only on a fully closed 5m state.
+                direction_row = self._connection.execute(
+                    """SELECT direction FROM strategy_entry.paper_positions
+                       WHERE paper_position_id=%s AND state='OPEN'""",
+                    (key,),
+                ).fetchone()
+                if direction_row is None:
+                    raise RuntimeError("P90L90_PAPER_POSITION_DISAPPEARED")
+                side = str(direction_row[0])
+                if side == "LONG":
+                    target = max(c.high for c in history[-36:])
+                elif side == "SHORT":
+                    target = min(c.low for c in history[-36:])
+                else:
+                    raise RuntimeError("P90L90_PAPER_UNEXPECTED_SIDE")
+            self.on_p90l90_native_trade(
+                trading_account_id=str(account_id),
+                strategy_id=str(strategy_id),
+                paper_position_id=key,
+                symbol=symbol,
+                exec_id=exec_id,
+                exchange_sequence=exchange_sequence,
+                event_at=at,
+                price=price,
+                geometry_effective_at=geometry_at,
+                candidate_opposite_raw_tp=target,
+            )
+        return len(seen)
+
+    def on_p90l90_native_trade(
+        self,
+        *,
+        trading_account_id: str,
+        strategy_id: str,
+        paper_position_id: str,
+        symbol: str,
+        exec_id: str,
+        exchange_sequence: int,
+        event_at: datetime,
+        price: Decimal,
+        geometry_effective_at: datetime | None,
+        candidate_opposite_raw_tp: Decimal | None,
+    ) -> P90L90PaperClose | None:
+        """Advance one EXISTING P90L90 paper position with a durable DB checkpoint.
+
+        This explicit account-scoped, no-order Exit bridge is intentionally NOT
+        attached to the generic public-trade observer. The caller must provide
+        verified native trade order, exact account binding and closed 5m RAW
+        geometry; Entry capital/order simulation and SECOND48 remain unapproved.
+        Each update and its paper event are one PostgreSQL transaction.
+        """
+        with self._connection.transaction():
+            row = self._connection.execute(
+                """SELECT strategy_id,symbol,direction,entry_price,quantity,
+                          notional_usdt,best_price,mfe_pct,mae_pct,payload,state
+                     FROM strategy_entry.paper_positions
+                    WHERE paper_position_id=%s AND leg_type='PRIMARY'
+                    FOR UPDATE""",
+                (paper_position_id,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("P90L90 paper position identity not found")
+            if str(row[0]) != strategy_id or str(row[1]) != symbol:
+                raise ValueError("P90L90 paper position Strategy/symbol mismatch")
+            if str(row[10]) == "CLOSED":
+                return None
+            if str(row[10]) != "OPEN":
+                raise RuntimeError("P90L90 paper position is not OPEN")
+            direction = str(row[2])
+            if direction not in {"LONG", "SHORT"}:
+                raise ValueError("P90L90 paper direction invalid")
+            entry = _decimal(row[3], "P90L90 paper entry", positive=True)
+            quantity = _decimal(row[4], "P90L90 paper quantity", positive=True)
+            notional = _decimal(row[5], "P90L90 paper notional", positive=True)
+            old_best = _decimal(row[6], "P90L90 paper best", positive=True)
+            old_mfe = _decimal(row[7], "P90L90 paper mfe")
+            old_mae = _decimal(row[8], "P90L90 paper mae")
+            payload = dict(_mapping(row[9], "P90L90 paper payload"))
+            exit_policy = _mapping(payload.get("exit_policy"), "P90L90 exit policy")
+            local_zone = _mapping(
+                exit_policy.get("local_zone_exit"), "P90L90 local zone"
+            )
+            if str(local_zone.get("operator")) != "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                raise ValueError("P90L90 paper Exit operator mismatch")
+            checkpoint_raw = _mapping(
+                payload.get("p90l90_exit_checkpoint"), "P90L90 checkpoint"
+            )
+            checkpoint = P90L90PaperExitCheckpoint.restore(
+                checkpoint_raw,
+                trading_account_id=trading_account_id,
+                strategy_id=strategy_id,
+                paper_position_id=paper_position_id,
+                symbol=symbol,
+                side=cast(Side, direction),
+                entry_price=entry,
+            )
+            accepted, close = checkpoint.on_native_trade(
+                exec_id=exec_id,
+                exchange_sequence=exchange_sequence,
+                event_at=event_at,
+                price=price,
+                geometry_effective_at=geometry_effective_at,
+                candidate_opposite_raw_tp=candidate_opposite_raw_tp,
+            )
+            if not accepted:
+                return None
+            payload["p90l90_exit_checkpoint"] = checkpoint.snapshot()
+            move = _directional_move(entry, price, direction)
+            mfe = max(old_mfe, move)
+            mae = min(old_mae, move)
+            best = max(old_best, price) if direction == "LONG" else min(old_best, price)
+            stop = checkpoint.exit_state.stop
+            protected = checkpoint.exit_state.protected
+            if close is None:
+                changed = self._connection.execute(
+                    """UPDATE strategy_entry.paper_positions
+                          SET best_price=%s,mfe_pct=%s,mae_pct=%s,
+                              active_stop_price=%s,trailing_active=%s,
+                              payload=%s::jsonb,updated_at=clock_timestamp()
+                        WHERE paper_position_id=%s AND state='OPEN'
+                        RETURNING paper_position_id""",
+                    (
+                        best, mfe, mae, stop, protected, canonical_json(payload),
+                        paper_position_id,
+                    ),
+                ).fetchone()
+                if changed is None:
+                    raise RuntimeError("P90L90 paper Exit lost open-position lease")
+                return None
+            modeled = modeled_pnl_after_fees(
+                side=cast(Side, direction),
+                entry_price=entry,
+                exit_price=close.modeled_price,
+                entry_notional_usdt=notional,
+                maker_exit=close.resting_maker_proxy,
+            )
+            payload["p90l90_modeled_economics"] = {
+                "gross_usdt": str(modeled.gross_usdt),
+                "entry_fee_usdt": str(modeled.entry_fee_usdt),
+                "exit_fee_usdt": str(modeled.exit_fee_usdt),
+                "net_usdt": str(modeled.net_usdt),
+                "modeled_exchange_fill": False,
+                "maker_exit_proxy": close.resting_maker_proxy,
+            }
+            gross = _pnl(quantity, entry, close.modeled_price, direction)
+            return_pct = _directional_move(entry, close.modeled_price, direction)
+            changed = self._connection.execute(
+                """UPDATE strategy_entry.paper_positions
+                      SET state='CLOSED',closed_at=%s,exit_price=%s,exit_reason=%s,
+                          best_price=%s,mfe_pct=%s,mae_pct=%s,
+                          active_stop_price=%s,trailing_active=%s,
+                          gross_pnl_usdt=%s,gross_return_pct=%s,
+                          payload=%s::jsonb,updated_at=clock_timestamp()
+                    WHERE paper_position_id=%s AND state='OPEN'
+                    RETURNING paper_position_id""",
+                (
+                    event_at.astimezone(UTC), close.modeled_price, close.reason,
+                    best, mfe, mae, stop, protected, gross, return_pct,
+                    canonical_json(payload), paper_position_id,
+                ),
+            ).fetchone()
+            if changed is None:
+                raise RuntimeError("P90L90 paper Exit lost open-position lease")
+            self._event(
+                paper_position_id,
+                event_at,
+                "CLOSED",
+                close.modeled_price,
+                gross,
+                return_pct,
+                {
+                    "reason": close.reason,
+                    "trading_account_id": trading_account_id,
+                    "strategy_id": strategy_id,
+                    "native_exec_id": exec_id,
+                    "native_exchange_sequence": exchange_sequence,
+                    "observed_native_price": str(price),
+                    "modeled_exchange_fill": False,
+                    "modeled_net_usdt": str(modeled.net_usdt),
+                    "resting_maker_proxy": close.resting_maker_proxy,
+                },
+            )
+            return close
+
+    def bootstrap_p90_l53_history(
+        self, symbol: str, candles: tuple[Candle, ...]
+    ) -> None:
+        """Restore ONLY P90 Exit RAW geometry memory; never mutate R1 orders.
+
+        The exact old R1 bootstrap also reconciles pending PAPER orders and
+        positions. A P90-only processor MUST NOT call it, especially where
+        an ordinary Strategy owns the same symbol or TradingAccount.
+        """
+        if symbol not in {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}:
+            raise ValueError("P90L90 Exit history outside approved symbols")
+        if len(candles) < 36:
+            raise RuntimeError("P90L90 Exit RAW L5-3 needs 36 closed 5m candles")
+        previous: datetime | None = None
+        for candle in candles:
+            if (
+                candle.symbol != symbol or candle.timeframe != "5"
+                or not candle.is_closed
+            ):
+                raise ValueError("P90L90 Exit history source mismatch")
+            if previous is not None and (
+                candle.closed_at - previous != timedelta(minutes=5)
+            ):
+                raise RuntimeError("P90L90 Exit closed 5m continuity missing")
+            previous = candle.closed_at
+        self._l53_candles[symbol].clear()
+        self._l53_candles[symbol].extend(candles[-260:])
+
+    def on_p90_closed_candle(self, candle: Candle) -> None:
+        """Advance P90 raw Exit bar memory without touching ordinary PAPER."""
+        if (
+            candle.symbol not in {"LTCUSDT", "INJUSDT", "DOTUSDT", "ARBUSDT", "APTUSDT"}
+            or candle.timeframe != "5" or not candle.is_closed
+        ):
+            raise ValueError("P90L90 Exit requires completed approved 5m candle")
+        rows = self._l53_candles[candle.symbol]
+        if len(rows) < 36:
+            raise RuntimeError("P90L90 Exit history not fully restored")
+        if candle.closed_at == rows[-1].closed_at:
+            if candle != rows[-1]:
+                raise RuntimeError("P90L90 Exit immutable 5m candle conflict")
+            return
+        if candle.closed_at - rows[-1].closed_at != timedelta(minutes=5):
+            raise RuntimeError("P90L90 Exit missing/late closed candle")
+        rows.append(candle)
+
     def bootstrap_l53_history(
         self, symbol: str, candles: tuple[Candle, ...]
     ) -> None:
@@ -289,6 +856,15 @@ class PaperTradeRuntime:
         ).fetchall()
         executable_price = self._last_trade_prices.get(candle.symbol, candle.close)
         for row in rows:
+            paper_payload = dict(_mapping(row[8], "paper position payload"))
+            paper_exit = _mapping(paper_payload.get("exit_policy"), "paper exit_policy")
+            local_zone = _mapping(
+                paper_exit.get("local_zone_exit") or {}, "paper local_zone_exit"
+            )
+            if local_zone.get("operator") == "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                # P90L90 is updated ONLY by explicit account-scoped native-tick
+                # Exit with a persisted checkpoint; never use R1 INNER geometry.
+                continue
             self._reconcile_l53_exit(
                 paper_position_id=str(row[0]),
                 direction=str(row[1]),
@@ -557,6 +1133,13 @@ class PaperTradeRuntime:
         exit_plan = bundle.exit_plan
 
         entry_policy = card.entry_policy.to_dict()
+        watch = _mapping(entry_policy.get("watch_policy") or {}, "paper watch_policy")
+        geometry = _mapping(watch.get("geometry") or {}, "paper watch geometry")
+        if geometry.get("operator") == "P90L90_RAW_H9_UNION_CROSSING":
+            raise RuntimeError(
+                "P90L90_PAPER_ENTRY_NOT_APPROVED: explicit no-order paper capital "
+                "and native fill contract are not yet owner-approved"
+            )
         execution_policy = _mapping(
             entry_policy.get("execution_policy"), "paper execution_policy"
         )
@@ -1073,6 +1656,15 @@ class PaperTradeRuntime:
             (symbol,),
         ).fetchall()
         for row in rows:
+            paper_payload = _mapping(row[16], "paper position payload")
+            paper_exit = _mapping(paper_payload.get("exit_policy"), "paper exit_policy")
+            local_zone = _mapping(
+                paper_exit.get("local_zone_exit") or {}, "paper local_zone_exit"
+            )
+            if local_zone.get("operator") == "P90L90_DYNAMIC_OPPOSITE_RAW_L53":
+                # No fallback to generic trailing or target: P90 requires
+                # native exec-id/sequence and an explicit account-scoped call.
+                continue
             self._update_one(row, price, observed_at, contexts)
 
     def _update_one(

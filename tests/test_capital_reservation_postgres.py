@@ -26,12 +26,22 @@ pytestmark = pytest.mark.skipif(
 
 
 def _seed_attempts(
-    prefix: str, *, count: int = 3, unified_r1: bool = False
+    prefix: str, *, count: int = 3, unified_r1: bool = False,
+    strategy_id_override: str | None = None,
+    strategy_version_override: str | None = None,
 ) -> dict[str, str]:
     assert DSN is not None
     now = datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
-    strategy_id = "r1_five_symbols" if unified_r1 else f"{prefix}-strategy"
-    strategy_version = "1.0-five-symbols-20261021" if unified_r1 else "1"
+    strategy_id = (
+        strategy_id_override
+        if strategy_id_override is not None
+        else ("r1_five_symbols" if unified_r1 else f"{prefix}-strategy")
+    )
+    strategy_version = (
+        strategy_version_override
+        if strategy_version_override is not None
+        else ("1.0-five-symbols-20261021" if unified_r1 else "1")
+    )
     strategy_fp = f"{prefix}-strategy-fp"
     activation_id = f"{prefix}-activation"
     entry_fp = f"{prefix}-entry-fp"
@@ -330,3 +340,89 @@ def test_unified_r1_parallel_cap_consumed_and_confirmed_release() -> None:
         )
         with pytest.raises(ValueError, match="R1_UNIFIED_CAPITAL_POLICY_MISMATCH"):
             port.reserve(rejected)
+
+
+@pytest.mark.parametrize("strategy_id,parallel,expected_limit", (
+    ("p90l90_legacy_main_ltc_inj", 3, 2),
+    ("p90l90_legacy_sub_dot_arb_apt", 4, 3),
+))
+def test_p90_real_account_cap_atomic_pg16(
+    strategy_id: str, parallel: int, expected_limit: int,
+) -> None:
+    """Exact Strategy pending+open ceiling is enforced under the account lock."""
+    assert DSN is not None
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+        VERSION,
+    )
+    prefix = "p90-real-" + uuid4().hex
+    identity = _seed_attempts(
+        prefix, count=parallel+1,
+        strategy_id_override=strategy_id,
+        strategy_version_override=VERSION,
+    )
+    barrier = Barrier(parallel)
+
+    def reserve(index: int) -> tuple[int, str]:
+        request = replace(
+            _request(prefix, index, identity),
+            capacity_available=Decimal("100"),
+        )
+        with psycopg.connect(DSN) as connection:
+            barrier.wait(timeout=15)
+            try:
+                row = PostgresCapitalReservationPort(connection).reserve(request)
+            except InsufficientCapital:
+                return index, "BLOCKED"
+            return index, row.state.value
+
+    with ThreadPoolExecutor(max_workers=parallel) as pool:
+        results = list(pool.map(reserve, range(parallel)))
+    accepted = [index for index, state in results if state == "RESERVED"]
+    blocked = [index for index, state in results if state == "BLOCKED"]
+    assert len(accepted) == expected_limit
+    assert len(blocked) == parallel - expected_limit
+
+    with psycopg.connect(DSN) as connection:
+        port = PostgresCapitalReservationPort(connection)
+        assert connection.execute(
+            """SELECT sum(requested_amount), count(*)
+                 FROM runtime.capital_reservations
+                WHERE strategy_id=%s AND state<>'RELEASED'""",
+            (strategy_id,),
+        ).fetchone() == (Decimal(str(expected_limit*10)), expected_limit)
+
+        first = replace(
+            _request(prefix, accepted[0], identity),
+            capacity_available=Decimal("100"),
+        )
+        assert port.reserve(first).state is CapitalReservationState.RESERVED
+        port.transition(first.reservation_id, state=CapitalReservationState.DISPATCHED)
+        port.transition(
+            first.reservation_id,
+            state=CapitalReservationState.PENDING_EXCHANGE_REFLECTION,
+            exchange_commitment_at=first.requested_at,
+        )
+        port.transition(
+            first.reservation_id,
+            state=CapitalReservationState.CONSUMED,
+            exchange_commitment_at=first.requested_at,
+        )
+        pending = replace(
+            _request(prefix, parallel, identity),
+            capacity_available=Decimal("100"),
+        )
+        with pytest.raises(InsufficientCapital):
+            port.reserve(pending)
+        port.transition(
+            first.reservation_id, state=CapitalReservationState.RELEASED,
+        )
+        assert port.reserve(pending).state is CapitalReservationState.RESERVED
+
+        # Do not silently change the size to satisfy exchange min notional.
+        invalid = replace(
+            _request(prefix, blocked[0], identity),
+            requested_amount=Decimal("11"),
+            capacity_available=Decimal("100"),
+        )
+        with pytest.raises(ValueError, match="P90_REAL_CAPITAL_POLICY_MISMATCH"):
+            port.reserve(invalid)

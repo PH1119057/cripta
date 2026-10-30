@@ -50,6 +50,15 @@ from bybit_workbench.private_worker_status import (
     private_worker_status_path,
 )
 from bybit_workbench.market_identity import bybit_instrument_id
+from bybit_workbench.private_ws_subscriptions import (
+    PRIVATE_TOPICS,
+    confirm_private_subscriptions,
+)
+from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
+from bybit_workbench.strategy_position import StrategyPosition
+from bybit_workbench.universal_exit.p90l90_real_pending import (
+    p90_real_exit_no_pending,
+)
 from bybit_workbench.account_state_generation import (
     AccountStateGenerationUnavailable,
     current_complete_account_state_generation,
@@ -81,6 +90,10 @@ from bybit_workbench.strategy_position_binding import (
 from bybit_workbench.universal_exit.contracts import ExitActionKind
 from bybit_workbench.universal_exit.execution_bridge import validate_exit_mutation
 from bybit_workbench.universal_exit.execution_store import mark_ambiguous_exit_command
+from bybit_workbench.universal_exit.p90l90_exchange_safety import (
+    p90_real_exchange_position_key,
+    verify_p90_real_exchange_mutation,
+)
 
 PRIVATE_URL = os.environ.get("BYBIT_PRIVATE_WS", "wss://stream.bybit.kz/v5/private?max_active_time=1m")
 TRADE_URL = os.environ.get("BYBIT_TRADE_WS", "wss://stream.bybit.kz/v5/trade?max_active_time=1m")
@@ -107,9 +120,13 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
-# From the same protected systemd credential bundle as API key and secret.
-# It MUST be supplied independently of identity.account_connectors DB rows.
+# Credential provenance is proved from the exact systemd mount/config,
+# independently of identity.account_connectors DB rows and secret payload fields.
 MOUNTED_CREDENTIAL_REF = ""
+MAIN_PRIVATE_CREDENTIAL_DIRECTORY = Path(
+    "/run/credentials/cripta-private-runtime.service"
+)
+MAIN_PRIVATE_CREDENTIAL_REF = "systemd-credential:bybit-mainnet"
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -120,6 +137,34 @@ PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
 PRIVATE_RECONNECT_RECOVERED_REASON = (
     "private WS reconnect recovered: verified R1 arm restored"
 )
+
+
+def private_worker_mounted_credential_ref(
+    *,
+    account_kind: str,
+    credential_name: str,
+    credential_directory: str,
+    payload_ref: object,
+) -> str:
+    """Prove credential provenance from runtime mount/config, never DB state."""
+    if account_kind == "MAIN":
+        try:
+            mounted_directory = Path(credential_directory).resolve(strict=True)
+        except OSError:
+            raise RuntimeError(
+                "MAIN_PRIVATE_WORKER_CREDENTIAL_PROVENANCE_UNVERIFIED"
+            ) from None
+        if (
+            credential_name != "bybit-mainnet"
+            or mounted_directory != MAIN_PRIVATE_CREDENTIAL_DIRECTORY
+        ):
+            raise RuntimeError(
+                "MAIN_PRIVATE_WORKER_CREDENTIAL_PROVENANCE_UNVERIFIED"
+            )
+        return MAIN_PRIVATE_CREDENTIAL_REF
+    if account_kind == "SUB":
+        return str(payload_ref or "").strip()
+    raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
 
 
 def validate_runtime_identity_contract(connection: psycopg.Connection) -> str:
@@ -1039,6 +1084,304 @@ def record_entry_decision(
     )
 
 
+def current_p90_real_no_pending_exit(
+    connection: psycopg.Connection,
+    position: StrategyPosition,
+) -> bool:
+    """Account-local durable command preflight, never Exchange permission."""
+    if position.trading_account_id != TRADING_ACCOUNT_ID:
+        return False
+    return p90_real_exit_no_pending(
+        connection, position=position, trading_account_id=TRADING_ACCOUNT_ID
+    )
+
+
+def own_p90_real_signed_position_reader(
+    connection: psycopg.Connection,
+    key: str,
+    secret: str,
+):
+    """Bind exact mounted-credential signed GET and live MAIN/SUB WS epoch.
+
+    This is an account-local read-only source adapter, not a public RPC, an
+    observer source, or authorization to dispatch an Exit Exchange command.
+    """
+    from bybit_workbench.universal_exit.p90l90_real_signed_position import (
+        P90RealSignedPositionReader,
+        P90RealSignedPositionUnverified,
+    )
+
+    if (
+        not TRADING_ACCOUNT_ID or not ACCOUNT_CONNECTOR_ID
+        or not MOUNTED_CREDENTIAL_REF or not key or not secret
+    ):
+        raise P90RealSignedPositionUnverified(
+            "P90_REAL_ACCOUNT_MOUNTED_CREDENTIAL_NOT_READY"
+        )
+
+    def signed_get(endpoint: str, params: dict[str, str]) -> dict[str, object]:
+        result, _ = api_get(endpoint, params, key, secret)
+        return result
+
+    return P90RealSignedPositionReader(
+        connection,
+        trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+        signed_get=signed_get,
+        verified_private_ws_continuity=current_p90_real_private_ws_epoch,
+        no_pending_exit_command=lambda position: current_p90_real_no_pending_exit(
+            connection, position
+        ),
+    )
+
+
+def _p90_private_ipc_evidence_handler(
+    raw: dict[str, object],
+    *,
+    key: str,
+    secret: str,
+):
+    """One exact account's sealed-key GET; never accept a client position.
+
+    A fresh isolated DB connection handles this thread. No Exchange mutation,
+    no credential/secret or raw REST headers leave the account-local process.
+    """
+    from psycopg.rows import dict_row
+
+    from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+        ALLOWED_SYMBOLS,
+        VERSION,
+    )
+    from bybit_workbench.universal_entry.transport_continuity import TradeCursor
+    from bybit_workbench.universal_exit.loader import load_exit_binding
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        P90PrivateIpcUnverified,
+        checked_request,
+    )
+
+    position_id, symbol, kind, at, seq, exec_id = checked_request(
+        raw,
+        expected_account=TRADING_ACCOUNT_ID,
+        expected_connector=ACCOUNT_CONNECTOR_ID,
+    )
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-real-private-proof",
+        row_factory=dict_row,
+    ) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+        position, plan = load_exit_binding(
+            connection, strategy_position_id=position_id
+        )
+        if (
+            position.strategy_id not in ALLOWED_SYMBOLS
+            or position.strategy_version != VERSION
+            or position.symbol not in ALLOWED_SYMBOLS[position.strategy_id]
+            or position.symbol != symbol
+            or position.trading_account_id != TRADING_ACCOUNT_ID
+            or position.identity_status != "PROVEN"
+            or position.initial_protection_confirmed_at is None
+            or plan.exit_plan_fingerprint != position.exit_plan_fingerprint
+        ):
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_DURABLE_POSITION_SCOPE_INVALID"
+            )
+        record = connection.execute(
+            """SELECT state,trading_account_id,identity_status
+                 FROM runtime.position_ownership
+                WHERE position_id=%s AND trading_account_id=%s""",
+            (position_id, TRADING_ACCOUNT_ID),
+        ).fetchone()
+        if (
+            not isinstance(record, dict)
+            or record.get("state") != "OPEN"
+            or record.get("trading_account_id") != TRADING_ACCOUNT_ID
+            or record.get("identity_status") != "PROVEN"
+        ):
+            raise P90PrivateIpcUnverified(
+                "P90_PRIVATE_IPC_POSITION_NOT_CURRENTLY_OPEN"
+            )
+        signed_reader = own_p90_real_signed_position_reader(
+            connection, key, secret
+        )
+        if kind == "TRADE":
+            if seq is None or exec_id is None:
+                raise P90PrivateIpcUnverified(
+                    "P90_PRIVATE_IPC_TRADE_CURSOR_MISSING"
+                )
+            cursor = TradeCursor(
+                symbol=symbol, seq=seq, exec_id=exec_id, traded_at=at
+            )
+            evidence = signed_reader(position, cursor)
+        else:
+            evidence = signed_reader.for_closed_boundary(position, at)
+        # Re-check exact owner in the same READ ONLY repeatable transaction.
+        # A caller must independently reconcile any post-return mutation
+        # before materializing an actual Exchange Exit command.
+        return evidence
+
+
+
+def _p90_private_ipc_flat_handler(*, key: str, secret: str):
+    """Independent signed flat USDT-linear proof; no position supplied by IPC."""
+    from psycopg.rows import tuple_row
+
+    from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
+    from bybit_workbench.universal_exit.p90l90_real_flat_account import (
+        P90RealFlatAccountUnverified,
+        P90RealSignedFlatAccountReader,
+    )
+
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-real-private-flat-proof",
+        row_factory=tuple_row,
+    ) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+
+        def current_ws() -> bool:
+            # A status.json file cannot prove a live private WS session.
+            with status_lock:
+                snapshot = {
+                    "identity": dict(status.get("identity", {})),
+                    "private": dict(status.get("private", {})),
+                }
+            return verified_private_ws_epoch(
+                snapshot,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                now_epoch=int(time.time()),
+            )
+
+        def signed_get(endpoint: str, params: dict[str, str]) -> dict[str, object]:
+            result, _ = api_get(endpoint, params, key, secret)
+            return result
+
+        try:
+            result = P90RealSignedFlatAccountReader(
+                connection,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+                signed_get=signed_get,
+                verified_private_ws_continuity=current_ws,
+            )()
+        except P90RealFlatAccountUnverified as exc:
+            atomic_status(
+                "p90_private_ipc",
+                {
+                    "state": "BLOCKED",
+                    "flat_reason": str(exc),
+                    "observed_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
+        except Exception as exc:
+            atomic_status(
+                "p90_private_ipc",
+                {
+                    "state": "BLOCKED",
+                    "flat_reason": "UNEXPECTED_" + type(exc).__name__,
+                    "observed_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
+        atomic_status(
+            "p90_private_ipc",
+            {
+                "state": "VERIFIED",
+                "flat_reason": "",
+                "observed_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        return result
+
+
+def _p90_private_ipc_recovery_handler(*, key: str, secret: str):
+    """Signed account-wide USDT inventory used only for open-position restart."""
+    from psycopg.rows import tuple_row
+
+    from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
+    from bybit_workbench.universal_exit.p90l90_real_recovery_account import (
+        P90RealSignedRecoveryAccountReader,
+    )
+
+    with psycopg.connect(
+        "dbname=cripta user=cripta host=/var/run/postgresql "
+        "application_name=p90-real-private-recovery-proof",
+        row_factory=tuple_row,
+    ) as connection:
+        connection.execute("SET TRANSACTION READ ONLY")
+
+        def current_ws() -> bool:
+            with status_lock:
+                snapshot = {
+                    "identity": dict(status.get("identity", {})),
+                    "private": dict(status.get("private", {})),
+                }
+            return verified_private_ws_epoch(
+                snapshot,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                now_epoch=int(time.time()),
+            )
+
+        def signed_get(endpoint: str, params: dict[str, str]) -> dict[str, object]:
+            result, _ = api_get(endpoint, params, key, secret)
+            return result
+
+        return P90RealSignedRecoveryAccountReader(
+            connection,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            account_connector_id=ACCOUNT_CONNECTOR_ID,
+            mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+            signed_get=signed_get,
+            verified_private_ws_continuity=current_ws,
+        )()
+
+
+def p90_private_ipc_loop(
+    key: str, secret: str, ready: threading.Event,
+) -> None:
+    """Optional read-only producer owned by the credential-bound private worker."""
+    from bybit_workbench.universal_exit.p90l90_real_private_ipc import (
+        serve_private_proof,
+    )
+
+    serve_private_proof(
+        account=TRADING_ACCOUNT_ID,
+        connector=ACCOUNT_CONNECTOR_ID,
+        handler=lambda request: _p90_private_ipc_evidence_handler(
+            dict(request), key=key, secret=secret
+        ),
+        running=lambda: running,
+        ready=ready.set,
+        flat_handler=lambda: _p90_private_ipc_flat_handler(
+            key=key, secret=secret,
+        ),
+        recovery_handler=lambda: _p90_private_ipc_recovery_handler(
+            key=key, secret=secret,
+        ),
+    )
+
+
+def current_p90_real_private_ws_epoch(position: StrategyPosition) -> bool:
+    """Read only THIS live process's private WS session; never status.json."""
+    if position.trading_account_id != TRADING_ACCOUNT_ID:
+        return False
+    with status_lock:
+        snapshot = {
+            "identity": dict(status.get("identity", {})),
+            "private": dict(status.get("private", {})),
+        }
+    return verified_private_ws_epoch(
+        snapshot, trading_account_id=TRADING_ACCOUNT_ID,
+        account_connector_id=ACCOUNT_CONNECTOR_ID,
+        now_epoch=int(time.time()),
+    )
+
+
 def atomic_status(channel: str, value: dict[str, object]) -> None:
     with status_lock:
         status[channel] = value
@@ -1621,7 +1964,7 @@ def record_protection_or_owner_event(
             ORDER BY position_idx LIMIT 1""",
         (symbol, TRADING_ACCOUNT_ID),
     ).fetchone()
-    after = json.loads(after_row[0]) if after_row else {}
+    after = _db_json_object(after_row[0] if after_row else None)
     before = before or {}
     order_rows = connection.execute(
         """SELECT order_id FROM runtime.hot_orders
@@ -1780,7 +2123,20 @@ def _universal_exit_position(
         raise RuntimeError("STRATEGY_EXIT_POSITION_OWNER_MISMATCH")
     if expected_owner[1] != "BYBIT:UNIFIED":
         raise RuntimeError("STRATEGY_EXIT_ACCOUNT_UNSUPPORTED")
-    expected_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        expected_key = p90_real_exchange_position_key(
+            payload,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            symbol=symbol,
+            position_idx=expected_idx,
+        )
+    else:
+        expected_key = f"BYBIT:UNIFIED:LINEAR:USDT:{symbol}:{expected_idx}"
     if expected_owner[2] != expected_key:
         raise RuntimeError("STRATEGY_EXIT_EXCHANGE_POSITION_KEY_MISMATCH")
 
@@ -1888,6 +2244,15 @@ def _execute_universal_exit_command(
     tick: Decimal,
     qty_step: Decimal,
 ) -> dict[str, object]:
+    # A P90 REAL exit uses the exact account-qualified physical slot.
+    # A missing/failed authenticated Bybit position read is NOT empty data.
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        _require_entry_bybit_read_ok(positions_payload, "/v5/position/list")
     position = _universal_exit_position(
         connection,
         payload=payload,
@@ -1902,6 +2267,21 @@ def _execute_universal_exit_command(
     if not isinstance(mutation_raw, dict):
         raise RuntimeError("STRATEGY_EXIT_MUTATION_INVALID")
     mutation = validate_exit_mutation(action_kind, mutation_raw)
+    if (
+        str(payload.get("strategy_id") or "")
+        in {"p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"}
+        or str(payload.get("strategy_version") or "")
+        == "2.0-p90l90-real-main-sub-20261028"
+    ):
+        verify_p90_real_exchange_mutation(
+            payload=payload,
+            trading_account_id=TRADING_ACCOUNT_ID,
+            symbol=symbol,
+            position=position,
+            action_kind=action_kind,
+            mutation=mutation,
+            tick=tick,
+        )
     position_idx = int(position.get("positionIdx") or 0)
 
     if action_kind is ExitActionKind.SET_STOP:
@@ -2102,7 +2482,46 @@ def _execute_universal_exit_command(
                 Decimal(str(mutation["active_price"])), tick, "trailing active_price"
             )
             params["activePrice"] = str(active)
-        return api_post("/v5/position/trading-stop", params, key, secret)
+        # Bybit ACK is NOT evidence that the autonomous trailing exists.
+        # An ambiguous response must block retries and trigger reconciliation.
+        accepted = api_post("/v5/position/trading-stop", params, key, secret)
+        if str(payload.get("strategy_version") or "") != "2.0-p90l90-real-main-sub-20261028":
+            return accepted  # Never alter unrelated Strategy execution semantics.
+        try:
+            after, _ = api_get(
+                "/v5/position/list",
+                {"category": "linear", "symbol": symbol}, key, secret,
+            )
+            _require_entry_bybit_read_ok(after, "/v5/position/list")
+            items = (after.get("result") or {}).get("list")
+            if not isinstance(items, list):
+                raise ValueError("trailing signed inventory missing")
+            current = [
+                item for item in items
+                if isinstance(item, dict)
+                and item.get("symbol") == symbol
+                and str(item.get("positionIdx")) == str(position_idx)
+                and Decimal(str(item.get("size") or "0")) > 0
+            ]
+            if len(current) != 1:
+                raise ValueError("trailing live position missing or ambiguous")
+            verified = current[0]
+            if (
+                str(verified.get("side")) != str(position.get("side"))
+                or Decimal(str(verified.get("size"))) != Decimal(str(position.get("size")))
+                or Decimal(str(verified.get("avgPrice"))) != Decimal(str(position.get("avgPrice")))
+                or Decimal(str(verified.get("stopLoss"))) != Decimal(str(position.get("stopLoss")))
+                or Decimal(str(verified.get("takeProfit"))) != Decimal(
+                    str(position.get("takeProfit"))
+                )
+                or Decimal(str(verified.get("trailingStop"))) != distance
+            ):
+                raise ValueError("trailing readback or existing TP/SL drift")
+        except Exception as exc:
+            raise ExchangeMutationBarrier(
+                "P90 REAL Bybit trailing ACK requires signed Exchange reconciliation"
+            ) from exc
+        return accepted
 
     current_qty = Decimal(str(position.get("size") or 0))
     if action_kind is ExitActionKind.REDUCE:
@@ -2272,6 +2691,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
     if tick <= 0 or qty_step <= 0:
         raise RuntimeError("Bybit did not return price/quantity steps")
     result: dict[str, object]
+    # No private fill can return from execute_command without an immediate
+    # signed Universal Exit handoff. Unrelated Strategy commands are unchanged.
+    p90_real_postfill: tuple[str, str, tuple[str, ...]] | None = None
     if kind == "strategy_exit":
         result = _execute_universal_exit_command(
             connection,
@@ -2436,6 +2858,34 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         if available < stake: raise RuntimeError("недостаточно доступного баланса")
         qty=quantize(stake*Decimal(leverage)/price,qty_step)
         if qty<=0: raise RuntimeError("calculated quantity is below exchange step")
+        # P90 REAL requires proven isolated account mode, not merely a
+        # leverage=1 order. Bybit UTA's /v5/position/list tradeMode is
+        # deprecated (always 0), so read the SIGNED account-level marginMode.
+        # Never switch the whole account's margin mode on behalf of Strategy.
+        from bybit_workbench.universal_entry import p90l90_real_contract_v3 as p90v3
+        if (
+            str(payload.get("strategy_id") or "") in p90v3.MAX_ACCOUNT_COMMITTED
+            or str(payload.get("strategy_version") or "") == p90v3.VERSION
+        ):
+            try:
+                p90v3.validate_real_v3_instrument_lot(
+                    symbol=symbol, instrument=instrument,
+                    quantity=qty, signal_price=price,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
+            signed_info, _ = api_get("/v5/account/info", {}, key, secret)
+            # /v5/account/info returns result.marginMode, NOT result.list.
+            # The exact signed account-info validator below validates both
+            # response shape and retCode without the inventory-list helper.
+            try:
+                p90v3.validate_real_v3_exchange_entry(
+                    payload=payload, symbol=symbol,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    signed_account_info=signed_info,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
         fault_code = _critical_lifecycle_fault_code(connection)
         if fault_code is not None:
             # First Exchange mutation for this Entry is below. Avoid claiming
@@ -2451,6 +2901,26 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             tick=tick,
             contract=contract,
         )
+        if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+            # Verify attached TP and SL against a new public Bybit LastPrice
+            # AFTER resolving the immutable causal RAW target, immediately
+            # BEFORE the first Exchange mutation. This cannot guarantee the
+            # future fill and is not a replacement for the signed readback.
+            current_ticker, _ = api_get(
+                "/v5/market/tickers",
+                {"category": "linear", "symbol": symbol},
+            )
+            try:
+                p90v3.validate_real_v3_attached_protection_at_last_price(
+                    symbol=symbol,
+                    side=side,
+                    instrument_tick=tick,
+                    stop_loss=stop,
+                    take_profit=target,
+                    ticker_response=current_ticker,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
         # Entry submits server-side initial protection atomically with the order.
         # R1 carries catastrophic SL plus exact causal opposite-inner TP.
         order: dict[str, object] = {
@@ -2522,14 +2992,34 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                     "/v5/position/list", {"category": "linear", "symbol": symbol}, key, secret
                 )
                 _require_entry_bybit_read_ok(current, "/v5/position/list")
-                filled_position = next(
-                    (
-                        item
-                        for item in ((current.get("result") or {}).get("list") or [])
-                        if Decimal(str(item.get("size") or 0)) > 0
-                    ),
-                    None,
-                )
+                if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+                    from bybit_workbench.universal_entry.p90l90_real_market_fill import (
+                        P90RealMarketPositionUnverified,
+                        exact_market_order_execution_ids,
+                        exact_open_market_position,
+                    )
+
+                    try:
+                        filled_position = exact_open_market_position(
+                            current["result"]["list"],
+                            symbol=symbol,
+                            side=side,
+                        )
+                    except P90RealMarketPositionUnverified as exc:
+                        # Entry was already acknowledged by Bybit. Stop this
+                        # attempt for independent reconciliation; NEVER retry.
+                        raise ExchangeMutationBarrier(
+                            f"REAL_MARKET_POSITION_READBACK_UNVERIFIED:{exc}"
+                        ) from None
+                else:
+                    filled_position = next(
+                        (
+                            item
+                            for item in ((current.get("result") or {}).get("list") or [])
+                            if Decimal(str(item.get("size") or 0)) > 0
+                        ),
+                        None,
+                    )
                 if filled_position:
                     break
                 time.sleep(0.25)
@@ -2540,6 +3030,35 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             actual_entry = Decimal(str(filled_position.get("avgPrice") or 0))
             if actual_entry <= 0:
                 raise RuntimeError("Bybit не вернул фактическую цену исполнения")
+            real_fill_execution_ids: tuple[str, ...] = ()
+            if str(payload.get("strategy_version") or "") == p90v3.VERSION:
+                # Signed, fully paginated GET by Exchange orderId; a matching
+                # same-symbol position is not itself proof of our fill.
+                try:
+                    actual_executions = _complete_exchange_inventory(
+                        "/v5/execution/list",
+                        {
+                            "category": "linear",
+                            "orderId": exchange_order_id,
+                            "limit": "100",
+                        },
+                        key,
+                        secret,
+                    )
+                    real_fill_execution_ids = exact_market_order_execution_ids(
+                        actual_executions,
+                        exchange_order_id=exchange_order_id,
+                        entry_order_link_id=command_id[:36],
+                        symbol=symbol,
+                        side=side,
+                        position_size=Decimal(str(filled_position.get("size"))),
+                        position_avg=actual_entry,
+                        tick_size=tick,
+                    )
+                except (ExchangeReadUnavailable, P90RealMarketPositionUnverified) as exc:
+                    raise ExchangeMutationBarrier(
+                        f"REAL_MARKET_SIGNED_EXECUTION_LINEAGE_UNVERIFIED:{type(exc).__name__}"
+                    ) from None
             actual_stop, actual_target = resolve_initial_protection_boundaries(
                 entry=actual_entry,
                 side=side,
@@ -2613,6 +3132,7 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
             # If state is pending/uncertain, keep the acknowledged order for
             # reconciliation; NEVER retry /order/create or trading-stop here.
             live_protection_confirmed = False
+            verified_real_position: dict[str, object] | None = None
             for probe in range(3):
                 try:
                     proven_payload, _ = api_get(
@@ -2647,6 +3167,11 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                         observed_stop == actual_stop
                         and (actual_target is None or observed_tp == actual_target)
                     )
+                    if (
+                        live_protection_confirmed
+                        and str(payload.get("strategy_version") or "") == p90v3.VERSION
+                    ):
+                        verified_real_position = matching[0]
                 if live_protection_confirmed:
                     break
                 if probe < 2:
@@ -2655,12 +3180,138 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 raise ExchangeMutationBarrier(
                     "market Entry initial protection not confirmed on Exchange"
                 )
-            result["actualProtection"] = {
+            if real_fill_execution_ids:
+                # First confirmed protected REAL fill is durably assigned to
+                # its exact StrategyPosition BEFORE the Entry command is
+                # marked terminal or a later observer/source tick is evaluated.
+                # The opening order already carried both Exchange-side guards.
+                # No Exit decision may run concurrently with the temporary
+                # SL correction above because ownership is not yet exposed.
+                if verified_real_position is None:
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_PROTECTION_UNVERIFIED"
+                    )
+                try:
+                    verified_qty = Decimal(str(verified_real_position["size"]))
+                    verified_avg = Decimal(str(verified_real_position["avgPrice"]))
+                except (KeyError, InvalidOperation, ValueError, TypeError):
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_QUANTITY_INVALID"
+                    ) from None
+                if (
+                    verified_qty != Decimal(str(filled_position.get("size")))
+                    or verified_avg != actual_entry
+                ):
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_EXCHANGE_READBACK_DRIFT"
+                    )
+                try:
+                    # Same exact TradingAccount transaction lock as capital,
+                    # slot admission and private Exchange reconciliation.
+                    # It remains held through persisted first-fill ownership.
+                    connection.execute(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                        (TRADING_ACCOUNT_ID,),
+                    )
+                    real_lineage = load_universal_entry_lineage(
+                        connection,
+                        command_id=command_id,
+                        command_payload=payload,
+                    )
+                    if (
+                        real_lineage is None
+                        or real_lineage.strategy_version != p90v3.VERSION
+                        or real_lineage.trading_account_id != TRADING_ACCOUNT_ID
+                        or real_lineage.strategy_id
+                        not in p90v3.ALLOWED_SYMBOLS
+                        or symbol not in p90v3.ALLOWED_SYMBOLS[
+                            real_lineage.strategy_id
+                        ]
+                    ):
+                        raise RuntimeError("P90_REAL_FIRST_FILL_LINEAGE_INVALID")
+                    first_execution = next(
+                        item for item in actual_executions
+                        if item.get("execId") == real_fill_execution_ids[0]
+                    )
+                    first_fill_ms = int(str(first_execution["execTime"]))
+                    if first_fill_ms <= 0:
+                        raise RuntimeError("P90_REAL_FIRST_FILL_TIME_INVALID")
+                    position_id, trade_id = stable_cycle_ids(
+                        entry_command_id=command_id,
+                        first_execution_id=real_fill_execution_ids[0],
+                        symbol=symbol,
+                        side=side,
+                        position_idx=0,
+                    )
+                    persist_universal_strategy_position(
+                        connection,
+                        lineage=real_lineage,
+                        position_id=position_id,
+                        trade_id=trade_id,
+                        entry_command_id=command_id,
+                        symbol=symbol,
+                        side=side,
+                        actual_avg_fill=actual_entry,
+                        actual_qty=verified_qty,
+                        fill_at=datetime.fromtimestamp(first_fill_ms / 1000, tz=UTC),
+                        exchange_order_ids=(exchange_order_id,),
+                        client_order_ids=(command_id[:36],),
+                        execution_ids=real_fill_execution_ids,
+                        position_idx=0,
+                    )
+                    initial_evidence = {
+                        "source": "SIGNED_BYBIT_MARKET_FILL_AND_POSITION",
+                        "entry_order_id": exchange_order_id,
+                        "entry_execution_ids": list(real_fill_execution_ids),
+                        "position_idx": 0,
+                        "symbol": symbol,
+                        "stopLoss": str(actual_stop),
+                        "takeProfit": str(actual_target),
+                        "actual_avg_fill": str(actual_entry),
+                        "actual_qty": str(verified_qty),
+                        "verified_at": datetime.now(UTC).isoformat(),
+                        "trading_account_id": TRADING_ACCOUNT_ID,
+                    }
+                    updated = connection.execute(
+                        """UPDATE runtime.position_ownership
+                              SET initial_protection_confirmed_at=clock_timestamp(),
+                                  initial_protection_evidence=%s::jsonb
+                            WHERE position_id=%s AND entry_command_id=%s
+                              AND state='OPEN'
+                              AND trading_account_id=%s
+                              AND identity_status='PROVEN'""",
+                        (
+                            json.dumps(initial_evidence, sort_keys=True),
+                            position_id,
+                            command_id,
+                            TRADING_ACCOUNT_ID,
+                        ),
+                    )
+                    if updated.rowcount != 1:
+                        raise RuntimeError("P90_REAL_FIRST_FILL_OWNER_RACE")
+                    connection.commit()
+                    p90_real_postfill = (
+                        position_id, exchange_order_id,
+                        tuple(real_fill_execution_ids),
+                    )
+                except Exception:
+                    connection.rollback()
+                    # Exchange order is already accepted and protected; its
+                    # reservation must be reconciled, never resubmitted.
+                    raise ExchangeMutationBarrier(
+                        "P90_REAL_FIRST_FILL_OWNER_PERSISTENCE_UNVERIFIED"
+                    ) from None
+            actual_protection_result: dict[str, object] = {
                 "entryPrice": str(actual_entry), "stopLoss": str(actual_stop),
                 "takeProfit": None if actual_target is None else str(actual_target),
                 "exchange": protection.get("retMsg"),
                 "verifiedFromExchange": True,
             }
+            if real_fill_execution_ids:
+                actual_protection_result["entryExecutionIds"] = list(
+                    real_fill_execution_ids
+                )
+            result["actualProtection"] = actual_protection_result
     else: raise RuntimeError("unknown command type")
     before_position = None if position is None else dict(position)
     try:
@@ -2669,6 +3320,46 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         raise ExchangeMutationBarrier(
             f"post-mutation reconciliation failed: {exc}"
         ) from exc
+    if p90_real_postfill is not None:
+        # This is the FIRST protected, authenticated fill. A native Market
+        # stream/Exit failure must block this command terminalization rather
+        # than wait until a future 5m candle or silently leave trailing idle.
+        # The already-attached Bybit SL+TP remain resident. This does NOT
+        # resubmit Entry or attempt any emergency arbitrary market close.
+        from operations.connectivity.p90l90_real_postfill_handoff import (
+            handoff_real_first_protected_fill,
+        )
+
+        first_position_id, first_order_id, first_execution_ids = p90_real_postfill
+        try:
+            with connection.transaction():
+                handoff_real_first_protected_fill(
+                    connection,
+                    position_id=first_position_id,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    account_connector_id=ACCOUNT_CONNECTOR_ID,
+                    exchange_entry_order_id=first_order_id,
+                    signed_execution_ids=first_execution_ids,
+                    loaded_release_commit=os.environ.get(
+                        "CRIPTA_RELEASE_COMMIT", "",
+                    ).strip().lower(),
+                    signed_position_reader=(
+                        lambda db: own_p90_real_signed_position_reader(
+                            db, key, secret
+                        )
+                    ),
+                    current_private_ws=current_p90_real_private_ws_epoch,
+                    no_pending_exit_command=(
+                        lambda subject: current_p90_real_no_pending_exit(
+                            connection, subject,
+                        )
+                    ),
+                )
+        except Exception:
+            connection.rollback()
+            raise ExchangeMutationBarrier(
+                "P90_REAL_FIRST_FILL_NATIVE_EXIT_HANDOFF_UNVERIFIED"
+            ) from None
     record_protection_or_owner_event(
         connection, command_id, kind, symbol, payload, before_position
     )
@@ -2691,7 +3382,9 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
         kind in {"entry", "initial_protection", "break_even", "current_stop", "trailing_stop"}
         or (
             kind == "strategy_exit"
-            and str(payload.get("action_kind") or "") in {"SET_TP", "SET_STOP", "SET_PROTECTION"}
+            and str(payload.get("action_kind") or "") in {
+                "SET_TP", "SET_STOP", "SET_PROTECTION", "SET_TRAILING",
+            }
         )
     )
     if protection_mutation:
@@ -3231,7 +3924,8 @@ def reconcile_position_ownership(
     rows = connection.execute(
         """SELECT position_id,trade_id,symbol,side,actual_avg_fill,actual_qty,
                   extract(epoch from fill_at)*1000,position_idx,entry_command_id,
-                  entry_execution_request_id,exchange_position_key
+                  entry_execution_request_id,exchange_position_key,
+                  strategy_id,strategy_version
            FROM runtime.position_ownership
            WHERE (state='OPEN' OR close_link_status='UNRESOLVED_EXACT_LINK')
              AND (trading_account_id=%s AND identity_status='PROVEN')
@@ -3293,6 +3987,12 @@ def reconcile_position_ownership(
                            END,
                        initial_protection_evidence=
                            CASE
+                             -- Reconciliation must preserve the signed
+                             -- first-fill Bybit order and execution IDs.
+                             WHEN strategy_version=%s
+                               AND initial_protection_evidence->>'source'
+                                 ='SIGNED_BYBIT_MARKET_FILL_AND_POSITION'
+                             THEN initial_protection_evidence
                              WHEN %s
                              THEN %s::jsonb
                              ELSE initial_protection_evidence
@@ -3301,6 +4001,7 @@ def reconcile_position_ownership(
                 (
                     protection_confirmed,
                     now,
+                    "2.0-p90l90-real-main-sub-20261028",
                     protection_confirmed,
                     json.dumps(
                         {
@@ -3422,8 +4123,20 @@ def reconcile_position_ownership(
         trigger_slippage = trigger_to_fill_slippage_pct(
             side, trigger, close.actual_exit_avg_fill or Decimal(0)
         )
+        # Historical R1 has its own immutable 1% attribution. The new
+        # owner-approved P90 REAL-v3 catastrophic stop is -10% of actual
+        # average fill and must not be misreported as an R1 1% stop.
+        p90_v3 = (
+            len(row) >= 13
+            and str(row[11]) in {
+                "p90l90_legacy_main_ltc_inj", "p90l90_legacy_sub_dot_arb_apt"
+            }
+            and str(row[12]) == "2.0-p90l90-real-main-sub-20261028"
+        )
         initial_stop = Decimal(str(row[4])) * (
-            Decimal("0.99") if side == "Buy" else Decimal("1.01")
+            (Decimal("0.90") if side == "Buy" else Decimal("1.10"))
+            if p90_v3
+            else (Decimal("0.99") if side == "Buy" else Decimal("1.01"))
         )
         latest_stop = next(
             (Decimal(str(value["stop_after"])) for value in reversed(protections) if value["stop_after"] is not None),
@@ -4174,6 +4887,16 @@ def upsert_exchange_order_history(
     )
 
 
+def _db_json_object(raw: object | None) -> dict[str, object]:
+    """Psycopg decodes jsonb to dict, while legacy text may arrive as JSON."""
+    if raw is None:
+        return {}
+    value = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+    if not isinstance(value, dict):
+        raise RuntimeError("PRIVATE_POSITION_PAYLOAD_NOT_OBJECT")
+    return dict(value)
+
+
 def upsert_position(connection: psycopg.Connection, item: dict[str, object], now: int) -> None:
     existing = connection.execute(
         """SELECT payload_json FROM runtime.hot_positions
@@ -4185,7 +4908,7 @@ def upsert_position(connection: psycopg.Connection, item: dict[str, object], now
             TRADING_ACCOUNT_ID,
         ),
     ).fetchone()
-    merged = json.loads(existing[0]) if existing else {}
+    merged = _db_json_object(existing[0] if existing else None)
     merged.update(item)
     connection.execute("""INSERT INTO runtime.hot_positions(
         symbol,position_idx,side,size,entry_price,leverage,
@@ -4380,9 +5103,31 @@ def private_loop(key: str, secret: str) -> None:
             ws = websocket.create_connection(PRIVATE_URL, timeout=10, enable_multithread=False)
             ws.settimeout(1)
             auth(ws, key, secret)
-            ws.send(json.dumps({"op": "subscribe", "args": ["order.linear", "execution.linear", "position.linear", "wallet"]}, separators=(",", ":")))
+            confirmed_topics = confirm_private_subscriptions(
+                ws,
+                lambda message: handle_private(connection, message),
+                is_running=lambda: running,
+            )
+            connection_event(
+                connection, "private", "subscriptions_confirmed",
+                topics=list(confirmed_topics), reconnects=reconnects,
+            )
             connection_event(connection, "private", "connected", reconnects=reconnects)
-            atomic_status("private", {"state": "connected", "connected_at_epoch": int(time.time()), "reconnects": reconnects, "last_message_epoch": None, "hot_positions": hot_positions, "hot_orders": hot_orders})
+            confirmed_epoch = int(time.time())
+            atomic_status(
+                "private",
+                {
+                    "state": "connected",
+                    "connected_at_epoch": confirmed_epoch,
+                    "subscriptions_confirmed_at_epoch": confirmed_epoch,
+                    "subscriptions_topics": list(confirmed_topics),
+                    "reconnects": reconnects,
+                    "last_message_epoch": None,
+                    "last_verified_message_epoch": None,
+                    "hot_positions": hot_positions,
+                    "hot_orders": hot_orders,
+                },
+            )
             if recovering:
                 restored = False
                 if (
@@ -4417,7 +5162,30 @@ def private_loop(key: str, secret: str) -> None:
                     message = json.loads(raw)
                     handle_private(connection, message)
                     previous = status.get("private", {})
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": int(time.time()), "hot_positions": previous.get("hot_positions", 0), "hot_orders": previous.get("hot_orders", 0)})
+                    authenticated_frame = (
+                        message.get("op") == "pong"
+                        or message.get("topic") in PRIVATE_TOPICS
+                    )
+                    atomic_status(
+                        "private",
+                        {
+                            "state": "connected",
+                            "connected_at_epoch": previous.get("connected_at_epoch"),
+                            "subscriptions_confirmed_at_epoch": previous.get(
+                                "subscriptions_confirmed_at_epoch"
+                            ),
+                            "subscriptions_topics": previous.get("subscriptions_topics"),
+                            "reconnects": reconnects,
+                            "last_message_epoch": int(time.time()),
+                            "last_verified_message_epoch": (
+                                int(time.time())
+                                if authenticated_frame
+                                else previous.get("last_verified_message_epoch")
+                            ),
+                            "hot_positions": previous.get("hot_positions", 0),
+                            "hot_orders": previous.get("hot_orders", 0),
+                        },
+                    )
                 if time.monotonic() >= next_ping:
                     ws.send('{"op":"ping"}')
                     next_ping = time.monotonic() + 20
@@ -4441,8 +5209,15 @@ def private_loop(key: str, secret: str) -> None:
                             {
                                 "state": "connected",
                                 "connected_at_epoch": previous.get("connected_at_epoch"),
+                                "subscriptions_confirmed_at_epoch": previous.get(
+                                    "subscriptions_confirmed_at_epoch"
+                                ),
+                                "subscriptions_topics": previous.get("subscriptions_topics"),
                                 "reconnects": reconnects,
                                 "last_message_epoch": previous.get("last_message_epoch"),
+                                "last_verified_message_epoch": previous.get(
+                                    "last_verified_message_epoch"
+                                ),
                                 "hot_positions": previous.get("hot_positions", 0),
                                 "hot_orders": previous.get("hot_orders", 0),
                                 "reconciliation_error": _private_worker_safe_error(exc),
@@ -4453,7 +5228,24 @@ def private_loop(key: str, secret: str) -> None:
                         next_reconcile = time.monotonic() + 1.0
                         continue
                     previous = status.get("private", {})
-                    atomic_status("private", {"state": "connected", "connected_at_epoch": previous.get("connected_at_epoch"), "reconnects": reconnects, "last_message_epoch": previous.get("last_message_epoch"), "hot_positions": hot_positions, "hot_orders": hot_orders})
+                    atomic_status(
+                        "private",
+                        {
+                            "state": "connected",
+                            "connected_at_epoch": previous.get("connected_at_epoch"),
+                            "subscriptions_confirmed_at_epoch": previous.get(
+                                "subscriptions_confirmed_at_epoch"
+                            ),
+                            "subscriptions_topics": previous.get("subscriptions_topics"),
+                            "reconnects": reconnects,
+                            "last_message_epoch": previous.get("last_message_epoch"),
+                            "last_verified_message_epoch": previous.get(
+                                "last_verified_message_epoch"
+                            ),
+                            "hot_positions": hot_positions,
+                            "hot_orders": hot_orders,
+                        },
+                    )
                     cadence = 1.0 if hot_positions else 5.0
                     next_reconcile = max(
                         reconcile_started_monotonic + cadence,
@@ -4571,15 +5363,22 @@ def main() -> None:
         STATUS.parent.mkdir(parents=True, exist_ok=True)
     # SUB status directory must be explicitly provisioned by the control actor,
     # never silently created under the shared MAIN status directory.
-    credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
+    credential_directory = os.environ["CREDENTIALS_DIRECTORY"]
+    credential_path = Path(credential_directory) / credential_name
     credentials = json.loads(credential_path.read_text(encoding="utf-8"))
-    MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
+    MOUNTED_CREDENTIAL_REF = ""
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
         account_kind = validate_runtime_identity_contract(bootstrap)
         if account_kind != configured_kind:
             raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_REGISTRY_MISMATCH")
+        MOUNTED_CREDENTIAL_REF = private_worker_mounted_credential_ref(
+            account_kind=configured_kind,
+            credential_name=credential_name,
+            credential_directory=credential_directory,
+            payload_ref=credentials.get("credential_ref"),
+        )
         if configured_kind == "SUB":
             authenticated_entry_connector_gate(
                 bootstrap, credentials["api_key"], credentials["api_secret"]
@@ -4621,6 +5420,20 @@ def main() -> None:
     bootstrap.close()
     signal.signal(signal.SIGTERM, lambda *_: globals().__setitem__("running", False))
     signal.signal(signal.SIGINT, lambda *_: globals().__setitem__("running", False))
+    ipc_setting = os.environ.get("CRIPTA_P90_REAL_PRIVATE_IPC", "DISABLED")
+    if ipc_setting not in {"DISABLED", "ENABLED"}:
+        raise RuntimeError("P90_REAL_PRIVATE_IPC_MODE_INVALID")
+    if ipc_setting == "ENABLED":
+        proof_ready = threading.Event()
+        proof_thread = threading.Thread(
+            target=p90_private_ipc_loop,
+            args=(credentials["api_key"], credentials["api_secret"], proof_ready),
+            daemon=True,
+            name="p90-private-signed-read-only-ipc",
+        )
+        proof_thread.start()
+        if not proof_ready.wait(timeout=3.0) or not proof_thread.is_alive():
+            raise RuntimeError("P90_REAL_PRIVATE_IPC_NOT_BOUND")
     thread = threading.Thread(target=trade_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)
     thread.start()
     commands = threading.Thread(target=command_loop, args=(credentials["api_key"], credentials["api_secret"]), daemon=True)

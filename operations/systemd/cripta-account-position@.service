@@ -1,0 +1,36 @@
+# Inert account-scoped monitoring template, no trade/Exit authority.
+# Must not replace legacy Position Supervisor until Dashboard/analyst/archive parity.
+[Unit]
+Description=Cripta account-local position observation (%i)
+After=postgresql.service
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=cripta
+Group=cripta
+WorkingDirectory=/srv/cripta/runtime/current
+Environment=PYTHONUNBUFFERED=1
+Environment=CRIPTA_ACCOUNT_POSITION_OBSERVER=ENABLED
+Environment=CRIPTA_TRADING_ACCOUNT_ID=%i
+Environment=CRIPTA_ACCOUNT_POSITION_POLL_SECONDS=15
+Environment=CRIPTA_ACCOUNT_POSITION_STATUS_PATH=/var/lib/cripta/account_position/account-%i/status.json
+Environment=PYTHONPATH=/srv/cripta/runtime/current/src
+ExecStart=/srv/cripta/runtime/current/.venv/bin/python /srv/cripta/runtime/current/operations/monitoring/account_position_runtime.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadOnlyPaths=/srv/cripta/runtime/current
+ReadWritePaths=/var/lib/cripta/account_position/account-%i
+
+# No [Install], no automatic activation.

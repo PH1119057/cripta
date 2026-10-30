@@ -1,7 +1,7 @@
 # CRIPTA — верхние архитектурные правила
 
-**Версия:** 3.3
-**Дата:** 2026-10-25
+**Версия:** 3.4
+**Дата:** 2026-10-28
 **Статус:** верхний канонический архитектурный контракт
 
 Этот документ определяет верхнюю архитектуру и межслойные запреты.
@@ -626,6 +626,63 @@ Critical fault обязан иметь durable owner-notification delivery contr
 явный escalation state. UI alone не считается доставкой. Потеря delivery сама
 является operational fault и не разрешает торговую mutation.
 
+### 9.1.1 Multi-account Supervisor coverage — 2026-10-27 remediation boundary
+
+**FINDING (current implementation, not a new trading policy):**
+the deployed Lifecycle Supervisor process is MAIN-only: its unit fixes one
+`CRIPTA_TRADING_ACCOUNT_ID` and one MAIN credential. The same process
+currently performs both account-specific protection/ownership/fault scans and
+global cross-account functions (stale-release LIVE-arm retirement and owner
+fault-delivery processing). Making two copies of that process is **not** itself
+multi-account coverage: a SUB copy must never read MAIN with SUB's
+TradingAccount ID, impersonate another account, or independently duplicate
+global alert delivery or arm-session retirement.
+
+**Mandatory replacement contract before any multi-account REAL admission:**
+- Account-specific lifecycle checks cover **every** independently authorized
+  active TradingAccount with the matching AccountConnector, exact authenticated
+  Exchange evidence, verified credential provenance and scoped durable faults.
+  Freshness, lack of protection, unresolved mutations and Exit owner failures
+  cannot be satisfied by the other account's successful snapshot.
+- Global delivery/escalation and release-arm invariants have **one explicit
+  execution owner**, or proven concurrency-safe exactly-once ownership. A new
+  SUB worker must not silently repeat global side effects. Neither a missing
+  SUB worker nor its failure may disarm unrelated TradingAccounts by guess.
+- **Specific P0 observed in code:** `LifecycleSupervisor._resolve_cleared_faults`
+  currently queries every `runtime.lifecycle_faults` row in `state='OPEN'`
+  without an account scope. A second account-scoped scan can mark another
+  account's fault `RESOLVED` when it is merely absent from that local scan.
+  Production multi-account supervision is blocked until fault projection,
+  detection, lifecycle IDs, resolution and owner delivery are scoped/combined
+  under one proven all-account consistency boundary. Do not solve this by
+  duplicating the current systemd unit.
+- Entry admission stays blocked for an unproven account. Existing owned Exit
+  and recovery remain possible under their current operational-safety contract.
+  A Supervisor never creates its own trading/Exit policy or arms LIVE.
+- Replacement requires account-local status/audit, restart/reconciliation,
+  negative tests for mismatched credentials and account IDs, and
+  consumer/reporting parity. Source/code presence and systemd liveness are
+  insufficient.
+- Old MAIN-only Lifecycle Supervisor must not be retired or declared
+  multi-account-ready until the exact consumer/provider tests and deployment
+  evidence are PASS. This paragraph specifies a required safety boundary, not
+  permission to launch duplicate service instances.
+
+### 9.1.2 Independent read-only safety evidence — account-scope finding
+
+**FINDING:** the installed legacy `cripta-safety-observer.service`
+authenticates with a single MAIN credential and cannot be counted as an
+independent SUB account evidence source. The per-account private reconciliation
+proves account data synchronization, but does **not automatically prove**
+the independently owned safety-observer or Lifecycle protection contract.
+
+**Required:** before multi-account REAL enable, identify exact consumer(s)
+of the existing safety observer, account-scope its required Exchange facts or
+provide a validated equivalent independent per-account reader, preserve
+durable alert/restart/audit behavior, and test MAIN/SUB failure isolation.
+Do not share MAIN credentials as a substitute for SUB's connector; do not
+remove the old producer before its required read consumers have parity.
+
 ## 9.2 Position Supervisor
 
 `Position Supervisor` наблюдает фактическое состояние конкретной открытой
@@ -633,6 +690,22 @@ StrategyPosition и Exchange state: qty, price, protection, MFE/MAE, geometry,
 context, reconciliation.
 
 Он не является владельцем Exit policy.
+
+### 9.2.1 Current legacy observer and retirement gate — 2026-10-27
+
+**FINDING:** the currently installed `cripta-position-supervisor.service`
+is bound to MAIN, analyzes historical M3 HOLD profiles and persists
+`supervisor.snapshots`, `supervisor.transitions` and related audit context.
+This is **not** an implemented two-account Position Supervisor. The canonical
+Position Supervisor capability (§9.2) remains required for each relevant
+OPEN StrategyPosition and cannot be dropped merely because R1 was retired.
+
+**Before/after ownership:** before = MAIN-only legacy provider of
+MFE/MAE, market structure and observation/audit; after = an account-scoped
+Position Supervisor or a separately owner-approved equivalent provider with
+the same required facts, audited lineage and verified consumers for all
+TradingAccounts. Do not disable the legacy provider before proving the
+replacement, or invent an Exit rule from former M3 features.
 
 ## 9.3 Analyst
 
@@ -920,6 +993,37 @@ Before changing or purging current PostgreSQL history:
 No cleanup, PostgreSQL rewrite, service restart, LIVE arm or Exchange mutation is
 authorized by this documentation decision alone.
 
+
+### 48.2 P90L90 durable market-data lineage independent of loaded code — OWNER DECISION 2026-10-28 (Issue #243)
+
+This section owns the **storage identity and compatibility invariant** for the P90L90 PAPER causal 5m/15m candle archive and native/Entry restart checkpoints. It does not change Strategy Entry/Exit/SECOND48 economics, ownership or any REAL/LIVE right.
+
+**Separate identities (never alias):** `P90_DATA_LINEAGE_ID` identifies one immutable, content-audited five-symbol causal data lineage (venue/source, instruments, timeframes, original seed provenance, normalized event and geometry/transport schema, exact root digest); `PRODUCER_RELEASE_COMMIT` identifies the Git release that actually committed a new fact or checkpoint generation; `INSTALLED_COMMIT` / `LOADED_COMMIT` identify executable code. The historical SQL `source_commit` fields are **existing per-record release provenance**, not a license to re-label data with the latest `main` commit. Provenance and compatibility identities have distinct persistence and review responsibilities.
+
+**Existing immutable seed:** Preserve all previously committed original P90L90 5m/15m records and five causal/Entry checkpoint identities, timestamps, payloads and their exact original `source_commit` (`ecde51102e4fe624e4b312eca85318540f200229`). Preserve the last committed generation and pending/cursor state. No historical `UPDATE` of bar `source_commit`, candle payload, event timestamp, order, geometry or provenance; no `DELETE`, `TRUNCATE`, reset/reseed or counter rewrite to make a new release appear compatible.
+
+**Compatibility attestation:** A separately versioned, durable, auditable, **append-only** lineage/compatibility record must bind exact `P90_DATA_LINEAGE_ID`, origin release, immutable history digest/counts per symbol/timeframe, checkpoint origin/identity and exact `LOADED_COMMIT` plus schema/consumer compatibility version. Creating the record requires independent exact-history QC and approved actor/migration, reviewed code and targeted disposable-DB regression. It must reject unknown/mixed/partial origins, altered bytes, incompatible effective Entry/Exit/transport schema, cursor gaps and competing registrations; no automatic acceptance merely because the new commit is on GitHub `main` or is a descendant of the seed release. The previously stored version and any superseding attestation must remain traceable. Record the actual producer release of **new** bar events and checkpoint generations without rewriting historical source identities.
+
+**Runtime release transition:** Installed code may consume a prior lineage only after exact versioned compatibility is PASS; the native Observer and activation preflight must independently verify the same compatibility record, all five existing source-backed checkpoints and their reconstructed geometry. Read-only preflight may not lock rows with `FOR UPDATE`; writable event dispatch retains transaction/row-lock atomicity. Release installer must not silently mutate any data provenance as a deployment side effect. Mixed per-event producer versions remain explicitly identified and deterministically verified. Reconnect, partial migration or mismatch fails closed, without PAPER entry or Exchange orders.
+
+**Production gate:** `OWNER DECISION → CANON → reviewed implementation + migration + disposable tests/parity → GitHub main → exact installer/actor/backup/rollback → per-account native causal proof → PAPER activation → runtime behavior evidence`. Until implemented, `P90_LINEAGE_COMPATIBILITY=NOT_VERIFIED` and `PAPER_ACTIVATED=NO`; do not bypass via writable preflight, direct SQL updates, source relabeling, or a reset of historical candles.
+
+
+
+### 48.4 Единственный рабочий источник закрытых свечей — OWNER DECISION 2026-10-28 (Issue #243)
+
+**Authority / physical store:** `analytics.closed_candles` в production PostgreSQL — одна общая, ограниченная потребностями активных потребителей каноническая cache-таблица **точных подтверждённых OHLCV closed candles**. Ключ факта: `market_source_id + instrument_id + timeframe + closed_at UTC`, с exact open time, OHLCV, source transport/provenance и версией контракта. Один факт физически записывается один раз и проверяется на конфликт; не допускаются отдельные новые per-Strategy/per-Account физические копии тех же свечей. Эта таблица не заменяет `analytics.market_minutes` (объективные минутные показатели, но не исходный OHLC). Не превращать PostgreSQL в безграничный raw trade/orderbook lake; запрашивать и удерживать только проверенную закрытую историю, необходимую по exact зарегистрированным потребителям, с отдельным контролем ёмкости и retention.
+
+**Owner / consumers:** market-data adapter/наблюдательный контур получает OHLC из утверждённого `MarketSource` (`Venue / InstrumentIdentity`), нормализует UTC, подтверждает closure, coverage и непротиворечивые цены; сохраняет в общий store. MAYAK и Dispatcher могут читать общий store и производные market-context, но Dispatcher не владеет raw candle fetch/physical archive; Strategy/Entry/Exit только запрашивают и читают эту историю и сохраняют **собственные** вычисленные geometry, signal/position и causal processing checkpoints. TradingAccount/connector не создаёт другую копию общих рыночных данных; по настройкам аккаунта разрешается только approved MarketSource с exact Venue/InstrumentIdentity. Нет разрешённого адаптера/проверенного соответствия — `NOT_READY`, не подменять другим источником.
+
+**On-demand warmup/gap recovery:** до первой активации Strategy и после любого pause/restart/connection gap adapter вычисляет точную требуемую историю по immutable StrategyCard/EntryPlan/ExitPlan (все окна, ATR seed и календарные фильтры), читает уже записанный canonical slice и догружает **только недостающее** из approved MarketSource через bounded paginated provider API. Принимаются только fully closed bars, exact последовательность timeframe/UTC и доказанное source lineage; конфликт или incomplete history `HARD_STOP` для соответствующей Strategy. Нет ожидания «проторговки» 9 часов/7 дней после старта, когда исторические closed bars доступны от поставщика. Нельзя искусственно достраивать OHLC из `market_minutes` или неполных ticks и выдавать за exchange-native bars.
+
+**Epoch/cursor boundary:** восстановленные OHLC достаточны только для closed-bar геометрии. Они НЕ доказывают точную последовательность пропущенных `publicTrade` execId/seq. Перезапуск стратегии без открытой PAPER/REAL позиции допускает новый **явно зафиксированный** source/Entry epoch: историческое состояние до границы остаётся audit evidence; до нового доказанного WS/publicTrade cursor не создавать Entry; не симулировать пропущенные кандидаты. Если есть сохранённая позиция, pending trade/command или неполная Exit история, необходим отдельный exact reconciliation/continuity gate без обнуления её состояния. Старые checkpoint нельзя переписывать, backdate или переименовывать для успешного запуска.
+
+**Historical exception / migration:** 17,995 неизменяемых оригинальных свечей `strategy_entry.p90l90_causal_closed_bars` и 5 P90 causal checkpoints из §48.2 — историческое audit/restart evidence с прежним `source_commit`, НЕ второй рабочий writer или source of truth для новых свечей. Перенос потребителей/архива допустим только с сохранением исходных digest, identity и проверенного rollback. Ни одна новая Strategy не должна зависеть от per-Strategy candle store; future closed candles получают одного общего producer-а и не dual-write в P90 archive. Класс исключения и lifecycle старой позиции должны быть доказаны до включения PAPER.
+
+**Release gate:** `OWNER DECISION → CANON → reviewed shared migration + source adapter + startup/restart consumer integration + multi-strategy/no-duplication tests + gap/epoch regression → GitHub main → verified installer/actor → source+DB+runtime evidence → PAPER`. Сама публикация канона не означает, что store создан или Strategy активирована.
+
 ## 49. Venue / MarketSource / TradingAccount identity — OWNER DECISION 2026-10-16
 
 CRIPTA separates market identity, private execution identity and Strategy
@@ -1063,6 +1167,18 @@ ARCH §48 storage/recoverability rules remain controlling. This section changes
 identity/ownership only and does not authorize DB migration, deletion, deploy,
 LIVE arm or Exchange mutation.
 
+**Legacy-to-multi-account rollout — OWNER DECISION 2026-10-27.**
+Historical single-account R1 rows can stay in their real historical account
+and remain read-only legacy evidence. Adding SUB accounts must not require
+retroactively inventing StrategyExecutionBinding, splitting old trades, or
+reassigning their physical account. The new private state key includes the
+actual TradingAccount, while net performance remains aggregatable by exact
+Strategy and account. The temporary offline infrastructure migration is
+authorized only under `DEVELOPMENT_RELEASE §48.2.1`; it is neither loss of
+historical data nor proof that multi-account execution fan-out is implemented.
+A provisional `OWNER_ASSERTED_PENDING` provider UID never itself verifies a
+mounted exchange key or confers new REAL permission.
+
 ### 49.6 Independent Strategy configurations and multi-account fan-out — OWNER DECISION 2026-10-20
 
 Strategy duplication is a **creation-time UI operation** ("create based on"), not an
@@ -1139,3 +1255,7 @@ Never discard irreplaceable trading, execution, fee, ownership, operator, safety
 В отношении ARCH §48 компактные curated records InstrumentResearchRecord, которые должны пережить удаление первичных raw исследований и несут уникальную project decision/evidence value, требуют устойчивого сохранения в CRIPTA_IRREPLACEABLE_DATA-совместимом storage/retention контуре. Большие market-data files продолжают следовать своему external reconstructible/non-reconstructible class; automatic purge не затрагивает этот per-instrument compact ledger. В записи остаются финальные значения, sampling/QC/fee assumptions, UTC interval, method/source fingerprints, correction lineage и явный status ограниченной воспроизводимости после raw purge.
 
 **OWNER DECISION 2026-10-21 (последующее уточнение): единственный постоянный primary store для компактных InstrumentResearchRecord — Git-versioned JSON в GitHub `PH1119057/cripta:main` по пути `operations/dashboard/instrument_research_catalog.json`.** PostgreSQL и Dashboard не являются вторыми writers/stores этой истории; Dashboard и любые API только читают versioned snapshot, установленный с exact verified release. Records, ещё находящиеся в feature branch, не считаются canonical registered. Любая регистрация/исправление публикуется через проверенный Git commit и сохраняет record_id, hash, lineage; старые записи не перезаписываются молча. Raw market-data archives не являются этим store. Git-hosting и release rollback сами по себе не доказывают независимое восстановление: перед purge raw и объявлением irreversible-retention PASS необходим независимый verified backup/export exact JSON и hashes. Конкретные read API/UI, tests, release/deploy/rollback остаются обязательными implementation gates, а не следствием выбора storage. Research mandatory field/record schema и registration gate — RESEARCH_COMPUTE §23; stable terms — GLOSSARY §35. Additive deployment требует DEVELOPMENT_RELEASE gates; docs-only change не затрагивает production database/runtime/TradingAccount.
+
+## 50. Permanent bounded Release Controller — OWNER DECISION 2026-10-30
+
+Release Controller — control-plane capability, not Strategy, Entry, Exit or Execution owner. Permanent bounded SentinelX command may invoke only a uniquely authorized exact-release request, never an arbitrary privileged shell. The existing verified installer retains deployment ownership; full approval, actor/path and recovery contract belongs to DEVELOPMENT_RELEASE §50.5. This is target architecture tracked by Issue #288, not an already deployed service.

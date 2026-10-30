@@ -309,7 +309,11 @@ def test_analyst_counterfactual_source_has_no_trading_path() -> None:
 
 def test_observer_captures_counterfactual_only_for_real_execution_activation() -> None:
     start = OBSERVER.index("for evaluation in evaluations:")
-    block = OBSERVER[start : start + 2600]
+    # Scope to the evaluation loop, not a brittle fixed number of bytes:
+    # additional specialized PAPER-only consumers must never hide the
+    # existing REAL counterfactual vs generic non-REAL create_order guards.
+    end = OBSERVER.index("evaluations_count += 1", start)
+    block = OBSERVER[start : end]
     assert "build_insufficient_funds_candidate(" in block
     assert "counterfactual_store.record_candidate(candidate)" in block
     assert "evaluation.signal.strategy_activation_id" in block

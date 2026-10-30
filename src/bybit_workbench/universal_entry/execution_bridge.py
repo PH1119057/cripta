@@ -514,6 +514,10 @@ def prepare_runtime_entry_command(
         "strategy_context_features": signal_attributes.get("strategy_context_features"),
         "stake_usdt": str(requested_amount),
         "leverage": leverage,
+        # Exact immutable Strategy capital mode travels all the way to
+        # Execution. Bybit UTA margin is account-scoped; the signed
+        # pre-order account check must independently confirm it.
+        "margin_mode": capital_policy.get("margin_mode"),
         "side": side,
         "price": str(reference_price),
         "entry_offset_pct": str(offset_pct),

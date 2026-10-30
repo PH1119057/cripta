@@ -11,6 +11,8 @@ from bybit_workbench.strategies.indicators import true_ranges, wilder_atr
 
 from .contracts import EntryPlan, FrozenPolicy, MarketFactEnvelope, TradeDirection
 from .fingerprint import fingerprint
+from .p90l90_causal import P90L90CausalEntry, causal_entry_state
+from .p90l90_crossing_fact import p90l90_crossing_fact
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +125,7 @@ class _WatchState:
     last_touch_at: datetime | None = None
     history_ready: bool = False
     r1_stability: R1StabilityDiagnostic | None = None
+    p90l90: P90L90CausalEntry | None = None
     traces: list[WatchTracePoint] = field(default_factory=list)
 
 
@@ -181,6 +184,13 @@ def _compare(left: Decimal, comparator: str, right: Decimal) -> bool:
     raise ValueError(f"unsupported numeric comparator: {comparator}")
 
 
+def _is_p90l90_policy(policy: Mapping[str, object]) -> bool:
+    geometry = policy.get("geometry")
+    return isinstance(geometry, Mapping) and geometry.get("operator") == (
+        "P90L90_RAW_H9_UNION_CROSSING"
+    )
+
+
 def _policy(plan: EntryPlan) -> dict[str, object]:
     payload = plan.watch_policy.to_dict()
     if "enabled" not in payload:
@@ -188,6 +198,15 @@ def _policy(plan: EntryPlan) -> dict[str, object]:
     if not bool(payload["enabled"]):
         if set(payload) != {"enabled"}:
             raise ValueError("disabled watch_policy cannot carry hidden configuration")
+        return payload
+    geometry = payload.get("geometry")
+    if isinstance(geometry, Mapping) and geometry.get("operator") == (
+        "P90L90_RAW_H9_UNION_CROSSING"
+    ):
+        if payload.get("events") != {
+            "trade": "PUBLIC_TRADE", "candle_closed": "CANDLE_CLOSED"
+        }:
+            raise ValueError("P90L90 requires exact native public trade/candle events")
         return payload
     required = (
         "candidate_timeframe_minutes",
@@ -709,6 +728,9 @@ class ParameterizedCausalMarketWatch:
         policy = _policy(plan)
         if not bool(policy["enabled"]):
             return
+        if _is_p90l90_policy(policy):
+            self._load_p90l90_history(plan, symbol, candles, observed_at=observed_at)
+            return
         if symbol not in plan.symbols:
             raise ValueError("watch history symbol is outside EntryPlan scope")
         history_limit = _derived_history_limit(policy)
@@ -779,6 +801,10 @@ class ParameterizedCausalMarketWatch:
         policy = _policy(plan)
         if not bool(policy["enabled"]):
             return (fact,)
+        if _is_p90l90_policy(policy):
+            return self._process_p90l90_fact(
+                plan, fact, allow_candidate=allow_candidate
+            )
         state = self._state(plan, fact.symbol)
         if not state.history_ready:
             return ()
@@ -812,6 +838,95 @@ class ParameterizedCausalMarketWatch:
         if kind == str(events.get("trade")):
             return self._on_trade(plan, state, fact, allow_candidate)
         return ()
+
+    def _load_p90l90_history(
+        self,
+        plan: EntryPlan,
+        symbol: str,
+        candles: Mapping[str, tuple[Candle, ...]],
+        *,
+        observed_at: datetime,
+    ) -> None:
+        if symbol not in plan.symbols:
+            raise ValueError("P90L90 history outside Strategy scope")
+        state = self._state(plan, symbol)
+        state.candles.clear()
+        state.p90l90 = P90L90CausalEntry()
+        # 7 × 288 full previous UTC days + ATR200 warmup + active day.
+        for tf in ("5", "15"):
+            rows = candles.get(tf, ())
+            if any(bar.symbol != symbol or bar.timeframe != tf for bar in rows):
+                raise ValueError("P90L90 seed symbol/timeframe mismatch")
+            if any(bar.closed_at > observed_at for bar in rows):
+                raise ValueError("P90L90 seed contains future completed candle")
+            state.candles[tf] = deque(
+                sorted((bar for bar in rows if bar.is_closed), key=lambda b: b.closed_at),
+                maxlen=2800,
+            )
+        state.history_ready = True
+        five = state.candles["5"]
+        if five:
+            geometry = causal_entry_state(
+                tuple(five), tuple(state.candles["15"]), effective_at=five[-1].closed_at
+            )
+            if geometry is not None:
+                state.p90l90.update_geometry(geometry)
+
+    def _process_p90l90_fact(
+        self,
+        plan: EntryPlan,
+        fact: MarketFactEnvelope,
+        *,
+        allow_candidate: bool,
+    ) -> tuple[MarketFactEnvelope, ...]:
+        state = self._state(plan, fact.symbol)
+        if not state.history_ready or state.p90l90 is None:
+            return ()
+        kind = fact.event_kind
+        if kind == "CANDLE_CLOSED":
+            candle = self._candle_from_fact(fact)
+            if candle.timeframe not in {"5", "15"}:
+                return ()
+            target = state.candles[candle.timeframe]
+            if target and candle.closed_at < target[-1].closed_at:
+                raise ValueError("P90L90 late closed candle changes causal history")
+            if target and candle.closed_at == target[-1].closed_at:
+                if candle != target[-1]:
+                    raise ValueError("P90L90 conflicting completed candle")
+                return ()
+            target.append(candle)
+            five = state.candles["5"]
+            if five:
+                geometry = causal_entry_state(
+                    tuple(five), tuple(state.candles["15"]),
+                    effective_at=five[-1].closed_at,
+                )
+                if geometry is not None and (
+                    state.p90l90.state is None
+                    or geometry.effective_at > state.p90l90.state.effective_at
+                ):
+                    state.p90l90.update_geometry(geometry)
+            return ()
+        if kind != "PUBLIC_TRADE":
+            return ()
+        price = _decimal(fact.attributes.to_dict().get("price"), "P90L90 trade price")
+        crossings = state.p90l90.on_trade(price=price, event_at=fact.event_at)
+        if not allow_candidate:
+            return ()
+        if not crossings:
+            return ()
+        geometry = state.p90l90.state
+        if geometry is None:
+            raise RuntimeError("P90L90 crossed without causal geometry")
+        return tuple(
+            p90l90_crossing_fact(
+                entry_plan_fingerprint=plan.entry_plan_fingerprint,
+                source_fact=fact,
+                crossing=item,
+                geometry=geometry,
+            )
+            for item in crossings
+        )
 
     def _candle_from_fact(self, fact: MarketFactEnvelope) -> Candle:
         attrs = fact.attributes.to_dict()
