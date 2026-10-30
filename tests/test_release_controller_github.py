@@ -124,6 +124,40 @@ def test_release_evidence_rejects_missing_scope_enforcement(monkeypatch):
         github.release_evidence(TARGET)
 
 
+
+def test_source_can_fast_forward_uses_canonical_compare(monkeypatch):
+    source = "e" * 40
+
+    def compare_json(path, params=None):
+        del params
+        assert path == f"/compare/{source}...{TARGET}"
+        return {
+            "status": "ahead",
+            "merge_base_commit": {"sha": source},
+            "base_commit": {"sha": source},
+            "behind_by": 0,
+        }
+
+    monkeypatch.setattr(github, "_get_json", compare_json)
+    assert github.source_can_fast_forward(source, TARGET) is True
+
+
+def test_source_can_fast_forward_rejects_diverged_history(monkeypatch):
+    source = "e" * 40
+
+    def compare_json(path, params=None):
+        del params
+        assert path == f"/compare/{source}...{TARGET}"
+        return {
+            "status": "diverged",
+            "merge_base_commit": {"sha": "f" * 40},
+            "base_commit": {"sha": source},
+            "behind_by": 1,
+        }
+
+    monkeypatch.setattr(github, "_get_json", compare_json)
+    assert github.source_can_fast_forward(source, TARGET) is False
+
 def test_approval_candidates_use_only_owner_ledger_comments(monkeypatch):
     request = {
         "repository": "PH1119057/cripta",
