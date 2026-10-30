@@ -735,6 +735,19 @@ def cutover() -> None:
     shutil.chown(dashboard_app, user="cripta", group="cripta")
     dashboard_app.chmod(0o644)
 
+    write_root_file(
+        STATE_ROOT / "INSTALLED_COMMIT",
+        RELEASE + "\n",
+        0o640,
+        group="cripta",
+    )
+    write_root_file(
+        STATE_ROOT / "LAST_BACKUP",
+        str(FAILED_BACKUP) + "\n",
+        0o640,
+        group="cripta",
+    )
+
     for relative, unit in UNIT_SPECS:
         install_bytes(relative, Path("/etc/systemd/system") / unit, 0o644)
 
@@ -830,18 +843,6 @@ def cutover() -> None:
         if service_active(unit):
             raise RecoveryError(f"SUB_UNIT_BECAME_ACTIVE:{unit}")
 
-    write_root_file(
-        STATE_ROOT / "INSTALLED_COMMIT",
-        RELEASE + "\n",
-        0o640,
-        group="cripta",
-    )
-    write_root_file(
-        STATE_ROOT / "LAST_BACKUP",
-        str(FAILED_BACKUP) + "\n",
-        0o640,
-        group="cripta",
-    )
 
 
 def postcheck(pre_state: tuple[str, str, str]) -> bool:
