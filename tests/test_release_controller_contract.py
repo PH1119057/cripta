@@ -14,6 +14,11 @@ def test_controller_source_is_valid_python_and_has_no_cli_parser():
     assert "argparse" not in source
     assert "len(sys.argv) != 1" in source
     assert "OWNER_ARM=UNCHANGED" in source
+    assert '"/usr/bin/setpriv"' in source
+    assert '"--reuid={user}"' in source
+    assert '"--regid={user}"' in source
+    assert '"--init-groups"' in source
+    assert "/usr/sbin/runuser" not in source
 
 
 def test_controller_service_is_inert_and_sandboxed():
