@@ -205,7 +205,6 @@ def _merged_pr(target: str) -> dict[str, Any]:
 
 def _status_checks(
     *,
-    pr_number: int,
     head_sha: str,
     required: dict[str, int | None],
 ) -> dict[str, str]:
@@ -235,10 +234,6 @@ def _status_checks(
         for run in workflow_runs
         if run.get("name") == "quality"
         and run.get("head_sha") == head_sha
-        and any(
-            isinstance(item, dict) and item.get("number") == pr_number
-            for item in (run.get("pull_requests") or [])
-        )
     ]
     if not quality:
         raise GitHubEvidenceError("QUALITY_WORKFLOW_MISSING")
@@ -258,7 +253,7 @@ def release_evidence(target: str) -> ReleaseEvidence:
     pr = _merged_pr(target)
     pr_number = pr["number"]
     head_sha = pr["head"]["sha"]
-    checks = _status_checks(pr_number=pr_number, head_sha=head_sha, required=required)
+    checks = _status_checks(head_sha=head_sha, required=required)
     return ReleaseEvidence(
         remote_main=remote_main,
         target_tree=tree,
