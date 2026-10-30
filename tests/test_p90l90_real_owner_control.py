@@ -151,3 +151,20 @@ def test_p90_prearm_atomically_retires_exact_historical_r1_binding() -> None:
 
     unprearm_block = source[unprearm:]
     assert "binding-r1-unified-2c51489dae0a38fc" not in unprearm_block
+
+
+def test_p90_prearm_live_freshness_uses_post_read_clock() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "observer_checked_at = datetime.now(UTC)" in source
+    assert "proof_checked_at = datetime.now(UTC)" in source
+    assert "generation_checked_at = datetime.now(UTC)" in source
+    assert (
+        "reconciliation_checked_ms = int(datetime.now(UTC).timestamp() * 1000)"
+        in source
+    )
+    assert "position_mode_checked_at = datetime.now(UTC)" in source
+    assert "(current - observer_at.astimezone(UTC)).total_seconds()" not in source
+    assert "(current - proof.observed_at).total_seconds()" not in source
+    assert "(current - completed).total_seconds()" not in source
+    assert "now_ms - int(reconciliation[1])" not in source
+    assert 'position mode") >= current' not in source

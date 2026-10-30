@@ -331,7 +331,6 @@ def prepare_p90l90_real_v3_prearm_evidence(
     """
     _require(now.tzinfo is not None and now.utcoffset() is not None, "now must be aware")
     current = now.astimezone(UTC)
-    now_ms = int(current.timestamp() * 1000)
     valid_until = current + timedelta(seconds=90)
 
     identity, parity = _release_and_parity_evidence(
@@ -350,6 +349,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
         Path("/var/lib/cripta/universal_entry_observer/status.json"),
         "Universal Entry observer status",
     )
+    observer_checked_at = datetime.now(UTC)
     observer_at = datetime.fromisoformat(str(observer.get("updated_at") or ""))
     _require(observer_at.tzinfo is not None, "observer timestamp invalid")
     observer_symbols = cast(list[object], observer.get("symbols") or [])
@@ -364,7 +364,9 @@ def prepare_p90l90_real_v3_prearm_evidence(
         and set(observer_symbols) == set().union(*ALLOWED_SYMBOLS.values())
         and len(observer_entry_plans) == 2
         and len(observer_exit_plans) == 2
-        and 0 <= (current - observer_at.astimezone(UTC)).total_seconds() <= 15,
+        and 0
+        <= (observer_checked_at - observer_at.astimezone(UTC)).total_seconds()
+        <= 15,
         "source-only observer not exact/fresh",
     )
 
@@ -509,13 +511,14 @@ def prepare_p90l90_real_v3_prearm_evidence(
         proof = P90PrivateProofClient(
             account=account_id, connector=connector_id, timeout_seconds=3.0
         ).read_flat_account()
+        proof_checked_at = datetime.now(UTC)
         _require(
             proof.trading_account_id == account_id
             and proof.source_ref == "bybit:signed-flat-linear-usdt:exact-account"
             and proof.open_positions == 0
             and proof.open_orders == 0
             and proof.pending_commands == 0
-            and 0 <= (current - proof.observed_at).total_seconds() <= 15,
+            and 0 <= (proof_checked_at - proof.observed_at).total_seconds() <= 15,
             strategy_id + " signed private flat proof invalid/stale",
         )
         generation = connection.execute(
@@ -526,6 +529,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 ORDER BY started_at DESC LIMIT 1""",
             (account_id,),
         ).fetchone()
+        generation_checked_at = datetime.now(UTC)
         _require(generation is not None, strategy_id + " account generation missing")
         completed = _aware(generation[2], strategy_id + " generation")
         available = Decimal(str(generation[3]))
@@ -536,7 +540,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
             and int(generation[5]) == 0
             and available.is_finite()
             and available >= REQUESTED_USDT
-            and 0 <= (current - completed).total_seconds() <= 15,
+            and 0 <= (generation_checked_at - completed).total_seconds() <= 15,
             strategy_id + " account generation not fresh/flat/capable of one 10 USDT Entry",
         )
         reconciliation = connection.execute(
@@ -546,13 +550,14 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 ORDER BY id DESC LIMIT 1""",
             (account_id,),
         ).fetchone()
+        reconciliation_checked_ms = int(datetime.now(UTC).timestamp() * 1000)
         _require(
             reconciliation is not None
             and bool(reconciliation[2])
             and int(reconciliation[3]) == 0
             and int(reconciliation[4]) == 0
             and str(reconciliation[5]) == "PROVEN"
-            and 0 <= now_ms - int(reconciliation[1]) <= 15_000,
+            and 0 <= reconciliation_checked_ms - int(reconciliation[1]) <= 15_000,
             strategy_id + " reconciliation missing/stale/non-flat",
         )
         outstanding = Decimal(str(connection.execute(
@@ -578,6 +583,7 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 ORDER BY instrument,observed_at DESC""",
             (account_id, sorted(ALLOWED_SYMBOLS[strategy_id])),
         ).fetchall()
+        position_mode_checked_at = datetime.now(UTC)
         _require(
             len(pm_rows) == len(ALLOWED_SYMBOLS[strategy_id]),
             strategy_id + " position-mode cohort incomplete",
@@ -591,7 +597,8 @@ def prepare_p90l90_real_v3_prearm_evidence(
                 and str(row[3]) == "ONE_WAY"
                 and int(row[4]) == 0
                 and str(row[7]) == "PROVEN"
-                and _aware(row[6], strategy_id + "/" + symbol + " position mode") >= current,
+                and _aware(row[6], strategy_id + "/" + symbol + " position mode")
+                >= position_mode_checked_at,
                 strategy_id + "/" + symbol + " position mode invalid/stale",
             )
             position_modes[(strategy_id, symbol)] = tuple(row)
