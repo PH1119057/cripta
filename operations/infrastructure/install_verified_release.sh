@@ -15,6 +15,14 @@ CONTROL_CHECKPOINT="${CRIPTA_RELEASE_CONTROL_CHECKPOINT:-0}"
 CONTROL_REASON="${CRIPTA_RELEASE_CONTROL_REASON:-}"
 STAGED_OFFLINE="${CRIPTA_STAGED_OFFLINE_CUTOVER:-0}"
 CONTROL_MAX_AGE_SECONDS=604800
+controller_stage=""
+
+cleanup_controller_stage() {
+  if [[ -n "$controller_stage" && -d "$controller_stage" ]]; then
+    rm -rf -- "$controller_stage"
+  fi
+}
+trap cleanup_controller_stage EXIT
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 as_repo_owner() { runuser -u cripta -- env GIT_OPTIONAL_LOCKS=0 "$@"; }
@@ -262,9 +270,17 @@ release_controller_files=(
   operations/infrastructure/cripta-release-controller
   operations/infrastructure/release_controller_gate.py
   operations/infrastructure/release_controller_github.py
+  operations/systemd/cripta-release-controller.service
 )
+controller_stage="$(mktemp -d /run/cripta-release-controller-stage.XXXXXX)"
+chmod 0700 "$controller_stage"
 for relative in "${release_controller_files[@]}"; do
-  [[ -f "$runtime_release/$relative" ]] || die "release controller source missing: $relative"
+  candidate="$runtime_release/$relative"
+  [[ -f "$candidate" ]] || die "release controller source missing: $relative"
+  staged="$controller_stage/$(basename "$relative")"
+  as_repo_owner git -C "$SOURCE" show "$RELEASE_COMMIT:$relative" > "$staged"
+  chmod 0600 "$staged"
+  cmp -s "$staged" "$candidate" || die "release controller candidate differs from exact Git: $relative"
 done
 echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
 
@@ -411,6 +427,7 @@ restore_pre_cutover_services() {
 
 release_exit_handler() {
   local rc=$?
+  cleanup_controller_stage
   if [[ "$deploy_succeeded" == "1" || "$services_stopped" == "0" ]]; then
     return
   fi
@@ -547,6 +564,9 @@ for spec in "${unit_specs[@]}"; do
   IFS='|' read -r src_rel unit scope <<<"$spec"
   if [[ "$scope" == "tooling" ]]; then source_unit="$tooling_release/$src_rel"; else source_unit="$runtime_release/$src_rel"; fi
   [[ -f "$source_unit" ]] || die "unit source missing: $source_unit"
+  if [[ "$unit" == "cripta-release-controller.service" ]]; then
+    source_unit="$controller_stage/cripta-release-controller.service"
+  fi
   install -o root -g root -m 0644 "$source_unit" "/etc/systemd/system/$unit"
 done
 install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.service.d
@@ -555,13 +575,13 @@ install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/crip
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/deploy_dashboard_ui.sh" /usr/local/sbin/cripta-deploy-dashboard-ui
 install -d -o root -g root -m 0755 /usr/local/libexec/cripta-release-controller
 install -o root -g root -m 0755 \
-  "$runtime_release/operations/infrastructure/cripta-release-controller" \
+  "$controller_stage/cripta-release-controller" \
   /usr/local/libexec/cripta-release-controller/cripta-release-controller
 install -o root -g root -m 0644 \
-  "$runtime_release/operations/infrastructure/release_controller_gate.py" \
+  "$controller_stage/release_controller_gate.py" \
   /usr/local/libexec/cripta-release-controller/release_controller_gate.py
 install -o root -g root -m 0644 \
-  "$runtime_release/operations/infrastructure/release_controller_github.py" \
+  "$controller_stage/release_controller_github.py" \
   /usr/local/libexec/cripta-release-controller/release_controller_github.py
 
 install -d -o root -g cripta -m 0750 /etc/cripta
@@ -642,6 +662,7 @@ else
 fi
 
 deploy_succeeded=1
+cleanup_controller_stage
 trap - EXIT
 
 echo "DEPLOY_EXACT_VERIFIED_COMMIT=PASS"
