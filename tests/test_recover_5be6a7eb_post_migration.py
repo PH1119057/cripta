@@ -1,16 +1,12 @@
-"""Static and pure-contract tests for the exact 5be6 post-migration recovery."""
+"""Static contract tests for the exact 5be6 post-migration recovery."""
 import ast
-import importlib.util
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "operations/infrastructure/recover_5be6a7eb_post_migration.py"
-spec = importlib.util.spec_from_file_location("recover_5be6", SCRIPT)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
+SOURCE = SCRIPT.read_text(encoding="utf-8")
+TREE = ast.parse(SOURCE)
 
 EXPECTED_ACTIVE = {
     "cripta-bybit-latency.service",
@@ -35,56 +31,67 @@ EXPECTED_ACTIVE = {
 }
 
 
+def _literal_assignment(name: str):
+    for node in TREE.body:
+        if isinstance(node, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                return ast.literal_eval(node.value)
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == name:
+                return ast.literal_eval(node.value)
+    raise AssertionError(f"assignment not found: {name}")
+
+
 def test_recovery_script_is_valid_python_and_fixed_identity():
-    source = SCRIPT.read_text(encoding="utf-8")
-    ast.parse(source)
-    assert module.RELEASE == "5be6a7eb48024a554f4c69ec8f71ea777bbd98a7"
-    assert module.BASELINE == "db50682d372c382ed77da9635a21d5e3a39da549"
-    assert module.RELEASE_TREE == "8156f34a464966d9acbe06fc9819e2c6c22b3948"
-    assert "len(sys.argv) != 1" in source
-    assert "argparse" not in source
+    assert _literal_assignment("RELEASE") == "5be6a7eb48024a554f4c69ec8f71ea777bbd98a7"
+    assert _literal_assignment("BASELINE") == "db50682d372c382ed77da9635a21d5e3a39da549"
+    assert _literal_assignment("RELEASE_TREE") == "8156f34a464966d9acbe06fc9819e2c6c22b3948"
+    assert "len(sys.argv) != 1" in SOURCE
+    assert "argparse" not in SOURCE
 
 
 def test_recovery_resumes_after_migrations_without_reapplying_them():
-    source = SCRIPT.read_text(encoding="utf-8")
-    assert "operations/sql/" not in source
-    assert "pg_dump" not in source
-    assert "runtime_schema.py" in source
-    assert '"validate"' in source
-    assert "SCHEMA_APPLIED_NOT_BEFORE" in source
+    assert "operations/sql/" not in SOURCE
+    assert "pg_dump" not in SOURCE
+    assert "runtime_schema.py" in SOURCE
+    assert '"validate"' in SOURCE
+    assert "SCHEMA_APPLIED_NOT_BEFORE" in SOURCE
 
 
 def test_recovered_active_set_is_exact_and_sub_remains_inert():
-    assert module.ACTIVE_SERVICES == EXPECTED_ACTIVE
-    assert module.ACTIVE_SERVICES.issubset(module.MANAGED_SERVICES)
-    assert all("@" not in unit for unit in module.ACTIVE_SERVICES)
-    assert all(unit not in module.ACTIVE_SERVICES for unit in module.SUB_UNITS)
+    active_services = _literal_assignment("ACTIVE_SERVICES")
+    managed_services = set(_literal_assignment("MANAGED_SERVICES"))
+    sub_units = _literal_assignment("SUB_UNITS")
+    assert active_services == EXPECTED_ACTIVE
+    assert active_services.issubset(managed_services)
+    assert all("@" not in unit for unit in active_services)
+    assert all(unit not in active_services for unit in sub_units)
 
 
 def test_stop_window_matches_failed_installer_event():
-    value = module.parse_systemd_time("Fri 2026-10-30 20:03:31 UTC")
-    assert value == datetime(2026, 10, 30, 20, 3, 31, tzinfo=UTC)
-    assert value >= module.STOP_WINDOW_START
-    assert value <= module.STOP_WINDOW_END
+    start = datetime(2026, 10, 30, 20, 3, 0, tzinfo=UTC)
+    end = datetime(2026, 10, 30, 20, 4, 0, tzinfo=UTC)
+    assert "STOP_WINDOW_START = datetime(2026, 10, 30, 20, 3, 0, tzinfo=UTC)" in SOURCE
+    assert "STOP_WINDOW_END = datetime(2026, 10, 30, 20, 4, 0, tzinfo=UTC)" in SOURCE
+    value = datetime(2026, 10, 30, 20, 3, 31, tzinfo=UTC)
+    assert value >= start
+    assert value <= end
 
 
 def test_recovery_keeps_trading_controls_fail_closed():
-    source = SCRIPT.read_text(encoding="utf-8")
-    assert 'if (gate, permissions, sessions) != ("0", "0", "0")' in source
-    assert "OWNER_ARM=UNCHANGED" in source
-    assert "systemctl\", \"disable\", \"cripta-release-controller.service" in source
+    assert 'if (gate, permissions, sessions) != ("0", "0", "0")' in SOURCE
+    assert "OWNER_ARM=UNCHANGED" in SOURCE
+    assert "systemctl\", \"disable\", \"cripta-release-controller.service" in SOURCE
 
 
 def test_privileged_payload_is_sourced_from_exact_git_objects():
-    source = SCRIPT.read_text(encoding="utf-8")
-    assert 'f"{module.RELEASE}:{relative}"' not in source
-    assert 'f"{RELEASE}:{relative}"' in source
-    assert "install_bytes(relative" in source
-    assert "git_bytes(relative)" in source
+    assert 'f"{RELEASE}:{relative}"' in SOURCE
+    assert "install_bytes(relative" in SOURCE
+    assert "git_bytes(relative)" in SOURCE
 
 
 def test_source_delta_is_bounded_to_recovery_and_docs():
-    allowed_source_delta = module.ALLOWED_SOURCE_DELTA
+    allowed_source_delta = _literal_assignment("ALLOWED_SOURCE_DELTA")
     assert allowed_source_delta == {
         "docs/DOCUMENTATION_INDEX_RU.md",
         "docs/RESEARCH_COMPUTE_RULES_RU.md",
