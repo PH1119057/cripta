@@ -214,6 +214,15 @@ def materialize_symbol(
                                 raise ValueError(
                                     "BOOK_HASH_DISAGREEMENT_BETWEEN_READERS"
                                 )
+                            if (
+                                ofi_manifest["source_suffix_records"]
+                                != abs_manifest["orderbook"][
+                                    "source_suffix_records"
+                                ]
+                            ):
+                                raise ValueError(
+                                    "BOOK_SUFFIX_COUNT_DISAGREEMENT_BETWEEN_READERS"
+                                )
                             if abs_manifest["orderbook"]["state"] != "SOURCE_PRESENT":
                                 raise ValueError(
                                     "BOOK_SOURCE_NOT_PRESENT_AFTER_PREFLIGHT"
@@ -295,6 +304,9 @@ def materialize_symbol(
                                     "orderbook_raw_records": ofi_manifest[
                                         "raw_records_read"
                                     ],
+                                    "orderbook_source_suffix_records": (
+                                        ofi_manifest["source_suffix_records"]
+                                    ),
                                     "ofi_minute_status_counts": ofi_manifest[
                                         "minute_status_counts"
                                     ],
@@ -311,6 +323,11 @@ def materialize_symbol(
                                     "absorption_book_gaps": abs_manifest[
                                         "orderbook"
                                     ]["gaps"],
+                                    "absorption_book_source_suffix_records": (
+                                        abs_manifest["orderbook"][
+                                            "source_suffix_records"
+                                        ]
+                                    ),
                                 }
                             )
 

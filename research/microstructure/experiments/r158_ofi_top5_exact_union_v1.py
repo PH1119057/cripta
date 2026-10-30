@@ -189,7 +189,10 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
     minute = defaultdict(lambda: {"events": 0, "unknown_events": 0,
                                   "bid_quote": Decimal(0), "ask_quote": Decimal(0)})
     record_count = 0
+    suffix_records = 0
+    seen_suffix = False
     previous_ts = None
+    end_ms = start_ms + 86400000
     with zipfile.ZipFile(path) as archive:
         members = archive.namelist()
         if len(members) != 1 or members[0] != f"{day}_{symbol}_ob200.data":
@@ -198,11 +201,26 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
             for line in source:
                 record = json.loads(line)
                 ts = int(record["ts"])
-                if not start_ms <= ts < start_ms + 86400000:
-                    raise ValueError("source record outside UTC source day")
                 if previous_ts is not None and ts < previous_ts:
                     raise ValueError("unsorted source exchange event timestamps")
                 previous_ts = ts
+                data = record.get("data")
+                if (
+                    record.get("topic") != f"orderbook.200.{symbol}"
+                    or not isinstance(data, dict)
+                    or data.get("s") != symbol
+                ):
+                    raise ValueError("wrong native book source identity")
+                if ts < start_ms:
+                    raise ValueError("source record before UTC source day")
+                if ts >= end_ms:
+                    suffix_records += 1
+                    seen_suffix = True
+                    if suffix_records > 1000:
+                        raise ValueError("unbounded next UTC day suffix")
+                    continue
+                if seen_suffix:
+                    raise ValueError("source reentered UTC day after suffix")
                 resnapshot = record["type"] == "snapshot" and record_count > 0
                 value = reader.on_record(record)
                 if resnapshot:
@@ -246,7 +264,9 @@ def calculate_archive(path: Path, symbol: str, day: date, max_events: int = 0,
         "algorithm": VERSION, "source": str(path), "source_zip_sha256": _hash(path),
         "source_script_sha256": _hash(Path(__file__)),
         "symbol": symbol, "date_utc": day.isoformat(),
-        "raw_records_read": record_count, "max_events_limit": max_events,
+        "raw_records_read": record_count,
+        "source_suffix_records": suffix_records,
+        "max_events_limit": max_events,
         "archive_fully_read": max_events == 0,
         "native_day_coverage_qc": "NOT_VERIFIED",
         "reader_qc": dict(reader.counts),

@@ -161,3 +161,16 @@ def test_native_resnapshot_marks_continuity_unknown_not_zero(tmp_path):
     assert rows[0]["book_deltas_unknown"] == 1
     assert rows[0]["book_status"] == "UNKNOWN"
     assert rows[0]["bid_added_quote_usdt"] is None
+
+
+def test_bounded_next_day_book_suffix_is_accepted_and_counted(tmp_path):
+    suffix = delta(u=102, seq=1002, ts=TS + 86400000 + 132)
+    root = stage(
+        tmp_path,
+        [snapshot(), delta(b=[["300", "12"]]), suffix],
+        [],
+    )
+    manifest, rows = m.calculate(SYM, DAY, root)
+    assert manifest["orderbook"]["records"] == 2
+    assert manifest["orderbook"]["source_suffix_records"] == 1
+    assert rows[0]["book_status"] == "OBSERVED"

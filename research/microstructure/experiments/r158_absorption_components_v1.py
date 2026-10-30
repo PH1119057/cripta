@@ -76,13 +76,21 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
     cancelled order. Source gaps poison the exact minute and require snapshot.
     """
     if not path.is_file():
-        return {"state": "SOURCE_MISSING", "sha256": None, "snapshots": 0,
-                "gaps": 0, "records": 0}
+        return {
+            "state": "SOURCE_MISSING",
+            "sha256": None,
+            "snapshots": 0,
+            "gaps": 0,
+            "records": 0,
+            "source_suffix_records": 0,
+        }
     day_start = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
     state = None
     uid = seq = ts0 = None
-    snapshots = gaps = records = 0
+    snapshots = gaps = records = suffix_records = 0
+    seen_suffix = False
     previous_source_ts = None
+    day_end = day_start + 86400000
     with zipfile.ZipFile(path) as archive:
         expected = f"{day}_{symbol}_ob200.data"
         if archive.namelist() != [expected]:
@@ -92,14 +100,24 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                 item = json.loads(line)
                 data = item["data"]
                 ts = int(item["ts"])
-                if not day_start <= ts < day_start + 86400000:
-                    raise ValueError("OB200 timestamp outside file day")
                 if previous_source_ts is not None and ts < previous_source_ts:
                     raise ValueError("native OB200 source timestamp out of order")
                 previous_source_ts = ts
-                if (item["topic"] != f"orderbook.200.{symbol}"
-                        or data["s"] != symbol):
+                if (
+                    item["topic"] != f"orderbook.200.{symbol}"
+                    or data["s"] != symbol
+                ):
                     raise ValueError("wrong native OB200 source identity")
+                if ts < day_start:
+                    raise ValueError("OB200 timestamp before file day")
+                if ts >= day_end:
+                    suffix_records += 1
+                    seen_suffix = True
+                    if suffix_records > 1000:
+                        raise ValueError("unbounded next UTC day suffix")
+                    continue
+                if seen_suffix:
+                    raise ValueError("OB200 reentered file day after suffix")
                 minute = (ts - day_start) // 60000
                 current = bins[minute]
                 records += 1
@@ -177,8 +195,14 @@ def process_book(path: Path, symbol: str, day: date, bins: dict) -> dict:
                     for side in SIDE:
                         current[side + "_add"] += changes[side][0]
                         current[side + "_remove"] += changes[side][1]
-    return {"state": "SOURCE_PRESENT", "sha256": hashed(path),
-            "snapshots": snapshots, "gaps": gaps, "records": records}
+    return {
+        "state": "SOURCE_PRESENT",
+        "sha256": hashed(path),
+        "snapshots": snapshots,
+        "gaps": gaps,
+        "records": records,
+        "source_suffix_records": suffix_records,
+    }
 
 
 def process_trades(path: Path, symbol: str, day: date, bins: dict) -> dict:

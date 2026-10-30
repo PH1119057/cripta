@@ -71,14 +71,21 @@ def stage_day(raw_root, day):
     (base / "orderbook").mkdir(parents=True, exist_ok=True)
     (base / "public_trades").mkdir(parents=True, exist_ok=True)
     member = f"{day}_{SYMBOL}_ob200.data"
-    with zipfile.ZipFile(base / "orderbook" / f"{member}.zip", "w") as archive:
-        archive.writestr(
-            member,
-            "\n".join(json.dumps(x) for x in (snapshot(day), delta(day))) + "\n",
-        )
     start_seconds = int(
         datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp()
     )
+    suffix = delta(day)
+    suffix["ts"] = start_seconds * 1000 + 86400000 + 132
+    suffix["data"]["u"] = 102
+    suffix["data"]["seq"] = 1002
+    with zipfile.ZipFile(base / "orderbook" / f"{member}.zip", "w") as archive:
+        archive.writestr(
+            member,
+            "\n".join(
+                json.dumps(x) for x in (snapshot(day), delta(day), suffix)
+            )
+            + "\n",
+        )
     with gzip.open(
         base / "public_trades" / f"{SYMBOL}{day}.csv.gz", "wt", newline=""
     ) as stream:
@@ -122,6 +129,10 @@ def test_independent_qc_recomputes_every_row_without_primary_reader_import(
     assert report["checked_minute_rows_per_indicator"] == 2880
     assert report["indicator_ids"] == [10, 16]
     assert len(report["source_days"]) == 2
+    assert all(
+        item["orderbook_source_suffix_records"] == 1
+        for item in report["source_days"]
+    )
     assert report["research_ready"] is False
     assert report["verified_available_after"] is False
     saved = json.loads(

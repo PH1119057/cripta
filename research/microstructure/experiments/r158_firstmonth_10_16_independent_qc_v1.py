@@ -132,8 +132,10 @@ def independent_book_day(path: Path, symbol: str, day: date):
     cells = defaultdict(empty_book_cell)
     state = None
     prior_u = prior_seq = prior_ts = None
-    record_count = snapshots = gaps = 0
+    record_count = snapshots = gaps = suffix_records = 0
+    seen_suffix = False
     prior_source_ts = None
+    end_ms = start_ms + 86400000
     with zipfile.ZipFile(path) as archive:
         member = f"{day}_{symbol}_ob200.data"
         if archive.namelist() != [member]:
@@ -143,8 +145,6 @@ def independent_book_day(path: Path, symbol: str, day: date):
                 event = json.loads(line)
                 data = event["data"]
                 ts = int(event["ts"])
-                if not start_ms <= ts < start_ms + 86400000:
-                    raise ValueError("OB200_OUTSIDE_DAY")
                 if prior_source_ts is not None and ts < prior_source_ts:
                     raise ValueError("OB200_SOURCE_TIME_BACKWARDS")
                 prior_source_ts = ts
@@ -153,6 +153,16 @@ def independent_book_day(path: Path, symbol: str, day: date):
                     or data["s"] != symbol
                 ):
                     raise ValueError("OB200_IDENTITY")
+                if ts < start_ms:
+                    raise ValueError("OB200_BEFORE_DAY")
+                if ts >= end_ms:
+                    suffix_records += 1
+                    seen_suffix = True
+                    if suffix_records > 1000:
+                        raise ValueError("OB200_UNBOUNDED_NEXT_DAY_SUFFIX")
+                    continue
+                if seen_suffix:
+                    raise ValueError("OB200_REENTERED_DAY_AFTER_SUFFIX")
                 minute = (ts - start_ms) // 60000
                 cell = cells[minute]
                 record_count += 1
@@ -274,6 +284,7 @@ def independent_book_day(path: Path, symbol: str, day: date):
         "records": record_count,
         "snapshots": snapshots,
         "gaps": gaps,
+        "source_suffix_records": suffix_records,
     }
 
 
@@ -510,6 +521,14 @@ def check_symbol(
             prov["date_utc"] != day.isoformat()
             or prov["orderbook_sha256"] != book_meta["sha256"]
             or prov["trade_sha256"] != trade_meta["sha256"]
+            or (
+                prov["orderbook_source_suffix_records"]
+                != book_meta["source_suffix_records"]
+            )
+            or (
+                prov["absorption_book_source_suffix_records"]
+                != book_meta["source_suffix_records"]
+            )
         ):
             raise ValueError("SOURCE_PROVENANCE_DRIFT")
         for exp_ofi, exp_abs in zip(expected_ofi, expected_abs):
@@ -534,6 +553,9 @@ def check_symbol(
                 "orderbook_records": book_meta["records"],
                 "orderbook_snapshots": book_meta["snapshots"],
                 "orderbook_gaps": book_meta["gaps"],
+                "orderbook_source_suffix_records": book_meta[
+                    "source_suffix_records"
+                ],
                 "trade_sha256": trade_meta["sha256"],
                 "trade_rows": trade_meta["rows"],
             }

@@ -175,3 +175,17 @@ def test_later_native_snapshot_poison_resets_minute_even_if_deltas_resume(tmp_pa
     assert minute_rows[0]["unknown_events"] == 1
     assert minute_rows[0]["events"] == 2
     assert minute_rows[0]["signed_quote_usdt"] is None
+
+
+def test_bounded_next_day_suffix_is_accepted_and_counted(tmp_path):
+    suffix = delta(uid=102, seq=1002, ts=TS + 86400000 + 132)
+    archive = _zip_archive(
+        tmp_path,
+        [original_snapshot(), delta(b=[["300", "12"]]), suffix],
+    )
+    manifest, minutes = m.calculate_archive(archive, "APTUSDT", DAY)
+    assert manifest["raw_records_read"] == 2
+    assert manifest["source_suffix_records"] == 1
+    assert manifest["archive_fully_read"] is True
+    assert minutes[0]["status"] == "OBSERVED"
+    assert minutes[0]["signed_quote_usdt"] == "600"
