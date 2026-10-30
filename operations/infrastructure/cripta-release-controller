@@ -85,11 +85,17 @@ def _run(args: list[str], *, env: dict[str, str] | None = None) -> str:
 
 def _as_user(user: str, args: list[str]) -> list[str]:
     return [
-        "/usr/bin/setpriv",
-        f"--reuid={user}",
-        f"--regid={user}",
-        "--init-groups",
-        "--",
+        "/usr/bin/systemd-run",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--property=Type=oneshot",
+        f"--property=User={user}",
+        f"--property=Group={user}",
+        "--property=NoNewPrivileges=yes",
+        "--property=PrivateTmp=yes",
+        "--property=ProtectHome=yes",
         *args,
     ]
 
@@ -318,17 +324,7 @@ def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> 
 
 
 def _sync_source(target: str) -> None:
-    sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
-    _run(
-        _as_user(
-            "cripta",
-            [
-                "/usr/bin/env",
-                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-                str(sync),
-            ],
-        )
-    )
+    _run(["/usr/bin/systemctl", "start", "cripta-source-sync.service"])
     head, clean = _source_state()
     if head != target or not clean:
         raise ControllerError("SOURCE_SYNC_POSTCONDITION_FAILED")
