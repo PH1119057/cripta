@@ -26,6 +26,7 @@ from release_controller_github import (
     approval_candidates,
     current_main,
     release_evidence,
+    source_can_fast_forward,
 )
 
 SOURCE = Path("/srv/cripta/source_checkout")
@@ -422,6 +423,7 @@ def main() -> int:
         evidence = release_evidence(remote_main)
         if evidence.target_tree != remote_tree:
             raise ControllerError("REMOTE_TREE_EVIDENCE_MISMATCH")
+        source_fast_forward_ok = source_can_fast_forward(source_head, remote_main)
 
         actor_paths_ok = _actor_paths_ok()
         rollback_ready = _rollback_ready(baseline, runtime_path, tooling_path)
@@ -442,6 +444,7 @@ def main() -> int:
             now=datetime.now(UTC),
             remote_main=evidence.remote_main,
             source_head=source_head,
+            source_fast_forward_ok=source_fast_forward_ok,
             installed_runtime=runtime_baseline,
             installed_tooling=tooling_baseline,
             required_checks=evidence.required_checks,
