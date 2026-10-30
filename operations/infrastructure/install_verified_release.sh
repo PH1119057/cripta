@@ -258,6 +258,16 @@ for spec in "${unit_specs[@]}"; do
 done
 echo "UNIT_SOURCE_PREFLIGHT=PASS"
 
+release_controller_files=(
+  operations/infrastructure/cripta-release-controller
+  operations/infrastructure/release_controller_gate.py
+  operations/infrastructure/release_controller_github.py
+)
+for relative in "${release_controller_files[@]}"; do
+  [[ -f "$runtime_release/$relative" ]] || die "release controller source missing: $relative"
+done
+echo "RELEASE_CONTROLLER_SOURCE_PREFLIGHT=PASS"
+
 stamp="$(date -u +%Y%m%d_%H%M%S)"
 backup="$BACKUP_ROOT/${stamp}_${EXPECTED_BASELINE}_to_${RELEASE_COMMIT}"
 install -d -o root -g root -m 0700 "$backup"
@@ -301,7 +311,7 @@ if [[ -d /etc/systemd/system/cripta-private-runtime.service.d ]]; then
   install -d -m 0700 "$backup/files/etc/systemd/system"
   cp -a /etc/systemd/system/cripta-private-runtime.service.d "$backup/files/etc/systemd/system/"
 fi
-for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /etc/cripta/release.env; do
+for path in /usr/local/sbin/cripta-apply-incoming /usr/local/sbin/cripta-deploy-dashboard-ui /usr/local/libexec/cripta-release-controller /etc/cripta/release.env; do
   if [[ -e "$path" || -L "$path" ]]; then
     safe="${path#/}"
     install -d -m 0700 "$backup/files/$(dirname "$safe")"
@@ -543,6 +553,16 @@ install -d -o root -g root -m 0755 /etc/systemd/system/cripta-private-runtime.se
 install -o root -g root -m 0644 "$runtime_release/operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf" /etc/systemd/system/cripta-private-runtime.service.d/10-pythonpath.conf
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/cripta-apply-incoming" /usr/local/sbin/cripta-apply-incoming
 install -o root -g root -m 0755 "$runtime_release/operations/infrastructure/deploy_dashboard_ui.sh" /usr/local/sbin/cripta-deploy-dashboard-ui
+install -d -o root -g root -m 0755 /usr/local/libexec/cripta-release-controller
+install -o root -g root -m 0755 \
+  "$runtime_release/operations/infrastructure/cripta-release-controller" \
+  /usr/local/libexec/cripta-release-controller/cripta-release-controller
+install -o root -g root -m 0644 \
+  "$runtime_release/operations/infrastructure/release_controller_gate.py" \
+  /usr/local/libexec/cripta-release-controller/release_controller_gate.py
+install -o root -g root -m 0644 \
+  "$runtime_release/operations/infrastructure/release_controller_github.py" \
+  /usr/local/libexec/cripta-release-controller/release_controller_github.py
 
 install -d -o root -g cripta -m 0750 /etc/cripta
 cat > /etc/cripta/release.env <<EOF
