@@ -83,21 +83,31 @@ def _run(args: list[str], *, env: dict[str, str] | None = None) -> str:
     return result.stdout.strip()
 
 
+def _as_user(user: str, args: list[str]) -> list[str]:
+    return [
+        "/usr/bin/setpriv",
+        f"--reuid={user}",
+        f"--regid={user}",
+        "--init-groups",
+        "--",
+        *args,
+    ]
+
+
 def _git(*args: str) -> str:
     return _run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/env",
-            "GIT_OPTIONAL_LOCKS=0",
-            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-            "/usr/bin/git",
-            "-C",
-            str(SOURCE),
-            *args,
-        ]
+            [
+                "/usr/bin/env",
+                "GIT_OPTIONAL_LOCKS=0",
+                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+                "/usr/bin/git",
+                "-C",
+                str(SOURCE),
+                *args,
+            ],
+        )
     )
 
 
@@ -197,15 +207,10 @@ def _sandbox_ok() -> bool:
 
 def _cripta_test(flag: str, path: Path) -> bool:
     result = subprocess.run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/test",
-            flag,
-            str(path),
-        ],
+            ["/usr/bin/test", flag, str(path)],
+        ),
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -315,15 +320,14 @@ def _claim_nonce(*, nonce: str, comment_id: int, target: str, baseline: str) -> 
 def _sync_source(target: str) -> None:
     sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
     _run(
-        [
-            "/usr/sbin/runuser",
-            "-u",
+        _as_user(
             "cripta",
-            "--",
-            "/usr/bin/env",
-            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-            str(sync),
-        ]
+            [
+                "/usr/bin/env",
+                "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+                str(sync),
+            ],
+        )
     )
     head, clean = _source_state()
     if head != target or not clean:
@@ -331,20 +335,19 @@ def _sync_source(target: str) -> None:
 
 
 def _exact_installer_bytes(target: str) -> bytes:
-    args = [
-        "/usr/sbin/runuser",
-        "-u",
+    args = _as_user(
         "cripta",
-        "--",
-        "/usr/bin/env",
-        "GIT_OPTIONAL_LOCKS=0",
-        "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-        "/usr/bin/git",
-        "-C",
-        str(SOURCE),
-        "show",
-        f"{target}:operations/infrastructure/install_verified_release.sh",
-    ]
+        [
+            "/usr/bin/env",
+            "GIT_OPTIONAL_LOCKS=0",
+            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+            "/usr/bin/git",
+            "-C",
+            str(SOURCE),
+            "show",
+            f"{target}:operations/infrastructure/install_verified_release.sh",
+        ],
+    )
     result = subprocess.run(
         args,
         check=False,
