@@ -16,7 +16,6 @@ import gzip
 import hashlib
 import json
 import os
-import pwd
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -158,8 +157,11 @@ def audit(
     days: int = DAYS,
     require_actor: bool = True,
 ) -> dict:
-    if require_actor and os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-        raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    if require_actor:
+        import pwd
+
+        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
     if days <= 0:
         raise ValueError("INVALID_DAY_COUNT")
     manifest = load_manifest(source_manifest)

@@ -14,7 +14,6 @@ import importlib.util
 import io
 import json
 import os
-import pwd
 import re
 import shutil
 from datetime import date, timedelta
@@ -74,8 +73,11 @@ def materialize_symbol(
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
     if days != 30:
         raise ValueError("ONLY_FULL_FIRSTMONTH_30D_ALLOWED")
-    if require_actor and os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-        raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    if require_actor:
+        import pwd
+
+        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
     if not output_root.parent.is_dir():
         raise FileNotFoundError("OUTPUT_PARENT_MISSING")
     if not os.access(output_root.parent, os.W_OK | os.X_OK):

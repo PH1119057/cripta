@@ -12,7 +12,6 @@ import gzip
 import hashlib
 import json
 import os
-import pwd
 import zipfile
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
@@ -426,8 +425,11 @@ def check_symbol(
 ) -> dict:
     if symbol not in COHORT:
         raise ValueError("SYMBOL_OUTSIDE_OWNER_COHORT")
-    if require_actor and os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-        raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    if require_actor:
+        import pwd
+
+        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
 
     target = run_root / symbol
     final_path = target / "run_final.json"

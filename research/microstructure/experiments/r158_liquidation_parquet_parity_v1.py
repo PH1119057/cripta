@@ -18,7 +18,6 @@ import hashlib
 import importlib
 import json
 import os
-import pwd
 import sys
 from collections import Counter, defaultdict
 from datetime import UTC, date, datetime
@@ -312,8 +311,11 @@ def audit(
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
     if not cohort or any(symbol not in COHORT for symbol in cohort):
         raise ValueError("COHORT_OUTSIDE_OWNER_SCOPE")
-    if require_actor and os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-        raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    if require_actor:
+        import pwd
+
+        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
     if output_root.exists():
         raise FileExistsError("IMMUTABLE_PARITY_REPORT_ROOT_EXISTS")
     if not output_root.parent.is_dir():

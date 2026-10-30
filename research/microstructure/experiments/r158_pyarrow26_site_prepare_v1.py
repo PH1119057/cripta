@@ -17,7 +17,6 @@ import importlib
 import json
 import os
 import platform
-import pwd
 import re
 import sys
 import urllib.request
@@ -120,8 +119,11 @@ def prepare(
 ) -> dict:
     if not SHA_RE.fullmatch(source_commit):
         raise ValueError("SOURCE_COMMIT_MUST_BE_EXACT_40HEX")
-    if require_actor and os.geteuid() != pwd.getpwnam("cripta").pw_uid:
-        raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
+    if require_actor:
+        import pwd
+
+        if os.geteuid() != pwd.getpwnam("cripta").pw_uid:
+            raise PermissionError("EFFECTIVE_ACTOR_NOT_CRIPTA")
     if enforce_platform:
         if sys.version_info[:2] != (3, 12):
             raise RuntimeError("PYTHON_ABI_NOT_CP312")
