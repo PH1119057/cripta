@@ -398,7 +398,6 @@ OWNER DECISION 2026-10-19 (separation of geometry ownership): Entry/H9 uses ATR2
 
 R1 ExitPlan:
 
-
 ```text
 normal target:
   opposite RAW structural L5-3 extremum (LONG max(high36), SHORT min(low36)), without ATR200
@@ -799,7 +798,6 @@ slot. Для Strategy, которой разрешена real Exchange mutation,
 loss-containment обязателен.
 
 `protection_policy.initial_protection` принадлежит Strategy и передаётся в
-
 Execution при открытии. Execution обязана подтвердить фактическое состояние
 защиты на Exchange (в составе opening contract либо сразу после fill — согласно
 возможностям адаптера). Missing/unsupported/unconfirmed protection блокирует
@@ -1200,7 +1198,6 @@ with fresh successful Exchange reconciliation, authenticated Bybit connection,
 account identity/capital, exact release and strategy activation, position mode,
 Entry/Exit plan loading and live infrastructure checks retained.
 Individual new Entry requests still enforce physical slot ownership, exposure,
-
 capital reservation, idempotence and initial protection. Existing Exit/position
 supervision remains independent; unresolved safety faults are not waived by
 this policy. No LIVE re-arm is a side effect of deploy.
@@ -1545,4 +1542,3 @@ from this value; all §4.7/§7.6.3 gates remain mandatory.
 - Закрытые 5m свечи остаются источником динамической противоположной RAW L5-3 **TP**, не источником обновления Exchange trailing. Действующие начальный TP и аварийный SL нельзя молча отменить/ослабить во время постановки или обновления TP; отдельные Exchange mutation/fill races, partial fill, very-fast TP и restart должны пройти отрицательные и end-to-end проверки. При потере private WS/источника/подтверждения защиты — fail-closed и существующий fault/reconciliation процесс, без придуманного market close.
 
 Настоящее решение не даёт автоматического LIVE-arm, permission, регистрации активной стратегии или права обойти Observer/Execution hardstop. До live-equivalence обязательны реальные MAIN/SUB account-local proof, post-fill handoff, native/candle continuity, Bybit-side TRAIL035 readback, recovery и §4.7 gates.
-
