@@ -1,6 +1,7 @@
 """Tests for credential-free GitHub evidence used by Release Controller (#288)."""
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ MODULE = (
 )
 spec = importlib.util.spec_from_file_location("release_controller_github", MODULE)
 github = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = github
 spec.loader.exec_module(github)
 
 TARGET = "a" * 40
