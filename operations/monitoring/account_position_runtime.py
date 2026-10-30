@@ -37,8 +37,11 @@ def collect_once(connection: Any, *, trading_account_id: str, now: datetime) -> 
     row = connection.execute(
         """SELECT state,completed_at
              FROM runtime.account_state_generations
-            WHERE trading_account_id=%s AND identity_status='PROVEN'
-            ORDER BY started_at DESC LIMIT 1""", (trading_account_id,)
+            WHERE trading_account_id=%s
+              AND identity_status='PROVEN'
+              AND state='COMPLETE'
+              AND completed_at IS NOT NULL
+            ORDER BY completed_at DESC LIMIT 1""", (trading_account_id,)
     ).fetchone()
     if row is None or row["state"] != "COMPLETE" or row["completed_at"] is None:
         return {"state": "UNKNOWN", "reason": "GENERATION_NOT_COMPLETE", "sampled": 0}
