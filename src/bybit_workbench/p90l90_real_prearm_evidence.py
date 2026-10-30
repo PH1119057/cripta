@@ -532,7 +532,10 @@ def prepare_p90l90_real_v3_prearm_evidence(
                       positions_count,active_orders_count,identity_status
                  FROM runtime.account_state_generations
                 WHERE trading_account_id=%s
-                ORDER BY started_at DESC LIMIT 1""",
+                  AND state='COMPLETE'
+                  AND identity_status='PROVEN'
+                  AND completed_at IS NOT NULL
+                ORDER BY completed_at DESC LIMIT 1""",
             (account_id,),
         ).fetchone()
         generation_checked_at = datetime.now(UTC)
@@ -867,6 +870,3 @@ def prepare_p90l90_real_v3_prearm_evidence(
         "source_epoch_id": str(epoch_id),
         "owner_arm_approval_recorded": False,
         "mainnet_gate_enabled": False,
-        "execution_permissions": 0,
-        "exchange_mutation": False,
-    }
