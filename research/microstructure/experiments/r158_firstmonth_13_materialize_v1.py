@@ -187,6 +187,9 @@ def materialize_symbol(
                             "source_sha256": manifest["source_zip_sha256"],
                             "source_bytes": source.stat().st_size,
                             "raw_records_read": manifest["raw_records_read"],
+                            "source_suffix_records": manifest[
+                                "source_suffix_records"
+                            ],
                             "episodes": manifest["episodes"],
                             "rows": manifest["rows"],
                             "outcome_counts": manifest["outcome_counts"],

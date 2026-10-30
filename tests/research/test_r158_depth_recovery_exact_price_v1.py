@@ -168,3 +168,29 @@ def test_unresolved_day_end_is_right_censored(tmp_path):
     target = rows_for(rows)
     assert all(row["outcome"] == "C" for row in target)
     assert all(row["outcome_reason"] == "DAY_END_RIGHT_CENSOR" for row in target)
+
+
+def test_bounded_next_day_suffix_is_validated_and_counted(tmp_path):
+    midnight = int(
+        datetime(DAY.year, DAY.month, DAY.day, tzinfo=UTC).timestamp() * 1000
+    )
+    records = [
+        snapshot(midnight),
+        delta(midnight + 1000, 101, 1001, bid=[["300", "8"]]),
+        delta(
+            midnight + 86400000 + 132,
+            102,
+            1002,
+            bid=[["300", "10"]],
+        ),
+    ]
+    manifest, rows = m.calculate_archive(
+        archive(tmp_path, records), SYMBOL, DAY
+    )
+    assert manifest["source_suffix_records"] == 1
+    target = rows_for(rows)
+    assert all(row["outcome"] == "C" for row in target)
+    assert all(
+        row["outcome_reason"] == "DAY_END_RIGHT_CENSOR"
+        for row in target
+    )

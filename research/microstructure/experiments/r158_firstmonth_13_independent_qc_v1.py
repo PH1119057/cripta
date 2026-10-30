@@ -8,6 +8,7 @@ compares every materialized episode×horizon row plus source hashes.
 from __future__ import annotations
 
 import argparse
+import heapq
 import gzip
 import hashlib
 import json
@@ -138,7 +139,9 @@ def is_complete(ep):
     return all(ep["state"][h]["outcome"] is not None for h in HORIZONS)
 
 
-def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
+def replay_day(
+    path: Path, symbol: str, day: date
+) -> tuple[list[dict], int]:
     day_start = int(
         datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000
     )
@@ -146,21 +149,86 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
     books = None
     uid = seq = last_ts = None
     active = {"b": {}, "a": {}}
+    deadlines = {"b": [], "a": []}
+    visibility = {"b": [], "a": []}
     completed = []
     ordinal = 0
 
+    def complete(ep):
+        return all(
+            ep["state"][h]["outcome"] is not None for h in HORIZONS
+        )
+
     def flush_complete(side, price):
         ep = active[side].get(price)
-        if ep is not None and is_complete(ep):
+        if ep is not None and complete(ep):
             completed.append(ep)
             del active[side][price]
+
+    def censor(ep, reason, ts):
+        for h in HORIZONS:
+            item = ep["state"][h]
+            if item["outcome"] is None:
+                item["outcome"] = "C"
+                item["reason"] = reason
+                item["outcome_ts"] = ts
 
     def censor_all(reason, ts):
         for side in ("b", "a"):
             for price, ep in list(active[side].items()):
-                close_unresolved(ep, reason, ts)
+                censor(ep, reason, ts)
                 completed.append(ep)
                 del active[side][price]
+
+    def register(ep):
+        side, price = ep["side"], ep["price"]
+        active[side][price] = ep
+        for h in HORIZONS:
+            heapq.heappush(
+                deadlines[side],
+                (ep["start"] + h, ep["episode_id"], price, h),
+            )
+        priority = price if side == "b" else -price
+        heapq.heappush(
+            visibility[side],
+            (priority, ep["episode_id"], price),
+        )
+
+    def resolve_deadlines(ts, *, inclusive):
+        for side in ("b", "a"):
+            heap = deadlines[side]
+            while heap and (
+                heap[0][0] <= ts if inclusive else heap[0][0] < ts
+            ):
+                deadline, episode_id, price, horizon = heapq.heappop(heap)
+                ep = active[side].get(price)
+                if ep is None or ep["episode_id"] != episode_id:
+                    continue
+                item = ep["state"][horizon]
+                if item["outcome"] is not None:
+                    continue
+                item["outcome"] = "N"
+                item["reason"] = "CONTINUOUS_THROUGH_HORIZON"
+                item["outcome_ts"] = deadline
+                flush_complete(side, price)
+
+    def censor_edge(side, ts):
+        book = books[side]
+        if len(book) != 200:
+            raise RuntimeError("QC_OB200_DEPTH_NOT_MAINTAINED")
+        boundary = min(book) if side == "b" else max(book)
+        heap = visibility[side]
+        while heap:
+            _, episode_id, price = heap[0]
+            outside = price < boundary if side == "b" else price > boundary
+            if not outside:
+                break
+            heapq.heappop(heap)
+            ep = active[side].get(price)
+            if ep is None or ep["episode_id"] != episode_id:
+                continue
+            censor(ep, "OB200_EDGE_VISIBILITY_LOST", ts)
+            flush_complete(side, price)
 
     def identity(record):
         data = record["data"]
@@ -185,8 +253,6 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
             data = record["data"]
             replacement = {}
             for side in ("b", "a"):
-                if not isinstance(data.get(side), list) or len(data[side]) != 200:
-                    raise ValueError("QC_SNAPSHOT_NOT_200")
                 replacement[side], _ = update_side(
                     {}, data[side], side, snapshot=True
                 )
@@ -206,7 +272,6 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
 
         check_uid, check_seq = uid, seq
         assert check_uid is not None and check_seq is not None
-        sequence_ok = True
         for record in group:
             rts, ruid, rseq = identity(record)
             if (
@@ -214,101 +279,73 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
                 or ruid != check_uid + 1
                 or rseq <= check_seq
             ):
-                sequence_ok = False
-                break
+                censor_all("SOURCE_SEQUENCE_GAP", ts)
+                books = None
+                uid = seq = last_ts = None
+                return
             check_uid, check_seq = ruid, rseq
-        if not sequence_ok:
-            censor_all("SOURCE_SEQUENCE_GAP", ts)
-            books = None
-            uid = seq = last_ts = None
-            return
 
-        for side in ("b", "a"):
-            for price, ep in list(active[side].items()):
-                if q_visible(books[side], side, price) is None:
-                    close_unresolved(ep, "OB200_EDGE_VISIBILITY_LOST", last_ts)
-                    flush_complete(side, price)
-                    continue
-                for h in HORIZONS:
-                    item = ep["state"][h]
-                    if item["outcome"] is None and ts > ep["start"] + h:
-                        item["outcome"] = "N"
-                        item["reason"] = "CONTINUOUS_THROUGH_HORIZON"
-                        item["outcome_ts"] = ep["start"] + h
-                flush_complete(side, price)
-
+        resolve_deadlines(ts, inclusive=False)
         before = {side: dict(books[side]) for side in ("b", "a")}
         touches = defaultdict(int)
-        lost = set()
-        valid = True
-        for record in group:
-            data = record["data"]
-            next_books = {}
-            for side in ("b", "a"):
-                next_books[side], touched = update_side(
-                    books[side], data[side], side, snapshot=False
-                )
-                for price in touched:
-                    touches[(side, price)] += 1
-            if (
-                any(len(next_books[side]) != 200 for side in ("b", "a"))
-                or max(next_books["b"]) >= min(next_books["a"])
-            ):
-                valid = False
-                break
-            books = next_books
-            uid = int(data["u"])
-            seq = int(data["seq"])
-            last_ts = ts
-            for side in ("b", "a"):
-                for price in active[side]:
-                    if q_visible(books[side], side, price) is None:
-                        lost.add((side, price))
-        if not valid:
+        try:
+            for record in group:
+                data = record["data"]
+                next_books = {}
+                for side in ("b", "a"):
+                    next_books[side], touched = update_side(
+                        books[side], data[side], side, snapshot=False
+                    )
+                    for price in touched:
+                        touches[(side, price)] += 1
+                if (
+                    any(
+                        len(next_books[side]) != 200
+                        for side in ("b", "a")
+                    )
+                    or max(next_books["b"]) >= min(next_books["a"])
+                ):
+                    raise RuntimeError("QC_INVALID_CONTINUOUS_BOOK")
+                books = next_books
+                uid = int(data["u"])
+                seq = int(data["seq"])
+                last_ts = ts
+                for side in ("b", "a"):
+                    censor_edge(side, ts)
+        except RuntimeError:
             censor_all("SOURCE_SEQUENCE_GAP", ts)
             books = None
             uid = seq = last_ts = None
             return
 
         after = {side: dict(books[side]) for side in ("b", "a")}
-        for side in ("b", "a"):
-            for price, ep in list(active[side].items()):
-                if (side, price) in lost:
-                    close_unresolved(ep, "OB200_EDGE_VISIBILITY_LOST", ts)
-                    flush_complete(side, price)
-                    continue
-                if touches[(side, price)] > 1:
-                    close_unresolved(
-                        ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts
-                    )
-                    flush_complete(side, price)
-                    continue
-                current = q_visible(books[side], side, price)
-                if current is None:
-                    close_unresolved(ep, "OB200_EDGE_VISIBILITY_LOST", ts)
-                    flush_complete(side, price)
-                    continue
-                if ts > ep["start"] and current >= ep["target"]:
-                    for h in HORIZONS:
-                        item = ep["state"][h]
-                        if (
-                            item["outcome"] is None
-                            and ts <= ep["start"] + h
-                        ):
-                            item["outcome"] = "R"
-                            item["reason"] = "EXACT_PRICE_TARGET_RECOVERED"
-                            item["outcome_ts"] = ts
-                            item["recovery_ms"] = ts - ep["start"]
+        for (side, price), count in touches.items():
+            ep = active[side].get(price)
+            if ep is None:
+                continue
+            if count > 1:
+                censor(ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts)
+                flush_complete(side, price)
+                continue
+            current = q_visible(books[side], side, price)
+            if current is None:
+                censor(ep, "OB200_EDGE_VISIBILITY_LOST", ts)
+                flush_complete(side, price)
+                continue
+            if ts > ep["start"] and current >= ep["target"]:
                 for h in HORIZONS:
                     item = ep["state"][h]
                     if (
                         item["outcome"] is None
-                        and ts == ep["start"] + h
+                        and ts <= ep["start"] + h
                     ):
-                        item["outcome"] = "N"
-                        item["reason"] = "CONTINUOUS_THROUGH_HORIZON"
-                        item["outcome_ts"] = ep["start"] + h
+                        item["outcome"] = "R"
+                        item["reason"] = "EXACT_PRICE_TARGET_RECOVERED"
+                        item["outcome_ts"] = ts
+                        item["recovery_ms"] = ts - ep["start"]
                 flush_complete(side, price)
+
+        resolve_deadlines(ts, inclusive=True)
 
         for side in ("b", "a"):
             prices = sorted(
@@ -334,16 +371,16 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
                     symbol, day, side, ordinal, price, old, current, ts, rank
                 )
                 if touches[(side, price)] > 1:
-                    close_unresolved(
-                        ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts
-                    )
+                    censor(ep, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts)
                     completed.append(ep)
                 else:
-                    active[side][price] = ep
+                    register(ep)
 
     previous_ts = None
     group_ts = None
     group = []
+    suffix_records = 0
+    seen_suffix = False
     with zipfile.ZipFile(path) as archive:
         member = f"{day}_{symbol}_ob200.data"
         if archive.namelist() != [member]:
@@ -352,13 +389,26 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
             for line in stream:
                 record = json.loads(line)
                 ts = int(record["ts"])
-                if ts < day_start:
-                    raise ValueError("QC_RECORD_BEFORE_DAY")
-                if ts >= day_end:
-                    break
                 if previous_ts is not None and ts < previous_ts:
                     raise ValueError("QC_TIMESTAMP_NONMONOTONE")
                 previous_ts = ts
+                data = record.get("data")
+                if (
+                    record.get("topic") != f"orderbook.200.{symbol}"
+                    or not isinstance(data, dict)
+                    or data.get("s") != symbol
+                ):
+                    raise ValueError("QC_SOURCE_IDENTITY_MISMATCH")
+                if ts < day_start:
+                    raise ValueError("QC_RECORD_BEFORE_DAY")
+                if ts >= day_end:
+                    suffix_records += 1
+                    seen_suffix = True
+                    if suffix_records > 1000:
+                        raise ValueError("QC_UNBOUNDED_NEXT_DAY_SUFFIX")
+                    continue
+                if seen_suffix:
+                    raise ValueError("QC_REENTERED_DAY_AFTER_SUFFIX")
                 if group_ts is None:
                     group_ts = ts
                 if ts != group_ts:
@@ -414,8 +464,7 @@ def replay_day(path: Path, symbol: str, day: date) -> list[dict]:
             row["horizon_s"],
         )
     )
-    return rows
-
+    return rows, suffix_records
 
 def read_output(path: Path):
     with gzip.open(path, "rt", encoding="utf-8") as stream:
@@ -488,7 +537,9 @@ def check_symbol(
             or prov["source_sha256"] != digest
         ):
             raise ValueError("QC_SOURCE_PROVENANCE_DRIFT")
-        expected = replay_day(source, symbol, day)
+        expected, suffix_records = replay_day(source, symbol, day)
+        if prov.get("source_suffix_records") != suffix_records:
+            raise ValueError("QC_SOURCE_SUFFIX_COUNT_DRIFT")
         for row in expected:
             try:
                 got = next(actual)
@@ -505,6 +556,7 @@ def check_symbol(
             {
                 "date_utc": day.isoformat(),
                 "source_sha256": digest,
+                "source_suffix_records": suffix_records,
                 "independent_rows": len(expected),
             }
         )

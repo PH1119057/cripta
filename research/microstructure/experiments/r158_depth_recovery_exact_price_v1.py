@@ -10,6 +10,7 @@ DESCRIPTIVE_ONLY_NOT_RESEARCH_READY.
 from __future__ import annotations
 
 import argparse
+import heapq
 import hashlib
 import json
 import zipfile
@@ -141,6 +142,12 @@ class DepthRecoveryReader:
             "b": {},
             "a": {},
         }
+        self.deadline_heaps: dict[
+            str, list[tuple[int, str, Decimal, int]]
+        ] = {"b": [], "a": []}
+        self.visibility_heaps: dict[
+            str, list[tuple[Decimal, str, Decimal]]
+        ] = {"b": [], "a": []}
         self.finished: list[Episode] = []
         self.episode_no = 0
         self.counts = {
@@ -232,23 +239,63 @@ class DepthRecoveryReader:
             uid, seq = ruid, rseq
         return True
 
-    def _resolve_passed_horizons_before_group(self, ts: int) -> None:
-        assert self.books is not None
+    def _register_episode(self, episode: Episode) -> None:
+        side = episode.side
+        self.active[side][episode.price] = episode
+        for horizon in HORIZONS_MS:
+            heapq.heappush(
+                self.deadline_heaps[side],
+                (
+                    episode.start_ts_ms + horizon,
+                    episode.episode_id,
+                    episode.price,
+                    horizon,
+                ),
+            )
+        priority = episode.price if side == "b" else -episode.price
+        heapq.heappush(
+            self.visibility_heaps[side],
+            (priority, episode.episode_id, episode.price),
+        )
+
+    def _resolve_deadlines(self, ts: int, *, inclusive: bool) -> None:
         for side in SIDES:
-            for price, episode in list(self.active[side].items()):
-                if visible_quantity(self.books[side], side, price) is None:
-                    self._censor_episode(
-                        episode, "OB200_EDGE_VISIBILITY_LOST", self.last_ts
-                    )
-                    self._finish_if_complete(side, price)
+            heap = self.deadline_heaps[side]
+            while heap and (
+                heap[0][0] <= ts if inclusive else heap[0][0] < ts
+            ):
+                deadline, episode_id, price, horizon = heapq.heappop(heap)
+                episode = self.active[side].get(price)
+                if episode is None or episode.episode_id != episode_id:
                     continue
-                for state in episode.unresolved():
-                    deadline = episode.start_ts_ms + state.horizon_ms
-                    if ts > deadline:
-                        state.outcome = "N"
-                        state.reason = "CONTINUOUS_THROUGH_HORIZON"
-                        state.outcome_ts_ms = deadline
+                state = episode.states[horizon]
+                if state.outcome is not None:
+                    continue
+                state.outcome = "N"
+                state.reason = "CONTINUOUS_THROUGH_HORIZON"
+                state.outcome_ts_ms = deadline
                 self._finish_if_complete(side, price)
+
+    def _censor_outside_visible_edge(self, side: str, ts: int) -> None:
+        assert self.books is not None
+        book = self.books[side]
+        if len(book) != 200:
+            raise RuntimeError("OB200_DEPTH_NOT_MAINTAINED")
+        boundary = min(book) if side == "b" else max(book)
+        heap = self.visibility_heaps[side]
+        while heap:
+            priority, episode_id, price = heap[0]
+            outside = price < boundary if side == "b" else price > boundary
+            if not outside:
+                break
+            heapq.heappop(heap)
+            episode = self.active[side].get(price)
+            if episode is None or episode.episode_id != episode_id:
+                continue
+            self._censor_episode(
+                episode, "OB200_EDGE_VISIBILITY_LOST", ts
+            )
+            self._finish_if_complete(side, price)
 
     def _apply_delta_group(
         self, ts: int, records: list[dict]
@@ -256,12 +303,10 @@ class DepthRecoveryReader:
         dict[str, dict[Decimal, Decimal]],
         dict[str, dict[Decimal, Decimal]],
         dict[tuple[str, Decimal], int],
-        set[tuple[str, Decimal]],
     ]:
         assert self.books is not None
         before = {side: dict(self.books[side]) for side in SIDES}
         touch_counts: dict[tuple[str, Decimal], int] = {}
-        visibility_lost: set[tuple[str, Decimal]] = set()
 
         for record in records:
             data = record["data"]
@@ -283,59 +328,43 @@ class DepthRecoveryReader:
             self.seq = int(data["seq"])
             self.last_ts = ts
             self.counts["deltas"] += 1
-
             for side in SIDES:
-                for price in self.active[side]:
-                    if visible_quantity(self.books[side], side, price) is None:
-                        visibility_lost.add((side, price))
+                self._censor_outside_visible_edge(side, ts)
 
         after = {side: dict(self.books[side]) for side in SIDES}
-        return before, after, touch_counts, visibility_lost
+        return before, after, touch_counts
 
-    def _resolve_after_group(
+    def _resolve_touched_after_group(
         self,
         ts: int,
         touch_counts: dict[tuple[str, Decimal], int],
-        visibility_lost: set[tuple[str, Decimal]],
     ) -> None:
         assert self.books is not None
-        for side in SIDES:
-            for price, episode in list(self.active[side].items()):
-                if (side, price) in visibility_lost:
-                    self._censor_episode(
-                        episode, "OB200_EDGE_VISIBILITY_LOST", ts
-                    )
-                    self._finish_if_complete(side, price)
-                    continue
-                if touch_counts.get((side, price), 0) > 1:
-                    self._censor_episode(
-                        episode, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts
-                    )
-                    self._finish_if_complete(side, price)
-                    continue
-                qty = visible_quantity(self.books[side], side, price)
-                if qty is None:
-                    self._censor_episode(
-                        episode, "OB200_EDGE_VISIBILITY_LOST", ts
-                    )
-                    self._finish_if_complete(side, price)
-                    continue
-
-                if ts > episode.start_ts_ms and qty >= episode.target_qty:
-                    for state in episode.unresolved():
-                        deadline = episode.start_ts_ms + state.horizon_ms
-                        if ts <= deadline:
-                            state.outcome = "R"
-                            state.reason = "EXACT_PRICE_TARGET_RECOVERED"
-                            state.outcome_ts_ms = ts
-                            state.recovery_ms = ts - episode.start_ts_ms
-
+        for (side, price), touches in touch_counts.items():
+            episode = self.active[side].get(price)
+            if episode is None:
+                continue
+            if touches > 1:
+                self._censor_episode(
+                    episode, "SAME_TIMESTAMP_ORDER_AMBIGUOUS", ts
+                )
+                self._finish_if_complete(side, price)
+                continue
+            qty = visible_quantity(self.books[side], side, price)
+            if qty is None:
+                self._censor_episode(
+                    episode, "OB200_EDGE_VISIBILITY_LOST", ts
+                )
+                self._finish_if_complete(side, price)
+                continue
+            if ts > episode.start_ts_ms and qty >= episode.target_qty:
                 for state in episode.unresolved():
                     deadline = episode.start_ts_ms + state.horizon_ms
-                    if ts == deadline:
-                        state.outcome = "N"
-                        state.reason = "CONTINUOUS_THROUGH_HORIZON"
-                        state.outcome_ts_ms = deadline
+                    if ts <= deadline:
+                        state.outcome = "R"
+                        state.reason = "EXACT_PRICE_TARGET_RECOVERED"
+                        state.outcome_ts_ms = ts
+                        state.recovery_ms = ts - episode.start_ts_ms
                 self._finish_if_complete(side, price)
 
     def _open_new_episodes(
@@ -382,7 +411,7 @@ class DepthRecoveryReader:
                     )
                     self.finished.append(episode)
                 else:
-                    self.active[side][price] = episode
+                    self._register_episode(episode)
 
     def on_group(self, ts: int, records: list[dict]) -> None:
         if not records:
@@ -408,18 +437,17 @@ class DepthRecoveryReader:
             self.counts["source_sequence_gaps"] += 1
             return
 
-        self._resolve_passed_horizons_before_group(ts)
+        self._resolve_deadlines(ts, inclusive=False)
         try:
-            before, after, touches, visibility_lost = self._apply_delta_group(
-                ts, records
-            )
+            before, after, touches = self._apply_delta_group(ts, records)
         except RuntimeError:
             self._censor_all("SOURCE_SEQUENCE_GAP", ts)
             self.books = None
             self.update_id = self.seq = self.last_ts = None
             self.counts["source_sequence_gaps"] += 1
             return
-        self._resolve_after_group(ts, touches, visibility_lost)
+        self._resolve_touched_after_group(ts, touches)
+        self._resolve_deadlines(ts, inclusive=True)
         self._open_new_episodes(ts, before, after, touches)
 
     def finish_day(self, day_end_ms: int) -> None:
@@ -499,6 +527,8 @@ def calculate_archive(
     group_ts: int | None = None
     group: list[dict] = []
     records = 0
+    suffix_records = 0
+    seen_suffix = False
 
     with zipfile.ZipFile(path) as archive:
         member = f"{day}_{symbol}_ob200.data"
@@ -508,13 +538,26 @@ def calculate_archive(
             for line in stream:
                 record = json.loads(line)
                 ts = int(record["ts"])
-                if ts < start_ms:
-                    raise ValueError("BOOK_RECORD_BEFORE_UTC_DAY")
-                if ts >= end_ms:
-                    break
                 if previous_ts is not None and ts < previous_ts:
                     raise ValueError("BOOK_NATIVE_TIMESTAMP_NONMONOTONE")
                 previous_ts = ts
+                data = record.get("data")
+                if (
+                    record.get("topic") != f"orderbook.200.{symbol}"
+                    or not isinstance(data, dict)
+                    or data.get("s") != symbol
+                ):
+                    raise ValueError("BOOK_SOURCE_IDENTITY_MISMATCH")
+                if ts < start_ms:
+                    raise ValueError("BOOK_RECORD_BEFORE_UTC_DAY")
+                if ts >= end_ms:
+                    suffix_records += 1
+                    seen_suffix = True
+                    if suffix_records > 1000:
+                        raise ValueError("UNBOUNDED_NEXT_UTC_DAY_SUFFIX")
+                    continue
+                if seen_suffix:
+                    raise ValueError("BOOK_REENTERED_UTC_DAY_AFTER_SUFFIX")
                 if group_ts is None:
                     group_ts = ts
                 if ts != group_ts:
@@ -556,6 +599,7 @@ def calculate_archive(
         "source_zip_sha256": hash_file(path),
         "source_script_sha256": hash_file(Path(__file__).resolve()),
         "raw_records_read": records,
+        "source_suffix_records": suffix_records,
         "episodes": len(episodes),
         "rows": len(rows),
         "outcome_counts": outcome_counts,

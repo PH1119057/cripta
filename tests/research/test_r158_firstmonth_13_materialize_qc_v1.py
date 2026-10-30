@@ -81,6 +81,13 @@ def stage_day(raw_root, symbol, day):
         snapshot(symbol, ts),
         delta(symbol, ts + 1000, 101, 1001, bid=[["300", "8"]]),
         delta(symbol, ts + 2000, 102, 1002, bid=[["300", "10"]]),
+        delta(
+            symbol,
+            ts + 86400000 + 132,
+            103,
+            1003,
+            bid=[["300", "9"]],
+        ),
     ]
     path = base / f"{day}_{symbol}_ob200.data.zip"
     member = f"{day}_{symbol}_ob200.data"
@@ -131,6 +138,10 @@ def test_full_30d_materialization_then_independent_fullrow_qc(tmp_path):
     )
     assert report["checked_days"] == 30
     assert report["checked_rows"] == 90
+    assert all(
+        item["source_suffix_records"] == 1
+        for item in report["source_days"]
+    )
     assert report["research_ready"] is False
 
     target = output / SYMBOL
