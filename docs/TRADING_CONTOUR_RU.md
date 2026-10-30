@@ -298,6 +298,7 @@ Research evidence checkpoint 2026-10-04:
 - hard stops at -1.0%, -1.5% and -2.0% worsened aggregate R1 economics and are not part of this implementation target;
 - confirmed-entry PostOnly offsets 0.05%, 0.10% and 0.20% were replayed with causal occupancy; 0.10% was the strongest aggregate candidate across both the current first-five cohort and all 15 screened symbols;
 - pre-confirmation fifth-state maker placement is rejected: it changed Entry semantics and produced premature invalid fills;
+
 - delayed maker conversion of hard exits is rejected by OWNER DECISION 2026-10-04 because future adverse movement is unbounded relative to the small fee saving; hard exits remain immediate taker.
 
 The current first-five R1 cohort remains: `APTUSDT / INJUSDT / DOTUSDT / LTCUSDT / ARBUSDT`.
@@ -599,6 +600,7 @@ Entry не вводит winner/priority/arbitration между Strategy.
 Запрещены скрытые глобальные H9/H3/130 bars/30m/60m или иные исторические
 торговые значения по умолчанию.
 
+
 ## 2.5 Entry zone / Entry point
 
 `Entry zone` и `Entry point` — общие понятия, а не одна универсальная формула.
@@ -898,6 +900,7 @@ Execution отвечает за:
 - order preparation/submission;
 - idempotency;
 - client/exchange IDs;
+
 - fill truth;
 - fees/slippage, где они измеримы;
 - initial protection;
@@ -1198,6 +1201,7 @@ with fresh successful Exchange reconciliation, authenticated Bybit connection,
 account identity/capital, exact release and strategy activation, position mode,
 Entry/Exit plan loading and live infrastructure checks retained.
 Individual new Entry requests still enforce physical slot ownership, exposure,
+
 capital reservation, idempotence and initial protection. Existing Exit/position
 supervision remains independent; unresolved safety faults are not waived by
 this policy. No LIVE re-arm is a side effect of deploy.
@@ -1217,4 +1221,330 @@ positions/orders, local commands/reservations/claims or historical incomplete
 bindings exist or not. This retirement does not inspect, modify, close or
 reassign those resources and never implies that Exchange inventory is flat.
 Existing positions remain protected by already placed Exchange safeguards
-subject to Exchange risks, and the new Execution/
+subject to Exchange risks, and the new Execution/Lifecycle/Universal Exit
+runtime must reconcile and resume their exact authorized ExitPlan, including
+when Exit implementation changed without retroactively changing Strategy
+policy. Recovery and fault checks continue independently from installer.
+No automatic mainnet enablement, execution permission or OWNER ARM follows;
+new Entry still requires fresh exact-account/Strategy/release checks and
+explicit owner approval. DEVELOPMENT_RELEASE §46 owns detailed procedure.
+
+## 4.11 Owner decision 2026-10-09 — R1 dynamic L5-3 Exit TP structural changes and Exchange price steps
+
+Only a structural change of the **opposite working-range extremum** qualifies a
+new R1 dynamic SET_TP Exit decision: `range_high` for LONG and `range_low`
+for SHORT. A standalone ATR200 change with unchanged applicable extremum
+does not trigger a new TP decision. The unchanged rolling 36 CLOSED 5m candles
+remain authoritative; when an old candle leaves the rolling window and
+changes the relevant extremum, that is a genuine structural change and must
+be processed. No hysteresis threshold, time cooldown or candle-outfall
+exclusion is introduced. Neither Entry policy nor L5-3 geometry is changed.
+
+When a genuine structural change occurs, the TP objective continues to use
+the original opposite zone **INNER** boundary: LONG `range_high - 0.5 * ATR200`;
+SHORT `range_low + 0.5 * ATR200`. The ATR value is the one current at that
+structural event, not an independently actionable trigger.
+
+The precise Strategy geometry remains unrounded. Exchange Execution must
+fetch the exact instrument's current `priceFilter.tickSize` and
+`lotSizeFilter.qtyStep` from Bybit instrument metadata, fail closed if
+invalid/missing, and normalize only the executable TP price. For a LONG
+position's sell TP the floor tick is used; for a SHORT position's buy TP the
+ceiling tick is used (toward the market, never further than the objective).
+The calculated objective, normalized price and Exchange-acknowledged order
+state must remain distinguishable in lineage; an unchanged confirmed
+effective price/quantity must not cause a redundant Bybit amendment/order.
+
+This decision concerns existing R1 dynamic SET_TP only. Stop Loss rounding,
+other Strategies, changes to Entry rules, new trailing/threshold policy,
+and proactive LIVE re-arm are not authorized by this section.
+
+# 7. Multi-account / multi-venue execution identity — OWNER DECISION 2026-10-16
+
+ARCH §49 owns the upper identity/cardinality model. This section defines how the
+trading contour consumes it.
+
+## 7.1 Strategy is account-independent policy
+
+StrategyCard / EntryPlan / ExitPlan do not hard-code a physical TradingAccount.
+StrategyActivation selects execution environment separately from the immutable
+trading policy.
+
+For REAL execution, every accepted strategy_attempt must resolve through an
+active StrategyExecutionBinding to one exact ExecutionLeg and TradingAccount
+before capital reservation / physical-slot admission. Missing, stale,
+overlapping or ambiguous binding is fail-closed and cannot fall back to a
+default account.
+
+## 7.2 REAL admission is TradingAccount-scoped
+
+AccountStateGeneration, available capital, position-mode evidence, physical
+slot, hot/private inventory, protection and reconciliation must all belong to
+the same exact trading_account_id as the ExecutionLeg.
+
+A successful check against another account on the same Venue does not satisfy
+admission. Likewise public Bybit market context is not private account evidence.
+
+The current one-way physical slot remains account-scoped. Multiple
+TradingAccounts may legitimately hold the same InstrumentIdentity and
+positionIdx concurrently without ownership conflict.
+
+## 7.3 Dedicated Strategy account isolation
+
+Normal REAL deployment uses DEDICATED_STRATEGY isolation: one TradingAccount
+serves at most one independent REAL StrategyActivation at a time. This gives
+separate capital, loss, profit, positions and recovery evidence.
+
+One StrategyActivation may use more than one TradingAccount only through
+explicitly named ExecutionLegs. Multi-leg atomicity/hedge/arbitrage semantics
+are Strategy-owned and require their own approved Strategy contract; the mere
+existence of multiple bindings does not create an arbitrage policy.
+
+Sharing one TradingAccount across independent REAL Strategies, internal netting
+or cross-Strategy capital pooling remains forbidden until separately approved.
+
+### 7.3.1 Strategy fan-out, capacity and protected opening — OWNER DECISION 2026-10-20
+
+A saved copy of StrategyCard is an independent Strategy ID and configuration,
+not a runtime child of its source. Strategy-owned configuration sets the coin
+universe, number of concurrent instruments/positions, stake, leverage and
+one-way/hedge permission; merely changing any one setting never changes
+the common Universal Entry/Exit Engine.
+
+For each accepted Strategy signal, the approved EntryPlan may yield one
+independent account-scoped ExecutionRequest for each eligible authorized
+StrategyExecutionBinding. Each account must pass its own capital, exposure,
+slot ownership, account position mode, instrument support, and LIVE-arm checks.
+There is no implicit cross-account atomicity. Per-account partial acceptance,
+rejection, recovery and Exit must remain attributable and auditable. One
+TradingAccount cannot be concurrently bound to two independent REAL Strategy
+activations; one Strategy may use any number of separately proven accounts.
+
+Capacity is Strategy policy, not a hard-coded one-position-per-Strategy or
+one-position-per-connection rule. In one-way, independently opening the same
+occupied physical account/instrument slot is prohibited unless a separately
+approved plan explicitly manages the existing position. In hedge mode, opposite
+sides are possible only if Strategy policy and exchange/account mode both
+support them. An illustrative ten-instrument policy may allow ten one-way
+positions, or up to twenty directional legs if both sides of all ten are
+explicitly authorized and sufficient capital exists; this is not an implicit
+global default.
+
+Entry decision ownership stays with Strategy/EntryPlan. Execution implements
+technical venue placement and confirms exchange-resident protective orders
+according to ExitPlan; it may not declare a newly opened position safely
+protected before confirmation. Fail-closed/recovery paths preserve real Exit,
+reconciliation and exact physical/account ownership.
+
+## 7.4 Execution and recovery lineage
+
+EntryExecutionRequest / ExitExecutionRequest and durable lifecycle lineage must
+carry or resolve the exact TradingAccount and ExecutionLeg used for the
+mutation. Exchange recovery is performed per TradingAccount/AccountConnector and
+must never reconcile one account's open orders/positions into another account.
+
+Strategy statistics remain attribution-gated by ARCH §47. A dedicated account
+makes accounting clearer but does not replace exact Strategy ownership lineage.
+
+This revision changes no Entry threshold, Exit rule, stake, leverage, protection
+or LIVE-arm policy.
+
+
+## 7.5 R1 one-Strategy/five-symbol configuration — OWNER DECISION 2026-10-21
+
+The owner clarified R1's intended identity: **one independently versioned R1
+StrategyCard**, permitted symbols APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT;
+both LONG and SHORT, one StrategyActivation and one dedicated TradingAccount
+through one proven StrategyExecutionBinding. The number of instruments does not
+multiply Strategy identity, StrategyActivation, account assignments or OWNER ARM.
+
+The Materializer persists one whole-Strategy EntryPlan and the matching ExitPlan
+per exact activation. The EntryPlan monitor is a read-only projection:
+`EntryPlan × InstrumentIdentity × direction`; five symbols and two directions
+produce ten monitored rows with common plan fingerprint, not ten autonomous
+Strategies nor ten persisted EntryPlans. The Dashboard must distinguish the
+Strategy, whole-plan identity, and per-direction readiness.
+
+The five historical per-symbol R1 Strategy identities created before this owner
+clarification are not rewritten, reused or silently merged. Exact historical
+StrategyCard, StrategyActivation, EntryPlan, ExitPlan, fills, PAPER positions,
+P&L and protective Exit ownership remain attributable to original identities.
+A future transactional activation transition must first prove pending PAPER
+orders and active PAPER/REAL position/Exit continuity. It must stop **new**
+signals/orders on legacy activations without orphaning existing Exit. Existing
+real execution permissions cannot be copied to a new Strategy or a new release.
+An inert new StrategyCard alone does not prove LIVE admission readiness.
+
+This is an architecture alignment, **not a change to R1 trading numbers**.
+The source-only unified R1 constructor changes neither DB activations,
+TradingAccount bindings nor mainnet gate, and does not perform OWNER ARM.
+Implementation, tests, verified deploy and runtime behavior have separate
+statuses in CURRENT_PROJECT_MAP.
+
+### 7.5.1 One-Strategy R1 MICRO_LIVE loss/capital limit — OWNER DECISION 2026-10-21
+
+The owner explicitly confirms the financial envelope for the **one**
+`r1_five_symbols` Strategy / one dedicated MAINNET TradingAccount:
+- exact permitted symbols: APTUSDT, ARBUSDT, DOTUSDT, INJUSDT, LTCUSDT;
+  directions LONG/SHORT for monitoring and signals, ONE_WAY position mode,
+  positionIdx=0; one physical open position slot per coin at a time;
+- requested amount **10 USDT per position** per coin, leverage **1x**;
+- total concurrent Strategy requested exposure/capital (open positions,
+  reservations, pending Entry commitments as applicable) **at most 50 USDT**.
+  The limit is across this one Strategy's five coin slots, NOT five separate
+  StrategyActivations or five independent account authorizations;
+- exchange-resident catastrophic initial SL **-10%** per executed
+  position, submitted and exchange-confirmed under the existing R1
+  initial-protection/lifecycle contract. This is not an ordinary Exit
+  target and does not replace dynamic ExitPlan ownership.
+
+Real Entry admission must enforce both each 10 USDT request and the
+account/Strategy aggregate 50 USDT ceiling transactionally; simultaneous
+pending/reserved and open capital cannot silently exceed the envelope.
+This decision does not authorize an additional position in an already
+occupied one-way physical slot, a second TradingAccount, higher leverage,
+an altered Entry/Exit algorithm or a new default from historical research.
+
+The historical five-Strategy R1 MICRO_LIVE cohort and its exceptional
+`CRITICAL_FAULT_DELIVERY` waiver in §4.7 do **not** authorize the new
+unified Strategy. Its pre-arm evidence must use one exact
+StrategyCard/StrategyActivation/EntryPlan/ExitPlan, one exact PRIMARY
+StrategyExecutionBinding, five instrument-scoped mode/slot proofs,
+one independent aggregate capital constraint and exact release identity.
+The ordinary non-waived critical delivery requirement remains in force
+until a separate explicit owner decision. New Strategy policy fields
+affecting results require immutable versioning and explicit activation
+transition; no historical R1 rows are retroactively edited.
+
+This is an **OWNER DECISION approving risk parameters only**. It is NOT
+`MAINNET_GATE_EXPLICIT_OWNER_APPROVAL`, an OWNER ARM, a deploy instruction,
+or permission to send an Exchange order. Canonical order remains:
+CANON UPDATE -> IMPLEMENTATION -> TEST/SHADOW -> LIVE EQUIVALENCE ->
+explicit owner-authorized MICRO_LIVE admission. Until all exact new-Strategy
+gates are proved, `mainnet=0`, execution permissions OFF, no new ACTIVE
+LIVE-arm session, and existing Exit/reconciliation continue independently.
+
+
+## 7.6 Two independent passive P90L90 LEGACY Strategies — OWNER DECISION 2026-10-27 (Issue #243)
+
+Owner explicitly authorizes authoring and durable registration of TWO NEW independent immutable StrategyCards based on the historically tested P90L90 PREV7D + TRAIL035 + opposite RAW L5-3 TP + SECOND48, WITHOUT any trading activation, Exchange orders or LIVE-arm. Historical five-coin results remain research evidence (RESEARCH_COMPUTE §§22.1–22.2), never prior R1 policy or live proof.
+
+- New independent Strategy ID p90l90_legacy_main_ltc_inj, symbols LTCUSDT, INJUSDT, directions LONG and SHORT; one proposed PRIMARY dedicated binding to the proven MAIN TradingAccount.
+- New independent Strategy ID p90l90_legacy_sub_dot_arb_apt, symbols DOTUSDT, ARBUSDT, APTUSDT, directions LONG and SHORT; one proposed PRIMARY dedicated binding to the proven SUB TradingAccount.
+- Both have separately versioned StrategyCard, own EntryPlan and ExitPlan with exact fingerprint and independent disabled StrategyActivation. All trading policy is identical except distinct universe and identity; no runtime inheritance. TradingAccount and AccountConnector identities live solely in StrategyExecutionBinding, not StrategyCard (ARCH §49). Public Bybit MarketSource can be shared.
+
+Exact Entry reference: from only fully closed 5m/15m states L5-3 36×5m, H9-5m 108×5m, H9-15m 36×15m; ATR Wilder 200 and 0.5×ATR inner range for working-width only, with causal warmup. LONG requires exact H9-5m low_raw == H9-15m low_raw; SHORT requires exact H9-5m high_raw == H9-15m high_raw, zero tolerance. Denominator is positive RAW_H9_UNION_SPAN = max(H9-5m high,H9-15m high) - min(H9-5m low,H9-15m low); LONG numerator L5-3 low_raw - H9 low_raw, SHORT numerator H9 high_raw - L5-3 high_raw; admissible 100×numerator/denominator inclusive [0%,15%]. Each symbol PREV7D width median from 7 prior fully complete UTC days, daily UTC refresh, ±0.5 percentage points inclusive, no partial-day/future fallback. First adjacent ordered public-trade crossing of the L5-3 RAW boundary per symbol/5m-state/side: LONG previous > low_raw >= current; SHORT previous < high_raw <= current. One independent one-way occupied slot per instrument; no STAY6, H3, OI or invented cooldown.
+
+Exact Exit reference: catastrophe SL at −10% gross from Entry; after first favorable move >=+0.5% gross activate monotone continuous high-watermark trailing distance 0.35 percentage points (first protection +0.15% gross), never loosen, no retroactive activation-tick fill. Dynamic opposite RAW 36-closed-5m L5-3 target LONG max(high36), SHORT min(low36), only armed/replaced if prospective gross favorable >=+0.5% from Entry, recalculated on newly closed 5m state. Causal event ordering: pre-existing stop, pre-existing resting TP, marketable/updated TP, finally tighten protection effective on later native trade. No arbitrary duration cap or retroactive completion.
+
+SECOND48 baseline: second actual Hard Stop in rolling 48h pauses new Entry for 48h, without closing open positions. Historical baseline was ONE five-symbol portfolio.
+
+**OWNER DECISION 2026-10-28 — Strategy-scoped configurable SECOND48 (Issue #243).** SECOND48 is a **Strategy lifecycle policy**, not a global exchange/account timeout. Each immutable StrategyCard/StrategyVersion explicitly defines `second_hardstop_embargo` with `enabled`, `hardstop_count`, `rolling_hours`, `new_entry_pause_hours`, `close_existing_positions=false`, and `domain=STRATEGY_VERSION`. For current proposed LEGACY profiles the values are enabled, 2, 48, 48 and no forced closure; their per-strategy event/pause state must be independent, shared by LONG and SHORT and all coins *within the same exact Strategy version*. Therefore MAIN LTC/INJ and SUB DOT/ARB/APT NEVER increment or reset each other's counters. Count only realized catastrophic `HARD_STOP` Exit events, not protected/trailing stops, cancellations or modeled adverse price alone. After threshold in the rolling UTC window, forbid only subsequent new Entry for configured duration; existing positions remain under Exit supervision. The window and pause duration are separately configurable positive parameters, and disabling the rule must be explicit. Restart must recover the exact Strategy ID/version/fingerprint, hard-stop source event identities and pause deadline durably; no account-inferred or process-global state. Configuration changes require a **new immutable Strategy version with a new fingerprint** and approved StrategyActivation/plan lifecycle; no in-place rewrite of two already registered passive 2026-10-27 cards or retrospective reinterpretation of historical ledgers. Existing stored `cross_strategy_domain=UNRESOLVED_OWNER_CONTRACT` is historical authoring state and shall remain NOT_READY until superseded by fully validated versions. No global five-coin historical P90L90 SECOND48 result is automatically transferable to two independently configured portfolios. Independent replay/after-fee evidence must demonstrate revised per-Strategy economics before enabling SHADOW; REAL continues to require all other gates.
+
+**PAPER-only continuation 2026-10-28 — no-order P90L90 native-trade proxy (Issue #243).** Before any separately approved REAL capital/order/fill contract, the exact owner-approved two P90L90 StrategyVersion v2 may simulate a strictly **non-Exchange** PAPER position at the causally verified first adjacent Bybit `PUBLIC_TRADE` RAW-crossing price. The *research-model* notional is fixed at 10 USDT per simulated position to preserve the historical P90L90 fee/economics comparison; `schema_leverage=1` is a required database-bookkeeping denomination, **not** an approval for any leverage or Bybit stake. No `paper_orders`, `EntryExecutionRequest` for REAL, exchange order, wallet capacity reservation, Exchange fill/ack, LIVE-arm, physical slot mutation or credentials may arise from this rail. PAPER must preserve exact immutable Strategy ID/version/fingerprint, EntryPlan/ExitPlan, source publicTrade identity/sequence, dedicated TradingAccount binding, one-way position slot, after-fee modeled ledger, durable Exit checkpoint and per-Strategy SECOND48 at transaction boundaries; lifecycle fail-closed on stale/missing causal transport/geometry, ambiguity or incomplete model. The original `execution_policy.order_type=NOT_APPROVED` remains immutable in v2 and **always** disqualifies real `execution_ready`; a positive `paper_ready` and `monitor_ready` prove only the separate zero-order simulation adapter under independently checked observer continuity. Passive database registration `enabled=false` does not itself enable SHADOW. Before owner-enabled SHADOW, require matching independent two-domain research/QC, complete Entry→PAPER→Exit integration tests, exact installed release and runtime evidence. Prior v1 `UNRESOLVED_OWNER_CONTRACT` snapshots remain untouched and NOT_READY.
+
+**Historical research evidence (NOT CANON/TRADE APPROVAL; CHECKED HERE 2026-10-28)**: full 2026-05-18 to 2026-08-16 UTC native-feed replay for two separately scoped strategies completed on actor `cripta`, job `job_260cb2bbf0dd`, 81,130,072 source trades, trade-by-trade baseline parity + ledger/source SHA-256 QC. At modeled 10 USDT per position, AFTER historical fee proxies: MAIN LTC/INJ `SECOND_48H=+5.831220832855 USDT`, SUB DOT/ARB/APT `+7.811427933175 USDT`; independent total `+13.642648766030 USDT`, versus former historical single five-coin SECOND48 `+14.087200729269 USDT`. The two numbers are different portfolio semantics. Bid/ask spread, slippage, funding and latency remain unmodeled; this validates research economics **only**, not exact new source consumer runtime parity or future profitability. Full provenance and immutable result paths/hashes: GitHub Issue #243 checkpoint 6456291425.
+
+Execution constraints: the source research assumed immediate 10-USDT-notional public-trade-price entry only as historical proxy; it did NOT approve actual Bybit order placement, leverage, real position stake/capacity or exchange fill semantics for these two new StrategyCards. Missing exact capital/order/embargo consumer policy must remain NOT_READY, not be filled by historical R1 defaults. Authoring a passive StrategyCard is distinct from enabling real trading; however no executable EntryPlan/ExitPlan equivalence claim may be made until exact new RAW-H9, PREV7D, TRAIL035, RAW L5-3 TP and SECOND48 consumers and tests exist.
+
+Allowed safe target: immutable cards and plan snapshots after exact materialization; disabled activations; audited INACTIVE/non-effective account assignment using an approved writer/actor and verified identity; zero new enabled execution permissions, mainnet off, zero live arms, no Exchange mutation. A pre-existing historical binding is not erased or silently reassigned. Signed MAIN provenance, account-specific writers, lifecycle/Exit proof and eventual separately authorized owner-armed MICRO_LIVE remain independent future gates.
+
+Status of this section: owner intention accepted; Canon publication requires ordinary GitHub review. This document alone is NOT implementation, DB-registration evidence, deployment or runtime verification.
+
+
+### 7.6.1 P90L90 PAPER lineage across code-only releases — OWNER DECISION 2026-10-28 (Issue #243)
+
+The owner approves retaining the five-symbol original P90L90 5m/15m candle archive and causal Entry/transport restart checkpoints across a verified code-only bugfix/release, **without copying, rewriting or reseeding historical facts**. Market-data lineage must not be equated to `INSTALLED_COMMIT` / `LOADED_COMMIT`. The storage/compatibility owner is ARCH §48.2 and glossary §38; this clause owns only the PAPER Strategy gate.
+
+P90L90 activation and the live Observer must prove a versioned compatibility attestation for the exact original causal dataset, all five symbols, their immutable StrategyCard/EntryPlan/ExitPlan fingerprints and independent MAIN/SUB SECOND48 state, plus exact loaded executable release. Only then can the existing 10-USDT-model, zero-order PAPER adapter be activated; historical records retain actual origin/source identity, and newly committed facts record their own producer release. No `source_commit=LOADED_COMMIT` equality shortcut, fabricated native `publicTrade` cursor, legacy R1 inheritance, forced PAPER position, REAL order, execution grant or LIVE-arm. A missing/inconsistent attestation blocks activation, not a reason to reset the durable seed.
+
+
+
+
+### 7.6.2 Общие closed candles и P90L90 restart — OWNER DECISION 2026-10-28
+
+Физический владелец и единое местоположение OHLC — `ARCH §48.4`,
+`analytics.closed_candles`; не добавлять новые per-Strategy/per-TradingAccount
+closed-candle writers. При startup/restart без ожидания живой проторговки
+запрашивать исторические закрытые 5m/15m по точному утверждённому источнику
+и полному `StrategyCard / EntryPlan / ExitPlan`. H9 требует 108 закрытых 5m
+и 36 закрытых 15m свечей (9h), L5-3 — 36 закрытых 5m (3h).
+Но неизменяемый P90L90 v2 дополнительно требует ATR200 и семи **полностью
+завершённых предыдущих UTC суток** для PREV7D. Только 9h для v2 недостаточно;
+короче менять можно лишь новой StrategyVersion после исследований, а не
+подменой source window.
+
+Исторические OHLC заполняют геометрию и gap в свечах, не создают пропущенных
+TradeCursor или Entry. Old P90 seed `source_commit=ecde511...` и
+пять checkpoint из §7.6.1 остаются неизменяемой доказательной историей.
+Только после независимого контроля отсутствующих позиций/pending и доказанного
+начала нового native publicTrade epoch можно разрешать PAPER-сигналы на
+**новых** сделках. Нельзя просто перезаписать старый generation=0 checkpoint
+или обходить модель source continuity. Сохранённая открытая позиция
+обязательно проходит собственный Exit/lifecycle reconciliation.
+
+
+### 7.6.3 Два P90L90 REAL MICRO_LIVE профиля — OWNER DECISION 2026-10-28 (Issue #243)
+
+**Owner exact instruction:** «Подтверждаю, запускай уже быстрее» в ответ на отдельное предложение следующих параметров для **двух современных P90L90**, MAIN LTC/INJ и SUB DOT/ARB/APT: **10 USDT на одну позицию, isolated 1×, MARKET вход, exchange-resident catastrophic SL −10%, не более одной позиции на монету, одновременный лимит 20 USDT MAIN / 30 USDT SUB**. Это approval immutable **REAL execution contract** для новой StrategyVersion, НЕ право ретроспективно переписать PAPER-v2, закрыть preexisting позиции, изменить Exchange gate или создать приказ без independent readiness+owner-arm. Новая версия materialized StrategyCard→EntryPlan/ExitPlan обязательна.
+
+**Entry/Exit/lifecycle scope:** обе новые реальные StrategyVersion сохраняют P90L90 H9/L5-3 exact RAW, ATR200, PREV7D, first ordered native trade crossing, continuous after-fill trailing at +0.5% with distance 0.35 pp, opposite RAW L5-3 target и SECOND48 per immutable StrategyVersion. Отдельное уточнение владельца ниже меняет **только момент первоначального TP для новых REAL версий**: прежнее условие §7.6 о +0.5% как условии **первичной** установки TP к ним не применяется; для исторической PAPER-v2 оно остаётся прежним. Никаких новых H3/OI/cooldown/Entry gap. В расчетах после комиссий фактические Exchange execution/fill/fee/funding, а не publicTrade research-proxy. Состояние позиций и эмбарго каждой версии отдельно, MAIN не изменяет SUB.
+
+**OWNER CORRECTION 2026-10-28 — INITIAL TP ON REAL ENTRY (Issue #243):** «Take profit ставится сразу при открытии сделки на противоположную сторону L5-3 от точки входа». Для обеих новых REAL StrategyVersion начальная биржевая защита после фактического MARKET-fill включает **и catastrophic SL −10%, и TP на противоположной RAW-границе L5-3** из точного causal snapshot закрытых 36×5m свечей: LONG `max(high36)`, SHORT `min(low36)`. TP нельзя откладывать до движения +0.5%: этот уровень является активацией trailing 0.35 pp, а не требованием для **первичного** TP. **OWNER CLARIFICATION 2026-10-29 — ENTRY-ATTACHED FIRST-SECOND PROTECTION (Issue #243):** владелец подтвердил, что первоначальные SL и TP передаются **в том же запросе Bybit V5 `POST /v5/order/create`**, что и `MARKET` Entry. Это уже существующая возможность Execution, а не новая торговая эвристика. Для USDT perpetual по утверждённому one-way contract используются `tpslMode=Full`, `takeProfit` и `stopLoss` как **цены триггеров**, `tpOrderType=Market` и `slOrderType=Market`. Первичная защита не ждёт отдельного запроса `/v5/position/trading-stop` после fill. `takeProfit` при отправке Entry — точная противоположная **RAW L5-3** граница из causal snapshot (LONG `max(high36)`, SHORT `min(low36)`), нормализованная по Bybit tick/trigger rules. Ширина рабочего диапазона допускается как способ вычислить эту же исходную цену, но не создаёт нового процентного TP от фактической fill-цены. API принимает trigger **price**, даже если пользовательский UI отображает проценты.
+
+**Первоначальный и точный SL:** средняя MARKET-fill заранее неизвестна, поэтому при `order/create` предварительный catastrophic SL −10% вычисляется от свежей проверенной Entry reference price в безопасном направлении и округляется по tick. Это только **временный opening-order protective envelope**, а не финальное доказательство точного уровня. После подтверждённого execution/fill средняя реальная цена `actual_avg_fill` задаёт точный SL (LONG ×0.90; SHORT ×1.10), который сравнивается с биржевым состоянием и при необходимости безопасно уточняется. Коррекция не вправе отменить действующий биржевой SL, расширить уже улучшенный Exit stop или поставить под риск открытую позицию без защиты; каждая mutation требует account-scoped сериализации и независимого signed Exchange readback.
+
+**Немедленный Exit handoff:** после первого подтверждённого реального fill/partial fill торговая позиция, её подтверждённый объём, StrategyPosition и ExitPlan **без промедления** переходят Universal Exit. Не ждать следующей 5m свечи, достижения +0.5% или окончания вспомогательной подстройки TP/SL для начала Exit ownership. Exit сразу получает causal native publicTrade/MFE и authenticated private evidence, а затем владеет динамической противоположной RAW L5-3 TP и trailing по уже утверждённому правилу (+0.5% / 0.35 pp). Opening TP/SL — биржевая страховка на первую секунду, **не замена Exit**; начальное уточнение и решения Exit координируются единым account-scoped command owner во избежание гонок и потери защиты.
+
+**Быстрый TP — штатное закрытие:** если цена достигает прикреплённого TP до первого действия Exit и биржа подтверждает реальный fill закрытия, фиксируется нормальный Exchange Exit с фактическим количеством, ценой, комиссиями и PnL. **Запрещено** автоматически отправлять новый произвольный `MARKET reduce-only`, повторять Entry или считать отсутствие уже закрывшейся позиции ошибкой само по себе. Partial fill/partial close и асинхронные order/execution/position события требуют количественной idempotent reconciliation по executionId и точному TradingAccount.
+
+**Exchange evidence и исключения:** ACK `order/create` не доказывает fill или установленную защиту. Нужны независимые signed Exchange readback, подписанная account identity, causal native continuity, корректный Exit owner и реальные protection outcomes. Если **до отправки** целевой RAW TP уже недопустим относительно актуальной цены/venue restrictions, отклонить Entry до mutation — не подставлять иной TP. Если **после fill** реальная позиция остаётся открытой, но SL или TP не подтверждены, это fail-closed `INITIAL_PROTECTION_UNVERIFIED`, запрет новых Entry и обязательный существующий fault/reconciliation safety workflow, без ложного PASS. Владелец **не утверждал** произвольное аварийное закрытие при быстром движении или уже сработавшем TP. Реакция на подтверждённую незащищённую *открытую* позицию за пределами существующего safety contract остаётся отдельным owner decision, а не новым торговым default. Исторические immutable v1/v2 карточки и старые research ledgers не переопределяются.
+
+**Real capital + order contract by exact StrategyVersion**:
+- MAIN: symbols LTCUSDT, INJUSDT; independent MAIN TradingAccount binding; maximum **2 concurrent per-symbol slots**, total reserved+pending+open requested capital **20 USDT**.
+
+- SUB: symbols DOTUSDT, ARBUSDT, APTUSDT; independent SUB TradingAccount binding; maximum **3 concurrent per-symbol slots**, total reserved+pending+open requested capital **30 USDT**.
+- Per new entry `requested_amount=10 USDT` **at 1× isolated**, interpreted as 10 USDT targeted position notional/initial-margin budget before fees (at 1× these are nominally equivalent). Account capacity must include actual fees, rounding and existing/pending reservations; cannot exceed approved ceilings, cannot borrow other-account capacity, and cannot silently increase position to meet an exchange minimum. If symbol's Bybit minimum lot/tick/notional prevents compliant 10 USDT, reject Entry fail-closed rather than upsize. Exact normalized quantity depends on current Bybit instrument filters; never derive from paper proxy.
+- `entry.order_type=MARKET` only for a **new** causally verified signal after current live publicTrade epoch, under exchange-one-way `positionIdx=0`, `marginMode=ISOLATED`, `leverage=1x`. No hedge, duplicate reservation, on-behalf account substitution or order sent from old PAPER path. Use actual Exchange orderAck/executionId/partial-fill and idempotent command ledger; every attempt and reservation belongs to exact StrategyVersion+TradingAccount/AccountConnector.
+- `initial_protection` = Exchange-resident SL at **10% gross adverse price from actual position average executed Entry price**; LONG `entry_fill_avg × 0.90`, SHORT `entry_fill_avg × 1.10`, rounded in safe direction by current exchange tick contract, with native conditional trigger method only after exact venue support validated. Ack of entry order ≠ filled position; ack of stop request ≠ confirmed active stop. All newly filled exposure must be protected or immediately subject to fail-closed emergency reconciliation; partial fill/protection race, reduce-only close, position quantity and after-fill TP/Exit updates require explicit tests. Do not use simulation trade price to calculate real SL.
+- Initial REAL protection must prove both Exchange-resident SL and the opposite RAW L5-3 TP immediately after actual fill; existing ExitPlan owns subsequent trailing/TP updates. Exchange stop stays protected without momentary unprotected exposure, no replacement that widens stop. First real trade only when native-mode, signed private order/fill state, fresh publicTrade cursor, account-scoped Position Supervisor/Lifecycle worker, protection status and emergency fault delivery are independently observed and attested. The installed service is not proof of behavior.
+- Capital ceilings are **per Strategy + exact dedicated TradingAccount**, not an aggregate across both accounts; slots account for queued, in-flight, reserved and confirmed physical exposure. On restart recover pending orders, exchange and local position state, current Exchange SL, and SECOND48 before any new Entry. Missing/reconnecting private WS => mainnet/account gate OFF; no speculative orders or fresh Entry after disconnection.
+
+**Release / live-arm distinction:** `OWNER_REAL_CAPITAL_CONTRACT=APPROVED`, `CANON_UPDATE_REQUIRED=YES` and `IMPLEMENTATION_AND_TEST_REQUIRED=YES`. The owner's request to proceed is not evidence of `READY_FOR_OWNER_ARM`. Exact approved release, loaded process identity, signed MAIN+SUB account safety snapshots, position/protection reconciliation, private WS continuity, deterministic order/exit tests and explicit target release/account scope arm checks remain separate mandatory gates under TC §4.7/§4.9, ARCH §7.2 and DEV §46. Until all pass `REAL_READY=NO`, `LIVE_ARM=OFF`; no startup/registration may automatically set `StrategyActivation.enabled`, permissions or Exchange gate. No real diagnostic smoke unless independently owner-triggered under TC §4.8.
+
+### 7.6.4 P90L90 REAL Exit request freshness — OWNER DECISION 2026-10-29 (Issue #243)
+
+For the TWO new P90L90 REAL MAIN/SUB StrategyVersions in §7.6.3, the owner
+explicitly approves `exit_policy.execution_policy.max_request_age_seconds=5`
+(integer seconds). This is an **ExitDecision-to-ExecutionRequest dispatch
+freshness bound**, measured from the exact UTC `ExitDecision.decided_at`;
+expired commands are rejected fail-closed as `REQUEST_EXPIRED`, never
+silently reissued using stale Exit geometry or an assumed position state.
+Recompute and re-attest current Exchange position/protection/source state
+before any new decision. The value is Strategy-owned per immutable REAL
+StrategyVersion/ExitPlan, not a runtime/global default and not an Entry age.
+
+This **does not delay or expire Exchange-resident TP, catastrophic SL or
+exchange-side trailing** already installed on Bybit; those remain effective
+until independently confirmed filled, cancelled or replaced. Exit Engine
+produces decisions to update dynamic opposite RAW L5-3 TP, tighten trailing /
+stop, or perform an explicitly allowed close action; Bybit itself triggers
+existing protective orders. The current 5-second value is a bounded
+operational freshness rule, not a minimum wait or a latency guarantee.
+A future adjustment requires a new approved immutable StrategyVersion and
+revalidation, not a hot runtime setting or retroactive rewrite of v1/v2.
+No mainnet permission, account arm, Strategy activation or deployment follows
+from this value; all §4.7/§7.6.3 gates remain mandatory.
+
+### 7.6.5 P90L90 REAL TRAIL035 — OWNER CORRECTION 2026-10-29 (Issue #243)
+
+**Owner exact correction:** «Надо именно через API подключать Bybit трейлинг. Именно это было в испытании. Именно так и должно быть. Иначе это уже другая стратегия». Для обеих новых REAL MAIN/SUB StrategyVersion §7.6.3 непрерывный TRAIL035 исполняется **автономным биржевым trailing stop Bybit**, а не серией программных `SET_STOP` по native-tick/closed-5m или локальному high-watermark. Историческая PAPER-v2, результаты research и утверждённые числа входа/выхода не переписываются.
+
+- После фактического MARKET fill/partial fill и подтверждения `StrategyPosition`, количества и первоначальных Exchange TP+catastrophic SL Universal Exit организует постановку **единственного account-scoped Bybit** `POST /v5/position/trading-stop` с `category=linear`, `tpslMode=Full`, `positionIdx=0`, `trailingStop` и `activePrice`; это Exchange-native conditional protection, не сервисный цикл перетаскивания стопа.
+- `activePrice` = уровень благоприятного движения на **+0.5% gross от подтверждённого `actual_avg_fill`** (LONG `fill × 1.005`, SHORT `fill × 0.995`). `trailingStop` по API — **абсолютное ценовое расстояние**, не строка «0.35%»: оно рассчитывается как `actual_avg_fill × 0.0035`, нормализуется в допустимое для инструмента расстояние по свежему tick/venue contract без увеличения разрешённого риска. При невозможности точного безопасного представления — fail-closed, без самовольного изменения 0.35 pp.
+- Постановка с Exchange `activePrice` выполняется **как можно раньше после подтверждённого fill**, пока порог ещё не достигнут, чтобы движение между событиями/закрытием очередной свечи не влияло на сопровождение. Сам trailing активируется Bybit при достижении `activePrice`. Отсутствие ещё одного publicTrade или закрытой 5m свечи не должно откладывать начальную передачу трейлинга. Если порог был достигнут до допустимой безопасной постановки, нельзя объявлять пропущенную активацию успешно восстановленной: требуется account-scoped reconciliation и фактический signed Exchange readback.
+- По подписанному `/v5/position/list` необходимо независимо подтвердить **ненулевой ожидаемый `trailingStop`** с правильным TradingAccount, positionIdx, qty, TP/SL, source/protection generation и отсутствием противоречащей pending mutation. ACK `trading-stop` сам по себе не является Exchange evidence. Повторный REST `SET_TRAILING` без проверенной необходимости запрещён; локальная подмена `SET_STOP` как «эквивалент» TRAIL035 запрещена.
+- Закрытые 5m свечи остаются источником динамической противоположной RAW L5-3 **TP**, не источником обновления Exchange trailing. Действующие начальный TP и аварийный SL нельзя молча отменить/ослабить во время постановки или обновления TP; отдельные Exchange mutation/fill races, partial fill, very-fast TP и restart должны пройти отрицательные и end-to-end проверки. При потере private WS/источника/подтверждения защиты — fail-closed и существующий fault/reconciliation процесс, без придуманного market close.
+
+Настоящее решение не даёт автоматического LIVE-arm, permission, регистрации активной стратегии или права обойти Observer/Execution hardstop. До live-equivalence обязательны реальные MAIN/SUB account-local proof, post-fill handoff, native/candle continuity, Bybit-side TRAIL035 readback, recovery и §4.7 gates.
+
