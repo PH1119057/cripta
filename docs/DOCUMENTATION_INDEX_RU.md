@@ -1516,3 +1516,39 @@ No change to Project Source set (11 documents), base pre-read, routed document p
 ## 17.1.5 Permanent bounded Release Controller — OWNER DECISION 2026-10-30
 
 Canonical release controller approval/actor/path/recovery contract: DEVELOPMENT_RELEASE §50.5; architecture boundary: CRIPTA_ARCHITECTURE_RULES §50; vocabulary: CRIPTA_GLOSSARY. Tracking: GitHub Issue #288. No change to current 11-file Project Source set, mandatory pre-read, routing, paths or bootstrap. This documentation change neither installs a controller nor modifies SentinelX permissions, runtime or LIVE status.
+
+# 60. №13 Depth Recovery endpoint/tie/gap contract — OWNER DECISION 2026-10-31
+
+Owner closes the remaining physical ambiguities of the first-month #13
+Depth Recovery contract in `RESEARCH_COMPUTE §21.8`:
+
+- recovery uses the same exact `side+price` and original pre-decrease target;
+  it must be observed at a strictly later native timestamp than the depletion;
+- the horizon endpoint is inclusive: recovery observed exactly at
+  `t0+15s`, `t0+60s` or `t0+300s` is `R`;
+- a same-native-timestamp ordering ambiguity that can affect the episode result
+  is fail-closed `C / SAME_TIMESTAMP_ORDER_AMBIGUOUS`, never inferred from file
+  order;
+- `N` is allowed only with proven source/book continuity through the complete
+  horizon and a trusted observation at or after the endpoint; wall-clock expiry
+  alone does not create `N`;
+- source gap, sequence discontinuity or snapshot reset censors only unresolved
+  horizons; already established `R`/`N` is retained;
+- an exact price outside the provably visible OB200 boundary censors unresolved
+  horizons; absence inside the provably visible region is observed zero;
+- 15/60/300s outcomes are independent, so `N@15s` may coexist with later
+  `R@60s/R@300s`; unresolved day-end outcomes are right-censored and never
+  carried across UTC days.
+
+This decision supersedes only the previously OPEN #13 endpoint/tie/gap/edge
+items in §21.8. Historical `exact_price_recovery_v1/v2` artifacts remain
+evidence and are not silently promoted or reinterpreted. Implementation requires
+a new formula version, full first-month materialization, independent QC and
+explicit `DESCRIPTIVE_ONLY` timing limitation where local historical
+`available_after` is unavailable.
+
+Documentation maintenance gate: current 11-file Project Source set, paths,
+mandatory pre-read and routing are unchanged; no README/AGENTS/bootstrap update
+is required. This is research measurement canon only and does not change
+Strategy/Entry/Exit/Execution, DB, services, deployment or LIVE.
+
