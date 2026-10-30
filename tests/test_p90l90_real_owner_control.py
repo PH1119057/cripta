@@ -6,7 +6,9 @@ DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
 SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
-MAIN_PRIVATE_DROPIN = ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf"
+MAIN_PRIVATE_DROPIN = (
+    ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf"
+)
 PREARM_SCRIPT = ROOT / "operations/implementation/control_p90l90_real_v3_prearm.py"
 PREARM_EVIDENCE = ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
 
