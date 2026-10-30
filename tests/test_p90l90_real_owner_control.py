@@ -193,3 +193,12 @@ def test_p90_portal_micro_live_waiver_is_scoped_and_release_migrated() -> None:
     assert "UPDATE control.execution_gates" not in migration
     assert "execution_permissions" not in migration
     assert "20261030_p90_portal_micro_live_waiver.sql" in installer
+
+
+def test_p90_prearm_uses_latest_completed_proven_account_generation() -> None:
+    source = PREARM_EVIDENCE.read_text()
+    assert "AND state='COMPLETE'" in source
+    assert "AND identity_status='PROVEN'" in source
+    assert "AND completed_at IS NOT NULL" in source
+    assert "ORDER BY completed_at DESC LIMIT 1" in source
+    assert "ORDER BY started_at DESC LIMIT 1" not in source
