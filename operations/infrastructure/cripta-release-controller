@@ -192,28 +192,43 @@ def _sandbox_ok() -> bool:
     return EXPECTED_RW_PATHS <= actual
 
 
+def _cripta_test(flag: str, path: Path) -> bool:
+    result = subprocess.run(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "cripta",
+            "--",
+            "/usr/bin/test",
+            flag,
+            str(path),
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=SAFE_ENV,
+    )
+    return result.returncode == 0
+
+
 def _actor_paths_ok() -> bool:
-    current = RUNTIME_ROOT / "current" / "operations" / "infrastructure"
-    preflight = current / "cripta-permission-preflight"
-    sync = current / "cripta-source-sync"
-    if not preflight.is_file() or not sync.is_file():
-        return False
+    sync = RUNTIME_ROOT / "current" / "operations" / "infrastructure" / "cripta-source-sync"
     checks = [
-        f"read:{sync}",
-        f"execute:{sync}",
-        f"create-child:{SOURCE}",
-        f"create-child:{SOURCE / '.git'}",
-        f"create-child:{RUNTIME_ROOT / 'releases'}",
-        f"create-child:{TOOLING_ROOT / 'releases'}",
+        ("-r", sync),
+        ("-x", sync),
+        ("-w", SOURCE),
+        ("-x", SOURCE),
+        ("-w", SOURCE / ".git"),
+        ("-x", SOURCE / ".git"),
+        ("-w", RUNTIME_ROOT / "releases"),
+        ("-x", RUNTIME_ROOT / "releases"),
+        ("-w", TOOLING_ROOT / "releases"),
+        ("-x", TOOLING_ROOT / "releases"),
     ]
-    args = [str(preflight), "--actor", "cripta"]
-    for check in checks:
-        args.extend(["--check", check])
-    try:
-        _run(args)
-    except ControllerError:
-        return False
-    return _sandbox_ok()
+    index = SOURCE / ".git" / "index"
+    if index.exists():
+        checks.append(("-w", index))
+    return all(_cripta_test(flag, item) for flag, item in checks) and _sandbox_ok()
 
 
 def _rollback_ready(baseline: str, runtime: Path, tooling: Path) -> bool:
