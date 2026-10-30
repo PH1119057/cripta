@@ -19,6 +19,11 @@ def test_controller_source_is_valid_python_and_has_no_cli_parser():
     assert '"--regid={user}"' in source
     assert '"--init-groups"' in source
     assert "/usr/sbin/runuser" not in source
+    assert '"/usr/bin/systemd-run"' in source
+    assert '"--wait"' in source
+    assert '"--pipe"' in source
+    assert '"--collect"' in source
+    assert '"--property=TimeoutStartSec=1800"' in source
 
 
 def test_controller_service_is_inert_and_sandboxed():
