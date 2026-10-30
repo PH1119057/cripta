@@ -6,6 +6,9 @@ DASH = ROOT / "operations/dashboard/app.py"
 OBSERVER = ROOT / "operations/monitoring/universal_entry_shadow.py"
 CONTROL = ROOT / "src/bybit_workbench/p90l90_real_arm_control.py"
 SUB_PRIVATE = ROOT / "operations/systemd/cripta-private-runtime@.service"
+MAIN_PRIVATE_DROPIN = (
+    ROOT / "operations/systemd/cripta-private-runtime.service.d/10-pythonpath.conf"
+)
 PREARM_SCRIPT = ROOT / "operations/implementation/control_p90l90_real_v3_prearm.py"
 PREARM_EVIDENCE = ROOT / "src/bybit_workbench/p90l90_real_prearm_evidence.py"
 
@@ -62,10 +65,15 @@ def test_p90_observer_has_three_state_prearm_real_failclosed_switch() -> None:
     assert "p90_real_live = True" in source[real:partial]
 
 
-def test_p90_sub_private_runtime_publishes_fresh_position_mode_evidence() -> None:
-    source = SUB_PRIVATE.read_text()
-    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in source
-    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in source
+def test_p90_private_runtimes_publish_fresh_mode_and_signed_ipc() -> None:
+    main_source = MAIN_PRIVATE_DROPIN.read_text()
+    sub_source = SUB_PRIVATE.read_text()
+    assert "Environment=CRIPTA_P90_REAL_PRIVATE_IPC=ENABLED" in main_source
+    assert "Environment=CRIPTA_P90_REAL_PRIVATE_IPC=ENABLED" in sub_source
+    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in main_source
+    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in main_source
+    assert "Environment=CRIPTA_POSITION_MODE_REFRESH_SECONDS=30" in sub_source
+    assert "Environment=CRIPTA_POSITION_MODE_FRESHNESS_SECONDS=90" in sub_source
 
 
 def test_p90_technical_evidence_and_owner_arm_are_separate_actions() -> None:
