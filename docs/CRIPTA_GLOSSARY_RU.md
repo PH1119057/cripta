@@ -298,7 +298,6 @@ LONG/SHORT не переименовывают физические объект
 торговым решением.
 
 **MarketRegime** — versioned причинная классификация объективного состояния
-
 рынка, которая различает не только мгновенный импульс, но и устойчивый режим
 по multi-horizon evidence. Exact thresholds/horizons не следуют из термина.
 
@@ -600,7 +599,6 @@ mutation. Account/trading-capacity state не входит в обязатель
 и может присутствовать только как отдельно предоставленный causal technical
 input.
 
-
 Alert stage является обязательной частью полного contour, но отсутствие
 owner-approved alert generation policy означает `NO_POLICY`: replay не имеет
 права придумывать thresholds, severity или alert из самого факта наличия
@@ -900,7 +898,6 @@ explicit and rechecks freshness at action time.
 
 **Research Measurement Contract** — канонический для исследования способ определения физической величины, формулы, единицы измерения, числителя/знаменателя, normalizer, окна и времени доступности. Единственный procedural owner — `RESEARCH_COMPUTE §21`; словарь не дублирует формулы.
 
-
 **Per-Instrument Feature** — наблюдаемая или производная feature одного exact `InstrumentIdentity`, `MarketSource`, периода, окна и версии алгоритма. Общая формула не означает общую нормализацию, распределение, порог или торговую интерпретацию для разных монет.
 
 **Analytical Cube / аналитический куб** — многомерное представление с обязательными осями Instrument × Time × Indicator и сохраняемыми source/venue, quality, direction, formula/window version, provenance и causal timing; допускает сравнение, но не автоматическое усреднение значений по монетам.
@@ -984,4 +981,3 @@ pause/restart/gap: historical bars позволяют восстановить g
 не заменяют пропущенные `publicTrade execId/seq`. Новые Entry
 допустимы лишь после фактического нового native cursor и независимых
 position/pending/reconciliation gates. Старый checkpoint сохраняется.
-
