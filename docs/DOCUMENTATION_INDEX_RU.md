@@ -1181,4 +1181,335 @@ OWNER DECISION:
   inventory, replacement analytics verification, backup/rollback and
   post-cutover runtime/disk evidence;
 - first cutover is observed for at least 7 days before storage behavior is
-  declared opera
+  declared operationally stable.
+
+Canonical ownership:
+- ARCH §48 owns storage/recoverability/retention architecture;
+- GLOSSARY §32 owns storage-class terminology;
+- DEVELOPMENT_RELEASE owns PostgreSQL/filesystem migration, backup, rollback and
+  actor/path safety;
+- RESEARCH_COMPUTE owns research dataset provenance/reproducibility and bounded
+  heavy-input processing.
+
+Documentation maintenance gate:
+- active document set: unchanged;
+- paths / mandatory pre-read / routing: unchanged;
+- Project Source remains exactly 11 current docs;
+- no existing section renumbered;
+- README / AGENTS / Project Instructions topology update is not required;
+- no Entry/Exit/Strategy/LIVE rule is changed;
+- this documentation commit performs no DB purge, schema migration, service
+  restart, deploy, LIVE arm or Exchange mutation.
+
+# 37. Multi-account / multi-venue identity revision — OWNER DECISION 2026-10-16
+
+OWNER DECISION:
+- market identity, private account identity and Strategy identity are separate
+  axes;
+- Venue / MarketSource / InstrumentIdentity own public market lineage;
+- TradingAccount is the stable opaque identity of a concrete private
+  main/subaccount/wallet and is not BYBIT:UNIFIED or another account type label;
+- StrategyCard remains independent of physical accounts;
+- REAL StrategyActivation resolves through StrategyExecutionBinding and one or
+  more named ExecutionLegs to exact TradingAccounts;
+- DEDICATED_STRATEGY is the default REAL isolation: one TradingAccount is not
+  concurrently shared by independent REAL StrategyActivations;
+- one Strategy may use multiple TradingAccounts for explicit multi-leg
+  execution; this does not itself authorize arbitrage/hedge behavior;
+- public market data is stored once per MarketSource/Instrument/time, not once
+  per TradingAccount;
+- different Venues remain distinct market facts; cross-venue aggregates preserve
+  contributor lineage;
+- CEX and DEX use the same upper identity model while adapters/provenance remain
+  venue-specific;
+- order/fill/position uniqueness must be scoped by exact provider/account
+  semantics rather than assumed globally;
+- current BYBIT:UNIFIED single-account implementation is a migration finding,
+  not the target identity model.
+
+Canonical ownership:
+- ARCH §49 owns upper identity/cardinality and account-isolation invariants;
+- GLOSSARY §33 owns terminology;
+- TRADING_CONTOUR §7 owns Strategy/Entry/Exit/Execution consumption of bindings;
+- OBSERVATION_ANALYTICS §7 owns market-source vs account-data observation grain;
+- DEVELOPMENT_RELEASE §48 owns additive/cutover/destructive migration ordering;
+- RESEARCH_COMPUTE §20 owns research dataset identity/provenance rules;
+- SECURITY owns credential separation;
+- CURRENT_PROJECT_MAP §37 records implementation gaps/status only.
+
+Documentation maintenance gate:
+- active document set remains unchanged;
+- no file path, mandatory pre-read or routed-reading rule changes;
+- Project Source remains exactly 11 current documents;
+- existing section numbers are not renumbered;
+- README / AGENTS / Project Instructions topology update is not required;
+- this documentation revision contains no Python/SQL/runtime mutation;
+- DB migration, data deletion, deploy, LIVE arm and Exchange mutation remain
+  separate future implementation steps.
+
+## 2026-10-18 PostgreSQL storage emergency amendment
+
+ARCH §50 owns one-time bounded physical PostgreSQL storage exception; DEVELOPMENT_RELEASE §49 owns actor/preflight, quiesce, rollback, restore and runtime gates; CURRENT_PROJECT_MAP records the time-bounded observed host state. This does not amend ARCH §48–49 retention/identity or close R10b/R11/R12. Current 11-document set, routing, root README/AGENTS and Project Instructions topology unchanged. LIVE is not authorized.
+
+
+# 38. Per-instrument research measurement and analytical cube — OWNER DECISION 2026-10-18
+
+Owner approves one research-wide measurement contract and a multidimensional cube, preserving separately every exact coin/instrument and its favorable/adverse event evidence. Research features are not silently averaged or normalized across symbols; the minimum axes are Instrument × Time × Indicator, with version, window, quality, direction and provenance as additional dimensions. Research of the five Bybit coins remains first; other venues/external signals/cross-venue are deferred until after the current Bybit research.
+
+Canonical ownership:
+- `RESEARCH_COMPUTE §21` owns physical units, denominators, coin-specific capacity and OI, VWAP vs quote-weighted estimators, temporal semantics, layer separation, aggregation and the per-(instrument, indicator, version, scope) RESEARCH-READY gate.
+- `CRIPTA_GLOSSARY §34` owns stable terms, not duplicate formulas.
+- `ARCH §48–49` continues to own storage/market-source/instrument architecture. This research-only measurement contract does not migrate data or alter runtime schema.
+- This INDEX records decision and document membership; RESEARCH journal records executed evidence rather than policy.
+
+Documentation maintenance gate:
+- Existing 11 current Project Source docs; no twelfth file, no splitting, no path/routing/base pre-read change.
+- `README.md`, `AGENTS.md` and `operations/bootstrap/CHATGPT_PROJECT_INSTRUCTIONS_RU.txt` not altered: bootstrap/topology content unchanged.
+- No existing section renumbered; new `RESEARCH_COMPUTE §21`, `GLOSSARY §34` and INDEX §38 are additive.
+- Historical 15/30 READY is not retroactively converted to 75/150; re-QC per pair before promotion.
+- No new trading threshold/Strategy behavior, market data acquisition, server filesystem/DB write, release/deploy or LIVE authorization.
+
+# 39. Independent Strategy configurations, multi-account fan-out and manual readiness — OWNER DECISION 2026-10-20
+
+Canonical owners: ARCH §49.6 for independent Strategy IDs, DEDICATED_STRATEGY
+TradingAccount isolation and fan-out; TRADING_CONTOUR §7.3.1 for Strategy
+capacity, one-way/hedge and account-scoped physical slot/Exit guarantees;
+GLOSSARY §33 for exact terms; DEVELOPMENT_RELEASE §46.1 for automatic
+post-deploy technical readiness and separate explicit OWNER ARM.
+
+This is target canonical architecture, not evidence of completed schema,
+Entry/Exit/Execution consumers, connectors, tests, Dashboard, deployment or
+LIVE authorization. No current Project Source documents, paths, mandatory
+pre-read or routing are changed; 11-member Project Source remains intact.
+The root README / AGENTS bootstrap are unchanged because routing and document
+membership are unchanged. Documentary commits do not authorize new REAL Entry.
+
+
+# 40. Release-bound historical Entry authorization independent of Exit — OWNER DECISION 2026-10-21
+
+The owner reconfirmed the 2026-10-08/09 invariant: routine deploy never waits
+for Exchange account to become flat; after release switching, the new runtime
+continues protection/reconciliation/Exit for existing positions. The 2026-10-15
+proven-flat prerequisite for retiring old LIVE-arm Entry authorization was a
+contradictory later amendment and is superseded, not an exception to the owner
+intent. DEVELOPMENT_RELEASE §44–46.1 owns release/retirement procedure;
+TRADING_CONTOUR §4.10–4.10.1 owns independent Entry/Exit behavior;
+ARCH §46 owns recovery. Explicit OWNER ARM remains required for NEW REAL Entry.
+
+Same-cycle changes: DEVELOPMENT_RELEASE 2.1, TRADING_CONTOUR 2.9,
+CURRENT_PROJECT_MAP 12.24 and source/test corrective proposal. No current
+file count/path, mandatory pre-read, routing or Project Instructions content
+changed; eleven Project Source documents remain. Root README/AGENTS/bootstrap
+requires no topology update. No canonical new-entry authorization, Exchange
+mutation or production deployment is performed by this documentation update.
+
+
+# 41. R1 Strategy identity and EntryPlan monitoring correction — OWNER DECISION 2026-10-21
+
+R1 is one StrategyCard/StrategyActivation serving five configured coins and
+both directions, with one authorized TradingAccount. The Materializer persists
+one whole-Strategy EntryPlan, whose five instrument × two direction monitoring
+lanes are displayed by the Dashboard with the underlying EntryPlan fingerprint.
+Previously stored per-symbol R1 Strategies remain historical exact-lineage
+records and must not be silently reparented. See TRADING_CONTOUR §7.5 for
+specific R1 ownership and transition; ARCH §49.3/§49.6 and
+TRADING_CONTOUR §7.3.1 for generalized account/Strategy bindings.
+
+Source construction and read-only monitor correction do not constitute
+activation migration, LIVE readiness, new Entry authorization or deploy.
+CURRENT_PROJECT_MAP records the source/test/production boundary. Active docs,
+mandatory pre-read, routing, Project Source file count, and README/AGENTS
+bootstrap entrypoints are unchanged.
+
+
+# 42. R1 single Strategy / five-symbol production migration — runtime checkpoint 2026-10-21
+
+CURRENT_PROJECT_MAP 12.26 records the dated operator-approved and verified
+production change: old five per-symbol R1 activations retired for **new Entry**,
+new immutable R1 StrategyCard/StrategyActivation, whole-plan EntryPlan/ExitPlan
+for five instruments and two directions, ten EntryPlan monitoring rows, and
+one ACTIVE dedicated TradingAccount StrategyExecutionBinding. The historical
+28 PAPER positions and 48 PAPER orders retained their original exact lineage
+hashes; all REAL permissions and mainnet gate stayed OFF, no OWNER ARM.
+
+GitHub PR #132 (EntryPlan monitor), #133 (unified R1 source and guarded
+transition), #135 (physical claim/command schema fix) and #136 (smallint
+mainnet gate binding SQL fix) are the related implementation evidence.
+MAP owns exact deployment job IDs, commit identities, DB verification,
+source/loaded distinction, failures and recovery QC. TRADING_CONTOUR §7.5
+remains the canonical R1 owner/model specification, not this index.
+The new document section does not change source-file cardinality,
+mandatory pre-read, routing, README/AGENTS/bootstrap or UI capacity.
+Application real trading/Exit takeover and unrelated Observer continuity
+issues are NOT declared verified by a flat-account DB migration.
+
+
+# 43. Observer bounded REST trade-audit recovery production checkpoint — 2026-10-21
+
+Owner-requested stabilization of the publicTrade REST continuity auditor:
+truncated HTTP response body and disconnected transport are now retryable
+only inside the preexisting two-attempt / four-second budget. There is no
+invented trade/OI replay and no relaxation of fail-closed causality.
+GitHub PR #138, all relevant CI PASS, deployment job
+`job_0a149834e6e2` exit_code=0, release
+`aef533b154945e0b2871571796a75848c3f77ebd` loaded and observed
+RUNNING with exact monitor lineage, 1 Strategy, 1 EntryPlan and 10 lanes.
+CURRENT_PROJECT_MAP 12.27 is the dated source/result/QC reference,
+including the first aborted exact-commit install attempt, rollback backup,
+runtime identity, and unresolved historical fault evidence.
+OBS §4 preserves operator-owned explicit resolution; do not auto-clear
+five remaining historical Observer faults merely because the new observer
+runs. No current Project Source count, canonical routing or bootstrap
+topology change was introduced by this checkpoint.
+
+
+# 44. Explicit historical Observer fault resolution — 2026-10-21
+
+CURRENT_PROJECT_MAP 12.28 contains the exact date, five fault IDs, original
+historic OI/publicTrade missing-data evidence, guarded actor/DB transaction,
+operator-approved audit fields, and post-commit QC. Five stale
+`UNIVERSAL_ENTRY_OBSERVER_RUNTIME_ERROR` incidents are resolved by an
+explicit owner-scoped operation, **not** by automatic success refresh.
+Original slot OI and DOTUSDT 3 publicTrade execIds remain NOT_RECOVERED;
+historical epochs remain NOT_COMPARABLE and cannot be silently backfilled.
+Post-state: observer fault OPEN=0, lifecycle fault OPEN=0, release-arm
+incident OPEN=0, observer RUNNING on loaded `aef533b...` with R1 one
+EntryPlan/ten lanes. Mainnet=0; no execution permissions or owner arm.
+
+Canonical owner: OBS §4 for explicit operator resolution and durable audit;
+Dashboard `resolve_observer_runtime_fault()` is the reused implementation;
+DEVELOPMENT_RELEASE §§5.1, 13, 19.5–19.6 for actor, DB privileges and
+upstream tool-security classifications. This is a dated operational checkpoint,
+not an architecture/trading-policy change. No changes to current Source count,
+paths, mandatory pre-read, routing or README/AGENTS bootstrap topology.
+
+
+# 45. Owner-approved R1 unified MICRO_LIVE envelope — 2026-10-21
+
+The owner approved the financial envelope for **one** `r1_five_symbols`
+Strategy on five coins in ONE_WAY mode: 10 USDT per open position,
+1x leverage, total concurrent committed Strategy exposure/reservations
+at most 50 USDT, and an Exchange-confirmed -10% catastrophic SL.
+TC §7.5.1 is the current canonical policy; the five historically
+independent R1 Strategy authorizations and earlier scope-limited
+critical-delivery waiver do not carry over. This decision does not
+authorize mainnet opening or a new LIVE-arm.
+
+MAP 12.29 captures independent read-only technical findings, exact
+source/installed identity and outstanding pre-arm implementation gaps.
+Required order: canonical decision -> implementation/immutable version
+as required -> tests/shadow/equivalence -> technical pre-arm
+-> separate explicit owner LIVE-arm. Current historical source/branch
+CI must not be reported as a deployed real execution path.
+The document topology, mandatory pre-read, routing, Source count and
+README/AGENTS/bootstrap paths are unchanged.
+
+# 46. История исследований в карточке монеты — OWNER DECISION 2026-10-21
+
+Владелец утвердил обязательную долговечную, **поинструментную** регистрацию каждого research result и его показ в справочнике монет: (a) краткая сводка с результатами и статусом, (b) история отдельных исследований по дате/времени. Запись должна содержать exact UTC period, идентичность инструмента, versioned Entry/Exit/protection и параметры стратегии (включая медиану/допуск и RAW TP при применимости), counts, положительные/отрицательные денежные итоги **после комиссий**, TP+/TP−, protected stops+/−, catastrophic hard stops и realized net P&L, nominals/fee model, QC/OOS/provenance. Хранение compact result обязательно **независимо от удаления больших исходных файлов**; при утрате источников воспроизводимость отмечается ограниченной.
+
+Canonical ownership: ARCH §48, §51 — storage/data owner и read-only consumer boundary; RESEARCH_COMPUTE §23 — mandatory recording, identity, financial fields, corrections and QC; CRIPTA_GLOSSARY §35 — terms. CURRENT_PROJECT_MAP фиксирует, что actual UI/API/database пока NOT IMPLEMENTED / NOT VERIFIED. Запись исследования не является immutable StrategyCard, разрешением торговли или переносом исторических thresholds в текущую стратегию.
+
+Documentation gate: нынешние 11 current Source docs, файлы/пути, pre-read и routed reading, root README/AGENTS и Project Instructions/bootstrap **не меняются**; разделы только добавлены, старые номера не сдвигаются. Эта ревизия не содержит Python/SQL/runtime mutation, не создаёт PostgreSQL schema и не является deploy или LIVE-arm. Physical writer/storage/API/UI implementation и backfill older history — последующий отдельный разрешённый цикл.
+
+# 47. Unified R1 50 USDT capital admission runtime checkpoint — 2026-10-21
+
+CURRENT_PROJECT_MAP 12.30 records the owner-approved TC §7.5.1
+10 USDT per position/50 USDT concurrent per-Strategy financial envelope,
+and the implemented independent transactional reservation check.
+PR #143 and disposable PostgreSQL/Windows/Linux CI PASS; production
+installer job `job_59273361c998` loaded `c17e0e2...` with
+`DEPLOY_EXACT_VERIFIED_COMMIT=PASS`, services liveness and Observer
+RUNNING one Strategy/one EntryPlan/10 lanes. Mainnet=0, execution
+permissions OFF, no OWNER ARM or Exchange order. MAP distinguishes
+CI-proven 50-USDT concurrency from NOT CHECKED HERE real-order execution
+and preserves exact rollback path, loaded/source identity and role isolation.
+No change to Source count, mandatory pre-read, routing or README/AGENTS.
+
+# 48. Single Git-versioned JSON owner of coin research history — OWNER DECISION 2026-10-21
+
+Following INDEX §46 and review PR #145, owner explicitly approved **Git-versioned JSON** as the one durable source of compact per-coin research records. Exact canonical store: `operations/dashboard/instrument_research_catalog.json` committed to GitHub `PH1119057/cripta:main`. Dashboard API/UI consumes its installed release snapshot read-only; no PostgreSQL mirror/second writer. Branch-only candidate records are not registered. Per-record exact MarketSource/InstrumentIdentity, separate scenarios/periods, gross+net after fees, hard-stops, OOS/leakage flag, provenance, hashes, identity and correction history must be preserved. Replace prior ARCH §51 undecided-storage wording with this OWNER DECISION; detailed record and registration gate are RESEARCH_COMPUTE §23. This does not turn historic research into Strategy/LIVE policy.
+
+A normal source commit/branch CI is not deploy. Each implementation requires Git review/CI, exact commit release, backup/rollback and read-only runtime test. Compact JSON must have independent verified backup/restore before heavy archive purge; otherwise IRREPLACEABLE_DATA retention gate remains open. State of physical system/API and deployment is tracked in MAP. No current-doc file-set, path for mandatory pre-read, Source count, README/AGENTS/Instruction routing changed.
+
+# 49. Git coin research catalogue source checkpoint — 2026-10-21
+
+Per owner storage decision INDEX §48, source PR #147 merged the sole Git JSON research store and read-only Dashboard API/card into GitHub main, exact merge commit e0058ef8bb758c531ad2afa929c4fc665dbde1ea. Seven PR CI workflows PASS and 30 per-coin results recorded. MAP provides exact source/status and limitations. Git source registered; Dashboard runtime NOT DEPLOYED / NOT VERIFIED HERE. OpenAI upstream security blocked server preflight; no bypass, installer or runtime restart. Independent backup/restore and full authenticated release verification remain required before purge or operational-completion claim. Source set, mandatory pre-read, routing, README/AGENTS/Instructions and trading LIVE settings unchanged.
+# 50. Isolation of research / docs / core Git workstreams — OWNER DECISION 2026-10-22
+
+Owner approved three scoped parallel workstreams **inside the existing single repository**, without changing the sole GitHub `PH1119057/cripta:main` authority: `research/*`, `docs/*`, `core/*`. Coordinated `cross/*` changes require an independent explicit owner decision and protected GitHub review. Owner of branch/path/merge scope is DEVELOPMENT_RELEASE §50; research writer/run/ledger-specific requirements belong only to RESEARCH_COMPUTE §17/§23/§24. Same-file docs changes must be serialized by an editorial integrator; branches alone do not eliminate textual conflicts.
+
+This decision changes **Git process and CI only**: current 11-document Project Source set, paths, mandatory base pre-read, routed pre-read, glossary terms, source-sync, production release composition, Dashboard consumer, registered research JSON store, PostgreSQL and LIVE contract remain unchanged. Existing 183 branches / 110 worktrees are not modified or retired by the decision. New guard is effective only after reviewed merge; required status check + protected `main` need separate GitHub settings verification. Do not report `MERGE_ENFORCEMENT=PASS` until actually verified. No deploy/restart/LIVE-arm is authorized.
+
+# 51. Cross-chat continuation and unfinished task branch reuse — OWNER DECISION 2026-10-22
+
+Owner approved a mandatory new-chat continuity gate: before creating a new branch/worktree or restarting a task job, discover and verify the unfinished Issue/PR, GitHub/local branches, exact server dirty worktree, job and active writer. Resume only an exact matching, safely idle task; ambiguity requires HARD STOP + OWNER_DECISION_REQUIRED for mutations. **Single canonical process owner:** DEVELOPMENT_RELEASE §50.4. Interaction reminder META §16; core-worker reminder WORK §14; bootstrap pointers in README/AGENTS/Project Instructions. Older unmerged branches are not automatically current tasks or canon, nor are archived assets discarded. Current 11-doc set, filename/routing/pre-read list, runtime/DB/Exchange, LIVE and deploy unchanged. This documentation-only changeset does not install a cross-chat task lock or certify current server worktree state.
+# 52. Git housekeeping status / continuation after cleanup — 2026-10-22
+
+Документальная синхронизация операционного результата, **без изменения trading/architecture canon**. Источник датированного checkpoint — CURRENT_PROJECT_MAP §38; подробный список веток, SHA, GitHub Actions и backup QC хранится в Issue #153 как evidence, не второй authority. Единственный владелец Git-workstream и нового чата — DEVELOPMENT_RELEASE §50 / §50.4.
+
+На проверенный pre-publication момент: 147 удалённых исторических refs двумя owner-approved waves; 41 remote refs остаются, в том числе две merged helper branches для ручного удаления. На сервере 109 non-main worktrees сохранены, 49 содержат WIP; физическая уборка отложена из-за неполной проверки ignored artifacts и job/consumer dependencies. Проверенный backup Git/WIP находится на **том же** data-disk, а не во внешнем аварийном хранилище.
+
+**Работа Research/Core/Docs разблокирована:** начинать новую scoped задачу от актуального защищённого `main`, но всегда выполнять DEVELOPMENT_RELEASE §50.4 discovery для совпадающей незавершённой задачи; старые Research/Entry/Exit данные не становятся Strategy policy. `REMOTE_HEAD` в MAP §38 — датированный снимок до публикации, а не SHA будущего документационного commit. Никаких server worktree removals, deploy, PostgreSQL, Exchange и LIVE действий эта редакция не выполняет. Состав 11 current docs, root entrypoints, pre-read, routing, filesystem roots и UI Project Source count не меняются.
+
+
+# 53. P90L90 isolated historical research contract — OWNER DECISION 2026-10-24
+
+Owner confirmed `VARIANT_A`: independent Bybit P90L90 `[2026-05-18T00Z, 2026-08-16T00Z)` for LTC/DOT/ARB/APT/INJ, equality of the relevant RAW side of 9-hour 5m/15m geometries, depth 0..15% normalized by **RAW H9 Union Span**, separate `FIXED90` full-window hindsight vs `PREV7D` causal previous-seven-complete-UTC-days L5-3 working-width filters (±0.5 percentage points), and independent `LOCK050`, `BE013`, `TRAIL035` Exit variants. Entry events are ordered public-trade crossing candidates, not actual fills. All financial comparisons require realized P&L net of stated fees and the common 82 full days alongside any separately reported extended FIXED90 sample.
+
+Canonical research-policy owner: `RESEARCH_COMPUTE §22.1`; terminology: `CRIPTA_GLOSSARY §36`; per-instrument versioned report/registration: `RESEARCH_COMPUTE §23`. Historical 2026-09-21..2026-10-20 methodology at `RESEARCH_COMPUTE §22`, including its **working H9** denominator and original implementation gate, is preserved without silent retrospective changes. The §23.2 example is explicitly labeled as historical. Cross-version dataset reuse does not entail strategy-policy reuse.
+
+This is **docs-only research scope**, not an implementation of research replays, not an installation or runtime verification, not production Entry/Exit/Strategy/DB/Exchange changes and not LIVE activation. The eleven existing Project Source documents, mandatory pre-read/routing, root README/AGENTS and Project Instructions/bootstrap remain unchanged. Before merged canonical publication, complete INDEX §17.7 documentation gate and protected GitHub PR/CI review; branch-only text is proposed, not `CANON`. Source/replay/QC/ledger publication use their own subsequent gates.
+
+# 54. P90L90 full 90-day warmup and ten-day analytical intervals — OWNER DECISION 2026-10-24
+
+По последующему явному решению владельца новый `P90L90_90D_WARMUP_V2` заменяет в **новой версии исследования** основную сравнительную выборку `COMMON82` и частичный первый день `EXTENDED_FIXED90`: для пяти Bybit LINEAR инструментов требуется равная проверенная полнота **90 UTC суток** `[2026-05-18T00:00:00Z,2026-08-16T00:00:00Z)`, отдельная история public trades **как минимум 8–17 мая** для Wilder ATR200 (L5-3, H9-5m, H9-15m) и семь полных предшествующих суток L5-3 width (11–17 мая) для причинной `PREV7D`. Если полнота отсутствует — `NOT_READY`, а не пересчёт 82d как 90d. `FIXED90` сохраняет `LOOKAHEAD=YES`.
+
+**Один owner контракта**: `RESEARCH_COMPUTE §22.2`; терминология — `CRIPTA_GLOSSARY §37`. Основной анализ: 9 непересекающихся интервалов по 10 UTC суток, дополнительный скользящий PnL 10d; каждая закрытая позиция относится к UTC дате закрытия. PnL строго net после модельных комиссий, крупные hard stops разложены по монетам, направлениям и сценариям; все итоговые суммы проверяются по immutable per-trade ledger. Новая L5-3 CLEAN v2 хранится отдельно от v1, с явной проверкой перекрытия/разницы ATR seed. Исходный `§22.1`, GitHub research catalog records и результаты v1.2 остаются архивной историей, не переписываются и не участвуют в новой основной таблице. Новые готовые результаты регистрируются в `RESEARCH_COMPUTE §23` как новые версии, а не как исправленные старые факты.
+
+Это новая research methodology, **не** StrategyCard, trading Entry/Exit/Execution, Dashboard/DB или LIVE. Current Project Source set остаётся 11 файлов; mandatory pre-read, routed pre-read, root README/AGENTS и Project Instructions/bootstrap не меняются. До внедрения §22.2 требуется protected docs PR/CI; до объявления результатов — acquisition provenance, полный preflight actual writer, reproducible new research source, input/ATR coverage and independent QC. Source sync ≠ deploy.
+
+# 55. Внутренний пользователь CRIPTA — владелец TradingAccount, а не биржевой MAIN — OWNER DECISION 2026-10-25
+
+Владелец утвердил отдельную product identity `CRIPTAUser`, которому принадлежит множество `TradingAccount` на любых разрешённых Venues (как MAIN, так и SUB либо other execution account). Каждый TradingAccount имеет ровно одного текущего CRIPTAUser-owner. Создатель регистрации и владелец могут не совпадать. Provider `isMaster`, `parentUid`, `parent_trading_account_id` и внешний MAIN являются только provenance и **не** пользовательским ownership. Подключение SUB не требует регистрации parent MAIN в CRIPTA. Потребительский доступ, торговое размещение, приватные записи и статистика должны быть owner-scoped; future UI/Telegram self-service отдельная capability с защищённым secret enrollment, не передачей raw keys обычными сообщениями.
+
+Единственный canonical owner архитектурного решения — ARCH §49.7; GLOSSARY §33 определяет `CRIPTAUser` / `TradingAccountOwnership`, SECURITY владеет secret storage, доступами и privacy-boundary. TRADING_CONTOUR и DEV сохраняют действующие LIVE, Exchange admission, staged implementation и release gates. Historical implementation finding 2026-10-25: прежний Bybit SUB UID checker требовал зарегистрированного parent MAIN. **Resolved in source+installed release:** PR #204, commit `978654f3e1e0a994a204dc2efd198088d7e00554`, сохраняет exact provider-UID/credential attestation и допускает SUB без внутреннего родителя. Подписанная SUB identity, DB-регистрация и баланс Bybit проверены, но отдельный SUB runtime **NOT READY** из-за legacy singleton/global primary keys приватных таблиц (Issue #205). Реализация multi-user/tenant ownership, защищённого UI и разграничения доступа пока отсутствует и потребует отдельной работы.
+
+**Status:** OWNER DECISION / TARGET CONCEPT. **IMPLEMENTED / DEPLOYED / RUNTIME VERIFIED = NO / NOT CHECKED HERE** для multi-user и secure bot. Данное docs-only изменение не делает DB write, schema/backfill, connector provisioning, real order, service restart или LIVE re-arm. Active Project Source set остаётся 11, пути, mandatory/routed pre-read, README, AGENTS и Project Instructions/bootstrap не меняются; section numbering текущих разделов сохранён. Before canonical merge: INDEX §17.7, GitHub scope/CI/PR verification.
+
+# 56. R1 retired; MAIN/SUB identity and Universal Entry verification — OWNER DECISION 2026-10-26
+
+Current owner supersedes historical R1 as an active implementation/test Strategy: `r1_five_symbols` is **RETIRED**, not a template for multi-account Universal Entry, and its historical Entry/Exit rules, MICRO_LIVE envelope and one-account owner-arm are not automatically inherited by future Strategies. Canonical trading meaning and historical retention: TRADING_CONTOUR §1.10; canonical terminology: GLOSSARY R1. Future MAIN/SUB Strategy/ExecutionBindings and live test require separate exact owner-approved policy, PAPER parity, fault/protection/evidence gates and explicit release-scoped owner arm. No real orders authorized here.
+
+Current operational checkpoint recorded in CURRENT_PROJECT_MAP (dated 2026-10-26): old R1 activation deactivated via standard CAS; mainnet gate 0 and no active exposure; SUB independently registered/credential/Bybit verified but its instance startup exposed legacy globally keyed wallet/hot-state DB blocker (Issue #205); MAIN exact provider UID registration still missing. ARCH §49 maintains private data scoped by TradingAccount; DEVELOPMENT_RELEASE §48 governs safe all-reader/writer index/key cutover. This documentation update is not a SUB runtime repair, migration, release or re-arm.
+
+Project Source set still 11; current doc paths, base/routed pre-read, README/AGENTS and derived Instructions/bootstrap unchanged. Canon updates confined to historical R1 status and dated MAP evidence; test/document scope per INDEX §17.7.
+
+# 57. First-month research exact indicator decisions №10/13/16/23/24/25 — OWNER DECISION 2026-10-26
+
+**Authority:** владелец утвердил точные физические направления через анкету Issue #158 (durable record [comment 6417846185](https://github.com/PH1119057/cripta/issues/158#issuecomment-6417846185)). Единственный canonical owner — **`docs/RESEARCH_COMPUTE_RULES_RU.md §21.8`**; единицы/causal/passport gates — §§21.3–21.7, GLOSSARY §34, Git/writer — DEVELOPMENT_RELEASE §§19,50. Не дублировать формулы в INDEX/MAP/README/AGENTS.
+
+**Scope:** APTUSDT, INJUSDT, DOTUSDT, LTCUSDT, ARBUSDT за 30 UTC суток с 18 мая по 16 июня 2026, один источник Bybit (+ Spot для №25), описательные research версии, №26 остаётся последним. Утверждены №10 exact-price Top5 union signed USDT; №13 все 200 уровней с отдельными Top5/6–200, H15/H60/H300 и `C` на UTC cutoff только для незавершённых; №16 отдельные наблюдаемые trade/book/price-компоненты; №23 только оригинальные изменения OI; №24 provider-published liquidation + file-hour coverage/UNKNOWN; №25 real Spot/Perp 1m executed base-volume VWAP divergence. Оригинальные данные могут быть исследованы описательно без доказанного local receiver clock, но не получают причинный READY; публичные оригиналы — только через обычный actor/path/Git security gate, платные — отдельное разрешение.
+
+**Status:** OWNER DECISION → CANON (только после публикации этого docs PR в GitHub main); IMPLEMENTED/DEPLOYED/RUNTIME VERIFIED — NO/NOT CHECKED HERE. Исторические 23/30 physical QC и 0/30 formal READY не изменены. Неподтверждённые точные timestamp ties, continuity/gap, provider origin, availability, полнота первичных OI/Spot/LIQ и independent full-period QC остаются OPEN. Existing PR #166 — отдельно исследовательский код, не владелец канона. Никаких Strategy/LIVE/deploy прав.
+
+
+# 58. Two independent passive LEGACY StrategyCards — OWNER DECISION 2026-10-27
+
+**Authority:** the two new P90L90 LEGACY immutable Strategy identities and exact RAW H9 / PREV7D / TRAIL035 / dynamic opposite RAW L5-3 TP / SECOND48 trading policy are owned exclusively by TRADING_CONTOUR §7.6; historic research provenance and model limitations remain RESEARCH_COMPUTE §§22.1–22.2. Multiaaccount account-binding identities and independent strategy ownership remain ARCH §49 and GLOSSARY §33, implementation and PostgreSQL actor/writer authorization DEVELOPMENT_RELEASE §§19,48,50.
+
+**Intent:** two separately saved, passive, immutable StrategyCards and own plans/disabled activations, with MAIN LTCUSDT+INJUSDT and SUB DOTUSDT+ARBUSDT+APTUSDT linked only via their own correct financial-account bindings. Strategy authoring and DB persistence are not LIVE trading or owner arm. Old recorded Strategy artifacts must not be rewritten or reused.
+
+**Gates:** exact new policy consumer/authoring support and independent tests, lawful DB producer/actor and INACTIVE binding behavior, signed account identity and non-overlapping effective binding, explicit new real capital/order/SECOND48 cross-account semantics before REAL. Missing gates fail closed; do not mislabel historical research logic as deployed Entry/Exit. User has not authorized LIVE. This docs-only change creates no DB records and does not alter Source file set, routing, Project Source count, bootstrap or active release.
+
+
+# 59. P90L90 causal provenance versus executable release — OWNER DECISION 2026-10-28 (Issue #243)
+
+Owner explicitly approved **separating immutable P90 market-data lineage from the installed/loaded code release** while retaining all existing original 5m/15m candles and five transport/Entry checkpoints without rewriting or deleting their original source identities.
+
+**Canonical owners:** ARCH §48.2 — lineage identity, append-only attestations, compatibility, immutable storage/producer provenance and release-transition gates; GLOSSARY §38 — exact terms; TRADING_CONTOUR §7.6.1 — PAPER activation/Strategy constraint. DEVELOPMENT_RELEASE §§8,19,44,50 still exclusively own Git/actor/installer/rollback. Research lineage and historical evidence stay RESEARCH_COMPUTE §§22.1–22.2. MAP is dated implementation evidence, not a second authority.
+
+**Before implementation:** verify the original existing five-symbol corpus and checkpoint digest/counts, exact current installed/loaded SHA, cross-release consumer equivalence, writer/DDL permissions and actor, no LIVE/REAL, no active writer conflict. Preserve all historical `source_commit` fields; new producer releases must remain individually identifiable. This docs publication does not create the compatibility record, authorize destructive PostgreSQL mutation, deploy, or activate PAPER. Status until separately tested and installed: `OWNER DECISION=YES`, `CANON=published only after this docs merge`, `IMPLEMENTED=NO`, `DEPLOYED=NO`, `P90_LINEAGE_COMPATIBILITY=NOT_VERIFIED`.
+
+No change to Project Source set (11 documents), base pre-read, routed document paths, ownership topology, or root bootstrap references; INDEX §17 topology-maintenance propagation therefore does not apply.
+
