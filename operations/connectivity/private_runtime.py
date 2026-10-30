@@ -120,9 +120,13 @@ PROCESS_STARTED_AT_MS = int(time.time() * 1000)
 ACCOUNT_REF = "BYBIT:UNIFIED"
 TRADING_ACCOUNT_ID = os.environ.get("CRIPTA_TRADING_ACCOUNT_ID", "").strip()
 ACCOUNT_CONNECTOR_ID = os.environ.get("CRIPTA_ACCOUNT_CONNECTOR_ID", "").strip()
-# From the same protected systemd credential bundle as API key and secret.
-# It MUST be supplied independently of identity.account_connectors DB rows.
+# Credential provenance is proved from the exact systemd mount/config,
+# independently of identity.account_connectors DB rows and secret payload fields.
 MOUNTED_CREDENTIAL_REF = ""
+MAIN_PRIVATE_CREDENTIAL_DIRECTORY = Path(
+    "/run/credentials/cripta-private-runtime.service"
+)
+MAIN_PRIVATE_CREDENTIAL_REF = "systemd-credential:bybit-mainnet"
 SIGNED_RECV_WINDOW = "5000"
 SIGNED_READ_RECV_WINDOW = "10000"
 SIGNED_READ_TIMEOUT_SECONDS = 5.0
@@ -133,6 +137,34 @@ PRIVATE_RECONNECT_GATE_REASON = "private WS reconnect: verification pending"
 PRIVATE_RECONNECT_RECOVERED_REASON = (
     "private WS reconnect recovered: verified R1 arm restored"
 )
+
+
+def private_worker_mounted_credential_ref(
+    *,
+    account_kind: str,
+    credential_name: str,
+    credential_directory: str,
+    payload_ref: object,
+) -> str:
+    """Prove credential provenance from runtime mount/config, never DB state."""
+    if account_kind == "MAIN":
+        try:
+            mounted_directory = Path(credential_directory).resolve(strict=True)
+        except OSError:
+            raise RuntimeError(
+                "MAIN_PRIVATE_WORKER_CREDENTIAL_PROVENANCE_UNVERIFIED"
+            ) from None
+        if (
+            credential_name != "bybit-mainnet"
+            or mounted_directory != MAIN_PRIVATE_CREDENTIAL_DIRECTORY
+        ):
+            raise RuntimeError(
+                "MAIN_PRIVATE_WORKER_CREDENTIAL_PROVENANCE_UNVERIFIED"
+            )
+        return MAIN_PRIVATE_CREDENTIAL_REF
+    if account_kind == "SUB":
+        return str(payload_ref or "").strip()
+    raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_INVALID")
 
 
 def validate_runtime_identity_contract(connection: psycopg.Connection) -> str:
@@ -5331,15 +5363,22 @@ def main() -> None:
         STATUS.parent.mkdir(parents=True, exist_ok=True)
     # SUB status directory must be explicitly provisioned by the control actor,
     # never silently created under the shared MAIN status directory.
-    credential_path = Path(os.environ["CREDENTIALS_DIRECTORY"]) / credential_name
+    credential_directory = os.environ["CREDENTIALS_DIRECTORY"]
+    credential_path = Path(credential_directory) / credential_name
     credentials = json.loads(credential_path.read_text(encoding="utf-8"))
-    MOUNTED_CREDENTIAL_REF = str(credentials.get("credential_ref") or "").strip()
+    MOUNTED_CREDENTIAL_REF = ""
     bootstrap = db("cripta-private-bootstrap")
     try:
         validate_runtime_schema_contract(bootstrap)
         account_kind = validate_runtime_identity_contract(bootstrap)
         if account_kind != configured_kind:
             raise RuntimeError("PRIVATE_WORKER_ACCOUNT_KIND_REGISTRY_MISMATCH")
+        MOUNTED_CREDENTIAL_REF = private_worker_mounted_credential_ref(
+            account_kind=configured_kind,
+            credential_name=credential_name,
+            credential_directory=credential_directory,
+            payload_ref=credentials.get("credential_ref"),
+        )
         if configured_kind == "SUB":
             authenticated_entry_connector_gate(
                 bootstrap, credentials["api_key"], credentials["api_secret"]

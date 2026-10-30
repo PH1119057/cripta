@@ -75,6 +75,52 @@ def test_sub_worker_must_be_independently_named() -> None:
     )
 
 
+def test_main_credential_provenance_comes_from_exact_systemd_mount(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    mounted = tmp_path / "main-credential-dir"
+    mounted.mkdir()
+    monkeypatch.setattr(
+        private_runtime, "MAIN_PRIVATE_CREDENTIAL_DIRECTORY", mounted.resolve()
+    )
+    assert private_runtime.private_worker_mounted_credential_ref(
+        account_kind="MAIN",
+        credential_name="bybit-mainnet",
+        credential_directory=str(mounted),
+        payload_ref=None,
+    ) == "systemd-credential:bybit-mainnet"
+
+
+def test_main_credential_provenance_rejects_wrong_mount(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    expected = tmp_path / "expected"
+    wrong = tmp_path / "wrong"
+    expected.mkdir()
+    wrong.mkdir()
+    monkeypatch.setattr(
+        private_runtime, "MAIN_PRIVATE_CREDENTIAL_DIRECTORY", expected.resolve()
+    )
+    with pytest.raises(
+        RuntimeError, match="MAIN_PRIVATE_WORKER_CREDENTIAL_PROVENANCE_UNVERIFIED"
+    ):
+        private_runtime.private_worker_mounted_credential_ref(
+            account_kind="MAIN",
+            credential_name="bybit-mainnet",
+            credential_directory=str(wrong),
+            payload_ref="legacy-payload-ref",
+        )
+
+
+def test_sub_credential_provenance_keeps_existing_payload_contract() -> None:
+    assert private_runtime.private_worker_mounted_credential_ref(
+        account_kind="SUB",
+        credential_name="bybit-sub-ta-test",
+        credential_directory="/not-consulted-for-sub",
+        payload_ref="systemd:bybit-sub-ta-test",
+    ) == "systemd:bybit-sub-ta-test"
+
+
 def test_main_worker_remains_compatible_and_exit_is_not_gated_by_new_entry_proof() -> None:
     assert_sub_worker_isolation(
         account_kind="MAIN",
