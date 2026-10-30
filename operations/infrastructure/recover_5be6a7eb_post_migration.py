@@ -481,45 +481,56 @@ def require_candidate_identity() -> None:
             raise RecoveryError(f"DASHBOARD_CANDIDATE_BYTES_MISMATCH:{relative}")
 
 
+def _stream_file_matches(expected_stream, actual: Path) -> bool:
+    if not actual.is_file():
+        return False
+    with actual.open("rb") as actual_stream:
+        while True:
+            expected_chunk = expected_stream.read(1024 * 1024)
+            actual_chunk = actual_stream.read(1024 * 1024)
+            if expected_chunk != actual_chunk:
+                return False
+            if not expected_chunk:
+                return True
+
+
 def compare_archive(
     *,
     archive_paths: tuple[str, ...],
     candidate: Path,
     excludes: set[str],
 ) -> None:
-    fd, tar_name = tempfile.mkstemp(prefix="cripta-recovery-archive.", dir="/run/lock")
-    os.close(fd)
-    tar_path = Path(tar_name)
+    process = subprocess.Popen(
+        [
+            "/usr/sbin/runuser",
+            "-u",
+            "cripta",
+            "--",
+            "/usr/bin/env",
+            "GIT_OPTIONAL_LOCKS=0",
+            "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+            "/usr/bin/git",
+            "-C",
+            str(SOURCE),
+            "archive",
+            "--format=tar",
+            RELEASE,
+            "--",
+            *archive_paths,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=SAFE_ENV,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        process.wait()
+        raise RecoveryError("CANDIDATE_ARCHIVE_PIPE_FAILED")
+
+    expected: set[str] = set()
     try:
-        with tar_path.open("wb") as stream:
-            result = subprocess.run(
-                [
-                    "/usr/sbin/runuser",
-                    "-u",
-                    "cripta",
-                    "--",
-                    "/usr/bin/env",
-                    "GIT_OPTIONAL_LOCKS=0",
-                    "PATH=/usr/sbin:/usr/bin:/sbin:/bin",
-                    "/usr/bin/git",
-                    "-C",
-                    str(SOURCE),
-                    "archive",
-                    "--format=tar",
-                    RELEASE,
-                    "--",
-                    *archive_paths,
-                ],
-                check=False,
-                stdout=stream,
-                stderr=subprocess.PIPE,
-                env=SAFE_ENV,
-            )
-        if result.returncode != 0:
-            raise RecoveryError("CANDIDATE_ARCHIVE_READ_FAILED")
-        expected: set[str] = set()
-        with tarfile.open(tar_path, "r") as archive:
-            for member in archive.getmembers():
+        with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
+            for member in archive:
                 relative = member.name
                 if member.isdir():
                     continue
@@ -529,33 +540,43 @@ def compare_archive(
                 actual = candidate / relative
                 if member.isfile():
                     source = archive.extractfile(member)
-                    if source is None or not actual.is_file():
-                        raise RecoveryError(f"CANDIDATE_FILE_MISSING:{relative}")
-                    if actual.read_bytes() != source.read():
+                    if source is None or not _stream_file_matches(source, actual):
                         raise RecoveryError(f"CANDIDATE_BYTES_MISMATCH:{relative}")
                 elif member.issym():
                     if not actual.is_symlink() or os.readlink(actual) != member.linkname:
                         raise RecoveryError(f"CANDIDATE_SYMLINK_MISMATCH:{relative}")
                 else:
                     raise RecoveryError(f"CANDIDATE_MEMBER_UNSUPPORTED:{relative}")
-
-        actual_paths: set[str] = set()
-        for path in candidate.rglob("*"):
-            relative = path.relative_to(candidate).as_posix()
-            if relative == "INSTALLED_COMMIT" or relative.startswith(".venv/"):
-                continue
-            if "__pycache__" in path.parts or path.suffix == ".pyc":
-                continue
-            if path.is_dir():
-                continue
-            actual_paths.add(relative)
-        extras = actual_paths - expected - excludes
-        if extras:
-            raise RecoveryError(
-                "CANDIDATE_UNEXPECTED_FILES:" + ",".join(sorted(extras)[:20])
-            )
+        process.stdout.close()
+        stderr = process.stderr.read().decode("utf-8", errors="replace")
+        returncode = process.wait()
+        if returncode != 0:
+            detail = stderr[-1000:].replace("\n", " | ")
+            raise RecoveryError(f"CANDIDATE_ARCHIVE_READ_FAILED:{detail}")
+    except Exception:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        raise
     finally:
-        tar_path.unlink(missing_ok=True)
+        process.stdout.close()
+        process.stderr.close()
+
+    actual_paths: set[str] = set()
+    for path in candidate.rglob("*"):
+        relative = path.relative_to(candidate).as_posix()
+        if relative == "INSTALLED_COMMIT" or relative.startswith(".venv/"):
+            continue
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        if path.is_dir():
+            continue
+        actual_paths.add(relative)
+    extras = actual_paths - expected - excludes
+    if extras:
+        raise RecoveryError(
+            "CANDIDATE_UNEXPECTED_FILES:" + ",".join(sorted(extras)[:20])
+        )
 
 
 def require_db_checkpoint() -> None:
