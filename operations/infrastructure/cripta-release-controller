@@ -360,7 +360,7 @@ def _exact_installer_bytes(target: str) -> bytes:
     return result.stdout
 
 
-def _deploy(*, target: str, baseline: str) -> None:
+def _deploy(*, target: str, baseline: str, nonce: str) -> None:
     installer_bytes = _exact_installer_bytes(target)
     fd, staged_name = tempfile.mkstemp(
         prefix="cripta-install-verified-release.",
@@ -375,14 +375,25 @@ def _deploy(*, target: str, baseline: str) -> None:
             os.fsync(stream.fileno())
         os.close(fd)
         fd = -1
-        env = {
-            **SAFE_ENV,
-            "CRIPTA_RELEASE_COMMIT": target,
-            "CRIPTA_EXPECTED_BASELINE_COMMIT": baseline,
-            "CRIPTA_RELEASE_CONTROL_CHECKPOINT": "0",
-            "CRIPTA_STAGED_OFFLINE_CUTOVER": "0",
-        }
-        _run(["/usr/bin/bash", str(staged)], env=env)
+        unit_suffix = hashlib.sha256(nonce.encode("ascii")).hexdigest()[:12]
+        _run(
+            [
+                "/usr/bin/systemd-run",
+                "--wait",
+                "--pipe",
+                "--collect",
+                f"--unit=cripta-controller-release-{unit_suffix}",
+                "--property=Type=oneshot",
+                "--property=TimeoutStartSec=1800",
+                "/usr/bin/env",
+                f"CRIPTA_RELEASE_COMMIT={target}",
+                f"CRIPTA_EXPECTED_BASELINE_COMMIT={baseline}",
+                "CRIPTA_RELEASE_CONTROL_CHECKPOINT=0",
+                "CRIPTA_STAGED_OFFLINE_CUTOVER=0",
+                "/usr/bin/bash",
+                str(staged),
+            ]
+        )
     finally:
         if fd >= 0:
             os.close(fd)
@@ -482,7 +493,7 @@ def main() -> int:
         if latest_main != target or _git_remote_main() != target:
             raise ControllerError("REMOTE_MAIN_MOVED_BEFORE_DEPLOY")
 
-        _deploy(target=target, baseline=expected_baseline)
+        _deploy(target=target, baseline=expected_baseline, nonce=nonce)
         post_remote, post_source, post_runtime, post_state = _postcheck(target)
         final_status = "DEPLOYED" if post_remote == target else "DEPLOYED_REMOTE_MOVED"
         _audit(
