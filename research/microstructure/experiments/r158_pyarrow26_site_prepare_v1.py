@@ -179,7 +179,7 @@ def prepare(
         "extracted_files": extracted_files,
         "python_version": platform.python_version(),
         "machine": platform.machine(),
-        "libc": platform.libc_ver(),
+        "libc": list(platform.libc_ver()),
         "validation": validation,
         "site_path": str(output_root / "site"),
         "system_runtime_modified": False,

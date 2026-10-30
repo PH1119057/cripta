@@ -35,12 +35,14 @@ def gzip_bytes(day, *, price="10.5"):
         datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000
     )
     raw = io.BytesIO()
-    with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
-        with io.TextIOWrapper(gz, encoding="utf-8", newline="") as text:
-            writer = csv.writer(text)
-            writer.writerow(["id", "timestamp", "price", "volume", "side", "rpi"])
-            writer.writerow(["1", str(start + 1000), price, "2", "buy", "0"])
-            writer.writerow(["2", str(start + 2000), "10.6", "1", "sell", "1"])
+    with (
+        gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz,
+        io.TextIOWrapper(gz, encoding="utf-8", newline="") as text,
+    ):
+        writer = csv.writer(text)
+        writer.writerow(["id", "timestamp", "price", "volume", "side", "rpi"])
+        writer.writerow(["1", str(start + 1000), price, "2", "buy", "0"])
+        writer.writerow(["2", str(start + 2000), "10.6", "1", "sell", "1"])
     return raw.getvalue()
 
 
