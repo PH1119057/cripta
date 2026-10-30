@@ -1197,6 +1197,7 @@ def _p90_private_ipc_flat_handler(*, key: str, secret: str):
 
     from bybit_workbench.private_ws_epoch import verified_private_ws_epoch
     from bybit_workbench.universal_exit.p90l90_real_flat_account import (
+        P90RealFlatAccountUnverified,
         P90RealSignedFlatAccountReader,
     )
 
@@ -1225,14 +1226,44 @@ def _p90_private_ipc_flat_handler(*, key: str, secret: str):
             result, _ = api_get(endpoint, params, key, secret)
             return result
 
-        return P90RealSignedFlatAccountReader(
-            connection,
-            trading_account_id=TRADING_ACCOUNT_ID,
-            account_connector_id=ACCOUNT_CONNECTOR_ID,
-            mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
-            signed_get=signed_get,
-            verified_private_ws_continuity=current_ws,
-        )()
+        try:
+            result = P90RealSignedFlatAccountReader(
+                connection,
+                trading_account_id=TRADING_ACCOUNT_ID,
+                account_connector_id=ACCOUNT_CONNECTOR_ID,
+                mounted_credential_ref=MOUNTED_CREDENTIAL_REF,
+                signed_get=signed_get,
+                verified_private_ws_continuity=current_ws,
+            )()
+        except P90RealFlatAccountUnverified as exc:
+            atomic_status(
+                "p90_private_ipc",
+                {
+                    "state": "BLOCKED",
+                    "flat_reason": str(exc),
+                    "observed_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
+        except Exception as exc:
+            atomic_status(
+                "p90_private_ipc",
+                {
+                    "state": "BLOCKED",
+                    "flat_reason": "UNEXPECTED_" + type(exc).__name__,
+                    "observed_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
+        atomic_status(
+            "p90_private_ipc",
+            {
+                "state": "VERIFIED",
+                "flat_reason": "",
+                "observed_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        return result
 
 
 def _p90_private_ipc_recovery_handler(*, key: str, secret: str):
