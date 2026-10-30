@@ -76,7 +76,7 @@ def fake_get_json(path, params=None):
                     "head_sha": HEAD,
                     "status": "completed",
                     "conclusion": "success",
-                    "pull_requests": [{"number": 290}],
+                    "pull_requests": [],
                 }
             ]
         }
