@@ -600,6 +600,10 @@ for unit in "${retired_units[@]}"; do
 done
 
 systemctl daemon-reload
+systemctl disable cripta-release-controller.service >/dev/null
+controller_enabled_state="$(systemctl is-enabled cripta-release-controller.service 2>/dev/null || true)"
+[[ "$controller_enabled_state" == "disabled" ]] ||
+  die "release controller must remain disabled/manual-only"
 for service in "${managed_services[@]}"; do
   if [[ "${was_active[$service]}" == "1" ]]; then systemctl start "$service"; fi
 done
