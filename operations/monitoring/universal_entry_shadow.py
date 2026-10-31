@@ -3560,7 +3560,17 @@ def _run_multi_strategy_observer() -> None:
     with psycopg.connect(DATABASE_DSN, autocommit=True) as connection:
         while not stopping_flag:
             try:
-                bundles = load_active_strategy_bundles(connection)
+                # Owner full-contour diagnostics are consumed only by the
+                # account-scoped Universal Entry consumer after an authenticated
+                # durable trigger. They must never become autonomous market
+                # Observer strategies or change P90's exact two-strategy source
+                # readiness projection.
+                bundles = tuple(
+                    bundle
+                    for bundle in load_active_strategy_bundles(connection)
+                    if bundle.card.scope.to_dict().get("kind")
+                    != "OWNER_FULL_CONTOUR_DIAGNOSTIC"
+                )
                 if not bundles:
                     _observer_status(
                         state="IDLE",
