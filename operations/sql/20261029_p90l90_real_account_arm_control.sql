@@ -383,7 +383,11 @@ BEGIN
        )
        AND ta.status='ACTIVE' AND ta.environment='MAINNET'
        AND ta.venue_id='venue-bybit' AND ta.account_type='UNIFIED'
-     FOR UPDATE OF b,a,ta;
+     -- Lock only the mutable Strategy rows owned by this narrow writer.
+     -- Account identity/connector and LIVE-session rows are checked in the
+     -- same SERIALIZABLE transaction without acquiring UPDATE privileges
+     -- on independently owned identity/control tables.
+     FOR UPDATE OF b,a;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'P90_ACCOUNT_ARM_BINDING_OR_ACTIVATION_NOT_EXACT';
     END IF;
@@ -406,7 +410,7 @@ BEGIN
        AND c.adapter_id='BYBIT_V5_PRIVATE'
        AND c.status='ACTIVE' AND c.retired_at IS NULL
        AND nullif(btrim(c.credential_ref),'') IS NOT NULL
-     FOR SHARE;
+     ;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'P90_ACCOUNT_ARM_CONNECTOR_NOT_EXACT';
     END IF;
@@ -423,7 +427,7 @@ BEGIN
        AND s.state='ACTIVE'
        AND s.owner_approved_at<=p_owner_approved_at
        AND s.deactivated_at IS NULL
-     FOR SHARE;
+     ;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'P90_ACCOUNT_ARM_STRATEGY_SYMBOL_OWNER_ARM_MISSING';
     END IF;
