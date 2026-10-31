@@ -32,6 +32,9 @@ OBSERVER = (
 MIGRATION = (
     ROOT / "operations/sql/20261101_owner_full_contour_diagnostic.sql"
 ).read_text(encoding="utf-8")
+RELEASE_INSTALLER = (
+    ROOT / "operations/infrastructure/install_verified_release.sh"
+).read_text(encoding="utf-8")
 
 
 def _main_bundle():
@@ -229,3 +232,36 @@ def test_diagnostic_ui_and_schema_are_bounded() -> None:
     account_insert = account_insert[:account_insert.index("RETURN p_session_id")]
     assert "\n    live_arm_session_id," not in account_insert
     assert "OWNER_FULL_CONTOUR_SYMBOL_ENTRY_MUTATION_PENDING" in MIGRATION
+
+
+def test_verified_release_registers_and_readbacks_diagnostic_capability() -> None:
+    migration = "operations/sql/20261101_owner_full_contour_diagnostic.sql"
+    installer = (
+        "operations/implementation/install_owner_full_contour_diagnostic.py"
+    )
+    assert migration in RELEASE_INSTALLER
+    migration_pos = RELEASE_INSTALLER.index(migration)
+    install_call = RELEASE_INSTALLER.index(
+        f"$runtime_release/{installer}\" install"
+    )
+    check_call = RELEASE_INSTALLER.index(
+        f"$runtime_release/{installer}\" check"
+    )
+    assert migration_pos < install_call < check_call
+    install_block = RELEASE_INSTALLER[install_call:check_call]
+    assert "runuser -u cripta" in RELEASE_INSTALLER[
+        RELEASE_INSTALLER.rfind("runuser -u cripta", 0, install_call):install_call
+    ]
+    assert "db_mutation_steps=$((db_mutation_steps + 1))" in RELEASE_INSTALLER[
+        install_call:check_call
+    ]
+
+
+def test_prestart_recovery_never_replays_stale_execution_smoke_entry() -> None:
+    block = PRIVATE[
+        PRIVATE.index("def resolve_prestart_entry_commands"):
+        PRIVATE.index("def resolve_prestart_non_entry_running_commands")
+    ]
+    assert "api_post(" not in block
+    assert "RESTART_NO_EXACT_EXCHANGE_OUTCOME" in block
+    assert "SET state='failed'" in block
