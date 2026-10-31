@@ -9,8 +9,9 @@ and release-bound LIVE-arm are temporary per diagnostic run.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from .contracts import StrategyCard
 from .dashboard_control import card_from_editable, strategy_authoring_template
@@ -244,3 +245,77 @@ def is_diagnostic_strategy(strategy_id: str, strategy_version: str) -> bool:
         strategy_version == VERSION
         and strategy_id in {MAIN_ID, SUB_ID}
     )
+
+
+def validate_exchange_entry(
+    *,
+    payload: Mapping[str, object],
+    symbol: str,
+    trading_account_id: str,
+    signed_account_info: Mapping[str, object],
+) -> bool:
+    """Fail closed on the exact diagnostic Entry contract before mutation."""
+    strategy_id = str(payload.get("strategy_id") or "")
+    version = str(payload.get("strategy_version") or "")
+    if not is_diagnostic_strategy(strategy_id, version):
+        return False
+    symbols, _activation, _binding, expected_account, _connector = strategy_scope(strategy_id)
+    if symbol not in symbols or trading_account_id != expected_account:
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_OR_SYMBOL_SCOPE_MISMATCH")
+    if str(payload.get("trading_account_id") or "") != trading_account_id:
+        raise ValueError("OWNER_FULL_CONTOUR_TRADING_ACCOUNT_IDENTITY_UNPROVEN")
+    if str(payload.get("source") or "") != "universal_entry":
+        raise ValueError("OWNER_FULL_CONTOUR_ORDER_SOURCE_UNVERIFIED")
+    for name in (
+        "capital_reservation_id",
+        "exchange_position_slot_claim_id",
+        "strategy_execution_binding_id",
+        "entry_plan_fingerprint",
+        "exit_plan_fingerprint",
+    ):
+        if not str(payload.get(name) or "").strip():
+            raise ValueError("OWNER_FULL_CONTOUR_ENTRY_LINEAGE_MISSING")
+    try:
+        amount = Decimal(str(payload.get("stake_usdt")))
+        price = Decimal(str(payload.get("price")))
+        offset = Decimal(str(payload.get("entry_offset_pct")))
+        leverage = int(str(payload.get("leverage")))
+    except (ValueError, TypeError, InvalidOperation):
+        raise ValueError("OWNER_FULL_CONTOUR_ENTRY_NUMERIC_INVALID") from None
+    if (
+        not amount.is_finite()
+        or amount != REQUESTED_USDT
+        or not price.is_finite()
+        or price <= 0
+        or not offset.is_finite()
+        or offset != 0
+        or leverage != LEVERAGE
+        or payload.get("margin_mode") != "ISOLATED"
+        or str(payload.get("side") or "") not in {"Buy", "Sell"}
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_MARKET_ISOLATED_1X_CONTRACT_MISMATCH")
+    initial = payload.get("initial_protection")
+    if not isinstance(initial, Mapping):
+        raise ValueError("OWNER_FULL_CONTOUR_INITIAL_PROTECTION_MISSING")
+    try:
+        stop = Decimal(str(initial.get("stop_loss_pct")))
+    except (ValueError, TypeError, InvalidOperation):
+        raise ValueError("OWNER_FULL_CONTOUR_INITIAL_PROTECTION_INVALID") from None
+    if (
+        initial.get("stop_loss_enabled") is not True
+        or stop != STOP_LOSS_PCT
+        or initial.get("take_profit_enabled") is not False
+        or initial.get("take_profit_pct") is not None
+        or initial.get("take_profit_price") is not None
+        or initial.get("trigger_by") != "LastPrice"
+        or initial.get("tpsl_mode") != "Full"
+    ):
+        raise ValueError("OWNER_FULL_CONTOUR_INITIAL_PROTECTION_CONTRACT_MISMATCH")
+    if signed_account_info.get("retCode") != 0:
+        raise ValueError("OWNER_FULL_CONTOUR_SIGNED_ACCOUNT_READ_NOT_OK")
+    data = signed_account_info.get("result")
+    if not isinstance(data, Mapping) or data.get("marginMode") != "ISOLATED_MARGIN":
+        raise ValueError("OWNER_FULL_CONTOUR_ACCOUNT_NOT_PROVEN_ISOLATED")
+    if str(data.get("unifiedMarginStatus") or "") not in {"3", "4", "5", "6"}:
+        raise ValueError("OWNER_FULL_CONTOUR_UNIFIED_ACCOUNT_MODE_UNKNOWN")
+    return True
