@@ -251,14 +251,75 @@ def test_real_consumer_commits_every_entry_iteration(monkeypatch) -> None:
         patch.object(entry_consumer, "check_release_arm_invariant"),
         patch.object(entry_consumer, "run_once", side_effect=fake_run_once),
         patch.object(entry_consumer.time, "sleep"),
+        patch.object(entry_consumer.time, "monotonic", return_value=100.0),
     ):
         assert entry_consumer.main() == 0
 
     assert events == [
-        "COMMIT", "COMMIT", "DISPATCHED:entry-a", "COMMIT",
-        "COMMIT", "BLOCKED:MODE", "COMMIT",
-        "COMMIT", "NO_REQUEST", "COMMIT",
+        "COMMIT", "DISPATCHED:entry-a", "COMMIT",
+        "BLOCKED:MODE", "COMMIT",
+        "NO_REQUEST", "COMMIT",
     ]
+
+
+def test_consumer_readiness_is_bounded_to_health_cadence(monkeypatch) -> None:
+    events: list[str] = []
+
+    class OfflineConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def commit(self):
+            events.append("COMMIT")
+
+    outcomes = iter(("NO_REQUEST", "NO_REQUEST", "NO_REQUEST"))
+
+    def fake_run_once(_connection, *, now=None):
+        del now
+        result = next(outcomes)
+        events.append(result)
+        if events.count("NO_REQUEST") == 3:
+            monkeypatch.setattr(entry_consumer, "running", False)
+        return result
+
+    with (
+        patch.object(entry_consumer, "ENTRY_COMMAND_SOURCE", "UNIVERSAL_ENTRY"),
+        patch.object(entry_consumer, "CONSUMER_ARM", "ENABLED"),
+        patch.object(entry_consumer, "TRADING_ACCOUNT_ID", "test-main"),
+        patch.object(entry_consumer, "ACCOUNT_CONNECTOR_ID", "test-connector"),
+        patch.object(entry_consumer, "POLL_SECONDS", 0.01),
+        patch.object(entry_consumer, "HEALTH_SECONDS", 2.0),
+        patch.object(entry_consumer, "running", True),
+        patch.object(entry_consumer, "require_exact_sub_instance"),
+        patch.object(
+            entry_consumer,
+            "_consumer_runtime_readiness",
+            return_value=(True, ()),
+        ) as readiness,
+        patch.object(entry_consumer, "_write_consumer_health") as health,
+        patch.object(entry_consumer.signal, "signal"),
+        patch.object(
+            entry_consumer.psycopg,
+            "connect",
+            return_value=OfflineConnection(),
+        ),
+        patch.object(entry_consumer, "check_release_arm_invariant") as guard,
+        patch.object(entry_consumer, "run_once", side_effect=fake_run_once),
+        patch.object(entry_consumer.time, "sleep"),
+        patch.object(
+            entry_consumer.time,
+            "monotonic",
+            side_effect=(100.0, 100.1, 102.1),
+        ),
+    ):
+        assert entry_consumer.main() == 0
+
+    assert readiness.call_count == 2
+    assert health.call_count == 2
+    assert guard.call_count == 2
 
 
 def test_observer_real_entry_faults_are_scoped_per_account() -> None:
