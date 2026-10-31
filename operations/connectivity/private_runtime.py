@@ -2886,6 +2886,23 @@ def execute_command(connection: psycopg.Connection, key: str, secret: str, row: 
                 )
             except ValueError as exc:
                 raise PreMutationSafetyBlock(str(exc)) from exc
+
+        from bybit_workbench.universal_entry import owner_full_contour_diagnostic as ownerdiag
+        if ownerdiag.is_diagnostic_strategy(
+            str(payload.get("strategy_id") or ""),
+            str(payload.get("strategy_version") or ""),
+        ):
+            signed_info, _ = api_get("/v5/account/info", {}, key, secret)
+            try:
+                ownerdiag.validate_exchange_entry(
+                    payload=payload,
+                    symbol=symbol,
+                    trading_account_id=TRADING_ACCOUNT_ID,
+                    signed_account_info=signed_info,
+                )
+            except ValueError as exc:
+                raise PreMutationSafetyBlock(str(exc)) from exc
+
         fault_code = _critical_lifecycle_fault_code(connection)
         if fault_code is not None:
             # First Exchange mutation for this Entry is below. Avoid claiming
