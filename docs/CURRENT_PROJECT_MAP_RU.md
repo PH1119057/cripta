@@ -1,7 +1,7 @@
 # CRIPTA — текущая карта проекта
 
-**Версия:** 12.33
-**Дата:** 2026-10-30
+**Версия:** 12.34
+**Дата:** 2026-10-31
 **Статус:** текущая карта реализации; не заменяет архитектурный контракт
 
 # 1. Source of truth
@@ -4626,3 +4626,50 @@ OWNER DECISION: R1 no longer qualifies as a current Strategy or target for Unive
 **MAIN identity:** live MAIN private WS works; original MAIN registry `external_account_ref` is NULL and Lifecycle Supervisor reports `REGISTERED_BYBIT_UID_MISSING`. Fresh signed MAIN UID confirmation/registry repair remains NOT COMPLETED. Earlier combined credential diagnostic failed OpenAI upstream security twice; no repeated blocked call or workaround authorized. MAIN/SUB are not ready for two real Entry attempts; future full readiness and owner approval are independent of this checkpoint.
 
 No Telegram/multi-user product implementation, destructive DB migration, Exchange mutation, new LIVE arm or server installation was performed in this documentation-only update.
+
+
+## 2026-10-31 P90 recovery / runtime-release retention — OWNER DECISION / IMPLEMENTATION PENDING
+
+CHECKED HERE on production host `robot` before implementation of this retention:
+exact GitHub/source/installed/loaded runtime was
+`09ac129b1c57e0994f48ad1abb2807a3d5a825a9`; mainnet gate=0,
+enabled execution permissions=0, active generic/account LIVE-arm sessions=0.
+Universal Entry Observer was `RUNNING / observer_ready=true`; MAIN and SUB
+Universal Entry consumers reported fresh `READY` health on the exact release.
+`P90_REAL_V3_PREARM_EVIDENCE=PASS` returned
+`PREARM_TECHNICAL_READY` for 2 Strategies / 2 TradingAccounts / 5 symbols,
+with `owner_arm_approval_recorded=false` and `exchange_mutation=false`.
+No OWNER ARM or Exchange mutation is authorized by this checkpoint.
+
+Storage finding:
+- System SSD/root is physically 20 GiB and remained 100% used with only about
+  53 MiB free after bounded APT-cache and stale pytest-temp cleanup;
+- `/srv/cripta/runtime/releases` contained 83 direct-child immutable exact-SHA
+  release directories, about 4.956 GiB total;
+- current `09ac129b...` plus immediate previous `cab795e4...` consumed only
+  about 125 MiB; the other 81 historical runtime artifacts consumed about
+  4.831 GiB;
+- all 83 direct children matched exact 40-hex directory naming and none was a
+  symlink at the checked checkpoint;
+- PostgreSQL `pg_wal` was small relative to the root pressure; an independent
+  observer SQL temp-sort defect was repaired in release `09ac129b...`, and a
+  sampled healthy epoch showed `PG_TMP_BYTES=0`.
+
+OWNER DECISION 2026-10-31:
+`/srv/cripta/runtime/releases` retains the current installed release plus
+exactly one immediate previous deployed release. Older canonical runtime release
+artifacts may be deleted only by the verified post-success retention pass
+defined in DEVELOPMENT_RELEASE §14.1.1. The previous generation is the exact
+`EXPECTED_BASELINE_COMMIT`, not a timestamp/mtime guess. Unexpected
+noncanonical entries block prune fail-closed. This decision does not extend to
+Research tooling, Dashboard UI bundles, rollback/system backups, Git worktrees
+or PostgreSQL data.
+
+Status at this documentation commit:
+`CANON=UPDATED IN CHANGESET`;
+`IMPLEMENTED=NO`;
+`DEPLOYED=NO`;
+`RUNTIME VERIFIED=NO`.
+Implementation must follow Git-first cross-contour release with
+`owner-approved-cross-contour`, tests, verified deploy, bounded prune audit,
+disk verification and fresh P90 pre-arm evidence. LIVE remains OFF.
