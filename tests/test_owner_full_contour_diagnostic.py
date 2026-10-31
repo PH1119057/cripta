@@ -13,16 +13,7 @@ from bybit_workbench.universal_entry.contracts import (
     TradeDirection,
 )
 from bybit_workbench.universal_entry.materializer import materialize_plans
-from bybit_workbench.universal_entry.owner_full_contour_diagnostic import (
-    MAIN_ACTIVATION_ID,
-    MAIN_ACCOUNT_ID,
-    MAIN_ID,
-    STOP_LOSS_PCT,
-    TAKE_PROFIT_PCT,
-    VERSION,
-    cards,
-    validate_exchange_entry,
-)
+import bybit_workbench.universal_entry.owner_full_contour_diagnostic as diagnostic
 from bybit_workbench.universal_entry.readiness import assess_strategy_runtime_readiness
 from bybit_workbench.universal_exit.contracts import (
     ExitActionKind,
@@ -44,10 +35,10 @@ MIGRATION = (
 
 
 def _main_bundle():
-    card = next(card for card in cards(approved_at=datetime(2026, 11, 1, tzinfo=UTC))
-                if card.strategy_id == MAIN_ID)
+    card = next(card for card in diagnostic.cards(approved_at=datetime(2026, 11, 1, tzinfo=UTC))
+                if card.strategy_id == diagnostic.MAIN_ID)
     activation = StrategyActivation(
-        activation_id=MAIN_ACTIVATION_ID,
+        activation_id=diagnostic.MAIN_ACTIVATION_ID,
         strategy_id=card.strategy_id,
         strategy_version=card.strategy_version,
         strategy_config_fingerprint=card.strategy_config_fingerprint,
@@ -66,7 +57,7 @@ def _position(exit_plan, direction: TradeDirection = TradeDirection.LONG):
     return StrategyPosition(
         strategy_position_id="diag-pos-1",
         account_ref="BYBIT:UNIFIED",
-        exchange_position_key=f"{MAIN_ACCOUNT_ID}:LTCUSDT:0",
+        exchange_position_key=f"{diagnostic.MAIN_ACCOUNT_ID}:LTCUSDT:0",
         position_idx=0,
         strategy_id=card.strategy_id,
         strategy_version=card.strategy_version,
@@ -86,7 +77,7 @@ def _position(exit_plan, direction: TradeDirection = TradeDirection.LONG):
         fill_at=datetime(2026, 11, 1, tzinfo=UTC),
         strategy_execution_binding_id="binding-owner-full-contour-main-20261101",
         execution_leg="PRIMARY",
-        trading_account_id=MAIN_ACCOUNT_ID,
+        trading_account_id=diagnostic.MAIN_ACCOUNT_ID,
         identity_status="PROVEN",
     )
 
@@ -107,13 +98,13 @@ def _observation(pnl: str) -> ExitObservation:
 
 
 def test_diagnostic_cards_are_exact_materializable_and_execution_ready() -> None:
-    diagnostic_cards = cards(approved_at=datetime(2026, 11, 1, tzinfo=UTC))
+    diagnostic_cards = diagnostic.cards(approved_at=datetime(2026, 11, 1, tzinfo=UTC))
     assert {card.strategy_id for card in diagnostic_cards} == {
         "owner_full_contour_diag_main",
         "owner_full_contour_diag_sub",
     }
     for card in diagnostic_cards:
-        assert card.strategy_version == VERSION
+        assert card.strategy_version == diagnostic.VERSION
         assert card.scope.to_dict()["kind"] == "OWNER_FULL_CONTOUR_DIAGNOSTIC"
         entry = card.entry_policy.to_dict()
         assert entry["watch_policy"] == {"enabled": False}
@@ -148,9 +139,9 @@ def test_diagnostic_exit_rules_use_exact_half_percent_close() -> None:
 def test_diagnostic_exchange_validator_is_exact_and_rejects_drift() -> None:
     payload = {
         "source": "universal_entry",
-        "strategy_id": MAIN_ID,
-        "strategy_version": VERSION,
-        "trading_account_id": MAIN_ACCOUNT_ID,
+        "strategy_id": diagnostic.MAIN_ID,
+        "strategy_version": diagnostic.VERSION,
+        "trading_account_id": diagnostic.MAIN_ACCOUNT_ID,
         "capital_reservation_id": "reservation-1",
         "exchange_position_slot_claim_id": "slot-1",
         "strategy_execution_binding_id": "binding-owner-full-contour-main-20261101",
@@ -165,7 +156,7 @@ def test_diagnostic_exchange_validator_is_exact_and_rejects_drift() -> None:
         "initial_protection": {
             "stop_loss_enabled": True,
             "take_profit_enabled": False,
-            "stop_loss_pct": str(STOP_LOSS_PCT),
+            "stop_loss_pct": str(diagnostic.STOP_LOSS_PCT),
             "take_profit_pct": None,
             "take_profit_price": None,
             "trigger_by": "LastPrice",
@@ -176,19 +167,19 @@ def test_diagnostic_exchange_validator_is_exact_and_rejects_drift() -> None:
         "retCode": 0,
         "result": {"marginMode": "ISOLATED_MARGIN", "unifiedMarginStatus": 6},
     }
-    assert validate_exchange_entry(
+    assert diagnostic.validate_exchange_entry(
         payload=payload,
         symbol="LTCUSDT",
-        trading_account_id=MAIN_ACCOUNT_ID,
+        trading_account_id=diagnostic.MAIN_ACCOUNT_ID,
         signed_account_info=signed,
     )
     drift = dict(payload)
     drift["stake_usdt"] = "100"
     with pytest.raises(ValueError, match="MARKET_ISOLATED_1X"):
-        validate_exchange_entry(
+        diagnostic.validate_exchange_entry(
             payload=drift,
             symbol="LTCUSDT",
-            trading_account_id=MAIN_ACCOUNT_ID,
+            trading_account_id=diagnostic.MAIN_ACCOUNT_ID,
             signed_account_info=signed,
         )
 
