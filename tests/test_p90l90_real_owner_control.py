@@ -45,7 +45,7 @@ def test_p90_owner_control_stages_before_gate_and_disarm_never_closes_positions(
     finalize = staged.index("def finalize_p90l90_real_v3(")
     open_gate = staged.index("SET enabled=1,reason=%s", finalize)
     assert account < readback < permissions < stage_gate < finalize < open_gate
-    assert "gate_enabled": False" in staged
+    assert '"gate_enabled": False' in staged
     assert '"positions_closed": False' in control
     assert "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE" in staged
 
