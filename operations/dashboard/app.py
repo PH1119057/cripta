@@ -1791,6 +1791,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                 symbol,observed_at_epoch_ms,state,shadow_action,snapshot_json
                 FROM supervisor.snapshots ORDER BY symbol,observed_at_epoch_ms DESC""").fetchall()
         exact_exit_rows = []
+        p90_exact_exit_rows = []
         has_exact_exit_table = bool(
             connection.execute("SELECT to_regclass('runtime.position_exit_attribution')").fetchone()[0]
         )
@@ -1812,6 +1813,33 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
                   )
                 ORDER BY a.closed_at DESC LIMIT %s""",
                 (TRADING_ACCOUNT_ID, 1000 if include_history else 20),
+            ).fetchall()
+            p90_exact_exit_rows = connection.execute(
+                """SELECT a.position_id,a.trade_id,o.symbol,o.side,a.closed_at,
+                a.actual_exit_qty,a.actual_exit_avg_fill,a.exit_owner,
+                a.exit_mechanism,a.gross_pnl,a.entry_fee_actual,a.exit_fee_actual,
+                a.actual_net_without_funding,a.actual_net_pnl,
+                a.entry_to_exit_price_move_pct,a.exit_execution_ids,
+                a.economics_completeness,a.link_status,
+                o.identity_status,o.trading_account_id,
+                o.strategy_id,o.strategy_version
+                FROM runtime.position_exit_attribution a
+                JOIN runtime.position_ownership o USING(position_id,trade_id)
+                WHERE a.link_status='EXACT'
+                  AND o.identity_status='PROVEN'
+                  AND (
+                       (o.strategy_id=%s AND o.strategy_version=%s)
+                       OR
+                       (o.strategy_id=%s AND o.strategy_version=%s)
+                  )
+                ORDER BY a.closed_at DESC LIMIT %s""",
+                (
+                    P90_MAIN_ID,
+                    P90_REAL_V3_VERSION,
+                    P90_SUB_ID,
+                    P90_REAL_V3_VERSION,
+                    1000 if include_history else 20,
+                ),
             ).fetchall()
         # Exchange-evidenced closures without StrategyPosition ownership.
         # Exchange-evidenced recovered cycles are an operator-ledger source.
@@ -2143,6 +2171,34 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             }
             for row in exact_exit_rows
         ]
+    p90_recent_closed = [
+        {
+            "position_id": row[0],
+            "trade_id": row[1],
+            "symbol": row[2],
+            "side": row[3],
+            "closed_at_epoch_ms": int(row[4].timestamp() * 1000),
+            "qty": float(row[5] or 0),
+            "price": float(row[6] or 0),
+            "exit_owner": row[7],
+            "exit_mechanism": row[8],
+            "reason": row[8],
+            "gross_pnl": float(row[9] or 0),
+            "entry_fee": float(row[10] or 0),
+            "exit_fee": float(row[11] or 0),
+            "net_pnl": float(row[12]) if row[12] is not None else None,
+            "actual_net_pnl": float(row[13]) if row[13] is not None else None,
+            "gross_move_pct": float(row[14]) if row[14] is not None else None,
+            "exec_ids": list(row[15] or []),
+            "economics_completeness": row[16],
+            "link_status": row[17],
+            "identity_status": row[18],
+            "trading_account_id": row[19],
+            "strategy_id": row[20],
+            "strategy_version": row[21],
+        }
+        for row in p90_exact_exit_rows
+    ]
     from bybit_workbench.closed_trade_reporting import (
         merge_evidenced_closed_trades,
         owner_controlled_closed_cycles,
@@ -2213,6 +2269,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
         },
         "positions": positions,
         "p90_rail": p90_rail,
+        "p90_recent_closed": p90_recent_closed,
         "p90_arm_status": p90_arm_status,
         "pending_entry_orders": pending_orders,
         "settings": {
