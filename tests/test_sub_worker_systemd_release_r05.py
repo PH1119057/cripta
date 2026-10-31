@@ -73,9 +73,9 @@ def test_sub_private_service_requires_exact_credential_and_scoped_write_root() -
     assert "bybit-mainnet.cred" not in unit
 
 
-def test_sub_entry_service_is_inert_with_no_private_credential_or_exit_clone() -> None:
+def test_sub_entry_service_is_explicitly_enableable_without_private_credential_or_exit_clone() -> None:
     unit = ENTRY.read_text(encoding="utf-8")
-    assert "[Install]\n" not in unit
+    assert "[Install]\nWantedBy=multi-user.target" in unit
     assert "Environment=CRIPTA_UNIVERSAL_ENTRY_MAINNET_CONSUMER=DISABLED" in unit
     assert "universal_entry_consumer.py --sub-account=%i" in unit
     assert "EnvironmentFile=/etc/cripta/private-runtime-%i.env" in unit
@@ -199,10 +199,11 @@ def test_release_installs_sub_templates_and_account_schema_without_auto_start() 
     # cutover; an absent SUB is never auto-started by a new release.
     assert "systemctl list-units --all --type=service" in installer
     assert 'managed_services+=("$unit")' in installer
-    # The two templates have no [Install] section and no running instance
-    # is introduced by the installer or by this offline test.
+    # The private template remains non-enableable; the Entry template may be
+    # explicitly enabled for an already approved account, but the installer
+    # still never auto-starts an absent SUB instance.
     assert "[Install]\n" not in PRIVATE.read_text(encoding="utf-8")
-    assert "[Install]\n" not in ENTRY.read_text(encoding="utf-8")
+    assert "[Install]\nWantedBy=multi-user.target" in ENTRY.read_text(encoding="utf-8")
 
 
 def test_position_mode_proofs_are_unique_per_trading_account(
