@@ -311,9 +311,7 @@ def _evaluate_claimed_positions(
                 if previous is not None:
                     if previous["boundary"] is None:
                         raise RuntimeError("previous L5-3 structural boundary missing")
-                    if Decimal(str(previous["boundary"])) == Decimal(
-                        str(geometry[structural_field])
-                    ):
+                    if Decimal(str(previous["boundary"])) == Decimal(str(geometry[structural_field])):  # noqa: E501
                         # No new geometry event needed: current range is unchanged.
                         continue
             prior_rows = connection.execute(
