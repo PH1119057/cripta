@@ -46,7 +46,9 @@ def test_owner_controlled_live_test_requires_current_active_micro_live_symbol() 
     block = APP.split('if kind == "owner_test_entry":', 1)[1].split(
         'elif kind == "trailing_stop":', 1
     )[0]
-    assert "release_commit=%s" not in block
+    assert "arm.release_commit=%s" in block
+    assert "LOADED_RELEASE_COMMIT" in block
+    assert "control.account_live_arm_sessions arm" in block
     assert "JOIN strategy_entry.strategy_activations act" in block
     assert "JOIN strategy_entry.execution_permissions perm" in block
     assert "act.enabled=true AND perm.enabled=true" in block
