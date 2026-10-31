@@ -53,7 +53,10 @@ from bybit_workbench.p90l90_real_prearm_evidence import (
 )
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import MAIN_ID as P90_MAIN_ID
 from bybit_workbench.universal_entry.p90l90_legacy_strategy import SUB_ID as P90_SUB_ID
-from bybit_workbench.universal_entry.p90l90_real_contract_v3 import VERSION as P90_REAL_V3_VERSION
+from bybit_workbench.universal_entry.p90l90_real_contract_v3 import (
+    ALLOWED_SYMBOLS as P90_ALLOWED_SYMBOLS,
+    VERSION as P90_REAL_V3_VERSION,
+)
 from bybit_workbench.r1_micro_live_control import (
     arm as arm_r1_micro_live,
     disarm as disarm_r1_micro_live,
@@ -1201,10 +1204,288 @@ def strategy_paper_state() -> dict[str, object]:
     }
 
 
+P90_RAIL_NEAR_PCT = Decimal("0.5")
+
+
+def _decimal_or_none(value: object) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        result = Decimal(str(value))
+    except (ValueError, TypeError):
+        return None
+    return result if result.is_finite() else None
+
+
+def p90_live_rail_state(
+    connection: psycopg.Connection[object],
+    *,
+    tickers: dict[str, dict[str, object]],
+) -> dict[str, object]:
+    """Read-only P90 operator projection; never recomputes Strategy geometry."""
+    expected = {
+        strategy_id: tuple(sorted(symbols))
+        for strategy_id, symbols in P90_ALLOWED_SYMBOLS.items()
+    }
+    binding_rows = connection.execute(
+        """SELECT a.strategy_id,b.trading_account_id
+             FROM strategy_entry.strategy_execution_bindings b
+             JOIN strategy_entry.strategy_activations a
+               ON a.activation_id=b.strategy_activation_id
+            WHERE a.strategy_id IN (%s,%s)
+              AND a.strategy_version=%s
+              AND a.enabled=true
+              AND b.binding_state='ACTIVE'
+            ORDER BY a.strategy_id,b.trading_account_id""",
+        (P90_MAIN_ID, P90_SUB_ID, P90_REAL_V3_VERSION),
+    ).fetchall()
+    bindings: dict[str, list[str]] = {P90_MAIN_ID: [], P90_SUB_ID: []}
+    for strategy_id, account_id in binding_rows:
+        bindings.setdefault(str(strategy_id), []).append(str(account_id))
+
+    epoch = connection.execute(
+        """SELECT epoch_id,source_commit,opened_at
+             FROM strategy_entry.p90l90_real_source_epochs
+            WHERE status='ACTIVE'
+            ORDER BY opened_at DESC
+            LIMIT 1"""
+    ).fetchone()
+    checkpoint_rows = []
+    if epoch is not None:
+        checkpoint_rows = connection.execute(
+            """SELECT symbol,updated_at,entry_checkpoint_json
+                 FROM strategy_entry.p90l90_real_causal_checkpoints
+                WHERE epoch_id=%s
+                  AND symbol=ANY(%s)
+                ORDER BY symbol""",
+            (str(epoch[0]), sorted({symbol for rows in expected.values() for symbol in rows})),
+        ).fetchall()
+    checkpoints = {
+        str(row[0]): {
+            "updated_at": row[1],
+            "entry": row[2] if isinstance(row[2], dict) else json.loads(row[2]),
+        }
+        for row in checkpoint_rows
+    }
+
+    account_for_symbol: dict[str, str | None] = {}
+    strategy_for_symbol: dict[str, str] = {}
+    for strategy_id, symbols in expected.items():
+        accounts = bindings.get(strategy_id, [])
+        account = accounts[0] if len(accounts) == 1 else None
+        for symbol in symbols:
+            strategy_for_symbol[symbol] = strategy_id
+            account_for_symbol[symbol] = account
+
+    accounts = sorted({value for value in account_for_symbol.values() if value})
+    position_rows = []
+    if accounts:
+        position_rows = connection.execute(
+            """SELECT trading_account_id,symbol,position_idx,side,size,entry_price,
+                      leverage,refreshed_at_epoch_ms,payload_json
+                 FROM runtime.hot_positions
+                WHERE trading_account_id=ANY(%s)
+                  AND identity_status='PROVEN'
+                  AND nullif(size,'')::numeric <> 0
+                ORDER BY trading_account_id,symbol,position_idx""",
+            (accounts,),
+        ).fetchall()
+
+    ownership_rows = connection.execute(
+        """SELECT o.trading_account_id,o.symbol,o.position_idx,o.side,
+                  coalesce((
+                      SELECT sum(e.exec_fee::numeric)
+                        FROM jsonb_array_elements_text(o.execution_ids) AS xid(exec_id)
+                        JOIN runtime.executions e ON e.exec_id=xid.exec_id
+                       WHERE e.trading_account_id=o.trading_account_id
+                         AND e.identity_status='PROVEN'
+                  ),0) AS entry_fee_actual
+             FROM runtime.position_ownership o
+            WHERE o.state='OPEN'
+              AND o.strategy_id IN (%s,%s)
+              AND o.strategy_version=%s
+              AND o.identity_status='PROVEN'""",
+        (P90_MAIN_ID, P90_SUB_ID, P90_REAL_V3_VERSION),
+    ).fetchall()
+    ownership_fees = {
+        (str(row[0]), str(row[1]), int(row[2] or 0), str(row[3])): float(row[4] or 0)
+        for row in ownership_rows
+    }
+    positions_by_symbol: dict[str, list[tuple[object, ...]]] = {}
+    for row in position_rows:
+        symbol = str(row[1])
+        if account_for_symbol.get(symbol) != str(row[0]):
+            continue
+        positions_by_symbol.setdefault(symbol, []).append(row)
+
+    items: list[dict[str, object]] = []
+    for strategy_id in (P90_MAIN_ID, P90_SUB_ID):
+        for symbol in expected[strategy_id]:
+            account_id = account_for_symbol.get(symbol)
+            checkpoint = checkpoints.get(symbol)
+            entry = checkpoint.get("entry", {}) if checkpoint else {}
+            geometry = entry.get("geometry") if isinstance(entry, dict) else {}
+            geometry = geometry if isinstance(geometry, dict) else {}
+            current_price = _decimal_or_none(
+                entry.get("previous_price") if isinstance(entry, dict) else None
+            )
+            if current_price is None:
+                ticker = tickers.get(symbol) or {}
+                current_price = _decimal_or_none(
+                    ticker.get("last_price") or ticker.get("mark_price")
+                )
+
+            candidates: list[dict[str, object]] = []
+            for side, edge_key, depth_key in (
+                ("LONG", "l53_low_raw", "long_depth_pct"),
+                ("SHORT", "l53_high_raw", "short_depth_pct"),
+            ):
+                depth = _decimal_or_none(geometry.get(depth_key))
+                edge = _decimal_or_none(geometry.get(edge_key))
+                if depth is None or edge is None or edge <= 0 or current_price is None:
+                    continue
+                if side == "LONG":
+                    distance = max(
+                        Decimal("0"),
+                        (current_price - edge) / edge * Decimal("100"),
+                    )
+                else:
+                    distance = max(
+                        Decimal("0"),
+                        (edge - current_price) / edge * Decimal("100"),
+                    )
+                candidates.append(
+                    {
+                        "side": side,
+                        "entry_price": str(edge),
+                        "distance_pct": str(distance),
+                        "depth_pct": str(depth),
+                    }
+                )
+            candidates.sort(key=lambda item: Decimal(str(item["distance_pct"])))
+            nearest = candidates[0] if candidates else None
+
+            exact_positions = positions_by_symbol.get(symbol, [])
+            position_payload: dict[str, object] | None = None
+            if len(exact_positions) == 1:
+                row = exact_positions[0]
+                raw = row[8] if isinstance(row[8], dict) else json.loads(row[8])
+                side = str(row[3])
+                entry_price = float(row[5] or 0)
+                quantity = float(row[4] or 0)
+                ticker = tickers.get(symbol) or {}
+                executable = (
+                    ticker.get("bid_price") if side == "Buy" else ticker.get("ask_price")
+                )
+                executable_value = float(
+                    executable
+                    or ticker.get("last_price")
+                    or ticker.get("mark_price")
+                    or raw.get("markPrice")
+                    or 0
+                )
+                fee_key = (str(row[0]), symbol, int(row[2] or 0), side)
+                actual_entry_fee = ownership_fees.get(fee_key)
+                entry_fee = (
+                    actual_entry_fee
+                    if actual_entry_fee is not None
+                    else entry_price * quantity * REAL_IMMEDIATE_CLOSE_FEE_RATE
+                )
+                gross = None
+                net = None
+                if entry_price > 0 and quantity > 0 and executable_value > 0:
+                    gross = (
+                        (executable_value - entry_price) * quantity
+                        if side == "Buy"
+                        else (entry_price - executable_value) * quantity
+                    )
+                    net = (
+                        gross
+                        - entry_fee
+                        - executable_value * quantity * REAL_IMMEDIATE_CLOSE_FEE_RATE
+                    )
+                position_payload = {
+                    "side": side,
+                    "size": str(row[4]),
+                    "entry_price": str(row[5]),
+                    "leverage": str(row[6]),
+                    "refreshed_at_epoch_ms": int(row[7] or 0),
+                    "mark_price": str(
+                        ticker.get("mark_price")
+                        or ticker.get("last_price")
+                        or raw.get("markPrice")
+                        or ""
+                    ),
+                    "executable_close_price": (
+                        None if executable_value <= 0 else str(executable_value)
+                    ),
+                    "net_pnl_to_close": net,
+                    "pnl_basis": (
+                        "AFTER_COMMISSIONS_ACTUAL_ENTRY_FEE"
+                        if actual_entry_fee is not None
+                        else "AFTER_COMMISSIONS_ESTIMATED_ENTRY_FEE"
+                    ),
+                }
+
+            if position_payload is not None:
+                state = "OPEN"
+                rank = 0
+            elif nearest is not None and Decimal(str(nearest["distance_pct"])) < P90_RAIL_NEAR_PCT:
+                state = "NEAR"
+                rank = 1
+            else:
+                state = "FAR"
+                rank = 2
+
+            items.append(
+                {
+                    "symbol": symbol,
+                    "strategy_id": strategy_id,
+                    "trading_account_id": account_id,
+                    "binding_ready": account_id is not None,
+                    "state": state,
+                    "rank": rank,
+                    "current_price": None if current_price is None else str(current_price),
+                    "nearest_entry": nearest,
+                    "entry_candidates": candidates,
+                    "geometry": {
+                        "effective_at": geometry.get("effective_at"),
+                        "working_width_pct": geometry.get("working_width_pct"),
+                        "previous_seven_day_median": geometry.get(
+                            "previous_seven_day_median"
+                        ),
+                    },
+                    "checkpoint_updated_at": (
+                        None
+                        if checkpoint is None
+                        else checkpoint["updated_at"].isoformat()
+                    ),
+                    "source_epoch_id": None if epoch is None else str(epoch[0]),
+                    "source_commit": None if epoch is None else str(epoch[1]),
+                    "position": position_payload,
+                }
+            )
+
+    items.sort(
+        key=lambda item: (
+            int(item["rank"]),
+            Decimal(str((item.get("nearest_entry") or {}).get("distance_pct") or "999999")),
+            str(item["symbol"]),
+        )
+    )
+    return {
+        "threshold_pct": str(P90_RAIL_NEAR_PCT),
+        "items": items,
+        "source_epoch_id": None if epoch is None else str(epoch[0]),
+        "source_commit": None if epoch is None else str(epoch[1]),
+    }
+
+
 def _live_trading_state(*, include_history: bool) -> dict[str, object]:
     tickers = live_tickers()
     liquidity_risks = execution_liquidity_risks()
     with psycopg.connect("dbname=cripta user=cripta host=/var/run/postgresql") as connection:
+        p90_rail = p90_live_rail_state(connection, tickers=tickers)
         wallet = connection.execute(
             """SELECT refreshed_at_epoch_ms,total_equity,wallet_balance,
                       available_balance,payload_json
@@ -1831,6 +2112,7 @@ def _live_trading_state(*, include_history: bool) -> dict[str, object]:
             "reserved_for_positions": reserved_for_positions,
         },
         "positions": positions,
+        "p90_rail": p90_rail,
         "pending_entry_orders": pending_orders,
         "settings": {
             "stake_usdt": settings[0],
