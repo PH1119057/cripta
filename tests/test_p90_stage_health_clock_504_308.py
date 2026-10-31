@@ -10,7 +10,10 @@ UI = (ROOT / "operations/dashboard/index.html").read_text(encoding="utf-8")
 
 def test_release_arm_guard_uses_fresh_clock_not_loop_clock() -> None:
     start = LIFECYCLE.index("if len(loaded_commit) == 40:")
-    end = LIFECYCLE.index("\n            with connection.transaction():\n                delivery", start)
+    end = LIFECYCLE.index(
+        "\n            with connection.transaction():\n                delivery",
+        start,
+    )
     body = LIFECYCLE[start:end]
     assert "guard_now = datetime.now(UTC)" in body
     assert "now=guard_now" in body
