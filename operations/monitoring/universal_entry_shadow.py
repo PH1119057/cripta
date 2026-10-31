@@ -3109,8 +3109,16 @@ def _run_observer_epoch(
                         raise RuntimeError(
                             "P90_REAL_LIVE_MAIN_SUB_ENTRY_PERMISSION_NOT_CURRENT"
                         )
+                    staged_gate_closed = (
+                        p90_real_staged
+                        and gate_row == (False, OWNER_ARM_STAGE_GATE_REASON)
+                    )
+                    staged_gate_finalized = (
+                        p90_real_staged
+                        and gate_row == (True, OWNER_ARM_OPEN_GATE_REASON)
+                    )
                     if p90_real_staged:
-                        if gate_row != (False, OWNER_ARM_STAGE_GATE_REASON):
+                        if not (staged_gate_closed or staged_gate_finalized):
                             raise RuntimeError(
                                 "P90_REAL_OWNER_ARM_STAGE_GATE_DRIFT"
                             )
@@ -3135,9 +3143,13 @@ def _run_observer_epoch(
                             raise RuntimeError(
                                 "P90_REAL_OWNER_ARM_STAGE_ACCOUNT_NOT_READY"
                             )
-                        # Full topology is proven, but the global gate is still
-                        # closed: never expose an executable admission context.
-                        return (), False
+                        if staged_gate_closed:
+                            # Full topology is proven, but the global gate is
+                            # still closed: never expose executable admission.
+                            return (), False
+                        # Final gate transaction already passed every staged
+                        # check. A fact may arrive before the next signature
+                        # tick; exact OPEN is therefore executable immediately.
                     return accounts, account_ready
 
                 runtime = assemble_p90_real_observer_runtime(
