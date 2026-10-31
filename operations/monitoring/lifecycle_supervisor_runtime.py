@@ -348,20 +348,27 @@ def main() -> int:
                 if installed_file.is_file() else ""
             )
             if len(loaded_commit) == 40:
+                # The loop-level `now` may be several seconds old after
+                # authenticated Exchange reads, protection work and scan_once.
+                # Observer/consumer heartbeat freshness must be evaluated
+                # against a clock captured immediately before this guard pass;
+                # otherwise a newer observer heartbeat appears "from the
+                # future" and causes false OPEN/RESOLVED incident oscillation.
+                guard_now = datetime.now(UTC)
                 source_ready, source_detail = _entry_source_health(
                     loaded_commit=loaded_commit,
-                    now=now,
+                    now=guard_now,
                 )
                 with connection.transaction():
                     retired_arms = retire_stale_release_arms(
                         connection,
                         loaded_commit=loaded_commit,
-                        now=now,
+                        now=guard_now,
                     )
                     check_release_arm_invariant(
                         connection,
                         loaded_commit=loaded_commit,
-                        now=now,
+                        now=guard_now,
                         require_entry_runtime_health=True,
                         entry_source_ready=source_ready,
                         entry_source_detail=source_detail,

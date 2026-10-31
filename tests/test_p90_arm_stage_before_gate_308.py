@@ -39,7 +39,7 @@ def test_dashboard_waits_for_exact_stage_and_disarms_on_failure() -> None:
     ]
     assert "stage_p90l90_real_v3(" in handler
     assert "_u6_wait_p90_real_v3_stage_ready(" in handler
-    assert "timeout_seconds=60.0" in handler
+    assert "timeout_seconds=20.0" in handler
     assert "final_stage_ready" in handler
     assert "finalize_p90l90_real_v3(" in handler
     assert "if staged:" in handler
@@ -72,5 +72,5 @@ def test_observer_stage_builds_full_runtime_but_exposes_no_admission() -> None:
 
 def test_ui_explains_gate_closed_stage_and_allows_bounded_wait() -> None:
     assert "проверяется полный runtime · mainnet gate пока CLOSED" in UI
-    assert "75000" in UI
+    assert "25000" in UI
     assert "Если проверка не пройдёт — gate не откроется." in UI
