@@ -919,13 +919,19 @@ Execution -> StrategyPosition -> Universal Exit lifecycle. Exact risk v1:
 10 USDT, 1x, MARKET, SL -0.5%, TP +0.5% от actual fill; P90 statistics/research
 его исключают. Canon owner: TRADING_CONTOUR §4.8.2 / ARCH §7.1.
 
-На момент этой documentation revision:
+Текущий status split:
 ```text
 FULL_CONTOUR_DIAGNOSTIC_CANON       = YES
-FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = NO
-FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = NO
+FULL_CONTOUR_DIAGNOSTIC_IMPLEMENTED = YES
+FULL_CONTOUR_DIAGNOSTIC_DEPLOYED    = RUNTIME_EVIDENCE_REQUIRED
 ```
-Эти статусы нельзя повышать до implementation/test/release/runtime evidence.
+
+`IMPLEMENTED=YES` означает наличие merged implementation в canonical GitHub
+`main` после PR #325 с production-blocking migration hotfix PR #327.
+`DEPLOYED` нельзя выводить из этого документа: его authoritative status
+задаётся только exact release identity + runtime evidence по §10 project
+status model. Поэтому здесь намеренно нет hard-coded `DEPLOYED=YES/NO`,
+который мог бы устареть без изменения канона.
 
 IMPLEMENTED / DEPLOYED 2026-09-21:
 - durable `runtime.position_mode_states`;
