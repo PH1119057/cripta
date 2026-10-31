@@ -62,6 +62,7 @@ def fake_get_json(path, params=None):
         return {
             "check_runs": [
                 {
+                    "id": 200,
                     "name": "scope",
                     "status": "completed",
                     "conclusion": "success",
@@ -73,6 +74,7 @@ def fake_get_json(path, params=None):
         return {
             "workflow_runs": [
                 {
+                    "id": 300,
                     "name": "quality",
                     "event": "pull_request",
                     "head_sha": HEAD,
@@ -94,6 +96,123 @@ def test_release_evidence_requires_ruleset_scope_and_quality(monkeypatch):
     assert evidence.merged_pr_head == HEAD
     assert evidence.required_checks == {"scope": "success", "quality": "success"}
     assert evidence.ruleset_ids == (7,)
+
+
+def test_release_evidence_uses_latest_duplicate_ci_evidence(monkeypatch):
+    def duplicate_runs(path, params=None):
+        value = fake_get_json(path, params)
+        if path == f"/commits/{HEAD}/check-runs":
+            return {
+                "check_runs": [
+                    {
+                        "id": 201,
+                        "name": "scope",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "app": {"id": 15368},
+                    },
+                    {
+                        "id": 199,
+                        "name": "scope",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "app": {"id": 15368},
+                    },
+                ]
+            }
+        if path == "/actions/runs":
+            return {
+                "workflow_runs": [
+                    {
+                        "id": 301,
+                        "name": "quality",
+                        "event": "pull_request",
+                        "head_sha": HEAD,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "pull_requests": [],
+                    },
+                    {
+                        "id": 299,
+                        "name": "quality",
+                        "event": "pull_request",
+                        "head_sha": HEAD,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "pull_requests": [],
+                    },
+                ]
+            }
+        return value
+
+    monkeypatch.setattr(github, "_get_json", duplicate_runs)
+    evidence = github.release_evidence(TARGET)
+    assert evidence.required_checks == {"scope": "success", "quality": "success"}
+
+
+def test_release_evidence_rejects_newest_failed_required_check(monkeypatch):
+    def latest_failed(path, params=None):
+        value = fake_get_json(path, params)
+        if path == f"/commits/{HEAD}/check-runs":
+            return {
+                "check_runs": [
+                    {
+                        "id": 200,
+                        "name": "scope",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "app": {"id": 15368},
+                    },
+                    {
+                        "id": 202,
+                        "name": "scope",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "app": {"id": 15368},
+                    },
+                ]
+            }
+        return value
+
+    monkeypatch.setattr(github, "_get_json", latest_failed)
+    with pytest.raises(
+        github.GitHubEvidenceError,
+        match="REQUIRED_CHECK_NOT_PASS:scope",
+    ):
+        github.release_evidence(TARGET)
+
+
+def test_release_evidence_rejects_newest_failed_quality_workflow(monkeypatch):
+    def latest_failed(path, params=None):
+        value = fake_get_json(path, params)
+        if path == "/actions/runs":
+            return {
+                "workflow_runs": [
+                    {
+                        "id": 300,
+                        "name": "quality",
+                        "event": "pull_request",
+                        "head_sha": HEAD,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "pull_requests": [],
+                    },
+                    {
+                        "id": 302,
+                        "name": "quality",
+                        "event": "pull_request",
+                        "head_sha": HEAD,
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "pull_requests": [],
+                    },
+                ]
+            }
+        return value
+
+    monkeypatch.setattr(github, "_get_json", latest_failed)
+    with pytest.raises(github.GitHubEvidenceError, match="QUALITY_WORKFLOW_NOT_PASS"):
+        github.release_evidence(TARGET)
 
 
 def test_release_evidence_rejects_reused_pr_head(monkeypatch):
