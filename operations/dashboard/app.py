@@ -6388,9 +6388,8 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                         connection.execute(
                             """INSERT INTO runtime.trade_commands(
                                    command_id,command_type,symbol,payload_json,state,
-                                   requested_at_epoch_ms,trading_account_id,
-                                   account_connector_id,identity_status
-                               ) VALUES(%s,%s,%s,%s,'queued',%s,%s,%s,'PROVEN')""",
+                                   requested_at_epoch_ms,trading_account_id,identity_status
+                               ) VALUES(%s,%s,%s,%s,'queued',%s,%s,'PROVEN')""",
                             (
                                 command_id,
                                 command_type,
@@ -6401,11 +6400,6 @@ body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b12
                                     test_account_id
                                     if kind == "owner_test_entry"
                                     else TRADING_ACCOUNT_ID
-                                ),
-                                (
-                                    test_connector_id
-                                    if kind == "owner_test_entry"
-                                    else None
                                 ),
                             ),
                         )
