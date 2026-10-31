@@ -4979,6 +4979,19 @@ def _u6_p90_real_v3_arm(
         raise ValueError("P90 REAL v3 OWNER ARM requires explicit confirmation")
     operator = handler.session_user() or "UNKNOWN"
     request_id = str(request.get("request_id") or secrets.token_hex(12))
+    if enabled:
+        # A previous PREARM_TECHNICAL_READY is not a durable LIVE authorization.
+        # Technical evidence expires after 90 seconds. Refresh the full, real
+        # source/account/observer/lifecycle proof only on an explicit owner click.
+        # A failure here must abort before any LIVE-arm session or gate mutation.
+        with psycopg.connect(
+            "dbname=cripta user=cripta host=/var/run/postgresql"
+        ) as evidence_connection:
+            prepare_p90l90_real_v3_prearm_evidence(
+                evidence_connection,
+                release_commit=LOADED_RELEASE_COMMIT,
+                now=datetime.now(UTC),
+            )
     with psycopg.connect(
         "dbname=cripta user=cripta host=/var/run/postgresql"
     ) as connection:
