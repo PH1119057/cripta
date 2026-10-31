@@ -45,11 +45,11 @@
     .rail-trade small{display:block;color:var(--muted);overflow-wrap:anywhere}
     .workspace-rail .rail-unknown{color:var(--muted)}
     @media(min-width:1250px){
-      main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,82fr);column-gap:12px;align-items:start}
+      main:has(#liveDesk.active){width:calc(100vw - 24px);max-width:2400px;display:grid;grid-template-columns:minmax(0,18fr) minmax(0,64fr) minmax(0,18fr);column-gap:12px;align-items:start}
       main:has(#liveDesk.active)>:not(.panel):not(.workspace-rail){grid-column:1/-1;min-width:0}
       main:has(#liveDesk.active)>#marketWorkspaceRail{display:flex;grid-column:1}
       main:has(#liveDesk.active)>#liveDesk{grid-column:2;min-width:0}
-      main:has(#liveDesk.active)>#closedWorkspaceRail{display:none!important}
+      main:has(#liveDesk.active)>#closedWorkspaceRail{display:flex;grid-column:3}
       main:has(#liveDesk.active) #liveDesk .core-trading-table{min-width:0}
       main:has(#liveDesk.active) #liveDesk .closed-scroll,main:has(#liveDesk.active) #liveDesk .table-scroll{max-width:100%;overflow-x:auto}
       main:has(#liveDesk.active) #liveDesk .trade-operator-grid{min-width:0}
@@ -140,7 +140,6 @@
     .console-event-note{font-size:10px;padding:4px 2px}
     .console-gate #tradeGateButton{align-self:flex-start;font-size:12px;font-weight:700;padding:8px 13px}
     #tradeGateButton,#tradeOperationStatus,#tradeGateNotice,#tradeGateReasons,#gatewayReleaseStatus{display:none!important}
-    #closedWorkspaceRail{display:none!important}
     #p90RealV3ArmDetail{font-size:10px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
     .console-gate .operation-status{font-size:11px;margin:0;padding:6px 8px;font-weight:600}
     .console-gate .observer-lock{font-size:11px;padding:6px 8px}
@@ -282,8 +281,8 @@
     <article id="closedTradesSection" class="card full core-trading-table"><h2>Завершённые сделки Bybit</h2><div class="muted" style="margin-bottom:10px">Сверху видны сделки за сегодня. Более старые записи находятся ниже во внутренней прокрутке; вся страница из-за них не растягивается. Нажмите строку, чтобы раскрыть причинную карточку.</div><div class="closed-scroll"><table><thead><tr><th>Время</th><th>Монета</th><th>Закрыто</th><th>Цена</th><th>Причина стратегии</th><th>Причина биржи</th><th>После комиссий</th></tr></thead><tbody id="realClosedRows"></tbody></table></div></article>
     <article id="bybitLogSection" class="card full core-trading-table"><h2>Лог Bybit · попытки входа</h2><div class="muted" style="margin-bottom:10px">Технический журнал реальных Entry-заявок. Принятая Bybit лимитная заявка ещё не является открытой сделкой. Здесь видно, ждала ли она fill, была ли отменена без исполнения и по какой причинной причине.</div><div class="closed-scroll"><table style="min-width:1450px"><thead><tr><th>Время</th><th>Монета</th><th>Strategy</th><th>Направление</th><th>Limit</th><th>Bybit order</th><th>Статус</th><th>Fill</th><th>SL / TP</th><th>Причина / итог</th></tr></thead><tbody id="bybitLogRows"><tr><td colspan="10" class="muted">Загрузка журнала Bybit…</td></tr></tbody></table></div></article>
   </section>
-  <aside id="closedWorkspaceRail" class="workspace-rail" aria-label="Завершённые сделки и результат" hidden>
-    <h2>Завершённые сделки</h2>
+  <aside id="closedWorkspaceRail" class="workspace-rail" aria-label="Завершённые сделки текущей P90 REAL v3">
+    <h2>Завершённые P90-сделки</h2>
     <div class="rail-periods" role="group" aria-label="Скользящий период статистики">
       <button type="button" data-rail-period="day">24 часа</button>
       <button type="button" data-rail-period="week">7 дней</button>
@@ -300,7 +299,7 @@
       <div class="rail-stat"><small class="rail-muted">Минус до hard-stop</small><b id="railSoftLoss" class="warn">—</b></div>
       <div class="rail-stat"><small class="rail-muted">Hard-stop</small><b id="railHardStop" class="loss">—</b></div>
     </div>
-    <div id="railDataStatus" class="rail-muted" role="status">Загрузка завершённых сделок…</div>
+    <div id="railDataStatus" class="rail-muted" role="status">Загрузка завершённых P90-сделок…</div>
     <div id="railClosedList" class="rail-scroll" aria-label="Закрытые сделки выбранного периода"></div>
   </aside>
 
@@ -1418,7 +1417,7 @@ function railSafe(v){const x=document.createElement('span');x.textContent=String
 function railMoney(v){return(v>0?'+':'')+v.toFixed(4)+' USDT'}
 function railHardStopTrade(x){
   // 'StopLoss' alone is NOT proof of the original maximum hard-stop.
-  const code=String(x.strategy_reason||'')+' '+String(x.reason||'')+' '+String(x.trade_card?.close_reason||'');
+  const code=String(x.strategy_reason||'')+' '+String(x.exit_mechanism||'')+' '+String(x.reason||'')+' '+String(x.trade_card?.close_reason||'');
   return /(?:HARD[_ -]?STOP|HARD_SL|MAX[_ -]?LOSS)/i.test(code);
 }
 function railRender(){
@@ -1443,9 +1442,9 @@ function railRender(){
   document.getElementById('railWins').textContent=wins;
   document.getElementById('railSoftLoss').textContent=soft;
   document.getElementById('railHardStop').textContent=hard;
-  document.getElementById('railClosedList').innerHTML=html||'<p class="rail-muted">За выбранный период закрытых сделок нет.</p>';
+  document.getElementById('railClosedList').innerHTML=html||'<p class="rail-muted">У текущей P90 REAL v3 за выбранный период закрытых сделок нет.</p>';
   const note=unknown?' · PnL неизвестен: '+unknown:'';
-  document.getElementById('railDataStatus').textContent='Данные Bybit · '+recent.length+' исполнений'+note+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
+  document.getElementById('railDataStatus').textContent='P90 REAL v3 · '+recent.length+' закрытых сделок'+note+(railClosedCache.length>=1000?' · История ограничена 1000 строками; итог может быть неполным':'')+'; hard-stop только по подтверждённой причине';
 }
 document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('click',()=>{
   railPeriod=b.dataset.railPeriod;
@@ -1454,14 +1453,14 @@ document.querySelectorAll('[data-rail-period]').forEach(b=>b.addEventListener('c
 }));
 async function railRefresh(){
   const closedRail=document.getElementById('closedWorkspaceRail');
-  if(!closedRail||closedRail.hidden||railRefreshBusy||document.hidden||!document.getElementById('liveDesk').classList.contains('active'))return;
+  if(!closedRail||railRefreshBusy||document.hidden||!document.getElementById('liveDesk').classList.contains('active'))return;
   railRefreshBusy=true;
   try{
     const resp=await fetch('/api/live/state?view=closed',{cache:'no-store'});
     if(!resp.ok)throw Error('HTTP '+resp.status);
     const out=await resp.json();
-    const closed=out.live_trading?.recent_closed;
-    if(!Array.isArray(closed))throw Error('Нет данных завершённых сделок');
+    const closed=out.live_trading?.p90_recent_closed;
+    if(!Array.isArray(closed))throw Error('Нет данных завершённых сделок P90 REAL v3');
     railClosedCache=closed;
     railClosedFetched=true;
     railRender();
